@@ -6,6 +6,7 @@ from typing import Any
 import click
 import yaml
 
+from agent_actions.config.schema_field import field_is_required
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
 
     # Format 1: Custom 'fields' array
     if "fields" in raw_schema and isinstance(raw_schema["fields"], list):
+        required_by_default = raw_schema.get("required_by_default", False)
         for field_def in raw_schema["fields"]:
             # Handle nested array with items.properties
             if (
@@ -45,7 +47,7 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
                         "name": field_def["id"],
                         "type": field_def.get("type", "unknown"),
                         "description": field_def.get("description", ""),
-                        "required": field_def.get("required", not field_def.get("optional", False)),
+                        "required": field_is_required(field_def, required_by_default),
                     }
                 )
 

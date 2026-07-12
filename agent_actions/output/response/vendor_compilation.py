@@ -8,6 +8,7 @@ Compiles unified schemas into the format required by each LLM vendor
 import logging
 from typing import Any
 
+from agent_actions.config.schema_field import field_is_required
 from agent_actions.errors import ConfigValidationError
 from agent_actions.utils.json_safety import ensure_json_safe
 
@@ -61,12 +62,11 @@ def compile_unified_schema(
 
     properties: dict[str, Any] = {}
     required: list[str] = []
+    required_by_default = unified.get("required_by_default", False)
     for field in unified.get("fields", []):
         key, schema_prop = compile_field(field, target_system)
         properties[key] = schema_prop
-        # Flat fields are required by default; opt out with `optional: true`
-        # or an explicit `required: false`. Explicit `required` wins over `optional`.
-        if field.get("required", not field.get("optional", False)):
+        if field_is_required(field, required_by_default):
             required.append(key)
     target = target_system.lower()
     compiled: dict[str, Any] | list[dict[str, Any]]
