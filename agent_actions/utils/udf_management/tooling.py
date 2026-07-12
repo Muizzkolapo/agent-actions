@@ -64,9 +64,10 @@ def execute_user_defined_function(
     udf = metadata["function"]
     granularity = metadata["granularity"]
 
-    # RECORD-mode input is the action-name-keyed bus dict; hand the UDF a Bus so
-    # authors can opt into data.require(). FILE mode receives a list, so it is
-    # excluded. Bus is a transparent dict subclass — get/[]/iteration unchanged.
+    # Hand RECORD-mode dict input to the UDF as a Bus so authors can opt into
+    # data.require() (the action-keyed bus on the tool path; a flat eval context
+    # on the guard-clause path). FILE mode receives a list, so it is excluded.
+    # Bus is a transparent dict subclass — get/[]/iteration unchanged.
     if (
         granularity == Granularity.RECORD
         and isinstance(input_data, dict)

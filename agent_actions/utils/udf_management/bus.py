@@ -6,13 +6,14 @@ from typing import Any
 
 
 class Bus(dict[str, Any]):
-    """Action-name-keyed bus. `get`/`[]` stay tolerant; `require` raises on unknown."""
+    """Strict-accessor dict for UDF input. `get`/`[]` stay tolerant; `require` raises on unknown."""
 
     def require(self, namespace: str) -> Any:
+        # Message stays generic: the same accessor wraps the action-keyed tool
+        # bus and the flat guard-clause context, so it names the key + the
+        # available keys and does not assume an action-name keying.
         if namespace not in self:
             raise KeyError(
-                f"UDF read unknown bus namespace '{namespace}'. The bus is keyed by "
-                f"action name; available: {sorted(self.keys())}. Check for an "
-                f"impl-name/action-name mismatch."
+                f"UDF read unknown key '{namespace}'. Available keys: {sorted(self.keys())}."
             )
         return self[namespace]

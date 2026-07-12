@@ -16,8 +16,8 @@ def test_require_raises_on_unknown():
 
 
 def test_require_error_lists_available_namespaces():
-    # Distinct names (no substring overlap) pin the available-namespaces list; a
-    # trivial `return self[ns]` — which the spec's own fixtures would pass — omits it.
+    # Distinct names (no substring overlap) pin the available-keys list; a trivial
+    # `return self[ns]` raises a bare KeyError that omits the other keys.
     with pytest.raises(KeyError) as exc:
         Bus({"ground": {}, "writer": {}}).require("typo")
     msg = str(exc.value)
