@@ -206,7 +206,7 @@ class WorkflowSchemaService:
                     return (
                         field_def.get("type", "unknown"),
                         field_def.get("description", ""),
-                        field_def.get("required", False),
+                        field_def.get("required", not field_def.get("optional", False)),
                     )
                 # Array field with items.properties
                 if (
