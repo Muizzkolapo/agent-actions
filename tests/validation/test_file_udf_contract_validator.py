@@ -125,6 +125,19 @@ def test_returns_fileudfresult_in_body_not_flagged():
     assert find_file_udf_contract_warnings(UDF_REGISTRY) == []
 
 
+def test_filter_accumulator_alias_not_flagged():
+    # An accumulator of input items, returned via an alias, is still filter mode.
+    @udf_tool(granularity=Granularity.FILE)
+    def passthrough_alias(data) -> list[dict]:
+        results = []
+        for item in data:
+            results.append(item)
+        out = results
+        return out
+
+    assert find_file_udf_contract_warnings(UDF_REGISTRY) == []
+
+
 # --- Construct mode: returns freshly-built dicts (must be flagged) -------------
 
 
@@ -176,6 +189,18 @@ def test_build_dict_in_var_then_append_flagged():
         return out
 
     assert any("build_var" in w for w in find_file_udf_contract_warnings(UDF_REGISTRY))
+
+
+def test_list_accumulator_alias_flagged():
+    @udf_tool(granularity=Granularity.FILE)
+    def expand(data) -> list[dict]:
+        results = []
+        for d in data:
+            results.append({"key": d.get("key")})
+        out = results  # returned via an alias — still a list of new dicts
+        return out
+
+    assert any("expand" in w for w in find_file_udf_contract_warnings(UDF_REGISTRY))
 
 
 def test_return_bare_dict_flagged():
