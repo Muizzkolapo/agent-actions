@@ -161,7 +161,9 @@ class PreflightService:
         for name, config in self.action_configs.items():
             if config.get("kind") != "tool":
                 continue
-            impl = config.get("impl")
+            # Post-expansion, the UDF name lives in model_name (the expander maps
+            # impl -> model_name); impl is the raw pre-expansion key.
+            impl = config.get("model_name") or config.get("impl")
             if not impl:
                 continue
             schema = config.get("json_output_schema")

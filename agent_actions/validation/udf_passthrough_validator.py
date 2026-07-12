@@ -116,16 +116,11 @@ def _bus_tainted_names(func: ast.AST, root: str) -> set[str]:
             return tainted
 
 
-def _returns_passthrough(func: ast.AST, root: str) -> bool:
-    """True if a bus-derived value reaches output via return/append/extend/+=."""
-    tainted = _bus_tainted_names(func, root)
+def _bus_accumulators(func: ast.AST, root: str, tainted: set[str]) -> set[str]:
+    """Names fed bus-derived items via append/extend/+= — candidate output lists."""
+    accs: set[str] = set()
     for node in ast.walk(func):
-        if isinstance(node, ast.Return) and node.value is not None:
-            if _is_derived(node.value, root, tainted):
-                return True
-        elif isinstance(node, ast.AugAssign) and _is_derived(node.value, root, tainted):
-            return True
-        elif (
+        if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr in ("append", "extend")
@@ -133,7 +128,27 @@ def _returns_passthrough(func: ast.AST, root: str) -> bool:
             and node.args
             and _is_derived(node.args[0], root, tainted)
         ):
-            return True
+            accs.add(node.func.value.id)
+        elif (
+            isinstance(node, ast.AugAssign)
+            and isinstance(node.target, ast.Name)
+            and _is_derived(node.value, root, tainted)
+        ):
+            accs.add(node.target.id)
+    return accs
+
+
+def _returns_passthrough(func: ast.AST, root: str) -> bool:
+    """True if a bus-derived value is returned — directly, or as an accumulator of bus items.
+
+    An accumulator fed bus data but only nested inside a constructed dict/other
+    literal is never returned as an output item, so it is not flagged."""
+    tainted = _bus_tainted_names(func, root)
+    reachable = tainted | _bus_accumulators(func, root, tainted)
+    for node in ast.walk(func):
+        if isinstance(node, ast.Return) and node.value is not None:
+            if _is_derived(node.value, root, reachable):
+                return True
     return False
 
 
