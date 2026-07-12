@@ -59,14 +59,34 @@ class TestCanHandle:
 
 
 class TestImportFailureFormatting:
-    def test_names_module_in_title(self, formatter, udf_import_error):
+    def test_title_reframes_to_name_auto_discovered_file(self, formatter, udf_import_error):
+        # The old title "Failed to load UDF module 'X'" read as if the user
+        # named the module; the file was auto-discovered by the recursive scan,
+        # so the title now names the file and says it was auto-discovered.
         result = formatter.format(
             udf_import_error,
             udf_import_error,
             str(udf_import_error),
             _context_for(udf_import_error),
         )
-        assert result.title == "Failed to load UDF module 'run_thinkific_gen.apply_html_text'"
+        assert result.title == (
+            "Auto-discovered UDF file failed to import: "
+            "/proj/tools/run_thinkific_gen/apply_html_text.py"
+        )
+        assert "auto-discovered" in result.title.lower()
+        # Cause stays visible through the reframe (FAILURE MODE: don't bury it).
+        assert "No module named 'markdown2'" in result.details
+        # Actionable next step names the user-code dir (-u / tool_path) + move-out.
+        assert "-u" in result.fix
+        assert "move it outside" in result.fix.lower()
+
+    def test_title_falls_back_to_module_when_file_unknown(self, formatter):
+        # No file path on the error — the title still frames it as an
+        # auto-discovered import, naming the module instead.
+        exc = UDFLoadError(module="proj.bad", error="boom")
+        result = formatter.format(exc, exc, str(exc), _context_for(exc))
+        assert "auto-discovered" in result.title.lower()
+        assert "proj.bad" in result.title
 
     def test_details_include_underlying_import_error(self, formatter, udf_import_error):
         result = formatter.format(
@@ -224,7 +244,10 @@ class TestImportFailureFormatting:
             _context_for(udf_import_error),
         )
         rendered = result.format_for_cli()
-        assert "Configuration Error: Failed to load UDF module" in rendered
+        assert (
+            "Configuration Error: Auto-discovered UDF file failed to import: "
+            "/proj/tools/run_thinkific_gen/apply_html_text.py" in rendered
+        )
         assert "Problem: Python could not import the UDF module" in rendered
         assert "File: /proj/tools/run_thinkific_gen/apply_html_text.py" in rendered
         assert "Fix: Python could not find the module 'markdown2'" in rendered
@@ -275,6 +298,19 @@ class TestDiscoveryFailureFormatting:
         result = formatter.format(exc, exc, str(exc), _context_for(exc))
         assert result.context["file_path"] == "/no/such/dir"
 
+    def test_sentinel_title_not_reframed_as_auto_discovered(self, formatter):
+        # A directory-level discovery failure is not the import of a discovered
+        # file; the "auto-discovered file" reframe must not touch it. Guards
+        # against a blanket "add auto-discovered to every UDFLoadError" fix.
+        exc = UDFLoadError(
+            module=UDFLoadError.DISCOVERY_SENTINEL,
+            file="/no/such/dir",
+            error="User code directory not found",
+        )
+        result = formatter.format(exc, exc, str(exc), _context_for(exc))
+        assert result.title == "UDF discovery failed"
+        assert "auto-discovered" not in result.title.lower()
+
 
 class TestFirstNonNone:
     """Direct coverage for the explicit-None coalescing helper.
@@ -307,7 +343,10 @@ class TestRegistrationInTranslatorChain:
     def test_translator_uses_udf_load_formatter(self, udf_import_error):
         translator = ErrorTranslator()
         result = translator.translate(udf_import_error)
-        assert result.title == "Failed to load UDF module 'run_thinkific_gen.apply_html_text'"
+        assert result.title == (
+            "Auto-discovered UDF file failed to import: "
+            "/proj/tools/run_thinkific_gen/apply_html_text.py"
+        )
         # Sanity: the install-hint surfaced (i.e. function/config formatters did not steal it).
         assert "Python could not find the module 'markdown2'" in result.fix
 
@@ -340,7 +379,7 @@ class TestRegistrationInTranslatorChain:
         )
         translator = ErrorTranslator()
         result = translator.translate(exc)
-        assert result.title == "Failed to load UDF module 'proj.tools.uses_yaml'"
+        assert result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
         assert "Python could not find the module 'PyYAML'" in result.fix
 
     def test_translator_routes_udf_with_yaml_cause_through_udf_formatter(self):
@@ -365,7 +404,7 @@ class TestRegistrationInTranslatorChain:
         )
         translator = ErrorTranslator()
         result = translator.translate(exc)
-        assert result.title == "Failed to load UDF module 'proj.uses_yaml'"
+        assert result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
         assert result.category == "Configuration Error"
         assert "YAML syntax error" not in result.title
 
