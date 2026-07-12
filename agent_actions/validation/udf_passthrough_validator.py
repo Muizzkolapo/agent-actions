@@ -17,84 +17,94 @@ def _target_names(target: ast.AST) -> set[str]:
     return set()
 
 
-def _root_is_data(node: ast.AST) -> bool:
-    """True if an attribute/subscript/call chain is ultimately rooted at name ``data``."""
-    current = node
-    while True:
-        if isinstance(current, ast.Call):
-            current = current.func
-        elif isinstance(current, ast.Attribute):
-            current = current.value
-        elif isinstance(current, ast.Subscript):
-            current = current.value
-        else:
-            break
-    return isinstance(current, ast.Name) and current.id == "data"
+def _first_param(func: ast.AST) -> str | None:
+    """The UDF's first positional parameter — the bus/record the framework passes in."""
+    args = func.args
+    params = list(args.posonlyargs) + list(args.args)
+    if params:
+        return params[0].arg
+    return args.vararg.arg if args.vararg else None
 
 
-def _is_bus_read(node: ast.AST) -> bool:
-    """True for ``data[...]`` or a ``data.get(...)`` chain — a read straight off the bus."""
-    if isinstance(node, ast.Subscript) and _root_is_data(node):
-        return True
-    return (
+def _reads_input(node: ast.AST, root: str, tainted: set[str]) -> bool:
+    """True for ``x.get(...)`` or ``x[...]`` where ``x`` is the input or derived from it."""
+    if isinstance(node, ast.Subscript):
+        return _is_input(node.value, root, tainted)
+    if (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "get"
-        and _root_is_data(node.func.value)
-    )
-
-
-def _is_derived(node: ast.AST, tainted: set[str]) -> bool:
-    """True if *node* carries bus data through unchanged (opaque keys), not a fresh literal.
-
-    A dict/list literal and a call to any other function are construction
-    boundaries — their key set is bounded by the code, so they are not derived.
-    """
-    if _is_bus_read(node):
-        return True
-    if isinstance(node, ast.Name):
-        return node.id in tainted
-    if isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp)):
-        local = set(tainted)
-        for gen in node.generators:
-            if _is_derived(gen.iter, local):
-                local |= _target_names(gen.target)
-        return _is_derived(node.elt, local)
-    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-        return any(_is_derived(elt, tainted) for elt in node.elts)
+    ):
+        return _is_input(node.func.value, root, tainted)
     return False
 
 
-def _bus_tainted_names(func: ast.AST) -> set[str]:
+def _is_input(node: ast.AST, root: str, tainted: set[str]) -> bool:
+    """True if *node* is the input parameter itself or a value already read from it."""
+    if isinstance(node, ast.Name):
+        return node.id == root or node.id in tainted
+    return _reads_input(node, root, tainted)
+
+
+def _is_derived(node: ast.AST, root: str, tainted: set[str]) -> bool:
+    """True if *node* carries bus data through unchanged (opaque keys), not a fresh literal.
+
+    A read off a *key* of the input is derived; the bare input parameter is not —
+    returning the whole input is a filter whose keys already match its own schema.
+    Dict/list literals and calls to other functions are construction boundaries.
+    """
+    if _reads_input(node, root, tainted):
+        return True
+    if isinstance(node, ast.Name):
+        return node.id in tainted
+    if isinstance(node, ast.IfExp):
+        return _is_derived(node.body, root, tainted) or _is_derived(node.orelse, root, tainted)
+    if isinstance(node, ast.BoolOp):
+        return any(_is_derived(v, root, tainted) for v in node.values)
+    if isinstance(node, ast.BinOp):
+        return _is_derived(node.left, root, tainted) or _is_derived(node.right, root, tainted)
+    if isinstance(node, (ast.ListComp, ast.GeneratorExp, ast.SetComp)):
+        local = set(tainted)
+        for gen in node.generators:
+            if _is_derived(gen.iter, root, local):
+                local |= _target_names(gen.target)
+        return _is_derived(node.elt, root, local)
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return any(_is_derived(elt, root, tainted) for elt in node.elts)
+    return False
+
+
+def _bus_tainted_names(func: ast.AST, root: str) -> set[str]:
     """Local names holding bus-derived values, to a fixpoint over the function body."""
     tainted: set[str] = set()
     while True:
         before = len(tainted)
         for node in ast.walk(func):
-            if isinstance(node, ast.For) and _is_derived(node.iter, tainted):
+            if isinstance(node, ast.For) and _is_derived(node.iter, root, tainted):
                 tainted |= _target_names(node.target)
-            elif isinstance(node, ast.comprehension) and _is_derived(node.iter, tainted):
+            elif isinstance(node, ast.comprehension) and _is_derived(node.iter, root, tainted):
                 tainted |= _target_names(node.target)
-            elif isinstance(node, ast.Assign) and _is_derived(node.value, tainted):
+            elif isinstance(node, ast.Assign) and _is_derived(node.value, root, tainted):
                 for tgt in node.targets:
                     tainted |= _target_names(tgt)
             elif (
                 isinstance(node, (ast.AnnAssign, ast.NamedExpr))
                 and node.value is not None
-                and _is_derived(node.value, tainted)
+                and _is_derived(node.value, root, tainted)
             ):
                 tainted |= _target_names(node.target)
         if len(tainted) == before:
             return tainted
 
 
-def _returns_passthrough(func: ast.AST, tainted: set[str]) -> bool:
-    """True if a bus-derived value reaches the function's output (return/append/extend/+=)."""
+def _returns_passthrough(func: ast.AST, root: str) -> bool:
+    """True if a bus-derived value reaches output via return/append/extend/+=."""
+    tainted = _bus_tainted_names(func, root)
     for node in ast.walk(func):
         if isinstance(node, ast.Return) and node.value is not None:
-            if _is_derived(node.value, tainted):
+            if _is_derived(node.value, root, tainted):
                 return True
-        elif isinstance(node, ast.AugAssign) and _is_derived(node.value, tainted):
+        elif isinstance(node, ast.AugAssign) and _is_derived(node.value, root, tainted):
             return True
         elif (
             isinstance(node, ast.Call)
@@ -102,7 +112,7 @@ def _returns_passthrough(func: ast.AST, tainted: set[str]) -> bool:
             and node.func.attr in ("append", "extend")
             and isinstance(node.func.value, ast.Name)
             and node.args
-            and _is_derived(node.args[0], tainted)
+            and _is_derived(node.args[0], root, tainted)
         ):
             return True
     return False
@@ -115,7 +125,8 @@ def _source_is_passthrough(source: str) -> bool:
         return False
     for func in ast.walk(tree):
         if isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if _returns_passthrough(func, _bus_tainted_names(func)):
+            root = _first_param(func)
+            if root and _returns_passthrough(func, root):
                 return True
     return False
 

@@ -164,12 +164,16 @@ class PreflightService:
             impl = config.get("impl")
             if not impl:
                 continue
+            schema = config.get("json_output_schema")
+            if not schema:
+                # No compiled output schema → runtime does no output validation and
+                # cannot reject, so there is nothing to warn about.
+                continue
             try:
                 source = inspect.getsource(get_udf_metadata(impl)["function"])
             except (FunctionNotFoundError, OSError, TypeError) as exc:
                 logger.debug("Skipping passthrough check for '%s': %s", name, exc)
                 continue
-            schema = config.get("json_output_schema") or {}
             inputs[name] = {
                 "source": source,
                 "additional_properties": bool(schema.get("additionalProperties", False)),
