@@ -42,7 +42,9 @@ _RETURN_DIRECT = "def flatten(data):\n    return data.get('ns')\n"
 
 
 def _risks(source, additional_properties=False):
-    return find_passthrough_schema_risks({"f": {"source": source, "additional_properties": additional_properties}})
+    return find_passthrough_schema_risks(
+        {"f": {"source": source, "additional_properties": additional_properties}}
+    )
 
 
 def test_passthrough_with_strict_schema_is_flagged():
