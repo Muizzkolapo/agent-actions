@@ -64,6 +64,13 @@ _MUTATE_RETURN_INPUT = "def mark(record):\n    record['status'] = 'KEEP'\n    re
 _SUBKEY_CONSTRUCT = (
     "def build(data):\n    cfg = data.get('config', {})\n    return {'ok': cfg.get('threshold')}\n"
 )
+# String first param with sequence indexing — a prompt/parse helper, not a dict
+# passthrough. Numeric index / slice must not be mistaken for a mapping read.
+_STR_INDEX = "def make_prompt(context_str):\n    return context_str[0]\n"
+_STR_SLICE = "def make_prompt(context_str):\n    return context_str[0:100]\n"
+_NEG_INDEX = "def last(seq):\n    return seq[-1]\n"
+# Variable string key is still a mapping read — real tools index by a key var.
+_VAR_KEY = "def f(data):\n    k = 'ns'\n    return data[k]\n"
 
 
 def _risks(source, additional_properties=False):
@@ -150,6 +157,22 @@ def test_mutate_and_return_input_not_flagged():
 
 def test_subkey_read_into_dict_literal_not_flagged():
     assert _risks(_SUBKEY_CONSTRUCT) == []
+
+
+def test_string_index_not_flagged():
+    assert _risks(_STR_INDEX) == []
+
+
+def test_string_slice_not_flagged():
+    assert _risks(_STR_SLICE) == []
+
+
+def test_negative_index_not_flagged():
+    assert _risks(_NEG_INDEX) == []
+
+
+def test_variable_key_subscript_is_flagged():
+    assert _risks(_VAR_KEY) != []
 
 
 def test_missing_source_is_ignored():
