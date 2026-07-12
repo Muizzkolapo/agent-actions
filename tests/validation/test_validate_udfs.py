@@ -659,7 +659,7 @@ class TestFileUdfContractWarnings:
 
         @udf_tool(granularity=Granularity.FILE)
         def dedup_scores(data) -> list[dict]:
-            return data
+            return [{"id": d.get("id")} for d in data]
 
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
@@ -686,7 +686,7 @@ class TestFileUdfContractWarnings:
 
         @udf_tool(granularity=Granularity.FILE)
         def other_workflows_udf(data) -> list[dict]:
-            return data
+            return [{"id": d.get("id")} for d in data]
 
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))
         cmd.console = MagicMock()
