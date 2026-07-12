@@ -56,11 +56,23 @@ def execute_user_defined_function(
         SchemaValidationError: If output validation fails.
         AgentActionsError: If execution fails.
     """
+    from agent_actions.config.types import Granularity
+    from agent_actions.utils.udf_management.bus import Bus
     from agent_actions.utils.udf_management.registry import get_udf_metadata
 
     metadata = get_udf_metadata(udf_name)
     udf = metadata["function"]
     granularity = metadata["granularity"]
+
+    # RECORD-mode input is the action-name-keyed bus dict; hand the UDF a Bus so
+    # authors can opt into data.require(). FILE mode receives a list, so it is
+    # excluded. Bus is a transparent dict subclass — get/[]/iteration unchanged.
+    if (
+        granularity == Granularity.RECORD
+        and isinstance(input_data, dict)
+        and not isinstance(input_data, Bus)
+    ):
+        input_data = Bus(input_data)
 
     try:
         result = udf(input_data, **kwargs)
