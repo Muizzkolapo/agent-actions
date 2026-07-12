@@ -848,7 +848,10 @@ class TestToolPassthroughCrossCheck:
         clear_registry()
         udf_tool(_passthrough_tool)
         try:
-            cfgs = {"scorer": {"kind": "llm", "model_name": "gpt-4o-mini"}}
+            # llm action carries an impl too — only the kind filter should exclude it.
+            cfgs = {
+                "scorer": {"kind": "llm", "impl": "_passthrough_tool", "model_name": "gpt-4o-mini"}
+            }
             assert self._svc(cfgs)._collect_tool_passthrough_inputs() == {}
         finally:
             clear_registry()
@@ -862,15 +865,16 @@ class TestToolPassthroughCrossCheck:
         )._collect_tool_passthrough_inputs()
         assert collected == {}
 
-    def test_missing_json_output_schema_defaults_to_strict(self):
+    def test_missing_json_output_schema_is_skipped(self):
+        # No compiled output schema means the runtime does no output validation
+        # and cannot reject — so preflight must not warn. Parity with runtime.
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
 
         clear_registry()
         udf_tool(_passthrough_tool)
         try:
             cfgs = {"flatten": {"kind": "tool", "impl": "_passthrough_tool"}}
-            collected = self._svc(cfgs)._collect_tool_passthrough_inputs()
-            assert collected["flatten"]["additional_properties"] is False
+            assert self._svc(cfgs)._collect_tool_passthrough_inputs() == {}
         finally:
             clear_registry()
 
@@ -893,6 +897,40 @@ class TestToolPassthroughCrossCheck:
         try:
             cfgs = {"flatten": self._tool("_passthrough_tool", additional_properties=True)}
             assert not any("flatten" in m for m in self._emit_warnings(cfgs, caplog)), cfgs
+        finally:
+            clear_registry()
+
+    def test_validate_emits_passthrough_warning_end_to_end(self, caplog):
+        # Full validate() must reach the passthrough check and stay non-fatal.
+        from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
+
+        clear_registry()
+        udf_tool(_passthrough_tool)
+        try:
+            cfgs = {
+                "flatten": {
+                    "kind": "tool",
+                    "impl": "_passthrough_tool",
+                    "context_scope": {"observe": ["source.*"]},
+                    "schema": {"type": "object", "properties": {"k": {"type": "string"}}},
+                    "json_output_schema": {
+                        "type": "object",
+                        "properties": {"k": {"type": "string"}},
+                        "additionalProperties": False,
+                    },
+                }
+            }
+            logger_name = "agent_actions.services.preflight_service"
+            aa_logger = logging.getLogger("agent_actions")
+            original = aa_logger.propagate
+            aa_logger.propagate = True
+            try:
+                with caplog.at_level(logging.WARNING, logger=logger_name):
+                    self._svc(cfgs).validate()  # completes without raising
+                msgs = [r.getMessage() for r in caplog.records if r.name == logger_name]
+            finally:
+                aa_logger.propagate = original
+            assert any("flatten" in m and "upstream dicts" in m for m in msgs), msgs
         finally:
             clear_registry()
 

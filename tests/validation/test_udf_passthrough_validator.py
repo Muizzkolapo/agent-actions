@@ -39,6 +39,31 @@ _EXTEND = "def flatten(data):\n    out = []\n    out.extend(data.get('ns'))\n   
 _AUGASSIGN = "def flatten(data):\n    out = []\n    out += data.get('ns')\n    return out\n"
 _COMPREHENSION = "def flatten(data):\n    return [c for c in data.get('ns')]\n"
 _RETURN_DIRECT = "def flatten(data):\n    return data.get('ns')\n"
+# Two-level namespace flatten with a ternary and `or []` guard — the canonical
+# real-world flatten shape. Taint must survive the sub-read off a derived value.
+_TWO_LEVEL = (
+    "def flatten(data):\n"
+    "    cq = data.get('canonicalize', {})\n"
+    "    items = cq.get('items') if isinstance(cq, dict) else None\n"
+    "    out = []\n"
+    "    for q in items or []:\n"
+    "        out.append(q)\n"
+    "    return out\n"
+)
+# Reads via subscript, not .get.
+_SUBSCRIPT = "def flatten(data):\n    return data['ns']\n"
+# Bus param named something other than `data` — the runtime passes it positionally.
+_NONDATA_PARAM = "def flatten(bus):\n    out = []\n    for c in bus.get('ns'):\n        out.append(c)\n    return out\n"
+# out = out + bus_read (plain Assign with BinOp, the sibling of +=).
+_BINOP_ASSIGN = "def flatten(data):\n    out = []\n    out = out + data.get('ns')\n    return out\n"
+# Returns the whole input unchanged (pure filter) — input already conforms, safe.
+_RETURN_INPUT = "def keep(record):\n    return record if record['ok'] else {}\n"
+# Mutates the input record and returns it — out of scope (not a namespace read); safe.
+_MUTATE_RETURN_INPUT = "def mark(record):\n    record['status'] = 'KEEP'\n    return record\n"
+# Reads a sub-key but builds a fresh dict literal — safe.
+_SUBKEY_CONSTRUCT = (
+    "def build(data):\n    cfg = data.get('config', {})\n    return {'ok': cfg.get('threshold')}\n"
+)
 
 
 def _risks(source, additional_properties=False):
@@ -87,15 +112,44 @@ def test_return_direct_bus_read_is_flagged():
     assert _risks(_RETURN_DIRECT) != []
 
 
-def test_multiple_actions_each_reported_once():
+def test_two_flagged_actions_yield_exactly_two_findings():
     actions = {
         "flatten": {"source": _PASSTHROUGH, "additional_properties": False},
         "build": {"source": _CONSTRUCTED, "additional_properties": False},
         "extend": {"source": _EXTEND, "additional_properties": False},
     }
     findings = find_passthrough_schema_risks(actions)
+    assert len(findings) == 2
     flagged = {name for name in ("flatten", "build", "extend") if any(name in f for f in findings)}
     assert flagged == {"flatten", "extend"}
+
+
+def test_two_level_namespace_flatten_is_flagged():
+    assert _risks(_TWO_LEVEL) != []
+
+
+def test_subscript_bus_read_is_flagged():
+    assert _risks(_SUBSCRIPT) != []
+
+
+def test_non_data_param_name_is_flagged():
+    assert _risks(_NONDATA_PARAM) != []
+
+
+def test_binop_assign_bus_read_is_flagged():
+    assert _risks(_BINOP_ASSIGN) != []
+
+
+def test_return_whole_input_not_flagged():
+    assert _risks(_RETURN_INPUT) == []
+
+
+def test_mutate_and_return_input_not_flagged():
+    assert _risks(_MUTATE_RETURN_INPUT) == []
+
+
+def test_subkey_read_into_dict_literal_not_flagged():
+    assert _risks(_SUBKEY_CONSTRUCT) == []
 
 
 def test_missing_source_is_ignored():
