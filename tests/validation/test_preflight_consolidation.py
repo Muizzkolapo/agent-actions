@@ -768,6 +768,22 @@ class TestToolPassthroughCrossCheck:
             "json_output_schema": {"type": "object", "additionalProperties": additional_properties},
         }
 
+    def _emit_warnings(self, cfgs: dict, caplog) -> list[str]:
+        """Run the passthrough warning step and return its preflight messages.
+
+        The ``agent_actions`` logger does not propagate by default, so caplog
+        (which listens on root) needs propagation toggled on for the call."""
+        logger_name = "agent_actions.services.preflight_service"
+        aa_logger = logging.getLogger("agent_actions")
+        original = aa_logger.propagate
+        aa_logger.propagate = True
+        try:
+            with caplog.at_level(logging.WARNING, logger=logger_name):
+                self._svc(cfgs)._warn_tool_passthrough_risks()
+            return [r.getMessage() for r in caplog.records if r.name == logger_name]
+        finally:
+            aa_logger.propagate = original
+
     def test_passthrough_tool_source_and_schema_collected(self):
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
 
@@ -864,12 +880,7 @@ class TestToolPassthroughCrossCheck:
         clear_registry()
         udf_tool(_passthrough_tool)
         try:
-            logger_name = "agent_actions.services.preflight_service"
-            with caplog.at_level(logging.WARNING, logger=logger_name):
-                self._svc(
-                    {"flatten": self._tool("_passthrough_tool")}
-                )._warn_tool_passthrough_risks()
-            msgs = [r.getMessage() for r in caplog.records if r.name == logger_name]
+            msgs = self._emit_warnings({"flatten": self._tool("_passthrough_tool")}, caplog)
             assert any("flatten" in m and "additionalProperties" in m for m in msgs), msgs
         finally:
             clear_registry()
@@ -880,13 +891,8 @@ class TestToolPassthroughCrossCheck:
         clear_registry()
         udf_tool(_passthrough_tool)
         try:
-            logger_name = "agent_actions.services.preflight_service"
-            with caplog.at_level(logging.WARNING, logger=logger_name):
-                self._svc(
-                    {"flatten": self._tool("_passthrough_tool", additional_properties=True)}
-                )._warn_tool_passthrough_risks()
-            msgs = [r.getMessage() for r in caplog.records if r.name == logger_name]
-            assert not any("flatten" in m for m in msgs), msgs
+            cfgs = {"flatten": self._tool("_passthrough_tool", additional_properties=True)}
+            assert not any("flatten" in m for m in self._emit_warnings(cfgs, caplog)), cfgs
         finally:
             clear_registry()
 
