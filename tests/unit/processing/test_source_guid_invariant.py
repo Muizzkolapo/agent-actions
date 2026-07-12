@@ -28,6 +28,7 @@ def _ctx():
 
 # ── chokepoint: no "" fallback ───────────────────────────────────────────────
 
+
 def test_chokepoint_raises_on_guidless_record_instead_of_stamping_empty():
     # No item source_guid and no result.source_guid → today ensure_required_fields
     # stamps "". The invariant: a record reaching enrichment without a source_guid
@@ -48,6 +49,7 @@ def test_chokepoint_inherits_parent_guid_without_fabricating_a_fresh_one():
 
 
 # ── producer: FILE-mode reconciliation never leaves a record blank ────────────
+
 
 def test_producer_stamps_synthetic_file_record():
     # source_index=None (tool-synthesized row) is left blank today; the producer
@@ -72,6 +74,7 @@ def test_producer_inherits_parent_guid_when_available():
 
 
 # ── storage: fail loud, never silently partial-drop ──────────────────────────
+
 
 def test_storage_fails_loud_on_guidless_record_in_a_mixed_batch():
     # Today write_source silently skips the guid-less item (rows < input, no error)

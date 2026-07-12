@@ -10,6 +10,7 @@ from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
@@ -515,17 +516,17 @@ class SQLiteBackend(StorageBackend):
         """Write source data with optional deduplication by source_guid."""
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
-        # Pre-filter: build rows list, warn on missing source_guid
+        # A blank source_guid at the storage boundary is an upstream invariant
+        # violation, not a routine skip: fail loud (a partial drop is silent data loss).
         rows: list[tuple[str, str, str]] = []
-        for item in data:
+        for index, item in enumerate(data):
             source_guid = item.get("source_guid")
             if not source_guid:
-                logger.warning(
-                    "Skipping source item without source_guid: %s",
-                    relative_path,
-                    extra={"workflow_name": self.workflow_name},
+                raise DataValidationError(
+                    f"Source record {index} for '{relative_path}' has no source_guid; "
+                    f"refusing to drop it silently",
+                    context={"relative_path": relative_path, "record_index": index},
                 )
-                continue
             rows.append((relative_path, source_guid, json.dumps(item, ensure_ascii=False)))
 
         with self._lock:
@@ -542,12 +543,6 @@ class SQLiteBackend(StorageBackend):
                 inserted_count: int = cursor.rowcount if cursor.rowcount >= 0 else 0
 
                 self.connection.commit()
-
-                if len(data) > 0 and len(rows) == 0:
-                    raise ValueError(
-                        f"All {len(data)} source records were dropped for "
-                        f"'{relative_path}' (missing source_guid); 0 inserted"
-                    )
 
                 skipped_count = len(rows) - inserted_count if enable_deduplication else 0
                 dedup_detail = f", {skipped_count} skipped (dedup)" if skipped_count > 0 else ""

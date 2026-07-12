@@ -3,6 +3,7 @@
 import pytest
 
 from agent_actions.errors.configuration import ConfigurationError
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -416,19 +417,19 @@ class TestWriteSourceDropGuard:
         backend.close()
 
     def test_all_records_missing_source_guid_raises(self, backend):
-        """write_source raises ValueError when every record lacks source_guid."""
+        """write_source raises when every record lacks source_guid."""
         data = [{"content": "no_guid"}, {"content": "also_no_guid"}]
-        with pytest.raises(ValueError, match="dropped"):
+        with pytest.raises(DataValidationError, match="no source_guid"):
             backend.write_source("batch_001", data)
 
-    def test_mix_valid_and_invalid_records_succeeds(self, backend):
-        """write_source succeeds when at least one record has source_guid."""
+    def test_mix_valid_and_invalid_records_raises(self, backend):
+        """A guid-less record in a mixed batch fails loud — no silent partial drop."""
         data = [
             {"source_guid": "g1", "content": "valid"},
             {"content": "no_guid"},
         ]
-        result = backend.write_source("batch_001", data)
-        assert result == "batch_001"
+        with pytest.raises(DataValidationError, match="no source_guid"):
+            backend.write_source("batch_001", data)
 
     def test_empty_data_list_succeeds(self, backend):
         """write_source succeeds with empty data (nothing to drop)."""

@@ -1248,19 +1248,21 @@ class TestReattachSourceGuid:
 
         assert structured[0]["source_guid"] == "sg-already-set"
 
-    def test_no_crash_on_none_mapping(self):
+    def test_none_mapping_stamps_at_producer(self):
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [{"content": {"val": 1}}]
         _reattach_source_guid(structured, None, [{"source_guid": "sg-1"}])
-        assert "source_guid" not in structured[0]
+        # No mapping to a parent → born at the producer with a fresh guid, never blank.
+        assert structured[0]["source_guid"]
+        assert structured[0]["source_guid"] != "sg-1"
 
-    def test_no_crash_on_empty_original(self):
+    def test_empty_original_stamps_at_producer(self):
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [{"content": {"val": 1}}]
         _reattach_source_guid(structured, {0: 0}, [])
-        assert "source_guid" not in structured[0]
+        assert structured[0]["source_guid"]  # no inheritable parent → fresh producer guid
 
     def test_many_to_one_uses_first_parent(self):
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
@@ -1277,17 +1279,18 @@ class TestReattachSourceGuid:
 
         assert structured[0]["source_guid"] == "sg-first"
 
-    def test_out_of_bounds_index_skipped(self):
+    def test_out_of_bounds_index_stamped_at_producer(self):
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [{"content": {"val": 1}}]
-        mapping = {0: 99}  # Out of bounds
+        mapping = {0: 99}  # Out of bounds — no resolvable parent
         original = [{"source_guid": "sg-only"}]
 
         _reattach_source_guid(structured, mapping, original)
 
-        # Out of bounds → not set (no crash)
-        assert "source_guid" not in structured[0]
+        # Unresolvable parent → fresh producer guid, not the wrong parent's, never blank.
+        assert structured[0]["source_guid"]
+        assert structured[0]["source_guid"] != "sg-only"
 
     def test_unmapped_outputs_not_defaulted_to_first(self):
         """Outputs not in source_mapping must NOT inherit source_guid from input[0]."""
@@ -1310,8 +1313,10 @@ class TestReattachSourceGuid:
 
         assert structured[0]["source_guid"] == "sg-a"
         assert structured[1]["source_guid"] == "sg-b"
-        # Index 2 is unmapped — must NOT get sg-a (the old default-to-0 bug)
-        assert "source_guid" not in structured[2]
+        # Index 2 is unmapped (a new record) — born at the producer with a fresh
+        # guid, and crucially NOT mis-attributed to any input parent.
+        assert structured[2]["source_guid"] not in {"sg-a", "sg-b", "sg-c"}
+        assert structured[2]["source_guid"]
 
     def test_empty_mapping_positional_fallback_same_cardinality(self):
         """Empty source_mapping with same cardinality uses positional fallback."""
@@ -1326,8 +1331,8 @@ class TestReattachSourceGuid:
         assert structured[0]["source_guid"] == "sg-a"
         assert structured[1]["source_guid"] == "sg-b"
 
-    def test_empty_mapping_no_fallback_different_cardinality(self):
-        """Empty source_mapping with different cardinality does NOT reattach."""
+    def test_empty_mapping_different_cardinality_stamps_fresh(self):
+        """Empty mapping + cardinality mismatch: no positional inherit — fresh producer guids."""
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [
@@ -1340,12 +1345,15 @@ class TestReattachSourceGuid:
 
         _reattach_source_guid(structured, mapping, original)
 
-        # Cardinality mismatch (3 vs 2): no safe positional fallback
-        for item in structured:
-            assert "source_guid" not in item
+        # No safe positional parent → each gets a fresh, distinct producer guid,
+        # never blank and never a mis-attributed parent guid.
+        guids = [item["source_guid"] for item in structured]
+        assert all(guids)
+        assert not ({"sg-a", "sg-b"} & set(guids))
+        assert len(set(guids)) == 3
 
-    def test_none_source_index_skips_guid_attachment(self):
-        """Synthetic records (source_index=None) do not inherit source_guid."""
+    def test_none_source_index_stamped_at_producer(self):
+        """Synthetic records (source_index=None) are born at the producer, not left blank."""
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [
@@ -1359,7 +1367,9 @@ class TestReattachSourceGuid:
         _reattach_source_guid(structured, mapping, original)
 
         assert structured[0]["source_guid"] == "sg-a"
-        assert "source_guid" not in structured[1]  # Synthetic — skipped
+        # Synthetic — a new entity, gets a fresh producer guid (not a parent's), never blank.
+        assert structured[1]["source_guid"] not in {"sg-a", "sg-b"}
+        assert structured[1]["source_guid"]
         assert structured[2]["source_guid"] == "sg-b"
 
 

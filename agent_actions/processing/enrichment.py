@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     EnricherExecutedEvent,
@@ -301,9 +302,15 @@ class RequiredFieldsEnricher(Enricher):
 
         fm = FieldManager()
         for i, item in enumerate(result.data):
-            # Prefer item-level source_guid (set by metadata reattachment in FILE mode)
-            # over result-level source_guid (which is None for FILE mode).
-            item_source_guid = item.get("source_guid") or result.source_guid or ""
+            # A record is stamped at its source or producer; a blank one here is an
+            # upstream invariant violation — fail loud, don't backfill an empty string.
+            item_source_guid = item.get("source_guid") or result.source_guid
+            if not item_source_guid:
+                raise DataValidationError(
+                    f"Record {i} reached '{context.action_name}' enrichment without a "
+                    f"source_guid; it must be stamped at its source or producer",
+                    context={"action": context.action_name, "record_index": i},
+                )
             result.data[i] = fm.ensure_required_fields(item, item_source_guid, context.action_name)
 
         return result
