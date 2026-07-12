@@ -30,3 +30,24 @@ def test_distinguishes_different_content():
 def test_non_dict_content():
     assert IDGenerator.derive_source_guid("text") == IDGenerator.derive_source_guid("text")
     assert IDGenerator.derive_source_guid("a") != IDGenerator.derive_source_guid("b")
+
+
+def test_bare_string_matches_content_wrapper():
+    # A text chunk is stamped from the raw string (task_preparer) at one site and
+    # from a {"content": text} wrapper (_prepare_online_data) at another — they must
+    # derive the SAME guid so source_data and the disposition key agree.
+    assert IDGenerator.derive_source_guid("chunk") == IDGenerator.derive_source_guid(
+        {"content": "chunk"}
+    )
+
+
+def test_all_text_projections_agree_across_modes():
+    # batch text (enveloped record → stripped), online ingestion wrapper, and the raw
+    # string (processing) must all collapse to one identity for the same chunk.
+    text = "a chunk of text"
+    batch = IDGenerator.derive_source_guid(
+        {"content": text, "target_id": "t", "node_id": "n", "batch_uuid": "b_0"}
+    )
+    online_ingestion = IDGenerator.derive_source_guid({"content": text})
+    processing_raw = IDGenerator.derive_source_guid(text)
+    assert batch == online_ingestion == processing_raw

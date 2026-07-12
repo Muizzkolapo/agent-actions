@@ -39,7 +39,8 @@ Four classes handle identity, lineage, field enforcement, and version correlatio
 IDGenerator (id_generation/generator.py)
 ├── generate_target_id()       → UUID4  (unique record identity)
 ├── generate_node_id(action)   → "{action}_{uuid4}"  (lineage node)
-├── generate_source_guid()     → UUID4  (record instance identity)
+├── derive_source_guid(record) → UUID5  (deterministic first-stage identity)
+├── generate_source_guid()     → UUID4  (new-entity identity: expansion/synthetic)
 └── generate_content_hash()    → UUID5  (deterministic content fingerprint)
 
 LineageBuilder (lineage/builder.py)

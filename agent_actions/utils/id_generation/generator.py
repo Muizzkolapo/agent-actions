@@ -45,9 +45,17 @@ class IDGenerator:
         The same input content always yields the same guid (across runs and stamp
         sites), so the disposition/checkpoint gate matches records on re-run and the
         ingestion and processing stamps agree. Framework envelope fields are excluded.
+
+        Note: the envelope exclusion is name-based — a user content field named exactly
+        like a framework field (e.g. `node_id`) is treated as envelope. Those names are
+        reserved.
         """
         if isinstance(record, dict):
-            content = {k: v for k, v in record.items() if k not in _ENVELOPE_FIELDS}
+            content: Any = {k: v for k, v in record.items() if k not in _ENVELOPE_FIELDS}
+        elif isinstance(record, str):
+            # A first-stage text chunk is stamped from a {"content": text} wrapper at
+            # some sites and from the raw string at others; normalize so they agree.
+            content = {"content": record}
         else:
             content = record
         return IDGenerator.generate_content_hash(content)
