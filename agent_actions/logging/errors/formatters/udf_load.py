@@ -108,10 +108,11 @@ class UDFLoadErrorFormatter(ErrorFormatter):
             )
 
         fix += (
-            "\n\nThis file was found by the recursive scan of the -u tree. Fix its "
-            "module-load code, or — if it is not a UDF — move it outside the -u "
-            "directory so discovery skips it. A single broken file blocks every "
-            "command that loads the workflow."
+            "\n\nThis file was found by the recursive scan of the user-code "
+            "directory (set via `-u <path>` or `tool_path` in your workflow "
+            "config). Fix its module-load code, or — if it is not a UDF — move "
+            "it outside that directory so discovery skips it. A single broken "
+            "file blocks every command that loads the workflow."
         )
 
         ctx: dict[str, Any] = {}
@@ -122,13 +123,11 @@ class UDFLoadErrorFormatter(ErrorFormatter):
         if requested_path:
             ctx["requested_path"] = requested_path
 
-        # Name the file, not the dotted module: discovery imported it from the
-        # -u tree, so "Failed to load UDF module 'X'" read as if the user chose
-        # it. Fall back to the module when no file path is available.
-        if file:
-            title = f"Auto-discovered UDF file failed to import: {file}"
-        else:
-            title = f"Auto-discovered UDF module failed to import: '{module}'"
+        # Name the file, not the dotted module — discovery found it by scanning
+        # the user-code directory, so the old module-named title read as if the
+        # user had chosen it. Fall back to the module identifier when no file
+        # path is available.
+        title = f"Auto-discovered UDF file failed to import: {file or module}"
 
         return UserError(
             category="Configuration Error",

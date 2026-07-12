@@ -60,9 +60,9 @@ class TestCanHandle:
 
 class TestImportFailureFormatting:
     def test_title_reframes_to_name_auto_discovered_file(self, formatter, udf_import_error):
-        # Spec 570: "Failed to load UDF module 'X'" read as if the user named
-        # the module. The file was auto-discovered by the recursive -u walk, so
-        # the title now names the file and says it was auto-discovered.
+        # The old title "Failed to load UDF module 'X'" read as if the user
+        # named the module; the file was auto-discovered by the recursive scan,
+        # so the title now names the file and says it was auto-discovered.
         result = formatter.format(
             udf_import_error,
             udf_import_error,
@@ -76,7 +76,7 @@ class TestImportFailureFormatting:
         assert "auto-discovered" in result.title.lower()
         # Cause stays visible through the reframe (FAILURE MODE: don't bury it).
         assert "No module named 'markdown2'" in result.details
-        # Actionable next step: the -u tree + the move-it-out option.
+        # Actionable next step names the user-code dir (-u / tool_path) + move-out.
         assert "-u" in result.fix
         assert "move it outside" in result.fix.lower()
 
