@@ -34,3 +34,18 @@ def test_record_udf_tolerant_reads_survive_wrap():
 
     result = execute_user_defined_function("mixed_reader", {"author": {"x": 1}})
     assert result == {"missing": None, "present": {"x": 1}, "has": True}
+
+
+def test_file_mode_input_is_not_wrapped():
+    # FILE mode receives a list, not the bus dict — the dict guard must exclude
+    # it. Wrapping a list in Bus would raise ValueError before the UDF ran.
+    seen = {}
+
+    @udf_tool(granularity=Granularity.FILE)
+    def file_reader(data):
+        seen["is_list"] = isinstance(data, list)
+        return [{"ok": True}]
+
+    result = execute_user_defined_function("file_reader", [{"a": 1}, {"b": 2}])
+    assert seen["is_list"] is True
+    assert result == [{"ok": True}]
