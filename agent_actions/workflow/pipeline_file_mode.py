@@ -75,40 +75,38 @@ def _reattach_source_guid(
     source_mapping: dict[int, int | list[int] | None] | None,
     original_data: list[dict],
 ) -> None:
-    """Reattach source_guid from input records to output items using mapping.
+    """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
-    Mutates structured_data in place.  Only sets source_guid when the output
-    item does not already carry a truthy value (explicit tool values win).
-    Entries with ``None`` source index (synthetic records) are skipped.
+    Mutates structured_data in place. An explicit tool value wins. Otherwise the
+    item inherits its mapped parent's guid; a record with no inheritable parent
+    (synthetic, unmapped, or a parent that itself lacks one) is a new entity
+    synthesized here — it gets a fresh guid generated at the producer, mirroring
+    the 1→N expansion pattern, so it still traces to its source file and is never
+    left blank for a downstream fallback to fabricate.
     """
-    if source_mapping is None or not original_data:
-        return
+    from agent_actions.utils.id_generation import IDGenerator
 
     for i, item in enumerate(structured_data):
         if item.get("source_guid"):
             continue  # Tool explicitly set it — respect that
 
-        if i not in source_mapping:
-            # Positional fallback only when ALL outputs lack node_id (empty mapping)
-            # and cardinalities match (1:1 passthrough by tools that don't preserve node_id).
-            # When mapping has entries, unmapped outputs are genuinely new records.
-            if not source_mapping and len(structured_data) == len(original_data):
-                source_idx: int | list[int] | None = i
-            else:
-                continue  # Unmapped output — new record, no parent to inherit from
-        else:
-            source_idx = source_mapping[i]
-
-        if source_idx is None:
-            continue  # Synthetic record — no parent GUID to inherit
+        source_idx: int | list[int] | None = None
+        if source_mapping is not None:
+            if i in source_mapping:
+                source_idx = source_mapping[i]
+            elif not source_mapping and len(structured_data) == len(original_data):
+                # Empty mapping + matching cardinality: 1:1 passthrough by a tool
+                # that didn't preserve node_id.
+                source_idx = i
 
         if isinstance(source_idx, list):
-            source_idx = source_idx[0]  # Many-to-one: use first parent
+            source_idx = source_idx[0] if source_idx else None  # Many-to-one: first parent
 
-        if isinstance(source_idx, int) and source_idx < len(original_data):
+        parent_guid = None
+        if isinstance(source_idx, int) and original_data and source_idx < len(original_data):
             parent_guid = original_data[source_idx].get("source_guid")
-            if parent_guid:
-                item["source_guid"] = parent_guid
+
+        item["source_guid"] = parent_guid or IDGenerator.generate_source_guid()
 
 
 def _resolve_input_record(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
@@ -197,16 +198,15 @@ class TestWriteSourceExecutemany:
         rows = backend.read_source("path/data.json")
         assert any(r["value"] == "replaced" for r in rows)
 
-    def test_write_source_skips_items_without_guid(self, backend):
+    def test_write_source_raises_on_item_without_guid(self, backend):
         data = [
             {"value": "no_guid"},
             {"source_guid": "g1", "value": "has_guid"},
         ]
-        backend.write_source("path/data.json", data)
-        rows = backend.read_source("path/data.json")
-        assert len(rows) == 1
+        with pytest.raises(DataValidationError, match="no source_guid"):
+            backend.write_source("path/data.json", data)
 
     def test_write_source_all_missing_guid_raises(self, backend):
         data = [{"value": "no_guid_1"}, {"value": "no_guid_2"}]
-        with pytest.raises(ValueError, match="missing source_guid"):
+        with pytest.raises(DataValidationError, match="no source_guid"):
             backend.write_source("path/data.json", data)
