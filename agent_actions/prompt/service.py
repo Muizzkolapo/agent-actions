@@ -695,23 +695,7 @@ class PromptPreparationService:
                     logger.debug("No project root found from %s", start_path)
 
             if workflow_config_path:
-                file_path_obj = Path(workflow_config_path).resolve()
-                current = file_path_obj.parent
-                workflow_root = None
-
-                search_up = current
-                while search_up != search_up.parent:
-                    if (search_up / "agent_config").exists():
-                        workflow_root = search_up
-                        break
-                    if search_up.name == "agent_config":  # In case we are inside it
-                        workflow_root = search_up.parent
-                        break
-                    search_up = search_up.parent
-
-                if not workflow_root:
-                    workflow_root = current
-
+                workflow_root = PromptPreparationService._find_workflow_root(workflow_config_path)
                 workflow_seed_dir = workflow_root / seed_dir_name
                 if workflow_seed_dir.exists() and workflow_seed_dir.is_dir():
                     logger.debug("Found workflow-level seed data: %s", workflow_seed_dir)
@@ -733,13 +717,57 @@ class PromptPreparationService:
             logger.warning("Error during seed data resolution: %s", e, exc_info=True)
             # Fall through to error raising
 
-        # Not found - raise error
-        raise StaticDataLoadError(
+        # Not found - raise an error that names the folder AND the seed_path namespace.
+        message = (
             f"Seed data directory not found. Create '{seed_dir_name}' folder "
             "at workflow root (same level as agent_config/, schema/, prompt_store/) "
-            "to store static reference data files.",
+            "to store static reference data files. The folder name comes from "
+            f"'seed_data_path' in agent_actions.yml (currently '{seed_dir_name}'); "
+            "actions always reference seed data under the 'seed_path' context "
+            "namespace, regardless of the folder name."
+        )
+        if seed_dir_name == "seed_path" and PromptPreparationService._default_seed_folder_exists(
+            workflow_config_path
+        ):
+            message += (
+                " A 'seed_data' folder already exists — 'seed_path' is the context "
+                "namespace, not the folder name. Remove 'seed_data_path: seed_path' "
+                "from agent_actions.yml to use the default 'seed_data' folder."
+            )
+        raise StaticDataLoadError(
+            message,
             context={
                 "workflow_config_path": str(workflow_config_path),
                 "error_type": "missing_seed_data_directory",
             },
         )
+
+    @staticmethod
+    def _find_workflow_root(workflow_config_path: str) -> Path:
+        """Walk up from a workflow config file to the directory that holds ``agent_config/``."""
+        current = Path(workflow_config_path).resolve().parent
+        search_up = current
+        while search_up != search_up.parent:
+            if (search_up / "agent_config").exists():
+                return search_up
+            if search_up.name == "agent_config":  # In case we are inside it
+                return search_up.parent
+            search_up = search_up.parent
+        return current
+
+    @staticmethod
+    def _default_seed_folder_exists(workflow_config_path: str | None) -> bool:
+        """Whether a conventional ``seed_data`` folder exists at the workflow or project root."""
+        from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
+
+        candidates: list[Path] = []
+        start_path = Path(workflow_config_path).parent if workflow_config_path else None
+        if workflow_config_path:
+            candidates.append(
+                PromptPreparationService._find_workflow_root(workflow_config_path) / "seed_data"
+            )
+        try:
+            candidates.append(PathManager().get_project_root(start_path=start_path) / "seed_data")
+        except ProjectRootNotFoundError:
+            pass
+        return any(candidate.is_dir() for candidate in candidates)
