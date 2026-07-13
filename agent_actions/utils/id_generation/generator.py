@@ -4,20 +4,7 @@ import json
 import uuid
 from typing import Any
 
-# Framework envelope fields excluded from the source_guid content projection: they
-# are per-run/positional (target_id, batch_uuid, …) so hashing them would defeat the
-# deterministic identity. Everything else is the record's content.
-_ENVELOPE_FIELDS = frozenset(
-    {
-        "source_guid",
-        "target_id",
-        "batch_id",
-        "batch_uuid",
-        "node_id",
-        "parent_target_id",
-        "root_target_id",
-    }
-)
+from agent_actions.record.envelope import SOURCE_GUID_EXCLUDED_FIELDS
 
 
 class IDGenerator:
@@ -51,7 +38,7 @@ class IDGenerator:
         reserved.
         """
         if isinstance(record, dict):
-            content: Any = {k: v for k, v in record.items() if k not in _ENVELOPE_FIELDS}
+            content: Any = {k: v for k, v in record.items() if k not in SOURCE_GUID_EXCLUDED_FIELDS}
         elif isinstance(record, str):
             # A first-stage text chunk is stamped from a {"content": text} wrapper at
             # some sites and from the raw string at others; normalize so they agree.
