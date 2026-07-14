@@ -94,21 +94,6 @@ _PERSISTENT_FIELDS: frozenset[str] = RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_F
 # pipeline_file_mode (tool input stripping), and scope_namespace (metadata exclusion).
 RECORD_FRAMEWORK_FIELDS: frozenset[str] = _PERSISTENT_FIELDS | RECORD_STAGE_FIELDS
 
-# Volatile identity fields excluded from the source_guid content hash (generator.py
-# imports this): positional envelope ids + the staging batch ids. NOT RECORD_FRAMEWORK_FIELDS
-# — that set also holds content/metadata, which ARE the payload here (excluding = collapse).
-SOURCE_GUID_EXCLUDED_FIELDS: frozenset[str] = frozenset(
-    {
-        "source_guid",
-        "target_id",
-        "node_id",
-        "parent_target_id",
-        "root_target_id",
-        "batch_id",
-        "batch_uuid",
-    }
-)
-
 
 class RecordEnvelopeError(Exception):
     """Raised when a record envelope contract is violated."""

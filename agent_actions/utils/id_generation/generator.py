@@ -4,8 +4,6 @@ import json
 import uuid
 from typing import Any
 
-from agent_actions.record.envelope import SOURCE_GUID_EXCLUDED_FIELDS
-
 
 class IDGenerator:
     """Centralized ID generation service for processor operations."""
@@ -27,23 +25,15 @@ class IDGenerator:
 
     @staticmethod
     def derive_source_guid(record: Any) -> str:
-        """Deterministic source_guid for a first-stage record: UUID5 over its content.
+        """Deterministic UUID5 identity over a first-stage record's raw content.
 
-        The same input content always yields the same guid (across runs and stamp
-        sites), so the disposition/checkpoint gate matches records on re-run and the
-        ingestion and processing stamps agree. The volatile envelope/identity fields in
-        ``SOURCE_GUID_EXCLUDED_FIELDS`` are excluded from the hash.
-
-        Note: the exclusion is name-based — a user content field named exactly like an
-        excluded field (e.g. `node_id`, `batch_id`) is dropped from the hash. Those
-        names are reserved.
+        Hashes the payload as given — nothing is stripped by name. Callers MUST derive
+        BEFORE the volatile envelope (target_id/batch_id/node_id) is added, so identity is
+        stable across runs and a user field sharing a framework name stays part of identity
+        (no silent collision). A bare string normalizes to ``{"content": str}``.
         """
-        if isinstance(record, dict):
-            content: Any = {k: v for k, v in record.items() if k not in SOURCE_GUID_EXCLUDED_FIELDS}
-        elif isinstance(record, str):
-            # A first-stage text chunk is stamped from a {"content": text} wrapper at
-            # some sites and from the raw string at others; normalize so they agree.
-            content = {"content": record}
+        if isinstance(record, str):
+            content: Any = {"content": record}
         else:
             content = record
         return IDGenerator.generate_content_hash(content)

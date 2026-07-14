@@ -346,6 +346,9 @@ def _prepare_text_chunks_batch(
     result = []
     for idx, chunk in enumerate(chunks):
         target_id = str(uuid.uuid4())
+        # Hash identity over the raw content BEFORE the volatile envelope is added, so the
+        # per-run target_id/batch_id never enters the guid.
+        source_guid = IDGenerator.derive_source_guid({"content": chunk})
         record = {
             "content": chunk,
             "batch_id": batch_id,
@@ -355,8 +358,8 @@ def _prepare_text_chunks_batch(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
+            "source_guid": source_guid,
         }
-        record["source_guid"] = IDGenerator.derive_source_guid(record)
         result.append(record)
     return result
 
@@ -377,6 +380,10 @@ def _add_batch_metadata(
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
+        # Hash identity over the raw row BEFORE the framework envelope is added, so a user
+        # column named like a framework field (e.g. node_id in a graph/edge export) stays
+        # part of identity instead of being overwritten and collapsing distinct rows.
+        source_guid = IDGenerator.derive_source_guid(row)
         record = {
             **row,
             "batch_id": batch_id,
@@ -386,8 +393,8 @@ def _add_batch_metadata(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
+            "source_guid": source_guid,
         }
-        record["source_guid"] = IDGenerator.derive_source_guid(record)
         result.append(record)
     return result
 
