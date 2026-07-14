@@ -50,7 +50,7 @@ defaults:
     folder: ./staging
     file_type: [json]
   context_scope:
-    seed_path:
+    seed:
       domain_rules: $file:domain_rules.json
       reference_data: $file:reference_data.json
 ```

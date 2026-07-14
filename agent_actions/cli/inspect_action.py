@@ -464,11 +464,10 @@ class ContextCommand(BaseInspectCommand):
         context_scope = action_config.get("context_scope") or {}
 
         # `seed.*` is populated by the `seed` directive.
-        seed_entries = context_scope.get("seed")
-        seed_keys: list[str] = list(seed_entries.keys()) if isinstance(seed_entries, dict) else []
+        seed_keys = self._seed_namespace_keys(context_scope)
         # Don't shadow a user action literally named `seed`.
         if seed_keys and "seed" not in namespaces:
-            namespaces["seed"] = list(dict.fromkeys(seed_keys))
+            namespaces["seed"] = seed_keys
 
         return {
             "action_name": self.target_action_name,
@@ -481,6 +480,14 @@ class ContextCommand(BaseInspectCommand):
             },
             "total_template_variables": sum(len(fs) for fs in namespaces.values()),
         }
+
+    @staticmethod
+    def _seed_namespace_keys(context_scope: dict[str, Any]) -> list[str]:
+        """Keys exposed under the ``seed.*`` namespace, from the ``seed`` directive."""
+        seed_entries = context_scope.get("seed")
+        if not isinstance(seed_entries, dict):
+            return []
+        return list(dict.fromkeys(seed_entries.keys()))
 
     @staticmethod
     def _group_refs_by_namespace(refs: list[Any]) -> dict[str, list[str]]:

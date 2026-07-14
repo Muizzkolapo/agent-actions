@@ -334,7 +334,7 @@ Mutable values (list, dict) are deep-copied to prevent
 cross-agent state leakage.
 ```
 
-`context_scope` is a special case -- it uses `deep_merge_context_scope()` which merges action-level directives **into** defaults (dicts merged, lists deduplicated) rather than replacing them. This lets an action add drop fields while inheriting seed_path from defaults.
+`context_scope` is a special case -- it uses `deep_merge_context_scope()` which merges action-level directives **into** defaults (dicts merged, lists deduplicated) rather than replacing them. This lets an action add drop fields while inheriting seed from defaults.
 
 ---
 
@@ -430,4 +430,4 @@ ResponseBuilder (static methods):
 
 12. **Array-type schemas produce separate output_schema and json_output_schema.** When the schema is `type: array`, the full unified schema goes to `output_schema` (for LLM providers) while `json_output_schema` gets just the `items` definition (for validation). This is because validation operates on individual items, not the outer array wrapper.
 
-13. **context_scope merges, not replaces.** Unlike all other config fields that follow "action overrides defaults", `context_scope` uses `deep_merge_context_scope()` which merges action-level directives into defaults. Dicts are shallow-merged; lists are concatenated and deduplicated. This lets an action add `drop` fields while inheriting `seed_path` from defaults.
+13. **context_scope merges, not replaces.** Unlike all other config fields that follow "action overrides defaults", `context_scope` uses `deep_merge_context_scope()` which merges action-level directives into defaults. Dicts are shallow-merged; lists are concatenated and deduplicated. This lets an action add `drop` fields while inheriting `seed` from defaults.

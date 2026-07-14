@@ -85,7 +85,7 @@ context_scope:
   observe:      ["extract.title", "extract.body"]
   passthrough:  ["source.customer_id"]
   drop:         ["source.ssn", "source.salary"]
-  seed_path:
+  seed:
     rules: "grading_rubric.json"
 ```
 
@@ -232,7 +232,7 @@ Step 2: BUILD FIELD CONTEXT
   --> Pops _dependency_metadata for diagnostic use later
   
 Step 3: LOAD SEED DATA
-  StaticDataLoader.load_static_data(seed_path_config)
+  StaticDataLoader.load_static_data(seed_config)
   --> Loads JSON/YAML/CSV/text files from seed_data/ directory
   --> Returns dict keyed by field_name from config
   
@@ -327,7 +327,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
 
 ```
 context_scope:
-  seed_path:
+  seed:
     rubric: "grading_rubric.json"
     examples: "few_shot_examples.yml"
 

@@ -8,6 +8,9 @@ Verifies that:
 3. normalize_all_agent_configs normalizes context_scope in-place
 """
 
+import pytest
+
+from agent_actions.errors import ConfigurationError
 from agent_actions.input.context.normalizer import (
     DIRECTIVE_REGISTRY,
     _build_version_base_name_map,
@@ -15,6 +18,24 @@ from agent_actions.input.context.normalizer import (
     normalize_all_agent_configs,
     normalize_context_scope,
 )
+
+
+class TestRemovedDirectives:
+    def test_seed_path_raises_naming_the_replacement(self):
+        """The renamed-away seed_path key raises, naming both the old key and 'seed'."""
+        with pytest.raises(ConfigurationError) as excinfo:
+            normalize_context_scope({"seed_path": {"x": "$file:y.json"}}, {})
+        msg = str(excinfo.value)
+        assert "seed_path" in msg  # names the removed key
+        assert "'seed'" in msg  # points at the replacement
+
+    def test_static_data_raises_naming_the_replacement(self):
+        """The retired static_data key raises with the same guidance."""
+        with pytest.raises(ConfigurationError) as excinfo:
+            normalize_context_scope({"static_data": {"x": "$file:y.json"}}, {})
+        msg = str(excinfo.value)
+        assert "static_data" in msg
+        assert "'seed'" in msg
 
 
 class TestDirectiveRegistry:
