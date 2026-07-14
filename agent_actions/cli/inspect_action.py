@@ -463,13 +463,9 @@ class ContextCommand(BaseInspectCommand):
 
         context_scope = action_config.get("context_scope") or {}
 
-        # `seed.*` is populated by the `seed_path` and `static_data` directives.
-        # (`seed_data` in SEED_CONFIG_KEYS is an anti-typo flag, not a real key.)
-        seed_keys: list[str] = []
-        for src_key in ("seed_path", "static_data"):
-            entries = context_scope.get(src_key)
-            if isinstance(entries, dict):
-                seed_keys.extend(entries.keys())
+        # `seed.*` is populated by the `seed` directive.
+        seed_entries = context_scope.get("seed")
+        seed_keys: list[str] = list(seed_entries.keys()) if isinstance(seed_entries, dict) else []
         # Don't shadow a user action literally named `seed`.
         if seed_keys and "seed" not in namespaces:
             namespaces["seed"] = list(dict.fromkeys(seed_keys))

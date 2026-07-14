@@ -4,7 +4,7 @@ Tests for the context_scope_normalizer module.
 Verifies that:
 1. List directives (observe, passthrough, drop, drops) have version base name
    references expanded to concrete versioned references
-2. Dict directives (seed_path) are preserved as-is (never expanded)
+2. Dict directives (seed) are preserved as-is (never expanded)
 3. normalize_all_agent_configs normalizes context_scope in-place
 """
 
@@ -34,8 +34,8 @@ class TestDirectiveRegistry:
         assert DIRECTIVE_REGISTRY["drops"]["expand_versions"] is True
 
     def test_dict_directives_are_not_expanded(self):
-        assert DIRECTIVE_REGISTRY["seed_path"]["type"] == "dict"
-        assert DIRECTIVE_REGISTRY["seed_path"]["expand_versions"] is False
+        assert DIRECTIVE_REGISTRY["seed"]["type"] == "dict"
+        assert DIRECTIVE_REGISTRY["seed"]["expand_versions"] is False
 
 
 class TestNormalizeContextScope:
@@ -57,22 +57,22 @@ class TestNormalizeContextScope:
 
         assert result["observe"] == ["loop_action_1.score", "loop_action_2.score"]
 
-    def test_preserves_seed_path_dict(self):
+    def test_preserves_seed_dict(self):
         context_scope = {
-            "seed_path": {"exam_syllabus": "syllabus.json", "grading_rubric": "rubric.json"}
+            "seed": {"exam_syllabus": "syllabus.json", "grading_rubric": "rubric.json"}
         }
         version_base_map = {"loop_action": ["loop_action_1", "loop_action_2"]}
 
         result = normalize_context_scope(context_scope, version_base_map)
 
-        assert result["seed_path"] == {
+        assert result["seed"] == {
             "exam_syllabus": "syllabus.json",
             "grading_rubric": "rubric.json",
         }
 
     def test_handles_mixed_directives(self):
         context_scope = {
-            "seed_path": {"exam_syllabus": "syllabus.json"},
+            "seed": {"exam_syllabus": "syllabus.json"},
             "observe": ["loop_action.*", "other_action.field1"],
             "passthrough": ["loop_action.*"],
             "drop": ["unwanted_field"],
@@ -81,7 +81,7 @@ class TestNormalizeContextScope:
 
         result = normalize_context_scope(context_scope, version_base_map)
 
-        assert result["seed_path"] == {"exam_syllabus": "syllabus.json"}
+        assert result["seed"] == {"exam_syllabus": "syllabus.json"}
         assert result["observe"] == [
             "loop_action_1.*",
             "loop_action_2.*",
@@ -195,16 +195,14 @@ class TestNormalizeAllAgentConfigs:
                 "version_base_name": "loop",
                 "version_number": 1,
             },
-            "consumer": {
-                "context_scope": {"observe": ["loop.*"], "seed_path": {"key": "value.json"}}
-            },
+            "consumer": {"context_scope": {"observe": ["loop.*"], "seed": {"key": "value.json"}}},
         }
 
         normalize_all_agent_configs(agent_configs)
 
         assert agent_configs["consumer"]["context_scope"] == {
             "observe": ["loop_1.*"],
-            "seed_path": {"key": "value.json"},
+            "seed": {"key": "value.json"},
         }
         assert "context_scope_expanded" not in agent_configs["consumer"]
 
@@ -230,7 +228,7 @@ class TestNormalizeAllAgentConfigs:
 
 
 class TestSeedPathPreservation:
-    def test_seed_path_not_destroyed_by_version_expansion(self):
+    def test_seed_not_destroyed_by_version_expansion(self):
         agent_configs = {
             "extract_1": {
                 "is_versioned_agent": True,
@@ -244,7 +242,7 @@ class TestSeedPathPreservation:
             },
             "consumer": {
                 "context_scope": {
-                    "seed_path": {
+                    "seed": {
                         "exam_syllabus": "syllabus.json",
                         "grading_rubric": "rubric.json",
                     },
@@ -255,7 +253,7 @@ class TestSeedPathPreservation:
 
         normalize_all_agent_configs(agent_configs)
 
-        assert agent_configs["consumer"]["context_scope"]["seed_path"] == {
+        assert agent_configs["consumer"]["context_scope"]["seed"] == {
             "exam_syllabus": "syllabus.json",
             "grading_rubric": "rubric.json",
         }

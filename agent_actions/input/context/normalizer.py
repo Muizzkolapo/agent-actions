@@ -15,11 +15,14 @@ DIRECTIVE_REGISTRY = {
     "drop": {"type": "list", "expand_versions": True},
     "drops": {"type": "list", "expand_versions": True},
     # Dict directives - preserve as-is (never expand)
-    "seed_path": {"type": "dict", "expand_versions": False},
+    "seed": {"type": "dict", "expand_versions": False},
 }
 
-# Config keys that users confuse with the runtime 'seed' namespace in references.
-SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path"})
+# Directive keys that were removed, mapped to their replacement (for a loud error).
+REMOVED_DIRECTIVES = {"seed_path": "seed", "static_data": "seed"}
+
+# Namespaces users write in prompt references when they mean the 'seed' namespace.
+SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path", "static_data"})
 
 # Directive names that belong UNDER context_scope, not as sibling keys.
 _CONTEXT_SCOPE_DIRECTIVES = ("observe", "passthrough", "drop")
@@ -50,6 +53,14 @@ def normalize_context_scope(
     expanded_scope = {}
 
     for directive_name, directive_value in context_scope.items():
+        if directive_name in REMOVED_DIRECTIVES:
+            replacement = REMOVED_DIRECTIVES[directive_name]
+            raise ConfigurationError(
+                f"context_scope.{directive_name} is no longer a valid directive; "
+                f"it was renamed to '{replacement}'. Rename '{directive_name}:' to "
+                f"'{replacement}:' under context_scope.",
+                context={"directive": directive_name, "replacement": replacement},
+            )
         directive_info = DIRECTIVE_REGISTRY.get(
             directive_name, {"type": "unknown", "expand_versions": False}
         )

@@ -43,8 +43,7 @@ class ContextScopeDict(TypedDict, total=False):
     passthrough: list[str]
     drop: list[str]
     keep: list[str]
-    seed_path: dict[str, Any]
-    static_data: dict[str, Any]
+    seed: dict[str, Any]
 
 
 class GuardConfigDict(TypedDict, total=False):

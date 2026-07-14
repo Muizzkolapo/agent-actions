@@ -34,7 +34,7 @@ and service wiring used by CLI commands and runtime agents.
 | `PromptLoader.discover_prompt_files()` | `prompt_store/{workflow}.md` | Reads | — |
 | `PromptFormatter.get_raw_prompt()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt` |
 | `PromptPreparationService.prepare_prompt_with_context()` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope` |
-| `PromptPreparationService._load_seed_data()` | `seed_data/*.json` | Reads | `actions[].context_scope.seed_path` |
+| `PromptPreparationService._load_seed_data()` | `seed_data/*.json` | Reads | `actions[].context_scope.seed` |
 | `PromptUtils.inject_function_outputs_into_prompt()` | `tools/{workflow}/*.py` | Reads | `actions[].prompt` |
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt`, `actions[].schema_name` |
 | `render_pipeline_with_templates()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema_name`, `actions[].schema` |

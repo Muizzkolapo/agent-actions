@@ -541,8 +541,8 @@ class PromptPreparationService:
         agent_config: dict[str, Any], context_scope: dict[str, Any], agent_name: str
     ) -> dict[str, Any]:
         """Load seed data files if configured, returning empty dict otherwise."""
-        seed_path_config = context_scope.get("seed_path") if context_scope else None
-        if not seed_path_config:
+        seed_config = context_scope.get("seed") if context_scope else None
+        if not seed_config:
             return {}
 
         try:
@@ -553,7 +553,7 @@ class PromptPreparationService:
             logger.debug("[SEED_DATA_LOAD] Seed data directory: %s", static_data_dir)
 
             static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
-            static_data = static_data_loader.load_static_data(seed_path_config)
+            static_data = static_data_loader.load_static_data(seed_config)
 
             logger.debug(
                 "[SEED_DATA_LOAD] Loaded %d seed data files: %s",
