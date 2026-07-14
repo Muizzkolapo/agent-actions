@@ -21,6 +21,8 @@ def test_generator_shares_envelope_authority_object():
         "record.envelope must own the authoritative source_guid exclusion set "
         "(SOURCE_GUID_EXCLUDED_FIELDS)"
     )
+    # Identity (`is`), not `==`: a value-equal *copy* in generator would pass equality
+    # yet silently drift if envelope's set later changed. Same object IS the invariant.
     assert (
         getattr(generator, "SOURCE_GUID_EXCLUDED_FIELDS", None)
         is envelope.SOURCE_GUID_EXCLUDED_FIELDS

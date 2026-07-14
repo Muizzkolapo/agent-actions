@@ -31,11 +31,12 @@ class IDGenerator:
 
         The same input content always yields the same guid (across runs and stamp
         sites), so the disposition/checkpoint gate matches records on re-run and the
-        ingestion and processing stamps agree. Framework envelope fields are excluded.
+        ingestion and processing stamps agree. The volatile envelope/identity fields in
+        ``SOURCE_GUID_EXCLUDED_FIELDS`` are excluded from the hash.
 
-        Note: the envelope exclusion is name-based — a user content field named exactly
-        like a framework field (e.g. `node_id`) is treated as envelope. Those names are
-        reserved.
+        Note: the exclusion is name-based — a user content field named exactly like an
+        excluded field (e.g. `node_id`, `batch_id`) is dropped from the hash. Those
+        names are reserved.
         """
         if isinstance(record, dict):
             content: Any = {k: v for k, v in record.items() if k not in SOURCE_GUID_EXCLUDED_FIELDS}
