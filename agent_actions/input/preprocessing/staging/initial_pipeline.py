@@ -237,6 +237,19 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
 
+def _source_payload_keys(item: dict) -> set[str]:
+    """The user payload's field names for a source record.
+
+    First-stage records nest the payload under ``content.source``; online source records
+    are flat. Return the payload keys either way so callers compare user data, not the
+    framework envelope.
+    """
+    content = item.get("content")
+    if isinstance(content, dict) and isinstance(content.get("source"), dict):
+        return set(content["source"].keys())
+    return set(item.keys())
+
+
 def _should_save_source_items(
     new_items: list[dict],
     file_path: str,
@@ -275,8 +288,10 @@ def _should_save_source_items(
                 )
                 return True
 
-            existing_fields = set(existing_items[0].keys())
-            new_fields = set(new_items[0].keys()) if new_items else set()
+            # Compare the user payload (content.source), not the framework envelope — the
+            # top-level key count is a fixed set of framework fields and would never differ.
+            existing_fields = _source_payload_keys(existing_items[0])
+            new_fields = _source_payload_keys(new_items[0]) if new_items else set()
 
             if len(new_fields) > len(existing_fields):
                 logger.info(
@@ -346,11 +361,11 @@ def _prepare_text_chunks_batch(
     result = []
     for idx, chunk in enumerate(chunks):
         target_id = str(uuid.uuid4())
-        # Hash identity over the raw content BEFORE the volatile envelope is added, so the
-        # per-run target_id/batch_id never enters the guid.
+        # Identity is hashed over the raw payload; the payload then lives under content.source
+        # (parity with structured rows: source.content == the chunk, no framework leak).
         source_guid = IDGenerator.derive_source_guid({"content": chunk})
         record = {
-            "content": chunk,
+            "content": {"source": {"content": chunk}},
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
@@ -380,12 +395,12 @@ def _add_batch_metadata(
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
-        # Hash identity over the raw row BEFORE the framework envelope is added, so a user
-        # column named like a framework field (e.g. node_id in a graph/edge export) stays
-        # part of identity instead of being overwritten and collapsing distinct rows.
+        # Identity is hashed over the raw user payload; the payload then lives under its own
+        # content.source namespace so the framework fields (added flat, below) can never
+        # overwrite a user column that shares their name, nor leak into source.*.
         source_guid = IDGenerator.derive_source_guid(row)
         record = {
-            **row,
+            "content": {"source": {**row}},
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
