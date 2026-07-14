@@ -116,13 +116,28 @@ class WorkflowStaticAnalyzer:
         # destroy the diagnostic signal.
         context_scope_errors = self._check_context_scope_required()
 
-        # Step 0b: Normalize context_scope using the same function the runtime
-        # pipeline uses. Guarantees all downstream extractors see a dict.
+        # Step 0b: Normalize context_scope (same function the runtime uses) so
+        # extractors see a dict. A removed directive raises here; collect it as a
+        # validation error rather than letting analyze() abort mid-pass.
         for action in self.workflow_config.get("actions", []):
             if isinstance(action, dict):
-                action["context_scope"] = normalize_context_scope(
-                    action.get("context_scope"), version_base_map={}
-                )
+                try:
+                    action["context_scope"] = normalize_context_scope(
+                        action.get("context_scope"), version_base_map={}
+                    )
+                except ConfigurationError as exc:
+                    context_scope_errors.append(
+                        StaticTypeError(
+                            message=str(exc),
+                            location=FieldLocation(
+                                agent_name=action.get("name", "workflow"),
+                                config_field="context_scope",
+                            ),
+                            referenced_agent="",
+                            referenced_field="",
+                        )
+                    )
+                    action["context_scope"] = {}
 
         # Guard-skip observe warnings must be computed before wildcard expansion
         # because expansion turns safe wildcards into specific refs (false positives).

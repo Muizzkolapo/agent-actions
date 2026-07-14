@@ -36,7 +36,7 @@ defaults:
   api_key: GEMINI_API_KEY
   batch_max_workers: 6
   context_scope:
-    seed_path:
+    seed:
       rubric: $file:evaluation_rubric.json
   retry:
     enabled: true

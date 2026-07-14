@@ -823,7 +823,7 @@ context_scope controls what the LLM sees:
   │    department: Engineering  (observe fields)  │
   │                                               │
   │  Available in Jinja2 templates:               │
-  │    {{ seed.rules }}  (static_data)            │
+  │    {{ seed.rules }}  (seed directive)         │
   └──────────────────────────────────────────────┘
 
   ┌──────────────────────────────────────────────┐

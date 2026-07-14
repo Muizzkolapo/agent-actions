@@ -130,7 +130,7 @@ WorkflowStaticAnalyzer.analyze()
              - reserved action name validation
              - template namespace coverage
              - context_scope field references
-             - seed_data/seed_path misuse
+             - seed_data/seed_path/static_data misuse
              - schema structure validation
              - drop directive targeting
              - guard-nullable field detection

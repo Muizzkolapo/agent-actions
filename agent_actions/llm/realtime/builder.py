@@ -47,7 +47,7 @@ def create_dynamic_agent(
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
     # - Static data loading (context_scope.seed)
-    # - Field reference replacement ({action.field}, {static.field})
+    # - Field reference replacement ({action.field})
     # - Context scope transformations (observe/drop/passthrough)
     # - Few-shot sample injection
     # - Consistent behavior across batch and online modes

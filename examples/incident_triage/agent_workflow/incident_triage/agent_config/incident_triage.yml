@@ -26,7 +26,7 @@ defaults:
   api_key: GEMINI_API_KEY
   batch_max_workers: 6
   context_scope:
-    seed_path:
+    seed:
       team_roster: $file:team_roster.json
       service_catalog: $file:service_catalog.json
       runbook_catalog: $file:runbook_catalog.json
