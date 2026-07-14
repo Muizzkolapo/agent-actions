@@ -23,7 +23,7 @@ defaults:
     folder: ./staging
     file_type: [json]
   context_scope:
-    seed_path:
+    seed:
       book_catalog: $file:book_catalog.json
   retry:
     enabled: true

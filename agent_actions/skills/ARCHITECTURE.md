@@ -168,7 +168,7 @@ CLI entry point (outside this module):
 
 3. **Bus snapshot rule.** The data model described in `SKILL.md` follows the additive bus pattern: every record's `content` dict only grows. Each action writes its output under a namespace key (`content["action_name"] = {...}`). Nothing is removed. `context_scope.observe` is the selector that controls what each action sees, but the bus carries everything. This is the foundational invariant that all reference docs assume.
 
-4. **`seed.` prefix.** Seed data loaded via `context_scope.seed_path` is available in prompts as `{{ seed.key }}`. The config key is `seed_path:` but the template variable prefix is `seed.` — a naming asymmetry that the debugging guide calls out as a common source of confusion.
+4. **`seed.` prefix.** Seed data declared under `context_scope.seed` is available in prompts as `{{ seed.key }}`. The config key (`seed:`) and the template variable prefix (`seed.`) are the same word — declare it, then reference it.
 
 5. **Skill naming convention.** Skill directories must start with `agac-` by convention (the current skill is `agac-agent-skills`). Discovery does not enforce this — any subdirectory is treated as a skill — but the convention exists for namespace clarity.
 

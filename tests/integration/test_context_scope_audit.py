@@ -1,6 +1,6 @@
 """Comprehensive context_scope audit tests.
 
-Tests every directive (observe, passthrough, drop, seed_path) across:
+Tests every directive (observe, passthrough, drop, seed) across:
 - RECORD vs FILE granularity
 - Wildcard expansion (action.*)
 - Version base expansion
@@ -405,11 +405,11 @@ class TestNormalizerVersionExpansion:
         scope = normalize_context_scope({"passthrough": ["extract.id"]}, version_map)
         assert scope["passthrough"] == ["extract_1.id", "extract_2.id"]
 
-    def test_seed_path_not_expanded(self):
+    def test_seed_not_expanded(self):
         version_map = {"extract": ["extract_1", "extract_2"]}
         seed = {"syllabus": "data/syllabus.json"}
-        scope = normalize_context_scope({"seed_path": seed}, version_map)
-        assert scope["seed_path"] == seed
+        scope = normalize_context_scope({"seed": seed}, version_map)
+        assert scope["seed"] == seed
 
     def test_null_context_scope_returns_empty(self):
         assert normalize_context_scope(None, {}) == {}

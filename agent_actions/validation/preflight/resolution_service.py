@@ -266,14 +266,14 @@ class WorkflowResolutionService:
             context_scope = config.get("context_scope", {})
             if not isinstance(context_scope, dict):
                 continue
-            seed_path_config = context_scope.get("seed_path", {})
-            if not seed_path_config or not isinstance(seed_path_config, dict):
+            seed_config = context_scope.get("seed", {})
+            if not seed_config or not isinstance(seed_config, dict):
                 continue
 
-            action_seed_keys[action_name] = set(seed_path_config.keys())
+            action_seed_keys[action_name] = set(seed_config.keys())
             action_seed_data[action_name] = {}
 
-            for field_name, file_spec in seed_path_config.items():
+            for field_name, file_spec in seed_config.items():
                 if not isinstance(file_spec, str):
                     continue
 
@@ -285,7 +285,7 @@ class WorkflowResolutionService:
                             message=str(e),
                             location=FieldLocation(
                                 agent_name=action_name,
-                                config_field=f"context_scope.seed_path.{field_name}",
+                                config_field=f"context_scope.seed.{field_name}",
                                 raw_reference=file_spec,
                             ),
                             referenced_agent=action_name,
@@ -305,7 +305,7 @@ class WorkflowResolutionService:
                             message=(f"Seed file not found: {file_spec} (resolved to {resolved})"),
                             location=FieldLocation(
                                 agent_name=action_name,
-                                config_field=f"context_scope.seed_path.{field_name}",
+                                config_field=f"context_scope.seed.{field_name}",
                                 raw_reference=file_spec,
                             ),
                             referenced_agent=action_name,
@@ -330,7 +330,7 @@ class WorkflowResolutionService:
                             message=f"Seed file '{file_spec}' failed to parse: {e}",
                             location=FieldLocation(
                                 agent_name=action_name,
-                                config_field=f"context_scope.seed_path.{field_name}",
+                                config_field=f"context_scope.seed.{field_name}",
                                 raw_reference=file_spec,
                             ),
                             referenced_agent=action_name,
@@ -401,14 +401,14 @@ class WorkflowResolutionService:
                     hint = (
                         f"Declared seed keys: {', '.join(sorted(declared_keys))}"
                         if declared_keys
-                        else f"No seed_path entries declared for action '{action_name}'."
+                        else f"No seed entries declared for action '{action_name}'."
                     )
                     errors.append(
                         StaticTypeError(
                             message=(
                                 f"Action '{action_name}' references seed.{seed_key} "
                                 f"but '{seed_key}' is not declared in "
-                                f"context_scope.seed_path"
+                                f"context_scope.seed"
                             ),
                             location=FieldLocation(
                                 agent_name=action_name,

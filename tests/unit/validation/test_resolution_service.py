@@ -153,7 +153,7 @@ class TestSeedFileChecks:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:missing.json"},
+                        "seed": {"field1": "$file:missing.json"},
                     },
                 },
             },
@@ -180,7 +180,7 @@ class TestSeedFileChecks:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:data.json"},
+                        "seed": {"field1": "$file:data.json"},
                     },
                 },
             },
@@ -205,7 +205,7 @@ class TestSeedFileChecks:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:../../etc/passwd"},
+                        "seed": {"field1": "$file:../../etc/passwd"},
                     },
                 },
             },
@@ -216,8 +216,8 @@ class TestSeedFileChecks:
         seed_errors = [e for e in result.errors if "escapes base directory" in e.message]
         assert len(seed_errors) == 1
 
-    def test_no_seed_path_config_no_errors(self):
-        """No seed_path in config produces no errors."""
+    def test_no_seed_config_no_errors(self):
+        """No seed in config produces no errors."""
         svc = WorkflowResolutionService(
             action_configs={
                 "loader": {"context_scope": {}},
@@ -241,7 +241,7 @@ class TestSeedFileChecks:
             action_configs={
                 "broken_action": {
                     "prompt": "{{ unclosed_var",
-                    "context_scope": {"seed_path": {"data": "some_value"}},
+                    "context_scope": {"seed": {"data": "some_value"}},
                 },
             },
             workflow_config_path=workflow_path,
@@ -268,7 +268,7 @@ class TestSeedFileChecks:
             action_configs={
                 "broken_action": {
                     "prompt": "{{ unclosed_var",
-                    "context_scope": {"seed_path": {"data": "v"}},
+                    "context_scope": {"seed": {"data": "v"}},
                 },
                 "good_action": {
                     "prompt": "{{ source.field }}",
@@ -294,7 +294,7 @@ class TestSeedFileChecks:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:data.json"},
+                        "seed": {"field1": "$file:data.json"},
                     },
                 },
             },

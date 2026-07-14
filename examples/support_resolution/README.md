@@ -153,7 +153,7 @@ The `assign_team` action uses seed data -- a static JSON file loaded into the co
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       routing_rules: $file:routing_rules.json
 ```
 

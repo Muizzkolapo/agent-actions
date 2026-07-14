@@ -155,7 +155,7 @@ Seed data provides static reference material that shapes LLM behavior. It's defi
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       brand_voice: $file:brand_voice.json
       marketplace_rules: $file:marketplace_rules.json
 ```

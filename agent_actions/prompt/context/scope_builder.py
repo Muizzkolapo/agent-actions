@@ -315,7 +315,7 @@ def build_field_context_with_history(
     field_context = {
         "source": {...},        # Original input data
         "{dep_name}": {...},    # Dependency action outputs (FILTERED by context_scope)
-        "seed": {...},          # Static reference data (via static_data)
+        "seed": {...},          # Static reference data (via the seed directive)
         "version": {...},       # Version iteration info (i, idx, length, first, last)
         "workflow": {...},      # Workflow metadata
     }

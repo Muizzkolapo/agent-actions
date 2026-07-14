@@ -62,7 +62,7 @@ class StaticDataLoader:
         logger.debug("StaticDataLoader initialized with directory: %s", self.static_data_dir)
 
     def load_static_data(self, static_data_config: dict[str, str]) -> dict[str, Any]:
-        """Load all static data files specified in context_scope.static_data."""
+        """Load all static data files specified in context_scope.seed."""
         if not static_data_config:
             logger.debug("No static data config provided, skipping load")
             return {}

@@ -1,7 +1,7 @@
 """Tests for seed field reference validation in preflight checks.
 
 Covers:
-- Namespace mismatches (error): seed.X where X is not in seed_path
+- Namespace mismatches (error): seed.X where X is not in seed
 - Nested field mismatches (warning): seed.rubric.typo where typo doesn't exist
 - Deeply nested field walks
 - Array boundary handling
@@ -73,17 +73,17 @@ class TestNestedKeyExists:
 
 
 class TestSeedNamespaceValidation:
-    """Referencing seed.X when X is not in seed_path produces a blocking error."""
+    """Referencing seed.X when X is not in seed produces a blocking error."""
 
     def test_undeclared_namespace_from_observe(self, tmp_path):
-        """observe: [seed.missing.field] with no seed_path entry for 'missing'."""
+        """observe: [seed.missing.field] with no seed entry for 'missing'."""
         wf_path = _make_project(tmp_path, {"rubric.json": {"scoring": 1}})
 
         svc = WorkflowResolutionService(
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.missing.field"],
                     },
                 },
@@ -94,11 +94,11 @@ class TestSeedNamespaceValidation:
 
         ns_errors = [e for e in result.errors if "seed.missing" in e.message]
         assert len(ns_errors) == 1
-        assert "not declared in context_scope.seed_path" in ns_errors[0].message
+        assert "not declared in context_scope.seed" in ns_errors[0].message
         assert "rubric" in ns_errors[0].hint  # suggests declared key
 
-    def test_undeclared_namespace_no_seed_path_at_all(self, tmp_path):
-        """Action references seed.X but has no seed_path config."""
+    def test_undeclared_namespace_no_seed_at_all(self, tmp_path):
+        """Action references seed.X but has no seed config."""
         wf_path = _make_project(tmp_path)
 
         svc = WorkflowResolutionService(
@@ -125,7 +125,7 @@ class TestSeedNamespaceValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric"],
                     },
                 },
@@ -157,7 +157,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.scoring_critera"],  # typo
                     },
                 },
@@ -188,7 +188,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.scoring_criteria"],
                     },
                 },
@@ -210,7 +210,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": [
                             "seed.rubric.scoring.helpfulness.weight",  # valid
                             "seed.rubric.scoring.helpfulness.typo",  # invalid
@@ -236,7 +236,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.items"],
                     },
                 },
@@ -258,7 +258,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rules": "$file:rules.json"},
+                        "seed": {"rules": "$file:rules.json"},
                         "observe": ["seed.rules.marketplace_ruls"],  # close typo
                     },
                 },
@@ -281,7 +281,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.zzz_completely_wrong"],
                     },
                 },
@@ -301,7 +301,7 @@ class TestSeedFieldValidation:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "passthrough": ["seed.rubric.*"],
                     },
                 },
@@ -327,7 +327,7 @@ class TestSeedJsonParseFailure:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"data": "$file:bad.json"},
+                        "seed": {"data": "$file:bad.json"},
                     },
                 },
             },
@@ -357,13 +357,13 @@ class TestMultipleActions:
             action_configs={
                 "action_a": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.scoring_criteria"],  # valid
                     },
                 },
                 "action_b": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.typo_field"],  # invalid
                     },
                 },
@@ -376,21 +376,21 @@ class TestMultipleActions:
         assert len(result.warnings) == 1
         assert "action_b" in result.warnings[0].message
 
-    def test_action_without_seed_path_referencing_seed(self, tmp_path):
-        """Action A has seed_path, action B doesn't but references seed."""
+    def test_action_without_seed_referencing_seed(self, tmp_path):
+        """Action A has seed, action B doesn't but references seed."""
         wf_path = _make_project(tmp_path, {"rubric.json": {"a": 1}})
 
         svc = WorkflowResolutionService(
             action_configs={
                 "action_a": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric"],
                     },
                 },
                 "action_b": {
                     "context_scope": {
-                        "observe": ["seed.rubric.field"],  # no seed_path!
+                        "observe": ["seed.rubric.field"],  # no seed!
                     },
                 },
             },
@@ -426,7 +426,7 @@ class TestInlinePromptExtraction:
                     "name": "processor",
                     "prompt": "Score using {{ seed.rubric.scoring_critera }}",
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                     },
                 },
             },
@@ -447,7 +447,7 @@ class TestInlinePromptExtraction:
                     "name": "processor",
                     "prompt": "Use {{ seed.missing_data.field }}",
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                     },
                 },
             },
@@ -475,7 +475,7 @@ class TestExistingChecksUnchanged:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:missing.json"},
+                        "seed": {"field1": "$file:missing.json"},
                     },
                 },
             },
@@ -494,7 +494,7 @@ class TestExistingChecksUnchanged:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:../../etc/passwd"},
+                        "seed": {"field1": "$file:../../etc/passwd"},
                     },
                 },
             },
@@ -505,8 +505,8 @@ class TestExistingChecksUnchanged:
         seed_errors = [e for e in result.errors if "escapes base directory" in e.message]
         assert len(seed_errors) == 1
 
-    def test_no_seed_path_no_errors(self):
-        """No seed_path in config produces no errors (existing behavior)."""
+    def test_no_seed_no_errors(self):
+        """No seed in config produces no errors (existing behavior)."""
         svc = WorkflowResolutionService(
             action_configs={"loader": {"context_scope": {}}},
         )
@@ -526,7 +526,7 @@ class TestExistingChecksUnchanged:
             action_configs={
                 "loader": {
                     "context_scope": {
-                        "seed_path": {"field1": "$file:data.json"},
+                        "seed": {"field1": "$file:data.json"},
                     },
                 },
             },
@@ -555,7 +555,7 @@ class TestDeduplication:
             action_configs={
                 "processor": {
                     "context_scope": {
-                        "seed_path": {"rubric": "$file:rubric.json"},
+                        "seed": {"rubric": "$file:rubric.json"},
                         "observe": ["seed.rubric.typo_field"],
                         "passthrough": ["seed.rubric.typo_field"],
                     },

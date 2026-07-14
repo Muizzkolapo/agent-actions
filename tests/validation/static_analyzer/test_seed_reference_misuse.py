@@ -44,6 +44,44 @@ class TestSeedReferenceMisuse:
         assert len(misuse_errors) == 1
         assert "seed.rubric" in misuse_errors[0].message
 
+    def test_removed_seed_directive_reported_not_crashed(self):
+        """A workflow still using the retired seed_path directive yields a collected
+        validation error (analyze does not raise mid-pass)."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "processor",
+                    "context_scope": {"seed_path": {"rubric": "$file:rubric.json"}},
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        rename_errors = [
+            e for e in result.errors if "seed_path" in e.message and "seed" in e.message
+        ]
+        assert len(rename_errors) >= 1
+
+    def test_static_data_dot_in_observe_triggers_error(self):
+        """Using the retired 'static_data.field' as a reference namespace should error."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "processor",
+                    "context_scope": {
+                        "observe": ["static_data.rubric"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        misuse_errors = [e for e in result.errors if "static_data.rubric" in e.message]
+        assert len(misuse_errors) == 1
+        assert "seed.rubric" in misuse_errors[0].message
+
     def test_seed_dot_in_observe_no_error(self):
         """Using correct 'seed.field' in observe should not trigger a misuse error."""
         workflow_config = {

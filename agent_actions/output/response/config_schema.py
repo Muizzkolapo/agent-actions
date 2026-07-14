@@ -230,7 +230,7 @@ class AgentConfig(BaseModel):
     context_scope: dict[str, Any] | None = Field(
         default=None,
         description="Context scope configuration for data visibility and flow control "
-        "(seed_path, observe, drop directives). Normalized in-place by config pipeline "
+        "(seed, observe, drop directives). Normalized in-place by config pipeline "
         "(version references expanded to field prefix patterns).",
     )
 

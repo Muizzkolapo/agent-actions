@@ -277,7 +277,7 @@ Seed data is declared once in `defaults` and made available across all actions:
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       team_roster: $file:team_roster.json
       service_catalog: $file:service_catalog.json
       runbook_catalog: $file:runbook_catalog.json

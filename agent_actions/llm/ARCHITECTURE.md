@@ -811,7 +811,7 @@ context_scope controls what the LLM sees:
              drop: [ssn, salary]
              observe: [department]
              passthrough: [name]
-             static_data: seed_data/rules.json
+             seed: seed_data/rules.json
                          │
                          ▼
   ┌──────────────────────────────────────────────┐
@@ -823,7 +823,7 @@ context_scope controls what the LLM sees:
   │    department: Engineering  (observe fields)  │
   │                                               │
   │  Available in Jinja2 templates:               │
-  │    {{ seed.rules }}  (static_data)            │
+  │    {{ seed.rules }}  (seed directive)         │
   └──────────────────────────────────────────────┘
 
   ┌──────────────────────────────────────────────┐

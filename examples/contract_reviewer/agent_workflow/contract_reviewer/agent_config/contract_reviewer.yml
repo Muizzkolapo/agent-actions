@@ -26,7 +26,7 @@ defaults:
   batch_max_workers: 4
 
   context_scope:
-    seed_path:
+    seed:
       risk_criteria: $file:risk_criteria.json
   reprompt:
     on_schema_mismatch: reprompt
