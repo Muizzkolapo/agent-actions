@@ -509,6 +509,35 @@ class TestInvokeBatchLoop:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_first_stage_exception_keeps_stamped_source_guid(self, mock_fire, mock_get_preparer):
+        """A first-stage record hitting the generic-exception path must carry its STAMPED
+        source_guid (the persisted source_data key), not a value re-derived over the
+        already-stamped item — else the FAILED disposition is keyed on a guid absent from
+        source_data and cross-run failure matching breaks."""
+        from agent_actions.utils.id_generation import IDGenerator
+
+        mock_get_preparer.return_value.prepare.side_effect = ValueError("boom")
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=MagicMock(),
+        )
+        # A first-stage record stamped upstream (unified.py), the way ingestion persisted it.
+        raw = {"content": "x", "question": "q"}
+        stamped_guid = IDGenerator.derive_source_guid(raw)
+        record = {**raw, "source_guid": stamped_guid}
+        # Re-deriving over the stamped record DIVERGES (the guid is now in the hash), so a
+        # test asserting "some guid" would miss the bug — pin the exact stamped value.
+        assert IDGenerator.derive_source_guid(record) != stamped_guid
+
+        results = strategy.invoke([record], _make_context(is_first_stage=True))
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[0].source_guid == stamped_guid
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
     def test_reraises_configuration_error(self, mock_fire, mock_get_preparer):
         from agent_actions.errors import ConfigurationError
 

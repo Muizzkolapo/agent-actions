@@ -258,15 +258,13 @@ class OnlineLLMStrategy:
                     str(e),
                 )
                 input_record = item if isinstance(item, dict) else None
-                source_snapshot = None
-                source_guid = None
-                if context.is_first_stage:
-                    from agent_actions.utils.id_generation import IDGenerator
-
-                    source_guid = IDGenerator.derive_source_guid(item)
-                    source_snapshot = TaskPreparer._prepare_source_snapshot(item)
-                else:
-                    source_guid = item.get("source_guid") if isinstance(item, dict) else None
+                # Read the stamped guid — a first-stage record is stamped at
+                # ingestion/unified before processing, so re-deriving here would hash the
+                # now-stamped item and diverge from the persisted source_data key.
+                source_guid = input_record.get("source_guid") if input_record else None
+                source_snapshot = (
+                    TaskPreparer._prepare_source_snapshot(item) if context.is_first_stage else None
+                )
                 failed_result = ProcessingResult.failed(
                     error=f"Error processing item {idx}: {str(e)}",
                     source_guid=source_guid,
