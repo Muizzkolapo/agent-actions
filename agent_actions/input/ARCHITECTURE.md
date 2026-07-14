@@ -177,6 +177,8 @@ process_initial_stage(InitialStageContext)
   |     a. Generate batch_id, node_id
   |     b. Format dispatch (text->chunks, JSON->list, CSV/XLSX->rows, XML->records)
   |     c. _add_batch_metadata() per record:
+  |          user payload wrapped under content.source (framework fields stay flat,
+  |          so a user column named like a framework field can't be overwritten),
   |          source_guid, target_id, batch_id, batch_uuid,
   |          parent_target_id=None, root_target_id=target_id
   |     d. Apply record_limit slice
@@ -199,7 +201,7 @@ In **online mode**, `source_guid` is generated for source saving, but `target_id
 
 ### Source save deduplication
 
-`_should_save_source_items()` compares field counts between new and existing source files. If the existing source data has more fields (richer), the save is skipped. This prevents subsequent runs from overwriting enriched source data with sparser versions.
+`_should_save_source_items()` compares user-payload field counts (the `content.source` keys, via `_source_payload_keys()`) between new and existing source files. If the existing source data has more fields (richer), the save is skipped. This prevents subsequent runs from overwriting enriched source data with sparser versions.
 
 ---
 
