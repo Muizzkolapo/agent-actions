@@ -717,22 +717,24 @@ class PromptPreparationService:
             logger.warning("Error during seed data resolution: %s", e, exc_info=True)
             # Fall through to error raising
 
-        # Not found - raise an error that names the folder AND the seed_path namespace.
+        # Not found - name the folder and distinguish it from the seed_path
+        # context_scope directive (the common point of confusion).
         message = (
-            f"Seed data directory not found. Create '{seed_dir_name}' folder "
-            "at workflow root (same level as agent_config/, schema/, prompt_store/) "
-            "to store static reference data files. The folder name comes from "
-            f"'seed_data_path' in agent_actions.yml (currently '{seed_dir_name}'); "
-            "actions always reference seed data under the 'seed_path' context "
-            "namespace, regardless of the folder name."
+            f"Seed data directory not found. Looked for the '{seed_dir_name}' folder "
+            "at the workflow root (same level as agent_config/, schema/, prompt_store/). "
+            "The folder name defaults to 'seed_data' and can be changed with "
+            "'seed_data_path' in agent_actions.yml; it is separate from the 'seed_path' "
+            "directive in an action's context_scope, which only lists the seed files to "
+            "load. Create the folder to store static reference data files."
         )
         if seed_dir_name == "seed_path" and PromptPreparationService._default_seed_folder_exists(
             workflow_config_path
         ):
             message += (
-                " A 'seed_data' folder already exists — 'seed_path' is the context "
-                "namespace, not the folder name. Remove 'seed_data_path: seed_path' "
-                "from agent_actions.yml to use the default 'seed_data' folder."
+                " A 'seed_data' folder already exists — 'seed_path' is the context_scope "
+                "directive that lists seed files, not the folder name. Remove "
+                "'seed_data_path: seed_path' from agent_actions.yml to use the default "
+                "'seed_data' folder."
             )
         raise StaticDataLoadError(
             message,
@@ -757,7 +759,11 @@ class PromptPreparationService:
 
     @staticmethod
     def _default_seed_folder_exists(workflow_config_path: str | None) -> bool:
-        """Whether a conventional ``seed_data`` folder exists at the workflow or project root."""
+        """Whether a conventional ``seed_data`` folder exists at the workflow or project root.
+
+        Best-effort diagnostic: any probing failure yields ``False`` so the primary
+        "seed data directory not found" error is never replaced by a probe error.
+        """
         from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 
         candidates: list[Path] = []
@@ -768,6 +774,12 @@ class PromptPreparationService:
             )
         try:
             candidates.append(PathManager().get_project_root(start_path=start_path) / "seed_data")
-        except ProjectRootNotFoundError:
-            pass
-        return any(candidate.is_dir() for candidate in candidates)
+        except ProjectRootNotFoundError as exc:
+            logger.debug("No project root while probing for a default seed_data folder: %s", exc)
+        except OSError as exc:
+            logger.debug("Filesystem error resolving project root while probing: %s", exc)
+        try:
+            return any(candidate.is_dir() for candidate in candidates)
+        except OSError as exc:
+            logger.debug("Could not stat a candidate seed_data folder: %s", exc)
+            return False
