@@ -71,7 +71,8 @@ class TestXlsxDirectUsage:
         result = _add_batch_metadata(xlsx_output, "batch_test", "node_0")
 
         assert len(result) == 2
-        assert result[0]["name"] == "Alice"
+        # User fields live under content.source; framework fields stay flat.
+        assert result[0]["content"]["source"] == {"name": "Alice", "age": 30}
         assert result[0]["batch_id"] == "batch_test"
         assert "source_guid" in result[0]
-        assert result[1]["age"] == 25
+        assert result[1]["content"]["source"]["age"] == 25

@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.guards import GuardBehavior
 from agent_actions.processing.prepared_task import (
     GuardStatus,
@@ -156,11 +157,16 @@ class TaskPreparer:
             if isinstance(item, dict):
                 content = item.get("content")
                 if content is None:
-                    # First-stage batch records may not have content wrapper yet —
-                    # treat them like first-stage by extracting raw fields
+                    # First-stage records are stamped at ingestion (573 invariant); a blank
+                    # one can't be re-derived here (the envelope would poison identity) —
+                    # fail loud instead of fabricating a guid.
                     source_guid = item.get("source_guid")
                     if not source_guid:
-                        source_guid = IDGenerator.derive_source_guid(item)
+                        raise DataValidationError(
+                            "First-stage record reached task preparation without a "
+                            "source_guid; it must be stamped at ingestion",
+                            context={"keys": sorted(item.keys())},
+                        )
                     snapshot = self._prepare_source_snapshot(item)
                     return item, source_guid, snapshot
                 source_guid = item.get("source_guid")

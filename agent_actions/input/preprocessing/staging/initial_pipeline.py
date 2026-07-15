@@ -237,6 +237,19 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
 
+def _source_payload_keys(item: dict) -> set[str]:
+    """The user payload's field names for a source record.
+
+    First-stage records nest the payload under ``content.source``; online source records
+    are flat. Return the payload keys either way so callers compare user data, not the
+    framework envelope.
+    """
+    content = item.get("content")
+    if isinstance(content, dict) and isinstance(content.get("source"), dict):
+        return set(content["source"].keys())
+    return set(item.keys())
+
+
 def _should_save_source_items(
     new_items: list[dict],
     file_path: str,
@@ -275,8 +288,10 @@ def _should_save_source_items(
                 )
                 return True
 
-            existing_fields = set(existing_items[0].keys())
-            new_fields = set(new_items[0].keys()) if new_items else set()
+            # Compare the user payload (content.source), not the framework envelope — the
+            # top-level key count is a fixed set of framework fields and would never differ.
+            existing_fields = _source_payload_keys(existing_items[0])
+            new_fields = _source_payload_keys(new_items[0]) if new_items else set()
 
             if len(new_fields) > len(existing_fields):
                 logger.info(
@@ -346,8 +361,11 @@ def _prepare_text_chunks_batch(
     result = []
     for idx, chunk in enumerate(chunks):
         target_id = str(uuid.uuid4())
+        # Identity is hashed over the raw payload; the payload then lives under content.source
+        # (parity with structured rows: source.content == the chunk, no framework leak).
+        source_guid = IDGenerator.derive_source_guid({"content": chunk})
         record = {
-            "content": chunk,
+            "content": {"source": {"content": chunk}},
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
@@ -355,8 +373,8 @@ def _prepare_text_chunks_batch(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
+            "source_guid": source_guid,
         }
-        record["source_guid"] = IDGenerator.derive_source_guid(record)
         result.append(record)
     return result
 
@@ -377,8 +395,12 @@ def _add_batch_metadata(
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
+        # Identity is hashed over the raw user payload; the payload then lives under its own
+        # content.source namespace so the framework fields (added flat, below) can never
+        # overwrite a user column that shares their name, nor leak into source.*.
+        source_guid = IDGenerator.derive_source_guid(row)
         record = {
-            **row,
+            "content": {"source": {**row}},
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
@@ -386,8 +408,8 @@ def _add_batch_metadata(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
+            "source_guid": source_guid,
         }
-        record["source_guid"] = IDGenerator.derive_source_guid(record)
         result.append(record)
     return result
 
@@ -507,32 +529,33 @@ def _prepare_online_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        data_chunk = chunks
-
-        # Deterministic content identity — matches what UnifiedProcessor/
-        # OnlineLLMStrategy derive for the same content, by construction.
-        src_text = []
-        for text in data_chunk:
-            record = {"content": text}
-            record["source_guid"] = IDGenerator.derive_source_guid(record)
-            src_text.append(record)
+        # Wrap the payload under content.source (parity with batch); identity is hashed
+        # over the raw content before wrapping, and the processor inherits the stamped guid.
+        data_chunk = []
+        for text in chunks:
+            source_guid = IDGenerator.derive_source_guid({"content": text})
+            data_chunk.append(
+                {"content": {"source": {"content": text}}, "source_guid": source_guid}
+            )
+        src_text = data_chunk
 
     elif ctx.file_type == ".json":
-        data_chunk = json_loader.process(ctx.content, ctx.file_path)
+        raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
 
-        if not isinstance(data_chunk, list):
-            data_chunk = [data_chunk]
+        if not isinstance(raw_items, list):
+            raw_items = [raw_items]
 
-        # Do NOT mutate data_chunk: OnlineLLMStrategy derives source_guid from the raw item
-        src_text = []
-        for item in data_chunk:
-            if isinstance(item, dict):
-                source_item = item.copy()
-                if "source_guid" not in source_item:
-                    source_item["source_guid"] = IDGenerator.derive_source_guid(source_item)
-                src_text.append(source_item)
-            else:
-                src_text.append(item)
+        # Wrap the user payload under content.source (parity with batch); identity is hashed
+        # over the raw item before wrapping, so the processor inherits the stamped guid. A
+        # pre-existing source_guid (e.g. checkpoint resume) is honored.
+        data_chunk = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                data_chunk.append(item)
+                continue
+            source_guid = item.get("source_guid") or IDGenerator.derive_source_guid(item)
+            data_chunk.append({"content": {"source": {**item}}, "source_guid": source_guid})
+        src_text = data_chunk
 
     elif ctx.file_type in (".csv", ".tsv"):
         # TabularLoader routes on extension and handles tab-separated files

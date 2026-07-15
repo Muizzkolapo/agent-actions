@@ -41,11 +41,9 @@ class TestPrepareJsonBatchWithParsedInput:
 
         assert len(result) == 2
 
-        # Original fields preserved
-        assert result[0]["name"] == "Alice"
-        assert result[0]["age"] == 30
-        assert result[1]["name"] == "Bob"
-        assert result[1]["age"] == 25
+        # Original user fields preserved under the content.source namespace
+        assert result[0]["content"]["source"] == {"name": "Alice", "age": 30}
+        assert result[1]["content"]["source"] == {"name": "Bob", "age": 25}
 
         # Batch metadata added
         for idx, row in enumerate(result):
@@ -180,10 +178,10 @@ class TestFullPipelineNoDoubleParse:
             )
 
         assert len(data_chunk) == 2
-        assert data_chunk[0]["ticket_id"] == "T-001"
+        assert data_chunk[0]["content"]["source"]["ticket_id"] == "T-001"
         assert "batch_id" in data_chunk[0]
         assert "source_guid" in data_chunk[0]
-        assert data_chunk[1]["ticket_id"] == "T-002"
+        assert data_chunk[1]["content"]["source"]["ticket_id"] == "T-002"
 
     def test_json_online_pipeline_with_parsed_content(self, tmp_path):
         """Online mode: JsonLoader.process() returns pre-parsed content directly."""

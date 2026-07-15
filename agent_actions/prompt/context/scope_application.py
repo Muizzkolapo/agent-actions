@@ -421,7 +421,14 @@ def _resolve_source_content(
     if not matched and source_data:
         matched = source_data[0]
     if matched:
-        return _extract_content_data(matched)
+        content = _extract_content_data(matched)
+        # First-stage records nest the user payload under content.source; return that so
+        # source.<field> resolves to the user field, not {"source": {...}}. Online source
+        # records are flat (no "source" key) and pass through unchanged.
+        source = content.get("source")
+        if isinstance(source, dict):
+            return source
+        return content
     return {}
 
 
