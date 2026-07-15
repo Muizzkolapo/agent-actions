@@ -1,4 +1,4 @@
-"""FILE-mode observe-drop must not desync raw_records (spec 587).
+"""FILE-mode observe-drop must not desync raw_records.
 
 When ``context_scope.observe`` drops records that lack an observed upstream
 namespace — the shape produced by merging a guard-filtered source (e.g.
