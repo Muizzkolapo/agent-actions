@@ -583,12 +583,15 @@ class ProcessingPipeline:
                 source_data=source_data,
             )
             # prefilter_by_guard indexes original_data positionally and rejects a
-            # length mismatch, so raw_records must drop the same records observe
-            # did (source_guid is unique per FILE-mode record).
-            skipped_guids = {s["source_guid"] for s in scope_skipped if s.get("source_guid")}
+            # length mismatch, so raw_records must drop exactly the records observe
+            # did.  Align by input INDEX, not source_guid: merged/version records
+            # can carry source_guid=None (loop.py) or duplicates, and a guid
+            # set-diff would then leave desynced records behind and recreate the
+            # length-mismatch crash.
+            skipped_indices = {skip["index"] for skip in scope_skipped}
             aligned_raw = (
-                [r for r in data if r.get("source_guid") not in skipped_guids]
-                if skipped_guids
+                [record for i, record in enumerate(data) if i not in skipped_indices]
+                if skipped_indices
                 else data
             )
             if scope_skipped and self.config.storage_backend:
@@ -605,6 +608,14 @@ class ProcessingPipeline:
                     for skip in scope_skipped
                     if skip.get("source_guid")
                 ]
+                unkeyed = len(scope_skipped) - len(batch)
+                if unkeyed:
+                    logger.warning(
+                        "%s: %d observe-skipped record(s) had no source_guid — "
+                        "no per-record skip disposition written for them",
+                        self.config.action_name,
+                        unkeyed,
+                    )
                 if batch:
                     try:
                         self.config.storage_backend.set_dispositions_batch(batch)
@@ -614,15 +625,31 @@ class ProcessingPipeline:
                             len(batch),
                             self.config.action_name,
                         )
+            # Every input record was observe-skipped: the action yields no output,
+            # so mark the node SKIPPED for downstream cascade.  (When some records
+            # survive, raise_if_terminal_failure below handles the all-guard-filtered
+            # case; here filtered is empty, so it cannot.)
+            if scope_skipped and not filtered:
+                write_node_level_disposition(
+                    self.config.storage_backend,
+                    self.config.action_name,
+                    DISPOSITION_SKIPPED,
+                    OBSERVE_FIELD_MISSING,
+                )
             output, stats = self._unified_processor.process(
                 filtered, context, strategy, raw_records=aligned_raw
             )
+            # The observe-filtered survivors are what the strategy actually
+            # processed; terminal-failure accounting must count those, not the
+            # pre-observe total (which would report phantom failures).
+            active_input = filtered
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
             output, stats = self._unified_processor.process(data, context, strategy)
+            active_input = data
 
         stats.raise_if_terminal_failure(
-            self.config.action_name, data, output, self.config.storage_backend
+            self.config.action_name, active_input, output, self.config.storage_backend
         )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

@@ -291,8 +291,9 @@ run_mode == BATCH and not tool/HITL?
          │     └── else → OnlineLLMStrategy
          │
          ├── FILE mode:
-         │     apply_context_scope_for_records()
-         │     UnifiedProcessor.process(filtered, raw_records=data)
+         │     apply_context_scope_for_records() → (filtered, scope_skipped)
+         │     aligned_raw = data minus observe-skipped indices
+         │     UnifiedProcessor.process(filtered, raw_records=aligned_raw)
          │
          └── RECORD mode:
                UnifiedProcessor.process(data)

@@ -540,7 +540,10 @@ def apply_context_scope_for_records(
     Returns:
         Tuple of (enriched_records, skipped_records).  Skipped records had
         missing observe fields (upstream produced incomplete output) and carry
-        ``{"source_guid": ..., "reason": "observe_field_missing"}``.
+        ``{"source_guid": ..., "reason": "observe_field_missing", "index": i}``.
+        ``index`` is the record's position in the input list; callers align
+        parallel arrays (e.g. raw_records) positionally, since ``source_guid``
+        may be None or duplicated in merged/version records.
     """
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
@@ -567,7 +570,7 @@ def apply_context_scope_for_records(
     enriched: list[dict] = []
     skipped: list[dict] = []
 
-    for record in records:
+    for index, record in enumerate(records):
         content = get_existing_content(record)
         sguid = record.get("source_guid")
 
@@ -592,7 +595,7 @@ def apply_context_scope_for_records(
                 sguid,
                 e,
             )
-            skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING})
+            skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING, "index": index})
             continue
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
