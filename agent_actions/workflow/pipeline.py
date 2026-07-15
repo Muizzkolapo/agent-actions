@@ -582,6 +582,15 @@ class ProcessingPipeline:
                 action_name=self.config.action_name,
                 source_data=source_data,
             )
+            # prefilter_by_guard indexes original_data positionally and rejects a
+            # length mismatch, so raw_records must drop the same records observe
+            # did (source_guid is unique per FILE-mode record).
+            skipped_guids = {s["source_guid"] for s in scope_skipped if s.get("source_guid")}
+            aligned_raw = (
+                [r for r in data if r.get("source_guid") not in skipped_guids]
+                if skipped_guids
+                else data
+            )
             if scope_skipped and self.config.storage_backend:
                 batch: list[DispositionRow] = [
                     (
@@ -606,7 +615,7 @@ class ProcessingPipeline:
                             self.config.action_name,
                         )
             output, stats = self._unified_processor.process(
-                filtered, context, strategy, raw_records=data
+                filtered, context, strategy, raw_records=aligned_raw
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
