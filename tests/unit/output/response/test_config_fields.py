@@ -289,6 +289,19 @@ class TestRepromptPrecedenceForToolHitl:
         with pytest.raises(ConfigValidationError, match="reprompt"):
             ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
 
+    def test_reprompt_error_renders_kind_value_not_enum_repr(self):
+        """When kind is the ActionKind enum, the error must say 'tool', not 'ActionKind.TOOL'."""
+        from agent_actions.config.schema import ActionKind
+        from agent_actions.errors import ConfigValidationError
+
+        action = {**self._tool_action(), "kind": ActionKind.TOOL, "reprompt": {"validation": "f"}}
+        agent = {"agent_type": "my_tool", "name": "my_tool"}
+        with pytest.raises(ConfigValidationError) as exc:
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
+        message = str(exc.value)
+        assert "tool action 'my_tool'" in message
+        assert "ActionKind" not in message
+
 
 class TestVendorCompatibilityValidatorRunModeCoercion:
     """Verify VendorCompatibilityValidator coerces raw run_mode strings to RunMode."""
