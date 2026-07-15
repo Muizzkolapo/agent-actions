@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_FILE_GRANULARITY_ERROR
 
 from .config_fields import get_default, inherit_simple_fields
@@ -270,10 +270,22 @@ class ActionExpander:
         if action_kind in {"tool", "hitl"} and action.get("run_mode") is None:
             agent["run_mode"] = get_default("run_mode")
 
-        # reprompt is an LLM-recovery directive; a defaults-level reprompt must not
-        # bleed onto deterministic tool/hitl actions. An explicit action-level
-        # reprompt is still honoured.
-        if action_kind in {"tool", "hitl"} and "reprompt" not in action:
+        # reprompt is an LLM-recovery directive and is inert for deterministic
+        # tool/hitl actions. An explicit reprompt is a config error (fail fast);
+        # a reprompt inherited from workflow defaults is stripped.
+        if action_kind in {"tool", "hitl"}:
+            if "reprompt" in action:
+                raise ConfigValidationError(
+                    "reprompt",
+                    f"{action_kind} action '{action.get('name', 'unknown')}' cannot declare "
+                    "'reprompt' — reprompt is an LLM-recovery directive and has no effect on "
+                    "deterministic tools or HITL steps.",
+                    context={
+                        "action": action.get("name", "unknown"),
+                        "kind": action_kind,
+                        "hint": "Remove the reprompt block from this action.",
+                    },
+                )
             agent["reprompt"] = get_default("reprompt")
 
         # Validate configuration
