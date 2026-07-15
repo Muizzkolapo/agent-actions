@@ -270,6 +270,12 @@ class ActionExpander:
         if action_kind in {"tool", "hitl"} and action.get("run_mode") is None:
             agent["run_mode"] = get_default("run_mode")
 
+        # reprompt is an LLM-recovery directive; a defaults-level reprompt must not
+        # bleed onto deterministic tool/hitl actions. An explicit action-level
+        # reprompt is still honoured.
+        if action_kind in {"tool", "hitl"} and "reprompt" not in action:
+            agent["reprompt"] = get_default("reprompt")
+
         # Validate configuration
         validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
         if action_kind not in {"tool", "hitl"}:

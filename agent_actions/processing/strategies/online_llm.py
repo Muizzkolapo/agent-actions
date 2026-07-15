@@ -27,6 +27,7 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+from agent_actions.processing.helpers import _is_empty_output
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import (
@@ -59,20 +60,6 @@ from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCES
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
-
-
-def _is_empty_output(response: Any) -> bool:
-    """Check if a tool/LLM response is effectively empty."""
-    if response is None:
-        return True
-    if isinstance(response, dict) and len(response) == 0:
-        return True
-    if isinstance(response, list):
-        if len(response) == 0:
-            return True
-        if all(isinstance(item, dict) and len(item) == 0 for item in response):
-            return True
-    return False
 
 
 def _empty_warn_reason(
