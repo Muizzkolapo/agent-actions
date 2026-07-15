@@ -383,9 +383,7 @@ class TestToolKindNoReprompt:
         """model_vendor: tool (legacy signal) also triggers the no-reprompt path."""
         config = {
             "model_vendor": "tool",
-            "schema": {
-                "fields": [{"name": "result", "type": "string", "required": True}]
-            },
+            "schema": {"fields": [{"name": "result", "type": "string", "required": True}]},
             "reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 2},
             "name": "some_tool",
         }
