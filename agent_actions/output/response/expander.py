@@ -275,14 +275,15 @@ class ActionExpander:
         # a reprompt inherited from workflow defaults is stripped.
         if action_kind in {"tool", "hitl"}:
             if "reprompt" in action:
+                kind_label = getattr(action_kind, "value", action_kind)
                 raise ConfigValidationError(
                     "reprompt",
-                    f"{action_kind} action '{action.get('name', 'unknown')}' cannot declare "
+                    f"{kind_label} action '{action.get('name', 'unknown')}' cannot declare "
                     "'reprompt' — reprompt is an LLM-recovery directive and has no effect on "
                     "deterministic tools or HITL steps.",
                     context={
                         "action": action.get("name", "unknown"),
-                        "kind": action_kind,
+                        "kind": kind_label,
                         "hint": "Remove the reprompt block from this action.",
                     },
                 )
