@@ -278,6 +278,9 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> tup
                     reduce_key or "auto",
                 )
                 merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
+                # Guard-`filter` subtraction lives only in the storage-backend
+                # fan-in (where FILTERED dispositions exist); this filesystem path
+                # is unreachable whenever they do. Add it here if that changes.
 
                 # TemporaryDirectory instead of in-place overwrite: the old approach
                 # (overwrite + restore in finally) left corrupt files on SIGKILL.
@@ -323,24 +326,56 @@ def _resolve_upstream_root(file_path: Path, upstream_data_dirs: list[str]) -> Pa
     return file_path.parent
 
 
-def _collect_upstream_filtered_guids(
-    storage_backend: Any, upstream_data_dirs: list[str]
-) -> set[str]:
-    """Return source_guids a guard `filter` excluded in any upstream dependency.
+def _ancestor_action_names(
+    storage_backend: Any, action_name: str, upstream_data_dirs: list[str]
+) -> list[str]:
+    """Transitive upstream actions of ``action_name``.
 
-    A ``filter`` guard means the record is dead — it must not be carried forward
-    (guards/ARCHITECTURE.md).  The record leaves no ``target/`` output row but
-    does carry a per-record FILTERED disposition, so a downstream action that
-    also depends on an *unfiltered* sibling can re-inherit the guid at fan-in.
-    These guids are subtracted before the records reach the action.  Node-level
-    FILTERED markers (``__node__``) are rerun signals, not record identities.
+    A guard ``filter`` is authoritative for the filtering action AND everything
+    downstream of it, so a filtered guid must be subtracted even when the
+    filtering action is a grandparent reached only via one branch.  Prefer the
+    stored dependency graph (precise transitive ancestors); fall back to the
+    DIRECT dependency directories — never the flat execution order, which would
+    include parallel peers and could drop records that are legitimately live on
+    an independent branch.
+    """
+    try:
+        raw = storage_backend.load_metadata("dependency_graph")
+    except Exception:
+        raw = None
+    if raw:
+        try:
+            graph = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            graph = None
+        if isinstance(graph, dict) and isinstance(graph.get(action_name), list):
+            return [a for a in graph[action_name] if a != "staging"]
+    return [Path(d).name for d in upstream_data_dirs if Path(d).name != "staging"]
+
+
+def _collect_upstream_filtered_guids(
+    storage_backend: Any, action_name: str, upstream_data_dirs: list[str]
+) -> set[str]:
+    """Return source_guids a guard `filter` excluded anywhere upstream of ``action_name``.
+
+    A filtered record is dead (guards/ARCHITECTURE.md) but leaves a per-record
+    FILTERED disposition, so it can re-enter via an unfiltered sibling — these
+    guids are subtracted at fan-in.  ``__node__`` markers are rerun signals, not
+    record ids.  Fails open on storage errors (a safety net must not abort).
     """
     filtered_guids: set[str] = set()
-    for input_directory in upstream_data_dirs:
-        dep = Path(input_directory).name
-        if dep == "staging":
+    for dep in _ancestor_action_names(storage_backend, action_name, upstream_data_dirs):
+        try:
+            dispositions = storage_backend.get_disposition(dep, disposition=DISPOSITION_FILTERED)
+        except (OSError, sqlite3.Error, ValueError) as e:
+            logger.warning(
+                "Could not read FILTERED dispositions for upstream '%s' — "
+                "filter authority not enforced for it this run: %s",
+                dep,
+                e,
+            )
             continue
-        for disp in storage_backend.get_disposition(dep, disposition=DISPOSITION_FILTERED):
+        for disp in dispositions:
             record_id = disp.get("record_id")
             if record_id and record_id != NODE_LEVEL_RECORD_ID:
                 filtered_guids.add(record_id)
@@ -413,10 +448,10 @@ def process_from_storage_backend(
     files_found = len(data_by_path)
     files_processed = 0
 
-    # A guard `filter` on any upstream dependency makes those records dead — they
-    # must not re-enter here through an unfiltered sibling dependency.
+    # A guard `filter` anywhere upstream makes those records dead — they must not
+    # re-enter here through an unfiltered sibling dependency.
     filtered_guids = _collect_upstream_filtered_guids(
-        runner.storage_backend, params.upstream_data_dirs
+        runner.storage_backend, params.action_name, params.upstream_data_dirs
     )
 
     for relative_path, data_sources in data_by_path.items():
