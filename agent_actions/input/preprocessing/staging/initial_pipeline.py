@@ -529,32 +529,33 @@ def _prepare_online_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        data_chunk = chunks
-
-        # Deterministic content identity — matches what UnifiedProcessor/
-        # OnlineLLMStrategy derive for the same content, by construction.
-        src_text = []
-        for text in data_chunk:
-            record = {"content": text}
-            record["source_guid"] = IDGenerator.derive_source_guid(record)
-            src_text.append(record)
+        # Wrap the payload under content.source (parity with batch); identity is hashed
+        # over the raw content before wrapping, and the processor inherits the stamped guid.
+        data_chunk = []
+        for text in chunks:
+            source_guid = IDGenerator.derive_source_guid({"content": text})
+            data_chunk.append(
+                {"content": {"source": {"content": text}}, "source_guid": source_guid}
+            )
+        src_text = data_chunk
 
     elif ctx.file_type == ".json":
-        data_chunk = json_loader.process(ctx.content, ctx.file_path)
+        raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
 
-        if not isinstance(data_chunk, list):
-            data_chunk = [data_chunk]
+        if not isinstance(raw_items, list):
+            raw_items = [raw_items]
 
-        # Do NOT mutate data_chunk: OnlineLLMStrategy derives source_guid from the raw item
-        src_text = []
-        for item in data_chunk:
-            if isinstance(item, dict):
-                source_item = item.copy()
-                if "source_guid" not in source_item:
-                    source_item["source_guid"] = IDGenerator.derive_source_guid(source_item)
-                src_text.append(source_item)
-            else:
-                src_text.append(item)
+        # Wrap the user payload under content.source (parity with batch); identity is hashed
+        # over the raw item before wrapping, so the processor inherits the stamped guid. A
+        # pre-existing source_guid (e.g. checkpoint resume) is honored.
+        data_chunk = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                data_chunk.append(item)
+                continue
+            source_guid = item.get("source_guid") or IDGenerator.derive_source_guid(item)
+            data_chunk.append({"content": {"source": {**item}}, "source_guid": source_guid})
+        src_text = data_chunk
 
     elif ctx.file_type in (".csv", ".tsv"):
         # TabularLoader routes on extension and handles tab-separated files
