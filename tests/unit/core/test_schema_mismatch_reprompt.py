@@ -402,3 +402,47 @@ class TestToolKindNoReprompt:
         """kind: llm (or no kind) with reprompt must still return reprompt — no regression."""
         config = {"reprompt": {"on_schema_mismatch": "reprompt"}}
         assert _resolve_schema_mismatch_mode(config) == "reprompt"
+
+
+# ---------------------------------------------------------------------------
+# Empty output is on_empty's domain, never a schema-reject failure
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyOutputExemptFromSchemaReject:
+    """Empty output routes via the on_empty handler — it must never be rejected.
+
+    An empty response has no fields to validate against a schema; raising a hard
+    SchemaValidationError here would pre-empt the on_empty policy (skip/warn/error).
+    """
+
+    def _reject_config(self):
+        return {
+            "schema": {
+                "fields": [
+                    {"name": "title", "type": "string", "required": True},
+                    {"name": "score", "type": "number", "required": True},
+                ]
+            },
+            "reprompt": {"on_schema_mismatch": "reject"},
+            "name": "t",
+        }
+
+    def test_empty_list_not_rejected(self):
+        assert _validate_llm_output_schema([], self._reject_config(), "t") == []
+
+    def test_empty_dict_not_rejected(self):
+        assert _validate_llm_output_schema({}, self._reject_config(), "t") == {}
+
+    def test_list_of_empty_dicts_not_rejected(self):
+        assert _validate_llm_output_schema([{}, {}], self._reject_config(), "t") == [{}, {}]
+
+    def test_none_not_rejected(self):
+        assert _validate_llm_output_schema(None, self._reject_config(), "t") is None
+
+    def test_nonempty_invalid_still_rejected(self):
+        """P2 only exempts empty — genuinely-wrong non-empty output still hard-fails."""
+        from agent_actions.errors import SchemaValidationError
+
+        with pytest.raises(SchemaValidationError):
+            _validate_llm_output_schema({"wrong": "x"}, self._reject_config(), "t")
