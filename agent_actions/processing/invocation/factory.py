@@ -39,6 +39,7 @@ class InvocationStrategyFactory:
     @staticmethod
     def _create_online_strategy(agent_config: dict[str, Any]) -> OnlineStrategy:
         """Create OnlineStrategy with configured recovery services."""
+        from agent_actions.processing.helpers import _is_tool_action
         from agent_actions.processing.recovery.reprompt import (
             create_reprompt_service_from_config,
         )
@@ -51,6 +52,15 @@ class InvocationStrategyFactory:
 
         validator = InvocationStrategyFactory._build_validator(agent_config)
 
+        retry_service = create_retry_service_from_config(retry_config)
+
+        # Reprompt is meaningless for deterministic tools — re-running the same UDF yields the same output.
+        if _is_tool_action(agent_config):
+            return OnlineStrategy(
+                retry_service=retry_service,
+                reprompt_service=None,
+            )
+
         critique_fn = None
         if reprompt_config and reprompt_config.get("use_llm_critique"):
             from agent_actions.processing.recovery.critique import invoke_critique
@@ -58,7 +68,6 @@ class InvocationStrategyFactory:
             def critique_fn(response: Any, errors: str) -> str:
                 return invoke_critique(agent_config, response, errors)
 
-        retry_service = create_retry_service_from_config(retry_config)
         reprompt_service = create_reprompt_service_from_config(
             reprompt_config, validator=validator, critique_fn=critique_fn
         )

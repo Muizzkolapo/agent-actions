@@ -346,3 +346,103 @@ class TestBuildValidatorUnregisteredUdf:
         config = {"reprompt": {"validation": "nonexistent_udf"}}
         with pytest.raises(ConfigurationError, match="not found"):
             InvocationStrategyFactory._build_validator(config)
+
+
+# ---------------------------------------------------------------------------
+# Tool-kind: reprompt must not be wired
+# ---------------------------------------------------------------------------
+
+
+class TestToolKindNoReprompt:
+    """kind: tool actions must not get a reprompt service or schema-reprompt validator."""
+
+    def _make_tool_config(self):
+        return {
+            "kind": "tool",
+            "schema": {
+                "fields": [
+                    {"name": "code_block", "type": "string", "required": True},
+                    {"name": "description", "type": "string", "required": True},
+                ]
+            },
+            "reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 3},
+            "name": "flatten_code",
+        }
+
+    def test_tool_kind_with_schema_reprompt_yields_no_validator(self):
+        """_build_validator must return None for kind: tool — reprompt is inert on tools."""
+        result = InvocationStrategyFactory._build_validator(self._make_tool_config())
+        assert result is None
+
+    def test_tool_kind_online_strategy_has_no_reprompt_service(self):
+        """_create_online_strategy must not wire a reprompt_service for kind: tool."""
+        strategy = InvocationStrategyFactory._create_online_strategy(self._make_tool_config())
+        assert strategy._reprompt_service is None
+
+    def test_model_vendor_tool_also_yields_no_validator(self):
+        """model_vendor: tool (legacy signal) also triggers the no-reprompt path."""
+        config = {
+            "model_vendor": "tool",
+            "schema": {"fields": [{"name": "result", "type": "string", "required": True}]},
+            "reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 2},
+            "name": "some_tool",
+        }
+        assert InvocationStrategyFactory._build_validator(config) is None
+
+    def test_resolve_schema_mode_coerces_reprompt_to_reject_for_tools(self):
+        """For kind: tool with on_schema_mismatch: reprompt, mode is coerced to reject."""
+        config = {
+            "kind": "tool",
+            "reprompt": {"on_schema_mismatch": "reprompt"},
+            "name": "my_tool",
+        }
+        assert _resolve_schema_mismatch_mode(config) == "reject"
+
+    def test_resolve_schema_mode_llm_reprompt_unchanged(self):
+        """kind: llm (or no kind) with reprompt must still return reprompt — no regression."""
+        config = {"reprompt": {"on_schema_mismatch": "reprompt"}}
+        assert _resolve_schema_mismatch_mode(config) == "reprompt"
+
+
+# ---------------------------------------------------------------------------
+# Empty output is on_empty's domain, never a schema-reject failure
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyOutputExemptFromSchemaReject:
+    """Empty output routes via the on_empty handler — it must never be rejected.
+
+    An empty response has no fields to validate against a schema; raising a hard
+    SchemaValidationError here would pre-empt the on_empty policy (skip/warn/error).
+    """
+
+    def _reject_config(self):
+        return {
+            "schema": {
+                "fields": [
+                    {"name": "title", "type": "string", "required": True},
+                    {"name": "score", "type": "number", "required": True},
+                ]
+            },
+            "reprompt": {"on_schema_mismatch": "reject"},
+            "name": "t",
+        }
+
+    def test_empty_list_not_rejected(self):
+        assert _validate_llm_output_schema([], self._reject_config(), "t") == []
+
+    def test_empty_dict_not_rejected(self):
+        assert _validate_llm_output_schema({}, self._reject_config(), "t") == {}
+
+    def test_list_of_empty_dicts_not_rejected(self):
+        assert _validate_llm_output_schema([{}, {}], self._reject_config(), "t") == [{}, {}]
+
+    def test_none_not_rejected(self):
+        assert _validate_llm_output_schema(None, self._reject_config(), "t") is None
+
+    def test_nonempty_invalid_still_rejected(self):
+        """P2 only exempts empty — genuinely-wrong non-empty output still hard-fails."""
+        from agent_actions.errors import SchemaValidationError
+
+        with pytest.raises(SchemaValidationError):
+            _validate_llm_output_schema({"wrong": "x"}, self._reject_config(), "t")

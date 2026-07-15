@@ -76,12 +76,15 @@ def run_dynamic_agent(
         additional_context=None,
     )
 
-    if agent_config.get("kind") != "tool":
-        response = _validate_llm_output_schema(
-            response, agent_config, agent_name, skip_schema_validation=skip_schema_validation
-        )
+    response = _validate_llm_output_schema(
+        response, agent_config, agent_name, skip_schema_validation=skip_schema_validation
+    )
 
     return (response, True)
+
+
+def _is_tool_action(agent_config: dict[str, Any]) -> bool:
+    return agent_config.get("kind") == "tool" or agent_config.get("model_vendor") == "tool"
 
 
 def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
@@ -89,10 +92,22 @@ def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
 
     Returns ``"reject"``, ``"reprompt"``, or ``"warn"`` (internal signal for
     no enforcement).
+
+    For deterministic tool actions, ``"reprompt"`` is coerced to ``"reject"``
+    because re-running the same UDF on the same input always yields the same
+    output — reprompt is inert and would only burn futile attempts.
     """
     reprompt = agent_config.get("reprompt")
     if isinstance(reprompt, dict) and reprompt.get("on_schema_mismatch"):
-        return str(reprompt["on_schema_mismatch"])
+        mode = str(reprompt["on_schema_mismatch"])
+        if mode == "reprompt" and _is_tool_action(agent_config):
+            logger.warning(
+                "Action '%s': on_schema_mismatch=reprompt is inert for deterministic tools "
+                "— treating as reject.",
+                agent_config.get("name", "unknown"),
+            )
+            return "reject"
+        return mode
     return "warn"
 
 
@@ -136,6 +151,20 @@ def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
     return result
 
 
+def _is_empty_output(response: Any) -> bool:
+    """Check if a tool/LLM response is effectively empty."""
+    if response is None:
+        return True
+    if isinstance(response, dict) and len(response) == 0:
+        return True
+    if isinstance(response, list):
+        if len(response) == 0:
+            return True
+        if all(isinstance(item, dict) and len(item) == 0 for item in response):
+            return True
+    return False
+
+
 def _validate_llm_output_schema(
     response: Any,
     agent_config: dict[str, Any],
@@ -168,6 +197,12 @@ def _validate_llm_output_schema(
                 agent_name,
                 mismatch_mode,
             )
+        return response
+
+    # Empty output is the on_empty handler's domain, not schema validation's:
+    # an empty response has no fields to check, so rejecting it here would
+    # pre-empt the on_empty policy (skip/warn/error) with a hard failure.
+    if _is_empty_output(response):
         return response
 
     mismatch_mode = _resolve_schema_mismatch_mode(agent_config)

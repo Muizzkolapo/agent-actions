@@ -8,7 +8,7 @@ from agent_actions.config.schema import ActionConfig
 from agent_actions.errors import EmptyOutputError
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.logging.events.handlers.run_results import ActionResult, RunResultsCollector
-from agent_actions.processing.strategies.online_llm import _is_empty_output
+from agent_actions.processing.helpers import _is_empty_output
 
 # =============================================================================
 # _is_empty_output helper tests

@@ -216,6 +216,93 @@ class TestIsOperationalFromConfig:
         assert result["is_operational"] is False
 
 
+class TestRepromptPrecedenceForToolHitl:
+    """Tool/hitl actions must not inherit reprompt from workflow defaults.
+
+    reprompt is an LLM-recovery directive: re-running a deterministic UDF (or a
+    HITL step) on the same input can't change the outcome, so a defaults-level
+    reprompt must not bleed onto tool/hitl actions. An explicit action-level
+    reprompt is still honoured.
+    """
+
+    _DEFAULTS = {"reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 3}}
+
+    def _tool_action(self):
+        return {
+            "name": "my_tool",
+            "kind": "tool",
+            "impl": "pkg.some_fn",
+            "schema": {"fields": [{"name": "x", "type": "string"}]},
+        }
+
+    def test_tool_does_not_inherit_reprompt_from_defaults(self):
+        agent = {"agent_type": "my_tool", "name": "my_tool"}
+        result = ActionExpander._create_agent_from_action(
+            self._tool_action(), self._DEFAULTS, agent, lambda x: x
+        )
+        assert result["reprompt"] is False
+
+    def test_hitl_does_not_inherit_reprompt_from_defaults(self):
+        action = {
+            "name": "review",
+            "kind": "hitl",
+            "hitl": {"instructions": "Review the batch"},
+        }
+        agent = {"agent_type": "review", "name": "review"}
+        result = ActionExpander._create_agent_from_action(
+            action, self._DEFAULTS, agent, lambda x: x
+        )
+        assert result["reprompt"] is False
+
+    def test_llm_still_inherits_reprompt_from_defaults(self):
+        action = {
+            "name": "gen",
+            "model_vendor": "openai",
+            "model_name": "gpt-4o",
+            "api_key": "k",
+        }
+        agent = {"agent_type": "gen", "name": "gen"}
+        result = ActionExpander._create_agent_from_action(
+            action, self._DEFAULTS, agent, lambda x: x
+        )
+        assert result["reprompt"] == {"on_schema_mismatch": "reprompt", "max_attempts": 3}
+
+    def test_tool_explicit_reprompt_raises(self):
+        """An explicit reprompt on a tool is a config error, not a silent accept."""
+        from agent_actions.errors import ConfigValidationError
+
+        action = {**self._tool_action(), "reprompt": {"on_schema_mismatch": "reject"}}
+        agent = {"agent_type": "my_tool", "name": "my_tool"}
+        with pytest.raises(ConfigValidationError, match="reprompt"):
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
+
+    def test_hitl_explicit_reprompt_raises(self):
+        from agent_actions.errors import ConfigValidationError
+
+        action = {
+            "name": "review",
+            "kind": "hitl",
+            "hitl": {"instructions": "Review the batch"},
+            "reprompt": {"on_schema_mismatch": "reprompt"},
+        }
+        agent = {"agent_type": "review", "name": "review"}
+        with pytest.raises(ConfigValidationError, match="reprompt"):
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
+
+    def test_reprompt_error_renders_kind_value_not_enum_repr(self):
+        """When kind is the ActionKind enum, the error must say 'tool', not 'ActionKind.TOOL'."""
+        from agent_actions.config.schema import ActionKind
+        from agent_actions.errors import ConfigValidationError
+
+        action = {**self._tool_action(), "kind": ActionKind.TOOL, "reprompt": {"validation": "f"}}
+        agent = {"agent_type": "my_tool", "name": "my_tool"}
+        with pytest.raises(ConfigValidationError) as exc:
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
+        message = str(exc.value)
+        assert "tool action 'my_tool'" in message
+        assert "ActionKind" not in message
+
+
 class TestVendorCompatibilityValidatorRunModeCoercion:
     """Verify VendorCompatibilityValidator coerces raw run_mode strings to RunMode."""
 
