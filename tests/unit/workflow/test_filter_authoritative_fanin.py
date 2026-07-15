@@ -160,9 +160,7 @@ def test_node_level_filtered_disposition_is_ignored(tmp_path):
 
     storage = MagicMock()
     storage.list_target_files.return_value = ["data.json"]
-    storage.read_target.side_effect = lambda action, rel: (
-        {"a": a_records, "b": b_records}[action]
-    )
+    storage.read_target.side_effect = lambda action, rel: ({"a": a_records, "b": b_records}[action])
 
     def _get_disposition(action, record_id=None, disposition=None):
         if action == "a" and disposition == DISPOSITION_FILTERED:

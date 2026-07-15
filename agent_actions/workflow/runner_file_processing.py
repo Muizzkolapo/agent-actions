@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
@@ -322,6 +323,42 @@ def _resolve_upstream_root(file_path: Path, upstream_data_dirs: list[str]) -> Pa
     return file_path.parent
 
 
+def _collect_upstream_filtered_guids(
+    storage_backend: Any, upstream_data_dirs: list[str]
+) -> set[str]:
+    """Return source_guids a guard `filter` excluded in any upstream dependency.
+
+    A ``filter`` guard means the record is dead — it must not be carried forward
+    (guards/ARCHITECTURE.md).  The record leaves no ``target/`` output row but
+    does carry a per-record FILTERED disposition, so a downstream action that
+    also depends on an *unfiltered* sibling can re-inherit the guid at fan-in.
+    These guids are subtracted before the records reach the action.  Node-level
+    FILTERED markers (``__node__``) are rerun signals, not record identities.
+    """
+    filtered_guids: set[str] = set()
+    for input_directory in upstream_data_dirs:
+        dep = Path(input_directory).name
+        if dep == "staging":
+            continue
+        for disp in storage_backend.get_disposition(dep, disposition=DISPOSITION_FILTERED):
+            record_id = disp.get("record_id")
+            if record_id and record_id != NODE_LEVEL_RECORD_ID:
+                filtered_guids.add(record_id)
+    return filtered_guids
+
+
+def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, int]:
+    """Drop records whose source_guid was guard-filtered upstream. Returns (kept, dropped)."""
+    if not filtered_guids or not isinstance(data, list):
+        return data, 0
+    kept = [
+        record
+        for record in data
+        if not (isinstance(record, dict) and record.get("source_guid") in filtered_guids)
+    ]
+    return kept, len(data) - len(kept)
+
+
 def process_from_storage_backend(
     runner: ActionRunner, params: FileProcessParams
 ) -> tuple[int, int]:
@@ -376,6 +413,12 @@ def process_from_storage_backend(
     files_found = len(data_by_path)
     files_processed = 0
 
+    # A guard `filter` on any upstream dependency makes those records dead — they
+    # must not re-enter here through an unfiltered sibling dependency.
+    filtered_guids = _collect_upstream_filtered_guids(
+        runner.storage_backend, params.upstream_data_dirs
+    )
+
     for relative_path, data_sources in data_by_path.items():
         try:
             if len(data_sources) == 1:
@@ -395,6 +438,15 @@ def process_from_storage_backend(
                     else:
                         all_data.append(source_data)
                 data = merge_records_by_key(all_data, reduce_key)
+
+            data, dropped = _drop_filtered_records(data, filtered_guids)
+            if dropped:
+                logger.info(
+                    "%s: dropped %d record(s) filtered by an upstream guard "
+                    "(filter is authoritative — dead records are not carried forward)",
+                    params.action_name,
+                    dropped,
+                )
 
             source_key = str(Path(relative_path).with_suffix(""))
             virtual_input_path = output_path / relative_path
