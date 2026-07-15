@@ -267,13 +267,27 @@ class TestRepromptPrecedenceForToolHitl:
         )
         assert result["reprompt"] == {"on_schema_mismatch": "reprompt", "max_attempts": 3}
 
-    def test_tool_explicit_reprompt_is_preserved(self):
+    def test_tool_explicit_reprompt_raises(self):
+        """An explicit reprompt on a tool is a config error, not a silent accept."""
+        from agent_actions.errors import ConfigValidationError
+
         action = {**self._tool_action(), "reprompt": {"on_schema_mismatch": "reject"}}
         agent = {"agent_type": "my_tool", "name": "my_tool"}
-        result = ActionExpander._create_agent_from_action(
-            action, self._DEFAULTS, agent, lambda x: x
-        )
-        assert result["reprompt"] == {"on_schema_mismatch": "reject"}
+        with pytest.raises(ConfigValidationError, match="reprompt"):
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
+
+    def test_hitl_explicit_reprompt_raises(self):
+        from agent_actions.errors import ConfigValidationError
+
+        action = {
+            "name": "review",
+            "kind": "hitl",
+            "hitl": {"instructions": "Review the batch"},
+            "reprompt": {"on_schema_mismatch": "reprompt"},
+        }
+        agent = {"agent_type": "review", "name": "review"}
+        with pytest.raises(ConfigValidationError, match="reprompt"):
+            ActionExpander._create_agent_from_action(action, self._DEFAULTS, agent, lambda x: x)
 
 
 class TestVendorCompatibilityValidatorRunModeCoercion:
