@@ -342,6 +342,35 @@ def _save_source_data(
         )
 
 
+def _envelope_row(payload: dict[str, Any]) -> dict[str, Any]:
+    """The single authority for a first-stage record's envelope and identity.
+
+    The payload lands under content.source; source_guid is derived over the RAW payload,
+    never lifted from a payload field of the same name — doing so would collapse identity
+    across rows that share that value. Batch decorates the result with ancestry; online uses
+    it as-is.
+    """
+    return {
+        "content": {"source": {**payload}},
+        "source_guid": IDGenerator.derive_source_guid(payload),
+    }
+
+
+def _wrap_online_rows(payloads: list[Any]) -> list[dict[str, Any]]:
+    """Envelope and stamp online first-stage rows through the single authority.
+
+    A non-dict payload cannot be namespaced under content.source, so it passes through
+    unchanged (preserving the prior behavior for non-record items).
+    """
+    wrapped: list[dict[str, Any]] = []
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            wrapped.append(payload)
+            continue
+        wrapped.append(_envelope_row(payload))
+    return wrapped
+
+
 def _prepare_text_chunks_batch(
     content: str, agent_config: dict[str, Any], batch_id: str, node_id: str
 ) -> list[dict[str, Any]]:
@@ -361,11 +390,8 @@ def _prepare_text_chunks_batch(
     result = []
     for idx, chunk in enumerate(chunks):
         target_id = str(uuid.uuid4())
-        # Identity is hashed over the raw payload; the payload then lives under content.source
-        # (parity with structured rows: source.content == the chunk, no framework leak).
-        source_guid = IDGenerator.derive_source_guid({"content": chunk})
         record = {
-            "content": {"source": {"content": chunk}},
+            **_envelope_row({"content": chunk}),
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
@@ -373,7 +399,6 @@ def _prepare_text_chunks_batch(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
-            "source_guid": source_guid,
         }
         result.append(record)
     return result
@@ -395,12 +420,8 @@ def _add_batch_metadata(
     result = []
     for idx, row in enumerate(rows):
         target_id = str(uuid.uuid4())
-        # Identity is hashed over the raw user payload; the payload then lives under its own
-        # content.source namespace so the framework fields (added flat, below) can never
-        # overwrite a user column that shares their name, nor leak into source.*.
-        source_guid = IDGenerator.derive_source_guid(row)
         record = {
-            "content": {"source": {**row}},
+            **_envelope_row(row),
             "batch_id": batch_id,
             "batch_uuid": f"{batch_id}_{idx}",
             "target_id": target_id,
@@ -408,7 +429,6 @@ def _add_batch_metadata(
             "parent_target_id": None,
             "root_target_id": target_id,
             "node_id": node_id,
-            "source_guid": source_guid,
         }
         result.append(record)
     return result
@@ -529,14 +549,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        # Wrap the payload under content.source (parity with batch); identity is hashed
-        # over the raw content before wrapping, and the processor inherits the stamped guid.
-        data_chunk = []
-        for text in chunks:
-            source_guid = IDGenerator.derive_source_guid({"content": text})
-            data_chunk.append(
-                {"content": {"source": {"content": text}}, "source_guid": source_guid}
-            )
+        data_chunk = _wrap_online_rows([{"content": text} for text in chunks])
         src_text = data_chunk
 
     elif ctx.file_type == ".json":
@@ -545,26 +558,17 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(raw_items, list):
             raw_items = [raw_items]
 
-        # Wrap the user payload under content.source (parity with batch); identity is hashed
-        # over the raw item before wrapping, so the processor inherits the stamped guid. A
-        # pre-existing source_guid (e.g. checkpoint resume) is honored.
-        data_chunk = []
-        for item in raw_items:
-            if not isinstance(item, dict):
-                data_chunk.append(item)
-                continue
-            source_guid = item.get("source_guid") or IDGenerator.derive_source_guid(item)
-            data_chunk.append({"content": {"source": {**item}}, "source_guid": source_guid})
+        data_chunk = _wrap_online_rows(raw_items)
         src_text = data_chunk
 
     elif ctx.file_type in (".csv", ".tsv"):
-        # TabularLoader routes on extension and handles tab-separated files
-        # via csv.reader(..., delimiter="\t").
-        data_chunk = tabular_loader.process(content=None, file_path=ctx.file_path)
+        rows = tabular_loader.process(content=None, file_path=ctx.file_path)
+        data_chunk = _wrap_online_rows(rows)
         src_text = data_chunk
 
     elif ctx.file_type == ".xlsx":
-        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]
+        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
+        data_chunk = _wrap_online_rows(rows)
         src_text = data_chunk
 
     elif ctx.file_type == ".xml":
