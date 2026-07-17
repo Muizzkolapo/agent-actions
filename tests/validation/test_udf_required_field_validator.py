@@ -99,6 +99,19 @@ _SUBSCRIPT_INSIDE_IF = (
     "    return result\n"
 )
 
+# A NESTED helper whose return sits below the outer function's tail return must
+# not be picked as the outer's tail — the outer's conditional-only field would
+# be silently exonerated by the inner's unrelated dict literal otherwise.
+_NESTED_HELPER_AFTER_TAIL_RETURN = (
+    "def build(data):\n"
+    "    result = {'options': []}\n"
+    "    if 'source_quote' in data:\n"
+    "        result['source_quote'] = data['source_quote']\n"
+    "    def _tail_helper():\n"
+    "        return {'source_quote': None}\n"
+    "    return result\n"
+)
+
 
 def _risks(source, required, additional_properties=True):
     return find_conditional_required_field_risks(
@@ -162,6 +175,12 @@ def test_subscript_assign_inside_if_is_not_credited():
     findings = _risks(_SUBSCRIPT_INSIDE_IF, ["options", "answer"])
     assert len(findings) == 1
     assert "answer" in findings[0]
+
+
+def test_nested_helper_return_does_not_shadow_outer_tail():
+    findings = _risks(_NESTED_HELPER_AFTER_TAIL_RETURN, ["options", "source_quote"])
+    assert len(findings) == 1
+    assert "source_quote" in findings[0]
 
 
 def test_additional_properties_true_does_not_suppress_required_check():

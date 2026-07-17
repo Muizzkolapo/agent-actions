@@ -1,24 +1,12 @@
-"""Static-AST check: a kind:tool UDF must unconditionally produce every
-required output-schema field, or the runtime schema validator will reject a
-subset of records mid-run.
-
-The runtime signal we mirror is `_validate_udf_output` in
-``agent_actions/utils/udf_management/tooling.py``: `jsonschema.validate` on
-each returned item against ``json_output_schema``, which raises
-``SchemaValidationError`` when a `required` property is missing. Post-568
-every flat schema field is required by default, so a UDF that emits a field
-only when a guard passes crashes the workflow whenever the guard misses.
-
-This validator finds the shape statically. It never imports or executes the
-UDF — only its source is inspected. It errs toward silence: any construction
-shape it does not fully recognise is treated as "unknown" and produces no
-warning, so the check contributes zero false positives on tools that do emit
-their required fields unconditionally.
-"""
+"""Static-AST check: a kind:tool UDF must unconditionally emit every required
+output-schema field, or `_validate_udf_output` crashes mid-run whenever a
+guard misses. Errs toward silence — unrecognised construction shapes yield
+no warning, so unconditionally-emitting tools stay clean."""
 
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 
 
 def _has_spread(dict_node: ast.Dict) -> bool:
@@ -35,17 +23,26 @@ def _const_str_keys(dict_node: ast.Dict) -> set[str]:
     return keys
 
 
-def _last_return(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Return | None:
-    """The tail return, chosen by source order — early guard returns must not shadow it.
+def _iter_own_returns(func: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.Return]:
+    """Yield every ``Return`` belonging to ``func`` — never one from a nested function.
 
-    ``ast.walk`` yields in BFS order, so we sort by lineno to get the tail
-    return (the return that actually determines the output shape in the happy
-    path). This mirrors how a reader thinks about a function whose top starts
-    with `if not isinstance(data, dict): return data`.
+    A plain ``ast.walk`` descends into inner ``FunctionDef``/``AsyncFunctionDef``
+    / ``Lambda`` nodes and would pick their returns as candidates for the outer
+    tail return, silently misclassifying the outer's output shape.
     """
-    returns = [
-        node for node in ast.walk(func) if isinstance(node, ast.Return) and node.value is not None
-    ]
+    stack: list[ast.AST] = list(func.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(node, ast.Return) and node.value is not None:
+            yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _last_return(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Return | None:
+    """The tail return, chosen by source order — early guard returns must not shadow it."""
+    returns = list(_iter_own_returns(func))
     if not returns:
         return None
     return max(returns, key=lambda r: r.lineno)
@@ -124,16 +121,12 @@ def _unconditional_output_keys(
 
 
 def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]:
-    """One warning per required schema field a kind:tool UDF cannot statically be
-    shown to emit unconditionally.
+    """One warning per required schema field a kind:tool UDF cannot statically
+    be shown to emit unconditionally.
 
-    Each action entry provides:
-
-    - ``source``: UDF text (as returned by ``inspect.getsource``).
-    - ``required``: the compiled ``json_output_schema.required`` list.
-    - ``additional_properties``: recorded for parity with the sibling
-      passthrough validator, but does not weaken the check — allowing extra
-      keys does not make a missing required key permissible.
+    ``additional_properties`` is accepted for call-site parity with the sibling
+    passthrough validator but does not weaken the check — extra keys allowed
+    does not make a missing required key permissible.
     """
     findings: list[str] = []
     for name, info in actions.items():
