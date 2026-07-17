@@ -111,6 +111,59 @@ class StorageBackend(ABC):
         """Create tables, indexes, and other infrastructure required by the backend."""
         ...
 
+    def _gate_schema_echo_deltas(
+        self,
+        action_name: str,
+        delta_records: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Replace schema-echo namespaces with a parse-error sentinel before persistence.
+
+        A namespace shaped like the compiled JSON Schema means an upstream path
+        handed us the schema instead of LLM output. The live-LLM flow catches this
+        in ``_reject_schema_echo_items``; this gate catches the resume / carry-forward
+        path that never invokes the LLM. The record keeps flowing (namespace swapped
+        for ``make_schema_echo_error``) and gets a FAILED/PARSE_ERROR disposition so
+        the failure stays queryable rather than being silently dropped.
+        """
+        from agent_actions.record.reasons import PARSE_ERROR
+        from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
+
+        gated: list[dict[str, Any]] = []
+        for record in delta_records:
+            content = record.get("content")
+            if not isinstance(content, dict) or action_name not in content:
+                gated.append(record)
+                continue
+            ns_value = content[action_name]
+            if not is_schema_echo(ns_value):
+                gated.append(record)
+                continue
+
+            source_guid = record.get("source_guid")
+            logger.warning(
+                "[%s] Schema-echo in delta for source_guid=%s (keys: %s) — "
+                "replacing with parse-error sentinel",
+                action_name,
+                source_guid,
+                sorted(ns_value.keys()),
+            )
+            gated.append(
+                {**record, "content": {**content, action_name: make_schema_echo_error(ns_value)}}
+            )
+
+            if source_guid:
+                try:
+                    self.set_disposition(
+                        action_name, source_guid, DISPOSITION_FAILED, reason=PARSE_ERROR
+                    )
+                except NotImplementedError:
+                    logger.warning(
+                        "[%s] Disposition write skipped for %s — backend has no set_disposition",
+                        action_name,
+                        source_guid,
+                    )
+        return gated
+
     def write_target(
         self,
         action_name: str,
@@ -136,6 +189,10 @@ class StorageBackend(ABC):
                     delta_records.append(
                         self._extract_delta(record, action_name, is_first_action=is_first_action)
                     )
+
+        # Refuse to persist namespaces that are the compiled JSON Schema instead of
+        # LLM output — the carry-forward / resume path bypasses the live-LLM guard.
+        delta_records = self._gate_schema_echo_deltas(action_name, delta_records)
 
         if not self._format_version_written:
             self.save_metadata("storage_format_version", str(self._STORAGE_FORMAT_VERSION))
