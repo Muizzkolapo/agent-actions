@@ -21,21 +21,28 @@ from agent_actions.input.context.normalizer import (
 
 
 class TestRemovedDirectives:
-    def test_seed_path_raises_naming_the_replacement(self):
-        """The renamed-away seed_path key raises, naming both the old key and 'seed'."""
+    """Removed names fail the SAME generic way as any other invalid directive —
+    they name the offending key and list the valid set, with no rename narrative."""
+
+    def test_seed_path_raises_generic_invalid_directive(self):
         with pytest.raises(ConfigurationError) as excinfo:
             normalize_context_scope({"seed_path": {"x": "$file:y.json"}}, {})
         msg = str(excinfo.value)
-        assert "seed_path" in msg  # names the removed key
-        assert "'seed'" in msg  # points at the replacement
+        assert "seed_path" in msg  # names the offending key
+        assert "renamed" not in msg.lower()  # no migration story
+        assert "no longer" not in msg.lower()
+        for valid in DIRECTIVE_REGISTRY:  # lists the valid set, derived from the registry
+            assert valid in msg
 
-    def test_static_data_raises_naming_the_replacement(self):
-        """The retired static_data key raises with the same guidance."""
+    def test_static_data_raises_generic_invalid_directive(self):
         with pytest.raises(ConfigurationError) as excinfo:
             normalize_context_scope({"static_data": {"x": "$file:y.json"}}, {})
         msg = str(excinfo.value)
         assert "static_data" in msg
-        assert "'seed'" in msg
+        assert "renamed" not in msg.lower()
+        assert "no longer" not in msg.lower()
+        for valid in DIRECTIVE_REGISTRY:
+            assert valid in msg
 
 
 class TestDirectiveRegistry:
@@ -127,13 +134,23 @@ class TestNormalizeContextScope:
 
         assert result["observe"] == ["regular_action.field1"]
 
-    def test_handles_unknown_directives(self):
-        context_scope = {"unknown_directive": {"foo": "bar"}}
-        version_base_map = {"loop_action": ["loop_action_1"]}
+    def test_unknown_directive_raises_not_silently_inert(self):
+        """An unrecognized directive fails loudly (was silently copied through, doing nothing)."""
+        with pytest.raises(ConfigurationError) as excinfo:
+            normalize_context_scope({"unknown_directive": {"foo": "bar"}}, {})
+        msg = str(excinfo.value)
+        assert "unknown_directive" in msg  # names the offending key
+        for valid in DIRECTIVE_REGISTRY:  # lists the valid set
+            assert valid in msg
 
-        result = normalize_context_scope(context_scope, version_base_map)
-
-        assert result["unknown_directive"] == {"foo": "bar"}
+    def test_typo_directive_raises_naming_valid_set(self):
+        """A near-miss typo (observ) errors instead of silently scoping nothing."""
+        with pytest.raises(ConfigurationError) as excinfo:
+            normalize_context_scope({"observ": ["source.*"]}, {})
+        msg = str(excinfo.value)
+        assert "observ" in msg
+        assert "observe" in msg  # the valid set names the intended directive
+        assert "renamed" not in msg.lower()  # generic message, no rename story
 
 
 class TestExpandListDirective:

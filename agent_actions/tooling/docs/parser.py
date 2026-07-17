@@ -270,10 +270,6 @@ class WorkflowParser:
         if "passthrough" in context_scope and isinstance(context_scope["passthrough"], list):
             inputs.extend(context_scope["passthrough"])
 
-        # Extract from 'keep' (legacy/alternative pattern)
-        if "keep" in context_scope and isinstance(context_scope["keep"], list):
-            inputs.extend(context_scope["keep"])
-
         # Remove duplicates while preserving order
         seen = set()
         unique_inputs = []

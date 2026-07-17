@@ -18,9 +18,6 @@ DIRECTIVE_REGISTRY = {
     "seed": {"type": "dict", "expand_versions": False},
 }
 
-# Directive keys that were removed, mapped to their replacement (for a loud error).
-REMOVED_DIRECTIVES = {"seed_path": "seed", "static_data": "seed"}
-
 # Namespaces users write in prompt references when they mean the 'seed' namespace.
 SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path", "static_data"})
 
@@ -53,17 +50,16 @@ def normalize_context_scope(
     expanded_scope = {}
 
     for directive_name, directive_value in context_scope.items():
-        if directive_name in REMOVED_DIRECTIVES:
-            replacement = REMOVED_DIRECTIVES[directive_name]
+        if directive_name not in DIRECTIVE_REGISTRY:
             raise ConfigurationError(
-                f"context_scope.{directive_name} is no longer a valid directive; "
-                f"it was renamed to '{replacement}'. Rename '{directive_name}:' to "
-                f"'{replacement}:' under context_scope.",
-                context={"directive": directive_name, "replacement": replacement},
+                f"context_scope.{directive_name} is not a valid directive. "
+                f"Valid directives: {', '.join(sorted(DIRECTIVE_REGISTRY))}.",
+                context={
+                    "directive": directive_name,
+                    "valid_directives": sorted(DIRECTIVE_REGISTRY),
+                },
             )
-        directive_info = DIRECTIVE_REGISTRY.get(
-            directive_name, {"type": "unknown", "expand_versions": False}
-        )
+        directive_info = DIRECTIVE_REGISTRY[directive_name]
 
         if directive_info["type"] == "list" and directive_info["expand_versions"]:
             if isinstance(directive_value, list):
