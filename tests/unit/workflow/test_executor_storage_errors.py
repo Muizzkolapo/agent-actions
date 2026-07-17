@@ -55,14 +55,6 @@ class TestResolveCompletionStatusStorageErrors:
         with pytest.raises(sqlite3.OperationalError, match="database is locked"):
             executor._resolve_completion_status("agent_a")
 
-    def test_database_error_from_list_target_files_propagates(self, executor, mock_deps):
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.list_target_files.side_effect = (
-            sqlite3.DatabaseError("database disk image is malformed")
-        )
-        with pytest.raises(sqlite3.DatabaseError, match="malformed"):
-            executor._resolve_completion_status("agent_a")
-
     def test_no_storage_backend_returns_completed(self, executor, mock_deps):
         mock_deps.action_runner.storage_backend = None
         result = executor._resolve_completion_status("agent_a")

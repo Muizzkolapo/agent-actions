@@ -708,23 +708,13 @@ class ActionExecutor:
         if storage_backend.has_disposition(
             action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ):
-            target_files = storage_backend.list_target_files(action_name)
-            if not target_files:
-                logger.info(
-                    "Action '%s' had all records guard-filtered — marking as skipped",
-                    action_name,
-                )
-                return ActionStatus.SKIPPED
-            storage_backend.clear_disposition(
-                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            )
-            logger.warning(
-                "Stale guard-skip disposition on '%s' — action has %d target file(s). "
-                "A write path set SKIPPED despite output existing. "
-                "Clearing disposition and proceeding as COMPLETED.",
+            # Clear-on-execute guarantees this row is current-round: only
+            # _handle_dependency_skip could have written it, so map directly to SKIPPED.
+            logger.info(
+                "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,
-                len(target_files),
             )
+            return ActionStatus.SKIPPED
         item_failures = storage_backend.get_failed_items(action_name)
         if item_failures:
             if not storage_backend.has_successful_items(action_name):
@@ -1191,8 +1181,30 @@ class ActionExecutor:
             metrics=ExecutionMetrics(duration=duration),
         )
 
+    def _clear_stale_node_disposition(self, action_name: str) -> None:
+        """Enforce the invariant that NODE_LEVEL disposition reflects the current round only.
+
+        Per-record dispositions (real source_guid keys) are unaffected — the
+        clear is keyed on record_id.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        try:
+            storage_backend.clear_disposition(
+                action_name=action_name,
+                record_id=NODE_LEVEL_RECORD_ID,
+            )
+        except Exception as err:
+            logger.warning(
+                "Failed to clear stale node-level disposition for %s: %s",
+                action_name,
+                err,
+            )
+
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
+        self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         try:
@@ -1228,6 +1240,7 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
+        self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         try:

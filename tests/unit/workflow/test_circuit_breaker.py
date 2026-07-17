@@ -608,10 +608,13 @@ class TestResolveCompletionStatus:
             executor._resolve_completion_status("agent_a")
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_returns_skipped_when_all_records_guard_skipped(self, mock_fire, executor, mock_deps):
-        """When pipeline sets DISPOSITION_SKIPPED at node level and no output exists, status should be 'skipped'."""
+    def test_returns_skipped_when_node_level_skipped_disposition_present(
+        self, mock_fire, executor, mock_deps
+    ):
+        """SKIPPED@NODE_LEVEL survives to completion resolution only if written
+        this round (clear-on-execute wipes prior-round rows), so the resolver
+        can trust it unconditionally."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.list_target_files.return_value = []
         assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
@@ -621,27 +624,11 @@ class TestResolveCompletionStatus:
     def test_guard_skipped_checked_before_failed_items(self, mock_fire, executor, mock_deps):
         """Guard-skipped disposition is checked before item-level failures."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.list_target_files.return_value = []
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
         assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.get_failed_items.assert_not_called()
-
-    @patch("agent_actions.workflow.executor.fire_event")
-    def test_stale_skipped_disposition_cleared_when_output_exists(
-        self, mock_fire, executor, mock_deps
-    ):
-        """A SKIPPED disposition is stale if the action produced output — clear it and return COMPLETED."""
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.list_target_files.return_value = [
-            "combined_scraped.json"
-        ]
-        mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
-        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
-        mock_deps.action_runner.storage_backend.clear_disposition.assert_called_once_with(
-            "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-        )
 
 
 class TestTotalFailureEscalation:
@@ -917,24 +904,6 @@ class TestStaleDispositionFullChain:
         # Stale disposition should have been cleared
         storage.clear_disposition.assert_called_once_with(
             "write_scenario_question", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-        )
-
-    @patch("agent_actions.workflow.executor.fire_event")
-    def test_action_produces_output_but_has_stale_skipped_resolves_completed(
-        self, mock_fire, executor, mock_deps
-    ):
-        """Action runs, writes output, but stale SKIPPED disposition exists → COMPLETED."""
-        storage = MagicMock()
-        storage.has_disposition.return_value = True
-        storage.list_target_files.return_value = ["combined_scraped.json"]
-        storage.get_failed_items.return_value = []
-        mock_deps.action_runner.storage_backend = storage
-
-        status = executor._resolve_completion_status("add_answer_text")
-
-        assert status == ActionStatus.COMPLETED
-        storage.clear_disposition.assert_called_once_with(
-            "add_answer_text", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
 
     @patch("agent_actions.workflow.executor.fire_event")

@@ -89,10 +89,7 @@ def _params(action_name: str = "action_a") -> ActionRunParams:
 
 
 class TestStaleNodeDispositionClearedOnExecute:
-
-    def test_prior_run_skipped_then_current_run_executes_clears_node_disposition(
-        self, tmp_path
-    ):
+    def test_prior_run_skipped_then_current_run_executes_clears_node_disposition(self, tmp_path):
         """Two-round scenario: prior run wrote SKIPPED@NODE_LEVEL; current run
         executes the action. The stale SKIPPED row is gone once
         ``_execute_action_run`` returns."""
