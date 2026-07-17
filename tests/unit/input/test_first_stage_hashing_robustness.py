@@ -1,16 +1,19 @@
-"""First-stage identity is robust to real loader output: dates, odd keys, tabs.
+"""First-stage identity is robust to real loader output: dates and tabs.
 
 The single envelope authority routes every online row through derive_source_guid
-(json.dumps-based). Real loader output must not crash ingestion: pandas Timestamp date
-cells from .xlsx, ragged csv rows that inject a None column key, numeric xlsx headers, and
-tab-separated .tsv files. Identity for normal string-keyed rows must not move (576 golden).
+(json.dumps-based). A pandas Timestamp date cell from .xlsx must hash rather than crash, a
+tab-separated .tsv must parse into real columns, and identity for normal string-keyed rows
+must not move (576 golden). A non-string field name has no stable identity and is rejected.
 """
 
 import datetime
 from pathlib import Path
 
+import pytest
+
 # Pre-load the workflow package to break a pre-existing import-order cycle.
 import agent_actions.workflow.coordinator  # noqa: F401
+from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     DataPreparationContext,
     _prepare_online_data,
@@ -55,10 +58,12 @@ def test_derive_handles_datetime_values_deterministically():
     ), "a different date must be a different identity"
 
 
-def test_derive_handles_non_string_and_none_keys():
-    # ragged csv rows inject a None key (restkey); xlsx can carry numeric headers
-    assert IDGenerator.derive_source_guid({"a": "1", "b": "2", None: ["3", "4"]})
-    assert IDGenerator.derive_source_guid({2024: "x", "name": "y"})
+def test_derive_rejects_non_string_field_names():
+    # a ragged csv row's None restkey / a numeric xlsx header has no usable name — fail loud
+    with pytest.raises(DataValidationError):
+        IDGenerator.derive_source_guid({"a": "1", "b": "2", None: ["3", "4"]})
+    with pytest.raises(DataValidationError):
+        IDGenerator.derive_source_guid({2024: "x", "name": "y"})
 
 
 def test_online_xlsx_date_column_ingests_without_crash():
