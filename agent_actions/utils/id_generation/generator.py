@@ -4,6 +4,8 @@ import json
 import uuid
 from typing import Any
 
+from agent_actions.errors import DataValidationError
+
 
 class IDGenerator:
     """Centralized ID generation service for processor operations."""
@@ -39,35 +41,38 @@ class IDGenerator:
         return IDGenerator.generate_content_hash(content)
 
     @staticmethod
-    def _canonicalize(obj: Any) -> Any:
-        """Make dict keys JSON-sortable without collapsing distinct keys.
+    def _require_string_keys(obj: Any) -> None:
+        """Reject non-string dict keys before hashing.
 
-        String keys are kept verbatim, so identity for normal payloads is unchanged. A
-        non-string key — a ragged csv row's None restkey, a numeric spreadsheet header — is
-        encoded to a distinct string (``\\x00`` + repr) that sort_keys can order and that
-        cannot merge with a same-looking string key (e.g. ``None`` vs the column ``"None"``).
+        A field name becomes a content.source key referenced by name downstream; a numeric
+        spreadsheet header or a ragged csv row's None restkey has no usable name and no
+        stable identity, so fail loud instead of hashing it ambiguously (stringifying such
+        keys would silently collapse distinct keys into one identity).
         """
         if isinstance(obj, dict):
-            return {
-                (k if isinstance(k, str) else f"\x00{k!r}"): IDGenerator._canonicalize(v)
-                for k, v in obj.items()
-            }
-        if isinstance(obj, list):
-            return [IDGenerator._canonicalize(v) for v in obj]
-        return obj
+            for key, value in obj.items():
+                if not isinstance(key, str):
+                    raise DataValidationError(
+                        f"Record field name {key!r} is a {type(key).__name__}, not a string; "
+                        f"first-stage field names must be strings",
+                        context={"field": repr(key), "field_type": type(key).__name__},
+                    )
+                IDGenerator._require_string_keys(value)
+        elif isinstance(obj, list):
+            for value in obj:
+                IDGenerator._require_string_keys(value)
 
     @staticmethod
     def generate_content_hash(content: Any) -> str:
         """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid).
 
         ``default=str`` renders non-JSON-native values (e.g. a spreadsheet date cell) rather
-        than raising, so identity is defined for any real loader row; it never fires for
-        JSON-native payloads, so existing identities do not move.
+        than raising; it never fires for JSON-native payloads, so existing identities do not
+        move. Non-string field names are rejected up front (see ``_require_string_keys``).
         """
         if isinstance(content, dict):
-            content_for_hash = json.dumps(
-                IDGenerator._canonicalize(content), sort_keys=True, default=str
-            )
+            IDGenerator._require_string_keys(content)
+            content_for_hash = json.dumps(content, sort_keys=True, default=str)
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
