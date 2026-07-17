@@ -43,3 +43,11 @@ and either dismiss the reviewer or bounce the diff.
 the doc-parity gap Lens B named. Record `YES_WITH_ISSUES` after addressing, not `NO`, when
 the body is affirmative. Do NOT rerun another reviewer round to "confirm" — that's just
 laundering a soft finding into a stronger vote and burns tokens for no signal.
+
+## 582 — a static "was this key definitely set" scan must skip nested function bodies
+
+**Failure mode:** `_last_return` used `ast.walk(func)` to pick the tail return by lineno. `ast.walk` descends into every child node — including nested `FunctionDef` / `AsyncFunctionDef` / `Lambda` bodies inside the outer function. A helper defined below the outer's tail return (dead code, but valid syntax) provides a return at a higher lineno and gets picked as the outer's tail. If that inner return happens to be a dict literal containing a field the outer only conditionally emits, the field is silently exonerated — the whole detector misses the exact class of bug it exists to catch. A blind correctness reviewer flagged it before merge; unit tests missed it because they were all single-function fixtures.
+
+**Detection signal:** the reviewer traced `_last_return` line by line and asked "does `ast.walk` distinguish between the outer function's returns and a nested helper's returns?" — a direct question about the traversal contract, not something a happy-path unit test surfaces.
+
+**Prevention rule:** when a static-AST check reasons about a function's OWN control flow (returns, top-level statements, "what runs unconditionally"), never use `ast.walk` on the function node — write a bounded walker that starts from `func.body` and stops descending at nested `FunctionDef` / `AsyncFunctionDef` / `Lambda` nodes. Add a regression fixture with a nested helper defined after the outer's tail return; it costs one paragraph and closes the pathological hole a reviewer will otherwise ask about.
