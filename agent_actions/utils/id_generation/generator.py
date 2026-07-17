@@ -40,14 +40,18 @@ class IDGenerator:
 
     @staticmethod
     def _canonicalize(obj: Any) -> Any:
-        """Stringify dict keys recursively so hashing is stable for non-string keys.
+        """Make dict keys JSON-sortable without collapsing distinct keys.
 
-        A no-op for string-keyed structures (identity is preserved), it only makes
-        heterogeneous or None keys hashable instead of crashing sort_keys — e.g. a ragged
-        csv row's None restkey, or a numeric spreadsheet header.
+        String keys are kept verbatim, so identity for normal payloads is unchanged. A
+        non-string key — a ragged csv row's None restkey, a numeric spreadsheet header — is
+        encoded to a distinct string (``\\x00`` + repr) that sort_keys can order and that
+        cannot merge with a same-looking string key (e.g. ``None`` vs the column ``"None"``).
         """
         if isinstance(obj, dict):
-            return {str(k): IDGenerator._canonicalize(v) for k, v in obj.items()}
+            return {
+                (k if isinstance(k, str) else f"\x00{k!r}"): IDGenerator._canonicalize(v)
+                for k, v in obj.items()
+            }
         if isinstance(obj, list):
             return [IDGenerator._canonicalize(v) for v in obj]
         return obj
