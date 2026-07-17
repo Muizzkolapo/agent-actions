@@ -1049,15 +1049,28 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
-        rows = [
-            (
-                action_name,
-                relative_path,
-                r.get("source_guid", ""),
-                json.dumps(r, ensure_ascii=False),
+        # Fail loud on blank source_guid: UNIQUE + INSERT OR REPLACE would silently overwrite.
+        rows: list[tuple[str, str, str, str]] = []
+        for index, r in enumerate(records):
+            source_guid = r.get("source_guid")
+            if not source_guid:
+                raise DataValidationError(
+                    f"Checkpoint record {index} for '{action_name}/{relative_path}' "
+                    f"has no source_guid; refusing to drop it silently",
+                    context={
+                        "action_name": action_name,
+                        "relative_path": relative_path,
+                        "record_index": index,
+                    },
+                )
+            rows.append(
+                (
+                    action_name,
+                    relative_path,
+                    source_guid,
+                    json.dumps(r, ensure_ascii=False),
+                )
             )
-            for r in records
-        ]
         with self._lock:
             cursor = self.connection.cursor()
             try:
