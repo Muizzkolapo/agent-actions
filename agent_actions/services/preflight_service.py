@@ -30,6 +30,9 @@ from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
 )
 from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
+from agent_actions.validation.udf_required_field_validator import (
+    find_conditional_required_field_risks,
+)
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
@@ -119,6 +122,9 @@ class PreflightService:
         # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
         self._warn_tool_passthrough_risks()
 
+        # 8. Cross-check kind:tool UDFs against their required output-schema fields
+        self._warn_tool_conditional_required_field_risks()
+
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
         prompts: dict[str, str] = {}
@@ -185,4 +191,45 @@ class PreflightService:
     def _warn_tool_passthrough_risks(self) -> None:
         """Warn when a kind:tool UDF passes upstream dicts through a strict schema."""
         for finding in find_passthrough_schema_risks(self._collect_tool_passthrough_inputs()):
+            logger.warning("Pre-flight: %s", finding)
+
+    def _collect_tool_required_field_inputs(self) -> dict[str, dict[str, Any]]:
+        """UDF source + compiled required list per kind:tool action.
+
+        Skipped when the UDF is unregistered, its source cannot be read, or
+        the action has no compiled ``json_output_schema`` — the runtime does
+        no output validation without one and cannot reject a missing field.
+        """
+        inputs: dict[str, dict[str, Any]] = {}
+        for name, config in self.action_configs.items():
+            if config.get("kind") != "tool":
+                continue
+            impl = config.get("model_name") or config.get("impl")
+            if not impl:
+                continue
+            schema = config.get("json_output_schema")
+            if not isinstance(schema, dict):
+                # Anthropic-tool compiled schemas are lists; not the tool path,
+                # but be defensive so the check never crashes preflight.
+                continue
+            required = schema.get("required") or []
+            if not required:
+                continue
+            try:
+                source = inspect.getsource(get_udf_metadata(impl)["function"])
+            except (FunctionNotFoundError, OSError, TypeError) as exc:
+                logger.debug("Skipping required-field check for '%s': %s", name, exc)
+                continue
+            inputs[name] = {
+                "source": source,
+                "required": list(required),
+                "additional_properties": bool(schema.get("additionalProperties", False)),
+            }
+        return inputs
+
+    def _warn_tool_conditional_required_field_risks(self) -> None:
+        """Warn when a kind:tool UDF only conditionally emits a required schema field."""
+        for finding in find_conditional_required_field_risks(
+            self._collect_tool_required_field_inputs()
+        ):
             logger.warning("Pre-flight: %s", finding)
