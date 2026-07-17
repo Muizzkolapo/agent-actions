@@ -373,7 +373,7 @@ This is defense-in-depth. All SQL uses parameterized queries, so injection is no
 
 10. **get_terminal_record_ids imports from processing at call time.** The method does `from agent_actions.processing.disposition_gate import GATE_TERMINAL_DISPOSITIONS` inside the method body to avoid a circular import. This means the set of terminal dispositions is defined in the processing module, not in storage.
 
-11. **source_data deduplication is by source_guid only within a path.** The UNIQUE constraint is `(relative_path, source_guid)`. The same `source_guid` can exist under different `relative_path` values without conflict. A record without a `source_guid` is an upstream invariant violation: `write_source` raises `DataValidationError` (fail-loud) rather than silently dropping it.
+11. **source_data deduplication is by source_guid only within a path.** The UNIQUE constraint is `(relative_path, source_guid)`. The same `source_guid` can exist under different `relative_path` values without conflict. A record without a `source_guid` is an upstream invariant violation: `write_source` raises `DataValidationError` (fail-loud) rather than silently dropping it. `save_checkpoint_records` takes the same posture — its `checkpoint_output` table is `UNIQUE(action_name, relative_path, source_guid)` with `INSERT OR REPLACE`, so a blank `source_guid` would collapse distinct records via silent overwrite.
 
 12. **read_target goes through a template method.** The public `read_target()` on `StorageBackend` calls `_read_target_raw()` (implemented by SQLiteBackend), then runs `validate_lifecycle_batch()` and `reset_for_downstream()`. This ensures lifecycle validation happens for every backend without each one reimplementing it.
 

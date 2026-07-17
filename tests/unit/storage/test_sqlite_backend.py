@@ -469,19 +469,32 @@ class TestSaveCheckpointRecordsDropGuard:
             backend.save_checkpoint_records("action_a", "output.json", records)
 
     def test_mix_valid_and_invalid_records_raises(self, backend):
-        """A guid-less record in a mixed batch fails loud — no silent partial drop."""
+        """A guid-less record in a mixed batch fails loud with no partial write of the valid rows."""
         records = [
             {"source_guid": "g1", "content": "valid"},
             {"content": "no_guid"},
         ]
-        with pytest.raises(DataValidationError, match="no source_guid"):
+        with pytest.raises(DataValidationError, match="no source_guid") as exc_info:
             backend.save_checkpoint_records("action_a", "output.json", records)
+        assert exc_info.value.context["record_index"] == 1
+        assert backend.read_checkpoint_records("action_a", "output.json") == []
 
     def test_blank_source_guid_raises(self, backend):
         """A blank-string source_guid is an upstream invariant violation, not a routine skip."""
         records = [{"source_guid": "", "content": "blank_guid"}]
         with pytest.raises(DataValidationError, match="no source_guid"):
             backend.save_checkpoint_records("action_a", "output.json", records)
+
+    def test_two_blank_guids_would_have_collapsed_now_raise(self, backend):
+        """The exact bug: two blank-guid records would collide on UNIQUE + INSERT OR REPLACE."""
+        records = [
+            {"source_guid": "", "content": "first_row"},
+            {"source_guid": "", "content": "second_row_would_overwrite"},
+        ]
+        with pytest.raises(DataValidationError, match="no source_guid") as exc_info:
+            backend.save_checkpoint_records("action_a", "output.json", records)
+        assert exc_info.value.context["record_index"] == 0
+        assert backend.read_checkpoint_records("action_a", "output.json") == []
 
     def test_empty_records_list_is_noop(self, backend):
         """An empty records list is a no-op (nothing to validate, nothing to drop)."""
