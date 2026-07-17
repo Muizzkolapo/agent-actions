@@ -356,13 +356,14 @@ def _envelope_row(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _wrap_online_rows(payloads: list[Any]) -> list[dict[str, Any]]:
+def _wrap_online_rows(payloads: list[Any]) -> list[Any]:
     """Envelope and stamp online first-stage rows through the single authority.
 
     A non-dict payload cannot be namespaced under content.source, so it passes through
-    unchanged (preserving the prior behavior for non-record items).
+    unchanged (preserving the prior behavior for non-record items) — hence the list may
+    contain a non-dict item, which surfaces downstream at the storage boundary.
     """
-    wrapped: list[dict[str, Any]] = []
+    wrapped: list[Any] = []
     for payload in payloads:
         if not isinstance(payload, dict):
             wrapped.append(payload)
@@ -387,21 +388,7 @@ def _prepare_text_chunks_batch(
         tokenizer_model=tokenizer_model,
         split_method=split_method,
     )
-    result = []
-    for idx, chunk in enumerate(chunks):
-        target_id = str(uuid.uuid4())
-        record = {
-            **_envelope_row({"content": chunk}),
-            "batch_id": batch_id,
-            "batch_uuid": f"{batch_id}_{idx}",
-            "target_id": target_id,
-            # Ancestry Chain: first-stage records are their own root
-            "parent_target_id": None,
-            "root_target_id": target_id,
-            "node_id": node_id,
-        }
-        result.append(record)
-    return result
+    return _add_batch_metadata([{"content": chunk} for chunk in chunks], batch_id, node_id)
 
 
 def _prepare_json_batch(
@@ -549,8 +536,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        data_chunk = _wrap_online_rows([{"content": text} for text in chunks])
-        src_text = data_chunk
+        data_chunk = src_text = _wrap_online_rows([{"content": text} for text in chunks])
 
     elif ctx.file_type == ".json":
         raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
@@ -558,18 +544,15 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(raw_items, list):
             raw_items = [raw_items]
 
-        data_chunk = _wrap_online_rows(raw_items)
-        src_text = data_chunk
+        data_chunk = src_text = _wrap_online_rows(raw_items)
 
     elif ctx.file_type in (".csv", ".tsv"):
         rows = tabular_loader.process(content=None, file_path=ctx.file_path)
-        data_chunk = _wrap_online_rows(rows)
-        src_text = data_chunk
+        data_chunk = src_text = _wrap_online_rows(rows)
 
     elif ctx.file_type == ".xlsx":
         rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
-        data_chunk = _wrap_online_rows(rows)
-        src_text = data_chunk
+        data_chunk = src_text = _wrap_online_rows(rows)
 
     elif ctx.file_type == ".xml":
         data_chunk = xml_loader.process(content=None, file_path=ctx.file_path)

@@ -39,10 +39,31 @@ class IDGenerator:
         return IDGenerator.generate_content_hash(content)
 
     @staticmethod
+    def _canonicalize(obj: Any) -> Any:
+        """Stringify dict keys recursively so hashing is stable for non-string keys.
+
+        A no-op for string-keyed structures (identity is preserved), it only makes
+        heterogeneous or None keys hashable instead of crashing sort_keys — e.g. a ragged
+        csv row's None restkey, or a numeric spreadsheet header.
+        """
+        if isinstance(obj, dict):
+            return {str(k): IDGenerator._canonicalize(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [IDGenerator._canonicalize(v) for v in obj]
+        return obj
+
+    @staticmethod
     def generate_content_hash(content: Any) -> str:
-        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid)."""
+        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid).
+
+        ``default=str`` renders non-JSON-native values (e.g. a spreadsheet date cell) rather
+        than raising, so identity is defined for any real loader row; it never fires for
+        JSON-native payloads, so existing identities do not move.
+        """
         if isinstance(content, dict):
-            content_for_hash = json.dumps(content, sort_keys=True)
+            content_for_hash = json.dumps(
+                IDGenerator._canonicalize(content), sort_keys=True, default=str
+            )
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
