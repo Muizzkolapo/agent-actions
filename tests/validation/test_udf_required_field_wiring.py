@@ -1,10 +1,5 @@
-"""Wire-point test for the conditional-required-field preflight refusal.
-
-Anchors on the actual behavioural failure: when a kind:tool UDF only
-conditionally produces a required output-schema field, the runtime will
-crash at `_validate_udf_output`, so preflight must refuse rather than
-merely warn. Proven end-to-end through the public `PreflightService`
-API — no new symbol is imported here."""
+"""Wire-point test for the conditional-required-field preflight refusal, driven
+through the public `PreflightService.validate()` — no new symbol is imported."""
 
 from __future__ import annotations
 
