@@ -37,7 +37,8 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                     "Either file_path or content must be provided for tabular processing",
                     context=error_context,
                 )
-            rows = list(csv.DictReader(content_str.splitlines()))
+            delimiter = "\t" if (file_path and file_path.lower().endswith(".tsv")) else ","
+            rows = list(csv.DictReader(content_str.splitlines(), delimiter=delimiter))
             return rows
         except csv.Error as e:
             operation = f"parsing CSV from {file_path or 'content string'}"

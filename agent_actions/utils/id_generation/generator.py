@@ -4,6 +4,8 @@ import json
 import uuid
 from typing import Any
 
+from agent_actions.errors import DataValidationError
+
 
 class IDGenerator:
     """Centralized ID generation service for processor operations."""
@@ -39,10 +41,38 @@ class IDGenerator:
         return IDGenerator.generate_content_hash(content)
 
     @staticmethod
+    def _require_string_keys(obj: Any) -> None:
+        """Reject non-string dict keys before hashing.
+
+        A field name becomes a content.source key referenced by name downstream; a numeric
+        spreadsheet header or a ragged csv row's None restkey has no usable name and no
+        stable identity, so fail loud instead of hashing it ambiguously (stringifying such
+        keys would silently collapse distinct keys into one identity).
+        """
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if not isinstance(key, str):
+                    raise DataValidationError(
+                        f"Record field name {key!r} is a {type(key).__name__}, not a string; "
+                        f"first-stage field names must be strings",
+                        context={"field": repr(key), "field_type": type(key).__name__},
+                    )
+                IDGenerator._require_string_keys(value)
+        elif isinstance(obj, list):
+            for value in obj:
+                IDGenerator._require_string_keys(value)
+
+    @staticmethod
     def generate_content_hash(content: Any) -> str:
-        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid)."""
+        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid).
+
+        ``default=str`` renders non-JSON-native values (e.g. a spreadsheet date cell) rather
+        than raising; it never fires for JSON-native payloads, so existing identities do not
+        move. Non-string field names are rejected up front (see ``_require_string_keys``).
+        """
         if isinstance(content, dict):
-            content_for_hash = json.dumps(content, sort_keys=True)
+            IDGenerator._require_string_keys(content)
+            content_for_hash = json.dumps(content, sort_keys=True, default=str)
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
