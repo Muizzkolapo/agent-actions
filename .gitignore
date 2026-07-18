@@ -60,3 +60,6 @@ examples/*/logs/
 # Local harness gate markers and smoke-test output
 .harness/
 artefact/
+
+# Per-clone harness scratch (plans + lessons) — promoted to shared/lessons, never tracked
+tasks/
