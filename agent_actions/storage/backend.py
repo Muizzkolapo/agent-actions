@@ -11,6 +11,8 @@ from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
+from agent_actions.record.reasons import PARSE_ERROR
+from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +127,8 @@ class StorageBackend(ABC):
         for ``make_schema_echo_error``) and gets a FAILED/PARSE_ERROR disposition so
         the failure stays queryable rather than being silently dropped.
         """
-        from agent_actions.record.reasons import PARSE_ERROR
-        from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
-
         gated: list[dict[str, Any]] = []
+        failed_rows: list[DispositionRow] = []
         for record in delta_records:
             content = record.get("content")
             if not isinstance(content, dict) or action_name not in content:
@@ -152,16 +152,20 @@ class StorageBackend(ABC):
             )
 
             if source_guid:
-                try:
-                    self.set_disposition(
-                        action_name, source_guid, DISPOSITION_FAILED, reason=PARSE_ERROR
-                    )
-                except NotImplementedError:
-                    logger.warning(
-                        "[%s] Disposition write skipped for %s — backend has no set_disposition",
-                        action_name,
-                        source_guid,
-                    )
+                failed_rows.append(
+                    (action_name, source_guid, DISPOSITION_FAILED, PARSE_ERROR, None, None, None)
+                )
+
+        if failed_rows:
+            try:
+                self.set_dispositions_batch(failed_rows)
+            except NotImplementedError:
+                logger.warning(
+                    "[%s] Disposition write skipped for %d record(s) — "
+                    "backend has no set_dispositions_batch",
+                    action_name,
+                    len(failed_rows),
+                )
         return gated
 
     def write_target(
