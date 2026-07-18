@@ -26,6 +26,7 @@ decoders to schema validators and preflight checks.
 | `bus_namespace_validator.py` | Module | `find_unknown_bus_namespaces`: AST scan flagging tool-UDF reads of `data.get("X")` / `data["X"]` where X is not a runtime bus namespace (action name or framework key), catching silent namespace typos at `validate-udfs`. | `validation` |
 | `clean_validator.py` | Module | `CleanCommandArgs` pydantic model used by the CLI. | `validation` |
 | `config_validator.py` | Module | Central config parser/validator used across startup flows. | `configuration`, `validation` |
+| `dag_schema_fit_validator.py` | Module | `find_dag_schema_compatibility_gaps`: per producer/consumer edge in the workflow DAG, warns when a tool consumer's required output field is neither guaranteed at any position in an upstream producer's compiled schema nor declared as synthesized via `defaults:` on the action. Bounded two-level descent (root, `field.`, `field[].`) — no UDF source reading. Wired at `PreflightService._warn_dag_schema_compatibility_gaps` (spec 592 Phase 2, warn-only). | `validation` |
 | `dep_observe_validator.py` | Module | `find_missing_observe_deps`: preflight mirror of the fatal runtime check that every declared dependency has an observe/passthrough field reference. | `validation` |
 | `init_validator.py` | Module | `InitCommandArgs` pydantic model used by the CLI. | `validation` |
 | `path_validator.py` | Module | Path validation utilities conforming to BaseValidator interface. | `validation` |

@@ -18,6 +18,9 @@ from agent_actions.models.action_schema import FieldSource
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
 from agent_actions.utils.udf_management.registry import get_udf_metadata
+from agent_actions.validation.dag_schema_fit_validator import (
+    find_dag_schema_compatibility_gaps,
+)
 from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
@@ -124,6 +127,11 @@ class PreflightService:
 
         # 8. Cross-check kind:tool UDFs against their required output-schema fields
         self._check_tool_conditional_required_field_risks()
+
+        # 9. DAG schema-fit: per producer/consumer edge, does the producer's schema
+        # guarantee every field the tool consumer requires (implicit), or does the
+        # consumer declare `defaults:` for it? (Spec 592 Phase 2, warn-only.)
+        self._warn_dag_schema_compatibility_gaps()
 
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
@@ -236,3 +244,8 @@ class PreflightService:
                 hint="Mark the field optional in the schema, "
                 "or emit it unconditionally in the UDF.",
             )
+
+    def _warn_dag_schema_compatibility_gaps(self) -> None:
+        """Warn when a tool consumer's required output field is neither guaranteed by an upstream producer nor declared as synthesized via `defaults:`."""
+        for finding in find_dag_schema_compatibility_gaps(self.action_configs):
+            logger.warning("Pre-flight: %s", finding)
