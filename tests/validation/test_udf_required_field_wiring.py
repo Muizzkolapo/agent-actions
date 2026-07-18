@@ -1,14 +1,16 @@
-"""Wire-point test for the conditional-required-field preflight warning.
+"""Wire-point test for the conditional-required-field preflight refusal.
 
-Anchors RED on the actual behavioural failure (no preflight warning is emitted
-today for a tool UDF that only conditionally produces a required output-schema
-field) so the fix is proven end-to-end through the public `PreflightService`
+Anchors on the actual behavioural failure: when a kind:tool UDF only
+conditionally produces a required output-schema field, the runtime will
+crash at `_validate_udf_output`, so preflight must refuse rather than
+merely warn. Proven end-to-end through the public `PreflightService`
 API — no new symbol is imported here."""
 
 from __future__ import annotations
 
-import logging
+import pytest
 
+from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.services.preflight_service import PreflightService
 
 
@@ -39,24 +41,7 @@ def _make_service(action_configs: dict) -> PreflightService:
     )
 
 
-def _capture_preflight_warnings(cfgs: dict, caplog) -> list[str]:
-    """Full `validate()` must reach the new check and stay non-fatal.
-
-    The `agent_actions` logger does not propagate by default; caplog needs it
-    on to see the warning."""
-    logger_name = "agent_actions.services.preflight_service"
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    try:
-        with caplog.at_level(logging.WARNING, logger=logger_name):
-            _make_service(cfgs).validate()
-        return [r.getMessage() for r in caplog.records if r.name == logger_name]
-    finally:
-        aa_logger.propagate = original
-
-
-def test_preflight_warns_when_required_field_only_conditionally_emitted(caplog):
+def test_preflight_refuses_when_required_field_only_conditionally_emitted():
     from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
 
     clear_registry()
@@ -85,7 +70,10 @@ def test_preflight_warns_when_required_field_only_conditionally_emitted(caplog):
                 },
             }
         }
-        msgs = _capture_preflight_warnings(cfgs, caplog)
-        assert any("reconstruct_options" in m and "source_quote" in m for m in msgs), msgs
+        with pytest.raises(PreFlightValidationError) as excinfo:
+            _make_service(cfgs).validate()
+        message = str(excinfo.value)
+        assert "reconstruct_options" in message, message
+        assert "source_quote" in message, message
     finally:
         clear_registry()
