@@ -708,23 +708,16 @@ class ActionExecutor:
         if storage_backend.has_disposition(
             action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ):
-            target_files = storage_backend.list_target_files(action_name)
-            if not target_files:
-                logger.info(
-                    "Action '%s' had all records guard-filtered — marking as skipped",
-                    action_name,
-                )
-                return ActionStatus.SKIPPED
-            storage_backend.clear_disposition(
-                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-            )
-            logger.warning(
-                "Stale guard-skip disposition on '%s' — action has %d target file(s). "
-                "A write path set SKIPPED despite output existing. "
-                "Clearing disposition and proceeding as COMPLETED.",
+            # Clear-on-execute guarantees this row is current-round. The writer
+            # whose row survives here is result_collector.write_node_level_disposition
+            # firing during run_action when every input record was filtered.
+            # (_handle_dependency_skip and _handle_all_versions_filtered also
+            # write SKIPPED@NODE_LEVEL but both return before this resolver runs.)
+            logger.info(
+                "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,
-                len(target_files),
             )
+            return ActionStatus.SKIPPED
         item_failures = storage_backend.get_failed_items(action_name)
         if item_failures:
             if not storage_backend.has_successful_items(action_name):
@@ -1191,8 +1184,27 @@ class ActionExecutor:
             metrics=ExecutionMetrics(duration=duration),
         )
 
+    def _clear_stale_node_disposition(self, action_name: str) -> None:
+        """Delete every NODE_LEVEL disposition row for the action (all types, not just SKIPPED).
+
+        Anything present here is prior-round and by definition stale — the
+        current round has not yet stamped anything. Storage errors propagate:
+        swallowing them would let a stale row survive and
+        ``_resolve_completion_status`` would misclassify a successful run as
+        SKIPPED. Per-record dispositions are keyed on their real ``source_guid``
+        and are unaffected.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        storage_backend.clear_disposition(
+            action_name=action_name,
+            record_id=NODE_LEVEL_RECORD_ID,
+        )
+
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
+        self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         try:
@@ -1228,6 +1240,7 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
+        self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
         try:

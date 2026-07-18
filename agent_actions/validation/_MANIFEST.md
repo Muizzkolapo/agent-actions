@@ -26,6 +26,7 @@ decoders to schema validators and preflight checks.
 | `bus_namespace_validator.py` | Module | `find_unknown_bus_namespaces`: AST scan flagging tool-UDF reads of `data.get("X")` / `data["X"]` where X is not a runtime bus namespace (action name or framework key), catching silent namespace typos at `validate-udfs`. | `validation` |
 | `clean_validator.py` | Module | `CleanCommandArgs` pydantic model used by the CLI. | `validation` |
 | `config_validator.py` | Module | Central config parser/validator used across startup flows. | `configuration`, `validation` |
+| `dag_schema_fit_validator.py` | Module | `find_dag_schema_compatibility_gaps`: per producer/consumer edge in the workflow DAG, warns when a tool consumer's required output field is neither guaranteed at any position in an upstream producer's compiled schema nor declared as synthesized via `defaults:` on the action. Symmetric two-level descent on both sides (root, `field.`, `field[].`) — no UDF source reading. Wired at `PreflightService._warn_dag_schema_compatibility_gaps` (spec 592 Phase 2, warn-only). | `validation` |
 | `dep_observe_validator.py` | Module | `find_missing_observe_deps`: preflight mirror of the fatal runtime check that every declared dependency has an observe/passthrough field reference. | `validation` |
 | `init_validator.py` | Module | `InitCommandArgs` pydantic model used by the CLI. | `validation` |
 | `path_validator.py` | Module | Path validation utilities conforming to BaseValidator interface. | `validation` |
@@ -37,7 +38,7 @@ decoders to schema validators and preflight checks.
 | `schema_validator.py` | Module | `SchemaValidator`: validates schema files against JSON Schema meta-schema. Fires a single `ValidationStartEvent` via the base class `_prepare_validation()`; the redundant `DataValidationStartedEvent` at the top of `validate()` has been removed. | `validation` |
 | `status_validator.py` | Module | `StatusCommandArgs` definition. | `validation` |
 | `udf_passthrough_validator.py` | Module | `find_passthrough_schema_risks`: static AST scan flagging `kind:tool` UDFs that return bus-derived dicts under a strict output schema. | `validation` |
-| `udf_required_field_validator.py` | Module | `find_conditional_required_field_risks`: static AST scan flagging `kind:tool` UDFs whose required output-schema fields are only produced inside a conditional branch (post-568 required-by-default class). | `validation` |
+| `udf_required_field_validator.py` | Module | `find_conditional_required_field_risks`: static AST scan that refuses preflight when a `kind:tool` UDF's required output-schema fields are only produced inside a conditional branch (post-568 required-by-default class; refusal wired in `PreflightService._check_tool_conditional_required_field_risks`). | `validation` |
 | `validate_udfs.py` | Module | Validates that UDFs referenced in configs exist. | `utils.udf_management`, `validation` |
 | `project_validator.py` | Module | `ProjectValidator` for project name, directory, and template validation. | `validation` |
 | `run_validator.py` | Module | `RunCommandArgs` pydantic model and pre-flight gating. | `validation` |
