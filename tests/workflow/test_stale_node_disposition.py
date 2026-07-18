@@ -229,3 +229,25 @@ class TestStaleNodeDispositionClearedOnExecute:
         assert not backend.has_disposition(
             "action_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ), "async _execute_action_run_async must clear stale NODE_LEVEL rows too"
+
+    def test_storage_error_during_clear_propagates(self, tmp_path):
+        """Clear failure must not be swallowed — the resolver would otherwise trust a stale row.
+
+        A silently-swallowed ``clear_disposition`` failure re-creates the
+        pre-fix bug: the stale ``SKIPPED@NODE_LEVEL`` row survives into
+        ``_resolve_completion_status``, which (after the read-side heal was
+        deleted) now returns SKIPPED unconditionally — and the action gets
+        misclassified as skipped despite writing target data. Fail loud
+        instead. Matches the fail-loud posture of spec 554's
+        ``_count_records_for_action``.
+        """
+        executor, backend = _make_executor_with_real_backend(tmp_path)
+
+        broken_backend = MagicMock(wraps=backend)
+        broken_backend.clear_disposition.side_effect = RuntimeError("simulated storage lock")
+        executor.deps.action_runner.storage_backend = broken_backend
+
+        with pytest.raises(RuntimeError, match="simulated storage lock"):
+            executor._execute_action_run(_params())
+
+        executor.deps.action_runner.run_action.assert_not_called()

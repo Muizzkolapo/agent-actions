@@ -613,12 +613,16 @@ class TestResolveCompletionStatus:
     ):
         """SKIPPED@NODE_LEVEL survives to completion resolution only if written
         this round (clear-on-execute wipes prior-round rows), so the resolver
-        can trust it unconditionally."""
+        can trust it unconditionally without cross-checking target_data."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
+        # Guardrail: the deleted heal used list_target_files to reconcile a
+        # "SKIPPED but has output" contradiction — the resolver must not
+        # regrow that dependency.
+        mock_deps.action_runner.storage_backend.list_target_files.assert_not_called()
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_guard_skipped_checked_before_failed_items(self, mock_fire, executor, mock_deps):

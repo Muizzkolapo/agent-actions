@@ -1184,23 +1184,18 @@ class ActionExecutor:
     def _clear_stale_node_disposition(self, action_name: str) -> None:
         """Enforce the invariant that NODE_LEVEL disposition reflects the current round only.
 
-        Per-record dispositions (real source_guid keys) are unaffected — the
-        clear is keyed on record_id.
+        Storage errors propagate — swallowing them would let a stale SKIPPED@NODE_LEVEL
+        row survive, and ``_resolve_completion_status`` (post-heal-deletion) would
+        classify a successful run as SKIPPED. Same fail-loud posture as spec 554's
+        ``_count_records_for_action``.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return
-        try:
-            storage_backend.clear_disposition(
-                action_name=action_name,
-                record_id=NODE_LEVEL_RECORD_ID,
-            )
-        except Exception as err:
-            logger.warning(
-                "Failed to clear stale node-level disposition for %s: %s",
-                action_name,
-                err,
-            )
+        storage_backend.clear_disposition(
+            action_name=action_name,
+            record_id=NODE_LEVEL_RECORD_ID,
+        )
 
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
