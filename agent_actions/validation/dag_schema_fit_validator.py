@@ -1,11 +1,6 @@
-"""Preflight check: every field a tool consumer requires in output must be
-guaranteed by an upstream producer or declared as synthesized via `defaults:`.
-
-F operates on the compiled JSON Schema per action — no UDF source reading, no
-AST scanning. Nesting descent is bounded at two levels (root, `field.`,
-`field[].`) which covers observed workflows without descending into arbitrary
-recursive `$ref` graphs.
-"""
+"""Preflight check: a tool consumer's required output must be guaranteed by an
+upstream producer's schema or declared as synthesized via `defaults:`. Symmetric
+two-level descent on both sides (root, `field.`, `field[].`); no UDF source read."""
 
 from __future__ import annotations
 
@@ -17,9 +12,10 @@ _NESTED_DEPTH = 2
 def _walk_required(node: Any, out: set[str], depth: int) -> None:
     """Collect `required` field names from every object node up to _NESTED_DEPTH.
 
-    Root object (depth 0), each direct property object (depth 1), and each
-    array item schema (depth 1) are inspected. Deeper descent is skipped to
-    keep the check bounded and predictable.
+    A dict with ``type: object`` contributes its ``required`` list at the
+    current depth. A dict with ``type: array`` recurses one level into
+    ``items``. Deeper descent is skipped. Non-dict nodes and unknown types
+    are silently skipped so a partial schema does not raise.
     """
     if not isinstance(node, dict) or depth > _NESTED_DEPTH:
         return
@@ -34,10 +30,10 @@ def _walk_required(node: Any, out: set[str], depth: int) -> None:
         _walk_required(node.get("items") or {}, out, depth + 1)
 
 
-def _guaranteed_fields(schema: dict[str, Any]) -> set[str]:
-    """Union of field names the schema guarantees at any position within the
-    depth window. A position-agnostic match — a match at any depth counts as
-    "the producer emits this name somewhere."""
+def _required_fields_two_level(schema: dict[str, Any]) -> set[str]:
+    """Set of field names required at any position within the depth window.
+    Used for BOTH producer-guaranteed and consumer-required sides so the
+    check is symmetric."""
     out: set[str] = set()
     _walk_required(schema, out, depth=0)
     return out
@@ -104,7 +100,8 @@ def find_dag_schema_compatibility_gaps(
         output_schema = consumer.get("json_output_schema")
         if not isinstance(output_schema, dict):
             continue
-        required_output = {f for f in (output_schema.get("required") or []) if isinstance(f, str)}
+
+        required_output = _required_fields_two_level(output_schema)
         if not required_output:
             continue
 
@@ -119,7 +116,7 @@ def find_dag_schema_compatibility_gaps(
             producer = action_configs.get(producer_name) or {}
             producer_schema = producer.get("json_output_schema")
             if isinstance(producer_schema, dict):
-                guaranteed |= _guaranteed_fields(producer_schema)
+                guaranteed |= _required_fields_two_level(producer_schema)
 
         for field in sorted(implicit_inputs - guaranteed):
             findings.append(

@@ -241,6 +241,14 @@ class ActionConfig(BaseModel):
         description="Behavior when action produces empty output: warn (log warning), "
         "error (fail workflow), skip (continue, emit event)",
     )
+    defaults: dict[str, Any] | None = Field(
+        default=None,
+        description="Per-output-field default values a tool UDF is expected to "
+        "synthesize when upstream input omits the field. Consumed by the DAG "
+        "schema-fit preflight check to exclude declared fields from the "
+        "implicit-input requirement set. The framework does not apply these "
+        "defaults automatically — the UDF must produce them.",
+    )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
     api_key: SecretStr | None = Field(default=None, description="API key")

@@ -1,5 +1,9 @@
-"""Wire-point test for the DAG schema-fit preflight warning, driven through
-the public `PreflightService.validate()` — no new symbol is imported."""
+"""Wire-point tests for the DAG schema-fit preflight warning, driven through
+the public `PreflightService.validate()` — no new symbol is imported.
+
+Quiet tests include a sentinel consumer that is expected to warn: if F is ever
+silenced or its message prefix is renamed, the sentinel assertion breaks first,
+so the quiet-side assertions cannot pass on a dead check."""
 
 from __future__ import annotations
 
@@ -31,131 +35,126 @@ def _capture_preflight_warnings(cfgs: dict, caplog) -> list[str]:
         aa_logger.propagate = original
 
 
-def test_preflight_warns_when_tool_consumer_required_field_not_guaranteed_upstream(caplog):
-    """Producer LLM's nested items declare properties but no `required:` list; the
-    downstream tool consumer's output schema requires the same field. Runtime schema
-    validation will reject any record whose input item omitted it. F must warn."""
-    cfgs = {
-        "code_extractor": {
-            "kind": "llm",
-            "json_output_schema": {
-                "type": "object",
-                "properties": {
-                    "candidate_code_list": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "code_block": {"type": "string"},
-                                "description": {"type": "string"},
-                            },
-                            # No `required:` on items — the mismatch.
-                        },
-                    },
-                },
-                "required": ["candidate_code_list"],
-                "additionalProperties": True,
-            },
-        },
-        "flatten_code": {
-            "kind": "tool",
-            "impl": "cc_flatten_code",
-            "dependencies": ["code_extractor"],
-            "context_scope": {"observe": ["code_extractor.*"]},
-            "json_output_schema": {
-                "type": "object",
-                "properties": {
-                    "code_block": {"type": "string"},
-                    "description": {"type": "string"},
-                },
-                "required": ["code_block", "description"],
-                "additionalProperties": True,
-            },
+def _llm_producer(nested_required: list[str] | None = None) -> dict:
+    items: dict = {
+        "type": "object",
+        "properties": {
+            "code_block": {"type": "string"},
+            "description": {"type": "string"},
         },
     }
+    if nested_required:
+        items["required"] = list(nested_required)
+    return {
+        "kind": "llm",
+        "context_scope": {"observe": ["source.*"]},
+        "schema": {
+            "type": "object",
+            "properties": {
+                "candidate_code_list": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {}},
+                }
+            },
+        },
+        "json_output_schema": {
+            "type": "object",
+            "properties": {
+                "candidate_code_list": {"type": "array", "items": items},
+            },
+            "required": ["candidate_code_list"],
+            "additionalProperties": True,
+        },
+    }
+
+
+def _tool_consumer(
+    name: str,
+    required: list[str],
+    defaults: dict | None = None,
+    producer: str = "code_extractor",
+) -> dict:
+    schema_props = {f: {"type": "string"} for f in required}
+    cfg: dict = {
+        "kind": "tool",
+        "impl": f"cc_{name}",
+        "dependencies": [producer],
+        "context_scope": {"observe": [f"{producer}.*"]},
+        "schema": {"type": "object", "properties": schema_props},
+        "json_output_schema": {
+            "type": "object",
+            "properties": schema_props,
+            "required": list(required),
+            "additionalProperties": True,
+        },
+    }
+    if defaults is not None:
+        cfg["defaults"] = defaults
+    return cfg
+
+
+# The sentinel consumer requires a field the producer never guarantees at any
+# depth and never declares in `defaults:` — F is required to warn for it.
+# Every quiet test uses this sentinel to prove F actually ran.
+_SENTINEL_FIELD = "unrelated_sentinel_field"
+_SENTINEL_NAME = "sentinel_consumer"
+
+
+def _sentinel() -> dict:
+    return _tool_consumer(_SENTINEL_NAME, required=[_SENTINEL_FIELD])
+
+
+def test_preflight_warns_when_tool_consumer_required_field_not_guaranteed_upstream(caplog):
+    """Producer LLM's nested items declare properties but no `required:` list; the
+    downstream tool consumer's output schema requires `description`. F must warn,
+    and the warning message must carry the `dag-fit` prefix that pins the emission
+    to F rather than any other preflight step."""
+    cfgs = {
+        "code_extractor": _llm_producer(nested_required=None),
+        "flatten_code": _tool_consumer("flatten_code", required=["code_block", "description"]),
+    }
     msgs = _capture_preflight_warnings(cfgs, caplog)
-    assert any("flatten_code" in m and "description" in m for m in msgs), msgs
+    assert any("dag-fit" in m and "flatten_code" in m and "description" in m for m in msgs), msgs
 
 
 def test_preflight_quiet_when_producer_guarantees_the_field(caplog):
-    """Same shape but producer declares nested items' `required: [description]` — no
-    gap, no warning."""
+    """When the producer declares `required: [description]` on its nested items,
+    F must NOT emit for the target consumer. The sentinel consumer proves F ran."""
     cfgs = {
-        "code_extractor": {
-            "kind": "llm",
-            "json_output_schema": {
-                "type": "object",
-                "properties": {
-                    "candidate_code_list": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "code_block": {"type": "string"},
-                                "description": {"type": "string"},
-                            },
-                            "required": ["code_block", "description"],
-                        },
-                    },
-                },
-                "required": ["candidate_code_list"],
-                "additionalProperties": True,
-            },
-        },
-        "flatten_code": {
-            "kind": "tool",
-            "impl": "cc_flatten_code",
-            "dependencies": ["code_extractor"],
-            "context_scope": {"observe": ["code_extractor.*"]},
-            "json_output_schema": {
-                "type": "object",
-                "properties": {
-                    "code_block": {"type": "string"},
-                    "description": {"type": "string"},
-                },
-                "required": ["code_block", "description"],
-                "additionalProperties": True,
-            },
-        },
+        "code_extractor": _llm_producer(nested_required=["code_block", "description"]),
+        "flatten_code": _tool_consumer("flatten_code", required=["code_block", "description"]),
+        _SENTINEL_NAME: _sentinel(),
     }
     msgs = _capture_preflight_warnings(cfgs, caplog)
-    assert not any("flatten_code" in m and "description" in m and "dag-fit" in m for m in msgs), msgs
+    # Sentinel must fire — proves F ran and its message prefix hasn't drifted.
+    assert any("dag-fit" in m and _SENTINEL_NAME in m and _SENTINEL_FIELD in m for m in msgs), (
+        f"F did not warn on the sentinel — is step 9 wired? msgs={msgs}"
+    )
+    # Target consumer must be quiet.
+    assert not any("dag-fit" in m and "flatten_code" in m and "description" in m for m in msgs), (
+        msgs
+    )
 
 
 def test_preflight_quiet_when_consumer_declares_defaults(caplog):
-    """Consumer declares `defaults: { description: "" }` — synthesis is promised;
-    F excludes the field from the input-requirement set."""
+    """When the consumer declares `defaults: { description: "" }`, F must exclude
+    `description` from the input-requirement set and NOT emit for it. The sentinel
+    proves F still runs on other consumers."""
     cfgs = {
-        "code_extractor": {
-            "kind": "llm",
-            "json_output_schema": {
-                "type": "object",
-                "properties": {
-                    "candidate_code_list": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {"description": {"type": "string"}},
-                        },
-                    },
-                },
-                "required": ["candidate_code_list"],
-                "additionalProperties": True,
-            },
-        },
-        "flatten_code": {
-            "kind": "tool",
-            "impl": "cc_flatten_code",
-            "dependencies": ["code_extractor"],
-            "context_scope": {"observe": ["code_extractor.*"]},
-            "defaults": {"description": ""},
-            "json_output_schema": {
-                "type": "object",
-                "properties": {"description": {"type": "string"}},
-                "required": ["description"],
-                "additionalProperties": True,
-            },
-        },
+        "code_extractor": _llm_producer(nested_required=None),
+        "flatten_code": _tool_consumer(
+            "flatten_code",
+            required=["description"],
+            defaults={"description": ""},
+        ),
+        _SENTINEL_NAME: _sentinel(),
     }
     msgs = _capture_preflight_warnings(cfgs, caplog)
-    assert not any("flatten_code" in m and "description" in m and "dag-fit" in m for m in msgs), msgs
+    # Sentinel must fire.
+    assert any("dag-fit" in m and _SENTINEL_NAME in m and _SENTINEL_FIELD in m for m in msgs), (
+        f"F did not warn on the sentinel — is step 9 wired? msgs={msgs}"
+    )
+    # Target consumer must be quiet on the defaulted field.
+    assert not any("dag-fit" in m and "flatten_code" in m and "description" in m for m in msgs), (
+        msgs
+    )
