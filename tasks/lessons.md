@@ -51,3 +51,26 @@ laundering a soft finding into a stronger vote and burns tokens for no signal.
 **Detection signal:** the reviewer traced `_last_return` line by line and asked "does `ast.walk` distinguish between the outer function's returns and a nested helper's returns?" — a direct question about the traversal contract, not something a happy-path unit test surfaces.
 
 **Prevention rule:** when a static-AST check reasons about a function's OWN control flow (returns, top-level statements, "what runs unconditionally"), never use `ast.walk` on the function node — write a bounded walker that starts from `func.body` and stops descending at nested `FunctionDef` / `AsyncFunctionDef` / `Lambda` nodes. Add a regression fixture with a nested helper defined after the outer's tail return; it costs one paragraph and closes the pathological hole a reviewer will otherwise ask about.
+
+## 593 — verify the persisted record shape before gating on a namespace key
+
+**Failure mode:** Spec 593's RED sketches described the checkpoint / online-result records as
+top-level `{"source_guid": ..., "<action>": value}`. The real shape is content-nested
+`{"source_guid": ..., "content": {"<action>": value}}` — produced by
+`transform_with_passthrough` → `RecordEnvelope.build`, and confirmed by `disposition_gate`
+reading `read_checkpoint_records` and `read_target` output interchangeably (same
+`r["source_guid"]` key, same downstream carry-forward). A gate written against the spec's
+stated shape would read `record["<action>"]` — always `None` — making the whole gate a
+**silent no-op** that a naive top-level-shaped test would still pass.
+
+**Detection signal:** the already-merged 556 gate (`_gate_schema_echo_deltas`) read
+`record["content"][action_name]`; the spec proposed *reusing* it but described a different
+record shape. Two seams claiming to share one predicate while disagreeing on the record
+shape is the tell — one of them is wrong about the shape.
+
+**Prevention rule:** before gating/reading a namespace on a persistence path, trace the
+producer (`transform_with_passthrough`) and an existing consumer that treats the two seams
+interchangeably, to pin the exact key. A spec's example record shape is a claim to verify
+against the producer, not a fact — especially when an existing sibling gate on the same
+value already reads a different key. Build the RED fixture from the real compiled shape
+(`compile_unified_schema(..., "ollama_cloud")`) so a wrong key can't accidentally pass.
