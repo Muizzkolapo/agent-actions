@@ -37,7 +37,7 @@ decoders to schema validators and preflight checks.
 | `schema_validator.py` | Module | `SchemaValidator`: validates schema files against JSON Schema meta-schema. Fires a single `ValidationStartEvent` via the base class `_prepare_validation()`; the redundant `DataValidationStartedEvent` at the top of `validate()` has been removed. | `validation` |
 | `status_validator.py` | Module | `StatusCommandArgs` definition. | `validation` |
 | `udf_passthrough_validator.py` | Module | `find_passthrough_schema_risks`: static AST scan flagging `kind:tool` UDFs that return bus-derived dicts under a strict output schema. | `validation` |
-| `udf_required_field_validator.py` | Module | `find_conditional_required_field_risks`: static AST scan flagging `kind:tool` UDFs whose required output-schema fields are only produced inside a conditional branch (post-568 required-by-default class). | `validation` |
+| `udf_required_field_validator.py` | Module | `find_conditional_required_field_risks`: static AST scan that refuses preflight when a `kind:tool` UDF's required output-schema fields are only produced inside a conditional branch (post-568 required-by-default class; refusal wired in `PreflightService._check_tool_conditional_required_field_risks`). | `validation` |
 | `validate_udfs.py` | Module | Validates that UDFs referenced in configs exist. | `utils.udf_management`, `validation` |
 | `project_validator.py` | Module | `ProjectValidator` for project name, directory, and template validation. | `validation` |
 | `run_validator.py` | Module | `RunCommandArgs` pydantic model and pre-flight gating. | `validation` |

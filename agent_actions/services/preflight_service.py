@@ -123,7 +123,7 @@ class PreflightService:
         self._warn_tool_passthrough_risks()
 
         # 8. Cross-check kind:tool UDFs against their required output-schema fields
-        self._warn_tool_conditional_required_field_risks()
+        self._check_tool_conditional_required_field_risks()
 
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
@@ -227,9 +227,12 @@ class PreflightService:
             }
         return inputs
 
-    def _warn_tool_conditional_required_field_risks(self) -> None:
-        """Warn when a kind:tool UDF only conditionally emits a required schema field."""
-        for finding in find_conditional_required_field_risks(
-            self._collect_tool_required_field_inputs()
-        ):
-            logger.warning("Pre-flight: %s", finding)
+    def _check_tool_conditional_required_field_risks(self) -> None:
+        """Refuse preflight when a kind:tool UDF only conditionally emits a required schema field."""
+        findings = find_conditional_required_field_risks(self._collect_tool_required_field_inputs())
+        if findings:
+            raise PreFlightValidationError(
+                "\n".join(findings),
+                hint="Mark the field optional in the schema, "
+                "or emit it unconditionally in the UDF.",
+            )
