@@ -54,8 +54,15 @@ def _drive(strategy, backend, result, monkeypatch, action="action_a"):
 
 
 class TestOnlineNoLLMSeam:
-    def test_schema_echo_success_never_persists_as_success(self, backend, monkeypatch):
-        """A success result carrying a schema-echo namespace is failed at the seam."""
+    def test_schema_echo_success_is_failed_with_parse_error(self, backend, monkeypatch):
+        """A success result carrying a schema-echo namespace is failed at the seam.
+
+        Pins status AND persisted state together: the returned result is exactly FAILED
+        (not merely non-success — an UNPROCESSED/dropped result would not satisfy this),
+        the record carries a positive ``failed`` disposition (proving _checkpoint_record
+        fired, not a vacuous absence), and the checkpointed namespace is the parse-error
+        sentinel. A status-only or disposition-less implementation cannot pass.
+        """
         strategy = OnlineLLMStrategy(agent_config={}, agent_name="action_a")
         result = ProcessingResult.success(
             data=[{"source_guid": "g1", "content": {"action_a": _compiled_schema()}}],
@@ -63,10 +70,15 @@ class TestOnlineNoLLMSeam:
         )
         results = _drive(strategy, backend, result, monkeypatch)
 
-        assert results[0].status != ProcessingStatus.SUCCESS  # never a silent success
+        assert results[0].status == ProcessingStatus.FAILED  # exact — never a silent success
 
         disps = backend.get_disposition("action_a", record_id="g1")
-        assert not any(d["disposition"] == "success" for d in disps)
+        assert disps, "the record must carry a disposition, not vanish"
+        assert all(d["disposition"] != "success" for d in disps)
+        assert any(d["disposition"] == "failed" for d in disps)  # _checkpoint_record fired FAILED
+
+        ns = backend.read_checkpoint_records("action_a", "output.json")[0]["content"]["action_a"]
+        assert "_parse_error" in ns and "title" not in ns
 
     def test_schema_echo_namespace_is_sanitized_in_checkpoint(self, backend, monkeypatch):
         """If the failed record is checkpointed, its namespace is the parse-error sentinel."""
