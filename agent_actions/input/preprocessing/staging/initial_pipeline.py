@@ -426,10 +426,8 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     local_batch_id = f"batch_{uuid.uuid4().hex}"
     node_id = f"node_{ctx.idx}_{uuid.uuid4()}"
     from agent_actions.input.loaders.tabular import TabularLoader
-    from agent_actions.input.loaders.xml import XmlLoader
 
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
-    xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
     data_chunk: list[dict[str, Any]]
     src_text: list[dict[str, Any]]
@@ -461,19 +459,14 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     elif ctx.file_type == ".xml":
-        # XML: let XmlLoader read the file itself (FileReader returns (tree, root) tuple, not str)
-        xml_result: Any = xml_loader.process(content=None, file_path=ctx.file_path)
-        if isinstance(xml_result, list):
-            data_chunk = _add_batch_metadata(xml_result, local_batch_id, node_id)
-        else:
-            data_chunk = [
-                {
-                    "content": xml_result,
-                    "batch_id": local_batch_id,
-                    "batch_uuid": f"{local_batch_id}_0",
-                }
-            ]
-        src_text = []
+        raise AgentActionsError(
+            "XML first-stage input is not supported; convert to CSV or JSON.",
+            context={
+                "file_type": ctx.file_type,
+                "file_path": ctx.file_path,
+                "agent_name": ctx.agent_name,
+            },
+        )
 
     else:
         supported = [
@@ -486,7 +479,6 @@ def _prepare_batch_data(ctx: DataPreparationContext):
             ".csv",
             ".tsv",
             ".xlsx",
-            ".xml",
         ]
         raise AgentActionsError(
             "Unsupported file type in staging loader",
@@ -514,11 +506,9 @@ def _prepare_online_data(ctx: DataPreparationContext):
     """Prepare data for online mode processing using direct loaders."""
     from agent_actions.input.loaders.json import JsonLoader
     from agent_actions.input.loaders.tabular import TabularLoader
-    from agent_actions.input.loaders.xml import XmlLoader
 
     json_loader = JsonLoader(ctx.agent_config, ctx.agent_name)
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
-    xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
     data_chunk: Any
     src_text: Any
@@ -555,8 +545,14 @@ def _prepare_online_data(ctx: DataPreparationContext):
         data_chunk = src_text = _wrap_online_rows(rows)
 
     elif ctx.file_type == ".xml":
-        data_chunk = xml_loader.process(content=None, file_path=ctx.file_path)
-        src_text = data_chunk
+        raise AgentActionsError(
+            "XML first-stage input is not supported; convert to CSV or JSON.",
+            context={
+                "file_type": ctx.file_type,
+                "file_path": ctx.file_path,
+                "agent_name": ctx.agent_name,
+            },
+        )
 
     else:
         supported = [
@@ -569,7 +565,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
             ".csv",
             ".tsv",
             ".xlsx",
-            ".xml",
         ]
         raise AgentActionsError(
             "Unsupported file type in staging loader",
