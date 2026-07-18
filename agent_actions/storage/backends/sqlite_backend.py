@@ -1049,6 +1049,10 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
+        # Refuse to checkpoint a namespace that is the compiled JSON Schema instead of
+        # LLM output — same seam guard write_target uses on target data.
+        records = self._gate_schema_echo_records(action_name, records)
+
         # Fail loud on blank source_guid: UNIQUE + INSERT OR REPLACE would silently overwrite.
         rows: list[tuple[str, str, str, str]] = []
         for index, r in enumerate(records):

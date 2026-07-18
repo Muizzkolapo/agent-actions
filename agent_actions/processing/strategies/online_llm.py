@@ -58,6 +58,7 @@ from agent_actions.record.reasons import (
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
 from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,50 @@ def _create_item_context(
         base_context,
         record_index=index,
         current_item=item if isinstance(item, dict) else None,
+    )
+
+
+def _reject_schema_echo_result(result: ProcessingResult, action_name: str) -> ProcessingResult:
+    """Fail a result whose action namespace is the compiled schema, not conforming output.
+
+    The executed-LLM path rejects echoes in ``transform_with_passthrough``; this is the
+    funnel every result crosses before checkpoint/collection, so any branch that plants a
+    schema echo is caught here — the namespace becomes ``_parse_error`` and the result
+    becomes FAILED, keeping status and persisted data consistent (never a silent success).
+    """
+    if not result.data:
+        return result
+    sanitized: list[dict[str, Any]] = []
+    changed = False
+    for record in result.data:
+        content = record.get("content") if isinstance(record, dict) else None
+        if isinstance(content, dict) and is_schema_echo(content.get(action_name)):
+            changed = True
+            sanitized.append(
+                {
+                    **record,
+                    "content": {
+                        **content,
+                        action_name: make_schema_echo_error(content[action_name]),
+                    },
+                }
+            )
+        else:
+            sanitized.append(record)
+    if not changed:
+        return result
+    logger.warning(
+        "[%s] Schema-echo namespace in a %s result (source_guid=%s) — "
+        "converting to parse-error and failing the record.",
+        action_name,
+        result.status.value,
+        result.source_guid,
+    )
+    return replace(
+        result,
+        status=ProcessingStatus.FAILED,
+        data=sanitized,
+        error="Schema-echo: action namespace was the compiled schema, not conforming output",
     )
 
 
@@ -174,6 +219,7 @@ class OnlineLLMStrategy:
             try:
                 item_context = _create_item_context(context, idx, item)
                 result = self.process_record(item, item_context)
+                result = _reject_schema_echo_result(result, context.action_name)
                 results.append(result)
 
                 if result.status == ProcessingStatus.SUCCESS:
