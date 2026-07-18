@@ -231,16 +231,9 @@ class TestStaleNodeDispositionClearedOnExecute:
         ), "async _execute_action_run_async must clear stale NODE_LEVEL rows too"
 
     def test_storage_error_during_clear_propagates(self, tmp_path):
-        """Clear failure must not be swallowed — the resolver would otherwise trust a stale row.
-
-        A silently-swallowed ``clear_disposition`` failure re-creates the
-        pre-fix bug: the stale ``SKIPPED@NODE_LEVEL`` row survives into
-        ``_resolve_completion_status``, which (after the read-side heal was
-        deleted) now returns SKIPPED unconditionally — and the action gets
-        misclassified as skipped despite writing target data. Fail loud
-        instead. Matches the fail-loud posture of spec 554's
-        ``_count_records_for_action``.
-        """
+        """Clear failure must not be swallowed — a silently-caught failure would let a stale
+        SKIPPED@NODE_LEVEL row survive, and the resolver would then misclassify a successful
+        run as SKIPPED."""
         executor, backend = _make_executor_with_real_backend(tmp_path)
 
         broken_backend = MagicMock(wraps=backend)

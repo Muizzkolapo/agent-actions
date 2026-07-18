@@ -708,8 +708,11 @@ class ActionExecutor:
         if storage_backend.has_disposition(
             action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ):
-            # Clear-on-execute guarantees this row is current-round: only
-            # _handle_dependency_skip could have written it, so map directly to SKIPPED.
+            # Clear-on-execute guarantees this row is current-round. The writer
+            # whose row survives here is result_collector.write_node_level_disposition
+            # firing during run_action when every input record was filtered.
+            # (_handle_dependency_skip and _handle_all_versions_filtered also
+            # write SKIPPED@NODE_LEVEL but both return before this resolver runs.)
             logger.info(
                 "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,
@@ -1182,12 +1185,14 @@ class ActionExecutor:
         )
 
     def _clear_stale_node_disposition(self, action_name: str) -> None:
-        """Enforce the invariant that NODE_LEVEL disposition reflects the current round only.
+        """Delete every NODE_LEVEL disposition row for the action (all types, not just SKIPPED).
 
-        Storage errors propagate — swallowing them would let a stale SKIPPED@NODE_LEVEL
-        row survive, and ``_resolve_completion_status`` (post-heal-deletion) would
-        classify a successful run as SKIPPED. Same fail-loud posture as spec 554's
-        ``_count_records_for_action``.
+        Anything present here is prior-round and by definition stale — the
+        current round has not yet stamped anything. Storage errors propagate:
+        swallowing them would let a stale row survive and
+        ``_resolve_completion_status`` would misclassify a successful run as
+        SKIPPED. Per-record dispositions are keyed on their real ``source_guid``
+        and are unaffected.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
