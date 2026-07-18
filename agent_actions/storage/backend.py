@@ -113,23 +113,22 @@ class StorageBackend(ABC):
         """Create tables, indexes, and other infrastructure required by the backend."""
         ...
 
-    def _gate_schema_echo_deltas(
+    def _gate_schema_echo_records(
         self,
         action_name: str,
-        delta_records: list[dict[str, Any]],
+        records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Replace schema-echo namespaces with a parse-error sentinel before persistence.
+        """Replace a schema-echo namespace with a parse-error sentinel before persistence.
 
-        A namespace shaped like the compiled JSON Schema means an upstream path
-        handed us the schema instead of LLM output. The live-LLM flow catches this
-        in ``_reject_schema_echo_items``; this gate catches the resume / carry-forward
-        path that never invokes the LLM. The record keeps flowing (namespace swapped
-        for ``make_schema_echo_error``) and gets a FAILED/PARSE_ERROR disposition so
-        the failure stays queryable rather than being silently dropped.
+        Guards the persistence seams that never re-invoke the LLM — ``write_target`` and
+        ``save_checkpoint_records`` — both of which persist content-nested records, so the
+        check reads ``record["content"][action_name]``. The record keeps flowing (namespace
+        swapped for ``make_schema_echo_error``, FAILED/PARSE_ERROR disposition) so the
+        failure stays queryable rather than being silently dropped.
         """
         gated: list[dict[str, Any]] = []
         failed_rows: list[DispositionRow] = []
-        for record in delta_records:
+        for record in records:
             content = record.get("content")
             if not isinstance(content, dict) or action_name not in content:
                 gated.append(record)
@@ -196,7 +195,7 @@ class StorageBackend(ABC):
 
         # Refuse to persist namespaces that are the compiled JSON Schema instead of
         # LLM output — the carry-forward / resume path bypasses the live-LLM guard.
-        delta_records = self._gate_schema_echo_deltas(action_name, delta_records)
+        delta_records = self._gate_schema_echo_records(action_name, delta_records)
 
         if not self._format_version_written:
             self.save_metadata("storage_format_version", str(self._STORAGE_FORMAT_VERSION))
