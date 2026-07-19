@@ -1,7 +1,7 @@
-"""Manual repro: guard evaluation with namespaced content (spec 085).
+"""Manual test: guard evaluation with namespaced content (spec 085).
 
 Tests whether guards resolve dotted paths against namespaced content.
-Run: python -m pytest tests/manual/repro_085_guard_namespaced.py -v
+Run: python -m pytest tests/manual/guard_namespaced_content.py -v
 """
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator

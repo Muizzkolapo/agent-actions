@@ -1,6 +1,6 @@
-"""Manual repro for spec 088: PassthroughEnricher with namespaced content.
+"""Manual test: PassthroughEnricher with namespaced content (spec 088).
 
-Run: python -m tests.manual.repro_088_enrichment
+Run: python -m tests.manual.passthrough_enricher_namespaced
 """
 
 from agent_actions.processing.enrichment import (

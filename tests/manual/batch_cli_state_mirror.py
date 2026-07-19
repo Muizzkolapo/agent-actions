@@ -1,6 +1,6 @@
-"""Manual state-mirror repro for the batch CLI multi-workflow bugs.
+"""Manual state-mirror test for the batch CLI multi-workflow bugs.
 
-Run: ``python -m tests.manual.repro_batch_cli_state_mirror``
+Run: ``python -m tests.manual.batch_cli_state_mirror``
 
 This script mirrors two states of the batch CLI:
 
