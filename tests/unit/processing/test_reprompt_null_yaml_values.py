@@ -1,4 +1,4 @@
-"""Regression tests for the reprompt sibling of VIOL-0031.
+"""Regression tests for null YAML reprompt config handling.
 
 ``parse_reprompt_config`` and ``create_reprompt_service_from_config`` used
 the same ``.get("key", default)`` antipattern as the retry path. With a

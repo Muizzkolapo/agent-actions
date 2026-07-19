@@ -1,7 +1,7 @@
 """Regression: the runtime `workflow.*` namespace matches what inspect and
 the static analyzer promise.
 
-Before VIOL-0008 the inspect view showed `workflow: name, run_id` but no
+Previously the inspect view showed `workflow: name, run_id` but no
 runtime path populated `workflow_metadata` with those keys, so
 `{{ workflow.name }}` raised at render time. This test locks in the
 end-to-end contract:

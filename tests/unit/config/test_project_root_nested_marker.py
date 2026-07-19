@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0065: a nested ``agent_actions.yml`` must not
+"""Regression tests: a nested ``agent_actions.yml`` must not
 hijack ``find_project_root_dir``; the outermost marker wins.  Single-marker,
 no-marker, and fallback-heuristic resolution stay byte-identical.
 """

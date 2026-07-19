@@ -167,7 +167,7 @@ class TestTemplateVariableReplacement:
     def test_template_var_in_dependency_string(self):
         """Sequential refinement: ${param-1} resolves inside the dependencies list.
 
-        Regression test for VIOL-0075 — the docs example for sequential refinement
+        Regression: the docs example for sequential refinement
         used Jinja2 conditional syntax inside dependency strings, which the expander
         does not evaluate. The fix wires deps through the same template_replacer
         already applied to prompts and schemas. Per-iteration values like

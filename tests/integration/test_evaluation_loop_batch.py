@@ -18,17 +18,16 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.types import EvaluationMetadata, EvaluationOutcome, RecoveryMetadata
 
 # Skip entire module if evaluation loop code is not yet available.
-# Created by specs 062 (PR #295) and 063 (PR #297).
 evaluation_mod = pytest.importorskip(
     "agent_actions.processing.evaluation",
-    reason="Requires evaluation loop core (PR #295)",
+    reason="Requires evaluation loop core",
 )
 EvaluationLoop = evaluation_mod.EvaluationLoop
 EvaluationStrategy = evaluation_mod.EvaluationStrategy
 
 strategies_mod = pytest.importorskip(
     "agent_actions.processing.evaluation.strategies",
-    reason="Requires validation strategy (PR #297)",
+    reason="Requires validation strategy",
 )
 ValidationStrategy = strategies_mod.ValidationStrategy
 

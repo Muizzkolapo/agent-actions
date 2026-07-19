@@ -249,7 +249,7 @@ class TestAgentConfigApiKeySecret:
 
 
 class TestDefaultAgentConfigApiKeySecret:
-    """Verify DefaultAgentConfig.api_key uses SecretStr (#1160)."""
+    """Verify DefaultAgentConfig.api_key uses SecretStr."""
 
     def test_repr_does_not_expose_raw_key(self):
         config = DefaultAgentConfig(api_key="defaults_secret")
@@ -272,7 +272,7 @@ class TestDefaultAgentConfigApiKeySecret:
 
 
 class TestEndToEndSecretStrPipeline:
-    """Integration: verify SecretStr flows end-to-end through the config pipeline (#1160)."""
+    """Integration: verify SecretStr flows end-to-end through the config pipeline."""
 
     def test_expander_output_coerced_to_secret_str_by_agent_config(self):
         """After expander produces a plain-str api_key dict,

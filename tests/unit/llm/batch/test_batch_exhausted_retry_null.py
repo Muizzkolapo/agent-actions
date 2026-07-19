@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0031 — sibling fix in the batch path.
+"""Regression tests for null YAML retry config in the batch exhausted path.
 
 ``BatchResultStrategy._build_exhausted_passthrough`` mirrors the
 online-path bug fixed in ``processing/result_collector.py``:

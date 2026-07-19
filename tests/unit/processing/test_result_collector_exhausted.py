@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0031.
+"""Regression tests for null YAML retry/exhausted config handling.
 
 `_handle_exhausted_policy` previously crashed with ``AttributeError`` when
 ``agent_config["retry"]`` was explicitly ``None`` (the YAML shape produced
@@ -46,7 +46,7 @@ def test_handle_exhausted_policy_coalesces_null_yaml_values(agent_config, expect
     documented ``return_last`` default rather than crashing or logging
     ``on_exhausted=None``.
 
-    Before VIOL-0031 the outer level (``retry: None``) raised
+    Previously the outer level (``retry: None``) raised
     ``AttributeError`` at ``result_collector.py:907``. Code review of the
     fix surfaced the same antipattern one level deeper, where
     ``on_exhausted: None`` silently logged ``on_exhausted=None`` instead
