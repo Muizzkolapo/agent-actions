@@ -6,7 +6,7 @@ Bug: The version correlator creates namespaced content
      {action_name: {v1: {fields}, v2: {fields}}}.
      Downstream tools see double-nested data.
 
-Run:  python tests/manual/repro_093_version_double_nesting.py
+Run:  python tests/manual/version_merge_double_nesting.py
 Expected: FAIL before fix, PASS after fix.
 """
 

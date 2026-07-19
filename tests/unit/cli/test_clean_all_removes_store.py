@@ -1,4 +1,4 @@
-"""Regression test for VIOL-0043: ``agac clean --all`` must remove the durable
+"""Regression test: ``agac clean --all`` must remove the durable
 store — regardless of which backend owns it.
 
 Today the ``remove_all`` branch only appends ``staging/``; the durable store

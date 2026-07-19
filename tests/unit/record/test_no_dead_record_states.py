@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0029/0030 — the dead ``RecordState`` members.
+"""Regression tests for removed ``RecordState`` members.
 
 ``committed`` and ``guard_deferred`` were listed in the enum, the resettable
 set, and the disposition map but had **zero stamp sites** — no code path ever

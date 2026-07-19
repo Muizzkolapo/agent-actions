@@ -62,7 +62,7 @@ class TestCategoryBypass:
 
 
 class TestDefaultFactoryFilterAcceptsActionEvents:
-    """Regression test for VIOL-0085 — default console categories must include `action`.
+    """Regression test: default console categories must include `action`.
 
     Action events use category ``"action"`` (see
     ``agent_actions.logging.events.types.EventCategories.ACTION`` and

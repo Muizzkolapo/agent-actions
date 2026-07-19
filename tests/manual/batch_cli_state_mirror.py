@@ -1,6 +1,6 @@
-"""Manual state-mirror repro for the batch CLI multi-workflow bugs.
+"""Manual state-mirror test for the batch CLI multi-workflow bugs.
 
-Run: ``python -m tests.manual.repro_viol_0042_batch_cli_state_mirror``
+Run: ``python -m tests.manual.batch_cli_state_mirror``
 
 This script mirrors two states of the batch CLI:
 
@@ -114,7 +114,7 @@ def scenario_1_workflow_path_discovery(project_root: Path) -> ScenarioResult:
         detail = f"_resolve_workflow raised {type(e).__name__}: {e}"
 
     return ScenarioResult(
-        name="Workflow path discovery (VIOL-0067 path)",
+        name="Workflow path discovery",
         current_passes=current_passes,
         future_passes=future_passes,
         detail=detail,
@@ -139,7 +139,7 @@ def scenario_2_action_name_routing() -> ScenarioResult:
     future_passes = not has_wrong_pin
 
     return ScenarioResult(
-        name="action_name routing (VIOL-0067 key)",
+        name="action_name routing",
         current_passes=current_passes,
         future_passes=future_passes,
         detail=f"'action_name=workflow_name' literal in batch_cli.py: {has_wrong_pin}",
@@ -163,7 +163,7 @@ def scenario_3_cli_flag_surface() -> ScenarioResult:
     future_passes = has_agent and has_action
 
     return ScenarioResult(
-        name="CLI flag surface (VIOL-0042)",
+        name="CLI flag surface",
         current_passes=current_passes,
         future_passes=future_passes,
         detail=f"--agent: {has_agent}, --action: {has_action}",
@@ -185,7 +185,7 @@ def _verdict(r: ScenarioResult) -> str:
 
 def main() -> int:
     print("=" * 72)
-    print("VIOL-0042 / VIOL-0067 state mirror — batch CLI multi-workflow bugs")
+    print("State mirror — batch CLI multi-workflow bugs")
     print("=" * 72)
 
     with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0081 — `.tsv` files staging dispatch.
+"""Regression tests for `.tsv` files staging dispatch.
 
 Before this fix, the staging dispatch in
 ``agent_actions/input/preprocessing/staging/initial_pipeline.py`` had no

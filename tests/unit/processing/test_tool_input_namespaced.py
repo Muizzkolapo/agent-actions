@@ -1,7 +1,7 @@
 """Tests for namespaced content delivery to tools and LLM.
 
-Verifies that after the additive content model (PR #323), tools receive
-namespaced dicts directly — no flattening, no fallback to flat format.
+Verifies that tools receive namespaced dicts directly — no flattening,
+no fallback to flat format.
 """
 
 from unittest.mock import patch

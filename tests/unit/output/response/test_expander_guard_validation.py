@@ -3,7 +3,7 @@
 Covers validate_agent_guards, validate_guard_references, and build_schema_registry
 from agent_actions.output.response.expander_guard_validation.
 
-Regression coverage for the validate_with_schemas call signature fix (#1107).
+Regression coverage for the validate_with_schemas call signature fix.
 """
 
 import pytest

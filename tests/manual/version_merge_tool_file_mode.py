@@ -9,7 +9,7 @@ Bug 2: data.get("content", data) returned {} when content key existed but was
        empty, instead of falling back to the full record.
        Fixed: get_existing_content utility handles this correctly.
 
-Run:  python tests/manual/repro_bug_03_version_merge_tool.py
+Run:  python tests/manual/version_merge_tool_file_mode.py
 Expected: PASS (both bugs are fixed).
 """
 

@@ -1,4 +1,4 @@
-"""Regression tests for VIOL-0083 — chunking defaults pinning.
+"""Regression tests for chunking defaults pinning.
 
 ``docs/reference/data-io/chunking.md`` documents the framework's default
 ``chunk_size`` and ``overlap``. The values must match the canonical defaults

@@ -464,8 +464,7 @@ class TestLineageNToMDedup:
     """FILE-mode dedup: N inputs -> M outputs with source_mapping."""
 
     def test_dedup_with_shared_source_guid_produces_distinct_lineage(self):
-        """5 inputs sharing source_guid, source_mapping={0:0, 1:1, 2:2}: each output gets distinct parent lineage.
-        This is the bug that PR #220 fixed -- regression guard."""
+        """5 inputs sharing source_guid, source_mapping={0:0, 1:1, 2:2}: each output gets distinct parent lineage."""
         shared_guid = "shared-dedup-guid"
         source_items = [
             _make_source_item(
