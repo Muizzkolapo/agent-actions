@@ -7,9 +7,21 @@ so the qualification must be announced, not silent.
 
 import logging
 
+import pytest
+
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope_for_records,
 )
+
+
+@pytest.fixture()
+def _enable_log_propagation():
+    """Ensure the agent_actions logger propagates to root so caplog captures records."""
+    aa_logger = logging.getLogger("agent_actions")
+    original = aa_logger.propagate
+    aa_logger.propagate = True
+    yield
+    aa_logger.propagate = original
 
 
 def _records():
@@ -21,6 +33,7 @@ def _records():
     ]
 
 
+@pytest.mark.usefixtures("_enable_log_propagation")
 class TestCollisionQualificationWarning:
     def test_collision_emits_warning_naming_qualified_keys(self, caplog):
         with caplog.at_level(logging.WARNING):
@@ -32,8 +45,7 @@ class TestCollisionQualificationWarning:
 
         messages = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
         assert any(
-            "ns1.answer" in m and "ns2.answer" in m and "merge_answers" in m
-            for m in messages
+            "ns1.answer" in m and "ns2.answer" in m and "merge_answers" in m for m in messages
         )
 
     def test_no_collision_emits_no_warning(self, caplog):

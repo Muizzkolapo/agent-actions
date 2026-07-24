@@ -103,9 +103,7 @@ class TestNamespacedPassthroughPlacement:
             data=[{"batch_name": "batch_A"}],
             context_data={},
             source_guid="g1",
-            agent_config=_config(
-                ["approve_final_question.*", "review_consolidated_answers.*"]
-            ),
+            agent_config=_config(["approve_final_question.*", "review_consolidated_answers.*"]),
             action_name="assign_batch_name",
             passthrough_fields=passthrough,
         )

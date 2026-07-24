@@ -99,16 +99,17 @@ def _make_ctx(
 
 
 class TestMergeOrder:
-    """U-2.A: LLM output must win over passthrough on key collision."""
+    """U-2.A: passthrough lands at content level; the action namespace is never overwritten."""
 
-    def test_llm_wins_on_passthrough_collision(self, strategy: BatchResultStrategy) -> None:
-        """When passthrough and LLM have same key, LLM value is kept."""
-        # Passthrough has "summary" — same key the LLM will produce.
+    def test_action_namespace_never_overwritten_by_passthrough(
+        self, strategy: BatchResultStrategy
+    ) -> None:
+        """A passthrough namespace colliding with the action name is skipped."""
         context_map = {
             "t-001": _build_context_map_row(
                 "t-001",
                 filter_status=FilterStatus.INCLUDED,
-                passthrough_fields={"summary": "Original passthrough value", "extra_field": "kept"},
+                passthrough_fields={"test_action": {"summary": "Original passthrough value"}},
             ),
         }
         llm_result = _make_batch_result("t-001", {"summary": "LLM generated this", "score": 0.95})
@@ -125,25 +126,21 @@ class TestMergeOrder:
         result = results[0]
         assert result.status == ProcessingStatus.SUCCESS
 
-        # Data items are {source_guid, content: {<existing>, <action_name>: {<merged>}}, target_id}.
-        # The passthrough merge happens BEFORE version_merge wraps output under action_name.
-        # So the merged fields live inside content[action_name].
-        data_item = result.data[0]
-        action_ns = data_item["content"]["test_action"]
-
-        # LLM value must win on collision
+        action_ns = result.data[0]["content"]["test_action"]
         assert action_ns["summary"] == "LLM generated this", (
-            f"LLM value should win on collision, got action_ns={action_ns}"
+            f"LLM output must win over a same-named passthrough namespace, got {action_ns}"
         )
         assert action_ns["score"] == 0.95
 
-    def test_passthrough_fills_gaps(self, strategy: BatchResultStrategy) -> None:
-        """Passthrough fields that don't collide with LLM output are preserved."""
+    def test_passthrough_namespaces_land_at_content_level(
+        self, strategy: BatchResultStrategy
+    ) -> None:
+        """Namespaced passthrough fields become siblings of the action namespace."""
         context_map = {
             "t-001": _build_context_map_row(
                 "t-001",
                 filter_status=FilterStatus.INCLUDED,
-                passthrough_fields={"category": "finance", "region": "US"},
+                passthrough_fields={"classify": {"category": "finance", "region": "US"}},
             ),
         }
         llm_result = _make_batch_result("t-001", {"summary": "LLM output", "score": 0.8})
@@ -157,64 +154,68 @@ class TestMergeOrder:
         )
 
         assert len(results) == 1
-        data_item = results[0].data[0]
-        action_ns = data_item["content"]["test_action"]
-
-        # Non-colliding passthrough fields should be present in the action namespace
-        assert action_ns.get("category") == "finance", (
-            f"Non-colliding passthrough field missing: action_ns={action_ns}"
+        content = results[0].data[0]["content"]
+        assert content.get("classify") == {"category": "finance", "region": "US"}, (
+            f"Passthrough namespace missing at content level: {content}"
         )
-        assert action_ns.get("region") == "US"
+        assert "classify" not in content["test_action"], (
+            "Passthrough namespace must not be nested inside the action output"
+        )
+        assert content["test_action"]["summary"] == "LLM output"
 
-    def test_collision_logged(
-        self, strategy: BatchResultStrategy, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Key collisions between passthrough and LLM output are logged."""
+    def test_existing_content_namespace_wins_per_field(self, strategy: BatchResultStrategy) -> None:
+        """A namespace already in record content keeps its values; passthrough fills gaps."""
         context_map = {
             "t-001": _build_context_map_row(
                 "t-001",
                 filter_status=FilterStatus.INCLUDED,
-                passthrough_fields={"summary": "will collide"},
+                passthrough_fields={"classify": {"category": "stale", "region": "US"}},
+                content={"classify": {"category": "finance"}},
             ),
         }
-        llm_result = _make_batch_result("t-001", {"summary": "LLM wins"})
+        llm_result = _make_batch_result("t-001", {"summary": "LLM output"})
 
         ctx = _make_ctx([llm_result], context_map)
-        with caplog.at_level(logging.DEBUG):
-            strategy.process(
-                batch_results=ctx.batch_results,
-                context_map=ctx.context_map,
-                output_directory=ctx.output_directory,
-                agent_config=ctx.agent_config,
-            )
-
-        collision_logged = any("summary" in r.getMessage() for r in caplog.records)
-        assert collision_logged, (
-            f"Collision between passthrough and LLM key 'summary' should be logged. "
-            f"Records: {[(r.name, r.getMessage()) for r in caplog.records]}"
+        results = strategy.process(
+            batch_results=ctx.batch_results,
+            context_map=ctx.context_map,
+            output_directory=ctx.output_directory,
+            agent_config=ctx.agent_config,
         )
 
-    def test_framework_fields_not_logged_as_collision(
+        content = results[0].data[0]["content"]
+        assert content["classify"]["category"] == "finance", (
+            "Existing content value must win over the passthrough copy"
+        )
+        assert content["classify"]["region"] == "US", (
+            "Passthrough must fill fields missing from the existing namespace"
+        )
+
+    def test_non_dict_passthrough_entries_ignored(
         self, strategy: BatchResultStrategy, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Framework fields (target_id, _state, etc.) should not be logged as collisions."""
+        """Framework fields (target_id, _state, etc.) are non-namespaced and are not merged."""
         context_map = {
             "t-001": _build_context_map_row(
                 "t-001",
                 filter_status=FilterStatus.INCLUDED,
-                passthrough_fields={"target_id": "t-001", "summary": "will collide"},
+                passthrough_fields={"target_id": "t-001", "summary": "flat entry"},
             ),
         }
         llm_result = _make_batch_result("t-001", {"summary": "LLM wins", "target_id": "t-001"})
 
         ctx = _make_ctx([llm_result], context_map)
         with caplog.at_level(logging.INFO):
-            strategy.process(
+            results = strategy.process(
                 batch_results=ctx.batch_results,
                 context_map=ctx.context_map,
                 output_directory=ctx.output_directory,
                 agent_config=ctx.agent_config,
             )
+
+        content = results[0].data[0]["content"]
+        assert content["test_action"]["summary"] == "LLM wins"
+        assert "summary" not in content, "Flat passthrough entries must not leak to content level"
 
         # target_id is a framework field — should NOT be logged as collision
         for record in caplog.records:

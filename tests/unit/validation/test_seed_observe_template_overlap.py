@@ -28,11 +28,7 @@ def _workflow(prompt, observe):
 
 
 def _overlap_warnings(result):
-    return [
-        w.message
-        for w in result.warnings
-        if "seed" in w.message and "twice" in w.message
-    ]
+    return [w.message for w in result.warnings if "seed" in w.message and "twice" in w.message]
 
 
 class TestSeedObserveTemplateOverlap:
