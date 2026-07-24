@@ -35,8 +35,11 @@ def merge_passthrough_namespaces(
         if ns not in content:
             content[ns] = copy.deepcopy(ns_fields)
         elif isinstance(existing_ns, dict):
-            for field_name, value in ns_fields.items():
-                existing_ns.setdefault(field_name, copy.deepcopy(value))
+            missing = {k: v for k, v in ns_fields.items() if k not in existing_ns}
+            if missing:
+                # Copy-on-write: namespace dicts may be shared with the input
+                # record's content, so never mutate them in place.
+                content[ns] = {**existing_ns, **copy.deepcopy(missing)}
 
 
 class PassthroughTransformer:

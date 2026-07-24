@@ -46,48 +46,57 @@ def _namespaced_content():
 
 
 class TestPassthroughEnricherNamespaced:
-    """PassthroughEnricher merges passthrough fields into the action namespace."""
+    """PassthroughEnricher places passthrough namespaces at content level."""
 
-    def test_merges_into_existing_action_namespace(self):
-        """Passthrough fields merge INTO content[action_name], not top-level."""
+    def test_passthrough_namespace_lands_at_content_level(self):
         content = {**_namespaced_content(), "action_c": {"llm_field": "llm_output"}}
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[{"content": content}],
-            passthrough_fields={"pt_field": "preserved"},
+            passthrough_fields={"upstream_hitl": {"hitl_status": "approved"}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
         out = enriched.data[0]["content"]
-        # passthrough field is inside action_c namespace
-        assert out["action_c"]["pt_field"] == "preserved"
-        assert out["action_c"]["llm_field"] == "llm_output"
-        # NOT at top level
-        assert "pt_field" not in out
+        assert out["upstream_hitl"] == {"hitl_status": "approved"}
+        assert out["action_c"] == {"llm_field": "llm_output"}
+        assert "upstream_hitl" not in out["action_c"]
 
-    def test_creates_namespace_when_absent(self):
-        """If action namespace doesn't exist, passthrough fields create it."""
-        content = _namespaced_content()  # no action_c
+    def test_action_namespace_never_overwritten(self):
+        """A passthrough namespace matching the action name is skipped."""
+        content = {**_namespaced_content(), "action_c": {"llm_field": "llm_output"}}
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[{"content": content}],
-            passthrough_fields={"pt_field": "preserved"},
+            passthrough_fields={"action_c": {"llm_field": "stale"}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
-        out = enriched.data[0]["content"]
-        assert out["action_c"] == {"pt_field": "preserved"}
-        assert "pt_field" not in out
+        assert enriched.data[0]["content"]["action_c"] == {"llm_field": "llm_output"}
 
-    def test_preserves_other_namespaces(self):
-        """Other action namespaces are not modified."""
+    def test_existing_namespace_wins_per_field(self):
+        """Content-level namespaces keep their values; passthrough fills gaps."""
         content = {**_namespaced_content(), "action_c": {"llm_field": "val"}}
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[{"content": content}],
-            passthrough_fields={"pt_field": "preserved"},
+            passthrough_fields={"action_a": {"field_a": "stale", "field_extra": "new"}},
+        )
+        context = _make_context("action_c")
+        enriched = PassthroughEnricher().enrich(result, context)
+
+        out = enriched.data[0]["content"]
+        assert out["action_a"]["field_a"] == "val_a"
+        assert out["action_a"]["field_extra"] == "new"
+
+    def test_preserves_other_namespaces(self):
+        content = {**_namespaced_content(), "action_c": {"llm_field": "val"}}
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": content}],
+            passthrough_fields={"upstream_hitl": {"hitl_status": "approved"}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
@@ -110,8 +119,26 @@ class TestPassthroughEnricherNamespaced:
 
         assert enriched.data[0]["content"] == content
 
+    def test_idempotent_after_transform_time_merge(self):
+        """Running the enricher on a record that already carries the namespace is a no-op."""
+        content = {
+            **_namespaced_content(),
+            "upstream_hitl": {"hitl_status": "approved"},
+            "action_c": {"llm_field": "val"},
+        }
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"content": content}],
+            passthrough_fields={"upstream_hitl": {"hitl_status": "approved"}},
+        )
+        context = _make_context("action_c")
+        enriched = PassthroughEnricher().enrich(result, context)
+
+        out = enriched.data[0]["content"]
+        assert out["upstream_hitl"] == {"hitl_status": "approved"}
+        assert "upstream_hitl" not in out["action_c"]
+
     def test_multiple_items(self):
-        """Passthrough fields merge into each item's action namespace."""
         items = [
             {"content": {**_namespaced_content(), "action_c": {"idx": 0}}},
             {"content": {**_namespaced_content(), "action_c": {"idx": 1}}},
@@ -119,15 +146,16 @@ class TestPassthroughEnricherNamespaced:
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=items,
-            passthrough_fields={"pt": "val"},
+            passthrough_fields={"upstream_hitl": {"hitl_status": "approved"}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
         for i in range(2):
-            assert enriched.data[i]["content"]["action_c"]["pt"] == "val"
-            assert enriched.data[i]["content"]["action_c"]["idx"] == i
-            assert "pt" not in enriched.data[i]["content"]
+            out = enriched.data[i]["content"]
+            assert out["upstream_hitl"] == {"hitl_status": "approved"}
+            assert out["action_c"]["idx"] == i
+            assert "upstream_hitl" not in out["action_c"]
 
     def test_item_without_content_key_skipped(self):
         """Items with no content dict are skipped without error."""
@@ -142,25 +170,24 @@ class TestPassthroughEnricherNamespaced:
         assert "content" not in enriched.data[0]
         assert "pt" not in enriched.data[0]
 
-    def test_multiple_passthrough_fields(self):
-        """Multiple passthrough fields all merge into action namespace."""
+    def test_multiple_passthrough_namespaces(self):
+        """Multiple passthrough namespaces all land at content level."""
         content = {**_namespaced_content(), "action_c": {"llm_field": "val"}}
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[{"content": content}],
-            passthrough_fields={"pt_a": "a", "pt_b": "b", "pt_c": "c"},
+            passthrough_fields={"ns_a": {"a": 1}, "ns_b": {"b": 2}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
-        ns = enriched.data[0]["content"]["action_c"]
-        assert ns["pt_a"] == "a"
-        assert ns["pt_b"] == "b"
-        assert ns["pt_c"] == "c"
-        assert ns["llm_field"] == "val"
+        out = enriched.data[0]["content"]
+        assert out["ns_a"] == {"a": 1}
+        assert out["ns_b"] == {"b": 2}
+        assert out["action_c"] == {"llm_field": "val"}
 
-    def test_passthrough_field_overwrites_llm_field_with_same_key(self):
-        """Passthrough field with same key as LLM output overwrites it."""
+    def test_flat_passthrough_entries_ignored(self):
+        """Non-namespaced (non-dict) passthrough entries are not merged anywhere."""
         content = {**_namespaced_content(), "action_c": {"shared_key": "llm_value"}}
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
@@ -170,44 +197,45 @@ class TestPassthroughEnricherNamespaced:
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
-        assert enriched.data[0]["content"]["action_c"]["shared_key"] == "passthrough_value"
+        out = enriched.data[0]["content"]
+        assert out["action_c"]["shared_key"] == "llm_value"
+        assert out.get("shared_key") is None
 
     def test_shared_namespace_dict_not_mutated(self):
-        """PassthroughEnricher must not mutate shared namespace dict objects in-place."""
+        """Filling gaps in an existing namespace must not mutate the shared dict in place."""
         shared_ns = {"llm_field": "original"}
-        item_a = {"content": {"action_c": shared_ns}}
+        item_a = {"content": {"upstream": shared_ns, "action_c": {"out": 1}}}
 
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=[item_a],
-            passthrough_fields={"pt_from_a": "a_value"},
+            passthrough_fields={"upstream": {"extra_field": "a_value"}},
         )
         context = _make_context("action_c")
         PassthroughEnricher().enrich(result, context)
 
-        assert item_a["content"]["action_c"]["pt_from_a"] == "a_value"
+        assert item_a["content"]["upstream"]["extra_field"] == "a_value"
+        assert item_a["content"]["upstream"]["llm_field"] == "original"
         assert shared_ns == {"llm_field": "original"}
 
     def test_shared_namespace_multiple_records_in_same_result(self):
-        """Multiple items in the same result sharing a namespace dict stay isolated."""
-        shared_ns = {"base": "value"}
+        """Inserted passthrough namespaces are independent copies per record."""
         items = [
-            {"content": {"action_c": shared_ns}},
-            {"content": {"action_c": shared_ns}},
+            {"content": {"action_c": {"idx": 0}}},
+            {"content": {"action_c": {"idx": 1}}},
         ]
         result = ProcessingResult(
             status=ProcessingStatus.SUCCESS,
             data=items,
-            passthrough_fields={"injected": "pt"},
+            passthrough_fields={"upstream": {"base": "value"}},
         )
         context = _make_context("action_c")
         enriched = PassthroughEnricher().enrich(result, context)
 
-        assert enriched.data[0]["content"]["action_c"]["injected"] == "pt"
-        assert enriched.data[1]["content"]["action_c"]["injected"] == "pt"
-        enriched.data[0]["content"]["action_c"]["extra"] = "only_in_0"
-        assert "extra" not in enriched.data[1]["content"]["action_c"]
-        assert shared_ns == {"base": "value"}
+        assert enriched.data[0]["content"]["upstream"] == {"base": "value"}
+        assert enriched.data[1]["content"]["upstream"] == {"base": "value"}
+        enriched.data[0]["content"]["upstream"]["extra"] = "only_in_0"
+        assert "extra" not in enriched.data[1]["content"]["upstream"]
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +298,7 @@ class TestEnrichmentPipelineNamespaced:
     """Full enrichment pipeline with namespaced content."""
 
     def test_full_pipeline_passthrough_in_correct_namespace(self):
-        """All enrichers run in sequence — passthrough in action namespace, others at record level."""
+        """All enrichers run in sequence — passthrough at content level, others at record level."""
         content = {
             "action_a": {"field_a": "val_a"},
             "action_b": {"field_b": "val_b"},
@@ -280,7 +308,7 @@ class TestEnrichmentPipelineNamespaced:
             status=ProcessingStatus.SUCCESS,
             data=[{"content": content, "source_guid": "sg-1"}],
             source_guid="sg-1",
-            passthrough_fields={"pt_field": "preserved_value"},
+            passthrough_fields={"upstream_hitl": {"hitl_status": "approved"}},
             pre_extracted_metadata={"model": "gpt-4"},
             recovery_metadata=RecoveryMetadata(
                 retry=RetryMetadata(attempts=2, failures=1, succeeded=True, reason="timeout")
@@ -292,10 +320,10 @@ class TestEnrichmentPipelineNamespaced:
 
         item = enriched.data[0]
 
-        # Passthrough fields merged into action_c namespace
-        assert item["content"]["action_c"]["pt_field"] == "preserved_value"
-        assert item["content"]["action_c"]["llm_field"] == "llm_output"
-        assert "pt_field" not in item["content"]
+        # Passthrough namespace is a sibling of the action namespace
+        assert item["content"]["upstream_hitl"] == {"hitl_status": "approved"}
+        assert item["content"]["action_c"] == {"llm_field": "llm_output"}
+        assert "upstream_hitl" not in item["content"]["action_c"]
 
         # Other namespaces preserved
         assert item["content"]["action_a"] == {"field_a": "val_a"}
