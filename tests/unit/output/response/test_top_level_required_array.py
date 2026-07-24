@@ -80,3 +80,27 @@ class TestDocsParserHonorsTopLevelRequired:
         assert fields["stem"] is True
         assert fields["code"] is True
         assert fields["hint"] is False
+
+
+class TestSchemaServiceHonorsTopLevelRequired:
+    def test_field_metadata_reflects_top_level_required(self):
+        from agent_actions.workflow.schema_service import WorkflowSchemaService
+
+        extract = WorkflowSchemaService._extract_field_metadata
+        schema = _schema()
+        assert extract(schema, "stem")[2] is True
+        assert extract(schema, "code")[2] is True
+        assert extract(schema, "hint")[2] is False
+
+    def test_field_metadata_explicit_required_false_beats_top_level(self):
+        from agent_actions.workflow.schema_service import WorkflowSchemaService
+
+        extract = WorkflowSchemaService._extract_field_metadata
+        schema = _schema(
+            fields=[
+                {"id": "stem", "type": "string", "required": False},
+                {"id": "code", "type": "string"},
+            ]
+        )
+        assert extract(schema, "stem")[2] is False
+        assert extract(schema, "code")[2] is True
