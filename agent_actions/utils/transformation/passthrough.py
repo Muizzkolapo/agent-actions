@@ -1,5 +1,7 @@
 """Orchestrator for passthrough transformations using the Strategy Pattern."""
 
+import copy
+
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.field_management import FieldManager
 
@@ -12,6 +14,29 @@ from .strategies import (
     PrecomputedUnstructuredStrategy,
 )
 from .strategies.base import ensure_dict_output
+
+
+def merge_passthrough_namespaces(
+    content: dict,
+    passthrough_fields: dict,
+    action_name: str,
+) -> None:
+    """Merge namespaced passthrough fields into *content* in place.
+
+    Passthrough namespaces are siblings of the action namespace, so a
+    downstream ``ns.field`` observe resolves against ``content[ns]``. Existing
+    content wins field-by-field: carry-forward may hold the fuller namespace,
+    and the action's own output must never be overwritten.
+    """
+    for ns, ns_fields in passthrough_fields.items():
+        if ns == action_name or not isinstance(ns_fields, dict):
+            continue
+        existing_ns = content.get(ns)
+        if ns not in content:
+            content[ns] = copy.deepcopy(ns_fields)
+        elif isinstance(existing_ns, dict):
+            for field_name, value in ns_fields.items():
+                existing_ns.setdefault(field_name, copy.deepcopy(value))
 
 
 class PassthroughTransformer:
@@ -108,6 +133,10 @@ class PassthroughTransformer:
             RecordEnvelope.build(action_name, ensure_dict_output(fields), envelope_input)
             for fields in action_outputs
         ]
+
+        if passthrough_fields:
+            for record in output:
+                merge_passthrough_namespaces(record["content"], passthrough_fields, action_name)
 
         return [
             self.field_manager.ensure_required_fields(
