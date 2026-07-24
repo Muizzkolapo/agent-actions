@@ -197,18 +197,18 @@ class TestContextScopeUnstructuredStrategy:
 
 
 class TestPrecomputedStructuredStrategy:
-    """PrecomputedStructuredStrategy merges passthrough, returns flat."""
+    """PrecomputedStructuredStrategy normalizes items; passthrough placement is
+    the transformer's job (content level), never the flat action output."""
 
-    def test_merges_passthrough_returns_flat(self):
+    def test_returns_flat_without_passthrough_merge(self):
         strategy = PrecomputedStructuredStrategy()
         data = [{"source_guid": "g1", "content": {"vote": "keep"}}]
-        passthrough = {"extra": "value"}
+        passthrough = {"upstream": {"extra": "value"}}
 
         result = strategy.transform(data, {}, "g1", _agent_config(), passthrough)
 
         assert len(result) == 1
-        assert result[0]["vote"] == "keep"
-        assert result[0]["extra"] == "value"
+        assert result[0] == {"vote": "keep"}
         assert "source_guid" not in result[0]
         assert "content" not in result[0]
 
@@ -216,24 +216,22 @@ class TestPrecomputedStructuredStrategy:
         """Output should not be wrapped under action namespace."""
         strategy = PrecomputedStructuredStrategy()
         data = [{"source_guid": "g1", "content": {"x": 1}}]
-        passthrough = {"y": 2}
+        passthrough = {"upstream": {"y": 2}}
 
         result = strategy.transform(data, {}, "g1", _agent_config("act"), passthrough)
 
-        # Flat — no action namespace wrapping
         assert "act" not in result[0]
-        assert result[0]["x"] == 1
-        assert result[0]["y"] == 2
+        assert result[0] == {"x": 1}
 
     def test_item_without_content_key(self):
         strategy = PrecomputedStructuredStrategy()
         data = [{"source_guid": "g1", "content": {"x": 1}}, {"other": "val"}]
-        passthrough = {"y": 2}
+        passthrough = {"upstream": {"y": 2}}
 
         result = strategy.transform(data, {}, "g1", _agent_config(), passthrough)
 
-        assert result[0] == {"x": 1, "y": 2}
-        assert result[1] == {"other": "val", "y": 2}
+        assert result[0] == {"x": 1}
+        assert result[1] == {"other": "val"}
 
 
 # ---------------------------------------------------------------------------
@@ -242,22 +240,23 @@ class TestPrecomputedStructuredStrategy:
 
 
 class TestPrecomputedUnstructuredStrategy:
-    """PrecomputedUnstructuredStrategy merges passthrough, returns flat."""
+    """PrecomputedUnstructuredStrategy normalizes items; passthrough placement is
+    the transformer's job (content level), never the flat action output."""
 
-    def test_merges_passthrough_returns_flat(self):
+    def test_returns_flat_without_passthrough_merge(self):
         strategy = PrecomputedUnstructuredStrategy()
         data = [{"vote": "keep"}]
-        passthrough = {"extra": "value"}
+        passthrough = {"upstream": {"extra": "value"}}
 
         result = strategy.transform(data, {}, "g1", _agent_config(), passthrough)
 
         assert len(result) == 1
-        assert result[0] == {"vote": "keep", "extra": "value"}
+        assert result[0] == {"vote": "keep"}
         assert "source_guid" not in result[0]
 
     def test_non_dict_items_normalized(self):
         strategy = PrecomputedUnstructuredStrategy()
-        result = strategy.transform(["text"], {}, "g1", _agent_config(), {"k": "v"})
+        result = strategy.transform(["text"], {}, "g1", _agent_config(), {"ns": {"k": "v"}})
         assert result[0] == {"value": "text"}
 
 

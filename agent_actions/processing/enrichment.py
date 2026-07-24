@@ -267,25 +267,27 @@ class PassthroughEnricher(Enricher):
     """Merge passthrough fields into results."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Merge passthrough_fields into the current action's content namespace.
+        """Merge namespaced passthrough_fields into content as sibling namespaces.
 
-        Content is namespaced: ``{"action_a": {...}, "action_b": {...}}``.
-        Passthrough fields are merged into ``content[context.action_name]``,
-        not at the top level.
+        passthrough_fields is ``{namespace: {field: value}}``. Each namespace
+        lands at content level next to the action's own namespace so a
+        downstream ``ns.field`` observe resolves against ``content[ns]``.
+        Idempotent with the transform-time merge: existing namespaces win
+        field-by-field and the action's own output is never touched.
         """
         if not result.passthrough_fields:
             return result
+
+        from agent_actions.utils.transformation.passthrough import (
+            merge_passthrough_namespaces,
+        )
 
         action_name = context.action_name
         for item in result.data:
             content = item.get("content")
             if not isinstance(content, dict):
                 continue
-            ns = content.get(action_name)
-            if isinstance(ns, dict):
-                content[action_name] = {**ns, **result.passthrough_fields}
-            else:
-                content[action_name] = dict(result.passthrough_fields)
+            merge_passthrough_namespaces(content, result.passthrough_fields, action_name)
 
         return result
 

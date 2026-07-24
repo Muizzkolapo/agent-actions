@@ -5,6 +5,7 @@ similar to TypeScript's compile-time type checking.
 """
 
 import logging
+import re
 from typing import Any
 
 from jinja2.exceptions import TemplateSyntaxError
@@ -203,6 +204,10 @@ class WorkflowStaticAnalyzer:
         # Step 2d: Catch seed_data/seed_path misuse in context_scope references
         for error in self._check_seed_reference_misuse():
             result.add_error(error)
+
+        # Step 2d-2: Warn when a seed field is both observed and template-referenced
+        for warning in self._check_seed_template_observe_overlap():
+            result.add_warning(warning)
 
         # Step 2e: Validate schema structures (pre-flight check)
         for error in self._check_schema_structures():
@@ -816,6 +821,89 @@ class WorkflowStaticAnalyzer:
                         )
 
         return errors
+
+    _SEED_TEMPLATE_REF = re.compile(r"\bseed\.([A-Za-z_][A-Za-z0-9_]*)")
+    _JINJA_SPAN = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
+
+    def _check_seed_template_observe_overlap(self) -> list[StaticTypeWarning]:
+        """Warn when a seed field is both observed and referenced in the template.
+
+        Seed data is always available to Jinja templates. Observing the same
+        field additionally injects it into the LLM context message, so the
+        value reaches the model twice.
+        """
+        from agent_actions.prompt.formatter import PromptFormatter
+
+        warnings: list[StaticTypeWarning] = []
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+
+            name = action.get("name", "unknown")
+            context_scope = action.get("context_scope") or {}
+            if not isinstance(context_scope, dict):
+                continue
+            observe = context_scope.get("observe") or []
+            if not isinstance(observe, list):
+                continue
+
+            observed_seed: set[str] = set()
+            seed_wildcard = False
+            for ref in observe:
+                if not isinstance(ref, str) or "." not in ref:
+                    continue
+                ns, field = ref.split(".", 1)
+                if ns != "seed":
+                    continue
+                if field == "*":
+                    seed_wildcard = True
+                else:
+                    observed_seed.add(field)
+            if not observed_seed and not seed_wildcard:
+                continue
+
+            try:
+                template = PromptFormatter.get_raw_prompt(action)
+            except Exception as exc:
+                logger.debug(
+                    "Cannot load prompt for action '%s', skipping seed overlap check: %s",
+                    name,
+                    exc,
+                )
+                continue
+            if not template:
+                continue
+
+            template_seed: set[str] = set()
+            for span in self._JINJA_SPAN.findall(template):
+                template_seed.update(self._SEED_TEMPLATE_REF.findall(span))
+
+            overlap = template_seed if seed_wildcard else template_seed & observed_seed
+            for field in sorted(overlap):
+                warnings.append(
+                    StaticTypeWarning(
+                        message=(
+                            f"Action '{name}': seed field '{field}' is both in "
+                            f"context_scope.observe and referenced in the prompt "
+                            f"template ({{{{ seed.{field} }}}}). The value is "
+                            f"injected twice — once via the rendered template and "
+                            f"once via the observe context message."
+                        ),
+                        location=FieldLocation(
+                            agent_name=name,
+                            config_field="context_scope.observe",
+                            raw_reference=f"seed.{field}",
+                        ),
+                        referenced_agent="seed",
+                        referenced_field=field,
+                        hint=(
+                            "Remove the observe entry (templates always see seed), "
+                            "or drop the template reference."
+                        ),
+                    )
+                )
+
+        return warnings
 
     def _check_schema_structures(self) -> list[StaticTypeError]:
         """Validate schema definitions for structural correctness.

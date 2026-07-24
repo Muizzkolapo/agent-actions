@@ -1,12 +1,16 @@
-"""Passthrough strategies for pre-computed passthrough_fields."""
+"""Passthrough strategies for pre-computed passthrough_fields.
 
-import copy
+These strategies only normalize items to flat action output dicts. The
+namespaced passthrough_fields themselves are merged at content level by
+``PassthroughTransformer`` — never into the action output, which would nest
+the passthrough namespace inside the action's own namespace.
+"""
 
 from .base import IPassthroughTransformStrategy, ensure_dict_output
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
-    """Merge precomputed passthrough fields into structured data items."""
+    """Normalize structured data items when precomputed passthrough fields exist."""
 
     def can_handle(
         self,
@@ -31,24 +35,20 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Merge passthrough fields into content, return flat action output.
-
-        Returns flat action output dicts — RecordEnvelope handles wrapping.
-        """
-        pt = passthrough_fields or {}
+        """Unwrap item content, returning flat action output dicts."""
         result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
-                result.append({**item["content"], **copy.deepcopy(pt)})
+                result.append(dict(item["content"]))
             elif isinstance(item, dict):
-                result.append({**item, **copy.deepcopy(pt)})
+                result.append(dict(item))
             else:
                 result.append(ensure_dict_output(item))
         return result
 
 
 class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
-    """Merge precomputed passthrough fields into unstructured data."""
+    """Normalize unstructured data items when precomputed passthrough fields exist."""
 
     def can_handle(
         self,
@@ -73,15 +73,11 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
         agent_config: dict,
         passthrough_fields: dict | None = None,
     ) -> list:
-        """Merge passthrough fields directly into items, return flat action output.
-
-        Returns flat action output dicts — RecordEnvelope handles wrapping.
-        """
-        pt = passthrough_fields or {}
+        """Return items as flat action output dicts."""
         merged = []
         for item in data:
             if isinstance(item, dict):
-                merged.append({**item, **copy.deepcopy(pt)})
+                merged.append(dict(item))
             else:
                 merged.append(ensure_dict_output(item))
         return merged

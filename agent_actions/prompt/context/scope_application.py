@@ -463,6 +463,17 @@ def _resolve_observe_refs_for_flat_keys(
     bare_counts = Counter(field for _, field in valid_pairs)
     collisions = {k for k, v in bare_counts.items() if v > 1}
 
+    if collisions:
+        qualified = sorted(f"{ns}.{field}" for ns, field in valid_pairs if field in collisions)
+        logger.warning(
+            "Action '%s': observe refs share bare field name(s) %s across namespaces. "
+            "Flat keys are namespace-qualified (%s) — a tool reading the bare key "
+            "will not find it; read the qualified key instead.",
+            action_name,
+            sorted(collisions),
+            ", ".join(qualified),
+        )
+
     wildcard_ns: set[str] = set()
     resolved: list[tuple[str, str, str]] = []
     for ns, field in valid_pairs:

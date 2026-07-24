@@ -32,7 +32,6 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import (
     _PERSISTENT_FIELDS,
-    RECORD_FRAMEWORK_FIELDS,
     RecordEnvelope,
 )
 from agent_actions.record.reasons import (
@@ -43,6 +42,7 @@ from agent_actions.record.reasons import (
 from agent_actions.utils.content import get_existing_content, is_version_merge
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
+from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
 
 logger = logging.getLogger(__name__)
 
@@ -326,9 +326,12 @@ class BatchResultStrategy:
         original_row = ctx.reconciler.get_record_by_id(custom_id)
         original_source_guid = ctx.reconciler.get_source_guid(custom_id)
 
+        stored_passthrough: dict[str, Any] = {}
         if ctx.agent_config:
             if custom_id in ctx.context_map:
-                generated_list = self._apply_context_passthrough(ctx, custom_id, generated_list)
+                stored_passthrough = BatchContextMetadata.get_passthrough_fields(
+                    ctx.context_map[custom_id]
+                )
             elif (ctx.agent_config.get("context_scope") or {}).get("passthrough"):
                 logger.warning(
                     "custom_id '%s' not found in context_map, skipping passthrough",
@@ -365,6 +368,8 @@ class BatchResultStrategy:
             else:
                 record = RecordEnvelope.build(action_name, item_dict, envelope_input)
                 record["source_guid"] = original_source_guid  # reconciler is authority for guid
+            if stored_passthrough:
+                merge_passthrough_namespaces(record["content"], stored_passthrough, action_name)
             structured_items.append(record)
 
         # target_id is a per-stage field — not carried by RecordEnvelope.build()
@@ -390,39 +395,6 @@ class BatchResultStrategy:
         processing_result.processing_context = processing_context
         processing_result.is_expansion = len(structured_items) > 1
         return processing_result
-
-    def _apply_context_passthrough(
-        self,
-        ctx: BatchProcessingContext,
-        custom_id: str,
-        generated_list: list[Any],
-    ) -> list[Any]:
-        """Apply stored context_scope.passthrough fields to generated items.
-
-        LLM output wins on key collisions — passthrough only fills gaps.
-        Collisions on user-content fields are logged; framework fields
-        (target_id, _state, etc.) are silently skipped.
-        """
-        stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
-
-        if stored_passthrough:
-            passthrough_keys = set(stored_passthrough.keys())
-            merged: list[Any] = []
-            for item in generated_list:
-                if isinstance(item, dict):
-                    collisions = (passthrough_keys & set(item.keys())) - RECORD_FRAMEWORK_FIELDS
-                    if collisions:
-                        logger.info(
-                            "Passthrough keys overridden by LLM output for %s: %s",
-                            custom_id,
-                            collisions,
-                        )
-                    merged.append({**stored_passthrough, **item})
-                else:
-                    merged.append(item)
-            generated_list = merged
-
-        return generated_list
 
     # -- Error / exhausted / unprocessed builders ------------------------------
 
