@@ -267,6 +267,13 @@ Schema-echo detection:
   -> "Schema-echo detected" error
       |
       v
+_deep_validation_errors()    jsonschema-backed constraint checks
+  Per-element validation of array fields against their items sub-schema
+  (errors name the element index), additionalProperties: false at top
+  level and inside elements, minimum/maximum, enum. Appends to
+  validation_errors and flips is_compliant; None field values tolerated.
+      |
+      v
 Namespace hint:
   If missing_required AND extra_fields are dicts
   -> suggests UDF is passing namespaced input without unwrapping
