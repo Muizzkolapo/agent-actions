@@ -7,7 +7,7 @@ import logging
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
-from agent_actions.config.schema_field import field_is_required
+from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -119,10 +119,11 @@ def _unguarded_refs(template: str) -> set[tuple[str, str]]:
 def _optional_field_names(schema: dict) -> set[str]:
     """Names the producer declares but does not guarantee (optional under the schema's default)."""
     required_by_default = schema.get("required_by_default", False)
+    top_level_required = top_level_required_ids(schema)
     return {
         f["id"]
         for f in schema.get("fields", [])
-        if "id" in f and not field_is_required(f, required_by_default)
+        if "id" in f and not field_is_required(f, required_by_default, top_level_required)
     }
 
 

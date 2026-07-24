@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from agent_actions.config.schema_field import field_is_required
+from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_validator import SchemaValidator
 
@@ -255,20 +255,12 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
     # Handle unified format with 'fields' array
     if "fields" in schema:
         required_by_default = schema.get("required_by_default", False)
-        top_level_required = set(schema.get("required", []))
+        top_level_required = top_level_required_ids(schema)
         for field_def in schema.get("fields", []):
             field_id = field_def.get("id") or field_def.get("name")
             if field_id:
                 all_fields.add(field_id)
-                if "required" in field_def:
-                    # Per-field annotation is authoritative
-                    if field_def["required"]:
-                        required_fields.add(field_id)
-                elif field_id in top_level_required:
-                    # Fall back to top-level required array
-                    required_fields.add(field_id)
-                elif field_is_required(field_def, required_by_default):
-                    # optional: true opts out; unmarked follows required_by_default
+                if field_is_required(field_def, required_by_default, top_level_required):
                     required_fields.add(field_id)
                 if "type" in field_def:
                     field_types[field_id] = field_def["type"]

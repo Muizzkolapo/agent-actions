@@ -8,7 +8,7 @@ Compiles unified schemas into the format required by each LLM vendor
 import logging
 from typing import Any
 
-from agent_actions.config.schema_field import field_is_required
+from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigValidationError
 from agent_actions.utils.json_safety import ensure_json_safe
 
@@ -63,10 +63,11 @@ def compile_unified_schema(
     properties: dict[str, Any] = {}
     required: list[str] = []
     required_by_default = unified.get("required_by_default", False)
+    top_level_required = top_level_required_ids(unified)
     for field in unified.get("fields", []):
         key, schema_prop = compile_field(field, target_system)
         properties[key] = schema_prop
-        if field_is_required(field, required_by_default):
+        if field_is_required(field, required_by_default, top_level_required):
             required.append(key)
     target = target_system.lower()
     compiled: dict[str, Any] | list[dict[str, Any]]

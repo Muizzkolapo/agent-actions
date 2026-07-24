@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from agent_actions.config.schema_field import field_is_required
+from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.models.action_schema import (
     ActionKind,
     ActionSchema,
@@ -200,6 +200,7 @@ class WorkflowSchemaService:
         # Format 1: Custom 'fields' array — [{id, type, description}, ...]
         if "fields" in json_schema and isinstance(json_schema["fields"], list):
             required_by_default = json_schema.get("required_by_default", False)
+            top_level_required = top_level_required_ids(json_schema)
             for field_def in json_schema["fields"]:
                 if not isinstance(field_def, dict):
                     continue
@@ -208,7 +209,7 @@ class WorkflowSchemaService:
                     return (
                         field_def.get("type", "unknown"),
                         field_def.get("description", ""),
-                        field_is_required(field_def, required_by_default),
+                        field_is_required(field_def, required_by_default, top_level_required),
                     )
                 # Array field with items.properties
                 if (

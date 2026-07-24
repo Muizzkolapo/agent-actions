@@ -6,7 +6,7 @@ from typing import Any
 import click
 import yaml
 
-from agent_actions.config.schema_field import field_is_required
+from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
     # Format 1: Custom 'fields' array
     if "fields" in raw_schema and isinstance(raw_schema["fields"], list):
         required_by_default = raw_schema.get("required_by_default", False)
+        top_level_required = top_level_required_ids(raw_schema)
         for field_def in raw_schema["fields"]:
             # Handle nested array with items.properties
             if (
@@ -47,7 +48,9 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
                         "name": field_def["id"],
                         "type": field_def.get("type", "unknown"),
                         "description": field_def.get("description", ""),
-                        "required": field_is_required(field_def, required_by_default),
+                        "required": field_is_required(
+                            field_def, required_by_default, top_level_required
+                        ),
                     }
                 )
 
