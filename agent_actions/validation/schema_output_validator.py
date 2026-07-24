@@ -5,11 +5,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import jsonschema  # type: ignore[import-untyped]
+
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
+
+_CONSTRAINT_KEYS = ("minimum", "maximum", "enum")
 
 # Reuse the canonical set of JSON Schema keywords defined in SchemaValidator
 # rather than maintaining a separate list.  When an LLM "echoes" the schema
@@ -179,6 +183,11 @@ def validate_output_against_schema(
             f"Extra fields not allowed in strict mode: {', '.join(extra_fields)}"
         )
 
+    deep_errors = _deep_validation_errors(llm_output, schema, extra_fields)
+    if deep_errors:
+        is_compliant = False
+        validation_errors.extend(deep_errors)
+
     # Detect action-namespaced output: extra keys whose values are dicts
     # suggest the UDF is passing through namespaced input instead of
     # unwrapping it via content.get("action_name", {}).get("field").
@@ -313,6 +322,96 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
                 field_types[k] = v
 
     return all_fields, required_fields, field_types
+
+
+def _deep_validation_errors(
+    llm_output: Any,
+    schema: dict[str, Any],
+    extra_fields: list[str],
+) -> list[str]:
+    """Constraint checks the flat pass skips: per-element items, additionalProperties, bounds, enum."""
+    errors: list[str] = []
+
+    if schema.get("additionalProperties") is False and extra_fields:
+        errors.append(
+            f"Extra fields not allowed (additionalProperties: false): {', '.join(extra_fields)}"
+        )
+
+    if "fields" in schema:
+        for field_def in schema.get("fields", []):
+            if not isinstance(field_def, dict):
+                continue
+            field_id = field_def.get("id") or field_def.get("name")
+            if field_id:
+                errors.extend(_field_value_errors(llm_output, field_id, field_def))
+    elif "properties" in schema and isinstance(schema["properties"], dict):
+        for prop_name, prop_def in schema["properties"].items():
+            if isinstance(prop_def, dict):
+                errors.extend(_field_value_errors(llm_output, prop_name, prop_def))
+    elif "schema" in schema and isinstance(schema["schema"], dict):
+        errors.extend(_deep_validation_errors(llm_output, schema["schema"], extra_fields))
+    elif (
+        schema.get("type") == "array"
+        and isinstance(schema.get("items"), dict)
+        and isinstance(llm_output, list)
+    ):
+        errors.extend(_element_errors(llm_output, schema["items"], field_name=None))
+
+    return errors
+
+
+def _field_value_errors(llm_output: Any, field_name: str, field_def: dict[str, Any]) -> list[str]:
+    """Deep errors for one output field: per-element items validation plus value constraints."""
+    if not isinstance(llm_output, dict) or field_name not in llm_output:
+        return []
+    value = llm_output[field_name]
+    if value is None:
+        return []
+
+    errors: list[str] = []
+    items = field_def.get("items")
+    if field_def.get("type") == "array" and isinstance(items, dict) and isinstance(value, list):
+        errors.extend(_element_errors(value, items, field_name=field_name))
+    errors.extend(_constraint_errors(value, field_name, field_def))
+    return errors
+
+
+def _element_errors(
+    elements: list[Any],
+    items_schema: dict[str, Any],
+    field_name: str | None,
+) -> list[str]:
+    """Validate each array element against the items sub-schema, naming the element index."""
+    location = f"'items' for field '{field_name}'" if field_name else "'items'"
+    try:
+        jsonschema.Draft202012Validator.check_schema(items_schema)
+    except jsonschema.exceptions.SchemaError as e:
+        return [f"Invalid {location} sub-schema: {e.message}"]
+
+    validator = jsonschema.Draft202012Validator(items_schema)
+    prefix = f"Field '{field_name}' element" if field_name else "Element"
+    errors: list[str] = []
+    for idx, element in enumerate(elements):
+        for message in sorted(err.message for err in validator.iter_errors(element)):
+            errors.append(f"{prefix} {idx}: {message}")
+    return errors
+
+
+def _constraint_errors(value: Any, field_name: str, field_def: dict[str, Any]) -> list[str]:
+    """Validate a field value against its declared minimum/maximum/enum constraints."""
+    constraints = {k: field_def[k] for k in _CONSTRAINT_KEYS if k in field_def}
+    if not constraints:
+        return []
+    try:
+        jsonschema.Draft202012Validator.check_schema(constraints)
+    except jsonschema.exceptions.SchemaError as e:
+        return [f"Invalid constraints for field '{field_name}': {e.message}"]
+
+    validator = jsonschema.Draft202012Validator(constraints)
+    return [
+        f"Field '{field_name}': {message}"
+        for message in sorted(err.message for err in validator.iter_errors(value))
+    ]
 
 
 def _extract_output_fields(llm_output: Any) -> set[str]:
