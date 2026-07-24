@@ -1,7 +1,8 @@
 """Tests for enrichment pipeline with namespaced content.
 
 Content is namespaced: {"action_a": {...}, "action_b": {...}}.
-PassthroughEnricher must merge into content[action_name], not top-level.
+PassthroughEnricher places passthrough namespaces at content level, as
+siblings of the action namespace — never inside content[action_name].
 Other enrichers must NOT modify content internals — they work at record level.
 """
 
