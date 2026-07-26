@@ -103,3 +103,8 @@ class TestCompatibleGuardLiteralsStaySilent:
     def test_null_literal_no_warning(self):
         wf = _workflow({"approved": "string"}, "producer.approved != null")
         assert _type_warnings(WorkflowStaticAnalyzer(wf).analyze()) == []
+
+    def test_nullable_union_type_no_warning_and_no_crash(self):
+        wf = _workflow({"status": "string"}, 'producer.status == "approved"')
+        wf["actions"][0]["schema"]["properties"]["status"] = {"type": ["string", "null"]}
+        assert _type_warnings(WorkflowStaticAnalyzer(wf).analyze()) == []

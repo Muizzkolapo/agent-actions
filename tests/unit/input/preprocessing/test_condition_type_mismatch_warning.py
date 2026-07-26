@@ -139,6 +139,32 @@ class TestCompatibleComparisonsStaySilent:
 
 
 @pytest.mark.usefixtures("_enable_log_propagation", "_reset_mismatch_dedup")
+class TestOperandOrderAndOperatorScope:
+    def test_literal_on_left_field_on_right_warns(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            _evaluate(
+                {"content": {"review": {"approved": "true"}}},
+                "true == review.approved",
+            )
+
+        warnings = _mismatch_warnings(caplog)
+        assert len(warnings) == 1
+        assert "review.approved" in warnings[0].message
+
+    def test_in_operator_stays_exempt(self, caplog):
+        """IN compares a scalar against an array-shaped literal by design —
+        a family check would flag every legitimate membership test."""
+        with caplog.at_level(logging.WARNING):
+            result = _evaluate(
+                {"content": {"page": {"density": "high"}}},
+                'page.density IN ["high", "medium"]',
+            )
+
+        assert result.should_execute is True
+        assert _mismatch_warnings(caplog) == []
+
+
+@pytest.mark.usefixtures("_enable_log_propagation", "_reset_mismatch_dedup")
 class TestWarningDeduplication:
     def test_same_mismatch_across_records_warns_once(self, caplog):
         evaluator = GuardEvaluator(GuardFilter(enable_metrics=False))

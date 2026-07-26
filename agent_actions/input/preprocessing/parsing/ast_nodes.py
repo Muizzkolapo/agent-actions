@@ -23,10 +23,11 @@ class MissingFieldError(ValueError):
 class GuardSemanticError(ValueError):
     """Raised when a guard condition has a structural problem.
 
-    Examples: unquoted string literal on comparison RHS, type mismatch
-    in comparison operands. Distinct from MissingFieldError (data-level)
-    because semantic errors are deterministic — they fail for every record,
-    not just records missing a field.
+    Example: unquoted string literal on comparison RHS. Distinct from
+    MissingFieldError (data-level) because semantic errors are
+    deterministic — they fail for every record, not just records missing
+    a field. Operand type mismatches warn instead of raising: the same
+    condition can be valid for one record's data and not another's.
     """
 
     pass

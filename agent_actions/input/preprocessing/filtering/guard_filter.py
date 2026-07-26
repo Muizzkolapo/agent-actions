@@ -266,11 +266,14 @@ class GuardFilter:
 
     def clear_cache(self):
         """Clear all caches."""
+        from ..parsing.ast_nodes import _reset_type_mismatch_warnings
+
         self.parser.clear_cache()
         self._cached_parse.cache_clear()
         with self._circuit_lock:
             self._semantic_error_cache.clear()
             self._error_counts.clear()
+        _reset_type_mismatch_warnings()
 
     def shutdown(self):
         """Shutdown the filter service."""

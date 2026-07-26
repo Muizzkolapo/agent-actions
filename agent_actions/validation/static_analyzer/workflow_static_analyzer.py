@@ -997,7 +997,9 @@ class WorkflowStaticAnalyzer:
                 if not producer_schema:
                     continue
                 declared = self._extract_field_types_from_schema(producer_schema).get(field_name)
-                declared_family = self._JSON_TYPE_FAMILIES.get(declared or "")
+                if not isinstance(declared, str):
+                    continue  # union types like ["string", "null"] stay unchecked
+                declared_family = self._JSON_TYPE_FAMILIES.get(declared)
                 literal_family = value_type_family(literal_node.value)
                 if not families_never_comparable(declared_family, literal_family):
                     continue
