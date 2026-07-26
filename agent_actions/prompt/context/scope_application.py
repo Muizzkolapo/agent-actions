@@ -435,13 +435,15 @@ def _resolve_source_content(
 def _resolve_observe_refs_for_flat_keys(
     observe_refs: list[str],
     action_name: str = "unknown",
+    *,
+    emit_diagnostics: bool = True,
 ) -> tuple[list[tuple[str, str, str]], bool]:
     """Parse observe refs and detect bare-key collisions for FILE mode flat key injection.
 
-    Returns (resolved, qualify_wildcards) where resolved is a list of
-    (namespace, field_name, output_key) triples. output_key is
-    namespace-qualified when bare-key collisions are detected.
-    qualify_wildcards is True when multiple wildcard namespaces exist.
+    Returns (resolved, qualify_wildcards): (namespace, field_name, output_key)
+    triples with output_key namespace-qualified on collision, and whether
+    multiple wildcard namespaces exist. ``emit_diagnostics=False`` is for
+    per-record callers re-resolving refs the enrichment pass already diagnosed.
     """
     valid_pairs: list[tuple[str, str]] = []
 
@@ -450,20 +452,21 @@ def _resolve_observe_refs_for_flat_keys(
             ns, field = parse_field_reference(ref)
             valid_pairs.append((ns, field))
         except ValueError as e:
-            fire_event(
-                ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=ref,
-                    reason=str(e),
-                    directive="resolve_observe_refs",
+            if emit_diagnostics:
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=ref,
+                        reason=str(e),
+                        directive="resolve_observe_refs",
+                    )
                 )
-            )
             continue
 
     bare_counts = Counter(field for _, field in valid_pairs)
     collisions = {k for k, v in bare_counts.items() if v > 1}
 
-    if collisions:
+    if collisions and emit_diagnostics:
         qualified = sorted(f"{ns}.{field}" for ns, field in valid_pairs if field in collisions)
         logger.warning(
             "Action '%s': observe refs share bare field name(s) %s across namespaces. "

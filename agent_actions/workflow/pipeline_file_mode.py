@@ -132,13 +132,15 @@ def _resolve_input_record(
 def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     """Extract observed business fields from an enriched record for tool input.
 
-    Reads from enriched content where drops have already been applied by
-    ``apply_context_scope_for_records()``.  Uses ``parse_field_reference()``
-    for validated ref parsing instead of the former ``str.split()`` shadow.
-
+    Reads post-drop enriched content. Bare field names colliding across
+    observed namespaces are delivered namespace-qualified (``ns.field``),
+    matching the flat keys enrichment injects; qualification follows the
+    declared refs, not namespace presence, so tools see stable key shapes.
     When no observe is configured, flattens all content namespaces.
     """
-    from agent_actions.prompt.context.scope_parsing import parse_field_reference
+    from agent_actions.prompt.context.scope_application import (
+        _resolve_observe_refs_for_flat_keys,
+    )
 
     content = record.get("content")
     if not isinstance(content, dict):
@@ -155,20 +157,21 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
         return business
 
     # Extract observed fields from post-drop enriched content.
-    # Drops were already applied by apply_context_scope_for_records().
+    # Drops and collision diagnostics were already handled by
+    # apply_context_scope_for_records().
+    resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
+        observe_refs, emit_diagnostics=False
+    )
     business = {}
-    for ref in observe_refs:
-        try:
-            ns, field = parse_field_reference(ref)
-        except ValueError:
-            continue  # Bad ref — already logged by scope application
+    for ns, field, output_key in resolved:
         ns_data = content.get(ns)
         if not isinstance(ns_data, dict):
             continue
         if field == "*":
-            business.update(ns_data)
+            for f, v in ns_data.items():
+                business[f"{ns}.{f}" if qualify_wildcards else f] = v
         elif field in ns_data:
-            business[field] = ns_data[field]
+            business[output_key] = ns_data[field]
 
     return business
 
