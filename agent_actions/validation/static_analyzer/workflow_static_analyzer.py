@@ -224,6 +224,10 @@ class WorkflowStaticAnalyzer:
         for warning in self._check_guard_nullable_fields():
             result.add_warning(warning)
 
+        # Step 2h: Guard literals whose type can never match the field's schema type
+        for warning in self._check_guard_literal_type_mismatch():
+            result.add_warning(warning)
+
         for warning in guard_skip_observe_warnings:
             result.add_warning(warning)
 
@@ -900,6 +904,140 @@ class WorkflowStaticAnalyzer:
                             "Remove the observe entry (templates always see seed), "
                             "or drop the template reference."
                         ),
+                    )
+                )
+
+        return warnings
+
+    _GUARD_TYPE_CHECKED_OPERATORS = frozenset({"EQ", "NE", "LT", "LE", "GT", "GE"})
+
+    _JSON_TYPE_FAMILIES = {
+        "string": "string",
+        "boolean": "boolean",
+        "integer": "number",
+        "number": "number",
+        "array": "array",
+        "object": "object",
+    }
+
+    def _check_guard_literal_type_mismatch(self) -> list[StaticTypeWarning]:
+        """Warn when a guard comparison literal can never match the referenced
+        field's declared schema type.
+
+        ``producer.approved == true`` with ``approved`` declared ``string``
+        evaluates false for every record regardless of data — with
+        ``on_false: filter`` the whole dataset silently disappears. The
+        runtime warns per record; this surfaces the same mismatch before any
+        record is processed.
+        """
+        from agent_actions.input.preprocessing.parsing.ast_nodes import (
+            ComparisonNode,
+            FieldNode,
+            LiteralNode,
+            LogicalNode,
+            families_never_comparable,
+            format_node,
+            value_type_family,
+        )
+        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+        def iter_field_literal_comparisons(node):
+            if isinstance(node, LogicalNode):
+                yield from iter_field_literal_comparisons(node.left)
+                if node.right is not None:
+                    yield from iter_field_literal_comparisons(node.right)
+            elif isinstance(node, ComparisonNode):
+                if isinstance(node.left, FieldNode) and isinstance(node.right, LiteralNode):
+                    yield node, node.left, node.right
+                elif isinstance(node.left, LiteralNode) and isinstance(node.right, FieldNode):
+                    yield node, node.right, node.left
+
+        warnings: list[StaticTypeWarning] = []
+        parser: WhereClauseParser | None = None
+
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            consumer_name = action.get("name", "unknown")
+            guard = action.get("guard")
+            if isinstance(guard, dict):
+                condition = guard.get("condition")
+            elif isinstance(guard, str):
+                condition = guard
+            else:
+                condition = None
+            if not condition or not isinstance(condition, str):
+                continue
+            if condition.strip().startswith("udf:"):
+                continue
+
+            if parser is None:
+                parser = WhereClauseParser()
+            parse_result = parser.parse(condition)
+            if not parse_result.success or parse_result.ast is None:
+                continue  # unparseable conditions are surfaced at evaluation time
+
+            for comparison, field_node, literal_node in iter_field_literal_comparisons(
+                parse_result.ast.root
+            ):
+                if comparison.operator.name not in self._GUARD_TYPE_CHECKED_OPERATORS:
+                    continue
+                if literal_node.value is None:
+                    continue
+                path = field_node.field_path
+                if "." not in path:
+                    continue
+                producer_name, field_name = path.split(".", 1)
+                if "." in field_name:
+                    continue  # schema types are tracked per top-level field
+                producer_node = self.graph.get_node(producer_name)
+                if not producer_node:
+                    continue
+                producer_schema = producer_node.output_schema.json_schema
+                if not producer_schema:
+                    continue
+                declared = self._extract_field_types_from_schema(producer_schema).get(field_name)
+                if not isinstance(declared, str):
+                    continue  # union types like ["string", "null"] stay unchecked
+                declared_family = self._JSON_TYPE_FAMILIES.get(declared)
+                literal_family = value_type_family(literal_node.value)
+                if not families_never_comparable(declared_family, literal_family):
+                    continue
+
+                message = (
+                    f"Guard on action '{consumer_name}': type mismatch in "
+                    f"'{format_node(comparison)}' — '{path}' is declared "
+                    f"'{declared}' in the schema of '{producer_name}' but the "
+                    f"literal is {literal_family} ({literal_node.value!r}); the "
+                    f"comparison outcome is decided by the types, not the data."
+                )
+                if declared_family == "string" and literal_family in ("boolean", "number"):
+                    literal_value = literal_node.value
+                    quoted = (
+                        str(literal_value).lower()
+                        if isinstance(literal_value, bool)
+                        else str(literal_value)
+                    )
+                    hint = (
+                        f"Quote the literal (e.g. {path} "
+                        f'{comparison.operator.value} "{quoted}"), or change the '
+                        f"schema type."
+                    )
+                elif declared_family == "boolean" and literal_family == "string":
+                    hint = "Compare against true/false without quotes, or change the schema type."
+                else:
+                    hint = "Align the literal with the field's declared schema type."
+                warnings.append(
+                    StaticTypeWarning(
+                        message=message,
+                        location=FieldLocation(
+                            agent_name=consumer_name,
+                            config_field="guard",
+                            raw_reference=path,
+                        ),
+                        referenced_agent=producer_name,
+                        referenced_field=field_name,
+                        hint=hint,
                     )
                 )
 

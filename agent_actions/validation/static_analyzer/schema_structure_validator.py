@@ -14,6 +14,16 @@ class SchemaStructureValidator:
     # Valid JSON Schema types
     VALID_TYPES = {"string", "number", "integer", "boolean", "array", "object", "null"}
 
+    def _is_valid_type_declaration(self, type_value: Any) -> bool:
+        """A known type name, or a non-empty union list of known names."""
+        if isinstance(type_value, str):
+            return type_value in self.VALID_TYPES
+        if isinstance(type_value, list):
+            return bool(type_value) and all(
+                isinstance(t, str) and t in self.VALID_TYPES for t in type_value
+            )
+        return False
+
     def validate_schema(
         self,
         schema: dict[str, Any],
@@ -169,8 +179,12 @@ class SchemaStructureValidator:
                     hint="Add 'type' key: string, number, integer, boolean, array, or object",
                 )
             )
-        elif field_type not in self.VALID_TYPES:
-            if not (field_type.startswith("array[") and field_type.endswith("]")):
+        elif not self._is_valid_type_declaration(field_type):
+            if not (
+                isinstance(field_type, str)
+                and field_type.startswith("array[")
+                and field_type.endswith("]")
+            ):
                 errors.append(
                     StaticTypeError(
                         message=f"Field '{field_id}' has invalid type '{field_type}'",
@@ -203,7 +217,7 @@ class SchemaStructureValidator:
         errors: list[StaticTypeError] = []
 
         schema_type = schema.get("type")
-        if schema_type not in self.VALID_TYPES:
+        if not self._is_valid_type_declaration(schema_type):
             errors.append(
                 StaticTypeError(
                     message=f"Invalid schema type '{schema_type}'",
@@ -310,7 +324,7 @@ class SchemaStructureValidator:
                         hint="Add type: string, number, integer, boolean, array, or object",
                     )
                 )
-            elif prop_type not in self.VALID_TYPES:
+            elif not self._is_valid_type_declaration(prop_type):
                 errors.append(
                     StaticTypeError(
                         message=f"Property '{prop_name}' has invalid type '{prop_type}'",

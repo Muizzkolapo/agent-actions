@@ -23,10 +23,11 @@ class MissingFieldError(ValueError):
 class GuardSemanticError(ValueError):
     """Raised when a guard condition has a structural problem.
 
-    Examples: unquoted string literal on comparison RHS, type mismatch
-    in comparison operands. Distinct from MissingFieldError (data-level)
-    because semantic errors are deterministic — they fail for every record,
-    not just records missing a field.
+    Example: unquoted string literal on comparison RHS. Distinct from
+    MissingFieldError (data-level) because semantic errors are
+    deterministic — they fail for every record, not just records missing
+    a field. Operand type mismatches warn instead of raising: the same
+    condition can be valid for one record's data and not another's.
     """
 
     pass
@@ -35,6 +36,91 @@ class GuardSemanticError(ValueError):
 def _is_null_or_empty_namespace(ns_value: Any) -> bool:
     """Return True if namespace value is null (NullNamespace/None) or empty dict."""
     return is_null_namespace(ns_value) or (isinstance(ns_value, dict) and not ns_value)
+
+
+def value_type_family(value: Any) -> str | None:
+    """Coarse type family used to detect never-comparable operand pairs."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int | float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list | tuple):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return None
+
+
+def families_never_comparable(left: str | None, right: str | None) -> bool:
+    """Whether two type families make ==, != and ordering comparisons
+    type-determined rather than data-determined.
+
+    boolean/number stays comparable (``True == 1`` holds), and an unknown
+    family never triggers — this must only fire on certain mismatches.
+    """
+    if left is None or right is None or left == right:
+        return False
+    return {left, right} != {"boolean", "number"}
+
+
+_TYPE_CHECKED_OPERATOR_NAMES = frozenset({"EQ", "NE", "LT", "LE", "GT", "GE"})
+
+_TYPE_MISMATCH_SEEN: set[tuple[str, str, str, str]] = set()
+_TYPE_MISMATCH_SEEN_MAX = 1024
+
+
+def _reset_type_mismatch_warnings() -> None:
+    _TYPE_MISMATCH_SEEN.clear()
+
+
+def _warn_comparison_type_mismatch(
+    node: "ComparisonNode", left_value: Any, right_value: Any
+) -> None:
+    """Warn once per (field, operator, families) when a field/literal comparison
+    can only ever resolve one way because the operand types never compare.
+
+    Silent cross-type comparisons make ``on_false: filter`` guards drop every
+    record with no signal; the result is left untouched (strict, no coercion) —
+    this only adds the missing announcement.
+    """
+    if node.operator.name not in _TYPE_CHECKED_OPERATOR_NAMES:
+        return
+    if isinstance(node.left, FieldNode) and isinstance(node.right, LiteralNode):
+        field_node, field_value, literal_value = node.left, left_value, right_value
+    elif isinstance(node.right, FieldNode) and isinstance(node.left, LiteralNode):
+        field_node, field_value, literal_value = node.right, right_value, left_value
+    else:
+        return
+    if field_value is None or literal_value is None:
+        return
+
+    field_family = value_type_family(field_value)
+    literal_family = value_type_family(literal_value)
+    if not families_never_comparable(field_family, literal_family):
+        return
+
+    key = (field_node.field_path, node.operator.name, str(field_family), str(literal_family))
+    if key in _TYPE_MISMATCH_SEEN or len(_TYPE_MISMATCH_SEEN) >= _TYPE_MISMATCH_SEEN_MAX:
+        return
+    _TYPE_MISMATCH_SEEN.add(key)
+
+    message = (
+        f"Condition '{format_node(node)}': type mismatch — field "
+        f"'{field_node.field_path}' has a {field_family} value ({field_value!r}) "
+        f"but is compared to a {literal_family} literal ({literal_value!r}); "
+        f"the outcome is decided by the types, not the data."
+    )
+    if field_family == "string" and literal_family in ("boolean", "number"):
+        quoted = (
+            str(literal_value).lower() if isinstance(literal_value, bool) else str(literal_value)
+        )
+        message += (
+            f" If the field is stored as a string, quote the literal "
+            f'(e.g. {field_node.field_path} {node.operator.value} "{quoted}").'
+        )
+    logger.warning(message)
 
 
 def _field_exists(data: Any, field_path: str) -> bool:
@@ -255,6 +341,7 @@ def evaluate_node(
                     ) from e
                 raise
 
+        _warn_comparison_type_mismatch(node, left_value, right_value)
         try:
             return op_fn(left_value, right_value)
         except (TypeError, ValueError):
