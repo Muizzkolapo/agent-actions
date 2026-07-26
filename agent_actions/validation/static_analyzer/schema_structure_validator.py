@@ -217,7 +217,7 @@ class SchemaStructureValidator:
         errors: list[StaticTypeError] = []
 
         schema_type = schema.get("type")
-        if schema_type not in self.VALID_TYPES:
+        if not self._is_valid_type_declaration(schema_type):
             errors.append(
                 StaticTypeError(
                     message=f"Invalid schema type '{schema_type}'",
