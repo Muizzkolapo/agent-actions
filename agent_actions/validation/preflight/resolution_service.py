@@ -254,8 +254,32 @@ class WorkflowResolutionService:
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
 
-        seed_data_dir = self._resolve_seed_data_dir()
+        seed_data_dir, seed_dir_name = self._resolve_seed_data_dir()
         if seed_data_dir is None:
+            # No seed directory anywhere — an error for any action that
+            # declares seed refs (the runtime loader would fail per record).
+            for action_name, action_config in self.action_configs.items():
+                context_scope = action_config.get("context_scope") or {}
+                seed_config = context_scope.get("seed", {})
+                if seed_config and isinstance(seed_config, dict):
+                    errors.append(
+                        StaticTypeError(
+                            message=(
+                                f"Seed data directory not found: create '{seed_dir_name}' at "
+                                "the workflow root (same level as agent_config/) or at the "
+                                "project root"
+                            ),
+                            location=FieldLocation(
+                                agent_name=action_name,
+                                config_field="context_scope.seed",
+                                raw_reference=seed_dir_name,
+                            ),
+                            referenced_agent=action_name,
+                            referenced_field="seed",
+                            hint=f"Declared seed fields: {', '.join(sorted(seed_config))}",
+                        )
+                    )
+                    break
             return errors, warnings
 
         # Phase 1: validate file existence and load seed data
@@ -530,32 +554,15 @@ class WorkflowResolutionService:
 
     # ── Helpers ────────────────────────────────────────────────────────
 
-    def _resolve_seed_data_dir(self) -> Path | None:
-        """Resolve the seed data directory from workflow config path.
+    def _resolve_seed_data_dir(self) -> tuple[Path | None, str]:
+        """Resolve the seed data directory via the shared runtime resolver.
 
-        Uses the ``seed_data_path`` setting from ``agent_actions.yml``
-        when available, falling back to ``"seed_data"``.
+        Preflight must consult the same folder the runtime loader will use
+        (workflow root first, then project root).
         """
         if not self.workflow_config_path:
-            return None
+            return None, "seed_data"
 
-        from agent_actions.config.path_config import find_project_root_dir, get_seed_data_path
+        from agent_actions.config.path_config import resolve_seed_data_dir
 
-        seed_dir_name = "seed_data"
-        config_start = Path(self.workflow_config_path).parent
-        project_root = find_project_root_dir(config_start)
-        if project_root is not None:
-            seed_dir_name = get_seed_data_path(project_root)
-
-        config_path = Path(self.workflow_config_path).resolve()
-        current = config_path.parent
-        while current != current.parent:
-            if (current / "agent_config").exists():
-                seed_dir = current / seed_dir_name
-                return seed_dir if seed_dir.exists() else None
-            if current.name == "agent_config":
-                seed_dir = current.parent / seed_dir_name
-                return seed_dir if seed_dir.exists() else None
-            current = current.parent
-
-        return None
+        return resolve_seed_data_dir(self.workflow_config_path)

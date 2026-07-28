@@ -515,8 +515,8 @@ class TestExistingChecksUnchanged:
         seed_errors = [e for e in result.errors if "seed" in e.message.lower()]
         assert len(seed_errors) == 0
 
-    def test_seed_data_dir_missing_graceful_skip(self, tmp_path):
-        """No seed_data directory → graceful skip (existing behavior)."""
+    def test_seed_data_dir_missing_with_seed_refs_errors(self, tmp_path):
+        """No seed directory anywhere with declared seed refs is a blocking error."""
         project = tmp_path / "project"
         agent_config = project / "agent_config"
         agent_config.mkdir(parents=True)
@@ -534,8 +534,8 @@ class TestExistingChecksUnchanged:
         )
         result = svc.resolve_all()
 
-        assert len(result.errors) == 0
-        assert len(result.warnings) == 0
+        dir_errors = [e for e in result.errors if "Seed data directory not found" in e.message]
+        assert len(dir_errors) == 1
 
 
 # ---------------------------------------------------------------------------
