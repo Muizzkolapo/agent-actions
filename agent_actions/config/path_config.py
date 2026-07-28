@@ -270,3 +270,54 @@ def get_seed_data_path(project_root: Path) -> str:
         )
         return "seed_data"
     return name
+
+
+def resolve_seed_data_dir(workflow_config_path: str | None) -> tuple[Path | None, str]:
+    """Resolve the seed data directory: workflow root first, then project root.
+
+    Single authority for seed directory resolution — the runtime loader and
+    the preflight seed checks must agree on which folder is consulted.
+    Returns ``(directory, seed_dir_name)``; directory is ``None`` when
+    neither the workflow-level nor the project-level folder exists.
+    """
+    from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
+
+    seed_dir_name = "seed_data"
+    try:
+        pm = PathManager()
+        start_path = Path(workflow_config_path).parent if workflow_config_path else None
+        if start_path is not None:
+            try:
+                project_root = pm.get_project_root(start_path=start_path)
+                seed_dir_name = get_seed_data_path(project_root)
+            except ProjectRootNotFoundError:
+                logger.debug("No project root found from %s", start_path)
+
+        if workflow_config_path:
+            current = Path(workflow_config_path).resolve().parent
+            workflow_root = None
+            search_up = current
+            while search_up != search_up.parent:
+                if (search_up / "agent_config").exists():
+                    workflow_root = search_up
+                    break
+                if search_up.name == "agent_config":
+                    workflow_root = search_up.parent
+                    break
+                search_up = search_up.parent
+            if workflow_root is None:
+                workflow_root = current
+
+            workflow_seed_dir = workflow_root / seed_dir_name
+            if workflow_seed_dir.is_dir():
+                logger.debug("Found workflow-level seed data: %s", workflow_seed_dir)
+                return workflow_seed_dir, seed_dir_name
+
+        project_seed_dir = pm.get_project_root() / seed_dir_name
+        if project_seed_dir.is_dir():
+            logger.debug("Found project-level seed data: %s", project_seed_dir)
+            return project_seed_dir, seed_dir_name
+    except Exception as e:
+        logger.warning("Error during seed data resolution: %s", e, exc_info=True)
+
+    return None, seed_dir_name

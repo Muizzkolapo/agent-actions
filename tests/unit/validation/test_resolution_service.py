@@ -281,8 +281,8 @@ class TestSeedFileChecks:
         good_action_errors = [e for e in result.errors if e.location.agent_name == "good_action"]
         assert len(good_action_errors) == 0
 
-    def test_seed_data_dir_missing_graceful_skip(self, tmp_path):
-        """When seed_data directory doesn't exist, gracefully skip (no errors)."""
+    def test_seed_data_dir_missing_with_seed_refs_errors(self, tmp_path):
+        """Declared seed refs with no seed directory anywhere is a blocking error."""
         project = tmp_path / "project"
         agent_config = project / "agent_config"
         agent_config.mkdir(parents=True)
@@ -302,8 +302,9 @@ class TestSeedFileChecks:
         )
         result = svc.resolve_all()
 
-        seed_errors = [e for e in result.errors if "seed" in e.message.lower()]
-        assert len(seed_errors) == 0
+        dir_errors = [e for e in result.errors if "Seed data directory not found" in e.message]
+        assert len(dir_errors) == 1
+        assert "field1" in (dir_errors[0].hint or "")
 
 
 class TestVendorRunModeCompatibility:
