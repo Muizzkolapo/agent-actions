@@ -180,32 +180,68 @@ def _merge_group_deep(group: list[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
+_AUTO_KEY_CANDIDATES = [
+    "version_correlation_id",
+    "source_guid",
+    "root_target_id",
+    "parent_target_id",
+]
+
+
+def _has_correlation_key(record: dict[str, Any], key_name: str) -> bool:
+    if record.get(key_name):
+        return True
+    content = record.get("content")
+    return isinstance(content, dict) and bool(content.get(key_name))
+
+
+def _select_universal_key(records: list[dict[str, Any]]) -> str | None:
+    """First auto candidate present on every record that carries any candidate.
+
+    Grouping must key every record in the pool on the SAME field: branches of
+    one logical record can carry different key sets (a version-merge descendant
+    has ``version_correlation_id``, a plain branch does not), and per-record
+    key selection would place them in disjoint groups — a silent partial merge.
+    Returns None when no candidate is universal (caller falls back to
+    per-record selection).
+    """
+    keyed = [r for r in records if any(_has_correlation_key(r, k) for k in _AUTO_KEY_CANDIDATES)]
+    if not keyed:
+        return None
+    for key_name in _AUTO_KEY_CANDIDATES:
+        if all(_has_correlation_key(r, key_name) for r in keyed):
+            return key_name
+    return None
+
+
 def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> list[Any]:
     """Merge records sharing the same correlation key.
 
-    For same-source fan-in (no ``reduce_key``), uses ``merge_branch_records``
-    so each branch contributes only its own namespace and upstream is preserved
-    from the base record (first record in the group).  For ``reduce_key``
-    aggregation (different sources grouped together), uses ``deep_merge_record``.
-
-    Note: When using the branch-records path, ``group[0]`` is the canonical
-    upstream source.  Its shared namespaces survive; other records' versions
-    of the same upstream namespaces are ignored.
+    The grouping key is chosen once for the whole pool (first universal
+    candidate, identity keys before lineage keys) so branches carrying
+    different key sets still group by their shared identity; an explicit
+    ``reduce_key`` takes precedence per record.  Same-source fan-in merges
+    via ``merge_branch_records`` with ``group[0]`` as the canonical
+    upstream (its shared namespaces survive); ``reduce_key`` aggregation
+    deep-merges groups instead.
     """
     groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
 
-    key_candidates: list[str] = []
-    if reduce_key:
-        key_candidates.append(reduce_key)
-    key_candidates.extend(
-        ["version_correlation_id", "root_target_id", "parent_target_id", "source_guid"]
-    )
+    universal_key = _select_universal_key([r for r in records if isinstance(r, dict)])
 
     for record in records:
         if not isinstance(record, dict):
             records_without_key.append(record)
             continue
+
+        key_candidates: list[str] = []
+        if reduce_key:
+            key_candidates.append(reduce_key)
+        if universal_key is not None:
+            key_candidates.append(universal_key)
+        else:
+            key_candidates.extend(_AUTO_KEY_CANDIDATES)
 
         correlation_value = get_correlation_value(record, key_candidates)
         if correlation_value:
