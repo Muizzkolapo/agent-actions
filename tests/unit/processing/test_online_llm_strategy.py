@@ -581,7 +581,7 @@ class TestInvokeBatchLoop:
         results = strategy.invoke([{"f": "1"}], context)
 
         assert len(results) == 1
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[0].data[0]["_state"] == RecordState.FAILED.value
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
@@ -628,7 +628,7 @@ class TestInvokeBatchLoop:
         results = strategy.invoke([{"f": "1"}], context)
 
         assert len(results) == 1
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[0].data[0]["_state"] == RecordState.FAILED.value
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")

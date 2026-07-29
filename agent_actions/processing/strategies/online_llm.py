@@ -137,7 +137,13 @@ def _build_prep_failed_result(
     context: ProcessingContext,
     error_msg: str,
 ) -> ProcessingResult:
-    """Build a tombstone ProcessingResult for a record that failed prompt preparation."""
+    """Build a FAILED ProcessingResult for a record that failed prompt preparation.
+
+    A prep failure is a genuine failure of this action, not upstream
+    cascade-quarantine, so it is classified FAILED (matching the batch path) and
+    counts toward terminal-failure detection. The tombstone preserves lineage so
+    downstream actions still see the record and cascade-skip it.
+    """
     input_record = item if isinstance(item, dict) else None
     source_guid = input_record.get("source_guid") if input_record else None
 
@@ -158,12 +164,14 @@ def _build_prep_failed_result(
             reason=error_msg[:500],
         )
 
-    return ProcessingResult.unprocessed(
-        data=[tombstone],
-        reason=PREP_FAILED,
+    result = ProcessingResult.failed(
+        error=error_msg,
         source_guid=source_guid,
         input_record=input_record,
     )
+    result.data = [tombstone]
+    result.skip_reason = PREP_FAILED
+    return result
 
 
 class OnlineLLMStrategy:

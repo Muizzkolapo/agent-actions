@@ -67,8 +67,8 @@ class TestOnlineMultiRecordContinuation:
         results = strategy.invoke(records, context)
 
         assert len(results) == 3
-        # Record 0: tombstone
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        # Record 0: failed tombstone (a prep failure is this action's own failure)
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[0].data[0]["_state"] == RecordState.FAILED.value
         # Records 1-2: success
         assert results[1].status == ProcessingStatus.SUCCESS
@@ -98,7 +98,7 @@ class TestOnlineMultiRecordContinuation:
         results = strategy.invoke([{"source_guid": "sg_fail"}, {"source_guid": "sg_ok"}], context)
 
         assert len(results) == 2
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[1].status == ProcessingStatus.SUCCESS
 
 
@@ -154,12 +154,12 @@ class TestCascadePropagation:
         assert "question" in tombstone["_state_history"][0]["reason"]
 
 
-class TestResultCollectorPrepFailedDisposition:
-    """ResultCollector counts prep-failed tombstones correctly."""
+class TestResultCollectorUnprocessedCounting:
+    """ResultCollector counts cascade-unprocessed records separately from success/failure."""
 
     def test_unprocessed_result_counted_separately(self):
-        """Prep-failed results (UNPROCESSED) don't inflate success or failure counts."""
-        from agent_actions.record.reasons import PREP_FAILED
+        """Upstream-quarantined (UNPROCESSED) records don't inflate success or failure counts."""
+        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 
         mock_backend = MagicMock()
 
@@ -169,14 +169,8 @@ class TestResultCollectorPrepFailedDisposition:
                 source_guid="sg_1",
             ),
             ProcessingResult.unprocessed(
-                data=[
-                    {
-                        "content": {"test_action": None},
-                        "_state": RecordState.FAILED.value,
-                        "source_guid": "sg_2",
-                    }
-                ],
-                reason=PREP_FAILED,
+                data=[{"content": {"test_action": None}, "source_guid": "sg_2"}],
+                reason=UPSTREAM_UNPROCESSED,
                 source_guid="sg_2",
             ),
         ]
