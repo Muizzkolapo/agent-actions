@@ -125,6 +125,14 @@ def validate_output_against_schema(
     """Validate LLM response against expected schema."""
     schema_name = schema.get("name", "unknown")
 
+    # FILE tools return a FileUDFResult envelope (outputs=[{source_index, data}]);
+    # validate each record's business data, not the envelope keys, so a healthy
+    # tool is not reported as an empty object.
+    from agent_actions.utils.udf_management.registry import FileUDFResult
+
+    if isinstance(llm_output, FileUDFResult):
+        llm_output = [out["data"] for out in llm_output.outputs]
+
     # Check for malformed 'properties' before extracting fields
     schema_structure_errors = _check_properties_type(schema)
 
