@@ -147,6 +147,10 @@ class WorkflowStaticAnalyzer:
         # Guard-filter + fan-in observe hazard: also before wildcard expansion.
         filter_fanin_warnings = self._check_filter_fanin_observe_hazard()
 
+        # FILE-tool observe collision: also before expansion, since two wildcard
+        # namespaces qualify every flat key and expansion would hide that.
+        file_tool_collision_warnings = self._check_file_tool_observe_collision()
+
         # Step 1: Build data flow graph
         self._build_graph()
 
@@ -232,6 +236,9 @@ class WorkflowStaticAnalyzer:
             result.add_warning(warning)
 
         for warning in filter_fanin_warnings:
+            result.add_warning(warning)
+
+        for warning in file_tool_collision_warnings:
             result.add_warning(warning)
 
         # Step 3: Check for unused and missing dependencies (add as warnings)
@@ -1631,6 +1638,68 @@ class WorkflowStaticAnalyzer:
                     )
                 )
 
+        return warnings
+
+    def _check_file_tool_observe_collision(self) -> list[StaticTypeWarning]:
+        """Warn when a FILE-mode tool observes colliding field names across namespaces.
+
+        FILE tools read observed fields as flat top-level keys; when namespaces collide
+        the framework qualifies the keys (``ns.field``) and a bare read returns None.
+        Flags it at preflight instead of at runtime, and reuses the runtime resolver so
+        the two can't drift.
+        """
+        from agent_actions.prompt.context.scope_application import (
+            _resolve_observe_refs_for_flat_keys,
+        )
+
+        warnings: list[StaticTypeWarning] = []
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            if action.get("kind") != "tool" and action.get("model_vendor") != "tool":
+                continue
+            if action.get("granularity") != "file":
+                continue
+            context_scope = action.get("context_scope")
+            if not isinstance(context_scope, dict):
+                continue
+            observe_refs = context_scope.get("observe")
+            if not isinstance(observe_refs, list):
+                continue
+
+            resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
+                observe_refs, emit_diagnostics=False
+            )
+            # Match runtime exactly: a specific field is qualified when its bare name
+            # collides; wildcards are qualified only when 2+ distinct namespaces use
+            # one (qualify_wildcards) — not when the same namespace is observed twice.
+            qualified = [out for _, field, out in resolved if field != "*" and out != field]
+            if qualify_wildcards:
+                qualified += [f"{ns}.*" for ns in {ns for ns, field, _ in resolved if field == "*"}]
+            qualified = sorted(qualified)
+            if not qualified:
+                continue
+
+            name = action.get("name", "unknown")
+            warnings.append(
+                StaticTypeWarning(
+                    message=(
+                        f"FILE tool '{name}' observes namespaces with colliding field "
+                        f"names; input keys are delivered namespace-qualified "
+                        f"({', '.join(qualified)}). A tool reading the bare field name "
+                        f"receives None."
+                    ),
+                    location=FieldLocation(
+                        agent_name=name,
+                        config_field="context_scope.observe",
+                        raw_reference=", ".join(r for r in observe_refs if isinstance(r, str)),
+                    ),
+                    referenced_agent="",
+                    referenced_field="",
+                    hint="Read the namespace-qualified keys in the tool, or observe "
+                    "non-colliding fields.",
+                )
+            )
         return warnings
 
     @staticmethod
