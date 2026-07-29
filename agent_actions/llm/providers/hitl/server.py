@@ -381,6 +381,14 @@ class HitlServer:
         with self._lock:
             if self.response_event.is_set():
                 return  # Another thread already set the response
+            if (
+                status == "timeout"
+                and record_reviews is None
+                and any(r is not None for r in self.record_reviews)
+            ):
+                # Timeout callers have no payload to pass; attach the recorded
+                # reviews so the caller can report how many were completed.
+                record_reviews = list(self.record_reviews)
             self.response = {
                 "hitl_status": status,
                 "user_comment": comment,
