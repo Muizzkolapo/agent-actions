@@ -7,6 +7,8 @@ downstream UPSTREAM_UNPROCESSED, across both online and batch paths.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.errors import RecordContextError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
@@ -67,8 +69,8 @@ class TestOnlineMultiRecordContinuation:
         results = strategy.invoke(records, context)
 
         assert len(results) == 3
-        # Record 0: tombstone
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        # Record 0: failed tombstone (a prep failure is this action's own failure)
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[0].data[0]["_state"] == RecordState.FAILED.value
         # Records 1-2: success
         assert results[1].status == ProcessingStatus.SUCCESS
@@ -98,7 +100,7 @@ class TestOnlineMultiRecordContinuation:
         results = strategy.invoke([{"source_guid": "sg_fail"}, {"source_guid": "sg_ok"}], context)
 
         assert len(results) == 2
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].status == ProcessingStatus.FAILED
         assert results[1].status == ProcessingStatus.SUCCESS
 
 
@@ -154,12 +156,12 @@ class TestCascadePropagation:
         assert "question" in tombstone["_state_history"][0]["reason"]
 
 
-class TestResultCollectorPrepFailedDisposition:
-    """ResultCollector counts prep-failed tombstones correctly."""
+class TestResultCollectorUnprocessedCounting:
+    """ResultCollector counts cascade-unprocessed records separately from success/failure."""
 
     def test_unprocessed_result_counted_separately(self):
-        """Prep-failed results (UNPROCESSED) don't inflate success or failure counts."""
-        from agent_actions.record.reasons import PREP_FAILED
+        """Upstream-quarantined (UNPROCESSED) records don't inflate success or failure counts."""
+        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 
         mock_backend = MagicMock()
 
@@ -169,14 +171,8 @@ class TestResultCollectorPrepFailedDisposition:
                 source_guid="sg_1",
             ),
             ProcessingResult.unprocessed(
-                data=[
-                    {
-                        "content": {"test_action": None},
-                        "_state": RecordState.FAILED.value,
-                        "source_guid": "sg_2",
-                    }
-                ],
-                reason=PREP_FAILED,
+                data=[{"content": {"test_action": None}, "source_guid": "sg_2"}],
+                reason=UPSTREAM_UNPROCESSED,
                 source_guid="sg_2",
             ),
         ]
@@ -190,3 +186,36 @@ class TestResultCollectorPrepFailedDisposition:
         )
         assert stats.success > 0
         assert stats.unprocessed > 0
+
+
+class TestResultCollectorPrepFailureCountedAsFailed:
+    """Wired path: prep-failed results flow through the collector into stats.failed."""
+
+    def test_all_prep_failed_counted_as_failed_and_trips_guard(self):
+        from agent_actions.processing.strategies.online_llm import _build_prep_failed_result
+
+        ctx = ProcessingContext(
+            agent_config={"agent_type": "vote_quality"},
+            agent_name="vote_quality",
+            storage_backend=MagicMock(),
+        )
+        records = [{"source_guid": f"sg_{i}"} for i in range(3)]
+        results = [
+            _build_prep_failed_result(r, ctx, "Template references undefined variables: key")
+            for r in records
+        ]
+
+        output, stats = ResultCollector.collect_results(
+            results,
+            agent_config={"agent_type": "vote_quality"},
+            agent_name="vote_quality",
+            is_first_stage=False,
+            storage_backend=MagicMock(),
+        )
+
+        # The prep failures land in the failure bucket, not unprocessed, so the
+        # terminal-failure guard sees a non-zero active denominator and fires.
+        assert stats.failed == 3
+        assert stats.unprocessed == 0
+        with pytest.raises(RuntimeError, match="0 successful records"):
+            stats.raise_if_terminal_failure("vote_quality", data=records, output=output)
