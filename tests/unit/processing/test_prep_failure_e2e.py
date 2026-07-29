@@ -7,6 +7,8 @@ downstream UPSTREAM_UNPROCESSED, across both online and batch paths.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.errors import RecordContextError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
@@ -184,3 +186,36 @@ class TestResultCollectorUnprocessedCounting:
         )
         assert stats.success > 0
         assert stats.unprocessed > 0
+
+
+class TestResultCollectorPrepFailureCountedAsFailed:
+    """Wired path: prep-failed results flow through the collector into stats.failed."""
+
+    def test_all_prep_failed_counted_as_failed_and_trips_guard(self):
+        from agent_actions.processing.strategies.online_llm import _build_prep_failed_result
+
+        ctx = ProcessingContext(
+            agent_config={"agent_type": "vote_quality"},
+            agent_name="vote_quality",
+            storage_backend=MagicMock(),
+        )
+        records = [{"source_guid": f"sg_{i}"} for i in range(3)]
+        results = [
+            _build_prep_failed_result(r, ctx, "Template references undefined variables: key")
+            for r in records
+        ]
+
+        output, stats = ResultCollector.collect_results(
+            results,
+            agent_config={"agent_type": "vote_quality"},
+            agent_name="vote_quality",
+            is_first_stage=False,
+            storage_backend=MagicMock(),
+        )
+
+        # The prep failures land in the failure bucket, not unprocessed, so the
+        # terminal-failure guard sees a non-zero active denominator and fires.
+        assert stats.failed == 3
+        assert stats.unprocessed == 0
+        with pytest.raises(RuntimeError, match="0 successful records"):
+            stats.raise_if_terminal_failure("vote_quality", data=records, output=output)
