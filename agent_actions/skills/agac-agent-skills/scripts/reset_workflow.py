@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Reset workflow state.
 
-Default (soft reset): removes .agent_status.json so the next run starts from
-scratch while keeping source data and the SQLite store intact.
+Default (soft reset): removes .agent_status.json so the next run re-drives the
+workflow, while keeping source data and the SQLite store intact. Records already
+completed in the store are carried forward, not regenerated — use --full for a
+true from-scratch rebuild.
 
 --full: wipes source/, store/, target/, and .agent_status.json, then
 recreates target/.
@@ -58,7 +60,10 @@ def main() -> None:
     else:
         print(f"Soft reset: clearing {status} (keeps DB and source)")
         remove(status)
-        print(f"Done. Run `agac run -a {args.workflow} -u tools` to re-run from scratch.")
+        print(
+            f"Done. Run `agac run -a {args.workflow} -u tools` to re-drive the workflow "
+            "(completed records carry forward; use --full to regenerate everything)."
+        )
 
 
 if __name__ == "__main__":
