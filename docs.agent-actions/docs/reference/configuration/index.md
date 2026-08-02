@@ -118,7 +118,7 @@ actions:
 | `dependencies` | list | Upstream actions to wait for |
 | `prompt` | string | Inline prompt or `$store.template` reference |
 | `schema` | string | Output validation schema |
-| `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed_path` — see [Context Scope](../context/context-scope.md) |
+| `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed` — see [Context Scope](../context/context-scope.md) |
 | `data_source` | object/string | Optional input source configuration for start-node actions (defaults to `staging/`) |
 
 ### Model Fields

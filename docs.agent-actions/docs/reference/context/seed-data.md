@@ -12,7 +12,7 @@ Seed Data loads static reference data (syllabi, rubrics, lookups) into workflow 
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       exam_syllabus: $file:syllabus.json
       grading_rubric: $file:rubric.yaml
 ```
@@ -62,7 +62,7 @@ prompt: |
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       syllabus: $file:exam_syllabus.json
       rubric: $file:grading_rubric.yaml
 ```
@@ -90,7 +90,7 @@ Workflow-level (recommended):
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       syllabus: $file:syllabus.json
 ```
 
@@ -100,6 +100,6 @@ Per-action (merged with defaults):
 actions:
   - name: specialized_action
     context_scope:
-      seed_path:
+      seed:
         special_data: $file:special.json
 ```

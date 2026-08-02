@@ -85,12 +85,12 @@ prompt: |
 
 ### seed
 
-The `seed` reference accesses static seed data loaded via `context_scope.seed_path`:
+The `seed` reference accesses static seed data loaded via `context_scope.seed`:
 
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       exam_syllabus: $file:syllabus.json
 
 actions:
