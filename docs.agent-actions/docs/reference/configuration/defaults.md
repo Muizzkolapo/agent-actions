@@ -47,7 +47,7 @@ actions:
 | `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
 | `granularity` | string | `record` or `file` processing |
 | `run_mode` | string | `batch` or `online` execution |
-| `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed_path` |
+| `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed` |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
@@ -130,7 +130,7 @@ Here's where it gets interesting. The `context_scope` in defaults applies to all
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       syllabus: $file:exam_syllabus.json
       rubric: $file:grading_rubric.yaml
 
@@ -146,7 +146,7 @@ actions:
     context_scope:
       observe:
         - extract_facts.facts  # Add action-specific scope
-    # seed_path is merged with defaults
+    # seed is merged with defaults
 ```
 
 ### Context Scope Merging
@@ -156,7 +156,7 @@ You might wonder what happens when an action defines its own context_scope. Acti
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       config: $file:config.json
 
 actions:
@@ -166,7 +166,7 @@ actions:
         - upstream.field
       passthrough:
         - source.id
-    # Result: seed_path from defaults + observe/passthrough from action
+    # Result: seed from defaults + observe/passthrough from action
 ```
 
 ## Overriding Patterns

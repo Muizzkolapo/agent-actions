@@ -13,7 +13,7 @@ The context system controls how data flows between actions—referencing upstrea
 |---------|---------|--------|
 | **Field References** | Access upstream action outputs | `{{ action.field }}` |
 | **Context Scope** | Control data visibility and flow | `context_scope: {observe, drop, passthrough}` |
-| **Seed Data** | Load static reference data | `seed_path: {name: $file:path}` |
+| **Seed Data** | Load static reference data | `seed: {name: $file:path}` |
 
 ## Learn More
 

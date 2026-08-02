@@ -75,14 +75,20 @@ The `passthrough` directive forwards fields directly to the action output **with
       - source.url                          # Preserve for downstream
 ```
 
+:::warning Passthrough preserves output — it does not feed downstream context
+`passthrough` keeps a field in **this action's own output record** (for lineage or export). It does **not** make that field available to later actions _through_ this action. A downstream action that needs the value must `observe` it from its **original producing action** (for example `observe: [source.url]`), not from the action that passed it through.
+
+In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. Relying on an upstream `passthrough` to satisfy a downstream `observe` can make the field resolve **empty at runtime**, silently, because the field is still declared on the consumer's schema.
+:::
+
 ## Seed Data
 
-Static reference data can be loaded via `seed_path`. See [Seed Data](./seed-data.md) for details.
+Static reference data can be loaded via `seed`. See [Seed Data](./seed-data.md) for details.
 
 ```yaml
 defaults:
   context_scope:
-    seed_path:
+    seed:
       exam_syllabus: $file:syllabus.json
   data_source:
     type: local
