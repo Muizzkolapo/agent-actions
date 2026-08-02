@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Fix docs dashboard accuracy — expand versioned actions (43→52), search agent_io* directories for manifest/runs/logs"
-time: 2026-06-14T05:53:00.000000Z

@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "Clear node-level disposition when an action begins executing. Eliminates the 'Stale guard-skip disposition' warning that fired on reruns after a prior dependency-skip, and removes the read-side heal block in _resolve_completion_status."
-time: 2026-07-17T20:00:00.000000Z
