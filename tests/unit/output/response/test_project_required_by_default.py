@@ -11,6 +11,7 @@ override wins). Explicit per-field markers still take precedence over both.
 import textwrap
 
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.output.response.vendor_compilation import compile_unified_schema
 from agent_actions.validation.schema_output_validator import validate_output_against_schema
 
 
@@ -82,6 +83,22 @@ def test_schema_file_override_beats_project_flag(tmp_path):
     report = validate_output_against_schema({"a": "x"}, loaded, "act")
     assert report.is_compliant
     assert "b" in report.missing_optional
+
+
+def test_project_flag_reaches_vendor_compiler(tmp_path):
+    """The injected flag survives into the compiled vendor schema's required list."""
+    _project(tmp_path, project_flag="required_by_default: true", schema_body=_UNMARKED)
+    loaded = SchemaLoader.load_schema("foo", project_root=tmp_path)
+    compiled = compile_unified_schema(loaded, "openai")
+    assert set(compiled["schema"]["required"]) == {"a", "b"}
+
+
+def test_no_flag_leaves_vendor_compiler_required_empty(tmp_path):
+    """Without the project flag, unmarked fields stay out of the compiled required list."""
+    _project(tmp_path, project_flag="", schema_body=_UNMARKED)
+    loaded = SchemaLoader.load_schema("foo", project_root=tmp_path)
+    compiled = compile_unified_schema(loaded, "openai")
+    assert compiled["schema"]["required"] == []
 
 
 def test_optional_field_still_opts_out_under_project_flag(tmp_path):
