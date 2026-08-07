@@ -178,7 +178,27 @@ class HitlConfig(BaseModel):
         return [r.strip() for r in v if r and r.strip()]
 
 
-class ActionConfig(BaseModel):
+class _RetryRepromptValidators(BaseModel):
+    """Shared before-mode coercion for the retry/reprompt shorthand fields."""
+
+    @field_validator("retry", mode="before", check_fields=False)
+    @classmethod
+    def validate_retry(cls, v):
+        return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
+
+    @field_validator("reprompt", mode="before", check_fields=False)
+    @classmethod
+    def validate_reprompt(cls, v):
+        return _validate_bool_or_mapping(
+            v,
+            "reprompt",
+            "Use one of:\n"
+            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
+            "  reprompt: {validation: fn_name}            # custom UDF validates",
+        )
+
+
+class ActionConfig(_RetryRepromptValidators):
     """Configuration for a workflow action."""
 
     model_config = ConfigDict(extra="forbid")
@@ -307,22 +327,6 @@ class ActionConfig(BaseModel):
         default=None, alias="_version_context", description="Version context injected by renderer"
     )
 
-    @field_validator("retry", mode="before")
-    @classmethod
-    def validate_retry(cls, v):
-        return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
-
-    @field_validator("reprompt", mode="before")
-    @classmethod
-    def validate_reprompt(cls, v):
-        return _validate_bool_or_mapping(
-            v,
-            "reprompt",
-            "Use one of:\n"
-            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
-            "  reprompt: {validation: fn_name}            # custom UDF validates",
-        )
-
     @model_validator(mode="after")
     def validate_kind_requirements(self):
         """Ensure kind-specific fields are present."""
@@ -346,7 +350,7 @@ class ActionConfig(BaseModel):
         return v
 
 
-class DefaultsConfig(BaseModel):
+class DefaultsConfig(_RetryRepromptValidators):
     """Default configuration applied to all actions."""
 
     # extra="ignore" (not "forbid"): workflow defaults may contain vendor-specific
@@ -414,22 +418,6 @@ class DefaultsConfig(BaseModel):
         le=32,
         description="Default max concurrent workers for Ollama batch processing",
     )
-
-    @field_validator("retry", mode="before")
-    @classmethod
-    def validate_retry(cls, v):
-        return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
-
-    @field_validator("reprompt", mode="before")
-    @classmethod
-    def validate_reprompt(cls, v):
-        return _validate_bool_or_mapping(
-            v,
-            "reprompt",
-            "Use one of:\n"
-            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
-            "  reprompt: {validation: fn_name}            # custom UDF validates",
-        )
 
 
 class WorkflowConfig(BaseModel):
