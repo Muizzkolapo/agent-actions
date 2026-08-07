@@ -147,21 +147,3 @@ class LineageBuilder:
             LineageBuilder._propagate_ancestry_chain(obj, parent_item)
 
         return obj
-
-    @staticmethod
-    def create_conditional_response(
-        source_guid: str, content: Any, node_id: str, item: dict | None = None
-    ) -> dict:
-        """Create a standard response with lineage and ancestry for conditional scenarios."""
-        lineage = LineageBuilder.build_lineage(item, node_id) if item else [node_id]
-        response = {
-            "source_guid": source_guid,
-            "content": content,
-            "node_id": node_id,
-            "lineage": lineage,
-        }
-
-        if item:
-            LineageBuilder._propagate_ancestry_chain(response, item)
-
-        return response

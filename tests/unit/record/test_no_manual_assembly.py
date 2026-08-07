@@ -60,21 +60,15 @@ class TestNoManualContentAssembly:
 
 
 class TestNoDirectWrapContentCalls:
-    """wrap_content() should only exist in content.py (as alias) and tests."""
+    """Content is built via RecordEnvelope.build_content; no wrap_content() anywhere."""
 
-    def test_no_wrap_content_outside_alias(self):
+    def test_no_wrap_content_calls(self):
         count, lines = _grep_count(
             r"wrap_content\(",
             AGENT_ACTIONS,
         )
-        filtered = [
-            line
-            for line in lines.splitlines()
-            if "content.py" not in line and "_MANIFEST" not in line
-        ]
-        assert not filtered, "Found wrap_content() calls outside content.py:\n" + "\n".join(
-            filtered
-        )
+        filtered = [line for line in lines.splitlines() if "_MANIFEST" not in line]
+        assert not filtered, "Found wrap_content() calls:\n" + "\n".join(filtered)
 
 
 class TestNoUnknownFallbacks:

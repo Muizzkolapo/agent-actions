@@ -27,7 +27,7 @@ Single authority for record content assembly. Every action type, granularity, an
 
 | Direction | Module | Why |
 |-----------|--------|-----|
-| **Depended on by** | `utils/content.py` | `wrap_content()` delegates to `build_content()` |
+| **Depended on by** | `utils/content.py` | `get_existing_content()` synthesizes first-stage content via the envelope model |
 | **Depended on by** | `utils/transformation/passthrough.py` | (Phase 2) record assembly after strategy |
 | **Depended on by** | `workflow/pipeline_file_mode.py` | FILE mode tool + HITL assembly; TrackedItem wrapping |
 | **Depended on by** | `llm/providers/tools/client.py` | TrackedItem preservation in `_strip_internal_fields` |

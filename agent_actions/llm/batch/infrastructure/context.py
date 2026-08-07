@@ -83,11 +83,6 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
-    def batch_context_exists(backend: "StorageBackend", action_name: str, batch_name: str) -> bool:
-        key = BatchContextManager._metadata_key(action_name, batch_name)
-        return backend.load_metadata(key) is not None
-
-    @staticmethod
     def delete_batch_context_map(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> bool:

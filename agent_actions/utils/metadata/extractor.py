@@ -3,7 +3,7 @@
 import time
 from typing import Any
 
-from .types import ResponseMetadata, UnifiedMetadata
+from .types import ResponseMetadata
 
 
 class MetadataExtractor:
@@ -229,14 +229,6 @@ class MetadataExtractor:
         if not agent_config:
             return None
         return agent_config.get("model_name") or agent_config.get("model")
-
-    @classmethod
-    def build_unified_metadata(
-        cls,
-        response_metadata: ResponseMetadata | None = None,
-    ) -> UnifiedMetadata:
-        """Build a UnifiedMetadata container from response metadata."""
-        return UnifiedMetadata(response=response_metadata)
 
 
 class MetadataTimer:
