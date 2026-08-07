@@ -1,6 +1,6 @@
 """Tests for LineageBuilder.add_unified_lineage() method."""
 
-from agent_actions.utils.lineage.builder import LineageBuilder
+from agent_actions.utils.lineage import LineageBuilder
 
 
 class TestUnifiedLineageFirstStage:

@@ -1,6 +1,6 @@
 """Tests for IDGenerator: uuid4 uniqueness and content_hash determinism."""
 
-from agent_actions.utils.id_generation.generator import IDGenerator
+from agent_actions.utils.id_generation import IDGenerator
 
 
 class TestGenerateSourceGuid:
