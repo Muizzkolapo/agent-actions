@@ -86,7 +86,9 @@ class TestCompletedBatchSkipsResubmission:
 class TestInFlightBatchStillBlocks:
     """Existing in-flight guard must continue to work."""
 
-    @pytest.mark.parametrize("status", list(BatchStatus.in_flight_states()))
+    @pytest.mark.parametrize(
+        "status", sorted(BatchStatus.in_flight_states(), key=lambda s: s.value)
+    )
     def test_in_flight_statuses_block_resubmission(self, tmp_path, status):
         """All in-flight statuses block new submission."""
         svc = _make_service()
