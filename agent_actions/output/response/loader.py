@@ -103,12 +103,16 @@ class SchemaLoader:
         schema is not found.  Duplicate names are logged as warnings
         by ``discover_schema_files``; the first occurrence is used.
         """
-        from agent_actions.config.path_config import get_schema_path, resolve_project_root
+        from agent_actions.config.path_config import (
+            get_required_by_default,
+            get_schema_path,
+            resolve_project_root,
+        )
 
+        effective_root = resolve_project_root(project_root)
         all_schemas = SchemaLoader.discover_schema_files(project_root)
 
         if schema_name not in all_schemas:
-            effective_root = resolve_project_root(project_root)
             sp = get_schema_path(effective_root)
             project_schema_dir = resolve_relative_to(sp, effective_root)
             wf_root = effective_root / "agent_workflow"
@@ -119,7 +123,12 @@ class SchemaLoader:
                 f"{wf_root if wf_root.exists() else effective_root}."
             )
 
-        return SchemaLoader._read_schema_file(schema_name, all_schemas[schema_name])
+        schema_data = SchemaLoader._read_schema_file(schema_name, all_schemas[schema_name])
+        # A schema that does not declare its own policy inherits the project-wide
+        # required_by_default from agent_actions.yml. Per-schema declaration wins.
+        if isinstance(schema_data, dict) and "required_by_default" not in schema_data:
+            schema_data["required_by_default"] = get_required_by_default(effective_root)
+        return schema_data
 
     @staticmethod
     def _read_schema_file(schema_name: str, schema_file: Path) -> dict:

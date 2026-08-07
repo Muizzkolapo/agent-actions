@@ -272,6 +272,27 @@ def get_seed_data_path(project_root: Path) -> str:
     return name
 
 
+def get_required_by_default(project_root: Path) -> bool:
+    """Return the project-wide ``required_by_default`` schema policy.
+
+    Reads the top-level ``required_by_default`` key from ``agent_actions.yml``.
+    When set true, flat schema fields with no explicit ``required``/``optional``
+    marker are treated as required across every schema, without adding the flag
+    to each schema file. Absent config or key defaults to ``False`` (fields
+    optional by default). A schema that declares its own ``required_by_default``
+    overrides this project setting.
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug(
+            "Could not load required_by_default from project config, defaulting to False: %s",
+            exc,
+        )
+        return False
+    return bool(config.get("required_by_default", False))
+
+
 def resolve_seed_data_dir(workflow_config_path: str | None) -> tuple[Path | None, str]:
     """Resolve the seed data directory: workflow root first, then project root.
 
