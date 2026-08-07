@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
+from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand
-from agent_actions.validation.retry_validator import RetryCommandArgs
 from tests.unit.cli.conftest import make_mock_backend
 
 

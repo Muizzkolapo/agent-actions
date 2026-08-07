@@ -213,7 +213,7 @@ def status(
     project_root: Path | None = None,
 ):
     """Checks the status of a running batch job."""
-    from agent_actions.validation.batch_validator import BatchCommandArgs
+    from agent_actions.cli.args import BatchCommandArgs
 
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
@@ -260,7 +260,7 @@ def retrieve(
     (`agent_workflow/<wf>/agent_io/target/<action>/`), matching the layout
     `agac run` writes to.
     """
-    from agent_actions.validation.batch_validator import BatchCommandArgs
+    from agent_actions.cli.args import BatchCommandArgs
 
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:

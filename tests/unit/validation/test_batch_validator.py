@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.validation.batch_validator import BatchCommandArgs
+from agent_actions.cli.args import BatchCommandArgs
 
 
 class TestBatchCommandArgs:

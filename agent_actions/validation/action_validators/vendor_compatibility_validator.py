@@ -66,7 +66,3 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
             return ActionEntryValidationResult(errors=errors, warnings=warnings)
 
         return ActionEntryValidationResult.success()
-
-
-# Backward compatibility alias
-BatchModeCompatibilityValidator = VendorCompatibilityValidator
