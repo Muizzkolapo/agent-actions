@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Inline the five identical per-vendor error-wrapping helpers — each was a one-line pass-through to the shared wrap_vendor_error with the module's own error mapping. No behavior change."
+time: 2026-08-07T23:00:00Z
