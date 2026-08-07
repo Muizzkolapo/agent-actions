@@ -270,61 +270,25 @@ class TestImportValidationModuleRaisesOnImportError:
     """E-6 — ImportError from load_module_from_path surfaces as ConfigurationError."""
 
     def test_import_error_raises_configuration_error(self):
-        from agent_actions.llm.batch.services.retry import _import_validation_module
+        from agent_actions.llm.batch.services.retry_polling import import_validation_module
 
         with patch(
             "agent_actions.llm.batch.services.retry_polling.load_module_from_path",
             side_effect=ImportError("No module named 'my_validator'"),
         ):
             with pytest.raises(ConfigurationError, match="my_validator"):
-                _import_validation_module("my_validator", "/some/path")
+                import_validation_module("my_validator", "/some/path")
 
     def test_other_exception_logs_warning_not_raises(self):
         """Non-ImportError exceptions are still suppressed to a warning."""
-        from agent_actions.llm.batch.services.retry import _import_validation_module
+        from agent_actions.llm.batch.services.retry_polling import import_validation_module
 
         with patch(
             "agent_actions.llm.batch.services.retry_polling.load_module_from_path",
             side_effect=RuntimeError("disk error"),
         ):
             # Should not raise — other exceptions are downgraded to warning
-            _import_validation_module("my_validator", None)
-
-
-# ---------------------------------------------------------------------------
-# E-7  ·  retry.py — backward-compat re-export of wait_for_batch_completion
-# ---------------------------------------------------------------------------
-
-
-class TestBackwardCompatReExports:
-    """E-7 — Ensure facade re-exports don't silently break."""
-
-    def test_wait_for_batch_completion_importable_from_retry(self):
-        """wait_for_batch_completion should be importable from the facade."""
-        from agent_actions.llm.batch.services.retry import wait_for_batch_completion  # noqa: F401
-
-        # Must be the same function object as the canonical location
-        from agent_actions.llm.batch.services.retry_polling import (
-            wait_for_batch_completion as canonical,
-        )
-
-        assert wait_for_batch_completion is canonical
-
-    def test_serialize_deserialize_importable_from_retry(self):
-        """serialize/deserialize_results should be importable from the facade."""
-        from agent_actions.llm.batch.services.retry import (  # noqa: F401
-            deserialize_results,
-            serialize_results,
-        )
-        from agent_actions.llm.batch.services.retry_serialization import (
-            deserialize_results as canonical_de,
-        )
-        from agent_actions.llm.batch.services.retry_serialization import (
-            serialize_results as canonical_se,
-        )
-
-        assert serialize_results is canonical_se
-        assert deserialize_results is canonical_de
+            import_validation_module("my_validator", None)
 
 
 # ---------------------------------------------------------------------------

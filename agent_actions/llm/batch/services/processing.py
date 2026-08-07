@@ -52,6 +52,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
     register_recovery_batch,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
+from agent_actions.llm.batch.services.retry_serialization import (
+    serialize_results,
+)
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter
@@ -538,7 +541,7 @@ class BatchProcessingService:
                         retry_max_attempts=max_attempts,
                         missing_ids=list(missing_ids),
                         record_failure_counts=record_failure_counts,
-                        accumulated_results=BatchRetryService.serialize_results(batch_results),
+                        accumulated_results=serialize_results(batch_results),
                     )
                     from agent_actions.processing.recovery.reprompt import parse_reprompt_config
 

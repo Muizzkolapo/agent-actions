@@ -11,6 +11,9 @@ import contextlib
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
+from agent_actions.llm.batch.services.retry_serialization import (
+    serialize_results,
+)
 from agent_actions.llm.providers.batch_base import BatchResult
 
 # ---------------------------------------------------------------------------
@@ -270,7 +273,6 @@ class TestSelectiveRepromptResubmission:
         from agent_actions.llm.batch.services.processing_recovery import (
             handle_reprompt_recovery,
         )
-        from agent_actions.llm.batch.services.retry import BatchRetryService
 
         accumulated = _make_results(10, fail_ids=set())
         rec_003_ok = BatchResult(custom_id="rec_003", content={"answer": "now_ok"}, success=True)
@@ -285,7 +287,7 @@ class TestSelectiveRepromptResubmission:
             reprompt_max_attempts=3,
             validation_name="check_it",
             on_exhausted="return_last",
-            accumulated_results=BatchRetryService.serialize_results(accumulated),
+            accumulated_results=serialize_results(accumulated),
             reprompt_attempts_per_record={"rec_003": 1, "rec_007": 1},
         )
 

@@ -16,10 +16,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.storage.backend import (
-    TERMINAL_DISPOSITIONS as GATE_TERMINAL_DISPOSITIONS,  # noqa: F401
-)
-
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
