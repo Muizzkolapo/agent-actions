@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.workflow.runner import (
     ActionRunner,
@@ -37,19 +36,14 @@ from agent_actions.workflow.strategies import InitialStrategy, StandardStrategy
 
 
 @pytest.fixture()
-def factory():
-    return MagicMock(spec=ProcessorFactory)
+def runner():
+    return ActionRunner(use_tools=True)
 
 
 @pytest.fixture()
-def runner(factory):
-    return ActionRunner(use_tools=True, processor_factory=factory)
-
-
-@pytest.fixture()
-def runner_with_backend(factory):
+def runner_with_backend():
     backend = MagicMock()
-    return ActionRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
+    return ActionRunner(use_tools=True, storage_backend=backend)
 
 
 def _make_file(path: Path, content: str = "hello") -> Path:
@@ -70,10 +64,9 @@ def _make_strategy():
 
 
 class TestInit:
-    def test_attributes_set(self, factory):
-        runner = ActionRunner(use_tools=True, processor_factory=factory)
+    def test_attributes_set(self):
+        runner = ActionRunner(use_tools=True)
         assert runner.use_tools is True
-        assert runner.processor_factory is factory
         assert runner.storage_backend is None
         assert runner.action_configs is None
         assert runner.execution_order == []
@@ -83,16 +76,16 @@ class TestInit:
         assert runner.data_source_config is None
         assert runner.project_root is None
 
-    def test_creates_three_strategies(self, factory):
-        runner = ActionRunner(use_tools=True, processor_factory=factory)
+    def test_creates_three_strategies(self):
+        runner = ActionRunner(use_tools=True)
         assert set(runner.strategies.keys()) == {"initial", "intermediate", "terminal"}
         assert isinstance(runner.strategies["initial"], InitialStrategy)
         assert isinstance(runner.strategies["intermediate"], StandardStrategy)
         assert isinstance(runner.strategies["terminal"], StandardStrategy)
 
-    def test_storage_backend_set(self, factory):
+    def test_storage_backend_set(self):
         backend = MagicMock()
-        runner = ActionRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
+        runner = ActionRunner(use_tools=True, storage_backend=backend)
         assert runner.storage_backend is backend
 
 

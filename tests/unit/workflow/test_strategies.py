@@ -71,22 +71,8 @@ class TestActionStrategyBase:
             ActionStrategy()
 
     def test_repr_includes_class_name(self):
-        strategy = InitialStrategy(processor_factory=None)
-        assert "InitialStrategy" in repr(strategy)
-
-    def test_repr_includes_processor_factory(self):
-        factory = MagicMock()
-        strategy = StandardStrategy(processor_factory=factory)
-        r = repr(strategy)
-        assert "StandardStrategy" in r
-        assert "processor_factory" in r
-
-    def test_execute_generate_target_requires_processor_factory(self):
-        """_execute_generate_target should raise RuntimeError when processor_factory is None."""
-        strategy = StandardStrategy(processor_factory=None)
-        params = _make_params()
-        with pytest.raises(RuntimeError, match="requires processor_factory"):
-            strategy._execute_generate_target(params)
+        assert "InitialStrategy" in repr(InitialStrategy())
+        assert "StandardStrategy" in repr(StandardStrategy())
 
 
 # ── InitialStrategy ────────────────────────────────────────────────────
@@ -98,7 +84,7 @@ class TestInitialStrategy:
     @patch("agent_actions.workflow.strategies.process_initial_stage")
     def test_execute_calls_process_initial_stage(self, mock_process):
         mock_process.return_value = "/data/output/file.json"
-        strategy = InitialStrategy(processor_factory=None)
+        strategy = InitialStrategy()
         params = _make_params()
 
         result = strategy.execute(params)
@@ -110,7 +96,7 @@ class TestInitialStrategy:
     def test_execute_passes_correct_context_fields(self, mock_process):
         mock_process.return_value = "/out/file.json"
         backend = MagicMock()
-        strategy = InitialStrategy(processor_factory=None)
+        strategy = InitialStrategy()
         params = _make_params(
             action_config={"key": "val"},
             action_name="my_action",
@@ -136,7 +122,7 @@ class TestInitialStrategy:
         """The InitialStageContext.agent_config should be the action_config dict."""
         mock_process.return_value = "/out/f.json"
         config = {"prompt": "hello", "model_vendor": "openai"}
-        strategy = InitialStrategy(processor_factory=None)
+        strategy = InitialStrategy()
         params = _make_params(action_config=config)
 
         strategy.execute(params)
@@ -144,20 +130,12 @@ class TestInitialStrategy:
         ctx = mock_process.call_args[0][0]
         assert ctx.agent_config == config
 
-    def test_equality_same_factory(self):
-        factory = MagicMock()
-        a = InitialStrategy(processor_factory=factory)
-        b = InitialStrategy(processor_factory=factory)
-        assert a == b
-
-    def test_equality_different_factory(self):
-        a = InitialStrategy(processor_factory=MagicMock())
-        b = InitialStrategy(processor_factory=MagicMock())
-        assert a != b
+    def test_equality_same_type(self):
+        assert InitialStrategy() == InitialStrategy()
 
     def test_equality_different_type(self):
-        a = InitialStrategy(processor_factory=None)
-        b = StandardStrategy(processor_factory=None)
+        a = InitialStrategy()
+        b = StandardStrategy()
         assert a != b
 
 
@@ -173,8 +151,7 @@ class TestStandardStrategy:
         mock_pipeline.process.return_value = "/data/output/file.json"
         mock_create.return_value = mock_pipeline
 
-        factory = MagicMock()
-        strategy = StandardStrategy(processor_factory=factory)
+        strategy = StandardStrategy()
         params = _make_params()
 
         result = strategy.execute(params)
@@ -193,9 +170,8 @@ class TestStandardStrategy:
         mock_pipeline.process.return_value = "/out/file.json"
         mock_create.return_value = mock_pipeline
 
-        factory = MagicMock()
         backend = MagicMock()
-        strategy = StandardStrategy(processor_factory=factory)
+        strategy = StandardStrategy()
         params = _make_params(
             action_config={"key": "val"},
             action_name="my_action",
@@ -211,7 +187,6 @@ class TestStandardStrategy:
             action_config={"key": "val"},
             action_name="my_action",
             idx=5,
-            processor_factory=factory,
             action_configs={"a": {}, "b": {}},
             workflow_metadata=None,
             storage_backend=backend,
@@ -225,8 +200,7 @@ class TestStandardStrategy:
         mock_pipeline.process.return_value = "/out/file.json"
         mock_create.return_value = mock_pipeline
 
-        factory = MagicMock()
-        strategy = StandardStrategy(processor_factory=factory)
+        strategy = StandardStrategy()
         pre_loaded = [{"id": 1, "content": "hello"}]
         params = _make_params(data=pre_loaded)
 
@@ -241,21 +215,13 @@ class TestStandardStrategy:
         mock_pipeline.process.return_value = "/out/file.json"
         mock_create.return_value = mock_pipeline
 
-        factory = MagicMock()
-        strategy = StandardStrategy(processor_factory=factory)
+        strategy = StandardStrategy()
         params = _make_params()  # data=None by default
 
         strategy.execute(params)
 
         call_kwargs = mock_pipeline.process.call_args[1]
         assert call_kwargs["data"] is None
-
-    def test_execute_raises_when_no_processor_factory(self):
-        """StandardStrategy.execute should raise RuntimeError if processor_factory is None."""
-        strategy = StandardStrategy(processor_factory=None)
-        params = _make_params()
-        with pytest.raises(RuntimeError, match="requires processor_factory"):
-            strategy.execute(params)
 
     @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
     def test_execute_forwards_workflow_metadata_to_pipeline_factory(self, mock_create):
@@ -265,7 +231,7 @@ class TestStandardStrategy:
         mock_pipeline.process.return_value = "/out/file.json"
         mock_create.return_value = mock_pipeline
 
-        strategy = StandardStrategy(processor_factory=MagicMock())
+        strategy = StandardStrategy()
         params = _make_params(workflow_metadata={"name": "my_wf", "run_id": "run_7"})
 
         strategy.execute(params)
@@ -276,22 +242,16 @@ class TestStandardStrategy:
         }
 
     def test_equality_same_factory(self):
-        factory = MagicMock()
-        a = StandardStrategy(processor_factory=factory)
-        b = StandardStrategy(processor_factory=factory)
+        a = StandardStrategy()
+        b = StandardStrategy()
         assert a == b
 
-    def test_equality_different_factory(self):
-        a = StandardStrategy(processor_factory=MagicMock())
-        b = StandardStrategy(processor_factory=MagicMock())
-        assert a != b
-
     def test_equality_different_type(self):
-        a = StandardStrategy(processor_factory=None)
-        b = InitialStrategy(processor_factory=None)
+        a = StandardStrategy()
+        b = InitialStrategy()
         assert a != b
 
     def test_equality_with_non_strategy(self):
-        a = StandardStrategy(processor_factory=None)
+        a = StandardStrategy()
         assert a != "not a strategy"
         assert a != 42

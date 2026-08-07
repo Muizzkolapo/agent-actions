@@ -25,5 +25,4 @@ def test_record_mode_hitl_raises_configuration_error():
                 action_name="review_items",
                 idx=0,
             ),
-            processor_factory=object(),
         )

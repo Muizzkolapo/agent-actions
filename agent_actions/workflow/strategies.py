@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional, cast
 
-from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     InitialStageContext,
@@ -37,12 +36,8 @@ class StrategyExecutionParams:
 class ActionStrategy(ABC):
     """Abstract base class for action execution strategies."""
 
-    def __init__(self, processor_factory: ProcessorFactory | None = None):
-        """Initialize the strategy with optional processor factory."""
-        self.processor_factory = processor_factory
-
     def __repr__(self):
-        return f"{self.__class__.__name__}(processor_factory={self.processor_factory})"
+        return f"{self.__class__.__name__}()"
 
     @abstractmethod
     def execute(self, params: StrategyExecutionParams) -> str:
@@ -50,8 +45,6 @@ class ActionStrategy(ABC):
 
     def _execute_generate_target(self, params: StrategyExecutionParams) -> str:
         """Process data through pipeline and return path to the generated output file."""
-        if self.processor_factory is None:
-            raise RuntimeError("BaseActionStrategy requires processor_factory")
         from agent_actions.workflow.pipeline import (
             create_processing_pipeline_from_params,
         )
@@ -60,7 +53,6 @@ class ActionStrategy(ABC):
             action_config=params.action_config,
             action_name=params.action_name,
             idx=params.idx,
-            processor_factory=self.processor_factory,
             action_configs=params.action_configs,
             workflow_metadata=params.workflow_metadata,
             storage_backend=params.storage_backend,
@@ -78,9 +70,7 @@ class InitialStrategy(ActionStrategy):
     """Strategy for the initial action in a workflow."""
 
     def __eq__(self, other):
-        if not isinstance(other, InitialStrategy):
-            return False
-        return self.processor_factory == other.processor_factory
+        return isinstance(other, InitialStrategy)
 
     def execute(self, params: StrategyExecutionParams) -> str:
         """Execute the initial action strategy and return path to the generated output file."""
@@ -105,9 +95,7 @@ class StandardStrategy(ActionStrategy):
     """Standard strategy for non-initial actions that read upstream data and generate target output."""
 
     def __eq__(self, other):
-        if not isinstance(other, StandardStrategy):
-            return False
-        return self.processor_factory == other.processor_factory
+        return isinstance(other, StandardStrategy)
 
     def execute(self, params: StrategyExecutionParams) -> str:
         """Execute the standard action strategy and return path to the generated output file."""
