@@ -4,9 +4,9 @@ from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.state import RecordState
-from agent_actions.utils.field_management.manager import FieldManager
-from agent_actions.utils.id_generation.generator import IDGenerator
-from agent_actions.utils.lineage.builder import LineageBuilder
+from agent_actions.utils.field_management import FieldManager
+from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.utils.lineage import LineageBuilder
 
 
 class PassthroughItemBuilder:

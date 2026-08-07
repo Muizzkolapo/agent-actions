@@ -5,7 +5,7 @@ merge consumer can group them, while 1->N expansions keep unique per-item
 ids. These pin both invariants.
 """
 
-from agent_actions.utils.correlation.version_id import VersionIdGenerator
+from agent_actions.utils.correlation import VersionIdGenerator
 
 _CFG = {"is_versioned_agent": True, "version_base_name": "extract", "workflow_session_id": "s1"}
 

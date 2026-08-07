@@ -36,14 +36,14 @@ Everything else imports only from `config` (types, paths), `errors`, and `loggin
 Four classes handle identity, lineage, field enforcement, and version correlation.
 
 ```
-IDGenerator (id_generation/generator.py)
+IDGenerator (id_generation.py)
 ├── generate_target_id()       → UUID4  (unique record identity)
 ├── generate_node_id(action)   → "{action}_{uuid4}"  (lineage node)
 ├── derive_source_guid(record) → UUID5  (deterministic first-stage identity)
 ├── generate_source_guid()     → UUID4  (new-entity identity: expansion/synthetic)
 └── generate_content_hash()    → UUID5  (deterministic content fingerprint)
 
-LineageBuilder (lineage/builder.py)
+LineageBuilder (lineage.py)
 ├── build_lineage(item, node_id)           → append node to chain
 ├── add_lineage_tracking(obj, item, node)  → node_id + lineage + ancestry
 ├── add_lineage_tracking_from_sources()    → many-to-one (FILE tools)
@@ -51,11 +51,11 @@ LineageBuilder (lineage/builder.py)
 ├── set_parent_tracking()                  → propagate parent/root target_id
 └── filter_node_lineage()                  → strip invalid node IDs
 
-FieldManager (field_management/manager.py)
+FieldManager (field_management.py)
 └── ensure_required_fields(obj, source_guid, action_name)
     → guarantees target_id, source_guid, node_id, lineage exist
 
-VersionIdGenerator (correlation/version_id.py)
+VersionIdGenerator (correlation.py)
 ├── get_or_create_version_correlation_id()          → GUID-based
 ├── get_or_create_position_based_version_correlation_id()  → index-based
 ├── add_version_correlation_id(obj, agent_config)   → main entry point
@@ -305,10 +305,10 @@ get_existing_content(record, is_first_stage=False)
 ### Identity and tracking
 | File | Role |
 |------|------|
-| `id_generation/generator.py` | UUID4/UUID5 generation for target_id, node_id, source_guid, content_hash |
-| `lineage/builder.py` | Lineage chain construction and ancestry propagation |
-| `correlation/version_id.py` | Deterministic version correlation IDs (LRU-capped, thread-safe) |
-| `field_management/manager.py` | Ensures required metadata fields on every output record |
+| `id_generation.py` | UUID4/UUID5 generation for target_id, node_id, source_guid, content_hash |
+| `lineage.py` | Lineage chain construction and ancestry propagation |
+| `correlation.py` | Deterministic version correlation IDs (LRU-capped, thread-safe) |
+| `field_management.py` | Ensures required metadata fields on every output record |
 
 ### UDF system
 | File | Role |

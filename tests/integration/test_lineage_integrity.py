@@ -13,7 +13,7 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
-from agent_actions.utils.correlation.version_id import VersionIdGenerator
+from agent_actions.utils.correlation import VersionIdGenerator
 
 
 def _make_context(

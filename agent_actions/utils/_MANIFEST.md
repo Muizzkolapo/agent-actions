@@ -12,10 +12,6 @@ pathways.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [correlation](correlation/_MANIFEST.md) | Version correlation ID generation for deterministic versioned-agent workflows. |
-| [field_management](field_management/_MANIFEST.md) | Ensures processed items always expose the required metadata/IDs. |
-| [id_generation](id_generation/_MANIFEST.md) | UUID/ deterministic ID helpers for target/node/source GUIDs. |
-| [lineage](lineage/_MANIFEST.md) | Lineage tracking helpers (chain building, ancestry chain propagation). |
 | [metadata](metadata/_MANIFEST.md) | Unified metadata extraction/ dataclasses for LLM responses. |
 | [transformation](transformation/_MANIFEST.md) | Passthrough transformer + strategy helpers for context_scope.passthrough data. |
 | [udf_management](udf_management/_MANIFEST.md) | UDF discovery, registry, and dynamic execution helpers. |
@@ -29,6 +25,10 @@ pathways.
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
 | `graph_utils.py` | Module | Graph algorithms for dependency resolution (`topological_sort`). | `errors` |
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
+| `correlation.py` | Module | `VersionIdGenerator`: deterministic version correlation IDs for versioned-agent workflows. | `versioning` |
+| `field_management.py` | Module | `FieldManager`: ensures processed items always expose the required metadata/IDs. | `metadata` |
+| `id_generation.py` | Module | `IDGenerator`: UUID/deterministic ID helpers for target/node/source GUIDs. | `identity` |
+| `lineage.py` | Module | `LineageBuilder`: lineage chain building and ancestry propagation. | `lineage` |
 | `passthrough_builder.py` | Module | `PassthroughItemBuilder` that creates normalized passthrough objects with metadata and lineage for batch/online modes. | `preprocessing`, `lineage`, `id_generation` |
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. Thread-safe global singleton with double-checked locking. `set_path_manager()` allows explicit DI of a scoped instance. `derive_workflow_root()` safely finds the workflow root from a path inside a workflow (agent_io fast-path + agent_config walk-up + safe fallback). | `config.paths`, `file_io` |
 | `safe_format.py` | Module | Robust exception formatting (safe formatting, root cause extraction, chain formatting). | `logging`, `errors` |
