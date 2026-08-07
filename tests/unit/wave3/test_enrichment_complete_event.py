@@ -9,7 +9,7 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.expander_action_types import process_tool_action
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import ProcessingStatus
-from agent_actions.utils.correlation.version_id import VersionIdGenerator
+from agent_actions.utils.correlation import VersionIdGenerator
 from tests.conftest import wire_batch_disposition_delegate
 
 

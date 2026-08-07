@@ -6,7 +6,7 @@ from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.lineage.builder import LineageBuilder
+from agent_actions.utils.lineage import LineageBuilder
 
 
 class ExhaustedRecordBuilder:
