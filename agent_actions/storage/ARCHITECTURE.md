@@ -165,7 +165,7 @@ UNPROCESSED        Cascade casualty — upstream failure prevented processing
 Three frozen sets partition dispositions by how the system treats them:
 
 ```
-GATE_TERMINAL_DISPOSITIONS (not reprocessed on re-run):
+TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   SUCCESS, FILTERED, SKIPPED, PASSTHROUGH, EXHAUSTED
 
   These records are "done" from the disposition gate's perspective.
@@ -371,7 +371,7 @@ This is defense-in-depth. All SQL uses parameterized queries, so injection is no
 
 9. **Threading model is single-process only.** The `RLock` serializes access within one Python process. Multiple processes writing to the same database rely on SQLite's file-level locking (with the 30-second timeout). The framework does not currently use multi-process writes, but the lock timeout is the safety net if it ever does.
 
-10. **get_terminal_record_ids imports from processing at call time.** The method does `from agent_actions.processing.disposition_gate import GATE_TERMINAL_DISPOSITIONS` inside the method body to avoid a circular import. This means the set of terminal dispositions is defined in the processing module, not in storage.
+10. **The terminal-disposition set lives in storage.** `TERMINAL_DISPOSITIONS` is defined in `storage/backend.py` next to `get_terminal_record_ids`, which reads it directly — the disposition gate in processing consumes the storage-defined set, not the other way around.
 
 11. **source_data deduplication is by source_guid only within a path.** The UNIQUE constraint is `(relative_path, source_guid)`. The same `source_guid` can exist under different `relative_path` values without conflict. A record without a `source_guid` is an upstream invariant violation: `write_source` raises `DataValidationError` (fail-loud) rather than silently dropping it. `save_checkpoint_records` takes the same posture — its `checkpoint_output` table is `UNIQUE(action_name, relative_path, source_guid)` with `INSERT OR REPLACE`, so a blank `source_guid` would collapse distinct records via silent overwrite.
 

@@ -8,10 +8,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from agent_actions.processing.disposition_gate import (
-    GATE_TERMINAL_DISPOSITIONS,
     DispositionGate,
     build_carry_forward,
 )
+from agent_actions.storage.backend import TERMINAL_DISPOSITIONS
 
 
 def _make_record(guid: str | None = None, **extra: object) -> dict:
@@ -109,18 +109,18 @@ class TestRecordsWithoutGuid:
 class TestTerminalSetCorrectness:
     def test_deferred_is_not_terminal(self):
         """Spec test 7: DEFERRED records must be reprocessed."""
-        assert "deferred" not in GATE_TERMINAL_DISPOSITIONS
+        assert "deferred" not in TERMINAL_DISPOSITIONS
 
     def test_failed_is_not_terminal(self):
         """Spec test 8: FAILED records must be reprocessed."""
-        assert "failed" not in GATE_TERMINAL_DISPOSITIONS
+        assert "failed" not in TERMINAL_DISPOSITIONS
 
     def test_exhausted_is_terminal(self):
         """Spec test 9: EXHAUSTED is gate-terminal."""
-        assert "exhausted" in GATE_TERMINAL_DISPOSITIONS
+        assert "exhausted" in TERMINAL_DISPOSITIONS
 
     def test_all_expected_terminals_present(self):
-        assert GATE_TERMINAL_DISPOSITIONS == frozenset(
+        assert TERMINAL_DISPOSITIONS == frozenset(
             {
                 "success",
                 "filtered",

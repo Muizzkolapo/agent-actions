@@ -26,7 +26,10 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.services.retry import BatchRetryService
+from agent_actions.llm.batch.services.retry_serialization import (
+    deserialize_results,
+    serialize_results,
+)
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.core.manager import fire_event
@@ -119,7 +122,7 @@ def process_recovery_batch(
         file_name=file_name,
     )
 
-    accumulated = BatchRetryService.deserialize_results(state.accumulated_results)
+    accumulated = deserialize_results(state.accumulated_results)
 
     if entry.recovery_type == RecoveryType.RETRY:
         return handle_retry_recovery(
@@ -188,7 +191,7 @@ def handle_retry_recovery(
             state.retry_attempt = next_attempt
             state.missing_ids = list(still_missing)
             state.record_failure_counts = updated_counts
-            state.accumulated_results = BatchRetryService.serialize_results(merged)
+            state.accumulated_results = serialize_results(merged)
             RecoveryStateManager.save(
                 context.service._storage_backend,
                 context.service._resolve_action_name(context.action_name),
@@ -251,7 +254,7 @@ def handle_reprompt_recovery(
     )
     if setup is None:
         # Merge prior graduated results with current cycle before finalizing.
-        final_results = BatchRetryService.deserialize_results(state.graduated_results)
+        final_results = deserialize_results(state.graduated_results)
         final_results.extend(recovery_results)
         return _finalize_and_cleanup(
             context,
@@ -265,7 +268,7 @@ def handle_reprompt_recovery(
     validation_name = strategy.name
     graduated, still_failing, failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
-    state.graduated_results.extend(BatchRetryService.serialize_results(graduated))
+    state.graduated_results.extend(serialize_results(graduated))
     state.evaluation_strategy_name = validation_name
 
     accumulate_failure_types(state.failure_type_counts, failure_types)
@@ -325,7 +328,7 @@ def handle_reprompt_recovery(
             failure_type_counts=state.failure_type_counts or None,
         )
 
-    final_results = BatchRetryService.deserialize_results(state.graduated_results)
+    final_results = deserialize_results(state.graduated_results)
     if still_failing:
         final_results.extend(still_failing)
 
@@ -449,7 +452,7 @@ def check_and_submit_reprompt(
         on_exhausted=on_exhausted,
         evaluation_strategy_name=strategy.name,
         graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
-        + BatchRetryService.serialize_results(graduated),
+        + serialize_results(graduated),
         reprompt_attempts_per_record=(
             dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
         ),
