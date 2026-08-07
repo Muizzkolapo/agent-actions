@@ -15,7 +15,6 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
-from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_FILE_GRANULARITY_ERROR
 
@@ -25,15 +24,9 @@ from .expander_action_types import (
     process_hitl_action,
     process_tool_action,
 )
-from .expander_guard_validation import (
-    build_schema_registry,
-    validate_agent_guards,
-    validate_guard_references,
-)
 from .expander_merge import (
     deep_merge_context_scope,
     initialize_optional_fields,
-    merge_directive_value,
     process_chunk_config,
 )
 from .expander_schema import (
@@ -55,83 +48,6 @@ class ActionExpander:
 
     Supports loop expansion for iterative action processing.
     """
-
-    def __init__(self):
-        """Initialize the ActionExpander."""
-        # This class uses static methods for utility functions
-
-    # ------------------------------------------------------------------
-    # Backward-compatible delegates (thin wrappers, no logic)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _validate_vendor_exists(vendor: str | None, action_name: str) -> None:
-        return validate_vendor_exists(vendor, action_name)
-
-    @staticmethod
-    def _validate_action_name(action_name: str | None) -> None:
-        return validate_action_name(action_name)
-
-    @staticmethod
-    def _validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
-        return validate_required_fields(agent, action_name)
-
-    @staticmethod
-    def _merge_directive_value(existing: Any, new_value: Any) -> Any:
-        return merge_directive_value(existing, new_value)
-
-    @staticmethod
-    def _deep_merge_context_scope(
-        defaults_scope: dict[str, Any] | None, action_scope: dict[str, Any] | None
-    ) -> dict[str, Any]:
-        return deep_merge_context_scope(defaults_scope, action_scope)
-
-    @staticmethod
-    def _process_schema_config(
-        agent: dict[str, Any], action: dict[str, Any], template_replacer
-    ) -> None:
-        return process_schema_config(agent, action, template_replacer)
-
-    @staticmethod
-    def _process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
-        return process_guard_config(agent, action)
-
-    @staticmethod
-    def _process_tool_action(
-        agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode
-    ) -> None:
-        return process_tool_action(agent, action, run_mode)
-
-    @staticmethod
-    def _compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None:
-        return compile_output_schema(agent, action)
-
-    @staticmethod
-    def _process_chunk_config(
-        agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
-    ) -> None:
-        return process_chunk_config(agent, action, defaults)
-
-    @staticmethod
-    def _initialize_optional_fields(agent: dict[str, Any]) -> None:
-        return initialize_optional_fields(agent)
-
-    @staticmethod
-    def _build_schema_registry(agents: list[dict[str, Any]]) -> dict[str, Any]:
-        return build_schema_registry(agents)
-
-    @staticmethod
-    def _validate_agent_guards(
-        agent: dict[str, Any],
-        validator,
-        agent_indices: dict[str, int],
-        action_schemas: dict[str, Any],
-    ) -> list[str]:
-        return validate_agent_guards(agent, validator, agent_indices, action_schemas)
-
-    # ------------------------------------------------------------------
-    # Orchestration methods (real logic stays here)
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _create_template_replacer(param_name: str, current_val, idx: int, values):
@@ -430,10 +346,6 @@ class ActionExpander:
                 agents.append(created_agent)
 
         return {workflow_name: agents}
-
-    @staticmethod
-    def validate_guard_references(agents: list[dict[str, Any]], strict: bool = True) -> list[str]:
-        return validate_guard_references(agents, strict)
 
 
 __all__ = ["ActionExpander"]
