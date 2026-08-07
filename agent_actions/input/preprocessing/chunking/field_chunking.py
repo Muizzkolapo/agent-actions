@@ -26,7 +26,6 @@ from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies i
     MetadataStrategy,
 )
 from agent_actions.input.preprocessing.chunking.strategies.validation import ConfigValidator
-from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.response.config_fields import get_default
 
 
@@ -87,20 +86,6 @@ class FieldAnalyzer:
         if not isinstance(record[field_name], str):
             return False
         return field_name not in self.config.preserve_fields
-
-    def analyze_record(self, record: dict[str, Any]) -> FieldAnalysisResult:
-        """Analyze a record to determine which fields need chunking."""
-        result = FieldAnalysisResult()
-        for field_name in self._determine_fields_to_analyze(record):
-            if not self._should_analyze_field(field_name, record):
-                continue
-            token_count = Tokenizer.num_tokens_from_string(
-                record[field_name], self.config.tokenizer_model
-            )
-            result.field_sizes[field_name] = token_count
-            if self.should_chunk_field(field_name, token_count):
-                result.fields_to_chunk.append(field_name)
-        return result
 
     def should_chunk_field(self, field_name: str, token_count: int) -> bool:
         """Return True if the field should be chunked based on token count and rules."""
@@ -273,47 +258,6 @@ class FieldChunker:
 
         if parent_id_field and parent_id_field in chunk_metadata_info:
             chunked_record[parent_id_field] = chunk_metadata_info.pop(parent_id_field)
-
-    def chunk_record(
-        self, record: dict[str, Any], analysis: FieldAnalysisResult
-    ) -> list[dict[str, Any]]:
-        """Chunk a record by processing each field separately (additive, not cartesian product)."""
-        all_chunks = []
-
-        for field_name in analysis.fields_to_chunk:
-            try:
-                field_value = record.get(field_name, "")
-
-                field_value, fallback_msg = self._prepare_field_value(field_value, field_name)
-                chunk_list = self.chunk_field(field_value, field_name)
-                chunk_list, fallback_msg = self._prepare_chunk_list(
-                    chunk_list, field_name, fallback_msg
-                )
-
-                for chunk_index, chunk_text in enumerate(chunk_list, 1):
-                    metadata_params = ChunkMetadataParams(
-                        record=record,
-                        field_name=field_name,
-                        field_value=field_value,
-                        chunk_text=chunk_text,
-                        chunk_index=chunk_index,
-                        total_chunks=len(chunk_list),
-                        fallback_msg=fallback_msg,
-                    )
-                    chunk_metadata_info = self._create_chunk_metadata(metadata_params)
-                    chunked_record = self._create_chunked_record(
-                        record, field_name, chunk_text, chunk_metadata_info
-                    )
-                    all_chunks.append(chunked_record)
-
-            except (ValueError, TypeError, KeyError, AttributeError) as exception:
-                error_fallback_result = self.fallback_strategy.handle_chunking_error(
-                    record, field_name, str(exception)
-                )
-                if error_fallback_result:
-                    all_chunks.extend(error_fallback_result)
-
-        return all_chunks
 
     def chunk_field(self, field_value: str, field_name: str | None = None) -> list[str]:
         """Chunk a specific field value using field-specific or global rules."""

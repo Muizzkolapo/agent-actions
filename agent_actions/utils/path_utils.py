@@ -90,13 +90,6 @@ def clean_directory(directory: str | Path, recursive: bool = False) -> bool:
     return get_path_manager().clean_path(Path(directory), recursive=recursive)
 
 
-def get_relative_path(path: str | Path, base: str | Path) -> Path:
-    """Get path relative to base directory."""
-    abs_path = resolve_absolute_path(path)
-    abs_base = resolve_absolute_path(base)
-    return abs_path.relative_to(abs_base)
-
-
 def derive_workflow_root(target_path: str | Path) -> Path:
     """Find workflow root from a path expected to be inside a workflow.
 

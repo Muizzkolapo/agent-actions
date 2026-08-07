@@ -2,7 +2,7 @@
 
 Bug: The version correlator creates namespaced content
      {v1: {fields}, v2: {fields}} — already the correct additive format.
-     Then wrap_content wraps it AGAIN under the consuming action's name:
+     Then content assembly wraps it AGAIN under the consuming action's name:
      {action_name: {v1: {fields}, v2: {fields}}}.
      Downstream tools see double-nested data.
 
@@ -16,7 +16,8 @@ from pathlib import Path
 project_root = str(Path(__file__).resolve().parent.parent.parent)
 sys.path.insert(0, project_root)
 
-from agent_actions.utils.content import get_existing_content, wrap_content
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.utils.content import get_existing_content
 
 
 def test_file_mode_double_nesting():
@@ -37,9 +38,9 @@ def test_file_mode_double_nesting():
     existing = get_existing_content(version_merged)
     tool_output = {"consensus": "keep", "total_score": 18}
 
-    # Broken path (what wrap_content does — wraps under action name):
-    broken = wrap_content("aggregate_votes", tool_output, existing)
-    assert "aggregate_votes" in broken, "wrap_content should wrap under action name"
+    # Broken path (namespacing under the consuming action's name):
+    broken = RecordEnvelope.build_content("aggregate_votes", tool_output, existing)
+    assert "aggregate_votes" in broken, "build_content should wrap under action name"
 
     # Fixed path (what the pipeline now does for version merge — spread):
     fixed = {**existing, **tool_output}

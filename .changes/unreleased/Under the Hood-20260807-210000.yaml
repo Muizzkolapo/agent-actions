@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove verified-dead definitions across nine modules: four unused PathManager methods, the unused RenderCommandArgs module, unused content-namespace helpers (wrap_content, read_namespace, has_namespace, get_all_namespaces — content is written via RecordEnvelope.build_content), and dead methods in FileHandler, LineageBuilder, MetadataExtractor, FieldAnalyzer/FieldChunker, BatchContextManager, DataFlowGraph, and path_utils. No behavior change."
+time: 2026-08-07T21:00:00Z

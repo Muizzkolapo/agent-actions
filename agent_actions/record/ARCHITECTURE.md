@@ -139,7 +139,7 @@ All three are `@staticmethod` on `RecordEnvelope`. All return new dicts.
 │  no source_guid, no persistent fields. Just merges action_output     │
 │  under action_name into existing_content.                            │
 │                                                                      │
-│  Used by: utils/content.py wrap_content()                            │
+│  Used by: utils/content.py get_existing_content()                    │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 

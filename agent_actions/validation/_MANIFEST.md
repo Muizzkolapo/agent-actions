@@ -32,7 +32,6 @@ decoders to schema validators and preflight checks.
 | `path_validator.py` | Module | Path validation utilities conforming to BaseValidator interface. | `validation` |
 | `prompt_ast.py` | Module | Jinja2 AST parser for extracting template variables. | `prompt_generation` |
 | `prompt_validator.py` | Module | Validates prompt references during CLI operations. | `validation` |
-| `render_validator.py` | Module | `RenderCommandArgs` pydantic model. | `validation` |
 | `run_validator.py` | Module | `RunCommandArgs` and pre-flight gating. | `validation` |
 | `schema_output_validator.py` | Module | Validates output data against JSON schemas. | `validation`, `schema` |
 | `schema_validator.py` | Module | `SchemaValidator`: validates schema files against JSON Schema meta-schema. Fires a single `ValidationStartEvent` via the base class `_prepare_validation()`; the redundant `DataValidationStartedEvent` at the top of `validate()` has been removed. | `validation` |
@@ -59,7 +58,7 @@ decoders to schema validators and preflight checks.
 | `ValidateUDFsCommand.validate` | `tools/{workflow}/*.py` | Validates | — |
 | `ProjectValidator.validate` | `agent_actions.yml` | Validates | `project_name` |
 
-**Internal only**: `BaseValidator`, `PathValidationOptions`, `BatchCommandArgs`, `CleanCommandArgs`, `InitCommandArgs`, `RenderCommandArgs`, `RunCommandArgs`, `StatusCommandArgs`, `SchemaValidationReport`, `FieldUsage`, `scan_prompt_fields_ast`, `validate_prompt_fields_ast` -- no direct project surface.
+**Internal only**: `BaseValidator`, `PathValidationOptions`, `BatchCommandArgs`, `CleanCommandArgs`, `InitCommandArgs`, `RunCommandArgs`, `StatusCommandArgs`, `SchemaValidationReport`, `FieldUsage`, `scan_prompt_fields_ast`, `validate_prompt_fields_ast` -- no direct project surface.
 
 ## Dependencies
 

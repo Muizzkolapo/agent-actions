@@ -80,25 +80,6 @@ class FileHandler:
         return None
 
     @staticmethod
-    def get_folder_after_agent_config(path):
-        """Extract the folder name immediately following 'agent_config' in a path.
-
-        Returns '(isfile)' when the next component is a file, None if 'agent_config' is absent.
-        """
-        path_components = Path(path).parts
-
-        if "agent_config" in path_components:
-            agent_config_index = path_components.index("agent_config")
-
-            if agent_config_index + 1 == len(path_components) - 1 and Path(path).is_file():
-                return "(isfile)"
-
-            if agent_config_index + 1 < len(path_components):
-                return path_components[agent_config_index + 1]
-
-        return None
-
-    @staticmethod
     def get_all_agent_paths(base_dir):
         """Return all .yml file paths found recursively under base_dir."""
         agent_paths = []
