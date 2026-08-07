@@ -112,7 +112,7 @@ def validate_guard_references(agents: list[dict[str, Any]], strict: bool = True)
         agents = result['my_workflow']
 
         # Validate guard references
-        errors = ActionExpander.validate_guard_references(agents, strict=False)
+        errors = validate_guard_references(agents, strict=False)
         if errors:
             for error in errors:
                 logger.warning(error)

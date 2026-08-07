@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Remove the ActionExpander delegate façade: 13 static pass-through wrappers (9 with no callers at all) and an empty __init__, self-described as 'thin wrappers, no logic'. Tests now call the real module functions directly. No behavior change."
+time: 2026-08-07T20:30:00Z

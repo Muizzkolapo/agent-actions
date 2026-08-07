@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from agent_actions.output.response.expander import ActionExpander
+from agent_actions.output.response.expander_schema import compile_output_schema
 
 LOGGER_NAME = "agent_actions.output.response.expander"
 
@@ -32,7 +32,7 @@ class TestCompileOutputSchemaWarning:
         agent = {"agent_type": "test_action", "schema": "unexpected_string_value"}
 
         with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
-            ActionExpander._compile_output_schema(agent, {})
+            compile_output_schema(agent, {})
 
         assert any("unsupported type" in msg.lower() for msg in caplog.messages)
         assert any("str" in msg for msg in caplog.messages)
@@ -44,7 +44,7 @@ class TestCompileOutputSchemaWarning:
         agent = {"agent_type": "test_action", "schema": 42}
 
         with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
-            ActionExpander._compile_output_schema(agent, {})
+            compile_output_schema(agent, {})
 
         assert any("unsupported type" in msg.lower() for msg in caplog.messages)
         assert any("int" in msg for msg in caplog.messages)
@@ -61,7 +61,7 @@ class TestCompileOutputSchemaWarning:
         }
 
         with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
-            ActionExpander._compile_output_schema(agent, {})
+            compile_output_schema(agent, {})
 
         assert not any("unsupported type" in msg.lower() for msg in caplog.messages)
 
@@ -73,7 +73,7 @@ class TestCompileOutputSchemaWarning:
         }
 
         with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
-            ActionExpander._compile_output_schema(agent, {})
+            compile_output_schema(agent, {})
 
         assert not any("unsupported type" in msg.lower() for msg in caplog.messages)
 
@@ -85,7 +85,7 @@ class TestCompileOutputSchemaWarning:
             "schema": "should_be_ignored",
         }
 
-        ActionExpander._compile_output_schema(agent, {})
+        compile_output_schema(agent, {})
 
         # Original json_output_schema preserved
         assert agent["json_output_schema"] == {"type": "object"}

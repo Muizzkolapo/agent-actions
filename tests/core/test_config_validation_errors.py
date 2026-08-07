@@ -6,7 +6,10 @@ import pytest
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.output.response.expander import ActionExpander
+from agent_actions.output.response.expander_validation import (
+    validate_action_name,
+    validate_required_fields,
+)
 
 
 class TestConfigValidationErrorMessages:
@@ -21,7 +24,7 @@ class TestConfigValidationErrorMessages:
             "api_key": "TEST_KEY",
         }
         with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_required_fields(agent, "test_action")
+            validate_required_fields(agent, "test_action")
         error = exc_info.value
         assert error.context is not None
         assert error.context["action_name"] == "test_action"
@@ -35,7 +38,7 @@ class TestConfigValidationErrorMessages:
         """Verify error lists all missing fields."""
         agent = {"agent_type": "test_action", "name": "test_action"}
         with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_required_fields(agent, "test_action")
+            validate_required_fields(agent, "test_action")
         error = exc_info.value
         missing = error.context["missing_fields"]
         assert "model_vendor" in missing
@@ -59,7 +62,7 @@ class TestConfigValidationErrorMessages:
     def test_reserved_action_name_error_lists_reserved_names(self):
         """Verify reserved action name validation includes reserved list."""
         with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_action_name("prompt")
+            validate_action_name("prompt")
         error = exc_info.value
         assert "prompt" in str(error)
         assert "reserved_names" in error.context
