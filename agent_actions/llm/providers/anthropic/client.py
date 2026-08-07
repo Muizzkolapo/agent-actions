@@ -44,11 +44,6 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
-def _wrap_anthropic_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Anthropic SDK errors into unified agent-actions error types."""
-    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
-
-
 class AnthropicClient(BaseClient):
     """Anthropic Claude API client for JSON and non-JSON LLM invocations."""
 
@@ -164,7 +159,7 @@ class AnthropicClient(BaseClient):
         try:
             response = client.messages.create(**api_args)
         except anthropic.APIError as e:
-            raise _wrap_anthropic_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(

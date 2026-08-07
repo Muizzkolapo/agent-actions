@@ -44,11 +44,6 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
-def _wrap_cohere_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Cohere SDK errors into unified agent-actions error types."""
-    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
-
-
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Cohere API client for JSON and non-JSON LLM invocations."""
 
@@ -116,7 +111,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
-            raise _wrap_cohere_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
@@ -185,7 +180,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
-            raise _wrap_cohere_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
