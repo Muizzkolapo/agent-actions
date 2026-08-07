@@ -82,17 +82,26 @@ def _upstream_edges(
     return resolved
 
 
+DAG_FIT_REMEDY = (
+    "mark the field optional in the consumer schema, mark it required at the "
+    "producing position upstream, or declare it with `defaults:` on the consuming "
+    "action — records missing a required field are rejected at runtime."
+)
+
+
 def find_dag_schema_compatibility_gaps(
     action_configs: dict[str, dict[str, Any]],
-) -> list[str]:
-    """One finding per required output field on a tool consumer that is neither
-    guaranteed by an upstream producer nor declared as synthesized via
-    `defaults:` on the action.
+) -> dict[str, list[str]]:
+    """Per tool consumer, the required output fields that are neither guaranteed
+    by an upstream producer nor declared as synthesized via `defaults:`.
+
+    Returns ``{consumer_action: [sorted missing fields]}`` for the caller to
+    render as one grouped warning (remedy: ``DAG_FIT_REMEDY``).
 
     Warn-only for Phase 2 of spec 592. Phase 4 flips this fatal and removes
     the sibling `find_conditional_required_field_risks` scanner it subsumes.
     """
-    findings: list[str] = []
+    gaps: dict[str, list[str]] = {}
     for consumer_name, consumer in action_configs.items():
         if consumer.get("kind") != "tool":
             continue
@@ -118,15 +127,8 @@ def find_dag_schema_compatibility_gaps(
             if isinstance(producer_schema, dict):
                 guaranteed |= _required_fields_two_level(producer_schema)
 
-        for field in sorted(implicit_inputs - guaranteed):
-            findings.append(
-                f"dag-fit: {consumer_name} output requires '{field}' but no upstream "
-                f"producer guarantees it (declared in properties without being listed "
-                f"as required), and no `defaults:` entry declares it synthesized on "
-                f"this action. Runtime schema validation will reject records where the "
-                f"UDF does not emit it. Fix one of: mark '{field}' optional in the "
-                f"consumer schema; mark it required at the producing position upstream; "
-                f"or add `defaults: {{{field}: <value>}}` on this action."
-            )
+        missing = sorted(implicit_inputs - guaranteed)
+        if missing:
+            gaps[consumer_name] = missing
 
-    return findings
+    return gaps

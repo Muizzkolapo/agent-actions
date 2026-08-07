@@ -19,6 +19,7 @@ from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
 from agent_actions.utils.udf_management.registry import get_udf_metadata
 from agent_actions.validation.dag_schema_fit_validator import (
+    DAG_FIT_REMEDY,
     find_dag_schema_compatibility_gaps,
 )
 from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
@@ -113,14 +114,17 @@ class PreflightService:
         ).resolve_all()
         resolution_result.raise_if_invalid()
 
-        for warning in resolution_result.warnings:
-            logger.warning("Pre-flight: %s", warning.message)
+        self._warn_findings(
+            "resolution", [warning.message for warning in resolution_result.warnings]
+        )
 
         # 6. Cross-check prompt refs against each producer's required set
-        for finding in find_unguarded_required_refs(
-            self._collect_prompts(), self._collect_producing_schemas()
-        ):
-            logger.warning("Pre-flight: %s", finding)
+        self._warn_findings(
+            "prompt-contract",
+            find_unguarded_required_refs(
+                self._collect_prompts(), self._collect_producing_schemas()
+            ),
+        )
 
         # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
         self._warn_tool_passthrough_risks()
@@ -198,8 +202,10 @@ class PreflightService:
 
     def _warn_tool_passthrough_risks(self) -> None:
         """Warn when a kind:tool UDF passes upstream dicts through a strict schema."""
-        for finding in find_passthrough_schema_risks(self._collect_tool_passthrough_inputs()):
-            logger.warning("Pre-flight: %s", finding)
+        self._warn_findings(
+            "tool-passthrough",
+            find_passthrough_schema_risks(self._collect_tool_passthrough_inputs()),
+        )
 
     def _collect_tool_required_field_inputs(self) -> dict[str, dict[str, Any]]:
         """UDF source + compiled required list per kind:tool action.
@@ -247,5 +253,43 @@ class PreflightService:
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:
         """Warn when a tool consumer's required output field is neither guaranteed by an upstream producer nor declared as synthesized via `defaults:`."""
-        for finding in find_dag_schema_compatibility_gaps(self.action_configs):
-            logger.warning("Pre-flight: %s", finding)
+        gaps = find_dag_schema_compatibility_gaps(self.action_configs)
+        if not gaps:
+            return
+        total = sum(len(fields) for fields in gaps.values())
+        self._warn_findings(
+            "dag-fit",
+            [f"{action}: {', '.join(fields)}" for action, fields in gaps.items()],
+            header=(
+                f"dag-fit — {total} required field(s) with no upstream guarantee "
+                f"across {len(gaps)} action(s)"
+            ),
+            remedy=DAG_FIT_REMEDY,
+        )
+
+    @staticmethod
+    def _warn_findings(
+        label: str,
+        findings: list[str],
+        header: str | None = None,
+        remedy: str | None = None,
+    ) -> None:
+        """Emit one grouped warning for a check's findings instead of one per finding.
+
+        Renders a tree so a run's warning wall reads as a few scannable blocks:
+
+            Pre-flight: dag-fit — 5 required field(s) ... across 2 action(s)
+              ├─ flatten: category, key, steps
+              ├─ assemble: id, items
+              └─ Fix: mark the field optional in the consumer schema, ...
+        """
+        if not findings:
+            return
+        items = list(findings)
+        if remedy:
+            items.append(f"Fix: {remedy}")
+        body = "\n".join(
+            f"  {'└─' if i == len(items) - 1 else '├─'} {item}" for i, item in enumerate(items)
+        )
+        head = header or f"{label} — {len(findings)} warning(s)"
+        logger.warning("Pre-flight: %s\n%s", head, body)
