@@ -1,7 +1,5 @@
 """Compatibility re-exports for core.loaders.data_loaders imports."""
 
-from agent_actions.config.di.container import registry as _registry
-
 from .base import BaseLoader, retry
 from .json import JsonLoader
 from .source_data import SourceDataLoader
@@ -28,6 +26,3 @@ __all__ = [
     "TextLoader",
     "XmlLoader",
 ]
-
-# Register loaders after imports to avoid circular dependencies
-_registry.register_loader("source_data")(SourceDataLoader)

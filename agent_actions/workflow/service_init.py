@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from agent_actions.config.factory import create_action_runner
 from agent_actions.storage import get_storage_backend
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
@@ -24,6 +23,7 @@ from agent_actions.workflow.models import (
     WorkflowServices,
 )
 from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
+from agent_actions.workflow.runner import ActionRunner
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -83,7 +83,7 @@ def initialize_services(
     """
     fire_event(WorkflowServicesInitializationStartEvent(workflow_name=metadata.agent_name))
 
-    action_runner = create_action_runner(
+    action_runner = ActionRunner(
         use_tools=config.use_tools,
         storage_backend=storage_backend,
     )

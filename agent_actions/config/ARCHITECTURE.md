@@ -1,6 +1,6 @@
 # Config Module Architecture
 
-This document maps the moving parts of `agent_actions/config/` — the module that loads, validates, merges, and resolves all configuration for the framework: workflow YAML files, environment variables, project paths, default constants, and dependency injection wiring.
+This document maps the moving parts of `agent_actions/config/` — the module that loads, validates, merges, and resolves all configuration for the framework: workflow YAML files, environment variables, project paths, and default constants.
 
 ---
 
@@ -244,83 +244,6 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 
 ---
 
-## DI System
-
-### Container Architecture
-
-```
-DependencyContainer
-  │
-  ├── register_singleton(interface, impl)  → one instance, created on first get()
-  ├── register_transient(interface, impl)  → new instance every get()
-  ├── register_factory(interface, fn)      → fn() called every get()
-  ├── register_instance(interface, obj)    → pre-built object
-  │
-  └── get(interface) → T
-        1. Check _services → create via _create_instance (auto-resolves deps)
-        2. Check _instances → return directly
-        3. Check _factories → call factory
-        4. None found → DependencyError
-
-  _create_instance(cls):
-    Introspects cls.__init__ signature + type hints.
-    For each param: resolve from container, use default, or raise.
-    Thread-safe for singletons (RLock).
-```
-
-### Registration Map
-
-```
-DIConfigurator.configure_container():
-
-  Singletons (shared across all callers):
-    PathManager      → PathManager
-    PromptLoader     → PromptLoader
-    LoggerFactory    → LoggerFactory
-
-  Transients (new instance per resolution):
-    IDataProcessor      → DataProcessor
-    IGenerator          → DataGenerator
-    ISourceDataLoader   → SourceDataLoader
-    IDataLoader         → JsonLoader
-```
-
-### Application Bootstrap
-
-```
-factory.py: application_container_context(config)
-  │
-  └─ ApplicationContainer(config)
-       │
-       ├── DIConfigurator.configure_container(config) → DependencyContainer
-       ├── DIConfigurator.create_processor_factory()   → ProcessorFactory
-       │
-       └── get_action_runner(use_tools, storage_backend)
-             └── ActionRunner(use_tools, processor_factory, storage_backend)
-
-Profiles:
-  development → DEBUG logging, no cache, no parallel
-  production  → INFO logging, cache on, parallel on
-  testing     → ERROR logging, mock everything
-```
-
-### ProcessorRegistry (Separate from DI Container)
-
-```
-ProcessorRegistry (module-level singleton: registry)
-  │
-  ├── @registry.register_processor("name")  → decorator
-  ├── @registry.register_loader("name")
-  ├── @registry.register_generator("name")
-  └── @registry.register_service("name")
-
-ProcessorFactory uses both:
-  ProcessorFactory(container, registry)
-    create_processor("name") → registry.get_processor("name") → cls
-                              → _build_init_kwargs(cls, container) → instance
-```
-
----
 
 ## File Index
 
@@ -344,14 +267,9 @@ ProcessorFactory uses both:
 | `manager.py` | `ConfigManager` — orchestrates the full pipeline: YAML load, Jinja2 render, Pydantic validate, merge defaults, expand actions, infer dependencies, topological sort, environment config |
 | `defaults.py` | Zero-import default constants: `StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults` |
 
-### DI System
+### Interfaces
 | File | Role |
 |------|------|
-| `di/container.py` | `DependencyContainer` (singleton/transient/factory/instance), `ProcessorRegistry` (decorator-based), `ProcessorFactory` (registry + container), `_build_init_kwargs()` |
-| `di/configurator.py` | `DIConfigurator` — registers all services, `ConfigurationProfile` presets (dev/prod/test) |
-| `di/application.py` | `ApplicationContainer` — top-level bootstrap, creates `ActionRunner` with all deps |
-| `di/types.py` | `DIConfig`, `LoggingConfig`, `ProcessorsConfig`, `ServicesConfig` typed dicts |
-| `factory.py` | `application_container_context()` context manager, `create_action_runner()` convenience function |
 | `interfaces.py` | `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `IDataProcessor` interface ABCs |
 
 ### Project Lifecycle

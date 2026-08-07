@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-from agent_actions.config.di.container import registry
 from agent_actions.config.interfaces import IDataProcessor
 from agent_actions.errors import TransformationError
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
@@ -19,7 +18,6 @@ class ProcessItemRequest:
     passthrough_fields: dict | None = None
 
 
-@registry.register_processor("data_processor")
 class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     """Handles post-processing of generated data (Single Responsibility)."""
 

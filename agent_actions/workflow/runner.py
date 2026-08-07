@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
-from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
@@ -84,12 +83,10 @@ class ActionRunner:
     def __init__(
         self,
         use_tools: bool,
-        processor_factory: ProcessorFactory | None = None,
         storage_backend: StorageBackend | None = None,
     ) -> None:
         """Initialize the ActionRunner with strategy configurations."""
         self.use_tools: bool = use_tools
-        self.processor_factory = processor_factory
         self.storage_backend = storage_backend
         self.action_configs: dict[str, dict] | None = None
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
@@ -103,9 +100,9 @@ class ActionRunner:
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
         self.project_root: Path | None = None  # Set by service_init.initialize_services
         self.strategies: dict[str, ActionStrategy] = {
-            "initial": InitialStrategy(processor_factory),
-            "intermediate": StandardStrategy(processor_factory),
-            "terminal": StandardStrategy(processor_factory),
+            "initial": InitialStrategy(),
+            "intermediate": StandardStrategy(),
+            "terminal": StandardStrategy(),
         }
 
     def get_action_folder(self, action_name: str, project_root: Path | None = None) -> str:

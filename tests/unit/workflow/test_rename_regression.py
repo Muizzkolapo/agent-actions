@@ -35,7 +35,7 @@ class TestInitialStrategyKwargs:
 
     def test_initial_strategy_passes_agent_config_and_agent_name(self):
         """Verify InitialStageContext is constructed with agent_config / agent_name."""
-        strategy = InitialStrategy(processor_factory=None)
+        strategy = InitialStrategy()
 
         params = StrategyExecutionParams(
             action_config={"model_vendor": "openai"},
@@ -78,8 +78,7 @@ class TestActionStrategyPipelineKwargs:
 
     def test_execute_generate_target_passes_agent_kwargs(self):
         """Verify pipeline factory receives action_config, action_name, action_configs."""
-        mock_factory = MagicMock()
-        strategy = StandardStrategy(processor_factory=mock_factory)
+        strategy = StandardStrategy()
 
         params = StrategyExecutionParams(
             action_config={"model_vendor": "openai"},

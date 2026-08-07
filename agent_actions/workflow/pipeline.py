@@ -5,9 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
-from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import AgentActionsError, ConfigurationError, DependencyError
+from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -94,7 +93,6 @@ class ProcessParams:
     action_name: str
     paths: FilePathsConfig
     idx: int
-    processor_factory: ProcessorFactory | None
     action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
@@ -103,16 +101,14 @@ class ProcessParams:
 class ProcessingPipeline:
     """Orchestrates data processing through configured agents in batch and online modes."""
 
-    def __init__(self, config: PipelineConfig, processor_factory: ProcessorFactory):
+    def __init__(self, config: PipelineConfig):
         """
         Initialize the processing pipeline.
 
         Args:
             config: PipelineConfig with agent configuration
-            processor_factory: Required factory for creating processors with DI
 
         Raises:
-            DependencyError: If processor_factory is not provided
             ConfigurationError: If action_config is None or invalid
         """
         if config.action_config is None:
@@ -143,16 +139,6 @@ class ProcessingPipeline:
                     "action_name": config.action_name,
                     "granularity": self.granularity,
                     "kind": self.action_kind,
-                },
-            )
-
-        if processor_factory is None:
-            raise DependencyError(
-                "ProcessingPipeline requires processor_factory",
-                {
-                    "component": "ProcessingPipeline",
-                    "dependency": "processor_factory",
-                    "action_name": config.action_name,
                 },
             )
 
@@ -298,19 +284,7 @@ class ProcessingPipeline:
 
         Returns:
             Path to the generated output file
-
-        Raises:
-            DependencyError: If processor_factory is not provided
         """
-        if params.processor_factory is None:
-            raise DependencyError(
-                "ProcessingPipeline.process_file requires processor_factory",
-                {
-                    "method": "ProcessingPipeline.process_file",
-                    "dependency": "processor_factory",
-                    "agent_name": params.action_name,
-                },
-            )
         # Tool and HITL actions run synchronously regardless of run_mode
         # (tools are Python functions, HITL blocks for human input)
         is_synchronous = params.action_config.get("model_vendor") in [
@@ -352,7 +326,6 @@ class ProcessingPipeline:
             action_config=params.action_config,
             action_name=params.action_name,
             idx=params.idx,
-            processor_factory=params.processor_factory,
             action_configs=params.action_configs,
             storage_backend=params.storage_backend,
         )
@@ -632,27 +605,10 @@ class ProcessingPipeline:
         return self._online_strategy
 
 
-def create_processing_pipeline(
-    config: PipelineConfig, processor_factory: ProcessorFactory
-) -> ProcessingPipeline:
-    """
-    Factory function for creating a ProcessingPipeline instance.
-
-    Args:
-        config: PipelineConfig with agent configuration
-        processor_factory: Required factory for creating processors with DI
-
-    Returns:
-        ProcessingPipeline instance
-    """
-    return ProcessingPipeline(config, processor_factory)
-
-
 def create_processing_pipeline_from_params(
     action_config: ActionConfigDict,
     action_name: str,
     idx: int,
-    processor_factory: ProcessorFactory,
     action_configs: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
     storage_backend: Optional["StorageBackend"] = None,
@@ -665,7 +621,6 @@ def create_processing_pipeline_from_params(
         action_config: Configuration for the action
         action_name: Name of the action
         idx: Index of the action
-        processor_factory: Required factory for creating processors with DI
         action_configs: Optional dictionary of all action configurations
         workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
         storage_backend: Optional storage backend for database persistence
@@ -683,4 +638,4 @@ def create_processing_pipeline_from_params(
         storage_backend=storage_backend,
         source_relative_path=source_relative_path,
     )
-    return ProcessingPipeline(config, processor_factory)
+    return ProcessingPipeline(config)
