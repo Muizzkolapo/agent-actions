@@ -331,7 +331,7 @@ Every path that resets action state also clears checkpoint records:
 ## Disposition Gate — What Gets Reprocessed
 
 ```
-GATE_TERMINAL_DISPOSITIONS (not reprocessed on re-run):
+TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   ✓ SUCCESS
   ✓ FILTERED
   ✓ SKIPPED

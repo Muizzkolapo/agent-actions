@@ -15,18 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 # Import operation modules for delegation
 from agent_actions.llm.batch.services import reprompt_ops as _reprompt
 from agent_actions.llm.batch.services import retry_ops as _retry
-
-# Re-export module-level functions for backward compatibility.
-# Tests and callers patch/import these from "agent_actions.llm.batch.services.retry".
-from agent_actions.llm.batch.services.retry_polling import (
-    import_validation_module as _import_validation_module,  # noqa: F401
-)
-from agent_actions.llm.batch.services.retry_polling import wait_for_batch_completion  # noqa: F401
-from agent_actions.llm.batch.services.retry_serialization import (  # noqa: F401
-    deserialize_results,
-    serialize_results,
-)
-from agent_actions.llm.batch.services.shared import retrieve_and_reconcile  # noqa: F401
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.processing.types import RecoveryMetadata
 
@@ -343,17 +332,3 @@ class BatchRetryService:
             per_record_attempts=per_record_attempts,
             failure_type_counts=failure_type_counts,
         )
-
-    # =========================================================================
-    # SERIALIZATION (delegated to retry_serialization)
-    # =========================================================================
-
-    @staticmethod
-    def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
-        """Serialize BatchResult objects for JSON persistence."""
-        return serialize_results(results)
-
-    @staticmethod
-    def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
-        """Deserialize BatchResult objects from JSON."""
-        return deserialize_results(data)
