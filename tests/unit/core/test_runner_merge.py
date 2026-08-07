@@ -6,6 +6,7 @@ import pytest
 
 from agent_actions.workflow.merge import merge_records_by_key
 from agent_actions.workflow.runner import ActionRunner
+from agent_actions.workflow.runner_file_processing import process_from_storage_backend
 
 
 class TestMergeRecordsByKey:
@@ -155,7 +156,7 @@ class TestStorageBackendMerge:
         params.idx = 0
 
         # Execute
-        files_found, files_processed = runner._process_from_storage_backend(params)
+        files_found, files_processed = process_from_storage_backend(runner, params)
 
         # Verify merge happened
         assert files_found == 1  # One unique path
@@ -195,7 +196,7 @@ class TestStorageBackendMerge:
         params.strategy = MagicMock()
         params.idx = 0
 
-        files_found, files_processed = runner._process_from_storage_backend(params)
+        files_found, files_processed = process_from_storage_backend(runner, params)
 
         # Two unique files processed
         assert files_found == 2
@@ -228,7 +229,7 @@ class TestStorageBackendMerge:
         params.strategy = MagicMock()
         params.idx = 0
 
-        runner._process_from_storage_backend(params)
+        process_from_storage_backend(runner, params)
 
         # Verify source_relative_path preserves full path without extension
         assert len(captured_params) == 1
