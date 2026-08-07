@@ -18,28 +18,7 @@ from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.workflow.runner_file_processing import (
-    collect_files_from_upstream as _collect_files_from_upstream,
-)
-from agent_actions.workflow.runner_file_processing import (
-    is_target_directory as _is_target_directory,
-)
-from agent_actions.workflow.runner_file_processing import (
-    process_directory_files as _process_directory_files,
-)
-from agent_actions.workflow.runner_file_processing import (
     process_files as _process_files,
-)
-from agent_actions.workflow.runner_file_processing import (
-    process_from_storage_backend as _process_from_storage_backend,
-)
-from agent_actions.workflow.runner_file_processing import (
-    process_merged_files as _process_merged_files,
-)
-from agent_actions.workflow.runner_file_processing import (
-    should_skip_item as _should_skip_item,
-)
-from agent_actions.workflow.runner_file_processing import (
-    warn_no_files_found as _warn_no_files_found,
 )
 from agent_actions.workflow.strategies import (
     ActionStrategy,
@@ -306,66 +285,6 @@ class ActionRunner:
             )
         )
 
-    def _should_skip_item(
-        self,
-        item: Path,
-        input_path: Path,
-        processed_paths: set,
-        file_type_filter: set[str] | None = None,
-    ) -> bool:
-        """Check if an item should be skipped during processing."""
-        return _should_skip_item(item, input_path, processed_paths, file_type_filter)
-
-    def _collect_files_from_upstream(self, upstream_data_dirs: list[str]) -> dict[Path, list[Path]]:
-        """Collect files from upstream directories, grouped by relative path."""
-        return _collect_files_from_upstream(upstream_data_dirs)
-
-    def _process_directory_files(
-        self,
-        input_path: Path,
-        output_path: Path,
-        input_directory: str,
-        params: FileProcessParams,
-        processed_paths: set,
-    ) -> tuple[int, int]:
-        """Process all files in a single directory.
-
-        Returns:
-            (files_found, files_processed).
-        """
-        return _process_directory_files(
-            self, input_path, output_path, input_directory, params, processed_paths
-        )
-
-    def _warn_no_files_found(self, params: FileProcessParams) -> None:
-        """Log warning if no files were found in upstream directories."""
-        _warn_no_files_found(params)
-
-    def _process_merged_files(self, params: FileProcessParams) -> tuple[int, int]:
-        """Process files from multiple upstream directories with content merging.
-
-        Returns:
-            (files_found, files_processed).
-        """
-        return _process_merged_files(self, params)
-
-    def _process_from_storage_backend(self, params: FileProcessParams) -> tuple[int, int]:
-        """Process data from storage backend instead of filesystem.
-
-        Returns:
-            (files_found, files_processed) to distinguish "no data" from
-            "data found but processing failed".
-        """
-        return _process_from_storage_backend(self, params)
-
-    def _is_target_directory(self, path: str) -> bool:
-        """Return True if path is a target directory (not staging)."""
-        return _is_target_directory(path)
-
-    def process_files(self, params: FileProcessParams) -> None:
-        """Walk upstream data directories and process each file with the given strategy."""
-        _process_files(self, params)
-
     def process_and_generate_for_action(self, params: ProcessGenerateParams) -> str:
         """Process and generate data for an action using the provided strategy."""
         agent_folder: str = self.get_action_folder(params.action_name)
@@ -388,7 +307,8 @@ class ActionRunner:
             )
             file_type_filter = result.file_type_filter
 
-        self.process_files(
+        _process_files(
+            self,
             FileProcessParams(
                 action_config=params.action_config,
                 action_name=params.action_name,
@@ -397,7 +317,7 @@ class ActionRunner:
                 output_directory=output_directory,
                 idx=params.idx,
                 file_type_filter=file_type_filter,
-            )
+            ),
         )
         return output_directory
 

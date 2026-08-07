@@ -24,6 +24,7 @@ def _make_params(upstream_dirs, output_dir, action_config=None):
     params.action_name = "test_action"
     params.strategy = MagicMock()
     params.idx = 0
+    params.file_type_filter = None
     return params
 
 
@@ -196,7 +197,6 @@ class TestProcessDirectoryFilesIsolation:
                 raise RuntimeError("record namespace failure on b.json")
 
         runner = MagicMock()
-        runner._should_skip_item.return_value = False
         runner._process_single_file.side_effect = _process
 
         params = _make_params([str(input_dir)], output_dir)
@@ -219,7 +219,6 @@ class TestProcessDirectoryFilesIsolation:
             (input_dir / name).write_text(json.dumps([{"id": name}]))
 
         runner = MagicMock()
-        runner._should_skip_item.return_value = False
         runner._process_single_file = MagicMock()
 
         params = _make_params([str(input_dir)], output_dir)
