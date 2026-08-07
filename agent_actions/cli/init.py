@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 import click
 import yaml
 
+from agent_actions.cli.args import InitCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.config.init import ProjectInitializer
 from agent_actions.errors import (
@@ -29,7 +30,6 @@ from agent_actions.logging.events import (
     ProjectValidationEvent,
 )
 from agent_actions.utils.constants import PROJECT_NAME_KEY
-from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project_validator import ProjectValidator
 
 logger = logging.getLogger(__name__)

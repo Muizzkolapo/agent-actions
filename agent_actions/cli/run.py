@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import click
 
+from agent_actions.cli.args import RunCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
-from agent_actions.validation.run_validator import RunCommandArgs
 
 if TYPE_CHECKING:
     from agent_actions.workflow.coordinator import AgentWorkflow

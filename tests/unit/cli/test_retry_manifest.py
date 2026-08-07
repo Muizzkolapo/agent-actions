@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import (
     RetryCommand,
     _delete_manifest,
@@ -13,7 +14,6 @@ from agent_actions.cli.retry import (
     _read_manifest,
     _write_manifest,
 )
-from agent_actions.validation.retry_validator import RetryCommandArgs
 from tests.unit.cli.conftest import make_mock_backend
 
 
