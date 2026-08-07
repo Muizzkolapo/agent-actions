@@ -173,7 +173,6 @@ __all__ = [
     # Configuration
     "ConfigLoadStartEvent",
     "ConfigLoadEvent",
-    # Environment
     # Initialization (CLI, System, Project)
     "CLIInitStartEvent",
     "CLIArgumentParsingEvent",

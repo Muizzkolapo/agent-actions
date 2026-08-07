@@ -206,15 +206,15 @@ Event types are spread across 8 source files in `events/`:
 | File | Domain | Count (approx.) |
 |------|--------|-----------------|
 | `workflow_events.py` | Workflow + action lifecycle | 8 |
-| `batch_events.py` | Batch submission, polling, completion | 12 |
-| `llm_events.py` | LLM requests, responses, errors | 9 |
-| `validation_events.py` | Validation, recovery, guard | 14 |
-| `initialization_events.py` | CLI, config, env, project, UDF | 21 |
+| `batch_events.py` | Batch submission, polling, completion | 10 |
+| `llm_events.py` | LLM requests, responses, errors | 6 |
+| `validation_events.py` | Validation, recovery, guard | 12 |
+| `initialization_events.py` | CLI, config, project, UDF | 13 |
 | `io_events.py` | File I/O, schema, context | 13 |
-| `data_pipeline_events.py` | Record processing, enrichment, results | 18 |
-| `cache_events.py` | Cache hit/miss/invalidation | 6 |
+| `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
+| `cache_events.py` | Cache hit/miss/invalidation | 5 |
 
-All 106 event types are re-exported from `events/__init__.py`.
+All 84 event types are re-exported from `events/__init__.py`.
 
 ---
 
@@ -368,7 +368,7 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 ### events/
 | File | Role |
 |------|------|
-| `events/__init__.py` | Re-exports all 106 event types + AgentActionsFormatter |
+| `events/__init__.py` | Re-exports all 84 event types + AgentActionsFormatter |
 | `events/types.py` | EventCategories constants + `_safe_value_repr()` |
 | `events/formatters.py` | AgentActionsFormatter -- dispatch table for console display |
 | `events/workflow_events.py` | W/A prefix events (workflow + action lifecycle) |
