@@ -2,7 +2,7 @@
 Tests for the flat operators module.
 
 Tests all comparison, logical, and function operators via the OPERATORS
-and FUNCTIONS dicts, plus the list_operators/get_operator_info shims.
+and FUNCTIONS dicts, plus the list_operators helper.
 """
 
 import pytest
@@ -12,7 +12,6 @@ from agent_actions.input.preprocessing.parsing.operators import (
     OPERATOR_INFO,
     OPERATORS,
     OperatorType,
-    get_operator_info,
     list_operators,
 )
 
@@ -161,16 +160,6 @@ class TestFunctionOperators:
 
 
 class TestOperatorInfo:
-    def test_get_operator_info(self):
-        info = get_operator_info("EQ")
-        assert info is not None
-        assert info.name == "EQ"
-        assert info.symbol == "=="
-        assert info.operator_type == OperatorType.COMPARISON
-
-    def test_get_operator_info_missing(self):
-        assert get_operator_info("UNKNOWN") is None
-
     def test_list_operators_filtered(self):
         comparison_ops = list_operators(OperatorType.COMPARISON)
         assert all(op.operator_type == OperatorType.COMPARISON for op in comparison_ops)

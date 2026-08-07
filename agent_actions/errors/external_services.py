@@ -58,9 +58,3 @@ class PromptTooLargeError(VendorAPIError):
     """Raised when the assembled prompt exceeds the model's context window."""
 
     pass
-
-
-class LLMResponseParseError(VendorAPIError):
-    """Raised when JSON parsing fails and reprompt/recovery is configured."""
-
-    pass

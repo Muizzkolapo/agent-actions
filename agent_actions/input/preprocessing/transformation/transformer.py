@@ -25,16 +25,6 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def remove_schema_objects(data: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
-        """Return a new dictionary with specified keys removed."""
-        if not isinstance(data, dict):
-            return data  # type: ignore[unreachable]
-        if not keys_to_remove:
-            return data
-
-        return {k: v for k, v in data.items() if k not in keys_to_remove}
-
-    @staticmethod
     def update_schema_objects(
         data_old: dict[str, Any], data_new: dict[str, Any], keys_to_update: list[str]
     ) -> dict[str, Any]:

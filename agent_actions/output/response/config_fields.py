@@ -47,7 +47,7 @@ SIMPLE_CONFIG_FIELDS = {
     "max_execution_time": 300,
     "where_clause": None,
     "enable_caching": True,
-    # Chunking defaults (used by expander_merge, initial_pipeline, field_chunking)
+    # Chunking defaults (used by expander_merge, initial_pipeline)
     "chunk_size": 300,
     "chunk_overlap": 10,
     "tokenizer_model": "cl100k_base",

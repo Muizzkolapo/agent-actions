@@ -25,8 +25,7 @@ Exception
     │   ├── VendorAPIError
     │   │   ├── AnthropicError
     │   │   ├── RateLimitError                 (retryable)
-    │   │   ├── PromptTooLargeError
-    │   │   └── LLMResponseParseError
+    │   │   └── PromptTooLargeError
     │   └── NetworkError                       (retryable)
     │
     ├── FileSystemError                        filesystem.py
@@ -89,7 +88,6 @@ _TRANSIENT_API_ERROR_PATTERNS = (
 | `VendorAPIError` (all other) | No | Provider rejected the request (bad input, content filter, etc.) |
 | `AnthropicError` | No | Subclass of VendorAPIError, not in RETRIABLE_ERRORS tuple |
 | `PromptTooLargeError` | No | Deterministic — same prompt will always be too large |
-| `LLMResponseParseError` | No | JSON parse failure — handled by reprompt, not retry |
 | Everything else | No | Configuration, filesystem, validation errors are not transient |
 
 ### How `is_retriable_error()` decides
@@ -269,7 +267,7 @@ This means callers cannot mutate the error's context after construction by holdi
 
 7. **`RecordContextError` lives under `ConfigurationError`, not `ProcessingError`.** This is a deliberate classification: a record's missing context is a configuration/data issue, not a processing failure. But its propagation behavior (per-record tombstone, pipeline continues) is more like a processing error. Do not move it without updating the callers that catch `ConfigurationError` subtypes.
 
-8. **`LLMResponseParseError` is not retried by `RetryService`.** It subclasses `VendorAPIError` but does not match `RETRIABLE_ERRORS` or `_TRANSIENT_API_ERROR_PATTERNS`. JSON parse failures are handled by the reprompt loop (corrective feedback to the LLM), not by transport-layer retry. Conflating the two recovery mechanisms will cause parse failures to burn through retry attempts without sending corrective feedback.
+8. **JSON parse failures are not retried by `RetryService`.** They are handled by the reprompt loop (corrective feedback to the LLM), not by transport-layer retry. Conflating the two recovery mechanisms will cause parse failures to burn through retry attempts without sending corrective feedback.
 
 9. **`RateLimitError` subclasses `VendorAPIError`.** This means `except VendorAPIError` will also catch rate limit errors. If you add error handling that catches `VendorAPIError` and treats it as terminal, you will accidentally suppress retry for rate limits. Always check for `RateLimitError` first, or use `is_retriable_error()`.
 

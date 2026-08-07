@@ -16,8 +16,6 @@ from typing import Any
 
 from agent_actions.config.defaults import DocsDefaults
 from agent_actions.tooling.code_scanner import (
-    extract_function_details,
-    extract_typed_dicts,
     scan_tool_functions,
 )
 
@@ -59,8 +57,6 @@ __all__ = [
     "extract_runtime_warnings",
     # Code scanners
     "scan_tool_functions",
-    "extract_typed_dicts",
-    "extract_function_details",
     # Component scanners
     "scan_vendors",
     "scan_error_types",

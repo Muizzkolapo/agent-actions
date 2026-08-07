@@ -323,9 +323,3 @@ def get_guard_evaluator() -> GuardEvaluator:
             if _GLOBAL_GUARD_EVALUATOR is None:
                 _GLOBAL_GUARD_EVALUATOR = GuardEvaluator()
     return _GLOBAL_GUARD_EVALUATOR
-
-
-def reset_guard_evaluator() -> None:
-    """Reset the global GuardEvaluator instance (for testing)."""
-    global _GLOBAL_GUARD_EVALUATOR
-    _GLOBAL_GUARD_EVALUATOR = None

@@ -51,30 +51,3 @@ class ISourceDataLoader(ILoader):
     async def save_source_data_async(self, relative_path: str, data: list[dict]) -> None:
         """Async version of save_source_data."""
         return await asyncio.to_thread(self.save_source_data, relative_path, data)
-
-
-# Processor interfaces
-class IDataProcessor(IProcessor):
-    """Interface for data processing."""
-
-    @abstractmethod
-    def process_item(
-        self,
-        contents: dict,
-        generated_data: list[dict],
-        source_guid: str,
-        passthrough_fields: dict | None = None,
-    ) -> list[dict]:
-        """Process a single data item."""
-
-    async def process_item_async(
-        self,
-        contents: dict,
-        generated_data: list[dict],
-        source_guid: str,
-        passthrough_fields: dict | None = None,
-    ) -> list[dict]:
-        """Async version of process_item."""
-        return await asyncio.to_thread(
-            self.process_item, contents, generated_data, source_guid, passthrough_fields
-        )
