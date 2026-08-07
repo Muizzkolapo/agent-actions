@@ -9,6 +9,21 @@ import logging
 
 from agent_actions.services.preflight_service import PreflightService
 
+_LOGGER = "agent_actions.services.preflight_service"
+
+
+def _capture_dagfit(configs, caplog):
+    """Run the dag-fit warn path with root propagation forced on for capture."""
+    aa_logger = logging.getLogger("agent_actions")
+    original = aa_logger.propagate
+    aa_logger.propagate = True
+    try:
+        with caplog.at_level(logging.WARNING, logger=_LOGGER):
+            _service(configs)._warn_dag_schema_compatibility_gaps()
+    finally:
+        aa_logger.propagate = original
+    return [r for r in caplog.records if "dag-fit" in r.getMessage()]
+
 
 def _service(action_configs):
     return PreflightService(
@@ -39,10 +54,7 @@ class TestDagFitGrouping:
             "flatten": _tool(["category", "key"]),
             "assemble": _tool(["id", "items"]),
         }
-        with caplog.at_level(logging.WARNING):
-            _service(configs)._warn_dag_schema_compatibility_gaps()
-
-        dagfit = [r for r in caplog.records if "dag-fit" in r.getMessage()]
+        dagfit = _capture_dagfit(configs, caplog)
         assert len(dagfit) == 1, (
             f"expected ONE aggregated dag-fit warning, got {len(dagfit)} records"
         )
@@ -52,10 +64,7 @@ class TestDagFitGrouping:
             "flatten": _tool(["category", "key", "steps"]),
             "assemble": _tool(["id", "items"]),
         }
-        with caplog.at_level(logging.WARNING):
-            _service(configs)._warn_dag_schema_compatibility_gaps()
-
-        msg = next(r.getMessage() for r in caplog.records if "dag-fit" in r.getMessage())
+        msg = _capture_dagfit(configs, caplog)[0].getMessage()
         assert "flatten: category, key, steps" in msg, msg
         assert "assemble: id, items" in msg, msg
 
@@ -64,12 +73,7 @@ class TestDagFitGrouping:
             "flatten": _tool(["category", "key", "steps"]),
             "assemble": _tool(["id", "items"]),
         }
-        with caplog.at_level(logging.WARNING):
-            _service(configs)._warn_dag_schema_compatibility_gaps()
-
-        combined = "\n".join(
-            r.getMessage() for r in caplog.records if "dag-fit" in r.getMessage()
-        )
+        combined = "\n".join(r.getMessage() for r in _capture_dagfit(configs, caplog))
         assert combined.count("optional in the consumer schema") == 1, combined
 
     def test_header_carries_counts(self, caplog):
@@ -77,10 +81,7 @@ class TestDagFitGrouping:
             "flatten": _tool(["category", "key", "steps"]),
             "assemble": _tool(["id", "items"]),
         }
-        with caplog.at_level(logging.WARNING):
-            _service(configs)._warn_dag_schema_compatibility_gaps()
-
-        msg = next(r.getMessage() for r in caplog.records if "dag-fit" in r.getMessage())
+        msg = _capture_dagfit(configs, caplog)[0].getMessage()
         first_line = msg.splitlines()[0]
         assert "5" in first_line and "2" in first_line, (
             f"header should carry field and action counts: {first_line!r}"
@@ -88,6 +89,4 @@ class TestDagFitGrouping:
 
     def test_quiet_when_no_gaps(self, caplog):
         configs = {"ok": _tool([])}
-        with caplog.at_level(logging.WARNING):
-            _service(configs)._warn_dag_schema_compatibility_gaps()
-        assert not [r for r in caplog.records if "dag-fit" in r.getMessage()]
+        assert _capture_dagfit(configs, caplog) == []
