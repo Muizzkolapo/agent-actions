@@ -19,6 +19,16 @@ from agent_actions.workflow.runner import (
     ProcessGenerateParams,
     SingleFileProcessParams,
 )
+from agent_actions.workflow.runner_file_processing import (
+    collect_files_from_upstream,
+    is_target_directory,
+    process_directory_files,
+    process_files,
+    process_from_storage_backend,
+    process_merged_files,
+    should_skip_item,
+    warn_no_files_found,
+)
 from agent_actions.workflow.strategies import InitialStrategy, StandardStrategy
 
 # ---------------------------------------------------------------------------
@@ -257,34 +267,34 @@ class TestShouldSkipItem:
         batch_dir.mkdir()
         item = batch_dir / "file.json"
         item.touch()
-        assert runner._should_skip_item(item, tmp_path, set()) is True
+        assert should_skip_item(item, tmp_path, set()) is True
 
     def test_directory_skipped(self, runner, tmp_path):
         sub = tmp_path / "subdir"
         sub.mkdir()
-        assert runner._should_skip_item(sub, tmp_path, set()) is True
+        assert should_skip_item(sub, tmp_path, set()) is True
 
     def test_dotfile_skipped(self, runner, tmp_path):
         dotfile = tmp_path / ".hidden"
         dotfile.touch()
-        assert runner._should_skip_item(dotfile, tmp_path, set()) is True
+        assert should_skip_item(dotfile, tmp_path, set()) is True
 
     def test_already_processed(self, runner, tmp_path):
         f = _make_file(tmp_path / "data.json")
         processed = {Path("data.json")}
-        assert runner._should_skip_item(f, tmp_path, processed) is True
+        assert should_skip_item(f, tmp_path, processed) is True
 
     def test_file_type_filter_mismatch(self, runner, tmp_path):
         f = _make_file(tmp_path / "data.csv")
-        assert runner._should_skip_item(f, tmp_path, set(), file_type_filter={"json"}) is True
+        assert should_skip_item(f, tmp_path, set(), file_type_filter={"json"}) is True
 
     def test_valid_file_not_skipped(self, runner, tmp_path):
         f = _make_file(tmp_path / "data.json")
-        assert runner._should_skip_item(f, tmp_path, set()) is False
+        assert should_skip_item(f, tmp_path, set()) is False
 
     def test_valid_file_with_matching_filter(self, runner, tmp_path):
         f = _make_file(tmp_path / "data.json")
-        assert runner._should_skip_item(f, tmp_path, set(), file_type_filter={"json"}) is False
+        assert should_skip_item(f, tmp_path, set(), file_type_filter={"json"}) is False
 
 
 # ---------------------------------------------------------------------------
@@ -296,20 +306,20 @@ class TestCollectFilesFromUpstream:
     def test_single_dir_with_files(self, runner, tmp_path):
         _make_file(tmp_path / "a.json")
         _make_file(tmp_path / "sub" / "b.json")
-        result = runner._collect_files_from_upstream([str(tmp_path)])
+        result = collect_files_from_upstream([str(tmp_path)])
         assert len(result) == 2
         assert Path("a.json") in result
         assert Path("sub/b.json") in result
 
     def test_nonexistent_dir_skipped(self, runner, tmp_path):
-        result = runner._collect_files_from_upstream([str(tmp_path / "nope")])
+        result = collect_files_from_upstream([str(tmp_path / "nope")])
         assert result == {}
 
     def test_skips_batch_and_dotfiles(self, runner, tmp_path):
         _make_file(tmp_path / "batch" / "x.json")
         _make_file(tmp_path / ".hidden")
         _make_file(tmp_path / "good.json")
-        result = runner._collect_files_from_upstream([str(tmp_path)])
+        result = collect_files_from_upstream([str(tmp_path)])
         assert len(result) == 1
         assert Path("good.json") in result
 
@@ -318,7 +328,7 @@ class TestCollectFilesFromUpstream:
         dir2 = tmp_path / "dir2"
         _make_file(dir1 / "shared.json", "one")
         _make_file(dir2 / "shared.json", "two")
-        result = runner._collect_files_from_upstream([str(dir1), str(dir2)])
+        result = collect_files_from_upstream([str(dir1), str(dir2)])
         assert len(result) == 1
         assert len(result[Path("shared.json")]) == 2
 
@@ -409,8 +419,8 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        _found, processed = runner._process_directory_files(
-            input_dir, output_dir, str(input_dir), params, set()
+        _found, processed = process_directory_files(
+            runner, input_dir, output_dir, str(input_dir), params, set()
         )
         assert processed == 2
         assert strategy.execute.call_count == 2
@@ -432,8 +442,8 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        _found, processed = runner._process_directory_files(
-            input_dir, output_dir, str(input_dir), params, set()
+        _found, processed = process_directory_files(
+            runner, input_dir, output_dir, str(input_dir), params, set()
         )
         assert processed == 1
 
@@ -456,7 +466,7 @@ class TestWarnNoFilesFound:
             output_directory=str(tmp_path / "out"),
             idx=0,
         )
-        runner._warn_no_files_found(params)
+        warn_no_files_found(params)
         mock_logger.debug.assert_called_once()
         assert "No files found" in mock_logger.debug.call_args[0][0]
 
@@ -472,7 +482,7 @@ class TestWarnNoFilesFound:
             output_directory=str(tmp_path / "out"),
             idx=0,
         )
-        runner._warn_no_files_found(params)
+        warn_no_files_found(params)
         mock_logger.warning.assert_not_called()
 
 
@@ -496,7 +506,7 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        _found, processed = runner._process_merged_files(params)
+        _found, processed = process_merged_files(runner, params)
         assert processed == 1
         strategy.execute.assert_called_once()
 
@@ -518,7 +528,7 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        _found, processed = runner._process_merged_files(params)
+        _found, processed = process_merged_files(runner, params)
         assert processed == 1
         mock_merge.assert_called_once()
         strategy.execute.assert_called_once()
@@ -542,7 +552,7 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        runner._process_merged_files(params)
+        process_merged_files(runner, params)
         # Original content should be restored
         assert (dir1 / "data.json").read_text(encoding="utf-8") == original_content
 
@@ -562,7 +572,7 @@ class TestProcessFromStorageBackend:
             output_directory="/out",
             idx=0,
         )
-        assert runner._process_from_storage_backend(params) == (0, 0)
+        assert process_from_storage_backend(runner, params) == (0, 0)
 
     def test_skips_staging_directories(self, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
@@ -575,7 +585,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        result = runner_with_backend._process_from_storage_backend(params)
+        result = process_from_storage_backend(runner_with_backend, params)
         assert result == (0, 0)
         backend.list_target_files.assert_not_called()
 
@@ -593,7 +603,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
         strategy.execute.assert_called_once()
@@ -617,7 +627,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
         mock_merge.assert_called_once()
@@ -637,7 +647,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 2
         assert processed == 1
 
@@ -656,7 +666,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         # good.json was read and processed; bad.json failed to read → only 1 file in data_by_path
         assert found == 1
         assert processed == 1
@@ -673,7 +683,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 0
         assert processed == 0
 
@@ -695,7 +705,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
 
@@ -717,7 +727,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = runner_with_backend._process_from_storage_backend(params)
+        found, processed = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
 
@@ -736,7 +746,7 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         with pytest.raises(ConfigurationError, match="missing _state"):
-            runner_with_backend._process_from_storage_backend(params)
+            process_from_storage_backend(runner_with_backend, params)
 
     def test_configuration_error_propagates_from_list_target_files(
         self, runner_with_backend, tmp_path
@@ -754,7 +764,7 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         with pytest.raises(ConfigurationError, match="bad state"):
-            runner_with_backend._process_from_storage_backend(params)
+            process_from_storage_backend(runner_with_backend, params)
 
 
 # ---------------------------------------------------------------------------
@@ -764,13 +774,13 @@ class TestProcessFromStorageBackend:
 
 class TestIsTargetDirectory:
     def test_target_path(self, runner):
-        assert runner._is_target_directory("/project/agent_io/target/dep") is True
+        assert is_target_directory("/project/agent_io/target/dep") is True
 
     def test_staging_path(self, runner):
-        assert runner._is_target_directory("/project/agent_io/staging/data") is False
+        assert is_target_directory("/project/agent_io/staging/data") is False
 
     def test_both_target_and_staging(self, runner):
-        assert runner._is_target_directory("/project/target/staging/dep") is False
+        assert is_target_directory("/project/target/staging/dep") is False
 
 
 # ---------------------------------------------------------------------------
@@ -794,7 +804,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        runner_with_backend.process_files(params)
+        process_files(runner_with_backend, params)
         strategy.execute.assert_called_once()
 
     def test_storage_backend_found_but_not_processed_raises(self, runner_with_backend, tmp_path):
@@ -816,7 +826,7 @@ class TestProcessFiles:
             idx=0,
         )
         with pytest.raises(DependencyError, match="Found .* files but failed to process"):
-            runner_with_backend.process_files(params)
+            process_files(runner_with_backend, params)
 
     def test_storage_backend_no_data_falls_through(self, runner_with_backend, tmp_path):
         """No data in backend → falls through to filesystem."""
@@ -836,7 +846,7 @@ class TestProcessFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        runner_with_backend.process_files(params)
+        process_files(runner_with_backend, params)
         strategy.execute.assert_called_once()
 
     @patch("agent_actions.workflow.runner_file_processing.merge_json_files")
@@ -857,7 +867,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        runner.process_files(params)
+        process_files(runner, params)
         mock_merge.assert_called_once()
         strategy.execute.assert_called_once()
 
@@ -877,7 +887,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        runner.process_files(params)
+        process_files(runner, params)
         assert strategy.execute.call_count == 2
 
     def test_single_upstream_dir(self, runner, tmp_path):
@@ -895,7 +905,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        runner.process_files(params)
+        process_files(runner, params)
         assert strategy.execute.call_count == 2
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
@@ -913,7 +923,7 @@ class TestProcessFiles:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        runner.process_files(params)
+        process_files(runner, params)
         mock_logger.debug.assert_called()
         assert any("No files found" in str(c) for c in mock_logger.debug.call_args_list)
 
@@ -954,7 +964,7 @@ class TestRunAgent:
 
 
 class TestProcessAndGenerateForAgent:
-    @patch.object(ActionRunner, "process_files")
+    @patch("agent_actions.workflow.runner._process_files")
     @patch.object(ActionRunner, "setup_directories")
     @patch.object(ActionRunner, "get_action_folder")
     def test_orchestrates_correctly(self, mock_folder, mock_setup, mock_process, runner):
@@ -976,7 +986,7 @@ class TestProcessAndGenerateForAgent:
         mock_process.assert_called_once()
 
     @patch("agent_actions.workflow.runner.resolve_start_node_data_source")
-    @patch.object(ActionRunner, "process_files")
+    @patch("agent_actions.workflow.runner._process_files")
     @patch.object(ActionRunner, "setup_directories")
     @patch.object(ActionRunner, "get_action_folder")
     def test_resolves_file_type_filter_for_start_node(
@@ -997,5 +1007,5 @@ class TestProcessAndGenerateForAgent:
         )
         runner.process_and_generate_for_action(params)
         # process_files should receive the file_type_filter
-        file_params = mock_process.call_args[0][0]
+        file_params = mock_process.call_args[0][1]
         assert file_params.file_type_filter == {"pdf", "docx"}

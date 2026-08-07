@@ -215,7 +215,7 @@ def process_directory_files(
     processing_errors: list[str] = []
     files_seen = 0
     for item in input_path.rglob("*"):
-        if runner._should_skip_item(item, input_path, processed_paths, params.file_type_filter):
+        if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
             continue
 
         relative_path = item.relative_to(input_path)
@@ -254,7 +254,7 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> tup
         "no files" from "all files failed".
     """
     output_path = Path(params.output_directory)
-    files_by_path = runner._collect_files_from_upstream(params.upstream_data_dirs)
+    files_by_path = collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
     processing_errors: list[str] = []
     files_seen = 0
