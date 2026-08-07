@@ -13,6 +13,7 @@ Key scenarios tested:
 """
 
 from agent_actions.output.response.expander import ActionExpander
+from agent_actions.output.response.expander_merge import deep_merge_context_scope
 
 
 class TestContextScopeDeepMerge:
@@ -23,7 +24,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"seed": {"exam_syllabus": "$file:azure_ds_associate_syllabus.json"}}
         action_scope = {"drop": ["source.syllabus", "source.url"]}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {
             "seed": {"exam_syllabus": "$file:azure_ds_associate_syllabus.json"},
@@ -35,7 +36,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"seed": {"knowledge_base": "$file:kb.json"}}
         action_scope = {"observe": ["previous_agent.field1", "previous_agent.field2"]}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {
             "seed": {"knowledge_base": "$file:kb.json"},
@@ -47,7 +48,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"observe": ["agent1.field1"]}
         action_scope = {"observe": ["agent2.field2", "agent3.field3"]}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {"observe": ["agent1.field1", "agent2.field2", "agent3.field3"]}
 
@@ -56,7 +57,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"drop": ["source.internal_id"]}
         action_scope = {"drop": ["source.api_key", "source.credentials"]}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {"drop": ["source.internal_id", "source.api_key", "source.credentials"]}
 
@@ -67,7 +68,7 @@ class TestContextScopeDeepMerge:
             "observe": ["agent2.field2", "agent3.field3"]  # agent2.field2 is duplicate
         }
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         # Should preserve order and remove duplicates
         assert result == {"observe": ["agent1.field1", "agent2.field2", "agent3.field3"]}
@@ -77,7 +78,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"seed": {"exam_syllabus": "$file:exam.json"}}
         action_scope = {"seed": {"grading_rubric": "$file:rubric.yaml"}}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {
             "seed": {"exam_syllabus": "$file:exam.json", "grading_rubric": "$file:rubric.yaml"}
@@ -92,7 +93,7 @@ class TestContextScopeDeepMerge:
             }
         }
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {"seed": {"exam_syllabus": "$file:custom_exam.json"}}
 
@@ -105,7 +106,7 @@ class TestContextScopeDeepMerge:
             "passthrough": ["source.metadata"],
         }
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {
             "seed": {"exam": "$file:exam.json"},
@@ -119,7 +120,7 @@ class TestContextScopeDeepMerge:
         defaults_scope = {"passthrough": ["source.id", "source.timestamp"]}
         action_scope = {"passthrough": ["source.metadata"]}
 
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
+        result = deep_merge_context_scope(defaults_scope, action_scope)
 
         assert result == {"passthrough": ["source.id", "source.timestamp", "source.metadata"]}
 

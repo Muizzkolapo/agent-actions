@@ -703,7 +703,7 @@ def test_validate_udf_output_rejects_invalid_items_in_list():
 
 # --- Array schema: json_output_schema is per-item at compile time ---
 
-# For `schema: {type: array, items: {…}}`, _compile_output_schema stores
+# For `schema: {type: array, items: {…}}`, compile_output_schema stores
 # the items schema directly as json_output_schema (no wrapper).
 _ARRAY_ITEM_SCHEMA = {
     "type": "object",
@@ -734,8 +734,8 @@ def test_validate_udf_output_array_schema_rejects_invalid_item():
 
 
 def test_compile_output_schema_extracts_array_items():
-    """_compile_output_schema should store items schema for array-type schemas."""
-    from agent_actions.output.response.expander import ActionExpander
+    """compile_output_schema should store items schema for array-type schemas."""
+    from agent_actions.output.response.expander_schema import compile_output_schema
 
     agent = {"agent_type": "my_tool"}
     agent["schema"] = {
@@ -747,7 +747,7 @@ def test_compile_output_schema_extracts_array_items():
         },
     }
 
-    ActionExpander._compile_output_schema(agent, {})
+    compile_output_schema(agent, {})
 
     # json_output_schema is the per-item schema with additionalProperties enforced
     assert agent["json_output_schema"] == {
@@ -760,14 +760,14 @@ def test_compile_output_schema_extracts_array_items():
 
 def test_compile_output_schema_non_array_unchanged():
     """Non-array schemas compile through the standard path."""
-    from agent_actions.output.response.expander import ActionExpander
+    from agent_actions.output.response.expander_schema import compile_output_schema
 
     agent = {"agent_type": "my_tool"}
     agent["schema"] = [
         {"id": "name", "type": "string", "required": True},
     ]
 
-    ActionExpander._compile_output_schema(agent, {})
+    compile_output_schema(agent, {})
 
     # Standard compilation: top-level object with properties
     assert agent["json_output_schema"]["type"] == "object"
