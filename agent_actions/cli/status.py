@@ -7,9 +7,9 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from agent_actions.cli.args import StatusCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.config.project_paths import ProjectPathsFactory
-from agent_actions.validation.status_validator import StatusCommandArgs
 
 
 class StatusCommand:

@@ -356,12 +356,6 @@ Configured in `reprompt.on_schema_mismatch` in action config:
 ### CLI command validators
 | File | Role |
 |------|------|
-| `batch_validator.py` | BatchCommandArgs pydantic model |
-| `clean_validator.py` | CleanCommandArgs pydantic model |
-| `init_validator.py` | InitCommandArgs pydantic model |
-| `run_validator.py` | RunCommandArgs and pre-flight gating |
-| `status_validator.py` | StatusCommandArgs pydantic model |
-| `retry_validator.py` | Retry command validation |
 
 ### Utilities
 | File | Role |

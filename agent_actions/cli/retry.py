@@ -16,6 +16,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -27,7 +28,6 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.validation.retry_validator import RetryCommandArgs
 
 logger = logging.getLogger(__name__)
 

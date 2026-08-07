@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.cli.args import RunCommandArgs
 from agent_actions.cli.run import RunCommand
 from agent_actions.utils.path_utils import get_path_manager, reset_path_manager
-from agent_actions.validation.run_validator import RunCommandArgs
 
 
 def _make_args(**overrides) -> RunCommandArgs:

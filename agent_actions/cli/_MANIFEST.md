@@ -56,6 +56,7 @@
 | `ListUDFsCommand` | Class | Implementation of the list-udfs command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the list-udfs command. | - |
 | `list_udfs_cmd` | Function | List all discovered User-Defined Functions (UDFs). | - |
+| `args.py` | Module | Pydantic argument models for the CLI commands (run, retry, init, clean, status, batch). | `cli`, `validation` |
 | `main.py` | Module | Main entry point for the Agent Actions CLI. | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
 | `CLI` | Class | Agent Actions CLI application. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |

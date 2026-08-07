@@ -209,8 +209,8 @@ class TestInitForceBackupSafety:
 
     def test_force_init_does_not_delete_existing_bak_directory(self):
         """Backup uses a unique temp path, never clobbers <project>.bak."""
+        from agent_actions.cli.args import InitCommandArgs
         from agent_actions.cli.init import InitCommand
-        from agent_actions.validation.init_validator import InitCommandArgs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir) / "myproject"
@@ -242,8 +242,8 @@ class TestStatusCorruptedFileExitCode:
     def test_corrupted_json_exits_nonzero(self):
         import click
 
+        from agent_actions.cli.args import StatusCommandArgs
         from agent_actions.cli.status import StatusCommand
-        from agent_actions.validation.status_validator import StatusCommandArgs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             io_dir = Path(tmpdir)
@@ -263,8 +263,8 @@ class TestStatusCorruptedFileExitCode:
     def test_non_dict_status_exits_nonzero(self):
         import click
 
+        from agent_actions.cli.args import StatusCommandArgs
         from agent_actions.cli.status import StatusCommand
-        from agent_actions.validation.status_validator import StatusCommandArgs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             io_dir = Path(tmpdir)
