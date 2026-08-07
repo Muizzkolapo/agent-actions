@@ -30,11 +30,6 @@ class ParsedReference:
         return self.field_path[0] if self.field_path else ""
 
     @property
-    def is_nested(self) -> bool:
-        """Check if this is a nested path reference (more than one level)."""
-        return len(self.field_path) > 1
-
-    @property
     def full_path(self) -> str:
         """Get full dotted path including action name."""
         return f"{self.action_name}.{'.'.join(self.field_path)}"

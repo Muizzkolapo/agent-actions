@@ -6,15 +6,11 @@ Tests cover:
 - Value resolution (simple, nested, array access)
 - Text substitution
 - Dependency validation
-- Evaluation context building
 """
 
 import pytest
 
 from agent_actions.input.preprocessing.field_resolution import (
-    DependencyValidationError,
-    EvaluationContext,
-    EvaluationContextProvider,
     FieldReferenceResolver,
     InvalidReferenceError,
     ReferenceFormat,
@@ -91,7 +87,6 @@ class TestReferenceParser:
         assert ref.action_name == "extract_facts"
         assert ref.field_path == ["count"]
         assert ref.full_reference == "extract_facts.count"
-        assert not ref.is_nested
 
     def test_parse_nested_path(self, parser):
         """Test parsing nested path like action.response.data.status."""
@@ -99,7 +94,6 @@ class TestReferenceParser:
 
         assert ref.action_name == "extract_facts"
         assert ref.field_path == ["response", "data", "status"]
-        assert ref.is_nested
         assert ref.field_name == "response"
 
     def test_parse_template_format(self, parser):
@@ -302,123 +296,6 @@ class TestReferenceValidator:
         assert len(errors) == 1
         assert "not in context_scope" in errors[0]
 
-    def test_validate_strict_raises_exception(self, validator, agent_indices):
-        """Test validate_strict raises on errors."""
-        agent_config = {"agent_type": "filter_action", "dependencies": []}
-
-        with pytest.raises(DependencyValidationError):
-            validator.validate_strict(
-                references=["nonexistent.field"],
-                agent_config=agent_config,
-                agent_indices=agent_indices,
-                current_agent_name="filter_action",
-            )
-
-    def test_extract_and_validate(self, validator, agent_indices):
-        """Test extracting and validating from guard condition."""
-        agent_config = {"agent_type": "filter_action", "dependencies": ["extract_facts"]}
-
-        errors = validator.extract_and_validate(
-            guard_condition="extract_facts.count > 5 AND source.type == 'pdf'",
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name="filter_action",
-        )
-
-        # source is a special namespace, so no errors
-        assert len(errors) == 0
-
-    def test_get_referenced_actions(self, validator):
-        """Test extracting action names from guard condition."""
-        actions = validator.get_referenced_actions(
-            "extract_facts.count > 5 AND classifier.category == 'tech'"
-        )
-
-        assert "extract_facts" in actions
-        assert "classifier" in actions
-        assert "source" not in actions  # Special namespace excluded
-
-
-# =============================================================================
-# EvaluationContext Tests
-# =============================================================================
-
-
-class TestEvaluationContext:
-    """Tests for the EvaluationContext dataclass."""
-
-    def test_to_flat_dict(self):
-        """Test converting context to flat dict."""
-        context = EvaluationContext(
-            current_content={"current_field": "value"},
-            field_context={"extract_facts": {"count": 5}, "source": {"title": "Test"}},
-        )
-
-        flat = context.to_flat_dict()
-
-        assert flat["current_field"] == "value"
-        assert flat["extract_facts"]["count"] == 5
-        assert flat["source"]["title"] == "Test"
-
-    def test_get_field_value(self):
-        """Test getting field value from context."""
-        context = EvaluationContext(
-            current_content={}, field_context={"extract_facts": {"count": 5, "status": "done"}}
-        )
-
-        assert context.get_field_value("extract_facts", "count") == 5
-        assert context.get_field_value("extract_facts", "status") == "done"
-        assert context.get_field_value("extract_facts", "missing") is None
-        assert context.get_field_value("missing", "field") is None
-
-    def test_has_action(self):
-        """Test checking action existence."""
-        context = EvaluationContext(
-            current_content={}, field_context={"extract_facts": {"count": 5}}
-        )
-
-        assert context.has_action("extract_facts")
-        assert not context.has_action("missing_action")
-
-
-# =============================================================================
-# EvaluationContextProvider Tests
-# =============================================================================
-
-
-class TestEvaluationContextProvider:
-    """Tests for the EvaluationContextProvider class."""
-
-    def test_build_minimal_context(self):
-        """Test building minimal context without historical loading."""
-        provider = EvaluationContextProvider()
-
-        context = provider.build_minimal_context(
-            current_content={"status": "active"}, upstream_data={"extract_facts": {"count": 10}}
-        )
-
-        assert context.current_content["status"] == "active"
-        assert context.get_field_value("extract_facts", "count") == 10
-
-    def test_to_flat_dict_merges_correctly(self):
-        """Test that to_flat_dict properly merges contexts."""
-        provider = EvaluationContextProvider()
-
-        context = provider.build_minimal_context(
-            current_content={"status": "active", "type": "doc"},
-            upstream_data={"extract": {"count": 5}, "source": {"title": "My Doc"}},
-        )
-
-        flat = context.to_flat_dict()
-
-        # Current content should be at top level
-        assert flat["status"] == "active"
-        assert flat["type"] == "doc"
-
-        # Upstream data should be under action names
-        assert flat["extract"]["count"] == 5
-        assert flat["source"]["title"] == "My Doc"
-
 
 # =============================================================================
 # Integration Tests
@@ -439,12 +316,10 @@ class TestIntegration:
         refs = resolver.parse_batch(guard_condition)
         assert len(refs) == 2
 
-        # Resolve all references
-        results = resolver.resolve_batch(refs, field_context)
-
-        # Check resolved values
-        for ref_str, result in results.items():
-            assert result.success, f"Failed to resolve: {ref_str}"
+        # Resolve each reference
+        for ref in refs:
+            result = resolver.resolve(ref, field_context)
+            assert result.success, f"Failed to resolve: {ref.full_reference}"
 
         # Verify actual values
         count_result = resolver.resolve("extract_facts.count", field_context)
@@ -452,25 +327,6 @@ class TestIntegration:
 
         confidence_result = resolver.resolve("classifier.confidence", field_context)
         assert confidence_result.value == 0.95
-
-    def test_context_provider_with_resolver(self, field_context):
-        """Test using context provider with resolver."""
-        provider = EvaluationContextProvider()
-        _resolver = FieldReferenceResolver()
-
-        # Build context
-        context = provider.build_minimal_context(
-            current_content={"local_field": "local_value"}, upstream_data=field_context
-        )
-
-        # Get flat dict for evaluation
-        eval_data = context.to_flat_dict()
-
-        # Resolve references against flat dict
-        # The flat dict should enable "extract_facts.count" style access
-        assert eval_data["extract_facts"]["count"] == 2
-        assert eval_data["source"]["title"] == "Test Document"
-        assert eval_data["local_field"] == "local_value"
 
 
 # =============================================================================

@@ -206,51 +206,6 @@ class RunTracker:
         except (ValueError, AttributeError):
             return 0
 
-    def update_run(self, run_id: str, updates: dict[str, Any] | None = None) -> bool:
-        """Update an existing run record with atomic file locking."""
-        if updates is None:
-            updates = {}
-
-        if not self.runs_file.exists():
-            return False
-
-        # Atomic read-modify-write with exclusive lock.
-        # LOCK_NB lets portalocker retry until timeout instead of blocking
-        # indefinitely at the OS level.
-        try:
-            with portalocker.Lock(
-                self.runs_file,
-                "r+",
-                timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-                flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
-            ) as f:
-                runs_data = self._load_runs_data_from_file(f)
-
-                # Find the run
-                for run in runs_data["executions"]:
-                    if run["id"] == run_id:
-                        self._apply_run_updates(run, updates)
-                        self._write_runs_data_to_file(f, runs_data)
-                        return True
-        except portalocker.exceptions.LockException:
-            logger.warning("Could not acquire lock on %s within timeout", self.runs_file)
-            return False
-
-        return False
-
-    def _apply_run_updates(self, run: dict[str, Any], updates: dict[str, Any]) -> None:
-        """Apply updates to a run record."""
-        if "status" in updates:
-            run["status"] = updates["status"]
-        if "ended_at" in updates:
-            ended_at = updates["ended_at"]
-            run["ended_at"] = ended_at
-            run["duration_seconds"] = self._calculate_duration(run["started_at"], ended_at)
-        if "actions_completed" in updates:
-            run["actions_completed"] = updates["actions_completed"]
-        if "error_message" in updates:
-            run["error_message"] = updates["error_message"]
-
     def start_workflow_run(
         self, *, workflow_id: str, workflow_name: str, actions_total: int
     ) -> str:
@@ -494,9 +449,3 @@ class RunTracker:
             del data["total_duration"]
 
         return metrics
-
-
-def track_workflow_run(*, config: RunConfig) -> str:
-    """Track a workflow run and return its run ID."""
-    tracker = RunTracker()
-    return tracker.record_run(config=config)

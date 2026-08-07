@@ -7,7 +7,6 @@ from typing import Any
 
 from .exceptions import ReferenceNotFoundError
 from .reference_parser import ParsedReference, ReferenceFormat, ReferenceParser
-from .validator import ReferenceValidator
 
 logger = logging.getLogger(__name__)
 
@@ -152,18 +151,6 @@ class FieldReferenceResolver:
                 error=str(e),
             )
 
-    def resolve_batch(
-        self, references: list[str | ParsedReference], field_context: dict[str, Any]
-    ) -> dict[str, ResolvedReference]:
-        """Resolve multiple references efficiently."""
-        results = {}
-
-        for ref in references:
-            ref_str = ref if isinstance(ref, str) else ref.full_reference
-            results[ref_str] = self.resolve(ref, field_context)
-
-        return results
-
     def substitute(
         self,
         text: str,
@@ -188,22 +175,6 @@ class FieldReferenceResolver:
                 )
 
         return text
-
-    def validate_references(
-        self,
-        references: list[str | ParsedReference],
-        agent_config: dict[str, Any],
-        agent_indices: dict[str, int],
-        current_agent_name: str | None = None,
-    ) -> list[str]:
-        """Validate that referenced actions exist in the dependency graph."""
-        validator = ReferenceValidator()
-        return validator.validate(
-            references=references,
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name=current_agent_name,
-        )
 
     _SENTINEL = object()  # Distinguishes "key missing" from "key present with None value"
 

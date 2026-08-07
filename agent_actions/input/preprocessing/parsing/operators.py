@@ -207,8 +207,3 @@ def list_operators(operator_type: OperatorType | None = None) -> list[OperatorIn
     if operator_type is not None:
         ops = [info for info in ops if info.operator_type == operator_type]
     return sorted(ops, key=lambda x: (x.operator_type.value, x.precedence, x.name))
-
-
-def get_operator_info(name: str) -> OperatorInfo | None:
-    """Get operator info by name."""
-    return OPERATOR_INFO.get(name)

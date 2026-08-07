@@ -56,27 +56,6 @@ class SchemaRenderer:
 
         return tree
 
-    def render_action_detail(self, schema: ActionSchema) -> Panel:
-        """Render detailed view of a single action."""
-        tree = Tree(f"[bold cyan]{schema.name}[/bold cyan] ({schema.kind.value})")
-
-        if schema.dependencies:
-            deps_branch = tree.add("[blue]depends_on:[/blue]")
-            for dep in schema.dependencies:
-                deps_branch.add(dep)
-
-        if schema.kind == ActionKind.TOOL and schema.input_fields:
-            schema_branch = tree.add("[green]expects (input schema):[/green]")
-            for field in schema.input_fields:
-                if field.is_required:
-                    schema_branch.add(f"[bold]{field.name}[/bold] [dim](required)[/dim]")
-                else:
-                    schema_branch.add(f"{field.name} [dim](optional)[/dim]")
-
-        self._add_outputs_to_tree(tree, schema)
-
-        return Panel(tree, title=f"Action: {schema.name}")
-
     def render_data_flow_panel(
         self,
         schemas: dict[str, ActionSchema],

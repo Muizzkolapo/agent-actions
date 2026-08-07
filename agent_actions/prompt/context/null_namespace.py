@@ -45,7 +45,6 @@ class NullNamespace:
 # Use these instead of bare string literals so typos are caught at import time.
 
 REASON_SKIPPED = "skipped"
-REASON_FILTERED = "filtered"
 
 # ── Pre-built singletons ─────────────────────────────────────────────
 # Avoids repeated allocation for the common case.
