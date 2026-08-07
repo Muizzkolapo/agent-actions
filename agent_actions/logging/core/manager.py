@@ -18,7 +18,7 @@ _stdlib_logger.propagate = False
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
-    from agent_actions.logging.core.protocols import EventFilter, EventHandler
+    from agent_actions.logging.core.protocols import EventHandler
 
 # Module-level atexit function registered once.  Delegates to the current
 # singleton so that reset() + get() does not accumulate callbacks.
@@ -42,7 +42,6 @@ class EventManager:
         global _atexit_registered
 
         self._handlers: list[EventHandler] = []
-        self._filters: list[EventFilter] = []
         self._context: dict[str, Any] = {}
         self._initialized: bool = False
         self._fire_lock: threading.RLock = threading.RLock()
@@ -81,7 +80,6 @@ class EventManager:
                         except Exception:
                             pass
                 cls._instance._handlers.clear()
-                cls._instance._filters.clear()
                 cls._instance._context.clear()
                 cls._instance._initialized = False
             cls._instance = None
@@ -110,11 +108,6 @@ class EventManager:
         """Remove all registered handlers."""
         with self._fire_lock:
             self._handlers.clear()
-
-    def add_filter(self, filter_: EventFilter) -> None:
-        """Add a global event filter applied before handlers."""
-        with self._fire_lock:
-            self._filters.append(filter_)
 
     def set_context(self, **kwargs: Any) -> None:
         """Set shared context values injected into event metadata."""
@@ -156,11 +149,10 @@ class EventManager:
             self._context_overlay.reset(token)
 
     def fire(self, event: BaseEvent) -> None:
-        """Fire an event: inject context, apply filters, dispatch to handlers."""
+        """Fire an event: inject context, dispatch to handlers."""
         with self._fire_lock:
             context = self._effective_context()
             handlers = list(self._handlers)
-            filters = list(self._filters)
 
         if context.get("invocation_id"):
             event.meta.invocation_id = context["invocation_id"]
@@ -171,19 +163,10 @@ class EventManager:
             if key not in ("invocation_id", "correlation_id"):
                 event.meta.extra[key] = value
 
-        filtered_event: BaseEvent | None = event
-        for filter_ in filters:
-            if filtered_event is None:
-                return
-            filtered_event = filter_.filter(filtered_event)
-
-        if filtered_event is None:
-            return
-
         for handler in handlers:
             try:
-                if handler.accepts(filtered_event):
-                    handler.handle(filtered_event)
+                if handler.accepts(event):
+                    handler.handle(event)
             except Exception:
                 # Don't let handler errors break the application
                 _stdlib_logger.warning("Event handler %s failed", handler, exc_info=True)

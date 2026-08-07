@@ -188,7 +188,7 @@ Complete telemetry of all system events in JSON Lines format (one event per line
 | Guard | G | `GuardEvaluationEvent`, `GuardPassEvent`, `GuardFailEvent` |
 | Data I/O | FIO | `FileWriteStartedEvent`, `FileWriteCompleteEvent` |
 | Cache | C | `CacheHitEvent`, `CacheMissEvent` |
-| Recovery | R | `RetryExhaustedEvent` (R001), `RepromptValidationFailedEvent` (R002), `RecoveryErrorEvent` (R003), `RepromptRetryEvent` (R004), `RepromptRecoveredEvent` (R005) |
+| Recovery | R | `RetryExhaustedEvent` (R001), `RepromptValidationFailedEvent` (R002), `RepromptRetryEvent` (R004), `RepromptRecoveredEvent` (R005) |
 
 #### Recovery Events (R004/R005)
 

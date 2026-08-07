@@ -162,18 +162,6 @@ manager = LoggerFactory.get_event_manager()
 
 **Returns None if:** LoggerFactory hasn't been initialized yet.
 
-#### LoggerFactory.get_run_results_collector()
-
-Get the RunResultsCollector instance.
-
-```python
-collector = LoggerFactory.get_run_results_collector()
-```
-
-**Returns:** Optional[RunResultsCollector]
-
-**Returns None if:** LoggerFactory hasn't been initialized or no output_dir was provided.
-
 #### LoggerFactory.reset()
 
 Reset the factory state (for testing).

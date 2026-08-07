@@ -9,18 +9,9 @@ from agent_actions.logging.events.types import EventCategories
 __all__ = [
     "ConfigLoadStartEvent",
     "ConfigLoadEvent",
-    "ConfigLoadCompleteEvent",
-    "ConfigValidationEvent",
-    "EnvironmentLoadStartEvent",
-    "EnvironmentVariableDetectedEvent",
-    "EnvironmentLoadCompleteEvent",
     "CLIInitStartEvent",
     "CLIArgumentParsingEvent",
     "CLIInitCompleteEvent",
-    "ApplicationInitializationStartEvent",
-    "StartupValidationStartEvent",
-    "StartupValidationCompleteEvent",
-    "DIContainerInitializationEvent",
     "WorkflowInitializationStartEvent",
     "WorkflowServicesInitializationStartEvent",
     "ProjectInitializationStartEvent",
@@ -28,9 +19,7 @@ __all__ = [
     "ProjectDirectoryCreatedEvent",
     "ProjectInitializedEvent",
     "UDFDiscoveryStartEvent",
-    "UDFDiscoveredEvent",
     "UDFDiscoveryCompleteEvent",
-    "ProcessorRegistrationEvent",
 ]
 
 
@@ -72,103 +61,6 @@ class ConfigLoadEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "F002"
-
-
-@dataclass
-class ConfigLoadCompleteEvent(BaseEvent):
-    """Fired when all configurations are loaded (not yet instrumented, see TICKET-019)."""
-
-    config_count: int = 0
-    elapsed_time: float = 0.0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.INFO
-        self.category = EventCategories.CONFIGURATION
-        self.message = (
-            f"All configurations loaded ({self.config_count} files) in {self.elapsed_time:.2f}s"
-        )
-        self.data = {
-            "config_count": self.config_count,
-            "elapsed_time": self.elapsed_time,
-        }
-
-    @property
-    def code(self) -> str:
-        return "F003"
-
-
-@dataclass
-class ConfigValidationEvent(BaseEvent):
-    """Fired when configuration validation occurs (not yet instrumented, see TICKET-019)."""
-
-    validation_target: str = ""
-    result: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.CONFIGURATION
-        self.message = f"Config validation for {self.validation_target}: {self.result}"
-        self.data = {
-            "validation_target": self.validation_target,
-            "result": self.result,
-        }
-
-    @property
-    def code(self) -> str:
-        return "F004"
-
-
-@dataclass
-class EnvironmentLoadStartEvent(BaseEvent):
-    """Fired when environment variable loading starts."""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.ENVIRONMENT
-        self.message = "Loading environment variables"
-        self.data = {}
-
-    @property
-    def code(self) -> str:
-        return "E001"
-
-
-@dataclass
-class EnvironmentVariableDetectedEvent(BaseEvent):
-    """Fired when an environment variable is detected."""
-
-    var_name: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.ENVIRONMENT
-        self.message = f"Environment variable detected: {self.var_name}"
-        self.data = {
-            "var_name": self.var_name,
-        }
-
-    @property
-    def code(self) -> str:
-        return "E002"
-
-
-@dataclass
-class EnvironmentLoadCompleteEvent(BaseEvent):
-    """Fired when environment variable loading completes."""
-
-    var_count: int = 0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.INFO
-        self.category = EventCategories.ENVIRONMENT
-        self.message = f"Environment loaded ({self.var_count} variables)"
-        self.data = {
-            "var_count": self.var_count,
-        }
-
-    @property
-    def code(self) -> str:
-        return "E003"
 
 
 @dataclass
@@ -228,70 +120,6 @@ class CLIInitCompleteEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "I003"
-
-
-@dataclass
-class ApplicationInitializationStartEvent(BaseEvent):
-    """Fired when application initialization starts."""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.INFO
-        self.category = EventCategories.INITIALIZATION
-        self.message = "Application initialization started"
-        self.data = {}
-
-    @property
-    def code(self) -> str:
-        return "I004"
-
-
-@dataclass
-class StartupValidationStartEvent(BaseEvent):
-    """Fired when startup validation starts."""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.INITIALIZATION
-        self.message = "Startup validation started"
-        self.data = {}
-
-    @property
-    def code(self) -> str:
-        return "I005"
-
-
-@dataclass
-class StartupValidationCompleteEvent(BaseEvent):
-    """Fired when startup validation completes."""
-
-    elapsed_time: float = 0.0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.INFO
-        self.category = EventCategories.INITIALIZATION
-        self.message = f"Startup validation complete in {self.elapsed_time:.2f}s"
-        self.data = {
-            "elapsed_time": self.elapsed_time,
-        }
-
-    @property
-    def code(self) -> str:
-        return "I006"
-
-
-@dataclass
-class DIContainerInitializationEvent(BaseEvent):
-    """Fired when DI container is initialized."""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.INITIALIZATION
-        self.message = "DI container initialized"
-        self.data = {}
-
-    @property
-    def code(self) -> str:
-        return "I007"
 
 
 @dataclass
@@ -437,27 +265,6 @@ class UDFDiscoveryStartEvent(BaseEvent):
 
 
 @dataclass
-class UDFDiscoveredEvent(BaseEvent):
-    """Fired when a UDF is discovered."""
-
-    udf_name: str = ""
-    udf_type: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.PLUGIN
-        self.message = f"Discovered UDF: {self.udf_name} ({self.udf_type})"
-        self.data = {
-            "udf_name": self.udf_name,
-            "udf_type": self.udf_type,
-        }
-
-    @property
-    def code(self) -> str:
-        return "P002"
-
-
-@dataclass
 class UDFDiscoveryCompleteEvent(BaseEvent):
     """Fired when UDF discovery completes."""
 
@@ -478,24 +285,3 @@ class UDFDiscoveryCompleteEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "P003"
-
-
-@dataclass
-class ProcessorRegistrationEvent(BaseEvent):
-    """Fired when a processor is registered."""
-
-    processor_name: str = ""
-    processor_type: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.PLUGIN
-        self.message = f"Processor registered: {self.processor_name} ({self.processor_type})"
-        self.data = {
-            "processor_name": self.processor_name,
-            "processor_type": self.processor_type,
-        }
-
-    @property
-    def code(self) -> str:
-        return "P004"

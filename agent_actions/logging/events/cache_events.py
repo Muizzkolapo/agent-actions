@@ -11,7 +11,6 @@ __all__ = [
     "CacheInvalidationEvent",
     "CacheLoadEvent",
     "CacheUpdateEvent",
-    "CacheStatsEvent",
 ]
 
 
@@ -133,37 +132,3 @@ class CacheUpdateEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "C005"
-
-
-@dataclass
-class CacheStatsEvent(BaseEvent):
-    """Fired to report cache statistics."""
-
-    cache_type: str = ""
-    hit_count: int = 0
-    miss_count: int = 0
-    total_entries: int = 0
-    size_bytes: int | None = None
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.CACHE
-        total_accesses = self.hit_count + self.miss_count
-        hit_rate = self.hit_count / total_accesses if total_accesses > 0 else 0.0
-        size_str = f" | {self.size_bytes:,} bytes" if self.size_bytes is not None else ""
-        self.message = (
-            f"Cache stats: {self.cache_type} - {hit_rate:.1%} hit rate "
-            f"({self.hit_count} hits, {self.miss_count} misses, {self.total_entries} entries{size_str})"
-        )
-        self.data = {
-            "cache_type": self.cache_type,
-            "hit_count": self.hit_count,
-            "miss_count": self.miss_count,
-            "total_entries": self.total_entries,
-            "size_bytes": self.size_bytes,
-            "hit_rate": hit_rate,
-        }
-
-    @property
-    def code(self) -> str:
-        return "C006"

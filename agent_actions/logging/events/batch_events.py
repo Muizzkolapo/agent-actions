@@ -16,8 +16,6 @@ __all__ = [
     "BatchStatusEvent",
     "BatchSubmissionFailedEvent",
     "BatchStatusCheckFailedEvent",
-    "BatchResultProcessingFailedEvent",
-    "BatchPartialFailureEvent",
 ]
 
 
@@ -263,47 +261,3 @@ class BatchStatusCheckFailedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "B010"
-
-
-@dataclass
-class BatchResultProcessingFailedEvent(BaseEvent):
-    """Fired when batch result processing fails."""
-
-    batch_id: str = ""
-    error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.BATCH
-        self.message = f"Failed to process batch results for {self.batch_id}: {self.error}"
-        self.data = {
-            "batch_id": self.batch_id,
-            "error": self.error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "B011"
-
-
-@dataclass
-class BatchPartialFailureEvent(BaseEvent):
-    """Fired when some batch items fail."""
-
-    batch_id: str = ""
-    failed_count: int = 0
-    total_count: int = 0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.WARN
-        self.category = EventCategories.BATCH
-        self.message = f"Batch {self.batch_id} partial failure: {self.failed_count}/{self.total_count} items failed"
-        self.data = {
-            "batch_id": self.batch_id,
-            "failed_count": self.failed_count,
-            "total_count": self.total_count,
-        }
-
-    @property
-    def code(self) -> str:
-        return "B012"

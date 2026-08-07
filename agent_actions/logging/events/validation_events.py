@@ -13,14 +13,12 @@ __all__ = [
     "ValidationWarningEvent",
     "DataParsingErrorEvent",
     "DataLoadingErrorEvent",
-    "DataValidationErrorEvent",
     "GuardEvaluationTimeoutEvent",
     "GuardEvaluationErrorEvent",
     "RetryExhaustedEvent",
     "RepromptValidationFailedEvent",
     "RepromptRetryEvent",
     "RepromptRecoveredEvent",
-    "RecoveryErrorEvent",
 ]
 
 
@@ -177,27 +175,6 @@ class DataLoadingErrorEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "D002"
-
-
-@dataclass
-class DataValidationErrorEvent(BaseEvent):
-    """Fired when data validation fails."""
-
-    file_path: str = ""
-    validation_error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.DATA
-        self.message = f"Data validation failed for {self.file_path}: {self.validation_error}"
-        self.data = {
-            "file_path": self.file_path,
-            "validation_error": self.validation_error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "D003"
 
 
 @dataclass
@@ -362,24 +339,3 @@ class RepromptRecoveredEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "R005"
-
-
-@dataclass
-class RecoveryErrorEvent(BaseEvent):
-    """Fired when recovery mechanism itself fails."""
-
-    recovery_type: str = ""
-    error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.RECOVERY
-        self.message = f"Recovery mechanism failed ({self.recovery_type}): {self.error}"
-        self.data = {
-            "recovery_type": self.recovery_type,
-            "error": self.error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "R003"

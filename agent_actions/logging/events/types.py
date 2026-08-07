@@ -16,7 +16,6 @@ Event Code Prefixes:
     G - Guard evaluation events
     R - Recovery/retry events
     F - Configuration loading events
-    E - Environment variable events
     I - Initialization/CLI events
     P - Plugin/UDF discovery events
     RP - Record Processing Pipeline events
@@ -46,7 +45,6 @@ class EventCategories:
     GUARD = "guard"
     RECOVERY = "recovery"
     CONFIGURATION = "configuration"
-    ENVIRONMENT = "environment"
     INITIALIZATION = "initialization"
     PLUGIN = "plugin"
     DATA_PROCESSING = "data_processing"

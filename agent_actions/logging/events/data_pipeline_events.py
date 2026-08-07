@@ -13,12 +13,9 @@ __all__ = [
     "EnrichmentPipelineStartedEvent",
     "EnricherExecutedEvent",
     "EnrichmentPipelineCompleteEvent",
-    "DataNormalizationStartedEvent",
-    "DataNormalizedEvent",
     "RecordProcessingStartedEvent",
     "RecordFilteredEvent",
     "RecordTransformedEvent",
-    "RecordProcessingCompleteEvent",
     "RecordEmptyOutputEvent",
     "BatchProcessingStartedEvent",
     "BatchProcessingProgressEvent",
@@ -157,46 +154,6 @@ class EnrichmentPipelineCompleteEvent(BaseEvent):
 
 
 @dataclass
-class DataNormalizationStartedEvent(BaseEvent):
-    """Fired when data normalization starts."""
-
-    data_type: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA_PROCESSING
-        self.message = f"Data normalization started for {self.data_type}"
-        self.data = {
-            "data_type": self.data_type,
-        }
-
-    @property
-    def code(self) -> str:
-        return "DT004"
-
-
-@dataclass
-class DataNormalizedEvent(BaseEvent):
-    """Fired when data is normalized."""
-
-    data_type: str = ""
-    item_count: int = 0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA_PROCESSING
-        self.message = f"Data normalized: {self.data_type} ({self.item_count} items)"
-        self.data = {
-            "data_type": self.data_type,
-            "item_count": self.item_count,
-        }
-
-    @property
-    def code(self) -> str:
-        return "DT005"
-
-
-@dataclass
 class RecordProcessingStartedEvent(BaseEvent):
     """Fired when record processing starts."""
 
@@ -271,33 +228,6 @@ class RecordTransformedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "RP003"
-
-
-@dataclass
-class RecordProcessingCompleteEvent(BaseEvent):
-    """Fired when record processing completes."""
-
-    action_name: str = ""
-    record_index: int = 0
-    source_guid: str = ""
-    status: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA_PROCESSING
-        self.message = (
-            f"[{self.action_name}] Record {self.record_index} processing complete: {self.status}"
-        )
-        self.data = {
-            "action_name": self.action_name,
-            "record_index": self.record_index,
-            "source_guid": self.source_guid,
-            "status": self.status,
-        }
-
-    @property
-    def code(self) -> str:
-        return "RP004"
 
 
 @dataclass

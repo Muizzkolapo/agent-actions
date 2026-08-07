@@ -11,10 +11,7 @@ __all__ = [
     "LLMErrorEvent",
     "RateLimitEvent",
     "TemplateRenderingFailedEvent",
-    "TemplateSyntaxErrorEvent",
     "LLMJSONParseErrorEvent",
-    "LLMConnectionErrorEvent",
-    "LLMServerErrorEvent",
 ]
 
 
@@ -163,27 +160,6 @@ class TemplateRenderingFailedEvent(BaseEvent):
 
 
 @dataclass
-class TemplateSyntaxErrorEvent(BaseEvent):
-    """Fired when template has syntax errors."""
-
-    action_name: str = ""
-    error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.TEMPLATE
-        self.message = f"Template syntax error in '{self.action_name}': {self.error}"
-        self.data = {
-            "action_name": self.action_name,
-            "error": self.error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "T002"
-
-
-@dataclass
 class LLMJSONParseErrorEvent(BaseEvent):
     """Fired when LLM returns unparseable JSON."""
 
@@ -204,47 +180,3 @@ class LLMJSONParseErrorEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "L005"
-
-
-@dataclass
-class LLMConnectionErrorEvent(BaseEvent):
-    """Fired when LLM connection/timeout error occurs."""
-
-    provider: str = ""
-    error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.LLM
-        self.message = f"{self.provider} connection error: {self.error}"
-        self.data = {
-            "provider": self.provider,
-            "error": self.error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "L006"
-
-
-@dataclass
-class LLMServerErrorEvent(BaseEvent):
-    """Fired when LLM server error (5xx) occurs."""
-
-    provider: str = ""
-    status_code: int = 0
-    error: str = ""
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.ERROR
-        self.category = EventCategories.LLM
-        self.message = f"{self.provider} server error ({self.status_code}): {self.error}"
-        self.data = {
-            "provider": self.provider,
-            "status_code": self.status_code,
-            "error": self.error,
-        }
-
-    @property
-    def code(self) -> str:
-        return "L007"

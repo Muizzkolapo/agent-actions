@@ -4,11 +4,9 @@
 from agent_actions.logging.events.batch_events import (
     BatchCompleteEvent,
     BatchErrorEvent,
-    BatchPartialFailureEvent,
     BatchPassthroughEvent,
     BatchProcessingCompleteEvent,
     BatchProgressEvent,
-    BatchResultProcessingFailedEvent,
     BatchResultsProcessedEvent,
     BatchStatusCheckFailedEvent,
     BatchStatusEvent,
@@ -22,7 +20,6 @@ from agent_actions.logging.events.cache_events import (
     CacheInvalidationEvent,
     CacheLoadEvent,
     CacheMissEvent,
-    CacheStatsEvent,
     CacheUpdateEvent,
 )
 
@@ -31,8 +28,6 @@ from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
     BatchProcessingProgressEvent,
     BatchProcessingStartedEvent,
-    DataNormalizationStartedEvent,
-    DataNormalizedEvent,
     DataValidationFailedEvent,
     DataValidationPassedEvent,
     DataValidationStartedEvent,
@@ -42,7 +37,6 @@ from agent_actions.logging.events.data_pipeline_events import (
     ExhaustedRecordEvent,
     RecordEmptyOutputEvent,
     RecordFilteredEvent,
-    RecordProcessingCompleteEvent,
     RecordProcessingStartedEvent,
     RecordTransformedEvent,
     ResultCollectedEvent,
@@ -53,26 +47,15 @@ from agent_actions.logging.events.formatters import AgentActionsFormatter
 
 # Initialization events
 from agent_actions.logging.events.initialization_events import (
-    ApplicationInitializationStartEvent,
     CLIArgumentParsingEvent,
     CLIInitCompleteEvent,
     CLIInitStartEvent,
-    ConfigLoadCompleteEvent,
     ConfigLoadEvent,
     ConfigLoadStartEvent,
-    ConfigValidationEvent,
-    DIContainerInitializationEvent,
-    EnvironmentLoadCompleteEvent,
-    EnvironmentLoadStartEvent,
-    EnvironmentVariableDetectedEvent,
-    ProcessorRegistrationEvent,
     ProjectDirectoryCreatedEvent,
     ProjectInitializationStartEvent,
     ProjectInitializedEvent,
     ProjectValidationEvent,
-    StartupValidationCompleteEvent,
-    StartupValidationStartEvent,
-    UDFDiscoveredEvent,
     UDFDiscoveryCompleteEvent,
     UDFDiscoveryStartEvent,
     WorkflowInitializationStartEvent,
@@ -98,15 +81,12 @@ from agent_actions.logging.events.io_events import (
 
 # LLM events
 from agent_actions.logging.events.llm_events import (
-    LLMConnectionErrorEvent,
     LLMErrorEvent,
     LLMJSONParseErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
-    LLMServerErrorEvent,
     RateLimitEvent,
     TemplateRenderingFailedEvent,
-    TemplateSyntaxErrorEvent,
 )
 from agent_actions.logging.events.types import EventCategories
 
@@ -114,10 +94,8 @@ from agent_actions.logging.events.types import EventCategories
 from agent_actions.logging.events.validation_events import (
     DataLoadingErrorEvent,
     DataParsingErrorEvent,
-    DataValidationErrorEvent,
     GuardEvaluationErrorEvent,
     GuardEvaluationTimeoutEvent,
-    RecoveryErrorEvent,
     RepromptRecoveredEvent,
     RepromptRetryEvent,
     RepromptValidationFailedEvent,
@@ -162,16 +140,12 @@ __all__ = [
     "BatchStatusEvent",
     "BatchSubmissionFailedEvent",
     "BatchStatusCheckFailedEvent",
-    "BatchResultProcessingFailedEvent",
-    "BatchPartialFailureEvent",
     # LLM
     "LLMRequestEvent",
     "LLMResponseEvent",
     "LLMErrorEvent",
     "RateLimitEvent",
     "LLMJSONParseErrorEvent",
-    "LLMConnectionErrorEvent",
-    "LLMServerErrorEvent",
     # Validation
     "ValidationStartEvent",
     "ValidationCompleteEvent",
@@ -183,14 +157,11 @@ __all__ = [
     "CacheInvalidationEvent",
     "CacheLoadEvent",
     "CacheUpdateEvent",
-    "CacheStatsEvent",
     # Template
     "TemplateRenderingFailedEvent",
-    "TemplateSyntaxErrorEvent",
     # Data
     "DataParsingErrorEvent",
     "DataLoadingErrorEvent",
-    "DataValidationErrorEvent",
     # Guard
     "GuardEvaluationTimeoutEvent",
     "GuardEvaluationErrorEvent",
@@ -199,24 +170,13 @@ __all__ = [
     "RepromptValidationFailedEvent",
     "RepromptRetryEvent",
     "RepromptRecoveredEvent",
-    "RecoveryErrorEvent",
     # Configuration
     "ConfigLoadStartEvent",
     "ConfigLoadEvent",
-    "ConfigLoadCompleteEvent",
-    "ConfigValidationEvent",
-    # Environment
-    "EnvironmentLoadStartEvent",
-    "EnvironmentVariableDetectedEvent",
-    "EnvironmentLoadCompleteEvent",
     # Initialization (CLI, System, Project)
     "CLIInitStartEvent",
     "CLIArgumentParsingEvent",
     "CLIInitCompleteEvent",
-    "ApplicationInitializationStartEvent",
-    "StartupValidationStartEvent",
-    "StartupValidationCompleteEvent",
-    "DIContainerInitializationEvent",
     "WorkflowInitializationStartEvent",
     "WorkflowServicesInitializationStartEvent",
     "ProjectInitializationStartEvent",
@@ -225,9 +185,7 @@ __all__ = [
     "ProjectInitializedEvent",
     # Plugin/UDF
     "UDFDiscoveryStartEvent",
-    "UDFDiscoveredEvent",
     "UDFDiscoveryCompleteEvent",
-    "ProcessorRegistrationEvent",
     # File I/O
     "SourceDataSavingEvent",
     "SourceDataSavedEvent",
@@ -246,13 +204,10 @@ __all__ = [
     "EnrichmentPipelineStartedEvent",
     "EnricherExecutedEvent",
     "EnrichmentPipelineCompleteEvent",
-    "DataNormalizationStartedEvent",
-    "DataNormalizedEvent",
     # Record Processing Pipeline
     "RecordProcessingStartedEvent",
     "RecordFilteredEvent",
     "RecordTransformedEvent",
-    "RecordProcessingCompleteEvent",
     "RecordEmptyOutputEvent",
     # Batch Processing (data processing)
     "BatchProcessingStartedEvent",
