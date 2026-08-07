@@ -14,30 +14,27 @@ This document maps the moving parts of `agent_actions/logging/` -- the module th
          core/             events/            errors/
     (dispatch engine)   (event library)   (error translation)
            |                  |                  |
-    +------+------+     70+ event types    formatter chain
+    +------+------+     80+ event types    formatter chain
     |      |      |     across 8 modules   -> UserError
  manager  handlers protocols
-(singleton) (4 types) (EventHandler,
-                       EventFilter)
+(singleton) (3 types) (EventHandler)
 
 Top-level files:
   factory.py    -- LoggerFactory: wires everything together
   config.py     -- LoggingConfig / FileHandlerSettings dataclasses
   filters.py    -- RedactingFilter (stdlib logging layer)
-  formatters.py -- JSONFormatter (stdlib logging layer)
 ```
 
-The module has **three packages** and **four top-level files**:
+The module has **three packages** and **three top-level files**:
 
 | Package / File | What it does |
 |----------------|-------------|
-| `core/` | Singleton EventManager, handler protocols, and the four built-in handler implementations (Console, JSONFile, LoggingBridge, ContextDebug) |
-| `events/` | 106 concrete event dataclasses organized by domain (workflow, batch, LLM, validation, etc.) plus the AgentActionsFormatter for console display |
+| `core/` | Singleton EventManager, the EventHandler protocol, and the three built-in handler implementations (Console, JSONFile, LoggingBridge) |
+| `events/` | Concrete event dataclasses organized by domain (workflow, batch, LLM, validation, etc.) plus the AgentActionsFormatter for console display |
 | `errors/` | ErrorTranslator with a chain of 10 formatter strategies that convert any Python exception into a structured UserError for CLI display |
 | `factory.py` | LoggerFactory -- the single entry point that initializes EventManager, registers handlers, and wires the stdlib logging bridge |
 | `config.py` | LoggingConfig and FileHandlerSettings dataclasses, built from `agent_actions.yml` or `AGENT_ACTIONS_*` env vars |
 | `filters.py` | RedactingFilter for the stdlib logging layer -- regex-based scrubbing of API keys, tokens, secrets |
-| `formatters.py` | JSONFormatter for stdlib log records (used by legacy code paths, not the primary event system) |
 
 ---
 
@@ -110,8 +107,7 @@ fire_event(LLMRequestEvent(...))       logger.info("Submitting batch")
          v
   EventManager dispatch loop
     1. Inject context (invocation_id, correlation_id, extras)
-    2. Run global filters (if any)
-    3. For each handler:
+    2. For each handler:
          handler.accepts(event)? -> handler.handle(event)
 ```
 
@@ -130,18 +126,16 @@ The EventManager is a **singleton** obtained via `EventManager.get()`. All event
 EventManager (singleton, thread-safe)
   |
   +-- _handlers: list[EventHandler]      -- registered in order
-  +-- _filters: list[EventFilter]        -- global pre-dispatch filters
   +-- _context: dict[str, Any]           -- shared context (invocation_id, etc.)
   +-- _context_overlay: ContextVar       -- per-thread/coroutine overlay
   +-- _fire_lock: RLock                  -- serializes fire() calls
   |
   fire(event):
-    1. Snapshot handlers + filters under lock
+    1. Snapshot handlers under lock
     2. Inject context into event.meta
          invocation_id, correlation_id -> direct fields
          everything else -> event.meta.extra
-    3. Run filters in order (filter can transform or drop event)
-    4. For each handler:
+    3. For each handler:
          handler.accepts(event)? -> handler.handle(event)
          Handler exceptions are caught and logged to stderr
          (via non-propagating _stdlib_logger to avoid re-entry)
@@ -195,7 +189,6 @@ Each domain gets a letter prefix. The code is the primary stable identifier for 
 | G | Guard evaluation | G001 GuardEvaluationErrorEvent |
 | R | Recovery/retry | R001 RetryExhaustedEvent |
 | F | Configuration | F001 ConfigLoadStartEvent |
-| E | Environment | E001 EnvironmentLoadStartEvent |
 | I | Initialization/CLI | I001 CLIInitStartEvent |
 | P | Plugin/UDF discovery | P001 UDFDiscoveryStartEvent |
 | RP | Record processing | RP01 RecordProcessingStartedEvent |
@@ -276,15 +269,6 @@ Purpose:  Routes stdlib logger.info/warning/error calls into EventManager
 Attached: To the "agent_actions" root logger (propagation disabled)
 Converts: logging.LogRecord -> LogEvent (code X000, category from logger name)
 Safety:   Catches all exceptions in emit() -- falls back to handleError()
-```
-
-### ContextDebugHandler (optional)
-
-```
-Purpose:  Aggregates context introspection events for --debug-context display
-Enabled:  Only when LoggerFactory.enable_context_debug() is called
-Filter:   Event codes CX001-CX006
-Output:   Rich tree display or plain text summary on demand
 ```
 
 ---
@@ -370,18 +354,16 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 | `factory.py` | LoggerFactory -- single entry point, handler registration, bridge setup |
 | `config.py` | LoggingConfig + FileHandlerSettings dataclasses |
 | `filters.py` | RedactingFilter + `_redact_sensitive_data()` |
-| `formatters.py` | JSONFormatter for stdlib LogRecords |
 
 ### core/
 | File | Role |
 |------|------|
 | `core/manager.py` | EventManager singleton -- thread-safe dispatch, context management |
-| `core/events.py` | BaseEvent, EventLevel, EventCategory, EventMeta |
-| `core/protocols.py` | EventHandler / EventFilter protocols, LevelFilter, CategoryFilter |
+| `core/events.py` | BaseEvent, EventLevel, EventMeta |
+| `core/protocols.py` | EventHandler protocol |
 | `core/handlers/bridge.py` | LoggingBridgeHandler + LogEvent, DebugEvent, SystemEvent |
 | `core/handlers/console.py` | ConsoleEventHandler -- Rich or plain stderr output |
 | `core/handlers/json_file.py` | JSONFileHandler -- buffered NDJSON writer with rotation |
-| `core/handlers/context_debug.py` | ContextDebugHandler -- aggregates CX events for debug display |
 
 ### events/
 | File | Role |
@@ -412,7 +394,7 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 
 ## Caveats
 
-**Event codes are public API.** External tooling, the ContextDebugHandler, and RunResultsCollector all match on event codes and event_type strings. Changing a code prefix or renaming an event class is a breaking change.
+**Event codes are public API.** External tooling and RunResultsCollector match on event codes and event_type strings. Changing a code prefix or renaming an event class is a breaking change.
 
 **RunResultsCollector matches by string.** The `accepts()` method checks `event.event_type` (class name as string) for `RecordEmptyOutputEvent` and `ResultCollectionCompleteEvent`. The `handle()` method dispatches on `event_type` strings in a long if/elif chain. Renaming an event class silently breaks result collection.
 

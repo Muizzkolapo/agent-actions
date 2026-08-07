@@ -25,7 +25,6 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 | `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. Registers four handler types: Console, `events.json` (all levels), `errors.json` (ERROR-only, output_dir runs only), and `run_results.json`. On init, clamps noisy third-party SDK/HTTP loggers (httpx, urllib3, openai, anthropic, ollama, groq, cohere, google_genai, googleapiclient, etc.) to WARNING and applies user-supplied `logging.module_levels` overrides; pre-init levels are snapshotted and restored by `reset()`. | `logging` |
 | `LoggerFactory` | Class | Manages logger creation, third-party suppression, and the `events.json` bridge. | `logging` |
 | `filters.py` | Module | Custom filters (e.g., `RedactingFilter`) to sanitize sensitive payloads. | `logging` |
-| `formatters.py` | Module | Formatter helpers such as `JSONFormatter` used across services. | `logging` |
 
 ## Project Surface
 

@@ -7,7 +7,6 @@ from agent_actions.logging.core.handlers.bridge import (
     SystemEvent,
 )
 from agent_actions.logging.core.handlers.console import ConsoleEventHandler
-from agent_actions.logging.core.handlers.context_debug import ContextDebugHandler
 from agent_actions.logging.core.handlers.json_file import JSONFileHandler
 
 __all__ = [
@@ -17,5 +16,4 @@ __all__ = [
     "LogEvent",
     "DebugEvent",
     "SystemEvent",
-    "ContextDebugHandler",
 ]

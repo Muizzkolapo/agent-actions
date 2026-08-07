@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 from agent_actions.logging.config import VALID_LOG_LEVELS, LoggingConfig
 
 if TYPE_CHECKING:
-    from agent_actions.logging.core.handlers import ContextDebugHandler
     from agent_actions.logging.core.manager import EventManager
     from agent_actions.logging.events.handlers import RunResultsCollector
 
@@ -333,11 +332,6 @@ class LoggerFactory:
         return cls._event_manager
 
     @classmethod
-    def get_run_results_collector(cls) -> RunResultsCollector | None:
-        """Get the RunResultsCollector instance."""
-        return cls._run_results_collector
-
-    @classmethod
     def set_context(cls, **kwargs) -> None:
         """Set shared context values for all events."""
         if cls._event_manager:
@@ -348,18 +342,3 @@ class LoggerFactory:
         """Flush all event handlers."""
         if cls._event_manager:
             cls._event_manager.flush()
-
-    @classmethod
-    def enable_context_debug(cls) -> ContextDebugHandler:
-        """Enable and return the context debug handler for --debug-context."""
-        if not cls._initialized:
-            cls.initialize()
-
-        from agent_actions.logging.core.handlers import ContextDebugHandler
-
-        handler = ContextDebugHandler()
-
-        if cls._event_manager:
-            cls._event_manager.register(handler)
-
-        return handler

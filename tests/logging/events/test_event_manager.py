@@ -8,7 +8,6 @@ import pytest
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.manager import EventManager, fire_event
-from agent_actions.logging.core.protocols import CategoryFilter, LevelFilter
 
 
 @pytest.fixture(autouse=True)
@@ -195,72 +194,6 @@ class TestContextManagement:
             assert manager.get_context("level") == "1"
 
         assert manager.get_context("level") == "0"
-
-
-class TestGlobalFilters:
-    """Tests for global event filters."""
-
-    def test_level_filter_drops_events(self):
-        """Test that LevelFilter drops events below threshold."""
-        manager = EventManager.get()
-        handler = MockHandler()
-        manager.register(handler)
-        manager.add_filter(LevelFilter(EventLevel.WARN))
-
-        debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
-        info_event = BaseEvent(level=EventLevel.INFO, message="info")
-        warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
-
-        manager.fire(debug_event)
-        manager.fire(info_event)
-        manager.fire(warn_event)
-
-        assert len(handler.events_received) == 1
-        assert handler.events_received[0].level == EventLevel.WARN
-
-    def test_category_filter(self):
-        """Test CategoryFilter filters by category."""
-        manager = EventManager.get()
-        handler = MockHandler()
-        manager.register(handler)
-        manager.add_filter(CategoryFilter({"workflow", "agent"}))
-
-        workflow_event = BaseEvent(category="workflow", message="workflow")
-        agent_event = BaseEvent(category="agent", message="agent")
-        batch_event = BaseEvent(category="batch", message="batch")
-
-        manager.fire(workflow_event)
-        manager.fire(agent_event)
-        manager.fire(batch_event)
-
-        assert len(handler.events_received) == 2
-        categories = [e.category for e in handler.events_received]
-        assert "workflow" in categories
-        assert "agent" in categories
-
-    def test_multiple_filters_chain(self):
-        """Test that multiple filters are chained."""
-        manager = EventManager.get()
-        handler = MockHandler()
-        manager.register(handler)
-
-        # First filter passes only INFO+
-        manager.add_filter(LevelFilter(EventLevel.INFO))
-        # Second filter passes only workflow category
-        manager.add_filter(CategoryFilter({"workflow"}))
-
-        # These should pass both filters
-        workflow_info = BaseEvent(level=EventLevel.INFO, category="workflow", message="pass")
-
-        # These should fail one or both
-        workflow_debug = BaseEvent(level=EventLevel.DEBUG, category="workflow", message="fail")
-        agent_info = BaseEvent(level=EventLevel.INFO, category="agent", message="fail")
-
-        manager.fire(workflow_info)
-        manager.fire(workflow_debug)
-        manager.fire(agent_info)
-
-        assert len(handler.events_received) == 1
 
 
 class TestFlush:

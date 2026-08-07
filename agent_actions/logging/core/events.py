@@ -32,15 +32,6 @@ class EventLevel(Enum):
         return [cls.DEBUG, cls.INFO, cls.WARN, cls.ERROR]
 
 
-class EventCategory(Enum):
-    """Base event categories; extensible via string categories."""
-
-    SYSTEM = "system"  # System lifecycle events
-    LIFECYCLE = "lifecycle"  # Application lifecycle
-    OPERATION = "operation"  # Generic operations
-    ERROR = "error"  # Error events
-
-
 @dataclass
 class EventMeta:
     """Standard correlation and tracing metadata attached to all events."""
