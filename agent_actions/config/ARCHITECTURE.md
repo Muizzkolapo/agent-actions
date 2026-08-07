@@ -1,6 +1,6 @@
 # Config Module Architecture
 
-This document maps the moving parts of `agent_actions/config/` — the module that loads, validates, merges, and resolves all configuration for the framework: workflow YAML files, environment variables, project paths, default constants, and dependency injection wiring.
+This document maps the moving parts of `agent_actions/config/` — the module that loads, validates, merges, and resolves all configuration for the framework: workflow YAML files, environment variables, project paths, and default constants.
 
 ---
 
