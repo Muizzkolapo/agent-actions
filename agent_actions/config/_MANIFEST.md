@@ -17,7 +17,6 @@ orchestration, prompts, and processing to concrete implementations.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [di](di/_MANIFEST.md) | Dependency injection container, registry, and application wiring. |
 
 ## Modules
 
@@ -28,7 +27,6 @@ orchestration, prompts, and processing to concrete implementations.
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
-| `factory.py` | Module | DI-aware factory helpers for `ActionRunner`. | `di`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
@@ -40,20 +38,9 @@ orchestration, prompts, and processing to concrete implementations.
 
 ### Configuration Bootstrap
 
-```mermaid
-flowchart TD
-    A[EnvironmentConfig] --> B[ApplicationContainer]
-    B --> C[DI Registrations]
-    C --> D[ActionRunner]
-```
-
-Key Functions
-
 | Module | Symbol | Type | Description |
 |--------|--------|------|-------------|
 | `environment.py` | `EnvironmentConfig` | Class | Environment settings with validation helpers. |
-| `factory.py` | `application_container_context` | Function | Context-managed DI lifecycle for container. |
-| `factory.py` | `create_action_runner` | Function | Create `ActionRunner` via DI container. |
 
 ### Project Path Resolution
 

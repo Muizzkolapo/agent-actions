@@ -17,7 +17,6 @@ def _make_process_params(kind: str, run_mode: RunMode = RunMode.BATCH) -> Proces
             output_directory="/tmp/output",
         ),
         idx=0,
-        processor_factory=MagicMock(),
     )
 
 

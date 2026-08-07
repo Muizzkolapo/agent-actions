@@ -9,7 +9,6 @@ from agent_actions.config.types import ActionConfigDict, ActionEntryDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.config.di.container import registry
 from agent_actions.config.interfaces import IGenerator
 from agent_actions.config.types import RunMode
 from agent_actions.errors import GenerationError
@@ -23,7 +22,6 @@ from agent_actions.processing.types import (
 logger = logging.getLogger(__name__)
 
 
-@registry.register_generator("data_generator")
 class DataGenerator(IGenerator):
     """Handles agent creation and data generation via OnlineLLMStrategy."""
 
