@@ -118,35 +118,13 @@ class DataFlowGraph:
         """Add a node to the graph."""
         self.nodes[node.name] = node
 
-    def add_edge(self, edge: DataFlowEdge) -> None:
-        """Add an edge to the graph."""
-        self.edges.append(edge)
-
     def get_node(self, name: str) -> DataFlowNode | None:
         """Get a node by name."""
         return self.nodes.get(name)
 
-    def has_node(self, name: str) -> bool:
-        """Check if a node exists."""
-        return name in self.nodes
-
     def is_special_namespace(self, name: str) -> bool:
         """Check if name is a special namespace (source, loop, etc.)."""
         return name in SPECIAL_NAMESPACES
-
-    def get_upstream_nodes(self, agent_name: str) -> list[DataFlowNode]:
-        """Get all nodes that this action depends on."""
-        node = self.nodes.get(agent_name)
-        if not node:
-            return []
-
-        upstream = []
-        for dep_name in node.dependencies:
-            dep_node = self.nodes.get(dep_name)
-            if dep_node:
-                upstream.append(dep_node)
-
-        return upstream
 
     def get_downstream_nodes(self, agent_name: str) -> list[DataFlowNode]:
         """Get all nodes that depend on this action."""

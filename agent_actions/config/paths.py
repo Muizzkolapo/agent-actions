@@ -248,11 +248,6 @@ class PathManager:
 
         return True
 
-    def validate_standard_path(self, path_type: PathType, path: Path) -> bool:
-        """Validate a path against standard requirements for its type."""
-        requirements = self.VALIDATION_RULES.get(path_type, {})
-        return self.validate_path(path, requirements)
-
     def normalize_path(self, path: str | Path) -> Path:
         """Normalize a path to a resolved Path object."""
         return Path(path).resolve()
@@ -265,19 +260,6 @@ class PathManager:
             return project_root in normalized_path.parents or normalized_path == project_root
         except ProjectRootNotFoundError:
             return False
-
-    def get_relative_to_project(self, path: Path) -> Path:
-        """Get path relative to project root."""
-        project_root = self.get_project_root()
-        normalized_path = self.normalize_path(path)
-        return normalized_path.relative_to(project_root)
-
-    def find_files_by_pattern(self, pattern: str, base_path: Path | None = None) -> list[Path]:
-        """Find files matching a glob pattern within the project."""
-        search_base = base_path or self.get_project_root()
-        search_base = self.normalize_path(search_base)
-
-        return sorted(search_base.glob(pattern))
 
     def clean_path(self, path: Path, recursive: bool = False) -> bool:
         """Remove a path, optionally recursively."""
@@ -306,22 +288,6 @@ class PathManager:
             return False
 
         return False
-
-    def create_mirror_path(self, source_path: Path, source_base: str, target_base: str) -> Path:
-        """Create a mirrored path by replacing source base with target base."""
-        source_path = self.normalize_path(source_path)
-        parts = source_path.parts
-
-        try:
-            base_index = parts.index(source_base)
-        except ValueError as exc:
-            raise PathManagerError(
-                f"Source base '{source_base}' not found in path {source_path}"
-            ) from exc
-
-        new_parts = parts[:base_index] + (target_base,) + parts[base_index + 1 :]
-
-        return Path(*new_parts)
 
     def clear_cache(self):
         """Clear the internal path cache."""

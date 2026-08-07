@@ -249,13 +249,6 @@ Strategies are evaluated in list order. `PrecomputedStructuredStrategy` must com
 ```
 content.py — namespaced content model
 
-wrap_content(action_name, output, existing)
-  → delegates to RecordEnvelope.build_content() (lazy import)
-  → {**existing_namespaces, action_name: output}
-
-read_namespace(record, action_name, field)
-  → record["content"][action_name][field]
-
 get_existing_content(record, is_first_stage=False)
   → PRIMARY ENTRY POINT for both batch and online paths
   │
@@ -361,4 +354,4 @@ get_existing_content(record, is_first_stage=False)
 
 10. **VersionIdGenerator uses class-level state.** The `OrderedDict` registry and `RLock` live on the class, not on instances. All callers share the same registry. `clear()` must be called between test runs to avoid cross-test contamination.
 
-11. **Content.py lazy imports are load-order sensitive.** Both `wrap_content` and `get_existing_content` import from `agent_actions.record.envelope` inside the function body. This breaks a circular dependency (`record` imports from `utils`, `utils/content.py` imports from `record`). Moving these to top-level imports would cause an `ImportError` at startup.
+11. **Content.py lazy imports are load-order sensitive.** `get_existing_content` imports from `agent_actions.record.envelope` inside the function body. This breaks a circular dependency (`record` imports from `utils`, `utils/content.py` imports from `record`). Moving these to top-level imports would cause an `ImportError` at startup.
