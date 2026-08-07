@@ -45,11 +45,6 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
-def _wrap_openai_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap OpenAI SDK errors into unified agent-actions error types."""
-    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
-
-
 class OpenAIClient(BaseClient):
     """OpenAI API client for JSON and non-JSON LLM invocations."""
 
@@ -113,7 +108,7 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise _wrap_openai_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
@@ -204,7 +199,7 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise _wrap_openai_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(

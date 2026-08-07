@@ -45,11 +45,6 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
-def _wrap_gemini_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Google Gemini SDK errors into unified agent-actions error types."""
-    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
-
-
 def _build_client(api_key: str) -> genai.Client:
     """Build a google-genai Client instance."""
     return genai.Client(api_key=api_key)
@@ -104,7 +99,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except genai_errors.APIError as e:
-            raise _wrap_gemini_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
@@ -163,7 +158,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except genai_errors.APIError as e:
-            raise _wrap_gemini_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(

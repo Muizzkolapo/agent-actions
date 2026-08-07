@@ -50,11 +50,6 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
-def _wrap_groq_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Groq SDK errors into unified agent-actions error types."""
-    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
-
-
 class GroqClient(BaseClient, JSONResponseMixin):
     """Groq API client for JSON and non-JSON LLM invocations."""
 
@@ -108,7 +103,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
-            raise _wrap_groq_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
@@ -172,7 +167,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
-            raise _wrap_groq_error(e, model_name, request_id) from e
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
