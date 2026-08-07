@@ -4,7 +4,6 @@ from agent_actions.errors.base import AgentActionsError
 from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.errors.filesystem import FileSystemError
 from agent_actions.errors.processing import ProcessingError
-from agent_actions.errors.validation import ValidationError
 
 
 class TestPathManagerExceptionHierarchy:
@@ -25,22 +24,6 @@ class TestPathManagerExceptionHierarchy:
 
         assert issubclass(PathManagerValidationError, FileSystemError)
         assert issubclass(PathManagerValidationError, AgentActionsError)
-
-
-class TestChunkingExceptionHierarchy:
-    def test_field_chunking_error_is_processing_error(self):
-        from agent_actions.input.preprocessing.chunking.errors import FieldChunkingError
-
-        assert issubclass(FieldChunkingError, ProcessingError)
-        assert issubclass(FieldChunkingError, AgentActionsError)
-
-    def test_field_chunking_validation_error_is_validation_error(self):
-        from agent_actions.input.preprocessing.chunking.errors import (
-            FieldChunkingValidationError,
-        )
-
-        assert issubclass(FieldChunkingValidationError, ValidationError)
-        assert issubclass(FieldChunkingValidationError, AgentActionsError)
 
 
 class TestFieldResolutionExceptionHierarchy:
@@ -82,17 +65,6 @@ class TestDuplicateActionErrorHierarchy:
 class TestNegativeAssertions:
     """Guard against accidental reversion to old base classes."""
 
-    def test_chunking_errors_not_bare_exception(self):
-        from agent_actions.input.preprocessing.chunking.errors import (
-            FieldChunkingError,
-            FieldChunkingValidationError,
-        )
-
-        assert not issubclass(FieldChunkingValidationError, ValueError)
-        # FieldChunkingError was Exception; now ProcessingError (still an Exception,
-        # but must be AgentActionsError)
-        assert issubclass(FieldChunkingError, AgentActionsError)
-
     def test_field_resolution_not_bare_exception(self):
         from agent_actions.input.preprocessing.field_resolution.exceptions import (
             FieldResolutionError,
@@ -111,12 +83,6 @@ class TestConstructorCompatibility:
         e = PathManagerError("test message")
         assert str(e) == "test message"
         assert e.context == {}
-
-    def test_field_chunking_error_single_string(self):
-        from agent_actions.input.preprocessing.chunking.errors import FieldChunkingError
-
-        e = FieldChunkingError("test message")
-        assert str(e) == "test message"
 
     def test_field_resolution_error_single_string(self):
         from agent_actions.input.preprocessing.field_resolution.exceptions import (

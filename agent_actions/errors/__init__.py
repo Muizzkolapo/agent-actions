@@ -26,7 +26,6 @@ from agent_actions.errors.configuration import (
 from agent_actions.errors.external_services import (
     AnthropicError,
     ExternalServiceError,
-    LLMResponseParseError,
     NetworkError,
     PromptTooLargeError,
     RateLimitError,
@@ -118,7 +117,6 @@ __all__ = [
     "NetworkError",
     "RateLimitError",
     "PromptTooLargeError",
-    "LLMResponseParseError",
     # File System
     "FileSystemError",
     "FileLoadError",

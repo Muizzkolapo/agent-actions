@@ -108,15 +108,3 @@ class InvocationStrategyFactory:
         if len(validators) == 1:
             return validators[0]
         return ComposedValidator(validators)
-
-    @staticmethod
-    def create_online(
-        agent_config: dict[str, Any],
-    ) -> OnlineStrategy:
-        """Create OnlineStrategy directly."""
-        return InvocationStrategyFactory._create_online_strategy(agent_config)
-
-    @staticmethod
-    def create_batch(provider: BatchProvider) -> BatchStrategy:
-        """Create BatchStrategy directly."""
-        return BatchStrategy(provider)

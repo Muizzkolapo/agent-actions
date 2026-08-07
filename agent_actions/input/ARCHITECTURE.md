@@ -246,7 +246,7 @@ GuardFilter(cache_size=1000, default_timeout=5)
   2. Submit to ThreadPoolExecutor(max_workers=4)
   |
   3. _evaluate_guard_condition():
-  |    a. _parse_condition_cached() -- LRU cache on condition string
+  |    a. _cached_parse() -- LRU cache on condition string
   |    b. WhereClauseParser.parse() --> ParseResult with AST
   |    c. ast.evaluate(data, functions) --> bool
   |
@@ -393,7 +393,6 @@ The resolver (`resolver.py`) and validator (`validator.py`) use parsed reference
 | File | Role |
 |------|------|
 | `context/normalizer.py` | context_scope normalization, version expansion, orphan detection |
-| `context/context_preprocessor.py` | Context data preparation for prompt rendering |
 
 ### Preprocessing -- staging
 | File | Role |
@@ -424,14 +423,11 @@ The resolver (`resolver.py`) and validator (`validator.py`) use parsed reference
 | `preprocessing/field_resolution/context_provider.py` | Evaluation context assembly |
 | `preprocessing/field_resolution/exceptions.py` | InvalidReferenceError and related |
 
-### Preprocessing -- chunking and transformation
+### Preprocessing -- transformation
 | File | Role |
 |------|------|
-| `preprocessing/chunking/field_chunking.py` | Field-level chunking for long text values |
-| `preprocessing/chunking/strategies/` | Chunking, fallback, metadata, and validation strategies |
 | `preprocessing/transformation/string_transformer.py` | Tokenizer: text splitting by token count |
 | `preprocessing/transformation/transformer.py` | General data transformation utilities |
-| `preprocessing/processing/data_processor.py` | DataProcessor for record-level preprocessing |
 
 ---
 

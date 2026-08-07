@@ -62,11 +62,6 @@ for _key in _OPERATOR_LOOKUP:
         _MULTI_WORD_STARTS.add(_key.split()[0].upper())
 
 
-def _get_lru_cache_info(cached_func):
-    """Get cache_info from an lru_cache-decorated function."""
-    return cached_func.cache_info()
-
-
 @dataclass
 class ParseError:
     """Information about a parsing error."""
@@ -443,7 +438,7 @@ class WhereClauseParser:
 
     def get_cache_info(self) -> dict[str, Any]:
         """Get cache statistics."""
-        cache_info = _get_lru_cache_info(type(self).parse_cached)
+        cache_info = type(self).parse_cached.cache_info()
         return {
             "hits": cache_info.hits,
             "misses": cache_info.misses,

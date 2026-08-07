@@ -310,7 +310,7 @@ Content fields are capped at `max_fields` (default 12) with a "...and N more fie
 ### docs/
 | File | Role |
 |------|------|
-| `__init__.py` | Public API: `generate_docs`, `serve_docs`, `RunTracker`, `track_workflow_run` |
+| `__init__.py` | Package docstring only — import `generate_docs`, `serve_docs`, `RunTracker` from their submodules |
 | `generator.py` | `CatalogGenerator` + `generate_docs()` orchestration |
 | `parser.py` | `WorkflowParser` -- YAML parsing and field extraction for catalog |
 | `run_tracker.py` | `RunTracker` -- concurrent-safe run recording with file locking |

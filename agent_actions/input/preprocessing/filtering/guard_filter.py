@@ -31,11 +31,6 @@ class ErrorCategory(Enum):
     TIMEOUT = "timeout"  # Evaluation exceeded time limit
 
 
-def _get_lru_cache_info(cached_func):
-    """Get cache_info from an lru_cache-decorated function."""
-    return cached_func.cache_info()
-
-
 @dataclass
 class FilterResult:
     """Result of filtering operation."""
@@ -188,10 +183,6 @@ class GuardFilter:
                 execution_time=execution_time,
             )
 
-    def _parse_condition_cached(self, condition: str) -> ParseResult:
-        """Parse guard condition with caching."""
-        return self._cached_parse(condition)
-
     @lru_cache(maxsize=1000)  # noqa: B019
     def _cached_parse(self, condition: str) -> ParseResult:
         """Internal cached parse method."""
@@ -201,7 +192,7 @@ class GuardFilter:
         self, data: dict[str, Any], condition: str, functions: dict[str, Any] | None
     ) -> bool:
         """Evaluate a guard condition against data."""
-        parse_result = self._parse_condition_cached(condition)
+        parse_result = self._cached_parse(condition)
 
         if not parse_result.success:
             if parse_result.error is None:
@@ -244,7 +235,7 @@ class GuardFilter:
     def get_cache_info(self) -> dict[str, Any]:
         """Get cache statistics."""
         parser_cache = self.parser.get_cache_info()
-        filter_cache = _get_lru_cache_info(type(self)._cached_parse)
+        filter_cache = type(self)._cached_parse.cache_info()
 
         total_calls = filter_cache.hits + filter_cache.misses
         hit_ratio = filter_cache.hits / total_calls if total_calls > 0 else 0

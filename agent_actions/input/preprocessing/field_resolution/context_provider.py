@@ -34,47 +34,6 @@ class EvaluationContext:
     workflow_metadata: dict[str, Any] | None = None
     current_item: dict[str, Any] | None = None
 
-    def get_action_output(self, action_name: str) -> dict[str, Any] | None:
-        """Get output from a specific upstream action."""
-        return self.field_context.get(action_name)
-
-    def has_action(self, action_name: str) -> bool:
-        """Check if an action's output exists in context."""
-        return action_name in self.field_context
-
-    def get_field_value(self, action_name: str, field_name: str, default: Any = None) -> Any:
-        """Get a specific field from an action's output."""
-        action_data = self.get_action_output(action_name)
-        if action_data and isinstance(action_data, dict):
-            return action_data.get(field_name, default)
-        return default
-
-    def to_flat_dict(self) -> dict[str, Any]:
-        """Convert to flat dict for WHERE clause evaluation."""
-        flat = {}
-
-        if self.current_content:
-            flat.update(self.current_content)
-
-        for action_name, action_data in self.field_context.items():
-            if action_name not in flat:
-                flat[action_name] = action_data
-
-        if self.source_content and "source" not in flat:
-            flat["source"] = self.source_content
-
-        if self.version_context and "version" not in flat:
-            flat["version"] = self.version_context
-
-        if self.workflow_metadata and "workflow" not in flat:
-            flat["workflow"] = self.workflow_metadata
-
-        return flat
-
-    def to_nested_dict(self) -> dict[str, Any]:
-        """Get the full nested field_context structure."""
-        return self.field_context.copy()
-
 
 class EvaluationContextProvider:
     """Builds rich evaluation contexts for guards, filters, and prompts."""
@@ -107,32 +66,4 @@ class EvaluationContextProvider:
             version_context=field_context.get("version"),
             workflow_metadata=field_context.get("workflow"),
             current_item=current_item,
-        )
-
-    def build_context_for_batch(
-        self,
-        contents: dict[str, Any],
-        config: ContextBuildConfig,
-        current_item: dict[str, Any] | None = None,
-    ) -> EvaluationContext:
-        """Build context for batch mode (simplified parameters)."""
-        if current_item is None:
-            current_item = {
-                "content": contents,
-                "source_guid": contents.get("source_guid") if contents else None,
-                "lineage": contents.get("lineage", []) if contents else [],
-            }
-
-        return self.build_context(current_item=current_item, config=config)
-
-    def build_minimal_context(
-        self,
-        current_content: dict[str, Any],
-        upstream_data: dict[str, dict[str, Any]] | None = None,
-    ) -> EvaluationContext:
-        """Build minimal context without historical loading."""
-        return EvaluationContext(
-            current_content=current_content,
-            field_context=upstream_data or {},
-            current_item={"content": current_content},
         )

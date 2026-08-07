@@ -5,7 +5,6 @@ from typing import Any
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
-from .exceptions import DependencyValidationError
 from .reference_parser import ParsedReference, ReferenceParser
 from .schema_field_validator import SchemaFieldValidator
 
@@ -86,60 +85,6 @@ class ReferenceValidator:
                 )
 
         return errors
-
-    def validate_strict(
-        self,
-        references: list[str | ParsedReference],
-        agent_config: dict[str, Any],
-        agent_indices: dict[str, int],
-        current_agent_name: str | None = None,
-    ) -> None:
-        """Validate references and raise DependencyValidationError if invalid."""
-        errors = self.validate(
-            references=references,
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name=current_agent_name,
-        )
-
-        if errors:
-            agent_name = current_agent_name or agent_config["agent_type"]
-            raise DependencyValidationError(
-                f"Invalid guard references in '{agent_name}':\n"
-                + "\n".join(f"  - {e}" for e in errors)
-            )
-
-    def extract_and_validate(
-        self,
-        guard_condition: str,
-        agent_config: dict[str, Any],
-        agent_indices: dict[str, int],
-        current_agent_name: str | None = None,
-    ) -> list[str]:
-        """Extract references from guard condition and validate them."""
-        # Parse references from guard condition
-        references = self._parser.parse_batch(guard_condition)
-
-        if not references:
-            return []
-
-        return self.validate(
-            references=list(references),
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name=current_agent_name,
-        )
-
-    def get_referenced_actions(self, guard_condition: str) -> list[str]:
-        """Extract unique action names referenced in a guard condition."""
-        references = self._parser.parse_batch(guard_condition)
-
-        action_names = set()
-        for ref in references:
-            if ref.action_name not in SPECIAL_NAMESPACES:
-                action_names.add(ref.action_name)
-
-        return sorted(action_names)
 
     def validate_against_schemas(
         self,

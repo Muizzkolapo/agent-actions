@@ -10,8 +10,8 @@ Single authority for record content assembly. Every action type, granularity, an
 |------|------|---------|---------|
 | `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
 | `tracking.py` | Module | `TrackedItem` | - |
-| `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `SETTLED_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `RETRIABLE_STATES`, `is_processable`, `is_settled`, `is_retriable` | - |
-| `__init__.py` | Re-export | `RecordEnvelope`, `RecordEnvelopeError`, `RecordState`, `TrackedItem` | - |
+| `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `CASCADE_BLOCKING_VALUES` | - |
+| `__init__.py` | Re-export | `RecordState` | - |
 
 ## Project Surface
 

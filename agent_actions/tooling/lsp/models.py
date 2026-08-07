@@ -27,19 +27,6 @@ class Location:
     end_line: int | None = None
     end_column: int | None = None
 
-    def to_lsp(self) -> dict:
-        """Convert to LSP Location format."""
-        return {
-            "uri": self.file_path.as_uri(),
-            "range": {
-                "start": {"line": self.line, "character": self.column},
-                "end": {
-                    "line": self.end_line or self.line,
-                    "character": self.end_column or self.column,
-                },
-            },
-        }
-
 
 @dataclass
 class Reference:
@@ -205,10 +192,6 @@ class ProjectIndex:
     def get_tool(self, name: str) -> ToolDefinition | None:
         """Get tool by function name."""
         return self.tools.get(name)
-
-    def get_schema(self, name: str) -> Path | None:
-        """Get schema file path by name (legacy helper)."""
-        return self.get_schema_path(name)
 
     def get_schema_path(self, name: str) -> Path | None:
         """Get schema file path by name."""

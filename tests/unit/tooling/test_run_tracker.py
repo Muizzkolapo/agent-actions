@@ -6,9 +6,8 @@ Logger-propagation handling lives in ``tests/unit/tooling/conftest.py``.
 import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import portalocker
 import pytest
 
 from agent_actions.tooling.docs.run_tracker import (
@@ -17,7 +16,6 @@ from agent_actions.tooling.docs.run_tracker import (
     RunTracker,
     _empty_runs_data,
     retry,
-    track_workflow_run,
 )
 
 # ---------------------------------------------------------------------------
@@ -283,78 +281,6 @@ class TestCalculateDuration:
         tracker = RunTracker(artefact_dir=tmp_path)
         # Non-string input triggers AttributeError on .replace()
         assert tracker._calculate_duration(None, None) == 0
-
-
-# ---------------------------------------------------------------------------
-# RunTracker.update_run
-# ---------------------------------------------------------------------------
-
-
-class TestUpdateRun:
-    def test_update_existing_run(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        run_id = tracker.record_run(config=_make_run_config(status="running"))
-
-        result = tracker.update_run(run_id, {"status": "success", "actions_completed": 5})
-        assert result is True
-
-        with open(tracker.runs_file) as f:
-            data = json.load(f)
-        rec = data["executions"][0]
-        assert rec["status"] == "success"
-        assert rec["actions_completed"] == 5
-
-    def test_update_with_ended_at_recalculates_duration(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        run_id = tracker.record_run(
-            config=_make_run_config(
-                started_at="2026-01-01T00:00:00",
-                duration_seconds=0,
-            )
-        )
-
-        tracker.update_run(run_id, {"ended_at": "2026-01-01T00:10:00"})
-
-        with open(tracker.runs_file) as f:
-            data = json.load(f)
-        assert data["executions"][0]["duration_seconds"] == 600.0
-
-    def test_update_error_message(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        run_id = tracker.record_run(config=_make_run_config())
-
-        tracker.update_run(run_id, {"error_message": "something broke"})
-
-        with open(tracker.runs_file) as f:
-            data = json.load(f)
-        assert data["executions"][0]["error_message"] == "something broke"
-
-    def test_update_nonexistent_run_returns_false(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        tracker.record_run(config=_make_run_config())
-
-        result = tracker.update_run("run_nonexistent_abc123", {"status": "failed"})
-        assert result is False
-
-    def test_update_when_no_file_returns_false(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        result = tracker.update_run("run_any_id", {"status": "failed"})
-        assert result is False
-
-    def test_update_with_none_updates_is_noop(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        run_id = tracker.record_run(config=_make_run_config(status="running"))
-        result = tracker.update_run(run_id, None)
-        # Should still return True (run found, empty updates applied)
-        assert result is True
-
-    def test_update_lock_failure_returns_false(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        run_id = tracker.record_run(config=_make_run_config())
-
-        with patch("portalocker.Lock", side_effect=portalocker.exceptions.LockException("locked")):
-            result = tracker.update_run(run_id, {"status": "failed"})
-        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -818,24 +744,6 @@ class TestLoadRunsDataFromFile:
         buf = io.StringIO("{invalid json")
         result = tracker._load_runs_data_from_file(buf)
         assert result["executions"] == []
-
-
-# ---------------------------------------------------------------------------
-# track_workflow_run (module-level convenience function)
-# ---------------------------------------------------------------------------
-
-
-class TestTrackWorkflowRun:
-    def test_delegates_to_run_tracker(self):
-        config = _make_run_config()
-        with patch(
-            "agent_actions.tooling.docs.run_tracker.RunTracker.record_run",
-            return_value="run_mock_abc",
-        ) as mock_record:
-            result = track_workflow_run(config=config)
-
-        assert result == "run_mock_abc"
-        mock_record.assert_called_once_with(config=config)
 
 
 # ---------------------------------------------------------------------------

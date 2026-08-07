@@ -26,12 +26,6 @@ class SchemaFieldValidationResult:
 class SchemaFieldValidator:
     """Validates field paths against JSON Schema definitions."""
 
-    def validate_multiple_paths(
-        self, field_paths: list[list[str]], json_schema: dict[str, Any], action_name: str
-    ) -> list[SchemaFieldValidationResult]:
-        """Validate multiple field paths at once."""
-        return [self.validate_field_path(path, json_schema, action_name) for path in field_paths]
-
     def validate_field_path(
         self, field_path: list[str], json_schema: dict[str, Any], action_name: str
     ) -> SchemaFieldValidationResult:

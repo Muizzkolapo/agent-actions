@@ -192,17 +192,11 @@ Illegal transitions raise `RecordEnvelopeError`.
 PROCESSABLE_STATES     = {ACTIVE}
     # Records eligible for LLM/tool processing
 
-SETTLED_STATES         = {all states} - {ACTIVE}
-    # Records that have reached a terminal state for this action
-
 RESETTABLE_DOWNSTREAM_STATES = {PROCESSED, GUARD_SKIPPED}
     # Can be reset to ACTIVE when fed as input to a downstream action
 
 CASCADE_BLOCKING_STATES = {CASCADE_SKIPPED, FAILED, EXHAUSTED}
     # Cannot be reset — downstream actions must cascade-skip these
-
-RETRIABLE_STATES       = {FAILED, EXHAUSTED}
-    # The CLI retry command targets records in these states
 ```
 
 `lifecycle_read.py` uses these sets at load time. When records are loaded from target storage as upstream input, `reset_for_downstream()` transitions resettable records back to `ACTIVE`. Records in blocking states stay as-is for the cascade logic to handle.

@@ -84,11 +84,6 @@ class PromptPreparationService:
     """Single point of truth for prompt preparation across batch and online modes."""
 
     @staticmethod
-    def is_valid_mode(mode: str) -> bool:
-        """Return True if mode is a valid RunMode value."""
-        return mode in (RunMode.BATCH, RunMode.ONLINE)
-
-    @staticmethod
     def prepare_prompt_with_context(
         agent_config: dict[str, Any],
         agent_name: str,

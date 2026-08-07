@@ -32,7 +32,7 @@ and chunking/lineage support).
 | `GuardFilter.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 
-**Internal only**: `ContextPreprocessor`, `FieldAnalyzer`, `FieldChunker`, `ReferenceParser`, `FieldReferenceResolver`, `ReferenceValidator`, `SchemaFieldValidator`, `EvaluationContextProvider`, `Tokenizer`, `DataProcessor` -- no direct project surface.
+**Internal only**: `ReferenceParser`, `FieldReferenceResolver`, `ReferenceValidator`, `SchemaFieldValidator`, `EvaluationContextProvider`, `Tokenizer` -- no direct project surface.
 
 ## Dependencies
 

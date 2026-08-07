@@ -23,8 +23,6 @@ class RecordState(str, Enum):
 
 PROCESSABLE_STATES: frozenset[RecordState] = frozenset({RecordState.ACTIVE})
 
-SETTLED_STATES: frozenset[RecordState] = frozenset(RecordState) - PROCESSABLE_STATES
-
 RESETTABLE_DOWNSTREAM_STATES: frozenset[RecordState] = frozenset(
     {
         RecordState.PROCESSED,
@@ -41,25 +39,3 @@ CASCADE_BLOCKING_STATES: frozenset[RecordState] = frozenset(
 )
 
 CASCADE_BLOCKING_VALUES: frozenset[str] = frozenset(s.value for s in CASCADE_BLOCKING_STATES)
-
-RETRIABLE_STATES: frozenset[RecordState] = frozenset(
-    {
-        RecordState.FAILED,
-        RecordState.EXHAUSTED,
-    }
-)
-
-
-def is_processable(state: RecordState) -> bool:
-    """True if the record can be sent to an LLM/tool for processing."""
-    return state in PROCESSABLE_STATES
-
-
-def is_settled(state: RecordState) -> bool:
-    """True if the record has reached a terminal state for this action."""
-    return state in SETTLED_STATES
-
-
-def is_retriable(state: RecordState) -> bool:
-    """True if the record is in a retriable terminal state (FAILED or EXHAUSTED)."""
-    return state in RETRIABLE_STATES
