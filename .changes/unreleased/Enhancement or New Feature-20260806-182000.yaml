@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Add a top-level required_by_default key to agent_actions.yml to set required-by-default flat-field schema validation project-wide, instead of per schema file. A schema may still override it with its own required_by_default, and explicit per-field required/optional markers win over both."
-time: 2026-08-06T18:20:00Z
