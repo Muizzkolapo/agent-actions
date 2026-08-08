@@ -40,6 +40,7 @@ class WorkflowNode extends vscode.TreeItem {
             `  Completed: ${s.completed}`,
             `  Running: ${s.running}`,
             `  Failed: ${s.failed}`,
+            `  Interrupted: ${s.interrupted}`,
             `  Pending: ${s.pending}`,
             `  Skipped: ${s.skipped}`,
         ].join('\n');
@@ -139,6 +140,8 @@ function getStatusIcon(status: ActionStatus): vscode.ThemeIcon {
             return new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'));
         case 'failed':
             return new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
+        case 'interrupted':
+            return new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('charts.orange'));
         case 'skipped':
             return new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('charts.gray'));
         default:
@@ -157,6 +160,8 @@ function getStatusLabel(status: ActionStatus): string {
             return '\u21BB'; // ↻
         case 'failed':
             return '\u2717'; // ✗
+        case 'interrupted':
+            return '\u26A0'; // ⚠
         case 'skipped':
             return '\u2298'; // ⊘
         default:

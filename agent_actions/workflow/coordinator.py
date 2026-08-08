@@ -18,7 +18,7 @@ from agent_actions.validation.preflight.guard_validation import validate_guard_c
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.execution_events import WorkflowEventLogger
-from agent_actions.workflow.managers.state import ActionStatus
+from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
@@ -151,19 +151,20 @@ class AgentWorkflow:
         """Reset failed/skipped/running actions to pending so re-runs retry them.
 
         For most statuses, clears ALL dispositions — disposition is derived
-        state that must follow action status.  For RUNNING actions (interrupted
-        mid-processing), only failure dispositions are cleared so that
+        state that must follow action status.  For actions that died
+        mid-processing (RUNNING after an ungraceful kill, INTERRUPTED after a
+        handled one), only failure dispositions are cleared so that
         checkpointed SUCCESS rows survive and the DispositionGate can carry
         them forward on resume.
         """
         state_mgr = self.services.core.state_manager
-        # Snapshot RUNNING actions before reset_retryable() transitions them
-        # to PENDING — must be captured first so we know which actions had
+        # Snapshot mid-processing actions before reset_retryable() transitions
+        # them to PENDING — must be captured first so we know which actions had
         # checkpointed progress to preserve.
         running_actions = {
             name
             for name in state_mgr.execution_order
-            if state_mgr.get_status(name) == ActionStatus.RUNNING
+            if state_mgr.get_status(name) in MID_PROCESSING_STATUSES
         }
         reset_actions = state_mgr.reset_retryable()
         if not reset_actions:
@@ -328,6 +329,15 @@ class AgentWorkflow:
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 
+            except BaseException as e:
+                # Ctrl-C, SIGTERM and task cancellation are not Exception subclasses,
+                # so they skip the handler above and would leave the in-flight action
+                # reading 'running' on disk long after the process is gone.
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self.state.failed = True
+                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
+                raise
+
     def run(self):
         """Execute workflow sequentially."""
         self._initialize_event_context()
@@ -421,6 +431,15 @@ class AgentWorkflow:
                     operation="sequential_workflow_execution",
                 )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
+                raise
+
+            except BaseException as e:
+                # Ctrl-C, SIGTERM and task cancellation are not Exception subclasses,
+                # so they skip the handler above and would leave the in-flight action
+                # reading 'running' on disk long after the process is gone.
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self.state.failed = True
+                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
                 raise
 
     def _run_storage_maintenance(self) -> None:

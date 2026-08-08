@@ -17,7 +17,8 @@ export type ActionStatus =
     | 'running'
     | 'completed'
     | 'failed'
-    | 'skipped';
+    | 'skipped'
+    | 'interrupted';
 
 /**
  * Action type inferred from dependencies and configuration
@@ -95,6 +96,7 @@ export interface StatusSummary {
     failed: number;
     pending: number;
     skipped: number;
+    interrupted: number;
 }
 
 /**

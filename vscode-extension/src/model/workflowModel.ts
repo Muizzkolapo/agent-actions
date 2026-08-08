@@ -40,7 +40,7 @@ const DEBOUNCE_MS = 250;
  */
 function toActionStatus(status: string | undefined): ActionStatus {
     const normalized = (status ?? '').toLowerCase();
-    if (['pending', 'running', 'completed', 'failed', 'skipped'].includes(normalized)) {
+    if (['pending', 'running', 'completed', 'failed', 'skipped', 'interrupted'].includes(normalized)) {
         return normalized as ActionStatus;
     }
     if (normalized === 'success') {
@@ -521,7 +521,7 @@ export class WorkflowModel implements vscode.Disposable {
                 summary[action.status] += 1;
                 return summary;
             },
-            { total: 0, completed: 0, running: 0, failed: 0, pending: 0, skipped: 0 }
+            { total: 0, completed: 0, running: 0, failed: 0, pending: 0, skipped: 0, interrupted: 0 }
         );
 
         // Sort by index

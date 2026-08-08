@@ -98,6 +98,13 @@ Every action has a status that controls what happens on the current run and on r
         missing output)
 ```
 
+One transition sits outside the diagram because it is driven by the process
+dying rather than by the workflow: on Ctrl-C, SIGTERM or cancellation the
+coordinator sweeps `RUNNING`/`CHECKING_BATCH` to `INTERRUPTED` on its way out.
+It is terminal and retryable, so the next run resets it to `PENDING` like any
+other retryable status — but it is deliberately not `FAILED`, because
+`_reset_retryable_actions` preserves checkpointed dispositions for it.
+
 ### Status Sets
 
 ```
@@ -105,13 +112,18 @@ COMPLETED_STATUSES = {COMPLETED, COMPLETED_WITH_FAILURES}
   → "Has valid output, skip on re-run"
   → Used by: is_completed(), coordinator level skip, executor early-exit
 
-TERMINAL_STATUSES = {COMPLETED, FAILED, SKIPPED, COMPLETED_WITH_FAILURES}
+TERMINAL_STATUSES = {COMPLETED, FAILED, SKIPPED, COMPLETED_WITH_FAILURES,
+                     INTERRUPTED}
   → "Done for this run, regardless of outcome"
   → Used by: is_workflow_complete(), is_workflow_done(), get_pending_actions()
 
-RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH}
+RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH, INTERRUPTED}
   → "Reset to PENDING on next run"
   → COMPLETED_WITH_FAILURES is NOT retryable (spec 534, 2026-05-31)
+
+MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED}
+  → "Died mid-processing; may hold checkpointed SUCCESS dispositions"
+  → Used by: _reset_retryable_actions selective-vs-bulk disposition clearing
 ```
 
 ### Completion Classification
@@ -411,20 +423,30 @@ The retry command is the dedicated path for fixing partial failures.
 It clears only the failed records' dispositions, preserving successes.
 ```
 
-### RUNNING actions get selective disposition clearing
+### Mid-processing actions get selective disposition clearing
 
 ```
 _reset_retryable_actions clears RUNNING_CLEAR_DISPOSITIONS
-(FAILED, EXHAUSTED, DEFERRED) for previously-RUNNING actions.
+(FAILED, EXHAUSTED, DEFERRED) for actions that died mid-processing.
 
 It does NOT clear SUCCESS, PASSTHROUGH, FILTERED, SKIPPED.
 
-Why: RUNNING actions may have checkpointed SUCCESS dispositions.
+Why: such actions may have checkpointed SUCCESS dispositions.
 Bulk-wiping them destroys resume progress.
 
-If you change this to bulk-clear for RUNNING:
+Which statuses count is MID_PROCESSING_STATUSES:
+    RUNNING     — the process died without unwinding (SIGKILL, OOM,
+                  power loss), so nothing rewrote the status.
+    INTERRUPTED — the coordinator caught Ctrl-C/SIGTERM/cancellation
+                  and recorded a terminal status on the way out.
+
+If you change this to bulk-clear for either:
     Checkpoint resume breaks — the DispositionGate finds no terminal
     IDs and reprocesses everything from scratch.
+
+The same trap applies to routing an interrupt through FAILED: that
+status is bulk-wiped by design, so collapsing INTERRUPTED into it
+silently destroys the checkpoint it exists to protect.
 ```
 
 ### The snapshot ordering in _reset_retryable_actions matters

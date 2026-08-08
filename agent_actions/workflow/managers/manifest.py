@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -314,6 +315,30 @@ class ManifestManager:
             self._manifest["status"] = "completed"
             self._manifest["completed_at"] = datetime.now().isoformat()
             self._save_manifest()
+
+    def mark_actions_terminal(self, action_names: Iterable[str], status: ActionStatus) -> None:
+        """Sweep *action_names* to *status* so the manifest is not self-contradictory.
+
+        Without this the workflow reads 'failed' while the action that was
+        executing still reads 'running'. Unknown names are ignored: the caller
+        sweeps from the status file, which can name actions this manifest never
+        initialized.
+        """
+        with self._lock:
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
+
+            actions = self._manifest.get("actions", {})
+            swept = [name for name in action_names if name in actions]
+            for name in swept:
+                actions[name]["status"] = status
+                actions[name]["completed_at"] = datetime.now().isoformat()
+
+            if swept:
+                self._save_manifest()
 
     def mark_workflow_failed(self, error: str) -> None:
         """Mark the entire workflow as failed."""
