@@ -100,10 +100,6 @@ def _unconditional_output_keys(
     ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
-    # A FILE tool's records live under `data` in the FileUDFResult envelope.
-    envelope = _file_udf_result_data(ret.value)
-    if envelope is not None:
-        return envelope
     # `return {...}` — the literal's constant keys are the unconditional set.
     if isinstance(ret.value, ast.Dict):
         if _has_spread(ret.value):
@@ -169,7 +165,10 @@ def unconditional_output_keys(source: str) -> set[str] | None:
     """The output keys a UDF's source provably emits on every path.
 
     ``None`` means the returned shape could not be read — callers must treat
-    that as "unknown", never as "emits nothing".
+    that as "unknown", never as "emits nothing". Reads the FileUDFResult
+    envelope that `find_conditional_required_field_risks` declines on, so it
+    must stay out of that check: seeing FILE tools for the first time there
+    would turn a warning-free project into a refused one.
     """
     try:
         tree = ast.parse(source)
@@ -177,6 +176,11 @@ def unconditional_output_keys(source: str) -> set[str] | None:
         return None
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            ret = _last_return(node)
+            if ret is not None and ret.value is not None:
+                envelope = _file_udf_result_data(ret.value)
+                if envelope is not None:
+                    return envelope
             return _unconditional_output_keys(node)
     return None
 

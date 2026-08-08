@@ -12,6 +12,7 @@ from agent_actions.validation.dag_schema_fit_validator import (
     find_dag_schema_compatibility_gaps,
 )
 from agent_actions.validation.udf_required_field_validator import (
+    find_conditional_required_field_risks,
     unconditional_output_keys,
 )
 
@@ -81,6 +82,24 @@ class TestFileUDFResultEnvelope:
                 return {"keep": keeps >= 2, "agreement_count": keeps}
         """)
         assert unconditional_output_keys(source) == {"keep", "agreement_count"}
+
+    def test_envelope_reading_does_not_reach_the_refusal_check(self):
+        """Reading envelopes must not make the refusal check see FILE tools.
+
+        That check raises and stops the run; extending its reach here would
+        turn projects that pass preflight today into refused ones.
+        """
+        source = textwrap.dedent("""
+            def writer(items):
+                return FileUDFResult(outputs=[{"data": {"output_path": "/x"}}])
+        """)
+        assert unconditional_output_keys(source) == {"output_path"}
+        assert (
+            find_conditional_required_field_risks(
+                {"writer": {"source": source, "required": ["output_path", "written_count"]}}
+            )
+            == []
+        )
 
     def test_unparsable_source_declines(self):
         assert unconditional_output_keys("def broken(:") is None
