@@ -2,8 +2,8 @@
  * Manifest and Agent Status Reader
  *
  * Reads runtime status from:
- * - agent_io/target/.manifest.json (execution plan and status)
- * - agent_io/.agent_status.json (live runtime status from PR #823)
+ * - the run manifest (execution plan and status) — see paths.ts for where
+ * - agent_io/.agent_status.json (live per-action status)
  */
 
 import * as vscode from 'vscode';
