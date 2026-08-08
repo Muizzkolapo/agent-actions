@@ -9,16 +9,16 @@
 
 import * as vscode from 'vscode';
 
-/**
- * Action execution status derived from manifest and agent_status.json
- */
-export type ActionStatus =
-    | 'pending'
-    | 'running'
-    | 'completed'
-    | 'failed'
-    | 'skipped'
-    | 'interrupted';
+// Status resolution lives in status.ts so it stays testable without a VS Code
+// host. Re-exported here because this module is the established import site.
+import type {
+    ActionStatus,
+    AgentStatusData,
+    ManifestActionInfo,
+    ManifestData,
+} from './status';
+
+export type { ActionStatus, AgentStatusData, ManifestActionInfo, ManifestData };
 
 /**
  * Action type inferred from dependencies and configuration
@@ -97,35 +97,6 @@ export interface StatusSummary {
     pending: number;
     skipped: number;
     interrupted: number;
-}
-
-/**
- * Manifest action entry from .manifest.json
- */
-export interface ManifestActionInfo {
-    index?: number;
-    level?: number;
-    status?: string;
-    output_dir?: string;
-    dependencies?: string[];
-    record_count?: number | null;
-}
-
-/**
- * Workflow manifest from agent_io/target/.manifest.json
- */
-export interface ManifestData {
-    workflow_name?: string;
-    execution_order?: string[];
-    levels?: string[][];
-    actions?: Record<string, ManifestActionInfo>;
-}
-
-/**
- * Agent status from agent_io/.agent_status.json (runtime status)
- */
-export interface AgentStatusData {
-    [actionName: string]: string | { status: string; [key: string]: unknown };
 }
 
 /**
