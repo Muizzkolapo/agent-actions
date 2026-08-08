@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ACTION_STATUSES, parseActionStatus, resolveActionStatus, toActionStatus } from './status';
+import {
+    ACTION_STATUSES,
+    parseActionStatus,
+    resolveActionStatus,
+    rollupStatus,
+    toActionStatus,
+    workflowSortRank,
+} from './status';
 import type { AgentStatusData, ManifestData } from './status';
 
 describe('toActionStatus', () => {
@@ -101,5 +108,49 @@ describe('resolveActionStatus with an unrecognised live value', () => {
         const manifest: ManifestData = { actions: { extract: { status: 'completed' } } };
         const agentStatus = { extract: 'from_the_future' } as AgentStatusData;
         assert.equal(resolveActionStatus(manifest, agentStatus, 'extract'), 'completed');
+    });
+});
+
+describe('rollupStatus', () => {
+    it('reports running when any action is live, whatever else happened', () => {
+        assert.equal(rollupStatus(['completed', 'failed', 'running', 'pending']), 'running');
+    });
+
+    it('reports failed when nothing is live but something failed', () => {
+        assert.equal(rollupStatus(['completed', 'failed', 'pending']), 'failed');
+    });
+
+    it('ranks a failure above an interruption', () => {
+        assert.equal(rollupStatus(['interrupted', 'failed']), 'failed');
+    });
+
+    it('reports interrupted when that is the worst outcome', () => {
+        assert.equal(rollupStatus(['completed', 'interrupted', 'pending']), 'interrupted');
+    });
+
+    it('reports completed only when every action reached a good end', () => {
+        assert.equal(rollupStatus(['completed', 'completed']), 'completed');
+        assert.equal(rollupStatus(['completed', 'skipped']), 'completed');
+    });
+
+    it('does not call a half-finished workflow completed', () => {
+        assert.equal(rollupStatus(['completed', 'pending']), 'pending');
+    });
+
+    it('treats an empty workflow as pending, not completed', () => {
+        assert.equal(rollupStatus([]), 'pending');
+    });
+});
+
+describe('workflowSortRank', () => {
+    it('puts live workflows above everything else', () => {
+        const ranked = (['completed', 'pending', 'failed', 'running', 'interrupted'] as const)
+            .slice()
+            .sort((a, b) => workflowSortRank(a) - workflowSortRank(b));
+        assert.deepEqual(ranked, ['running', 'failed', 'interrupted', 'pending', 'completed']);
+    });
+
+    it('gives skipped and completed the same lowest priority', () => {
+        assert.equal(workflowSortRank('skipped'), workflowSortRank('completed'));
     });
 });

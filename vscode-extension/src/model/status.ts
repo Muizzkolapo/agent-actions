@@ -133,3 +133,47 @@ export function resolveActionStatus(
 
     return 'pending';
 }
+
+/**
+ * The status a workflow should show given its actions.
+ *
+ * Ordered by what a reader needs to act on first: a live run outranks a
+ * failure, which outranks an interruption, so the top of the tree answers
+ * "is anything happening, and did anything go wrong" without expanding.
+ * An empty workflow reads as pending, not completed — nothing ran.
+ */
+export function rollupStatus(statuses: readonly ActionStatus[]): ActionStatus {
+    if (statuses.length === 0) {
+        return 'pending';
+    }
+    for (const rank of ['running', 'failed', 'interrupted'] as const) {
+        if (statuses.includes(rank)) {
+            return rank;
+        }
+    }
+    if (statuses.every((s) => s === 'completed' || s === 'skipped')) {
+        return 'completed';
+    }
+    return 'pending';
+}
+
+/**
+ * Sort key placing workflows that need attention at the top of the tree.
+ *
+ * Lower sorts first. Ties are broken by name at the call site so ordering is
+ * stable between refreshes.
+ */
+export function workflowSortRank(status: ActionStatus): number {
+    switch (status) {
+        case 'running':
+            return 0;
+        case 'failed':
+            return 1;
+        case 'interrupted':
+            return 2;
+        case 'pending':
+            return 3;
+        default:
+            return 4;
+    }
+}
