@@ -101,5 +101,16 @@ class TestFileUDFResultEnvelope:
             == []
         )
 
+    def test_multiple_output_rows_intersect_not_union(self):
+        """Each output row is validated alone, so only keys on every row are guaranteed."""
+        source = textwrap.dedent("""
+            def split(items):
+                return FileUDFResult(outputs=[
+                    {"data": {"shared": 1, "only_first": 2}},
+                    {"data": {"shared": 3, "only_second": 4}},
+                ])
+        """)
+        assert unconditional_output_keys(source) == {"shared"}
+
     def test_unparsable_source_declines(self):
         assert unconditional_output_keys("def broken(:") is None

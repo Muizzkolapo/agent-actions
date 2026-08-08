@@ -62,7 +62,9 @@ def _file_udf_result_data(node: ast.expr) -> set[str] | None:
     )
     if not isinstance(outputs, ast.List) or not outputs.elts:
         return None
-    keys: set[str] = set()
+    # Each output row is validated on its own, so a key is guaranteed only when
+    # every row carries it — intersect across rows rather than union.
+    per_row: list[set[str]] = []
     for element in outputs.elts:
         if not isinstance(element, ast.Dict) or _has_spread(element):
             return None
@@ -76,8 +78,8 @@ def _file_udf_result_data(node: ast.expr) -> set[str] | None:
         )
         if not isinstance(data, ast.Dict) or _has_spread(data):
             return None
-        keys |= _const_str_keys(data)
-    return keys
+        per_row.append(_const_str_keys(data))
+    return set.intersection(*per_row)
 
 
 def _callee_name(func: ast.expr) -> str | None:
