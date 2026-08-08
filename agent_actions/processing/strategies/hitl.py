@@ -83,8 +83,10 @@ class HITLStrategy:
                 )
 
             if os.environ.get("AGAC_HITL_AUTO_APPROVE") == "true":
-                logger.info(
-                    "[%s] AGAC_HITL_AUTO_APPROVE=true — auto-approving %d records",
+                logger.warning(
+                    "[%s] AGAC_HITL_AUTO_APPROVE=true — bypassing human review and "
+                    "auto-approving all %d records. No human approved this data. "
+                    "Unset the variable to restore the approval gate.",
                     context.agent_name,
                     len(filtered_records),
                 )
