@@ -120,6 +120,22 @@ def _unconditional_output_keys(
     return keys
 
 
+def unconditional_output_keys(source: str) -> set[str] | None:
+    """The output keys a UDF's source provably emits on every path.
+
+    ``None`` means the returned shape could not be read — callers must treat
+    that as "unknown", never as "emits nothing".
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return _unconditional_output_keys(node)
+    return None
+
+
 def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]:
     """One warning per required schema field a kind:tool UDF cannot statically
     be shown to emit unconditionally.
