@@ -496,7 +496,28 @@ The workflow continues as soon as you submit, even if the browser tab stays open
 
 ### Testing HITL Actions
 
-For automated testing, mock the HITL decision:
+#### Bypassing review in a smoke run
+
+Setting `AGAC_HITL_AUTO_APPROVE=true` makes every HITL action approve every
+record without opening the UI. It exists so end-to-end smoke runs do not block
+on a human.
+
+```bash
+AGAC_HITL_AUTO_APPROVE=true agac run -a my_workflow --fresh
+```
+
+:::danger This fabricates an approval no human gave
+While the variable is set, **every approval gate in every workflow becomes a
+rubber stamp**. Records are written with `hitl_status: approved` and the
+comment `auto-approved (smoke test)`, which is the only trace in the data that
+no human reviewed them.
+
+Each affected action logs a warning naming the variable and the record count.
+Export it per-command as shown above rather than in your shell profile, and
+never set it in an environment that produces data you intend to keep.
+:::
+
+For unit tests, mock the HITL decision instead:
 
 ```python
 from agent_actions.llm.providers.hitl.client import HitlClient

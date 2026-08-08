@@ -411,12 +411,16 @@ def test_file_mode_hitl_rejected_file_decision_still_succeeds():
         assert record["content"]["review_data"]["timestamp"] == "2026-02-12T10:00:00Z"
 
 
-def test_auto_approve_bypass_is_announced_at_warning_level(monkeypatch, caplog):
+def test_auto_approve_bypass_is_announced_at_warning_level(monkeypatch):
     """The review bypass must be impossible to miss in an otherwise normal run.
 
     ``AGAC_HITL_AUTO_APPROVE`` fabricates the approval a human never gave. It is
     needed by the smoke ring, but at info level a stale shell export silently
     turns every approval gate in every workflow into a rubber stamp.
+
+    Captures on the module logger rather than via ``caplog``: LoggerFactory sets
+    ``propagate = False`` on the ``agent_actions`` logger, so once any earlier
+    test configures logging, records never reach caplog's root handler.
     """
     monkeypatch.setenv("AGAC_HITL_AUTO_APPROVE", "true")
     input_data = [
@@ -429,15 +433,25 @@ def test_auto_approve_bypass_is_announced_at_warning_level(monkeypatch, caplog):
         source_data=input_data,
     )
 
-    with caplog.at_level(
-        logging.WARNING, logger="agent_actions.processing.strategies.hitl"
-    ):
+    emitted: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            emitted.append(record)
+
+    hitl_logger = logging.getLogger("agent_actions.processing.strategies.hitl")
+    handler = _Capture(level=logging.WARNING)
+    original_level = hitl_logger.level
+    hitl_logger.addHandler(handler)
+    hitl_logger.setLevel(logging.WARNING)
+    try:
         results = HITLStrategy().invoke(input_data, context)
+    finally:
+        hitl_logger.removeHandler(handler)
+        hitl_logger.setLevel(original_level)
 
     bypass_warnings = [
-        record
-        for record in caplog.records
-        if "AGAC_HITL_AUTO_APPROVE" in record.getMessage()
+        record for record in emitted if "AGAC_HITL_AUTO_APPROVE" in record.getMessage()
     ]
     assert bypass_warnings, "bypass must be announced at WARNING, not info"
     assert all(record.levelno >= logging.WARNING for record in bypass_warnings)
