@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'docs.agent-actions/**'
+      # The sidebar version is read out of pyproject.toml at build time
+      # (docusaurus.config.ts), so a release must redeploy or the site keeps
+      # advertising whatever version the last docs-only change happened to see.
+      - 'pyproject.toml'
 
   workflow_dispatch:
 

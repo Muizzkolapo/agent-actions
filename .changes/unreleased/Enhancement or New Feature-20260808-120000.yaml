@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "The run manifest now records the pid and hostname of the process executing the workflow. A run killed outright -- SIGKILL, OOM, power loss -- never gets to write a terminal status, so `.agent_status.json` kept claiming `running` forever and the VS Code sidebar spun indefinitely. Readers can now ask the OS whether that process still exists and report the actions as interrupted instead. The check is skipped when the manifest predates this field or was written on another host, so nothing is relabelled on a guess."
-time: 2026-08-08T12:00:00Z

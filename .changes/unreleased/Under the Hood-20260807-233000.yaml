@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove the unused dependency-injection layer (config/di + config/factory, ~700 LOC): its container bindings were never resolved, its config profiles never read, the ProcessorFactory it threaded through the runner/strategies/pipeline was null-checked but never invoked, and its component registry was write-only. ActionRunner is now constructed directly. The workflow package barrel resolves its exports lazily, which fixes a circular import that broke standalone test collection. No behavior change."
-time: 2026-08-07T23:30:00Z

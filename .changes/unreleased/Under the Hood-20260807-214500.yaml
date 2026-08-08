@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove the ActionRunner file-processing facade: nine pure-delegation methods over the runner_file_processing module functions, including two the module itself called back through. Callers and tests now use the module functions directly. No behavior change."
-time: 2026-08-07T21:45:00Z
