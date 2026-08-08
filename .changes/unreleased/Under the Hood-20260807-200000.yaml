@@ -1,3 +1,0 @@
-kind: Under the Hood
-body: "Remove dead code from the logging module: 22 never-fired event classes, the unused stdlib JSONFormatter module, the unreachable ContextDebugHandler (built for a --debug-context flag that never shipped), the unused EventManager global-filter machinery, and two unused LoggerFactory accessors. No behavior change — none of the removed code was reachable in production."
-time: 2026-08-07T20:00:00Z
