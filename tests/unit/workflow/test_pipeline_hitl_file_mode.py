@@ -285,6 +285,96 @@ def test_file_mode_hitl_timeout_raises_with_record_count():
         HITLStrategy().invoke(input_data, context)
 
 
+def test_file_mode_hitl_server_error_is_not_broadcast_as_a_decision():
+    """A failed approval UI must fail the action, never be applied as a verdict.
+
+    The server emits ``hitl_status="error"`` when it cannot bind a port. Treating
+    that as a decision stamps every record reviewed and lets the run report
+    success while downstream guards silently discard the whole dataset.
+    """
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(
+                {
+                    "hitl_status": "error",
+                    "user_comment": "Server failed to start: [Errno 48] Address already in use",
+                    "timestamp": "2026-02-12T10:00:00Z",
+                },
+                True,
+            ),
+        ),
+        pytest.raises(AgentActionsError, match="error"),
+    ):
+        HITLStrategy().invoke(input_data, context)
+
+
+def test_file_mode_hitl_unknown_status_is_not_broadcast_as_a_decision():
+    """Only approved/rejected are decisions; anything else must fail the action."""
+    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(
+                {"hitl_status": "pending", "timestamp": "2026-02-12T10:00:00Z"},
+                True,
+            ),
+        ),
+        pytest.raises(AgentActionsError, match="pending"),
+    ):
+        HITLStrategy().invoke(input_data, context)
+
+
+def test_file_mode_hitl_rejected_file_decision_still_succeeds():
+    """Anchor: real decisions keep flowing through with their shape unchanged."""
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with patch(
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+        return_value=(
+            {
+                "hitl_status": "rejected",
+                "user_comment": "not usable",
+                "timestamp": "2026-02-12T10:00:00Z",
+            },
+            True,
+        ),
+    ):
+        results = HITLStrategy().invoke(input_data, context)
+
+    assert len(results) == 1
+    assert results[0].status == ProcessingStatus.SUCCESS
+    assert len(results[0].data) == 2
+    for record in results[0].data:
+        assert record["content"]["review_data"]["hitl_status"] == "rejected"
+        assert record["content"]["review_data"]["user_comment"] == "not usable"
+        assert record["content"]["review_data"]["timestamp"] == "2026-02-12T10:00:00Z"
+
+
 def test_file_mode_hitl_observe_filters_and_orders_fields():
     """context_scope.observe should filter fields shown to HITL and preserve order."""
     action_config = {
