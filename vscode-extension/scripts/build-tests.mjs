@@ -8,9 +8,15 @@
  */
 
 import { build } from 'esbuild';
-import { globSync, rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
+import * as path from 'node:path';
 
-const entryPoints = globSync('src/**/*.test.ts');
+// readdirSync's recursive option rather than fs.globSync: glob landed in Node
+// 22 and CI runs Node 20.
+const entryPoints = readdirSync('src', { recursive: true })
+    .map(String)
+    .filter((file) => file.endsWith('.test.ts'))
+    .map((file) => path.join('src', file));
 
 if (entryPoints.length === 0) {
     console.error('No *.test.ts files found under src/');
