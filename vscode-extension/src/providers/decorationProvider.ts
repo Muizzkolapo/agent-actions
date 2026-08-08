@@ -20,6 +20,9 @@ import { WorkflowModel } from '../model/workflowModel';
 const STATUS_COLORS: Record<ActionStatus, vscode.ThemeColor> = {
     completed: new vscode.ThemeColor('gitDecoration.addedResourceForeground'),
     running: new vscode.ThemeColor('gitDecoration.modifiedResourceForeground'),
+    batch_submitted: new vscode.ThemeColor('gitDecoration.submoduleResourceForeground'),
+    checking_batch: new vscode.ThemeColor('gitDecoration.modifiedResourceForeground'),
+    completed_with_failures: new vscode.ThemeColor('gitDecoration.conflictingResourceForeground'),
     failed: new vscode.ThemeColor('gitDecoration.deletedResourceForeground'),
     interrupted: new vscode.ThemeColor('gitDecoration.conflictingResourceForeground'),
     pending: new vscode.ThemeColor('gitDecoration.ignoredResourceForeground'),

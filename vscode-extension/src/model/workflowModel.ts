@@ -14,14 +14,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
     ActionInfo,
-    ActionStatus,
     ActionType,
-    AgentStatusData,
     ManifestData,
     ParsedWorkflowConfig,
     StatusSummary,
     WorkflowInfo,
 } from './types';
+import { resolveActionStatus } from './status';
 import { readManifest, readAgentStatus } from './manifestReader';
 import { parseWorkflowConfig } from './yamlParser';
 
@@ -34,23 +33,6 @@ const MIN_POLL_INTERVAL_MS = 1000;
 
 /** Debounce delay for file watcher events */
 const DEBOUNCE_MS = 250;
-
-/**
- * Convert raw status string to ActionStatus enum
- */
-function toActionStatus(status: string | undefined): ActionStatus {
-    const normalized = (status ?? '').toLowerCase();
-    if (['pending', 'running', 'completed', 'failed', 'skipped', 'interrupted'].includes(normalized)) {
-        return normalized as ActionStatus;
-    }
-    if (normalized === 'success') {
-        return 'completed';
-    }
-    if (normalized === 'error') {
-        return 'failed';
-    }
-    return 'pending';
-}
 
 /**
  * Infer action type from dependencies and configuration
@@ -82,38 +64,6 @@ function getProjectRoot(configPath: string): string {
         return segments.slice(0, agentConfigIndex).join(path.sep);
     }
     return path.dirname(configPath);
-}
-
-/**
- * Resolve action status from manifest and agent_status.json
- * Agent status takes precedence as it's more up-to-date during execution
- */
-function resolveActionStatus(
-    manifest: ManifestData | null,
-    agentStatus: AgentStatusData | null,
-    actionName: string
-): ActionStatus {
-    // Check agent_status.json first (live runtime status)
-    if (agentStatus) {
-        const statusEntry = agentStatus[actionName];
-        if (typeof statusEntry === 'string') {
-            return toActionStatus(statusEntry);
-        }
-        if (typeof statusEntry === 'object' && statusEntry !== null) {
-            const statusValue = (statusEntry as Record<string, unknown>).status;
-            if (typeof statusValue === 'string') {
-                return toActionStatus(statusValue);
-            }
-        }
-    }
-
-    // Fall back to manifest status
-    const manifestStatus = manifest?.actions?.[actionName]?.status;
-    if (manifestStatus) {
-        return toActionStatus(manifestStatus);
-    }
-
-    return 'pending';
 }
 
 /**
@@ -521,7 +471,18 @@ export class WorkflowModel implements vscode.Disposable {
                 summary[action.status] += 1;
                 return summary;
             },
-            { total: 0, completed: 0, running: 0, failed: 0, pending: 0, skipped: 0, interrupted: 0 }
+            {
+                total: 0,
+                pending: 0,
+                running: 0,
+                batch_submitted: 0,
+                checking_batch: 0,
+                completed: 0,
+                completed_with_failures: 0,
+                failed: 0,
+                skipped: 0,
+                interrupted: 0,
+            }
         );
 
         // Sort by index
