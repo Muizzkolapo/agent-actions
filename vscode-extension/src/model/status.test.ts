@@ -290,26 +290,31 @@ describe('formatWorkflowSummary for parallel and batch runs', () => {
 describe('runLiveness', () => {
     const alive = () => true;
     const dead = () => false;
-    const HOST = 'my-laptop';
+    const HOST = 'a1b2c3d4e5f60718';
 
     it('reports dead when the run recorded its own ending', () => {
-        const m: ManifestData = { status: 'completed', pid: 123, hostname: HOST };
+        const m: ManifestData = { status: 'completed', pid: 123, host_id: HOST };
         assert.equal(runLiveness(m, HOST, alive), 'dead');
     });
 
     it('reports live when the owning process still exists', () => {
-        const m: ManifestData = { status: 'running', pid: 123, hostname: HOST };
+        const m: ManifestData = { status: 'running', pid: 123, host_id: HOST };
         assert.equal(runLiveness(m, HOST, alive), 'live');
     });
 
     it('reports dead when the owning process is gone', () => {
-        const m: ManifestData = { status: 'running', pid: 123, hostname: HOST };
+        const m: ManifestData = { status: 'running', pid: 123, host_id: HOST };
         assert.equal(runLiveness(m, HOST, dead), 'dead');
     });
 
     it('will not judge a pid from another machine', () => {
-        const m: ManifestData = { status: 'running', pid: 123, hostname: 'build-server' };
+        const m: ManifestData = { status: 'running', pid: 123, host_id: 'build-server' };
         assert.equal(runLiveness(m, HOST, dead), 'unknown');
+    });
+
+    it('will not judge a pid with no host recorded at all', () => {
+        // Fails closed: a pid alone cannot be attributed to this machine.
+        assert.equal(runLiveness({ status: 'running', pid: 123 }, HOST, dead), 'unknown');
     });
 
     it('will not judge a manifest from a framework that records no pid', () => {

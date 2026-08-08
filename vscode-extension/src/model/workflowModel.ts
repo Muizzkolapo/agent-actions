@@ -10,6 +10,7 @@
  * This is the single source of truth for workflow state in the extension.
  */
 
+import { createHash } from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -21,7 +22,12 @@ import {
     StatusSummary,
     WorkflowInfo,
 } from './types';
-import { reconcileWithLiveness, resolveActionStatus, runLiveness } from './status';
+import {
+    isProcessAlive,
+    reconcileWithLiveness,
+    resolveActionStatus,
+    runLiveness,
+} from './status';
 import {
     AGENT_STATUS_GLOB,
     MANIFEST_GLOB,
@@ -59,19 +65,9 @@ function toActionType(typeHint: string | undefined, dependencies: string[]): Act
     return 'transform';
 }
 
-/**
- * Whether a process with this id exists.
- *
- * Signal 0 performs the permission and existence checks without delivering
- * anything. EPERM means the process is alive but owned by someone else.
- */
-function isProcessAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === 'EPERM';
-    }
+/** Mirrors host_fingerprint in agent_actions/workflow/managers/manifest.py. */
+function localHostId(): string {
+    return createHash('sha256').update(os.hostname()).digest('hex').slice(0, 16);
 }
 
 /**
@@ -404,7 +400,7 @@ export class WorkflowModel implements vscode.Disposable {
 
         // A killed process never records a terminal status, so the files can
         // claim work is in flight long after it stopped. Ask the OS instead.
-        const liveness = runLiveness(manifest, os.hostname(), isProcessAlive);
+        const liveness = runLiveness(manifest, localHostId(), isProcessAlive);
 
         // Build a map of base names → versioned action names so downstream
         // dependencies that reference the base name (e.g. "score_quality")

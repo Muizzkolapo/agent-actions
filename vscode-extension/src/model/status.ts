@@ -60,9 +60,9 @@ export interface ManifestData {
     actions?: Record<string, ManifestActionInfo>;
     /** Run-level status: 'running' until the workflow finishes. */
     status?: string;
-    /** Process that owns the run, and the host it runs on. */
+    /** Process that owns the run, and a hash of the host it runs on. */
     pid?: number;
-    hostname?: string;
+    host_id?: string;
 }
 
 /**
@@ -76,7 +76,7 @@ export type RunLiveness = 'live' | 'dead' | 'unknown';
 
 export function runLiveness(
     manifest: ManifestData | null,
-    localHostname: string,
+    localHostId: string,
     isProcessAlive: (pid: number) => boolean
 ): RunLiveness {
     if (!manifest) {
@@ -89,10 +89,30 @@ export function runLiveness(
     if (typeof manifest.pid !== 'number') {
         return 'unknown';
     }
-    if (manifest.hostname && manifest.hostname !== localHostname) {
+    // Fails closed: an absent host id is as unjudgeable as a foreign one,
+    // since a pid only means something on the machine that issued it.
+    if (manifest.host_id !== localHostId) {
         return 'unknown';
     }
     return isProcessAlive(manifest.pid) ? 'live' : 'dead';
+}
+
+/**
+ * Whether a process with this id exists.
+ *
+ * Signal 0 performs the existence and permission checks without delivering
+ * anything. Only ESRCH — no such process — counts as gone. Every other
+ * outcome is "could not tell", and must report alive: the caller downgrades a
+ * running action on a `false`, so guessing here relabels live work as dead.
+ * EPERM (owned by another user) and Windows' EACCES both mean it exists.
+ */
+export function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
 }
 
 /** Statuses that claim work is happening right now. */

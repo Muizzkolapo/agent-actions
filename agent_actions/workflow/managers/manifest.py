@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -27,6 +28,11 @@ class DuplicateActionError(ConfigurationError):
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 MANIFEST_FILENAME = ".manifest.json"
+
+
+def host_fingerprint() -> str:
+    """Stable per-machine id that does not disclose the machine's name."""
+    return hashlib.sha256(socket.gethostname().encode()).hexdigest()[:16]
 
 
 class ManifestManager:
@@ -86,9 +92,10 @@ class ManifestManager:
                 "workflow_name": workflow_name,
                 "workflow_run_id": workflow_run_id,
                 # Lets a reader tell a live run from one that died without
-                # unwinding. Host-qualified: a pid from elsewhere means nothing.
+                # unwinding. Host-scoped because a pid from elsewhere means
+                # nothing; hashed because `agac docs` publishes this file.
                 "pid": os.getpid(),
-                "hostname": socket.gethostname(),
+                "host_id": host_fingerprint(),
                 "started_at": datetime.now().isoformat(),
                 "completed_at": None,
                 "status": "running",
