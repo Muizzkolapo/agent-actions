@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: "Preflight warnings now print as one grouped, tree-formatted block per check (dag-fit, prompt-contract, tool-passthrough, resolution) with counts in the header, fields grouped per action, and the remedy stated once — instead of one full paragraph per field. A run that previously emitted 30+ near-identical warning paragraphs now shows a dozen scannable lines."
-time: 2026-08-08T01:30:00Z

@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: "A run killed by Ctrl-C or SIGTERM no longer leaves its in-flight action reading `running` forever. The coordinator caught only `Exception`, but the CLI signal handler raises `SystemExit`, so the terminal-status sweep never ran and `agac status` and the VS Code extension kept reporting a live run after the process was gone. Interrupted actions now get a distinct `interrupted` status, which also preserves their checkpointed dispositions on resume -- routing them through `failed` would have bulk-wiped the checkpoint and forced a full reprocess."
-time: 2026-08-08T09:00:00Z
