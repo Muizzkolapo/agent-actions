@@ -112,5 +112,23 @@ class TestFileUDFResultEnvelope:
         """)
         assert unconditional_output_keys(source) == {"shared"}
 
+    def test_tail_return_wins_over_earlier_branches(self):
+        """Known limit: the tail return is read as the output shape.
+
+        Keys emitted only by an earlier branch are not counted, and keys the
+        earlier branch omits are still treated as guaranteed — so a field the
+        early path skips can go unwarned. The reading is shared with the
+        conditional-required scanner; narrowing it belongs with that check,
+        and the cost here is at most one advisory warning not shown.
+        """
+        source = textwrap.dedent("""
+            def writer(items):
+                if not items:
+                    return FileUDFResult(outputs=[{"data": {"written_count": 0}}])
+                return FileUDFResult(outputs=[{"data": {"written_count": 1,
+                                                        "output_path": "/x"}}])
+        """)
+        assert unconditional_output_keys(source) == {"written_count", "output_path"}
+
     def test_unparsable_source_declines(self):
         assert unconditional_output_keys("def broken(:") is None
