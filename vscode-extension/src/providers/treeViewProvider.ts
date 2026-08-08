@@ -11,6 +11,7 @@
 
 import * as vscode from 'vscode';
 import { ActionInfo, ActionStatus, WorkflowInfo } from '../model/types';
+import { formatWorkflowSummary, rollupStatus, workflowSortRank } from '../model/status';
 import { WorkflowModel } from '../model/workflowModel';
 
 /**
@@ -22,12 +23,33 @@ type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode;
  * Workflow root node
  */
 class WorkflowNode extends vscode.TreeItem {
-    constructor(public readonly workflow: WorkflowInfo) {
+    constructor(
+        public readonly workflow: WorkflowInfo,
+        public readonly status: ActionStatus
+    ) {
         super(workflow.name, vscode.TreeItemCollapsibleState.Expanded);
         this.contextValue = 'agentActions.workflow';
-        this.description = `${workflow.statusSummary.completed}/${workflow.statusSummary.total} completed`;
+        this.description = this.formatDescription();
         this.tooltip = this.buildTooltip();
-        this.iconPath = new vscode.ThemeIcon('graph');
+        this.iconPath = getStatusIcon(status);
+        // Without this the row is inert: it has no context-menu contribution
+        // either, so a click would do nothing at all.
+        this.command = {
+            command: 'vscode.open',
+            title: 'Open Workflow Config',
+            arguments: [vscode.Uri.file(workflow.configPath)],
+        };
+    }
+
+    /** Everything needed to triage, on the collapsed row. */
+    private formatDescription(): string {
+        const live = this.workflow.actions.find((a) => a.status === 'running');
+        const summary = formatWorkflowSummary(
+            this.status,
+            this.workflow.statusSummary,
+            live?.name
+        );
+        return `${getStatusLabel(this.status)} ${summary}`;
     }
 
     private buildTooltip(): string {
@@ -191,18 +213,18 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
     }
 
     getChildren(element?: TreeNode): TreeNode[] {
-        // Root level: show workflows
+        // Root level: one row per workflow, carrying its rolled-up status.
+        // Always shown, even for a single workflow — the row is where progress
+        // and liveness live, and the node starts expanded so nothing is buried.
         if (!element) {
-            const workflows = this.model.getWorkflows();
-            if (workflows.length === 0) {
-                return [];
-            }
-            // If single workflow, show actions directly
-            if (workflows.length === 1) {
-                return this.buildActionNodes(workflows[0].actions);
-            }
-            // Multiple workflows: show workflow nodes
-            return workflows.map((w) => new WorkflowNode(w));
+            return this.model
+                .getWorkflows()
+                .map((w) => new WorkflowNode(w, rollupStatus(w.actions.map((a) => a.status))))
+                .sort(
+                    (a, b) =>
+                        workflowSortRank(a.status) - workflowSortRank(b.status) ||
+                        a.workflow.name.localeCompare(b.workflow.name)
+                );
         }
 
         // Workflow level: show actions (with grouping)

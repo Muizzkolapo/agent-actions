@@ -3,8 +3,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ACTION_STATUSES, parseActionStatus, resolveActionStatus, toActionStatus } from './status';
-import type { AgentStatusData, ManifestData } from './status';
+import {
+    ACTION_STATUSES,
+    formatWorkflowSummary,
+    parseActionStatus,
+    resolveActionStatus,
+    rollupStatus,
+    toActionStatus,
+    workflowSortRank,
+} from './status';
+import type { AgentStatusData, ManifestData, StatusSummary } from './status';
 
 describe('toActionStatus', () => {
     it('passes through every status the framework can write', () => {
@@ -101,5 +109,178 @@ describe('resolveActionStatus with an unrecognised live value', () => {
         const manifest: ManifestData = { actions: { extract: { status: 'completed' } } };
         const agentStatus = { extract: 'from_the_future' } as AgentStatusData;
         assert.equal(resolveActionStatus(manifest, agentStatus, 'extract'), 'completed');
+    });
+});
+
+describe('rollupStatus', () => {
+    it('reports running when any action is live, whatever else happened', () => {
+        assert.equal(rollupStatus(['completed', 'failed', 'running', 'pending']), 'running');
+    });
+
+    it('reports failed when nothing is live but something failed', () => {
+        assert.equal(rollupStatus(['completed', 'failed', 'pending']), 'failed');
+    });
+
+    it('ranks a failure above an interruption', () => {
+        assert.equal(rollupStatus(['interrupted', 'failed']), 'failed');
+    });
+
+    it('reports interrupted when that is the worst outcome', () => {
+        assert.equal(rollupStatus(['completed', 'interrupted', 'pending']), 'interrupted');
+    });
+
+    it('reports completed only when every action reached a good end', () => {
+        assert.equal(rollupStatus(['completed', 'completed']), 'completed');
+        assert.equal(rollupStatus(['completed', 'skipped']), 'completed');
+    });
+
+    it('does not call a half-finished workflow completed', () => {
+        assert.equal(rollupStatus(['completed', 'pending']), 'pending');
+    });
+
+    it('treats an empty workflow as pending, not completed', () => {
+        assert.equal(rollupStatus([]), 'pending');
+    });
+});
+
+describe('workflowSortRank', () => {
+    it('puts live workflows above everything else', () => {
+        const ranked = ACTION_STATUSES.slice().sort(
+            (a, b) => workflowSortRank(a) - workflowSortRank(b) || a.localeCompare(b)
+        );
+        assert.deepEqual(ranked, [
+            'checking_batch',
+            'running',
+            'batch_submitted',
+            'failed',
+            'interrupted',
+            'completed_with_failures',
+            'pending',
+            'completed',
+            'skipped',
+        ]);
+    });
+
+    it('ranks every status, so union drift cannot slip through as last', () => {
+        for (const status of ACTION_STATUSES) {
+            assert.equal(typeof workflowSortRank(status), 'number', status);
+        }
+    });
+
+    it('gives skipped and completed the same lowest priority', () => {
+        assert.equal(workflowSortRank('skipped'), workflowSortRank('completed'));
+    });
+});
+
+describe('formatWorkflowSummary', () => {
+    const base: StatusSummary = {
+        total: 12,
+        pending: 0,
+        running: 0,
+        batch_submitted: 0,
+        checking_batch: 0,
+        completed: 0,
+        completed_with_failures: 0,
+        failed: 0,
+        skipped: 0,
+        interrupted: 0,
+    };
+
+    it('names the live action when one is running', () => {
+        const out = formatWorkflowSummary('running', { ...base, completed: 4 }, 'classify_genre');
+        assert.equal(out, '4/12 · classify_genre');
+    });
+
+    it('reports the failure count when nothing is live', () => {
+        assert.equal(formatWorkflowSummary('failed', { ...base, completed: 9, failed: 3 }), '9/12 · 3 failed');
+    });
+
+    it('reports interrupted when there are no failures', () => {
+        assert.equal(
+            formatWorkflowSummary('interrupted', { ...base, completed: 9, interrupted: 1 }),
+            '9/12 · 1 interrupted'
+        );
+    });
+
+    it('explains a short completed count with the skipped total', () => {
+        // Without this a guard-skipped workflow reads as an unexplained 10/12.
+        assert.equal(
+            formatWorkflowSummary('completed', { ...base, completed: 10, skipped: 2 }),
+            '10/12 · 2 skipped'
+        );
+    });
+
+    it('says nothing extra when the count already tells the whole story', () => {
+        assert.equal(formatWorkflowSummary('completed', { ...base, completed: 12 }), '12/12');
+    });
+
+    it('reports at most one detail, the most actionable', () => {
+        const out = formatWorkflowSummary(
+            'failed',
+            { ...base, completed: 5, failed: 2, interrupted: 1, skipped: 3 },
+            undefined
+        );
+        assert.equal(out, '5/12 · 2 failed');
+    });
+});
+
+describe('rollupStatus for batch and partial-failure runs', () => {
+    it('treats a submitted batch as outstanding, not never-started', () => {
+        assert.notEqual(rollupStatus(['completed', 'batch_submitted']), 'pending');
+    });
+
+    it('treats batch polling as live', () => {
+        assert.equal(rollupStatus(['completed', 'checking_batch']), 'checking_batch');
+    });
+
+    it('does not report a partially failed run as simply completed', () => {
+        assert.equal(
+            rollupStatus(['completed', 'completed_with_failures']),
+            'completed_with_failures'
+        );
+    });
+
+    it('ranks a live run above a submitted batch', () => {
+        assert.equal(rollupStatus(['batch_submitted', 'running']), 'running');
+    });
+});
+
+describe('formatWorkflowSummary for parallel and batch runs', () => {
+    const base: StatusSummary = {
+        total: 12,
+        pending: 0,
+        running: 0,
+        batch_submitted: 0,
+        checking_batch: 0,
+        completed: 0,
+        completed_with_failures: 0,
+        failed: 0,
+        skipped: 0,
+        interrupted: 0,
+    };
+
+    it('counts concurrent actions instead of naming one of them', () => {
+        const out = formatWorkflowSummary(
+            'running',
+            { ...base, completed: 2, running: 5 },
+            'classify_genre'
+        );
+        assert.equal(out, '2/12 · 5 running');
+    });
+
+    it('still names the action when only one is live', () => {
+        const out = formatWorkflowSummary(
+            'running',
+            { ...base, completed: 4, running: 1 },
+            'classify_genre'
+        );
+        assert.equal(out, '4/12 · classify_genre');
+    });
+
+    it('says a batch is outstanding rather than showing a bare count', () => {
+        assert.equal(
+            formatWorkflowSummary('batch_submitted', { ...base, completed: 3, batch_submitted: 1 }),
+            '3/12 · awaiting batch'
+        );
     });
 });

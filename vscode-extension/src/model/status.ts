@@ -133,3 +133,118 @@ export function resolveActionStatus(
 
     return 'pending';
 }
+
+/**
+ * The status a workflow should show given its actions.
+ *
+ * Ordered by what a reader needs to act on first: a live run outranks a
+ * failure, which outranks an interruption, so the top of the tree answers
+ * "is anything happening, and did anything go wrong" without expanding.
+ * An empty workflow reads as pending, not completed — nothing ran.
+ */
+const ROLLUP_PRECEDENCE: readonly ActionStatus[] = [
+    'running',
+    'checking_batch',
+    'batch_submitted',
+    'failed',
+    'interrupted',
+    'completed_with_failures',
+];
+
+/** Statuses that mean the action reached an acceptable end. */
+const SETTLED: readonly ActionStatus[] = ['completed', 'skipped'];
+
+export function rollupStatus(statuses: readonly ActionStatus[]): ActionStatus {
+    if (statuses.length === 0) {
+        return 'pending';
+    }
+    for (const rank of ROLLUP_PRECEDENCE) {
+        if (statuses.includes(rank)) {
+            return rank;
+        }
+    }
+    if (statuses.every((s) => SETTLED.includes(s))) {
+        return 'completed';
+    }
+    return 'pending';
+}
+
+/**
+ * Sort key placing workflows that need attention at the top of the tree.
+ *
+ * Lower sorts first. Ties are broken by name at the call site so ordering is
+ * stable between refreshes.
+ */
+export function workflowSortRank(status: ActionStatus): number {
+    switch (status) {
+        case 'running':
+        case 'checking_batch':
+            return 0;
+        case 'batch_submitted':
+            return 1;
+        case 'failed':
+            return 2;
+        case 'interrupted':
+            return 3;
+        case 'completed_with_failures':
+            return 4;
+        case 'pending':
+            return 5;
+        case 'completed':
+        case 'skipped':
+            return 6;
+    }
+    // No default: adding a status to the union must fail the build here rather
+    // than silently sorting it last. That omission is what let three real
+    // statuses render as never-started.
+    return assertNever(status);
+}
+
+function assertNever(value: never): never {
+    throw new Error(`Unhandled ActionStatus: ${String(value)}`);
+}
+
+/** Status counts for workflow progress display. */
+export interface StatusSummary {
+    total: number;
+    pending: number;
+    running: number;
+    batch_submitted: number;
+    checking_batch: number;
+    completed: number;
+    completed_with_failures: number;
+    failed: number;
+    skipped: number;
+    interrupted: number;
+}
+
+/**
+ * The one-line summary shown on a collapsed workflow row.
+ *
+ * Reports at most one detail, the most actionable one. Skipped is included so
+ * a workflow that finished with completed < total does not look unexplained.
+ */
+export function formatWorkflowSummary(
+    status: ActionStatus,
+    summary: StatusSummary,
+    liveActionName?: string
+): string {
+    const parts = [`${summary.completed}/${summary.total}`];
+
+    if (summary.running > 1) {
+        // A parallel level runs several at once; naming one implies it is alone.
+        parts.push(`${summary.running} running`);
+    } else if (liveActionName) {
+        parts.push(liveActionName);
+    } else if (status === 'batch_submitted' || status === 'checking_batch') {
+        parts.push('awaiting batch');
+    } else if (summary.failed > 0) {
+        parts.push(`${summary.failed} failed`);
+    } else if (summary.interrupted > 0) {
+        parts.push(`${summary.interrupted} interrupted`);
+    } else if (summary.skipped > 0) {
+        parts.push(`${summary.skipped} skipped`);
+    }
+
+    return parts.join(' \u00B7 ');
+}
