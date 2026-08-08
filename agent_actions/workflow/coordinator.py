@@ -328,6 +328,15 @@ class AgentWorkflow:
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 
+            except BaseException as e:
+                # Ctrl-C, SIGTERM and task cancellation are not Exception subclasses,
+                # so they skip the handler above and would leave the in-flight action
+                # reading 'running' on disk long after the process is gone.
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self.state.failed = True
+                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
+                raise
+
     def run(self):
         """Execute workflow sequentially."""
         self._initialize_event_context()
@@ -421,6 +430,15 @@ class AgentWorkflow:
                     operation="sequential_workflow_execution",
                 )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
+                raise
+
+            except BaseException as e:
+                # Ctrl-C, SIGTERM and task cancellation are not Exception subclasses,
+                # so they skip the handler above and would leave the in-flight action
+                # reading 'running' on disk long after the process is gone.
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self.state.failed = True
+                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
                 raise
 
     def _run_storage_maintenance(self) -> None:

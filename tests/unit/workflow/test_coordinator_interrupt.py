@@ -32,7 +32,9 @@ def _build_workflow(state_manager):
     metadata.agent_name = "test_workflow"
     metadata.execution_order = EXECUTION_ORDER
     metadata.action_indices = {name: idx for idx, name in enumerate(EXECUTION_ORDER)}
-    metadata.action_configs = {name: {"agent_type": name, "type": "llm"} for name in EXECUTION_ORDER}
+    metadata.action_configs = {
+        name: {"agent_type": name, "type": "llm"} for name in EXECUTION_ORDER
+    }
     wf.metadata = metadata
 
     wf.config = MagicMock(spec=WorkflowRuntimeConfig)

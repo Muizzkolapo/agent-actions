@@ -157,10 +157,31 @@ class WorkflowEventLogger:
             )
         )
 
-        if self.services.support.manifest_manager:
-            self.services.support.manifest_manager.mark_workflow_failed(get_error_detail(error))
-
-        self.services.core.state_manager.mark_running_as_failed()
+        self._mark_run_terminal(get_error_detail(error))
 
         # CLI decorator checks this attribute to prevent duplicate output
         error._already_displayed = True  # type: ignore[attr-defined]
+
+    def handle_workflow_interrupt(self, interrupt: BaseException, elapsed_time: float = 0.0):
+        """Record terminal state for a run killed by Ctrl-C, SIGTERM or cancellation."""
+        reason = f"Run interrupted ({type(interrupt).__name__})"
+
+        fire_event(
+            WorkflowFailedEvent(
+                workflow_name=self.agent_name,
+                error_message=reason,
+                error_detail=reason,
+                error_type=type(interrupt).__name__,
+                elapsed_time=elapsed_time,
+                failed_action=get_manager().get_context("action_name") or "",
+            )
+        )
+
+        self._mark_run_terminal(reason)
+
+    def _mark_run_terminal(self, detail: str) -> None:
+        """Sweep in-flight actions to a terminal status so a dead run reads as dead."""
+        if self.services.support.manifest_manager:
+            self.services.support.manifest_manager.mark_workflow_failed(detail)
+
+        self.services.core.state_manager.mark_running_as_failed()
