@@ -15,7 +15,7 @@ from agent_actions.logging.events import (
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,12 @@ class WorkflowEventLogger:
 
     def handle_workflow_error(self, error: Exception, elapsed_time: float = 0.0):
         """Handle workflow execution error with structured output."""
+        self._mark_run_terminal(
+            get_error_detail(error),
+            self.services.core.state_manager.mark_running_as_failed,
+            ActionStatus.FAILED,
+        )
+
         fire_event(
             WorkflowFailedEvent(
                 workflow_name=self.agent_name,
@@ -158,17 +164,18 @@ class WorkflowEventLogger:
             )
         )
 
-        self._mark_run_terminal(
-            get_error_detail(error),
-            self.services.core.state_manager.mark_running_as_failed,
-        )
-
         # CLI decorator checks this attribute to prevent duplicate output
         error._already_displayed = True  # type: ignore[attr-defined]
 
     def handle_workflow_interrupt(self, interrupt: BaseException, elapsed_time: float = 0.0):
         """Record terminal state for a run killed by Ctrl-C, SIGTERM or cancellation."""
         reason = f"Run interrupted ({type(interrupt).__name__})"
+
+        self._mark_run_terminal(
+            reason,
+            self.services.core.state_manager.mark_running_as_interrupted,
+            ActionStatus.INTERRUPTED,
+        )
 
         fire_event(
             WorkflowFailedEvent(
@@ -181,19 +188,19 @@ class WorkflowEventLogger:
             )
         )
 
-        self._mark_run_terminal(
-            reason,
-            self.services.core.state_manager.mark_running_as_interrupted,
-        )
-
-    def _mark_run_terminal(self, detail: str, sweep: Callable[[], list[str]]) -> None:
+    def _mark_run_terminal(
+        self, detail: str, sweep: Callable[[], list[str]], status: ActionStatus
+    ) -> None:
         """Record terminal state for in-flight work so a dead run reads as dead.
 
-        The status sweep runs before the manifest write: the status file is what
-        `agac status` and the editor read per action, so it must land even if the
-        manifest write raises.
+        Persisted before the caller fires its event, and with the status file
+        written before the manifest. Event handlers do real disk I/O, so a
+        second Ctrl-C landing inside one would otherwise discard the very write
+        that stops readers seeing a dead run as live.
         """
-        sweep()
+        swept = sweep()
 
-        if self.services.support.manifest_manager:
-            self.services.support.manifest_manager.mark_workflow_failed(detail)
+        manifest = self.services.support.manifest_manager
+        if manifest:
+            manifest.mark_actions_terminal(swept, status)
+            manifest.mark_workflow_failed(detail)

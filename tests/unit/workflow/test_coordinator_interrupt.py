@@ -10,6 +10,7 @@ import pytest
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.execution_events import WorkflowEventLogger
+from agent_actions.workflow.managers.manifest import ManifestManager
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.models import (
     CoreServices,
@@ -174,6 +175,54 @@ class TestInterruptedRunRecordsTerminalStatus:
             _drive_until(wf, KeyboardInterrupt())
 
         assert _persisted_status(status_file, "agent_b") == ActionStatus.PENDING
+
+    def test_batch_submitted_action_survives_the_sweep(self, tmp_path):
+        """Batch work continues in the provider queue after this process dies."""
+        state_manager, status_file = _running_state_manager(tmp_path)
+        state_manager.update_status("agent_b", ActionStatus.BATCH_SUBMITTED)
+        wf = _build_workflow(state_manager)
+
+        with pytest.raises(KeyboardInterrupt):
+            _drive_until(wf, KeyboardInterrupt())
+
+        assert _persisted_status(status_file, "agent_b") == ActionStatus.BATCH_SUBMITTED
+
+    def test_interrupt_sweeps_the_manifest_action_status(self, tmp_path):
+        """The manifest must not read workflow=failed while its action reads running."""
+        state_manager, _ = _running_state_manager(tmp_path)
+        wf = _build_workflow(state_manager)
+
+        manifest = ManifestManager(tmp_path)
+        manifest.initialize_manifest(
+            workflow_name="test_workflow",
+            execution_order=EXECUTION_ORDER,
+            levels=[["agent_a"], ["agent_b"]],
+            action_configs={name: {} for name in EXECUTION_ORDER},
+        )
+        manifest.mark_action_started("agent_a")
+        wf.services.support.manifest_manager = manifest
+
+        with pytest.raises(KeyboardInterrupt):
+            _drive_until(wf, KeyboardInterrupt())
+
+        written = json.loads((tmp_path / "logs" / ".manifest.json").read_text())
+        assert written["actions"]["agent_a"]["status"] == ActionStatus.INTERRUPTED
+        assert written["actions"]["agent_b"]["status"] == ActionStatus.PENDING
+        assert written["status"] == "failed"
+
+    def test_status_survives_an_interrupt_raised_by_an_event_handler(self, tmp_path):
+        """A second Ctrl-C often lands inside event dispatch, which does disk I/O."""
+        state_manager, status_file = _running_state_manager(tmp_path)
+        wf = _build_workflow(state_manager)
+
+        with patch(
+            "agent_actions.workflow.execution_events.fire_event",
+            side_effect=KeyboardInterrupt(),
+        ):
+            with pytest.raises(KeyboardInterrupt):
+                _drive_until(wf, KeyboardInterrupt())
+
+        assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
 
 
 class TestInterruptedRunResumesFromCheckpoint:
