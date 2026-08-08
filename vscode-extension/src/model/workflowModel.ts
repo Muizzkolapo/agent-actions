@@ -348,15 +348,21 @@ export class WorkflowModel implements vscode.Disposable {
     /**
      * Read the manifest from the first location that has one.
      *
-     * Absence of both is normal: a workflow that has never run has no manifest,
-     * and the model falls back to computing execution order from the config.
+     * Absence of all candidates is normal: a workflow that has never run has no
+     * manifest, and the model falls back to computing execution order from the
+     * config. The fallback is keyed on the file being absent rather than on the
+     * read succeeding, so a corrupt current manifest surfaces as no manifest
+     * instead of quietly substituting an older run's from the legacy location.
      */
     private async readFirstManifest(agentIoPath: string): Promise<ManifestData | null> {
         for (const candidate of manifestCandidatePaths(agentIoPath)) {
-            const manifest = await readManifest(vscode.Uri.file(candidate));
-            if (manifest) {
-                return manifest;
+            const uri = vscode.Uri.file(candidate);
+            try {
+                await vscode.workspace.fs.stat(uri);
+            } catch {
+                continue;
             }
+            return await readManifest(uri);
         }
         return null;
     }

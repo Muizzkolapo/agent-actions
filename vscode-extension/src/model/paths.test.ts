@@ -30,10 +30,11 @@ describe('manifestCandidatePaths', () => {
         assert.equal(manifestCandidatePaths(AGENT_IO).length, 2);
     });
 
-    it('never looks for the manifest directly under agent_io', () => {
-        // The bug this replaces: a single hardcoded path that no longer exists.
-        const stray = path.join(AGENT_IO, '.manifest.json');
-        assert.ok(!manifestCandidatePaths(AGENT_IO).includes(stray));
+    it('puts the framework-written location ahead of the legacy one', () => {
+        // Order is the whole point: reversing it would serve a pre-migration
+        // manifest in preference to the current run's.
+        const dirs = manifestCandidatePaths(AGENT_IO).map((p) => path.basename(path.dirname(p)));
+        assert.deepEqual(dirs, ['logs', 'target']);
     });
 });
 
@@ -44,9 +45,12 @@ describe('agentStatusPath', () => {
 });
 
 describe('watch globs', () => {
-    it('covers both manifest locations so the fallback still refreshes', () => {
-        assert.match(MANIFEST_GLOB, /logs/);
-        assert.match(MANIFEST_GLOB, /target/);
+    it('covers every location the reader will look in', () => {
+        // Substring checks would pass for a glob that watches nothing, so
+        // derive the expectation from the candidate list itself.
+        const dirs = manifestCandidatePaths(AGENT_IO).map((p) => path.basename(path.dirname(p)));
+        assert.deepEqual(dirs.sort(), ['logs', 'target']);
+        assert.equal(MANIFEST_GLOB, '**/agent_io/{logs,target}/.manifest.json');
     });
 
     it('watches the status file where the framework writes it', () => {

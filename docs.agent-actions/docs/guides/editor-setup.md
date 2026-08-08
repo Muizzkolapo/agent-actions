@@ -135,7 +135,7 @@ flowchart TB
 
     subgraph "Data Sources"
         CONFIG["agent_config/*.yml"]
-        MANIFEST["agent_io/target/.manifest.json"]
+        MANIFEST["agent_io/logs/.manifest.json"]
         RUNTIME["agent_io/.agent_status.json"]
     end
 
@@ -324,7 +324,7 @@ The Workflow Navigator reads from three sources:
 | File | Purpose | When Updated |
 |------|---------|--------------|
 | `agent_config/*.yml` | Workflow structure, action definitions, dependencies | When you edit the workflow |
-| `agent_io/target/.manifest.json` | Execution plan, action levels, output directories | When workflow starts |
+| `agent_io/logs/.manifest.json` | Execution plan, action levels, output directories | When workflow starts |
 | `agent_io/.agent_status.json` | Live runtime status for each action | During workflow execution |
 
 File watchers automatically refresh the UI when these files change. For more responsive updates during execution, enable polling with `agentActions.refreshInterval`.
@@ -490,7 +490,7 @@ Ensure your project has:
 
 If workflow status isn't refreshing:
 
-1. Check that `agent_io/target/.manifest.json` exists
+1. Check that `agent_io/logs/.manifest.json` exists
 2. Try `Cmd+Shift+R` to manually refresh
 3. Enable polling: `"agentActions.refreshInterval": 2000`
 
