@@ -22,6 +22,9 @@ from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 logger = logging.getLogger(__name__)
 
+# The server also emits "timeout" and "error"; those mean no review happened.
+_DECISION_STATUSES = frozenset({"approved", "rejected"})
+
 
 class HITLStrategy:
     """Strategy for FILE-granularity HITL invocation.
@@ -132,11 +135,46 @@ class HITLStrategy:
                     },
                 )
 
+            # Broadcasting a non-decision would stamp every record reviewed and
+            # let the run succeed while guards discard the whole dataset.
+            status = decision_payload.get("hitl_status")
+            if status not in _DECISION_STATUSES:
+                detail = decision_payload.get("user_comment") or "no detail reported"
+                raise AgentActionsError(
+                    f"HITL review did not produce a decision (hitl_status={status!r}, "
+                    f"detail: {detail}). None of these {len(records)} records were "
+                    "reviewed. Re-run the workflow to review them.",
+                    context={
+                        "agent_name": context.agent_name,
+                        "record_count": len(records),
+                        "hitl_status": status,
+                    },
+                )
+
             record_reviews = (
                 decision_payload.get("record_reviews")
                 if isinstance(decision_payload.get("record_reviews"), list)
                 else None
             )
+            # Per-record reviews overwrite the broadcast status, so the same
+            # allowlist has to hold here or a non-decision reaches records anyway.
+            for idx, review in enumerate(record_reviews or []):
+                if not isinstance(review, dict):
+                    continue
+                per_record_status = review.get("hitl_status")
+                if per_record_status is not None and per_record_status not in _DECISION_STATUSES:
+                    raise AgentActionsError(
+                        f"HITL review for record {idx} is not a decision "
+                        f"(hitl_status={per_record_status!r}). None of these "
+                        f"{len(records)} records were recorded. Re-run the workflow "
+                        "to review them.",
+                        context={
+                            "agent_name": context.agent_name,
+                            "record_count": len(records),
+                            "record_index": idx,
+                            "hitl_status": per_record_status,
+                        },
+                    )
             # Only propagate HITL decision metadata. Keep source business fields
             # (for example `status`) intact.
             decision_common = {
