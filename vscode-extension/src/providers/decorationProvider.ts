@@ -21,6 +21,7 @@ const STATUS_COLORS: Record<ActionStatus, vscode.ThemeColor> = {
     completed: new vscode.ThemeColor('gitDecoration.addedResourceForeground'),
     running: new vscode.ThemeColor('gitDecoration.modifiedResourceForeground'),
     failed: new vscode.ThemeColor('gitDecoration.deletedResourceForeground'),
+    interrupted: new vscode.ThemeColor('gitDecoration.conflictingResourceForeground'),
     pending: new vscode.ThemeColor('gitDecoration.ignoredResourceForeground'),
     skipped: new vscode.ThemeColor('gitDecoration.untrackedResourceForeground'),
 };

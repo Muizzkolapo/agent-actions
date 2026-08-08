@@ -201,6 +201,14 @@ class WorkflowEventLogger:
         swept = sweep()
 
         manifest = self.services.support.manifest_manager
-        if manifest:
+        if manifest is None:
+            return
+
+        try:
             manifest.mark_actions_terminal(swept, status)
             manifest.mark_workflow_failed(detail)
+        except (OSError, RuntimeError) as exc:
+            # The status file already carries the terminal state. Letting a
+            # manifest write failure out here would replace the interrupt the
+            # caller is about to re-raise, turning Ctrl-C into a generic error.
+            logger.warning("Could not record terminal state in manifest: %s", exc)

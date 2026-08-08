@@ -98,6 +98,13 @@ Every action has a status that controls what happens on the current run and on r
         missing output)
 ```
 
+One transition sits outside the diagram because it is driven by the process
+dying rather than by the workflow: on Ctrl-C, SIGTERM or cancellation the
+coordinator sweeps `RUNNING`/`CHECKING_BATCH` to `INTERRUPTED` on its way out.
+It is terminal and retryable, so the next run resets it to `PENDING` like any
+other retryable status — but it is deliberately not `FAILED`, because
+`_reset_retryable_actions` preserves checkpointed dispositions for it.
+
 ### Status Sets
 
 ```
@@ -105,13 +112,18 @@ COMPLETED_STATUSES = {COMPLETED, COMPLETED_WITH_FAILURES}
   → "Has valid output, skip on re-run"
   → Used by: is_completed(), coordinator level skip, executor early-exit
 
-TERMINAL_STATUSES = {COMPLETED, FAILED, SKIPPED, COMPLETED_WITH_FAILURES}
+TERMINAL_STATUSES = {COMPLETED, FAILED, SKIPPED, COMPLETED_WITH_FAILURES,
+                     INTERRUPTED}
   → "Done for this run, regardless of outcome"
   → Used by: is_workflow_complete(), is_workflow_done(), get_pending_actions()
 
-RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH}
+RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH, INTERRUPTED}
   → "Reset to PENDING on next run"
   → COMPLETED_WITH_FAILURES is NOT retryable (spec 534, 2026-05-31)
+
+MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED}
+  → "Died mid-processing; may hold checkpointed SUCCESS dispositions"
+  → Used by: _reset_retryable_actions selective-vs-bulk disposition clearing
 ```
 
 ### Completion Classification

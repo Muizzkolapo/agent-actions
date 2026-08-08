@@ -87,6 +87,7 @@ Persists per-action execution state for resumable runs:
 | `running` | Currently executing |
 | `completed` | Successfully finished |
 | `failed` | Terminated with error |
+| `interrupted` | The run was killed (Ctrl-C, SIGTERM) while this action was executing |
 | `skipped` | Skipped by guard |
 | `batch_submitted` | Batch job submitted, awaiting results |
 

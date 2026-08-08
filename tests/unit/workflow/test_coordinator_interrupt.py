@@ -124,8 +124,15 @@ class TestInterruptedRunRecordsTerminalStatus:
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
 
-    def test_async_cancellation_marks_running_action_interrupted(self, tmp_path):
-        """The async loop needs its own handler; the sequential one cannot cover it."""
+    def test_async_loop_records_interrupted_when_level_execution_is_cancelled(self, tmp_path):
+        """The async loop needs its own handler; the sequential one cannot cover it.
+
+        Scoped to cancellation reaching the loop, which is the real Ctrl-C path:
+        asyncio.run's shutdown throws CancelledError into the awaited coroutine.
+        A cancellation raised inside a child action task is absorbed by
+        execute_level_async's gather(return_exceptions=True) and never arrives
+        here, so it is out of this test's reach.
+        """
         state_manager, status_file = _running_state_manager(tmp_path)
         wf = _build_workflow(state_manager)
 
@@ -143,16 +150,21 @@ class TestInterruptedRunRecordsTerminalStatus:
 
         wf.services.support.manifest_manager.mark_workflow_failed.assert_called_once()
 
-    def test_status_sweep_lands_even_if_manifest_write_raises(self, tmp_path):
-        """The status file is what readers consult per action; it must not be lost."""
+    def test_manifest_write_failure_does_not_mask_the_interrupt(self, tmp_path):
+        """A failed manifest write must not turn Ctrl-C into a generic error.
+
+        The status file is the per-action surface readers consult, and it has
+        already landed by this point; the manifest is secondary. Letting its
+        failure out would replace the interrupt and change the exit code.
+        """
         state_manager, status_file = _running_state_manager(tmp_path)
         wf = _build_workflow(state_manager)
-        wf.services.support.manifest_manager.mark_workflow_failed.side_effect = RuntimeError(
-            "manifest not initialized"
+        wf.services.support.manifest_manager.mark_workflow_failed.side_effect = OSError(
+            "no space left on device"
         )
 
-        with pytest.raises(RuntimeError):
-            _drive_until(wf, KeyboardInterrupt())
+        with pytest.raises(SystemExit):
+            _drive_until(wf, SystemExit(130))
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
 
@@ -217,10 +229,10 @@ class TestInterruptedRunRecordsTerminalStatus:
 
         with patch(
             "agent_actions.workflow.execution_events.fire_event",
-            side_effect=KeyboardInterrupt(),
+            side_effect=SystemExit(130),
         ):
-            with pytest.raises(KeyboardInterrupt):
-                _drive_until(wf, KeyboardInterrupt())
+            with pytest.raises(SystemExit):
+                _drive_until(wf, SystemExit(130))
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
 

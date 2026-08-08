@@ -509,7 +509,8 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  RUNNING actions → clear only RUNNING_CLEAR_DISPOSITIONS
+  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED)
+                 → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
                     Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
 
