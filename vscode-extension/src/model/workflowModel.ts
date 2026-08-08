@@ -14,9 +14,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
     ActionInfo,
-    ActionStatus,
     ActionType,
-    AgentStatusData,
     ManifestData,
     ParsedWorkflowConfig,
     StatusSummary,
