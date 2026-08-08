@@ -177,3 +177,40 @@ export function workflowSortRank(status: ActionStatus): number {
             return 4;
     }
 }
+
+/** Status counts for workflow progress display. */
+export interface StatusSummary {
+    total: number;
+    completed: number;
+    running: number;
+    failed: number;
+    pending: number;
+    skipped: number;
+    interrupted: number;
+}
+
+/**
+ * The one-line summary shown on a collapsed workflow row.
+ *
+ * Reports at most one detail, the most actionable one. Skipped is included so
+ * a workflow that finished with completed < total does not look unexplained.
+ */
+export function formatWorkflowSummary(
+    status: ActionStatus,
+    summary: StatusSummary,
+    liveActionName?: string
+): string {
+    const parts = [`${summary.completed}/${summary.total}`];
+
+    if (liveActionName) {
+        parts.push(liveActionName);
+    } else if (summary.failed > 0) {
+        parts.push(`${summary.failed} failed`);
+    } else if (summary.interrupted > 0) {
+        parts.push(`${summary.interrupted} interrupted`);
+    } else if (summary.skipped > 0) {
+        parts.push(`${summary.skipped} skipped`);
+    }
+
+    return parts.join(' \u00B7 ');
+}

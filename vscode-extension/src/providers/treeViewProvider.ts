@@ -11,7 +11,7 @@
 
 import * as vscode from 'vscode';
 import { ActionInfo, ActionStatus, WorkflowInfo } from '../model/types';
-import { rollupStatus, workflowSortRank } from '../model/status';
+import { formatWorkflowSummary, rollupStatus, workflowSortRank } from '../model/status';
 import { WorkflowModel } from '../model/workflowModel';
 
 /**
@@ -36,19 +36,13 @@ class WorkflowNode extends vscode.TreeItem {
 
     /** Everything needed to triage, on the collapsed row. */
     private formatDescription(): string {
-        const s = this.workflow.statusSummary;
-        const parts = [`${getStatusLabel(this.status)} ${s.completed}/${s.total}`];
-
         const live = this.workflow.actions.find((a) => a.status === 'running');
-        if (live) {
-            parts.push(live.name);
-        } else if (s.failed > 0) {
-            parts.push(`${s.failed} failed`);
-        } else if (s.interrupted > 0) {
-            parts.push(`${s.interrupted} interrupted`);
-        }
-
-        return parts.join(' \u00B7 ');
+        const summary = formatWorkflowSummary(
+            this.status,
+            this.workflow.statusSummary,
+            live?.name
+        );
+        return `${getStatusLabel(this.status)} ${summary}`;
     }
 
     private buildTooltip(): string {

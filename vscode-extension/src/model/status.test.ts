@@ -5,13 +5,14 @@ import { describe, it } from 'node:test';
 
 import {
     ACTION_STATUSES,
+    formatWorkflowSummary,
     parseActionStatus,
     resolveActionStatus,
     rollupStatus,
     toActionStatus,
     workflowSortRank,
 } from './status';
-import type { AgentStatusData, ManifestData } from './status';
+import type { AgentStatusData, ManifestData, StatusSummary } from './status';
 
 describe('toActionStatus', () => {
     it('passes through every status the framework can write', () => {
@@ -152,5 +153,54 @@ describe('workflowSortRank', () => {
 
     it('gives skipped and completed the same lowest priority', () => {
         assert.equal(workflowSortRank('skipped'), workflowSortRank('completed'));
+    });
+});
+
+describe('formatWorkflowSummary', () => {
+    const base: StatusSummary = {
+        total: 12,
+        completed: 0,
+        running: 0,
+        failed: 0,
+        pending: 0,
+        skipped: 0,
+        interrupted: 0,
+    };
+
+    it('names the live action when one is running', () => {
+        const out = formatWorkflowSummary('running', { ...base, completed: 4 }, 'classify_genre');
+        assert.equal(out, '4/12 · classify_genre');
+    });
+
+    it('reports the failure count when nothing is live', () => {
+        assert.equal(formatWorkflowSummary('failed', { ...base, completed: 9, failed: 3 }), '9/12 · 3 failed');
+    });
+
+    it('reports interrupted when there are no failures', () => {
+        assert.equal(
+            formatWorkflowSummary('interrupted', { ...base, completed: 9, interrupted: 1 }),
+            '9/12 · 1 interrupted'
+        );
+    });
+
+    it('explains a short completed count with the skipped total', () => {
+        // Without this a guard-skipped workflow reads as an unexplained 10/12.
+        assert.equal(
+            formatWorkflowSummary('completed', { ...base, completed: 10, skipped: 2 }),
+            '10/12 · 2 skipped'
+        );
+    });
+
+    it('says nothing extra when the count already tells the whole story', () => {
+        assert.equal(formatWorkflowSummary('completed', { ...base, completed: 12 }), '12/12');
+    });
+
+    it('reports at most one detail, the most actionable', () => {
+        const out = formatWorkflowSummary(
+            'failed',
+            { ...base, completed: 5, failed: 2, interrupted: 1, skipped: 3 },
+            undefined
+        );
+        assert.equal(out, '5/12 · 2 failed');
     });
 });
