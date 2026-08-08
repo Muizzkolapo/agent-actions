@@ -36,6 +36,7 @@ from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
 from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
 from agent_actions.validation.udf_required_field_validator import (
     find_conditional_required_field_risks,
+    unconditional_output_keys,
 )
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -253,7 +254,9 @@ class PreflightService:
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:
         """Warn when a tool consumer's required output field is neither guaranteed by an upstream producer nor declared as synthesized via `defaults:`."""
-        gaps = find_dag_schema_compatibility_gaps(self.action_configs)
+        gaps = find_dag_schema_compatibility_gaps(
+            self.action_configs, synthesized=self._collect_synthesized_output_fields()
+        )
         if not gaps:
             return
         total = sum(len(fields) for fields in gaps.values())
@@ -266,6 +269,15 @@ class PreflightService:
             ),
             remedy=DAG_FIT_REMEDY,
         )
+
+    def _collect_synthesized_output_fields(self) -> dict[str, set[str]]:
+        """Output keys each kind:tool action's UDF provably emits on every path."""
+        synthesized: dict[str, set[str]] = {}
+        for name, info in self._collect_tool_required_field_inputs().items():
+            emitted = unconditional_output_keys(info.get("source", ""))
+            if emitted:
+                synthesized[name] = emitted
+        return synthesized
 
     @staticmethod
     def _warn_findings(

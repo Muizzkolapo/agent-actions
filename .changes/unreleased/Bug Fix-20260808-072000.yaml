@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Preflight's dag-fit check no longer reports output fields the consuming tool synthesizes itself — no upstream producer can guarantee a value the tool computes, so those were gaps that did not exist. Fields whose UDF provably emits them are excluded; unreadable shapes still warn. The UDF source scanner also now reads the FileUDFResult envelope, so FILE-granularity tools are no longer invisible to it."
+time: 2026-08-08T07:20:00Z

@@ -48,6 +48,49 @@ def _last_return(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Return | N
     return max(returns, key=lambda r: r.lineno)
 
 
+def _file_udf_result_data(node: ast.expr) -> set[str] | None:
+    """Constant keys of the `data` mappings in an inline ``FileUDFResult`` return.
+
+    ``None`` when the node is not a FileUDFResult call, or its ``outputs`` are
+    built dynamically — the caller then falls through to its own handling.
+    """
+    if not (isinstance(node, ast.Call) and _callee_name(node.func) == "FileUDFResult"):
+        return None
+    outputs = next(
+        (kw.value for kw in node.keywords if kw.arg == "outputs"),
+        node.args[0] if node.args else None,
+    )
+    if not isinstance(outputs, ast.List) or not outputs.elts:
+        return None
+    # Each output row is validated on its own, so a key is guaranteed only when
+    # every row carries it — intersect across rows rather than union.
+    per_row: list[set[str]] = []
+    for element in outputs.elts:
+        if not isinstance(element, ast.Dict) or _has_spread(element):
+            return None
+        data = next(
+            (
+                value
+                for key, value in zip(element.keys, element.values, strict=True)
+                if isinstance(key, ast.Constant) and key.value == "data"
+            ),
+            None,
+        )
+        if not isinstance(data, ast.Dict) or _has_spread(data):
+            return None
+        per_row.append(_const_str_keys(data))
+    return set.intersection(*per_row)
+
+
+def _callee_name(func: ast.expr) -> str | None:
+    """Bare name of a call target, whether called directly or via a module."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
 def _unconditional_output_keys(
     func: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> set[str] | None:
@@ -118,6 +161,30 @@ def _unconditional_output_keys(
         # in, so declining is safer than flagging every required field.
         return None
     return keys
+
+
+def unconditional_output_keys(source: str) -> set[str] | None:
+    """The output keys a UDF's source provably emits on every path.
+
+    ``None`` means the returned shape could not be read — callers must treat
+    that as "unknown", never as "emits nothing". Reads the FileUDFResult
+    envelope that `find_conditional_required_field_risks` declines on, so it
+    must stay out of that check: seeing FILE tools for the first time there
+    would turn a warning-free project into a refused one.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            ret = _last_return(node)
+            if ret is not None and ret.value is not None:
+                envelope = _file_udf_result_data(ret.value)
+                if envelope is not None:
+                    return envelope
+            return _unconditional_output_keys(node)
+    return None
 
 
 def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]:

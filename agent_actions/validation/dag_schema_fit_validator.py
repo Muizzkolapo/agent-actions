@@ -91,16 +91,16 @@ DAG_FIT_REMEDY = (
 
 def find_dag_schema_compatibility_gaps(
     action_configs: dict[str, dict[str, Any]],
+    synthesized: dict[str, set[str]] | None = None,
 ) -> dict[str, list[str]]:
-    """Per tool consumer, the required output fields that are neither guaranteed
-    by an upstream producer nor declared as synthesized via `defaults:`.
+    """Per tool consumer, the required output fields nothing guarantees, as
+    ``{consumer_action: [sorted missing fields]}``.
 
-    Returns ``{consumer_action: [sorted missing fields]}`` for the caller to
-    render as one grouped warning (remedy: ``DAG_FIT_REMEDY``).
-
-    Warn-only for Phase 2 of spec 592. Phase 4 flips this fatal and removes
-    the sibling `find_conditional_required_field_risks` scanner it subsumes.
+    ``synthesized`` maps an action to output keys its UDF provably emits — a
+    value the tool computes cannot be guaranteed upstream, so reporting it
+    would be a gap that does not exist.
     """
+    synthesized = synthesized or {}
     gaps: dict[str, list[str]] = {}
     for consumer_name, consumer in action_configs.items():
         if consumer.get("kind") != "tool":
@@ -116,7 +116,7 @@ def find_dag_schema_compatibility_gaps(
 
         defaults_raw = consumer.get("defaults") or {}
         defaults = set(defaults_raw.keys()) if isinstance(defaults_raw, dict) else set()
-        implicit_inputs = required_output - defaults
+        implicit_inputs = required_output - defaults - synthesized.get(consumer_name, set())
         if not implicit_inputs:
             continue
 
