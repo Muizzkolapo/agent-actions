@@ -156,6 +156,25 @@ class HITLStrategy:
                 if isinstance(decision_payload.get("record_reviews"), list)
                 else None
             )
+            # Per-record reviews overwrite the broadcast status, so the same
+            # allowlist has to hold here or a non-decision reaches records anyway.
+            for idx, review in enumerate(record_reviews or []):
+                if not isinstance(review, dict):
+                    continue
+                per_record_status = review.get("hitl_status")
+                if per_record_status is not None and per_record_status not in _DECISION_STATUSES:
+                    raise AgentActionsError(
+                        f"HITL review for record {idx} is not a decision "
+                        f"(hitl_status={per_record_status!r}). None of these "
+                        f"{len(records)} records were recorded. Re-run the workflow "
+                        "to review them.",
+                        context={
+                            "agent_name": context.agent_name,
+                            "record_count": len(records),
+                            "record_index": idx,
+                            "hitl_status": per_record_status,
+                        },
+                    )
             # Only propagate HITL decision metadata. Keep source business fields
             # (for example `status`) intact.
             decision_common = {

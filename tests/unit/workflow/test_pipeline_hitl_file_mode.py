@@ -341,6 +341,41 @@ def test_file_mode_hitl_unknown_status_is_not_broadcast_as_a_decision():
         HITLStrategy().invoke(input_data, context)
 
 
+def test_file_mode_hitl_per_record_non_decision_status_raises():
+    """The allowlist must hold per record, not only for the file-level status.
+
+    Per-record reviews overwrite the broadcast status, so a non-decision value
+    here reaches records through the same door layer 1 closed one level up.
+    """
+    input_data = [
+        {"source_guid": "sg-1", "content": {"id": 1}},
+        {"source_guid": "sg-2", "content": {"id": 2}},
+    ]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+    )
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(
+                {
+                    "hitl_status": "approved",
+                    "record_reviews": [
+                        {"hitl_status": "approved", "user_comment": ""},
+                        {"hitl_status": "error", "user_comment": "ui died"},
+                    ],
+                },
+                True,
+            ),
+        ),
+        pytest.raises(AgentActionsError, match="error"),
+    ):
+        HITLStrategy().invoke(input_data, context)
+
+
 def test_file_mode_hitl_rejected_file_decision_still_succeeds():
     """Anchor: real decisions keep flowing through with their shape unchanged."""
     input_data = [

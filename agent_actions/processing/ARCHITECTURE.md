@@ -142,7 +142,7 @@ Input records (from staging or upstream action)
 │  │  1. Call HITL agent with filtered records       │ │
 │  │  2. Receive single decision payload             │ │
 │  │  3. Broadcast decision to all records           │ │
-│  │  4. Detect hitl_status == "timeout" → error     │ │
+│  │  4. Non-decision status (timeout/error) → raise │ │
 │  └─────────────────────────────────────────────────┘ │
 └──────────┬───────────────────────────────────────────┘
            │
