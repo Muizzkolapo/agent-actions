@@ -119,8 +119,15 @@ class UnifiedProcessor:
                 records, context, raw_records
             )
             context.source_data = original_passing
+            # prefilter_by_guard returns these index-aligned. Keep the pairing so
+            # any later filtering or reordering of `passing` can be replayed onto
+            # source_data, which FILE-mode strategies index by position.
+            source_by_record = {
+                id(rec): original for rec, original in zip(passing, original_passing, strict=True)
+            }
         else:
             passing, guard_results = self._guard_filter(records, context)
+            source_by_record = {}
 
         carry_results: list[ProcessingResult] = []
         if self._disposition_gate is not None and passing:
@@ -163,33 +170,16 @@ class UnifiedProcessor:
                     to_process = passing
             passing = to_process
 
-            # FILE mode: carried records are served from prior output, so drop
-            # them here too or the positional broadcast below shifts onto them.
-            if raw_records is not None and carry_results:
-                carried_guids = {r.source_guid for r in carry_results if r.source_guid is not None}
-                context.source_data = [
-                    s
-                    for s in (context.source_data or [])
-                    if s.get("source_guid") not in carried_guids
-                ]
-
         # Cascade filter — quarantine upstream-failed records before strategy
         # sees them.  Strategies only receive processable records.
         processable, quarantined_results = partition_cascade_records(
             passing, action_name=context.agent_name
         )
 
-        # FILE mode: filter context.source_data to maintain positional alignment
-        # with processable records (used by reconcile_outputs / HITL broadcast).
-        if raw_records is not None and quarantined_results:
-            quarantined_guids = {
-                r.source_guid for r in quarantined_results if r.source_guid is not None
-            }
-            context.source_data = [
-                s
-                for s in (context.source_data or [])
-                if s.get("source_guid") not in quarantined_guids
-            ]
+        # Rebuilt from `processable`, not by subtracting guid sets: the gate
+        # re-queues un-carryable records at the END of the work list.
+        if raw_records is not None:
+            context.source_data = [source_by_record[id(rec)] for rec in processable]
 
         invocation_results = strategy.invoke(processable, context) if processable else []
 

@@ -543,9 +543,13 @@ This is intentional. FILE mode workflows depend on sequential accumulation
 (record N can reference record N-1's output). Do not unify without
 verifying FILE-mode workflows that depend on positional ordering.
 
-Also: FILE mode prunes context.source_data after cascade filter (line 176-183)
-to maintain positional alignment with processable records. If you skip this
-pruning, FileToolStrategy.reconcile_outputs() matches records by wrong indices.
+Also: FILE mode rebuilds context.source_data from `processable` after the
+disposition gate and cascade filter, replaying both onto it so index i still
+names the record the strategy receives at index i. It is rebuilt rather than
+pruned by guid because the gate re-queues un-carryable records at the END of
+the work list, which pruning alone would leave misaligned. If you skip this,
+FileToolStrategy.reconcile_outputs() matches records by wrong indices and
+HITLStrategy attributes each reviewer decision to the wrong record.
 ```
 
 ---

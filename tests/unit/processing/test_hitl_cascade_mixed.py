@@ -317,3 +317,55 @@ class TestHITLCarryForwardAlignment:
         r1_out = [r for r in output if r.get("source_guid") == "r1"]
         assert len(r1_out) == 1
         assert r1_out[0]["content"]["hitl_review"]["user_comment"] == "prior"
+
+    def test_reviews_stay_aligned_when_a_terminal_record_is_missing_from_prior_output(self):
+        """R1 and R3 are terminal, but prior output holds only R3.
+
+        R1 cannot be carried, so it is re-queued for processing — appended at the
+        END of the work list while it still sits FIRST in source_data. Reviews
+        must follow the records the reviewer saw, not the stale ordering.
+        """
+        r1 = _record("r1", "active")
+        r2 = _record("r2", "active")
+        r3 = _record("r3", "active")
+        r4 = _record("r4", "active")
+
+        mock_backend = MagicMock()
+        mock_backend.get_terminal_record_ids.return_value = {"r1", "r3"}
+        mock_backend.read_target.return_value = [
+            {
+                "source_guid": "r3",
+                "content": {"hitl_review": {"hitl_status": "approved", "user_comment": "prior"}},
+            }
+        ]
+
+        context = _make_context()
+        context.source_data = [r1, r2, r3, r4]
+        context.storage_backend = mock_backend
+        context.file_path = "test.json"
+
+        captured: dict[str, list] = {}
+
+        def _capture(**kwargs):
+            # The reviewer sees observe-filtered records; `val` carries the
+            # record identity that source_guid is stripped of.
+            captured["records"] = list(kwargs.get("context") or [])
+            reviews = [
+                {"hitl_status": "approved", "user_comment": f"review for {r.get('val')}"}
+                for r in captured["records"]
+            ]
+            return ([{"hitl_status": "approved", "record_reviews": reviews}], True)
+
+        with patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            side_effect=_capture,
+        ):
+            processor = UnifiedProcessor(disposition_gate=DispositionGate(mock_backend))
+            output, _stats = processor.process(
+                [r1, r2, r3, r4], context, HITLStrategy(), raw_records=[r1, r2, r3, r4]
+            )
+
+        for guid in ("r1", "r2", "r4"):
+            out = [r for r in output if r.get("source_guid") == guid]
+            assert len(out) == 1, f"{guid} must appear exactly once"
+            assert out[0]["content"]["hitl_review"]["user_comment"] == f"review for {guid}"
