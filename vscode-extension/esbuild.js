@@ -85,6 +85,11 @@ async function buildWebview() {
     target: "ES2020",
     outfile: "out/webview.js",
     alias: reactSingletonAliases,
+    // The entry imports components from ../agent_actions/tooling/docs/frontend,
+    // so esbuild resolves their bare imports from *that* directory and never
+    // reaches this package's node_modules. Without this the webview bundle
+    // fails to build and the data panel ships with no script at all.
+    nodePaths: [path.resolve(__dirname, "node_modules")],
     sourcemap: !production,
     minify: production,
     logLevel: "info",
