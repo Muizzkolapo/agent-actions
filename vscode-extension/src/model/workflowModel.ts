@@ -21,12 +21,16 @@ import {
     WorkflowInfo,
 } from './types';
 import { resolveActionStatus } from './status';
+import {
+    AGENT_STATUS_GLOB,
+    MANIFEST_GLOB,
+    agentStatusPath,
+    manifestCandidatePaths,
+} from './paths';
 import { readManifest, readAgentStatus } from './manifestReader';
 import { parseWorkflowConfig } from './yamlParser';
 
 const CONFIG_GLOB = '**/agent_config/**/*.{yml,yaml}';
-const MANIFEST_GLOB = '**/agent_io/target/.manifest.json';
-const AGENT_STATUS_GLOB = '**/agent_io/.agent_status.json';
 
 /** Minimum polling interval to prevent excessive refreshes */
 const MIN_POLL_INTERVAL_MS = 1000;
@@ -342,6 +346,22 @@ export class WorkflowModel implements vscode.Disposable {
     }
 
     /**
+     * Read the manifest from the first location that has one.
+     *
+     * Absence of both is normal: a workflow that has never run has no manifest,
+     * and the model falls back to computing execution order from the config.
+     */
+    private async readFirstManifest(agentIoPath: string): Promise<ManifestData | null> {
+        for (const candidate of manifestCandidatePaths(agentIoPath)) {
+            const manifest = await readManifest(vscode.Uri.file(candidate));
+            if (manifest) {
+                return manifest;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Build a WorkflowInfo from parsed config and runtime data
      */
     private async buildWorkflow(
@@ -353,11 +373,10 @@ export class WorkflowModel implements vscode.Disposable {
         const agentIoPath = path.join(rootPath, 'agent_io');
 
         // Read runtime status files
-        const manifestUri = vscode.Uri.file(path.join(agentIoPath, 'target', '.manifest.json'));
-        const statusUri = vscode.Uri.file(path.join(agentIoPath, '.agent_status.json'));
+        const statusUri = vscode.Uri.file(agentStatusPath(agentIoPath));
 
         const [manifest, agentStatus] = await Promise.all([
-            readManifest(manifestUri),
+            this.readFirstManifest(agentIoPath),
             readAgentStatus(statusUri),
         ]);
 
