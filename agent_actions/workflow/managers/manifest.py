@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
 import threading
 from collections.abc import Iterable
 from datetime import datetime
@@ -83,6 +85,10 @@ class ManifestManager:
                 "schema_version": MANIFEST_SCHEMA_VERSION,
                 "workflow_name": workflow_name,
                 "workflow_run_id": workflow_run_id,
+                # Lets a reader tell a live run from one that died without
+                # unwinding. Host-qualified: a pid from elsewhere means nothing.
+                "pid": os.getpid(),
+                "hostname": socket.gethostname(),
                 "started_at": datetime.now().isoformat(),
                 "completed_at": None,
                 "status": "running",

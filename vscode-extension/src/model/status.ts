@@ -58,6 +58,61 @@ export interface ManifestData {
     execution_order?: string[];
     levels?: string[][];
     actions?: Record<string, ManifestActionInfo>;
+    /** Run-level status: 'running' until the workflow finishes. */
+    status?: string;
+    /** Process that owns the run, and the host it runs on. */
+    pid?: number;
+    hostname?: string;
+}
+
+/**
+ * Whether the process that started the run still exists.
+ *
+ * 'unknown' is the safe answer and the common one: a manifest written by an
+ * older framework has no pid, and a pid from another machine says nothing.
+ * Callers must not downgrade anything on 'unknown'.
+ */
+export type RunLiveness = 'live' | 'dead' | 'unknown';
+
+export function runLiveness(
+    manifest: ManifestData | null,
+    localHostname: string,
+    isProcessAlive: (pid: number) => boolean
+): RunLiveness {
+    if (!manifest) {
+        return 'unknown';
+    }
+    if (manifest.status && manifest.status !== 'running') {
+        // The run recorded its own ending, so nothing in it is still going.
+        return 'dead';
+    }
+    if (typeof manifest.pid !== 'number') {
+        return 'unknown';
+    }
+    if (manifest.hostname && manifest.hostname !== localHostname) {
+        return 'unknown';
+    }
+    return isProcessAlive(manifest.pid) ? 'live' : 'dead';
+}
+
+/** Statuses that claim work is happening right now. */
+const IN_FLIGHT: readonly ActionStatus[] = ['running', 'checking_batch'];
+
+/**
+ * Correct an in-flight status when the run that wrote it is gone.
+ *
+ * A process killed outright — SIGKILL, OOM, power loss — never gets to record
+ * a terminal status, so the file keeps claiming 'running' indefinitely. The
+ * action did not fail; we simply know it never finished.
+ */
+export function reconcileWithLiveness(
+    status: ActionStatus,
+    liveness: RunLiveness
+): ActionStatus {
+    if (liveness === 'dead' && IN_FLIGHT.includes(status)) {
+        return 'interrupted';
+    }
+    return status;
 }
 
 /** Runtime status from agent_io/.agent_status.json */

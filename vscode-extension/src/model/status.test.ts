@@ -10,6 +10,8 @@ import {
     resolveActionStatus,
     rollupStatus,
     toActionStatus,
+    reconcileWithLiveness,
+    runLiveness,
     workflowSortRank,
 } from './status';
 import type { AgentStatusData, ManifestData, StatusSummary } from './status';
@@ -282,5 +284,71 @@ describe('formatWorkflowSummary for parallel and batch runs', () => {
             formatWorkflowSummary('batch_submitted', { ...base, completed: 3, batch_submitted: 1 }),
             '3/12 · awaiting batch'
         );
+    });
+});
+
+describe('runLiveness', () => {
+    const alive = () => true;
+    const dead = () => false;
+    const HOST = 'my-laptop';
+
+    it('reports dead when the run recorded its own ending', () => {
+        const m: ManifestData = { status: 'completed', pid: 123, hostname: HOST };
+        assert.equal(runLiveness(m, HOST, alive), 'dead');
+    });
+
+    it('reports live when the owning process still exists', () => {
+        const m: ManifestData = { status: 'running', pid: 123, hostname: HOST };
+        assert.equal(runLiveness(m, HOST, alive), 'live');
+    });
+
+    it('reports dead when the owning process is gone', () => {
+        const m: ManifestData = { status: 'running', pid: 123, hostname: HOST };
+        assert.equal(runLiveness(m, HOST, dead), 'dead');
+    });
+
+    it('will not judge a pid from another machine', () => {
+        const m: ManifestData = { status: 'running', pid: 123, hostname: 'build-server' };
+        assert.equal(runLiveness(m, HOST, dead), 'unknown');
+    });
+
+    it('will not judge a manifest from a framework that records no pid', () => {
+        assert.equal(runLiveness({ status: 'running' }, HOST, dead), 'unknown');
+    });
+
+    it('will not judge a missing manifest', () => {
+        assert.equal(runLiveness(null, HOST, dead), 'unknown');
+    });
+});
+
+describe('reconcileWithLiveness', () => {
+    it('corrects a running action whose process is gone', () => {
+        assert.equal(reconcileWithLiveness('running', 'dead'), 'interrupted');
+    });
+
+    it('corrects batch polling the same way', () => {
+        assert.equal(reconcileWithLiveness('checking_batch', 'dead'), 'interrupted');
+    });
+
+    it('leaves a live run alone', () => {
+        assert.equal(reconcileWithLiveness('running', 'live'), 'running');
+    });
+
+    it('changes nothing when liveness is unknown', () => {
+        // The conservative case: an older framework or a remote host must not
+        // have its live run relabelled as interrupted.
+        assert.equal(reconcileWithLiveness('running', 'unknown'), 'running');
+    });
+
+    it('does not touch a status that was already terminal', () => {
+        for (const status of ['completed', 'failed', 'skipped', 'interrupted'] as const) {
+            assert.equal(reconcileWithLiveness(status, 'dead'), status);
+        }
+    });
+
+    it('leaves a submitted batch alone, since it outlives the process', () => {
+        // Batch work continues in the provider queue after agac exits, so a
+        // dead local process does not mean that work stopped.
+        assert.equal(reconcileWithLiveness('batch_submitted', 'dead'), 'batch_submitted');
     });
 });

@@ -10,6 +10,7 @@
  * This is the single source of truth for workflow state in the extension.
  */
 
+import * as os from 'node:os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -20,7 +21,7 @@ import {
     StatusSummary,
     WorkflowInfo,
 } from './types';
-import { resolveActionStatus } from './status';
+import { reconcileWithLiveness, resolveActionStatus, runLiveness } from './status';
 import {
     AGENT_STATUS_GLOB,
     MANIFEST_GLOB,
@@ -56,6 +57,21 @@ function toActionType(typeHint: string | undefined, dependencies: string[]): Act
         return 'merge';
     }
     return 'transform';
+}
+
+/**
+ * Whether a process with this id exists.
+ *
+ * Signal 0 performs the permission and existence checks without delivering
+ * anything. EPERM means the process is alive but owned by someone else.
+ */
+function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'EPERM';
+    }
 }
 
 /**
@@ -386,6 +402,10 @@ export class WorkflowModel implements vscode.Disposable {
             readAgentStatus(statusUri),
         ]);
 
+        // A killed process never records a terminal status, so the files can
+        // claim work is in flight long after it stopped. Ask the OS instead.
+        const liveness = runLiveness(manifest, os.hostname(), isProcessAlive);
+
         // Build a map of base names → versioned action names so downstream
         // dependencies that reference the base name (e.g. "score_quality")
         // are expanded to all versioned names (e.g. ["score_quality_1", "score_quality_2", "score_quality_3"]).
@@ -440,7 +460,10 @@ export class WorkflowModel implements vscode.Disposable {
             const actionIndex = index >= 0 ? index + 1 : resolvedActions.indexOf(actionConfig) + 1;
             const outputDir = manifestAction?.output_dir ?? actionConfig.name;
             const folderPath = path.join(agentIoPath, 'target', outputDir);
-            const status = resolveActionStatus(manifest, agentStatus, actionConfig.name);
+            const status = reconcileWithLiveness(
+                resolveActionStatus(manifest, agentStatus, actionConfig.name),
+                liveness
+            );
             const type = toActionType(actionConfig.type, actionConfig.dependencies);
             // For versioned actions, use the base name's location
             const locationName = actionConfig.baseName ?? actionConfig.name;
