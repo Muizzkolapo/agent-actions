@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The documentation site builds again. Deploy Docs had failed on every run for over a week, so the published site was frozen and still advertised v0.2.6. Two partial dependabot bumps left version sets Docusaurus requires to match exactly: @docusaurus/core at 3.10.1 against preset-classic at 3.10.2, and react ^19.2.8 against react-dom ^19.2.7."
+time: 2026-08-08T20:00:00Z
