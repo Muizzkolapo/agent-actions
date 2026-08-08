@@ -32,6 +32,13 @@ class WorkflowNode extends vscode.TreeItem {
         this.description = this.formatDescription();
         this.tooltip = this.buildTooltip();
         this.iconPath = getStatusIcon(status);
+        // Without this the row is inert: it has no context-menu contribution
+        // either, so a click would do nothing at all.
+        this.command = {
+            command: 'vscode.open',
+            title: 'Open Workflow Config',
+            arguments: [vscode.Uri.file(workflow.configPath)],
+        };
     }
 
     /** Everything needed to triage, on the collapsed row. */
