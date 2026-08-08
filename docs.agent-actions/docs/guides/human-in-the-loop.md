@@ -96,7 +96,7 @@ hitl:
 |-------|------|---------|-------------|
 | `port` | int | 3001 | Server port (1024-65535). If busy, tries up to 5 consecutive ports. |
 | `instructions` | str | *(required)* | Instructions displayed in review UI. Be clear and specific. |
-| `timeout` | int | 300 | Seconds before timeout. Server shuts down and workflow continues with `hitl_status: timeout`. |
+| `timeout` | int | 300 | Seconds before timeout. Server shuts down, partial reviews are saved, and the action fails so a re-run can resume. |
 | `require_comment_on_reject` | bool | true | If true, rejecting a record requires a comment explaining why. |
 
 ### Workflow-Level Default Timeout
@@ -185,7 +185,7 @@ HITL actions return decisions in a standardized format:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `hitl_status` | str | `"approved"`, `"rejected"`, or `"timeout"` |
+| `hitl_status` | str | `"approved"` or `"rejected"` — the only values that reach downstream actions |
 | `user_comment` | str | Optional comment from reviewer |
 | `timestamp` | str | ISO-8601 timestamp (UTC) when review was submitted |
 | `record_reviews` | list | (FILE mode only) Per-record decisions |
@@ -223,12 +223,13 @@ guard:
 guard:
   condition: "review_action.hitl_status == 'approved'"
   on_false: skip
-
-# Handle timeout
-guard:
-  condition: "review_action.hitl_status != 'timeout'"
-  on_false: skip
 ```
+
+:::note No guard is needed for timeouts or server failures
+A review that does not complete never produces a record. The HITL action fails
+instead, so `hitl_status` downstream is always `approved` or `rejected` — a
+guard like `hitl_status != 'timeout'` can never fire.
+:::
 
 ## Usage Patterns
 
@@ -439,14 +440,15 @@ hitl:
 
 After timeout:
 - Server shuts down
-- Workflow continues with `hitl_status: "timeout"`
-- Downstream guards can handle this:
+- Decisions you already made are saved to disk
+- **The action fails** — the workflow stops rather than continuing with an
+  unreviewed dataset
+- Re-running the workflow reopens the UI with your earlier decisions restored,
+  so you resume where you left off
 
-```yaml
-guard:
-  condition: "review_action.hitl_status != 'timeout'"
-  on_false: filter
-```
+The same applies when the approval UI cannot start (for example, every port in
+its range is taken). No decision was made, so nothing is written to the records
+and the action fails with the reason. Fix the cause and re-run.
 
 ## Advanced Topics
 

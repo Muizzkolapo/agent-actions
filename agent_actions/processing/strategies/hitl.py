@@ -22,6 +22,9 @@ from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 logger = logging.getLogger(__name__)
 
+# The server also emits "timeout" and "error"; those mean no review happened.
+_DECISION_STATUSES = frozenset({"approved", "rejected"})
+
 
 class HITLStrategy:
     """Strategy for FILE-granularity HITL invocation.
@@ -129,6 +132,22 @@ class HITLStrategy:
                     context={
                         "agent_name": context.agent_name,
                         "record_count": len(records),
+                    },
+                )
+
+            # Broadcasting a non-decision would stamp every record reviewed and
+            # let the run succeed while guards discard the whole dataset.
+            status = decision_payload.get("hitl_status")
+            if status not in _DECISION_STATUSES:
+                detail = decision_payload.get("user_comment") or "no detail reported"
+                raise AgentActionsError(
+                    f"HITL review did not produce a decision (hitl_status={status!r}, "
+                    f"detail: {detail}). None of these {len(records)} records were "
+                    "reviewed. Re-run the workflow to review them.",
+                    context={
+                        "agent_name": context.agent_name,
+                        "record_count": len(records),
+                        "hitl_status": status,
                     },
                 )
 
