@@ -16,15 +16,27 @@
 export type ActionStatus =
     | 'pending'
     | 'running'
+    | 'batch_submitted'
+    | 'checking_batch'
     | 'completed'
+    | 'completed_with_failures'
     | 'failed'
     | 'skipped'
     | 'interrupted';
 
-const KNOWN_STATUSES: readonly string[] = [
+/**
+ * Every member of ActionStatus, for exhaustive iteration.
+ *
+ * Kept in sync with agent_actions/workflow/managers/state.py by
+ * status.test.ts, which fails if the framework grows a member this omits.
+ */
+export const ACTION_STATUSES: readonly ActionStatus[] = [
     'pending',
     'running',
+    'batch_submitted',
+    'checking_batch',
     'completed',
+    'completed_with_failures',
     'failed',
     'skipped',
     'interrupted',
@@ -59,9 +71,9 @@ export interface AgentStatusData {
  * Unrecognised values fall back to 'pending' — which is a lie about a run that
  * did start, so a status the framework can emit must be listed above.
  */
-export function toActionStatus(status: string | undefined): ActionStatus {
+export function parseActionStatus(status: string | undefined): ActionStatus | undefined {
     const normalized = (status ?? '').toLowerCase();
-    if (KNOWN_STATUSES.includes(normalized)) {
+    if ((ACTION_STATUSES as readonly string[]).includes(normalized)) {
         return normalized as ActionStatus;
     }
     if (normalized === 'success') {
@@ -70,7 +82,11 @@ export function toActionStatus(status: string | undefined): ActionStatus {
     if (normalized === 'error') {
         return 'failed';
     }
-    return 'pending';
+    return undefined;
+}
+
+export function toActionStatus(status: string | undefined): ActionStatus {
+    return parseActionStatus(status) ?? 'pending';
 }
 
 /** Read one action's status out of the agent_status.json shape. */
@@ -102,9 +118,12 @@ export function resolveActionStatus(
     agentStatus: AgentStatusData | null,
     actionName: string
 ): ActionStatus {
-    const live = agentStatusFor(agentStatus, actionName);
+    // Only a status we understand may pre-empt the manifest. An unrecognised
+    // string is no more informative than a missing one, and treating it as
+    // 'pending' would discard a manifest entry that does say something.
+    const live = parseActionStatus(agentStatusFor(agentStatus, actionName));
     if (live !== undefined) {
-        return toActionStatus(live);
+        return live;
     }
 
     const fromManifest = manifest?.actions?.[actionName]?.status;

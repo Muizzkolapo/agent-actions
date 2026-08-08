@@ -91,10 +91,13 @@ export interface WorkflowInfo {
  */
 export interface StatusSummary {
     total: number;
-    completed: number;
-    running: number;
-    failed: number;
     pending: number;
+    running: number;
+    batch_submitted: number;
+    checking_batch: number;
+    completed: number;
+    completed_with_failures: number;
+    failed: number;
     skipped: number;
     interrupted: number;
 }

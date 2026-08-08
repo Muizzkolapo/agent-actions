@@ -473,7 +473,18 @@ export class WorkflowModel implements vscode.Disposable {
                 summary[action.status] += 1;
                 return summary;
             },
-            { total: 0, completed: 0, running: 0, failed: 0, pending: 0, skipped: 0, interrupted: 0 }
+            {
+                total: 0,
+                pending: 0,
+                running: 0,
+                batch_submitted: 0,
+                checking_batch: 0,
+                completed: 0,
+                completed_with_failures: 0,
+                failed: 0,
+                skipped: 0,
+                interrupted: 0,
+            }
         );
 
         // Sort by index

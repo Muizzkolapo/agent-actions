@@ -371,7 +371,7 @@
     "typecheck": "tsc --noEmit",
     "package": "npm run typecheck && npm test && npm run build && vsce package",
     "publish": "npm run typecheck && npm test && npm run build && vsce publish",
-    "test": "node scripts/build-tests.mjs && node --test \"out-tests/**/*.mjs\""
+    "test": "node scripts/build-tests.mjs"
   },
   "dependencies": {
     "@vscode/python-extension": "^1.0.5",

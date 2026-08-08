@@ -1,20 +1,34 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { resolveActionStatus, toActionStatus } from './status';
+import { ACTION_STATUSES, parseActionStatus, resolveActionStatus, toActionStatus } from './status';
 import type { AgentStatusData, ManifestData } from './status';
 
 describe('toActionStatus', () => {
     it('passes through every status the framework can write', () => {
-        for (const status of [
-            'pending',
-            'running',
-            'completed',
-            'failed',
-            'skipped',
-            'interrupted',
-        ]) {
+        for (const status of ACTION_STATUSES) {
             assert.equal(toActionStatus(status), status);
+        }
+    });
+
+    it('covers every member of the Python ActionStatus enum', () => {
+        // The union and agent_actions/workflow/managers/state.py evolve
+        // independently, with only the JSON on disk linking them. Read the enum
+        // rather than restating it, so drift fails here instead of rendering a
+        // real status as 'pending'.
+        // npm test runs from vscode-extension/, so the framework sits one up.
+        const enumSource = readFileSync(
+            join('..', 'agent_actions', 'workflow', 'managers', 'state.py'),
+            'utf8'
+        );
+        const body = enumSource.split('class ActionStatus(str, Enum):')[1].split('\n\n\n')[0];
+        const written = [...body.matchAll(/^\s{4}[A-Z_]+ = "([a-z_]+)"$/gm)].map((m) => m[1]);
+
+        assert.ok(written.length >= 9, `parsed too few enum members: ${written.length}`);
+        for (const status of written) {
+            assert.equal(toActionStatus(status), status, `${status} does not survive the union`);
         }
     });
 
@@ -34,11 +48,9 @@ describe('toActionStatus', () => {
         assert.equal(toActionStatus('nonsense'), 'pending');
     });
 
-    it('does not report a status the framework emits as never-started', () => {
-        // Guards the whole class of bug: a value missing from the union reads
-        // as 'pending', which claims the action never ran.
-        assert.notEqual(toActionStatus('interrupted'), 'pending');
-        assert.notEqual(toActionStatus('skipped'), 'pending');
+    it('distinguishes unknown from pending for callers that can fall back', () => {
+        assert.equal(parseActionStatus('nonsense'), undefined);
+        assert.equal(parseActionStatus('pending'), 'pending');
     });
 });
 
@@ -80,6 +92,14 @@ describe('resolveActionStatus', () => {
 
     it('ignores an agent_status entry with no usable status field', () => {
         const agentStatus = { extract: { execution_time: 1.2 } } as unknown as AgentStatusData;
+        assert.equal(resolveActionStatus(manifest, agentStatus, 'extract'), 'completed');
+    });
+});
+
+describe('resolveActionStatus with an unrecognised live value', () => {
+    it('falls back to the manifest rather than claiming pending', () => {
+        const manifest: ManifestData = { actions: { extract: { status: 'completed' } } };
+        const agentStatus = { extract: 'from_the_future' } as AgentStatusData;
         assert.equal(resolveActionStatus(manifest, agentStatus, 'extract'), 'completed');
     });
 });

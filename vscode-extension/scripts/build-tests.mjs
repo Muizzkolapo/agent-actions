@@ -8,6 +8,7 @@
  */
 
 import { build } from 'esbuild';
+import { spawnSync } from 'node:child_process';
 import { readdirSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
 
@@ -37,4 +38,12 @@ await build({
     outExtension: { '.js': '.mjs' },
 });
 
-console.log(`Compiled ${entryPoints.length} test file(s) to out-tests/`);
+// Hand `node --test` explicit paths rather than a glob: glob patterns are a
+// Node 22 feature and CI runs Node 20.
+const compiled = readdirSync('out-tests', { recursive: true })
+    .map(String)
+    .filter((file) => file.endsWith('.mjs'))
+    .map((file) => path.join('out-tests', file));
+
+const result = spawnSync(process.execPath, ['--test', ...compiled], { stdio: 'inherit' });
+process.exit(result.status ?? 1);
