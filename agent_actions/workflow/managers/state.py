@@ -27,6 +27,7 @@ class ActionStatus(str, Enum):
     COMPLETED_WITH_FAILURES = "completed_with_failures"
     FAILED = "failed"
     SKIPPED = "skipped"
+    INTERRUPTED = "interrupted"
 
 
 # Status sets used across the workflow engine. Import from here to avoid
@@ -40,6 +41,7 @@ TERMINAL_STATUSES: frozenset[ActionStatus] = frozenset(
         ActionStatus.FAILED,
         ActionStatus.SKIPPED,
         ActionStatus.COMPLETED_WITH_FAILURES,
+        ActionStatus.INTERRUPTED,
     }
 )
 RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
@@ -48,7 +50,14 @@ RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
         ActionStatus.SKIPPED,
         ActionStatus.RUNNING,
         ActionStatus.CHECKING_BATCH,
+        ActionStatus.INTERRUPTED,
     }
+)
+# Statuses whose action died mid-processing and may hold checkpointed SUCCESS
+# dispositions. _reset_retryable_actions must clear these selectively, never in
+# bulk, or resume reprocesses work that already succeeded.
+MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
+    {ActionStatus.RUNNING, ActionStatus.INTERRUPTED}
 )
 
 
@@ -187,6 +196,17 @@ class ActionStateManager:
         """
         return self._bulk_transition(
             {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, ActionStatus.FAILED
+        )
+
+    def mark_running_as_interrupted(self) -> list[str]:
+        """Mark in-flight actions as interrupted when the run is killed.
+
+        Distinct from FAILED: the action did not produce a bad result, it never
+        finished. _reset_retryable_actions relies on that difference to preserve
+        checkpointed SUCCESS dispositions on resume.
+        """
+        return self._bulk_transition(
+            {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, ActionStatus.INTERRUPTED
         )
 
     def reset_retryable(self) -> list[str]:

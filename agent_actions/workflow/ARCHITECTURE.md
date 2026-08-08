@@ -411,20 +411,30 @@ The retry command is the dedicated path for fixing partial failures.
 It clears only the failed records' dispositions, preserving successes.
 ```
 
-### RUNNING actions get selective disposition clearing
+### Mid-processing actions get selective disposition clearing
 
 ```
 _reset_retryable_actions clears RUNNING_CLEAR_DISPOSITIONS
-(FAILED, EXHAUSTED, DEFERRED) for previously-RUNNING actions.
+(FAILED, EXHAUSTED, DEFERRED) for actions that died mid-processing.
 
 It does NOT clear SUCCESS, PASSTHROUGH, FILTERED, SKIPPED.
 
-Why: RUNNING actions may have checkpointed SUCCESS dispositions.
+Why: such actions may have checkpointed SUCCESS dispositions.
 Bulk-wiping them destroys resume progress.
 
-If you change this to bulk-clear for RUNNING:
+Which statuses count is MID_PROCESSING_STATUSES:
+    RUNNING     — the process died without unwinding (SIGKILL, OOM,
+                  power loss), so nothing rewrote the status.
+    INTERRUPTED — the coordinator caught Ctrl-C/SIGTERM/cancellation
+                  and recorded a terminal status on the way out.
+
+If you change this to bulk-clear for either:
     Checkpoint resume breaks — the DispositionGate finds no terminal
     IDs and reprocesses everything from scratch.
+
+The same trap applies to routing an interrupt through FAILED: that
+status is bulk-wiped by design, so collapsing INTERRUPTED into it
+silently destroys the checkpoint it exists to protect.
 ```
 
 ### The snapshot ordering in _reset_retryable_actions matters

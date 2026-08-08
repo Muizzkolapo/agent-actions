@@ -1,6 +1,7 @@
 """Workflow event firing and logging."""
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 from agent_actions.errors import get_error_detail
@@ -157,7 +158,10 @@ class WorkflowEventLogger:
             )
         )
 
-        self._mark_run_terminal(get_error_detail(error))
+        self._mark_run_terminal(
+            get_error_detail(error),
+            self.services.core.state_manager.mark_running_as_failed,
+        )
 
         # CLI decorator checks this attribute to prevent duplicate output
         error._already_displayed = True  # type: ignore[attr-defined]
@@ -177,11 +181,19 @@ class WorkflowEventLogger:
             )
         )
 
-        self._mark_run_terminal(reason)
+        self._mark_run_terminal(
+            reason,
+            self.services.core.state_manager.mark_running_as_interrupted,
+        )
 
-    def _mark_run_terminal(self, detail: str) -> None:
-        """Sweep in-flight actions to a terminal status so a dead run reads as dead."""
+    def _mark_run_terminal(self, detail: str, sweep: Callable[[], list[str]]) -> None:
+        """Record terminal state for in-flight work so a dead run reads as dead.
+
+        The status sweep runs before the manifest write: the status file is what
+        `agac status` and the editor read per action, so it must land even if the
+        manifest write raises.
+        """
+        sweep()
+
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_failed(detail)
-
-        self.services.core.state_manager.mark_running_as_failed()
