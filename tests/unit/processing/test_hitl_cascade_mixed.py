@@ -255,3 +255,65 @@ class TestGateCascadeInteraction:
         assert spy.received[0].get("source_guid") == "r1"
 
         assert stats.unprocessed == 1
+
+
+class TestHITLCarryForwardAlignment:
+    """FILE-mode HITL reviews must stay aligned when the gate carries records.
+
+    UnifiedProcessor re-filters ``context.source_data`` for cascade-quarantined
+    records so HITL's positional broadcast stays aligned, but not for records
+    the disposition gate carries forward — the sibling case, one block earlier.
+    """
+
+    def test_reviews_not_misattributed_when_gate_carries_a_record(self):
+        """R1 already reviewed on a prior run; R2 and R3 are new.
+
+        HITL is shown [R2, R3] and returns reviews in that order. Each review
+        must land on the record the reviewer saw it against.
+        """
+        r1 = _record("r1", "active")
+        r2 = _record("r2", "active")
+        r3 = _record("r3", "active")
+
+        mock_backend = MagicMock()
+        mock_backend.get_terminal_record_ids.return_value = {"r1"}
+        mock_backend.read_target.return_value = [
+            {
+                "source_guid": "r1",
+                "content": {"hitl_review": {"hitl_status": "approved", "user_comment": "prior"}},
+            }
+        ]
+
+        context = _make_context()
+        context.source_data = [r1, r2, r3]
+        context.storage_backend = mock_backend
+        context.file_path = "test.json"
+
+        hitl_response = {
+            "hitl_status": "approved",
+            "record_reviews": [
+                {"hitl_status": "approved", "user_comment": "R2 looks good"},
+                {"hitl_status": "rejected", "user_comment": "R3 needs work"},
+            ],
+        }
+
+        with patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=([hitl_response], True),
+        ):
+            processor = UnifiedProcessor(disposition_gate=DispositionGate(mock_backend))
+            output, _stats = processor.process(
+                [r1, r2, r3], context, HITLStrategy(), raw_records=[r1, r2, r3]
+            )
+
+        r2_out = [r for r in output if r.get("source_guid") == "r2"]
+        r3_out = [r for r in output if r.get("source_guid") == "r3"]
+        assert len(r2_out) == 1
+        assert len(r3_out) == 1
+        assert r2_out[0]["content"]["hitl_review"]["user_comment"] == "R2 looks good"
+        assert r3_out[0]["content"]["hitl_review"]["user_comment"] == "R3 needs work"
+
+        # The carried record must appear exactly once, from prior output only.
+        r1_out = [r for r in output if r.get("source_guid") == "r1"]
+        assert len(r1_out) == 1
+        assert r1_out[0]["content"]["hitl_review"]["user_comment"] == "prior"
