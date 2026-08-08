@@ -40,9 +40,7 @@ class TestSynthesizedFieldsAreGuaranteed:
 
     def test_unemitted_fields_are_still_reported(self):
         configs = {"upstream": _UPSTREAM, "writer": _CONSUMER}
-        gaps = find_dag_schema_compatibility_gaps(
-            configs, synthesized={"writer": {"output_path"}}
-        )
+        gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"writer": {"output_path"}})
         assert gaps == {"writer": ["written_count"]}, gaps
 
     def test_no_synthesis_info_preserves_existing_behavior(self):

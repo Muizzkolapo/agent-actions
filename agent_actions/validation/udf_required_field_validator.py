@@ -48,6 +48,47 @@ def _last_return(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Return | N
     return max(returns, key=lambda r: r.lineno)
 
 
+def _file_udf_result_data(node: ast.expr) -> set[str] | None:
+    """Constant keys of the `data` mappings in an inline ``FileUDFResult`` return.
+
+    ``None`` when the node is not a FileUDFResult call, or its ``outputs`` are
+    built dynamically — the caller then falls through to its own handling.
+    """
+    if not (isinstance(node, ast.Call) and _callee_name(node.func) == "FileUDFResult"):
+        return None
+    outputs = next(
+        (kw.value for kw in node.keywords if kw.arg == "outputs"),
+        node.args[0] if node.args else None,
+    )
+    if not isinstance(outputs, ast.List) or not outputs.elts:
+        return None
+    keys: set[str] = set()
+    for element in outputs.elts:
+        if not isinstance(element, ast.Dict) or _has_spread(element):
+            return None
+        data = next(
+            (
+                value
+                for key, value in zip(element.keys, element.values, strict=True)
+                if isinstance(key, ast.Constant) and key.value == "data"
+            ),
+            None,
+        )
+        if not isinstance(data, ast.Dict) or _has_spread(data):
+            return None
+        keys |= _const_str_keys(data)
+    return keys
+
+
+def _callee_name(func: ast.expr) -> str | None:
+    """Bare name of a call target, whether called directly or via a module."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
 def _unconditional_output_keys(
     func: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> set[str] | None:
@@ -59,6 +100,10 @@ def _unconditional_output_keys(
     ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
+    # A FILE tool's records live under `data` in the FileUDFResult envelope.
+    envelope = _file_udf_result_data(ret.value)
+    if envelope is not None:
+        return envelope
     # `return {...}` — the literal's constant keys are the unconditional set.
     if isinstance(ret.value, ast.Dict):
         if _has_spread(ret.value):
