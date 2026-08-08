@@ -163,6 +163,16 @@ class UnifiedProcessor:
                     to_process = passing
             passing = to_process
 
+            # FILE mode: carried records are served from prior output, so drop
+            # them here too or the positional broadcast below shifts onto them.
+            if raw_records is not None and carry_results:
+                carried_guids = {r.source_guid for r in carry_results if r.source_guid is not None}
+                context.source_data = [
+                    s
+                    for s in (context.source_data or [])
+                    if s.get("source_guid") not in carried_guids
+                ]
+
         # Cascade filter — quarantine upstream-failed records before strategy
         # sees them.  Strategies only receive processable records.
         processable, quarantined_results = partition_cascade_records(
