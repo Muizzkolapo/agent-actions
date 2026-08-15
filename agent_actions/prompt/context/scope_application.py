@@ -415,16 +415,13 @@ def _resolve_source_content(
 ) -> dict | None:
     """Resolve source namespace content for a record via source_guid.
 
-    A single-record source pool is unambiguous, so an index miss still
-    resolves to it. A miss against a multi-record pool returns None —
-    substituting another record's source would silently attribute the
-    wrong document, so the caller must skip the record instead.
+    Resolution is by index match only. A miss against a non-empty pool
+    returns None — substituting any other record's source would attribute
+    the wrong document, so the caller must skip the record instead.
     """
     matched = source_index.get(source_guid)
     if not matched and source_data:
-        if len(source_data) > 1:
-            return None
-        matched = source_data[0]
+        return None
     if matched:
         content = _extract_content_data(matched)
         # First-stage records nest the user payload under content.source; return that so
