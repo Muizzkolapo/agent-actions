@@ -12,6 +12,8 @@ from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
+_MISSING = object()
+
 
 def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
     """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other fields first-wins."""
@@ -122,7 +124,7 @@ def merge_branch_records(
 
 
 def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
-    """Return the first matching correlation value from top-level or content, or None."""
+    """Return the first truthy correlation value from top-level or content, or None."""
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
         if not correlation_value:
@@ -132,6 +134,24 @@ def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> 
         if correlation_value:
             return str(correlation_value)
     return None
+
+
+def get_reduce_key_value(record: dict[str, Any], reduce_key: str) -> str | None:
+    """Return the record's *reduce_key* value as a group label, or None when absent.
+
+    A reduce_key names a field of the user's own data, so ``0``, ``""`` and
+    ``False`` are valid labels and presence — not truthiness — decides whether
+    the record is keyed.  Automatic identity candidates stay truthiness-gated:
+    those ids are framework-assigned, and an empty one means unassigned rather
+    than a group named "".
+    """
+    value = record.get(reduce_key, _MISSING)
+    if value is _MISSING or value is None:
+        content = record.get("content")
+        value = content.get(reduce_key, _MISSING) if isinstance(content, dict) else _MISSING
+    if value is _MISSING or value is None:
+        return None
+    return str(value)
 
 
 def _identify_branch_mapping(
@@ -229,22 +249,18 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
     records_without_key: list[Any] = []
 
     universal_key = _select_universal_key([r for r in records if isinstance(r, dict)])
+    auto_candidates = [universal_key] if universal_key is not None else _AUTO_KEY_CANDIDATES
 
     for record in records:
         if not isinstance(record, dict):
             records_without_key.append(record)
             continue
 
-        key_candidates: list[str] = []
-        if reduce_key:
-            key_candidates.append(reduce_key)
-        if universal_key is not None:
-            key_candidates.append(universal_key)
-        else:
-            key_candidates.extend(_AUTO_KEY_CANDIDATES)
+        correlation_value = get_reduce_key_value(record, reduce_key) if reduce_key else None
+        if correlation_value is None:
+            correlation_value = get_correlation_value(record, auto_candidates)
 
-        correlation_value = get_correlation_value(record, key_candidates)
-        if correlation_value:
+        if correlation_value is not None:
             groups_by_key.setdefault(correlation_value, []).append(record)
         else:
             records_without_key.append(record)
