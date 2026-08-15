@@ -73,6 +73,16 @@ def test_producer_inherits_parent_guid_when_available():
     assert structured[0]["source_guid"] == "parent-1"
 
 
+def test_producer_propagates_parent_source_guid_chain():
+    # A mapped parent that is itself an expansion child (minted guid + carried
+    # attribution) must hand the attribution on, or source resolution dead-ends.
+    structured = [{"content": "child"}]
+    parents = [{"source_guid": "minted-gen1", "parent_source_guid": "original-staged-guid"}]
+    _reattach_source_guid(structured, {0: 0}, parents)
+    assert structured[0]["source_guid"] == "minted-gen1"
+    assert structured[0]["parent_source_guid"] == "original-staged-guid"
+
+
 # ── storage: fail loud, never silently partial-drop ──────────────────────────
 
 

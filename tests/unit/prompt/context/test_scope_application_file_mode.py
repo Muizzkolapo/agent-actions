@@ -254,6 +254,59 @@ class TestSourceResolution:
         assert enriched == []
         assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved"}]
 
+    def test_unresolved_guid_resolves_via_parent_source_guid(self):
+        """Expansion children resolve through their carried attribution, each to its own parent."""
+        records = [
+            {
+                "source_guid": "minted-1",
+                "parent_source_guid": "guid-1",
+                "content": {"dep": {"f": 1}},
+            },
+            {
+                "source_guid": "minted-2",
+                "parent_source_guid": "guid-2",
+                "content": {"dep": {"f": 2}},
+            },
+        ]
+        scope = {"observe": ["source.url", "dep.f"]}
+        enriched, skipped = apply_context_scope_for_records(
+            records, scope, action_name="test", source_data=SOURCE_DATA
+        )
+        assert [r["content"]["url"] for r in enriched] == ["http://1.com", "http://2.com"]
+        assert skipped == []
+
+    def test_own_guid_wins_over_parent_source_guid(self):
+        """A record whose own guid resolves never falls through to its parent's."""
+        records = [
+            {
+                "source_guid": "guid-2",
+                "parent_source_guid": "guid-1",
+                "content": {"dep": {"f": 1}},
+            },
+        ]
+        scope = {"observe": ["source.url", "dep.f"]}
+        enriched, skipped = apply_context_scope_for_records(
+            records, scope, action_name="test", source_data=SOURCE_DATA
+        )
+        assert enriched[0]["content"]["url"] == "http://2.com"
+        assert skipped == []
+
+    def test_parent_source_guid_also_unresolved_skips_record(self):
+        """Both identity hops miss → skip; the chain never falls back positionally."""
+        records = [
+            {
+                "source_guid": "minted-1",
+                "parent_source_guid": "also-unknown",
+                "content": {"dep": {"f": 1}},
+            },
+        ]
+        scope = {"observe": ["source.url", "dep.f"]}
+        enriched, skipped = apply_context_scope_for_records(
+            records, scope, action_name="test", source_data=SOURCE_DATA
+        )
+        assert enriched == []
+        assert skipped == [{"source_guid": "minted-1", "reason": "source_unresolved"}]
+
     def test_no_source_data_with_source_refs_skips_record(self):
         """Explicit source ref without source_data → record skipped (source namespace absent)."""
         records = [{"source_guid": "g1", "content": {"dep": {"f": 1}}}]
@@ -264,6 +317,7 @@ class TestSourceResolution:
         assert len(enriched) == 0
         assert len(skipped) == 1
         assert skipped[0]["source_guid"] == "g1"
+        assert skipped[0]["reason"] == "observe_field_missing"
 
     def test_no_source_refs_skips_resolution(self):
         """If no directive references source, source_data is ignored."""
