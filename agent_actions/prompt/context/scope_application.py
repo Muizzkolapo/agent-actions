@@ -19,7 +19,7 @@ from agent_actions.prompt.context.scope_parsing import (
     extract_field_value,
     parse_field_reference,
 )
-from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
+from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -412,13 +412,18 @@ def _resolve_source_content(
     source_guid: str | None,
     source_index: dict[str | None, dict],
     source_data: list[dict] | None,
-) -> dict:
+) -> dict | None:
     """Resolve source namespace content for a record via source_guid.
 
-    Falls back to first source record if source_guid not found in index.
+    A single-record source pool is unambiguous, so an index miss still
+    resolves to it. A miss against a multi-record pool returns None —
+    substituting another record's source would silently attribute the
+    wrong document, so the caller must skip the record instead.
     """
     matched = source_index.get(source_guid)
     if not matched and source_data:
+        if len(source_data) > 1:
+            return None
         matched = source_data[0]
     if matched:
         content = _extract_content_data(matched)
@@ -551,10 +556,8 @@ def apply_context_scope_for_records(
     only (correct for Jinja), this function preserves ALL original namespaces in the
     enriched record because downstream guards need full namespace visibility.
 
-    Returns:
-        Tuple of (enriched_records, skipped_records).  Skipped records had
-        missing observe fields (upstream produced incomplete output) and carry
-        ``{"source_guid": ..., "reason": "observe_field_missing"}``.
+    Returns (enriched_records, skipped_records); skipped entries carry
+    ``{"source_guid": ..., "reason": OBSERVE_FIELD_MISSING | SOURCE_UNRESOLVED}``.
     """
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
@@ -577,7 +580,7 @@ def apply_context_scope_for_records(
         else ([], False)
     )
 
-    source_cache: dict[str | None, dict] = {}
+    source_cache: dict[str | None, dict | None] = {}
     enriched: list[dict] = []
     skipped: list[dict] = []
 
@@ -591,6 +594,16 @@ def apply_context_scope_for_records(
             if sguid not in source_cache:
                 source_cache[sguid] = _resolve_source_content(sguid, source_index, source_data)
             source_content = source_cache[sguid]
+            if source_content is None:
+                logger.debug(
+                    "[%s] Skipping record %s — source_guid matches no record in the "
+                    "%d-record source pool",
+                    action_name,
+                    sguid,
+                    len(source_data or []),
+                )
+                skipped.append({"source_guid": sguid, "reason": SOURCE_UNRESOLVED})
+                continue
             if source_content:
                 field_context["source"] = source_content
 
@@ -619,11 +632,13 @@ def apply_context_scope_for_records(
         enriched.append({**record, "content": enriched_content})
 
     if skipped:
+        reason_counts = Counter(s["reason"] for s in skipped)
         logger.warning(
-            "[%s] %d of %d records skipped — missing upstream observe fields",
+            "[%s] %d of %d records skipped — %s",
             action_name,
             len(skipped),
             len(records),
+            ", ".join(f"{reason}: {count}" for reason, count in sorted(reason_counts.items())),
         )
 
     return enriched, skipped
