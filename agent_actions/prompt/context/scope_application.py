@@ -3,6 +3,7 @@
 import json
 import logging
 from collections import Counter
+from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
@@ -121,6 +122,7 @@ __all__ = [
     "apply_context_scope",
     "apply_context_scope_for_records",
     "plan_flat_observed_keys",
+    "observed_key_collisions",
     "format_llm_context",
     "FRAMEWORK_NAMESPACES",
     "FRAMEWORK_FIELDS",
@@ -508,22 +510,12 @@ def _apply_drops_to_content(content: dict, drop_refs: list[str]) -> None:
             content[ns].pop(field, None)
 
 
-def plan_flat_observed_keys(
+def _expand_observed_fields(
     content: dict,
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
-    *,
-    reserved_names: frozenset[str] | set[str] = frozenset(),
-) -> tuple[dict[str, Any], set[str]]:
-    """Map observed fields to the flat keys FILE mode delivers them under.
-
-    Shared by enrichment and tool/HITL input extraction so the two cannot drift.
-    A bare key is namespace-qualified whenever writing it bare would destroy
-    data: it names a bus namespace, two namespaces both claim it (``a.*``
-    expanding onto an explicit ``b.x`` — last writer wins, by ref order), or it
-    is in *reserved_names*, which callers writing into a live record use to pass
-    the names already taken there. Returns ``(flat_keys, qualified_keys)``.
-    """
+) -> list[tuple[str, str, str, Any]]:
+    """(namespace, field, declared key, value) per observed field present in content."""
     expanded: list[tuple[str, str, str, Any]] = []
     for ns, field, output_key in resolved_observe:
         ns_data = content.get(ns)
@@ -535,28 +527,72 @@ def plan_flat_observed_keys(
             )
         elif field in ns_data:
             expanded.append((ns, field, output_key, ns_data[field]))
+    return expanded
 
-    reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES | set(reserved_names)
 
+def observed_key_collisions(
+    contents: Iterable[dict],
+    resolved_observe: list[tuple[str, str, str]],
+    qualify_wildcards: bool,
+) -> set[str]:
+    """Declared keys that two namespaces both claim somewhere in the batch.
+
+    Decided per batch, not per record: a FILE action receives every record in one
+    call, so a key present as ``b.x`` on one item and ``x`` on the next is the
+    same silent loss as the overwrite it replaces. A wildcard only reveals what
+    it collides with once expanded against real content, and ragged upstream
+    output means one record can expand to a field the next one lacks.
+    """
     claimants: dict[str, set[str]] = {}
-    for ns, _field, key, _value in expanded:
-        claimants.setdefault(key, set()).add(ns)
+    for content in contents:
+        for ns, _field, key, _value in _expand_observed_fields(
+            content, resolved_observe, qualify_wildcards
+        ):
+            claimants.setdefault(key, set()).add(ns)
+    return {key for key, namespaces in claimants.items() if len(namespaces) > 1}
+
+
+def plan_flat_observed_keys(
+    content: dict,
+    resolved_observe: list[tuple[str, str, str]],
+    qualify_wildcards: bool,
+    *,
+    collisions: frozenset[str] | set[str] = frozenset(),
+    reserved_names: frozenset[str] | set[str] = frozenset(),
+) -> tuple[dict[str, Any], set[str]]:
+    """Map observed fields to the flat keys FILE mode delivers them under.
+
+    A key is qualified when delivering it bare would lose data: two namespaces
+    claim it (*collisions*), or it names a namespace the action reads by that
+    name. Both are declaration-derived, so enrichment and the payload agree —
+    and both announce.
+
+    *reserved_names* is the extra protection a caller writing into a live record
+    needs. Applied but never announced: the payload is a flat dict where that
+    name is free, so naming a key the action will not receive only misleads.
+    """
+    declared_reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES
 
     flat: dict[str, Any] = {}
-    qualified: set[str] = set()
-    for ns, field, key, value in expanded:
-        if key in reserved or len(claimants[key]) > 1:
+    announced: set[str] = set()
+    for ns, field, key, value in _expand_observed_fields(
+        content, resolved_observe, qualify_wildcards
+    ):
+        if key in collisions or key in declared_reserved:
             key = f"{ns}.{field}"
-            qualified.add(key)
+            announced.add(key)
+        elif key in reserved_names:
+            key = f"{ns}.{field}"
         flat[key] = value
 
-    return flat, qualified
+    return flat, announced
 
 
 def _inject_flat_observed_keys(
     content: dict,
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
+    collisions: set[str],
 ) -> set[str]:
     """Inject flat observed keys into post-drop content for FILE mode enrichment.
 
@@ -564,11 +600,15 @@ def _inject_flat_observed_keys(
     all of them because downstream guards need full namespace visibility, so a
     flat key must never be written over one.
     """
-    flat, qualified = plan_flat_observed_keys(
-        content, resolved_observe, qualify_wildcards, reserved_names=frozenset(content)
+    flat, announced = plan_flat_observed_keys(
+        content,
+        resolved_observe,
+        qualify_wildcards,
+        collisions=collisions,
+        reserved_names=frozenset(content),
     )
     content.update(flat)
-    return qualified
+    return announced
 
 
 # ── FILE mode wrapper ──────────────────────────────────────────────────
@@ -619,9 +659,8 @@ def apply_context_scope_for_records(
     )
 
     source_cache: dict[str | None, dict] = {}
-    enriched: list[dict] = []
+    prepared: list[tuple[dict, dict]] = []
     skipped: list[dict] = []
-    qualified_keys: set[str] = set()
 
     for record in records:
         content = get_existing_content(record)
@@ -651,15 +690,24 @@ def apply_context_scope_for_records(
             skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING})
             continue
 
-        # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
+        # Rebuild enriched record: ALL namespaces preserved, drops applied. Flat
+        # keys wait for pass 2 — their names depend on the whole batch.
         enriched_content = deepcopy(content)
         if has_source_refs and source_cache.get(sguid):
             enriched_content["source"] = deepcopy(source_cache[sguid])
         _apply_drops_to_content(enriched_content, drop_refs)
-        qualified_keys |= _inject_flat_observed_keys(
-            enriched_content, resolved_observe, qualify_wildcards
-        )
+        prepared.append((record, enriched_content))
 
+    collisions = observed_key_collisions(
+        (content for _, content in prepared), resolved_observe, qualify_wildcards
+    )
+
+    enriched: list[dict] = []
+    qualified_keys: set[str] = set()
+    for record, enriched_content in prepared:
+        qualified_keys |= _inject_flat_observed_keys(
+            enriched_content, resolved_observe, qualify_wildcards, collisions
+        )
         enriched.append({**record, "content": enriched_content})
 
     if qualified_keys:

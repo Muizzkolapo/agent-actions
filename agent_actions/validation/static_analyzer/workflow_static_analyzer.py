@@ -1643,17 +1643,23 @@ class WorkflowStaticAnalyzer:
     def _is_file_mode_bus_action(self, action: dict[str, Any]) -> bool:
         """Whether an action reads its input as FILE-mode flat observed keys.
 
-        HITL runs the identical enrichment path as a FILE tool and defaults to
-        FILE granularity, so an absent granularity key still means file there.
+        Resolves granularity the way the config expander does: HITL defaults to
+        file, everything else falls back to the workflow's own defaults block.
         """
         kind = action.get("kind")
         vendor = action.get("model_vendor")
+        is_hitl = kind == "hitl" or vendor == "hitl"
+        if not is_hitl and kind != "tool" and vendor != "tool":
+            return False
+
         granularity = action.get("granularity")
-        if kind == "hitl" or vendor == "hitl":
-            return granularity is None or granularity == "file"
-        if kind == "tool" or vendor == "tool":
-            return granularity == "file"
-        return False
+        if granularity is None and not is_hitl:
+            defaults = self.workflow_config.get("defaults")
+            if isinstance(defaults, dict):
+                granularity = defaults.get("granularity")
+        if granularity is None:
+            return is_hitl
+        return isinstance(granularity, str) and granularity.lower() == "file"
 
     @staticmethod
     def _observed_namespace_fields(
@@ -1685,14 +1691,16 @@ class WorkflowStaticAnalyzer:
         """Warn when FILE-mode observed fields collide on their flat key.
 
         FILE tool and HITL actions read observed fields as flat top-level keys.
-        A bare key that two namespaces claim, or that names a namespace on the
-        bus, is delivered namespace-qualified (``ns.field``) so nothing is
-        overwritten — and a bare read then returns None. Flags it at preflight
-        instead of at runtime, and plans the keys through the runtime planner so
-        the two can't drift.
+        A bare key two namespaces claim, or that names a namespace the action
+        reads by that name, arrives namespace-qualified (``ns.field``) so nothing
+        is overwritten — and a bare read then returns None. Plans the keys
+        through the runtime planner so the two can't drift, and reports only what
+        the payload will see: qualification the record applies purely to protect
+        a namespace would send the user to a key their action never gets.
         """
         from agent_actions.prompt.context.scope_application import (
             _resolve_observe_refs_for_flat_keys,
+            observed_key_collisions,
             plan_flat_observed_keys,
         )
 
@@ -1700,7 +1708,6 @@ class WorkflowStaticAnalyzer:
         if not any(self._is_file_mode_bus_action(a) for a in actions):
             return []
 
-        action_names: set[str] = {a["name"] for a in actions if isinstance(a.get("name"), str)}
         schemas = self.schema_extractor.extract_from_workflow(
             self.workflow_config, self.schema_loader
         )
@@ -1726,12 +1733,13 @@ class WorkflowStaticAnalyzer:
             if qualify_wildcards:
                 qualified |= {f"{ns}.*" for ns, field, _ in resolved if field == "*"}
             # Collisions the declared refs alone can't show: a wildcard expanding
-            # onto another ref's name, or a field shadowing a namespace.
+            # onto another ref's name, or a field shadowing an observed namespace.
+            shape = self._observed_namespace_fields(observe_refs, schemas)
             _, shadowed = plan_flat_observed_keys(
-                self._observed_namespace_fields(observe_refs, schemas),
+                shape,
                 resolved,
                 qualify_wildcards,
-                reserved_names=action_names,
+                collisions=observed_key_collisions([shape], resolved, qualify_wildcards),
             )
             qualified |= shadowed
             if not qualified:
