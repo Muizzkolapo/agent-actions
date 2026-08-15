@@ -120,9 +120,9 @@ class TestWildcardExpansionCollision:
 
 
 class TestNamespaceShadowing:
-    """An observed field named for a namespace overwrites it at runtime."""
+    """An observed field named for an observed namespace lands qualified."""
 
-    def test_field_shadowing_sibling_action_is_reported(self):
+    def test_field_shadowing_observed_namespace_is_reported(self):
         workflow = {
             "actions": [
                 _llm("extract", ["classify", "title"]),
@@ -141,6 +141,19 @@ class TestNamespaceShadowing:
         assert len(warnings) == 1
         assert "extract.classify" in warnings[0].message
 
+    def test_unrelated_action_sharing_a_field_name_is_silent(self):
+        """`title` is not on `merge`'s bus and is not observed, so the runtime
+        delivers a bare `title` — warning about a qualified key would misdirect."""
+        workflow = {
+            "actions": [
+                _llm("extract", ["title"]),
+                _llm("title", ["z"]),
+                _file_action("merge", "tool", ["extract"], ["extract.title"]),
+            ]
+        }
+
+        assert _collision_warnings(workflow) == []
+
     def test_field_shadowing_bus_namespace_is_reported(self):
         workflow = {
             "actions": [
@@ -153,6 +166,46 @@ class TestNamespaceShadowing:
 
         assert len(warnings) == 1
         assert "extract.source" in warnings[0].message
+
+
+class TestGranularityResolution:
+    def test_workflow_defaults_granularity_is_honoured(self):
+        """A tool inheriting `granularity: file` from workflow defaults runs the
+        same flat-key path as one declaring it inline."""
+        workflow = {
+            "defaults": {"granularity": "file"},
+            "actions": [
+                _llm("gen_a", ["code"]),
+                _llm("gen_b", ["code"]),
+                _file_action(
+                    "merge",
+                    "tool",
+                    ["gen_a", "gen_b"],
+                    ["gen_a.code", "gen_b.code"],
+                    granularity=None,
+                ),
+            ],
+        }
+
+        assert len(_collision_warnings(workflow)) == 1
+
+    def test_workflow_defaults_record_granularity_stays_silent(self):
+        workflow = {
+            "defaults": {"granularity": "record"},
+            "actions": [
+                _llm("gen_a", ["code"]),
+                _llm("gen_b", ["code"]),
+                _file_action(
+                    "merge",
+                    "tool",
+                    ["gen_a", "gen_b"],
+                    ["gen_a.code", "gen_b.code"],
+                    granularity=None,
+                ),
+            ],
+        }
+
+        assert _collision_warnings(workflow) == []
 
 
 class TestNoFalsePositives:

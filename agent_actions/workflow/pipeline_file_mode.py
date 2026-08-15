@@ -167,6 +167,11 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     return flat
 
 
+def extract_tool_inputs(records: list[dict], context_scope: Mapping[str, Any]) -> list[dict]:
+    """Extract the tool/HITL payload for a whole FILE-mode batch."""
+    return [extract_tool_input(record, context_scope) for record in records]
+
+
 def _build_record(
     action_name: str,
     data_fields: dict,
