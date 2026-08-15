@@ -195,7 +195,7 @@ class TestApplyContextScopeForRecords:
         assert result[1]["content"]["url"] == "https://b.com"
 
     def test_source_guid_fallback_to_first_source(self):
-        """Record whose source_guid doesn't match falls back to source_data[0]."""
+        """Guid miss against a single-record pool resolves to it (unambiguous)."""
         data = [
             {"source_guid": "sg-unknown", "content": {"extract": {"text": "Q"}}},
         ]
