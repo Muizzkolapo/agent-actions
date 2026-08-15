@@ -244,15 +244,15 @@ class TestSourceResolution:
         assert [r["content"]["url"] for r in enriched] == ["http://2.com"]
         assert skipped == [{"source_guid": "ghost", "reason": "source_unresolved"}]
 
-    def test_single_source_pool_still_resolves_on_guid_miss(self):
-        """A one-record pool is unambiguous — a guid miss still resolves to it."""
+    def test_single_source_pool_guid_miss_skips_record(self):
+        """Even a one-record pool never substitutes — resolution is by guid match only."""
         records = [{"source_guid": "unknown", "content": {"dep": {"f": 1}}}]
         pool = [{"source_guid": "other", "content": {"url": "http://only.com"}}]
         enriched, skipped = apply_context_scope_for_records(
             records, {"observe": ["source.url", "dep.f"]}, action_name="test", source_data=pool
         )
-        assert enriched[0]["content"]["url"] == "http://only.com"
-        assert skipped == []
+        assert enriched == []
+        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved"}]
 
     def test_no_source_data_with_source_refs_skips_record(self):
         """Explicit source ref without source_data → record skipped (source namespace absent)."""
