@@ -20,6 +20,7 @@ from agent_actions.prompt.context.scope_parsing import (
     parse_field_reference,
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def build_workflow_metadata(name: str, run_id: str | None = None) -> dict[str, A
 __all__ = [
     "apply_context_scope",
     "apply_context_scope_for_records",
+    "plan_flat_observed_keys",
     "format_llm_context",
     "FRAMEWORK_NAMESPACES",
     "FRAMEWORK_FIELDS",
@@ -506,28 +508,67 @@ def _apply_drops_to_content(content: dict, drop_refs: list[str]) -> None:
             content[ns].pop(field, None)
 
 
-def _inject_flat_observed_keys(
+def plan_flat_observed_keys(
     content: dict,
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
-) -> None:
-    """Inject flat observed keys into content for FILE mode enrichment.
+    *,
+    reserved_names: frozenset[str] | set[str] = frozenset(),
+) -> tuple[dict[str, Any], set[str]]:
+    """Map observed fields to the flat keys FILE mode delivers them under.
 
-    Reads values from post-drop content namespaces and injects them as
-    top-level keys. Wildcard refs expand to all fields in the namespace.
-    Keys are namespace-qualified when collisions are detected.
+    Shared by enrichment and tool/HITL input extraction so the two cannot drift.
+    A bare key is namespace-qualified whenever writing it bare would destroy
+    data: it names a bus namespace, two namespaces both claim it (``a.*``
+    expanding onto an explicit ``b.x`` — last writer wins, by ref order), or it
+    is in *reserved_names*, which callers writing into a live record use to pass
+    the names already taken there. Returns ``(flat_keys, qualified_keys)``.
     """
+    expanded: list[tuple[str, str, str, Any]] = []
     for ns, field, output_key in resolved_observe:
         ns_data = content.get(ns)
         if not isinstance(ns_data, dict):
             continue
-
         if field == "*":
-            for f, v in ns_data.items():
-                key = f"{ns}.{f}" if qualify_wildcards else f
-                content[key] = v
+            expanded.extend(
+                (ns, f, f"{ns}.{f}" if qualify_wildcards else f, v) for f, v in ns_data.items()
+            )
         elif field in ns_data:
-            content[output_key] = ns_data[field]
+            expanded.append((ns, field, output_key, ns_data[field]))
+
+    reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES | set(reserved_names)
+
+    claimants: dict[str, set[str]] = {}
+    for ns, _field, key, _value in expanded:
+        claimants.setdefault(key, set()).add(ns)
+
+    flat: dict[str, Any] = {}
+    qualified: set[str] = set()
+    for ns, field, key, value in expanded:
+        if key in reserved or len(claimants[key]) > 1:
+            key = f"{ns}.{field}"
+            qualified.add(key)
+        flat[key] = value
+
+    return flat, qualified
+
+
+def _inject_flat_observed_keys(
+    content: dict,
+    resolved_observe: list[tuple[str, str, str]],
+    qualify_wildcards: bool,
+) -> set[str]:
+    """Inject flat observed keys into post-drop content for FILE mode enrichment.
+
+    Every namespace already in *content* is reserved: the enriched record keeps
+    all of them because downstream guards need full namespace visibility, so a
+    flat key must never be written over one.
+    """
+    flat, qualified = plan_flat_observed_keys(
+        content, resolved_observe, qualify_wildcards, reserved_names=frozenset(content)
+    )
+    content.update(flat)
+    return qualified
 
 
 # ── FILE mode wrapper ──────────────────────────────────────────────────
@@ -580,6 +621,7 @@ def apply_context_scope_for_records(
     source_cache: dict[str | None, dict] = {}
     enriched: list[dict] = []
     skipped: list[dict] = []
+    qualified_keys: set[str] = set()
 
     for record in records:
         content = get_existing_content(record)
@@ -614,9 +656,21 @@ def apply_context_scope_for_records(
         if has_source_refs and source_cache.get(sguid):
             enriched_content["source"] = deepcopy(source_cache[sguid])
         _apply_drops_to_content(enriched_content, drop_refs)
-        _inject_flat_observed_keys(enriched_content, resolved_observe, qualify_wildcards)
+        qualified_keys |= _inject_flat_observed_keys(
+            enriched_content, resolved_observe, qualify_wildcards
+        )
 
         enriched.append({**record, "content": enriched_content})
+
+    if qualified_keys:
+        logger.warning(
+            "Action '%s': observed field(s) would have overwritten a namespace or "
+            "another observed field on the record. Flat keys are namespace-qualified "
+            "(%s) — an action reading the bare key will not find it; read the "
+            "qualified key instead.",
+            action_name,
+            ", ".join(sorted(qualified_keys)),
+        )
 
     if skipped:
         logger.warning(

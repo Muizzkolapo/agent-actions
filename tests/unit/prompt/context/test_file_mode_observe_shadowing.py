@@ -1,20 +1,54 @@
 """FILE-mode flat observed keys must never destroy what already holds their name.
 
-Each observed field is injected into a record's ``content`` as a bare top-level
-key. Written blind, that key overwrites whatever already owns the name — a
-sibling namespace, a framework bus namespace, or another observed field a
-wildcard expanded to. The overwrite is last-writer-wins and order-dependent,
-and clobbering a namespace additionally strands that namespace's own observed
-fields: they resolve against a non-dict and vanish.
-
-The enriched record is the data bus for ``kind: tool`` and ``kind: hitl`` FILE
-actions, so every one of these is silent data loss on the way into a UDF.
+Each observed field lands in a record's ``content`` as a bare top-level key.
+Written blind it overwrites whatever owns that name — a sibling namespace, a bus
+namespace, or another observed field a wildcard expanded to — last writer wins,
+by ref order. Clobbering a namespace also strands that namespace's own observed
+fields, which then resolve against a non-dict and vanish. The enriched record is
+the data bus for FILE ``kind: tool`` and ``kind: hitl``, so each is silent data
+loss on the way into a UDF.
 """
 
 import logging
 
+import pytest
+
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.workflow.pipeline_file_mode import extract_tool_input
+
+_SCOPE_LOGGER = "agent_actions.prompt.context.scope_application"
+
+
+class _Collector(logging.Handler):
+    def __init__(self, messages):
+        super().__init__(logging.WARNING)
+        self.messages = messages
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@pytest.fixture
+def scope_warnings():
+    """Warnings emitted by the scope logger, captured on that logger directly.
+
+    ``LoggerFactory`` sets ``propagate = False`` on the ``agent_actions`` logger
+    once initialized, so caplog's root handler sees these records only when no
+    earlier test has set the bridge up.
+    """
+    logger = logging.getLogger(_SCOPE_LOGGER)
+    messages: list[str] = []
+    handler = _Collector(messages)
+    saved_level, saved_disabled = logger.level, logger.disabled
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    logger.disabled = False
+    try:
+        yield messages
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(saved_level)
+        logger.disabled = saved_disabled
 
 
 def _enrich(content, observe, *, source_data=None, action_name="probe"):
@@ -54,11 +88,10 @@ class TestWildcardExpandedFieldCollision:
 
         assert extract_tool_input(record, cs) == {"a.x": "FROM_A", "y": 2, "b.x": "FROM_B"}
 
-    def test_collision_is_announced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            _enrich(dict(self.CONTENT), ["a.*", "b.x"], action_name="merge")
+    def test_collision_is_announced(self, scope_warnings):
+        _enrich(dict(self.CONTENT), ["a.*", "b.x"], action_name="merge")
 
-        assert any("merge" in r.message and "x" in r.message for r in caplog.records)
+        assert any("merge" in m and "a.x" in m and "b.x" in m for m in scope_warnings)
 
 
 class TestSiblingNamespaceShadowing:
@@ -135,9 +168,7 @@ class TestFrameworkNamespaceShadowing:
     def test_bus_namespace_name_qualified_even_when_absent(self):
         """``version`` is injected downstream for guards and templates; a bare
         flat key of that name would shadow it there."""
-        content = _enrich({"extract": {"version": 3, "title": "T"}}, ["extract.version"])[
-            "content"
-        ]
+        content = _enrich({"extract": {"version": 3, "title": "T"}}, ["extract.version"])["content"]
 
         assert content["extract.version"] == 3
         assert "version" not in content
@@ -168,8 +199,7 @@ class TestNonCollidingKeysStayBare:
         assert content["x"] == 1
         assert content["y"] == 2
 
-    def test_no_warning_when_nothing_collides(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            _enrich({"extract": {"text": "hello"}}, ["extract.text"])
+    def test_no_warning_when_nothing_collides(self, scope_warnings):
+        _enrich({"extract": {"text": "hello"}}, ["extract.text"])
 
-        assert caplog.records == []
+        assert scope_warnings == []

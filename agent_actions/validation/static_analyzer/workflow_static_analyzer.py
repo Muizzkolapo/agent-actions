@@ -1640,25 +1640,74 @@ class WorkflowStaticAnalyzer:
 
         return warnings
 
-    def _check_file_tool_observe_collision(self) -> list[StaticTypeWarning]:
-        """Warn when a FILE-mode tool observes colliding field names across namespaces.
+    def _is_file_mode_bus_action(self, action: dict[str, Any]) -> bool:
+        """Whether an action reads its input as FILE-mode flat observed keys.
 
-        FILE tools read observed fields as flat top-level keys; when namespaces collide
-        the framework qualifies the keys (``ns.field``) and a bare read returns None.
-        Flags it at preflight instead of at runtime, and reuses the runtime resolver so
+        HITL runs the identical enrichment path as a FILE tool and defaults to
+        FILE granularity, so an absent granularity key still means file there.
+        """
+        kind = action.get("kind")
+        vendor = action.get("model_vendor")
+        granularity = action.get("granularity")
+        if kind == "hitl" or vendor == "hitl":
+            return granularity is None or granularity == "file"
+        if kind == "tool" or vendor == "tool":
+            return granularity == "file"
+        return False
+
+    @staticmethod
+    def _observed_namespace_fields(
+        observe_refs: list[str], schemas: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
+        """Build the namespace→fields shape the runtime would enrich against.
+
+        Declared output schemas stand in for the record's namespaces so wildcard
+        refs can be expanded here the way runtime expands them against real
+        content. A namespace whose schema is dynamic or schemaless contributes
+        only its explicitly observed fields — its wildcard expansion is not
+        knowable before the run.
+        """
+        shape: dict[str, dict[str, Any]] = {}
+        for ref in observe_refs:
+            if not isinstance(ref, str) or "." not in ref:
+                continue
+            ns, field = ref.split(".", 1)
+            fields = shape.setdefault(ns, {})
+            schema = schemas.get(ns)
+            if field == "*":
+                if schema and not (schema.is_dynamic or schema.is_schemaless):
+                    fields.update(dict.fromkeys(schema.available_fields))
+            else:
+                fields[field] = None
+        return shape
+
+    def _check_file_tool_observe_collision(self) -> list[StaticTypeWarning]:
+        """Warn when FILE-mode observed fields collide on their flat key.
+
+        FILE tool and HITL actions read observed fields as flat top-level keys.
+        A bare key that two namespaces claim, or that names a namespace on the
+        bus, is delivered namespace-qualified (``ns.field``) so nothing is
+        overwritten — and a bare read then returns None. Flags it at preflight
+        instead of at runtime, and plans the keys through the runtime planner so
         the two can't drift.
         """
         from agent_actions.prompt.context.scope_application import (
             _resolve_observe_refs_for_flat_keys,
+            plan_flat_observed_keys,
+        )
+
+        actions = [a for a in self.workflow_config.get("actions", []) if isinstance(a, dict)]
+        if not any(self._is_file_mode_bus_action(a) for a in actions):
+            return []
+
+        action_names: set[str] = {a["name"] for a in actions if isinstance(a.get("name"), str)}
+        schemas = self.schema_extractor.extract_from_workflow(
+            self.workflow_config, self.schema_loader
         )
 
         warnings: list[StaticTypeWarning] = []
-        for action in self.workflow_config.get("actions", []):
-            if not isinstance(action, dict):
-                continue
-            if action.get("kind") != "tool" and action.get("model_vendor") != "tool":
-                continue
-            if action.get("granularity") != "file":
+        for action in actions:
+            if not self._is_file_mode_bus_action(action):
                 continue
             context_scope = action.get("context_scope")
             if not isinstance(context_scope, dict):
@@ -1670,24 +1719,33 @@ class WorkflowStaticAnalyzer:
             resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
                 observe_refs, emit_diagnostics=False
             )
-            # Match runtime exactly: a specific field is qualified when its bare name
-            # collides; wildcards are qualified only when 2+ distinct namespaces use
-            # one (qualify_wildcards) — not when the same namespace is observed twice.
-            qualified = [out for _, field, out in resolved if field != "*" and out != field]
+            # Bare names declared in two namespaces are qualified by the resolver;
+            # wildcards are qualified only when 2+ distinct namespaces use one
+            # (qualify_wildcards) — not when the same namespace is observed twice.
+            qualified = {out for _, field, out in resolved if field != "*" and out != field}
             if qualify_wildcards:
-                qualified += [f"{ns}.*" for ns in {ns for ns, field, _ in resolved if field == "*"}]
-            qualified = sorted(qualified)
+                qualified |= {f"{ns}.*" for ns, field, _ in resolved if field == "*"}
+            # Collisions the declared refs alone can't show: a wildcard expanding
+            # onto another ref's name, or a field shadowing a namespace.
+            _, shadowed = plan_flat_observed_keys(
+                self._observed_namespace_fields(observe_refs, schemas),
+                resolved,
+                qualify_wildcards,
+                reserved_names=action_names,
+            )
+            qualified |= shadowed
             if not qualified:
                 continue
 
             name = action.get("name", "unknown")
+            kind_label = "HITL action" if action.get("kind") == "hitl" else "FILE tool"
             warnings.append(
                 StaticTypeWarning(
                     message=(
-                        f"FILE tool '{name}' observes namespaces with colliding field "
-                        f"names; input keys are delivered namespace-qualified "
-                        f"({', '.join(qualified)}). A tool reading the bare field name "
-                        f"receives None."
+                        f"{kind_label} '{name}' observes colliding field names; input "
+                        f"keys are delivered namespace-qualified "
+                        f"({', '.join(sorted(qualified))}). An action reading the bare "
+                        f"field name receives None."
                     ),
                     location=FieldLocation(
                         agent_name=name,
@@ -1696,7 +1754,7 @@ class WorkflowStaticAnalyzer:
                     ),
                     referenced_agent="",
                     referenced_field="",
-                    hint="Read the namespace-qualified keys in the tool, or observe "
+                    hint="Read the namespace-qualified keys in the action, or observe "
                     "non-colliding fields.",
                 )
             )
