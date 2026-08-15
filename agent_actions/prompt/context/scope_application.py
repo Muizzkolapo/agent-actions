@@ -412,14 +412,19 @@ def _resolve_source_content(
     source_guid: str | None,
     source_index: dict[str | None, dict],
     source_data: list[dict] | None,
+    parent_source_guid: str | None = None,
 ) -> dict | None:
-    """Resolve source namespace content for a record via source_guid.
+    """Resolve source namespace content for a record by identity.
 
-    Resolution is by index match only. A miss against a non-empty pool
-    returns None — substituting any other record's source would attribute
-    the wrong document, so the caller must skip the record instead.
+    Tries the record's own source_guid, then its carried parent_source_guid
+    (the original pool identity, preserved when expansion re-mints guids).
+    A miss on both against a non-empty pool returns None — substituting any
+    other record's source would attribute the wrong document, so the caller
+    must skip the record instead.
     """
     matched = source_index.get(source_guid)
+    if not matched and parent_source_guid:
+        matched = source_index.get(parent_source_guid)
     if not matched and source_data:
         return None
     if matched:
@@ -577,20 +582,24 @@ def apply_context_scope_for_records(
         else ([], False)
     )
 
-    source_cache: dict[str | None, dict | None] = {}
+    source_cache: dict[tuple[str | None, str | None], dict | None] = {}
     enriched: list[dict] = []
     skipped: list[dict] = []
 
     for record in records:
         content = get_existing_content(record)
         sguid = record.get("source_guid")
+        psguid = record.get("parent_source_guid")
 
         # Build field_context with source namespace resolved
         field_context = dict(content)
         if has_source_refs:
-            if sguid not in source_cache:
-                source_cache[sguid] = _resolve_source_content(sguid, source_index, source_data)
-            source_content = source_cache[sguid]
+            cache_key = (sguid, psguid)
+            if cache_key not in source_cache:
+                source_cache[cache_key] = _resolve_source_content(
+                    sguid, source_index, source_data, psguid
+                )
+            source_content = source_cache[cache_key]
             if source_content is None:
                 logger.debug(
                     "[%s] Skipping record %s — source_guid matches no record in the "
@@ -621,8 +630,8 @@ def apply_context_scope_for_records(
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
         enriched_content = deepcopy(content)
-        if has_source_refs and source_cache.get(sguid):
-            enriched_content["source"] = deepcopy(source_cache[sguid])
+        if has_source_refs and source_cache.get((sguid, psguid)):
+            enriched_content["source"] = deepcopy(source_cache[(sguid, psguid)])
         _apply_drops_to_content(enriched_content, drop_refs)
         _inject_flat_observed_keys(enriched_content, resolved_observe, qualify_wildcards)
 

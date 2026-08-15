@@ -49,9 +49,13 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
+# parent_source_guid is the original source-pool identity, set when an expansion
+# re-mints source_guid — source resolution follows it when the minted guid
+# cannot match the pool.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
+        "parent_source_guid",
         "version_correlation_id",
     }
 )
@@ -269,8 +273,9 @@ def _carry_persistent_fields(
 
     Persistent fields fall into two categories:
 
-    1. **Tracking fields** (``source_guid``, ``version_correlation_id``) —
-       the record's stable identity, set once at creation.
+    1. **Tracking fields** (``source_guid``, ``parent_source_guid``,
+       ``version_correlation_id``) — the record's stable identity, set once
+       at creation (parent_source_guid at expansion re-mint).
     2. **Lifecycle fields** (``_state_history``, ``_state_schema_version``) —
        metadata tied to the record's state machine; ``_state_history`` grows
        across stages, ``_state_schema_version`` tags the history format.
