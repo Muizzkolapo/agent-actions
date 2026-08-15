@@ -107,7 +107,9 @@ class TestWildcardExpansionCollision:
         assert len(warnings) == 1
         assert "code" in warnings[0].message
 
-    def test_wildcard_with_disjoint_fields_is_silent(self):
+    def test_explicit_ref_beside_a_wildcard_is_reported(self):
+        """Even with disjoint schemas today, `gen_a.*` could grow a `score`, so
+        the key is qualified up front and preflight says so."""
         workflow = {
             "actions": [
                 _llm("gen_a", ["code", "notes"]),
@@ -116,7 +118,10 @@ class TestWildcardExpansionCollision:
             ]
         }
 
-        assert _collision_warnings(workflow) == []
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "gen_b.score" in warnings[0].message
 
 
 class TestNamespaceShadowing:
@@ -206,6 +211,67 @@ class TestGranularityResolution:
         }
 
         assert _collision_warnings(workflow) == []
+
+
+class TestProductionActionShape:
+    """The expander capitalizes granularity and folds defaults into each action,
+    so preflight sees `granularity: "File"` and no defaults block. Comparing
+    against the lowercase literal made this check dead in production."""
+
+    def test_capitalized_granularity_from_the_expander_is_covered(self):
+        workflow = {
+            "actions": [
+                _llm("gen_a", ["code"]),
+                _llm("gen_b", ["code"]),
+                {
+                    "name": "merge",
+                    "kind": "tool",
+                    "function": "merge_fn",
+                    "granularity": "File",
+                    "depends_on": ["gen_a", "gen_b"],
+                    "context_scope": {"observe": ["gen_a.code", "gen_b.code"]},
+                },
+            ]
+        }
+
+        assert len(_collision_warnings(workflow)) == 1
+
+    def test_capitalized_record_granularity_stays_silent(self):
+        workflow = {
+            "actions": [
+                _llm("gen_a", ["code"]),
+                _llm("gen_b", ["code"]),
+                {
+                    "name": "merge",
+                    "kind": "tool",
+                    "function": "merge_fn",
+                    "granularity": "Record",
+                    "depends_on": ["gen_a", "gen_b"],
+                    "context_scope": {"observe": ["gen_a.code", "gen_b.code"]},
+                },
+            ]
+        }
+
+        assert _collision_warnings(workflow) == []
+
+
+class TestSchemalessNamespaces:
+    def test_schemaless_wildcard_does_not_invent_a_collision(self):
+        """A schemaless namespace's fields are unknown before the run, so its
+        wildcard must not be expanded into a claim preflight reports."""
+        workflow = {
+            "actions": [
+                {"name": "gen_a", "prompt": "p"},
+                _llm("gen_b", ["content"]),
+                _file_action("merge", "tool", ["gen_a", "gen_b"], ["gen_a.*", "gen_b.content"]),
+            ]
+        }
+
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "gen_b.content" in warnings[0].message
+        assert "gen_a." not in warnings[0].message
 
 
 class TestNoFalsePositives:

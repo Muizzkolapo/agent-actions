@@ -66,13 +66,15 @@ class TestNonCollidingStayBare:
 
         assert extract_tool_input(_enriched(record, cs), cs) == {"q": "Q1", "a": "A1"}
 
-    def test_cross_namespace_distinct_fields_stay_bare(self):
+    def test_explicit_ref_is_qualified_when_a_wildcard_could_reach_it(self):
+        """Whether `extract.*` expands onto `category` is a property of the data,
+        so the only key shape stable across runs qualifies the explicit ref."""
         record = {"content": {"extract": {"q": "Q1"}, "classify": {"category": "FAQ", "x": 1}}}
         cs = {"observe": ["extract.*", "classify.category"]}
 
         business = extract_tool_input(_enriched(record, cs), cs)
 
-        assert business == {"q": "Q1", "category": "FAQ"}
+        assert business == {"q": "Q1", "classify.category": "FAQ"}
 
     def test_no_observe_flattens_all_namespaces(self):
         record = {"content": {"extract": {"q": "Q1"}, "classify": {"category": "FAQ"}}}

@@ -2,11 +2,13 @@
 
 Each observed field lands in a record's ``content`` as a bare top-level key.
 Written blind it overwrites whatever owns that name — a sibling namespace, a bus
-namespace, or another observed field a wildcard expanded to — last writer wins,
-by ref order. Clobbering a namespace also strands that namespace's own observed
-fields, which then resolve against a non-dict and vanish. The enriched record is
-the data bus for FILE ``kind: tool`` and ``kind: hitl``, so each is silent data
-loss on the way into a UDF.
+namespace, or a field a wildcard expanded onto — last writer wins, by ref order.
+Clobbering a namespace also strands that namespace's own observed fields, which
+then resolve against a non-dict and vanish. That record is the data bus for FILE
+``kind: tool`` and ``kind: hitl``, so each case is silent data loss into a UDF.
+
+Key names come from the observe refs alone; deriving them from the values would
+make a UDF's keys depend on which records share its file.
 """
 
 import logging
@@ -15,7 +17,7 @@ from copy import deepcopy
 import pytest
 
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.workflow.pipeline_file_mode import extract_tool_input, extract_tool_inputs
+from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 _SCOPE_LOGGER = "agent_actions.prompt.context.scope_application"
 
@@ -72,10 +74,9 @@ class TestWildcardExpandedFieldCollision:
         record = _enrich(dict(self.CONTENT), ["a.*", "b.x"])
         content = record["content"]
 
-        assert content["a.x"] == "FROM_A"
+        assert content["x"] == "FROM_A"
         assert content["b.x"] == "FROM_B"
         assert content["y"] == 2
-        assert "x" not in content, "a bare key can only carry one of the two values"
 
     def test_key_shape_is_order_independent(self):
         forward = _enrich(dict(self.CONTENT), ["a.*", "b.x"])["content"]
@@ -87,74 +88,69 @@ class TestWildcardExpandedFieldCollision:
         cs = {"observe": ["a.*", "b.x"]}
         record = _enrich(dict(self.CONTENT), cs["observe"])
 
-        assert extract_tool_input(record, cs) == {"a.x": "FROM_A", "y": 2, "b.x": "FROM_B"}
+        assert extract_tool_input(record, cs) == {"x": "FROM_A", "y": 2, "b.x": "FROM_B"}
 
     def test_collision_is_announced(self, scope_warnings):
         _enrich(dict(self.CONTENT), ["a.*", "b.x"], action_name="merge")
 
-        assert any("merge" in m and "a.x" in m and "b.x" in m for m in scope_warnings)
+        assert any("merge" in m and "b.x" in m for m in scope_warnings)
 
 
-class TestKeyShapeIsBatchStable:
-    """A FILE action receives the whole batch in one call, so a key may not be
-    renamed between records — a UDF reading ``item["b.x"]`` cannot have that key
-    exist on one item and not the next."""
+class TestKeyShapeIsDeclarationDerived:
+    """Key names come from the observe refs, never the values, so a record's keys
+    cannot depend on which other records share its file."""
 
-    RECORDS = [
-        {"source_guid": "g1", "content": {"a": {"x": 1}, "b": {"x": 2}}},
-        {"source_guid": "g2", "content": {"a": {"y": 3}, "b": {"x": 2}}},
-    ]
-
-    def _enriched(self, observe):
-        enriched, skipped = apply_context_scope_for_records(
-            records=deepcopy(self.RECORDS),
-            context_scope={"observe": observe},
-            action_name="agg",
-        )
-        assert not skipped
-        return enriched
-
-    def test_collision_in_one_record_qualifies_the_whole_batch(self):
-        """`a.x` collides with `b.x` only in g1; g2 must still deliver `b.x`."""
+    def test_explicit_ref_qualifies_whenever_a_wildcard_could_reach_it(self):
+        """`a.*` may or may not expand onto `x` depending on the data; qualifying
+        `b.x` only when it actually does would make the key data-dependent."""
         cs = {"observe": ["a.*", "b.x"]}
-
-        payloads = extract_tool_inputs(self._enriched(cs["observe"]), cs)
-
-        assert payloads == [{"a.x": 1, "b.x": 2}, {"y": 3, "b.x": 2}]
-
-    def test_enriched_records_agree_with_the_payload(self):
-        enriched = self._enriched(["a.*", "b.x"])
-
-        assert enriched[0]["content"]["b.x"] == 2
-        assert enriched[1]["content"]["b.x"] == 2
-        assert "x" not in enriched[1]["content"]
-
-    def test_no_collision_anywhere_in_the_batch_keeps_bare_keys(self):
         records = [
-            {"source_guid": "g1", "content": {"a": {"x": 1}, "b": {"z": 2}}},
-            {"source_guid": "g2", "content": {"a": {"y": 3}, "b": {"z": 4}}},
+            {"source_guid": "g1", "content": {"a": {"x": 1}, "b": {"x": 2}}},
+            {"source_guid": "g2", "content": {"a": {"y": 3}, "b": {"x": 2}}},
         ]
-        cs = {"observe": ["a.*", "b.z"]}
         enriched, _ = apply_context_scope_for_records(
             records=records, context_scope=cs, action_name="agg"
         )
 
-        assert extract_tool_inputs(enriched, cs) == [{"x": 1, "z": 2}, {"y": 3, "z": 4}]
+        payloads = [extract_tool_input(r, cs) for r in enriched]
 
+        assert payloads == [{"x": 1, "b.x": 2}, {"y": 3, "b.x": 2}]
 
-class TestNoObserveFlatten:
-    """With no observe declared the payload flattens every namespace — the same
-    bare-key overwrite hazard, on the same bus."""
+    def test_same_record_gives_the_same_keys_alone_or_with_file_mates(self):
+        cs = {"observe": ["a.*", "b.status"]}
+        keeper = {"source_guid": "k", "content": {"a": {"keep": "yes"}, "b": {"status": "B"}}}
+        collider = {"source_guid": "c", "content": {"a": {"status": "X"}, "b": {"status": "Y"}}}
 
-    def test_colliding_namespaces_do_not_overwrite(self):
-        records = [{"content": {"a": {"x": "FROM_A"}, "b": {"x": "FROM_B"}}}]
+        alone, _ = apply_context_scope_for_records(
+            records=[deepcopy(keeper)], context_scope=cs, action_name="agg"
+        )
+        together, _ = apply_context_scope_for_records(
+            records=[deepcopy(keeper), collider], context_scope=cs, action_name="agg"
+        )
 
-        assert extract_tool_inputs(records, {}) == [{"a.x": "FROM_A", "b.x": "FROM_B"}]
+        assert extract_tool_input(alone[0], cs) == extract_tool_input(together[0], cs)
 
-    def test_distinct_fields_still_flatten_bare(self):
-        records = [{"content": {"a": {"q": "Q"}, "b": {"category": "C"}}}]
+    def test_single_wildcard_with_no_other_namespace_stays_bare(self):
+        cs = {"observe": ["a.*", "a.x"]}
+        enriched, _ = apply_context_scope_for_records(
+            records=[{"source_guid": "g", "content": {"a": {"x": 1, "y": 2}}}],
+            context_scope=cs,
+            action_name="agg",
+        )
 
-        assert extract_tool_inputs(records, {}) == [{"q": "Q", "category": "C"}]
+        assert extract_tool_input(enriched[0], cs) == {"x": 1, "y": 2}
+
+    def test_record_and_payload_agree_on_every_key(self):
+        cs = {"observe": ["a.*", "b.x"]}
+        enriched, _ = apply_context_scope_for_records(
+            records=[{"source_guid": "g", "content": {"a": {"x": 1}, "b": {"x": 2}}}],
+            context_scope=cs,
+            action_name="agg",
+        )
+        payload = extract_tool_input(enriched[0], cs)
+
+        for key, value in payload.items():
+            assert enriched[0]["content"][key] == value
 
 
 class TestSiblingNamespaceShadowing:
@@ -180,6 +176,12 @@ class TestSiblingNamespaceShadowing:
 
         assert extract_tool_input(record, cs) == {"a.b": "CLOBBER", "y": "REAL_B_Y"}
 
+    def test_namespace_shadowing_is_announced(self, scope_warnings):
+        """The observed-namespace case is payload-visible, so it must be said."""
+        _enrich(dict(self.CONTENT), ["a.b", "b.y"], action_name="merge")
+
+        assert any("merge" in m and "a.b" in m for m in scope_warnings)
+
     def test_unobserved_sibling_namespace_survives(self):
         """The enriched record carries every namespace for downstream guards,
         so an unobserved namespace is no less protected than an observed one."""
@@ -194,7 +196,7 @@ class TestSiblingNamespaceShadowing:
         cs = {"observe": ["a.c"]}
         record = _enrich({"a": {"c": "CLOBBER"}, "c": {"z": 1}}, cs["observe"])
 
-        assert extract_tool_inputs([record], cs) == [{"c": "CLOBBER"}]
+        assert extract_tool_input(record, cs) == {"c": "CLOBBER"}
 
     def test_record_only_qualification_is_not_announced(self, scope_warnings):
         """Telling the user to 'read the qualified key' would send them to a key

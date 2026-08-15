@@ -129,71 +129,40 @@ def _resolve_input_record(
     return original_data[input_idx]
 
 
-def _flatten_all_namespaces(contents: list[dict]) -> list[dict]:
-    """Flatten every namespace for the no-observe case, qualifying real collisions.
+def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
+    """Extract observed business fields from an enriched record for tool input.
 
-    Two namespaces holding the same field name would otherwise flatten
-    last-writer-wins onto the same bus the observed path delivers on.
-    """
-    claimants: dict[str, set[str]] = {}
-    for content in contents:
-        for ns, ns_data in content.items():
-            if isinstance(ns_data, dict):
-                for field in ns_data:
-                    claimants.setdefault(field, set()).add(ns)
-    collisions = {field for field, namespaces in claimants.items() if len(namespaces) > 1}
-
-    business: list[dict] = []
-    for content in contents:
-        flat: dict = {}
-        for ns, ns_data in content.items():
-            if not isinstance(ns_data, dict):
-                continue
-            for field, value in ns_data.items():
-                flat[f"{ns}.{field}" if field in collisions else field] = value
-        business.append(flat)
-    return business
-
-
-def extract_tool_inputs(records: list[dict], context_scope: Mapping[str, Any]) -> list[dict]:
-    """Build the tool/HITL payload for a whole FILE-mode batch.
-
-    Reads post-drop enriched content. Bare field names two namespaces claim, or
-    that name a namespace the action reads by that name, are delivered
-    namespace-qualified (``ns.field``) so no observed value is dropped. The
-    batch decides those names together: a FILE action gets every record in one
-    call, so a key may not exist on one item and be renamed on the next. Drops
-    and diagnostics were already handled by ``apply_context_scope_for_records``.
+    Reads post-drop enriched content and plans keys through the same function
+    enrichment uses, so the payload and the record agree. Names come from the
+    observe refs alone, so they do not vary with the data. When no observe is
+    configured, flattens all content namespaces.
     """
     from agent_actions.prompt.context.scope_application import (
         _resolve_observe_refs_for_flat_keys,
-        observed_key_collisions,
         plan_flat_observed_keys,
     )
 
-    contents: list[dict] = []
-    for record in records:
-        content = record.get("content")
-        contents.append(content if isinstance(content, dict) else {})
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return {}
+
     observe_refs = context_scope.get("observe", [])
 
     if not observe_refs:
-        return _flatten_all_namespaces(contents)
+        # No observe declared — flatten all content namespaces
+        business: dict = {}
+        for ns_data in content.values():
+            if isinstance(ns_data, dict):
+                business.update(ns_data)
+        return business
 
+    # Drops and collision diagnostics were already handled by
+    # apply_context_scope_for_records().
     resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
         observe_refs, emit_diagnostics=False
     )
-    collisions = observed_key_collisions(contents, resolved, qualify_wildcards)
-    return [
-        plan_flat_observed_keys(content, resolved, qualify_wildcards, collisions=collisions)[0]
-        for content in contents
-    ]
-
-
-def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
-    """Single-record payload. Prefer ``extract_tool_inputs`` — key names are
-    decided per batch, and a lone record cannot see the batch's collisions."""
-    return extract_tool_inputs([record], context_scope)[0]
+    flat, _ = plan_flat_observed_keys(content, resolved, qualify_wildcards)
+    return flat
 
 
 def _build_record(
@@ -291,8 +260,8 @@ def framework_prepare_input(
     """Strip framework fields and wrap in TrackedItem for tool input."""
     context_scope: dict[str, Any] = {"observe": observe_refs} if observe_refs else {}
     return [
-        TrackedItem(business, source_index=i)
-        for i, business in enumerate(extract_tool_inputs(records, context_scope))
+        TrackedItem(extract_tool_input(record, context_scope), source_index=i)
+        for i, record in enumerate(records)
     ]
 
 

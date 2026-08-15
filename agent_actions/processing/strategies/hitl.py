@@ -18,7 +18,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.tools_resolver import resolve_tools_path
-from agent_actions.workflow.pipeline_file_mode import extract_tool_inputs
+from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class HITLStrategy:
                 hitl_agent_config["_hitl_file_stem"] = file_stem
 
             context_scope = context.agent_config.get("context_scope") or {}
-            filtered_records = extract_tool_inputs(records, context_scope)
+            filtered_records = [extract_tool_input(r, context_scope) for r in records]
 
             empty_count = sum(1 for r in filtered_records if not r)
             if empty_count:

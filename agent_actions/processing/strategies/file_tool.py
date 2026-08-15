@@ -21,7 +21,7 @@ from agent_actions.record.tracking import TrackedItem
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import (
-    extract_tool_inputs,
+    extract_tool_input,
     is_empty_response,
     reconcile_outputs,
 )
@@ -62,8 +62,8 @@ class FileToolStrategy:
         try:
             context_scope = context.agent_config.get("context_scope") or {}
             clean_input: list[TrackedItem] = [
-                TrackedItem(business, source_index=i)
-                for i, business in enumerate(extract_tool_inputs(records, context_scope))
+                TrackedItem(extract_tool_input(record, context_scope), source_index=i)
+                for i, record in enumerate(records)
             ]
 
             agent_config = cast(dict[str, Any], context.agent_config)

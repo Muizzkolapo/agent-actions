@@ -1700,7 +1700,6 @@ class WorkflowStaticAnalyzer:
         """
         from agent_actions.prompt.context.scope_application import (
             _resolve_observe_refs_for_flat_keys,
-            observed_key_collisions,
             plan_flat_observed_keys,
         )
 
@@ -1732,14 +1731,12 @@ class WorkflowStaticAnalyzer:
             qualified = {out for _, field, out in resolved if field != "*" and out != field}
             if qualify_wildcards:
                 qualified |= {f"{ns}.*" for ns, field, _ in resolved if field == "*"}
-            # Collisions the declared refs alone can't show: a wildcard expanding
-            # onto another ref's name, or a field shadowing an observed namespace.
-            shape = self._observed_namespace_fields(observe_refs, schemas)
+            # What the declared refs alone can't show: a field shadowing a
+            # namespace, or an explicit ref a wildcard elsewhere could expand onto.
             _, shadowed = plan_flat_observed_keys(
-                shape,
+                self._observed_namespace_fields(observe_refs, schemas),
                 resolved,
                 qualify_wildcards,
-                collisions=observed_key_collisions([shape], resolved, qualify_wildcards),
             )
             qualified |= shadowed
             if not qualified:
