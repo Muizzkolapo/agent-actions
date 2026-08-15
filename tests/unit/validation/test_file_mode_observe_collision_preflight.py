@@ -1,0 +1,188 @@
+"""Preflight must flag FILE-mode observe refs whose flat keys collide.
+
+``_check_file_tool_observe_collision`` reuses the runtime resolver so the two
+can't drift — which also means it inherits the resolver's blind spots. It saw
+collisions only between two explicitly named refs, so a wildcard expansion
+claiming an explicit ref's name, or an observed field shadowing a namespace,
+reached runtime unannounced. It was also gated on ``kind: tool``, leaving
+``kind: hitl`` FILE actions — which run the identical enrichment path — with
+no preflight coverage at all.
+"""
+
+from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+    WorkflowStaticAnalyzer,
+)
+
+_COLLISION_MARKER = "namespace-qualified"
+
+
+def _collision_warnings(workflow):
+    result = WorkflowStaticAnalyzer(workflow).analyze()
+    return [w for w in result.warnings if _COLLISION_MARKER in w.message]
+
+
+def _llm(name, fields, depends_on=None, observe=None):
+    action = {"name": name, "prompt": f"Run {name}"}
+    if fields:
+        action["schema"] = {
+            "type": "object",
+            "properties": {f: {"type": "string"} for f in fields},
+        }
+    if depends_on:
+        action["depends_on"] = depends_on
+    if observe:
+        action["context_scope"] = {"observe": observe}
+    return action
+
+
+def _file_action(name, kind, depends_on, observe, *, granularity="file"):
+    action = {
+        "name": name,
+        "kind": kind,
+        "depends_on": depends_on,
+        "context_scope": {"observe": observe},
+    }
+    if granularity is not None:
+        action["granularity"] = granularity
+    if kind == "tool":
+        action["function"] = f"{name}_fn"
+    return action
+
+
+class TestHitlCoverage:
+    """HITL FILE actions run the same enrichment path as FILE tools."""
+
+    def test_hitl_collision_is_reported(self):
+        workflow = {
+            "actions": [
+                _llm("review_a", ["title"]),
+                _llm("review_b", ["title"]),
+                _file_action(
+                    "approve",
+                    "hitl",
+                    ["review_a", "review_b"],
+                    ["review_a.title", "review_b.title"],
+                ),
+            ]
+        }
+
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "approve" in warnings[0].message
+
+    def test_hitl_without_explicit_granularity_is_covered(self):
+        """HITL defaults to FILE granularity when the key is absent."""
+        workflow = {
+            "actions": [
+                _llm("review_a", ["title"]),
+                _llm("review_b", ["title"]),
+                _file_action(
+                    "approve",
+                    "hitl",
+                    ["review_a", "review_b"],
+                    ["review_a.title", "review_b.title"],
+                    granularity=None,
+                ),
+            ]
+        }
+
+        assert len(_collision_warnings(workflow)) == 1
+
+
+class TestWildcardExpansionCollision:
+    """A wildcard expands to schema fields that can collide with explicit refs."""
+
+    def test_wildcard_versus_explicit_is_reported(self):
+        workflow = {
+            "actions": [
+                _llm("gen_a", ["code", "notes"]),
+                _llm("gen_b", ["code"]),
+                _file_action("merge", "tool", ["gen_a", "gen_b"], ["gen_a.*", "gen_b.code"]),
+            ]
+        }
+
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "code" in warnings[0].message
+
+    def test_wildcard_with_disjoint_fields_is_silent(self):
+        workflow = {
+            "actions": [
+                _llm("gen_a", ["code", "notes"]),
+                _llm("gen_b", ["score"]),
+                _file_action("merge", "tool", ["gen_a", "gen_b"], ["gen_a.*", "gen_b.score"]),
+            ]
+        }
+
+        assert _collision_warnings(workflow) == []
+
+
+class TestNamespaceShadowing:
+    """An observed field named for a namespace overwrites it at runtime."""
+
+    def test_field_shadowing_sibling_action_is_reported(self):
+        workflow = {
+            "actions": [
+                _llm("extract", ["classify", "title"]),
+                _llm("classify", ["label"]),
+                _file_action(
+                    "merge",
+                    "tool",
+                    ["extract", "classify"],
+                    ["extract.classify", "classify.label"],
+                ),
+            ]
+        }
+
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "extract.classify" in warnings[0].message
+
+    def test_field_shadowing_bus_namespace_is_reported(self):
+        workflow = {
+            "actions": [
+                _llm("extract", ["source", "title"]),
+                _file_action("merge", "tool", ["extract"], ["extract.source", "extract.title"]),
+            ]
+        }
+
+        warnings = _collision_warnings(workflow)
+
+        assert len(warnings) == 1
+        assert "extract.source" in warnings[0].message
+
+
+class TestNoFalsePositives:
+    def test_distinct_field_names_are_silent(self):
+        workflow = {
+            "actions": [
+                _llm("extract", ["text"]),
+                _llm("classify", ["topic"]),
+                _file_action(
+                    "merge", "tool", ["extract", "classify"], ["extract.text", "classify.topic"]
+                ),
+            ]
+        }
+
+        assert _collision_warnings(workflow) == []
+
+    def test_record_granularity_tool_is_silent(self):
+        """RECORD mode never injects flat keys, so there is nothing to collide."""
+        workflow = {
+            "actions": [
+                _llm("gen_a", ["code"]),
+                _llm("gen_b", ["code"]),
+                _file_action(
+                    "merge",
+                    "tool",
+                    ["gen_a", "gen_b"],
+                    ["gen_a.code", "gen_b.code"],
+                    granularity="record",
+                ),
+            ]
+        }
+
+        assert _collision_warnings(workflow) == []
