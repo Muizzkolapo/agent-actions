@@ -345,7 +345,8 @@ class TestNoneNamespace:
         scope = {"observe": ["skipped.*", "active.field"]}
         result, _ = apply_context_scope_for_records([record], scope, action_name="test")
         content = result[0]["content"]
-        assert content["field"] == "value"
+        # Qualified: the wildcard on "skipped" could expand onto "field".
+        assert content["active.field"] == "value"
         assert "skipped" in content  # None namespace preserved for guards
 
     def test_explicit_ref_on_none_namespace_enriches_with_null_safe(self):

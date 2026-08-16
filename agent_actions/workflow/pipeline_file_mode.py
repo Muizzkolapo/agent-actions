@@ -137,14 +137,14 @@ def _resolve_input_record(
 def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     """Extract observed business fields from an enriched record for tool input.
 
-    Reads post-drop enriched content. Bare field names colliding across
-    observed namespaces are delivered namespace-qualified (``ns.field``),
-    matching the flat keys enrichment injects; qualification follows the
-    declared refs, not namespace presence, so tools see stable key shapes.
-    When no observe is configured, flattens all content namespaces.
+    Reads post-drop enriched content and plans keys through the same function
+    enrichment uses, so the payload and the record agree. Names come from the
+    observe refs alone, so they do not vary with the data. When no observe is
+    configured, flattens all content namespaces.
     """
     from agent_actions.prompt.context.scope_application import (
         _resolve_observe_refs_for_flat_keys,
+        plan_flat_observed_keys,
     )
 
     content = record.get("content")
@@ -161,24 +161,13 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
                 business.update(ns_data)
         return business
 
-    # Extract observed fields from post-drop enriched content.
     # Drops and collision diagnostics were already handled by
     # apply_context_scope_for_records().
     resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
         observe_refs, emit_diagnostics=False
     )
-    business = {}
-    for ns, field, output_key in resolved:
-        ns_data = content.get(ns)
-        if not isinstance(ns_data, dict):
-            continue
-        if field == "*":
-            for f, v in ns_data.items():
-                business[f"{ns}.{f}" if qualify_wildcards else f] = v
-        elif field in ns_data:
-            business[output_key] = ns_data[field]
-
-    return business
+    flat, _ = plan_flat_observed_keys(content, resolved, qualify_wildcards)
+    return flat
 
 
 def _build_record(

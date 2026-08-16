@@ -360,8 +360,9 @@ class TestFileModeObserve:
         # dep_a wildcard extracts all fields
         assert result[0]["content"]["text"] == "hello"
         assert result[0]["content"]["score"] == 0.9
-        # dep_b specific field also extracted
-        assert result[0]["content"]["extra"] == "bonus"
+        # dep_b specific field also extracted, qualified because the dep_a
+        # wildcard could expand onto "extra"
+        assert result[0]["content"]["dep_b.extra"] == "bonus"
 
     def test_file_mode_no_observe_returns_data_unchanged(self):
         """No observe refs -> data returned as-is."""

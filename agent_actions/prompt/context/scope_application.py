@@ -20,6 +20,7 @@ from agent_actions.prompt.context.scope_parsing import (
     parse_field_reference,
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def build_workflow_metadata(name: str, run_id: str | None = None) -> dict[str, A
 __all__ = [
     "apply_context_scope",
     "apply_context_scope_for_records",
+    "plan_flat_observed_keys",
     "format_llm_context",
     "FRAMEWORK_NAMESPACES",
     "FRAMEWORK_FIELDS",
@@ -477,7 +479,7 @@ def _resolve_observe_refs_for_flat_keys(
         qualified = sorted(f"{ns}.{field}" for ns, field in valid_pairs if field in collisions)
         logger.warning(
             "Action '%s': observe refs share bare field name(s) %s across namespaces. "
-            "Flat keys are namespace-qualified (%s) — a tool reading the bare key "
+            "Flat keys are namespace-qualified (%s) — an action reading the bare key "
             "will not find it; read the qualified key instead.",
             action_name,
             sorted(collisions),
@@ -513,28 +515,111 @@ def _apply_drops_to_content(content: dict, drop_refs: list[str]) -> None:
             content[ns].pop(field, None)
 
 
-def _inject_flat_observed_keys(
+def _expand_observed_fields(
     content: dict,
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
-) -> None:
-    """Inject flat observed keys into content for FILE mode enrichment.
-
-    Reads values from post-drop content namespaces and injects them as
-    top-level keys. Wildcard refs expand to all fields in the namespace.
-    Keys are namespace-qualified when collisions are detected.
-    """
+) -> list[tuple[str, str, str, Any, bool]]:
+    """(namespace, field, declared key, value, came-from-wildcard) per observed field."""
+    expanded: list[tuple[str, str, str, Any, bool]] = []
     for ns, field, output_key in resolved_observe:
         ns_data = content.get(ns)
         if not isinstance(ns_data, dict):
             continue
-
         if field == "*":
-            for f, v in ns_data.items():
-                key = f"{ns}.{f}" if qualify_wildcards else f
-                content[key] = v
+            expanded.extend(
+                (ns, f, f"{ns}.{f}" if qualify_wildcards else f, v, True)
+                for f, v in ns_data.items()
+            )
         elif field in ns_data:
-            content[output_key] = ns_data[field]
+            expanded.append((ns, field, output_key, ns_data[field], False))
+    return expanded
+
+
+def plan_flat_observed_keys(
+    content: dict,
+    resolved_observe: list[tuple[str, str, str]],
+    qualify_wildcards: bool,
+    *,
+    reserved_names: frozenset[str] | set[str] = frozenset(),
+    action_name: str = "unknown",
+) -> tuple[dict[str, Any], set[str]]:
+    """Map observed fields to the flat keys FILE mode delivers them under.
+
+    Every rule reads the observe refs, never the data, so a ref always produces
+    the same key — on every record, batch and run. Deciding from the values
+    would let a UDF's keys depend on which records share a file, which is the
+    same silent loss as the overwrite this prevents.
+
+    A key is qualified when delivering it bare could lose data: it names a
+    namespace the action reads by that name, or a wildcard on another namespace
+    could expand onto it. *reserved_names* is the extra protection a caller
+    writing into a live record needs — applied, never announced, since the
+    payload is a flat dict where that name is free.
+    """
+    declared_reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES
+    wildcard_namespaces = {ns for ns, field, _ in resolved_observe if field == "*"}
+
+    flat: dict[str, Any] = {}
+    announced: set[str] = set()
+    for ns, field, key, value, from_wildcard in _expand_observed_fields(
+        content, resolved_observe, qualify_wildcards
+    ):
+        qualified = f"{ns}.{field}"
+        if key != qualified:
+            if key in declared_reserved:
+                key = qualified
+                announced.add(key)
+            elif not from_wildcard and wildcard_namespaces - {ns}:
+                # A wildcard elsewhere may expand onto this bare name. Which
+                # fields it actually yields is a property of the data, so the
+                # only stable answer is to qualify whenever it is possible.
+                key = qualified
+                announced.add(key)
+            elif key in reserved_names:
+                key = qualified
+        if key in flat and flat[key] is not value:
+            # Only reachable when a field name literally contains a dot and
+            # collides with another namespace's qualified key.
+            logger.warning(
+                "Action '%s': observed field '%s.%s' cannot be delivered — key '%s' is "
+                "already taken by another observed field. Rename the field or observe "
+                "fewer namespaces.",
+                action_name,
+                ns,
+                field,
+                key,
+            )
+            continue
+        flat[key] = value
+
+    return flat, announced
+
+
+def _inject_flat_observed_keys(
+    content: dict,
+    resolved_observe: list[tuple[str, str, str]],
+    qualify_wildcards: bool,
+    action_name: str,
+    reserved_namespaces: frozenset[str],
+) -> set[str]:
+    """Inject flat observed keys into post-drop content for FILE mode enrichment.
+
+    *reserved_namespaces* is the union of namespace names across the batch (see
+    caller): a flat key must never be written over a namespace, and reserving
+    only this record's own namespaces would let the same ref qualify on one
+    record and stay bare on the next, purely because of which namespace an
+    unrelated upstream branch happened to populate for that record.
+    """
+    flat, announced = plan_flat_observed_keys(
+        content,
+        resolved_observe,
+        qualify_wildcards,
+        reserved_names=reserved_namespaces,
+        action_name=action_name,
+    )
+    content.update(flat)
+    return announced
 
 
 # ── FILE mode wrapper ──────────────────────────────────────────────────
@@ -583,7 +668,7 @@ def apply_context_scope_for_records(
     )
 
     source_cache: dict[tuple[str | None, str | None], dict | None] = {}
-    enriched: list[dict] = []
+    prepared: list[tuple[dict, dict]] = []
     skipped: list[dict] = []
 
     for record in records:
@@ -628,14 +713,36 @@ def apply_context_scope_for_records(
             skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING})
             continue
 
-        # Rebuild enriched record: ALL namespaces preserved, drops applied, flat keys
+        # Rebuild enriched record: ALL namespaces preserved, drops applied. Flat
+        # keys wait for pass 2 — their names depend on the whole batch.
         enriched_content = deepcopy(content)
         if has_source_refs and source_cache.get((sguid, psguid)):
             enriched_content["source"] = deepcopy(source_cache[(sguid, psguid)])
         _apply_drops_to_content(enriched_content, drop_refs)
-        _inject_flat_observed_keys(enriched_content, resolved_observe, qualify_wildcards)
+        prepared.append((record, enriched_content))
 
+    # Namespace presence can differ per record; reserving the batch union rather
+    # than each record's own subset keeps a given ref qualified the same way on
+    # every record in this call, not just the ones that happen to carry it.
+    namespace_union: frozenset[str] = frozenset(ns for _, content in prepared for ns in content)
+
+    enriched: list[dict] = []
+    qualified_keys: set[str] = set()
+    for record, enriched_content in prepared:
+        qualified_keys |= _inject_flat_observed_keys(
+            enriched_content, resolved_observe, qualify_wildcards, action_name, namespace_union
+        )
         enriched.append({**record, "content": enriched_content})
+
+    if qualified_keys:
+        logger.warning(
+            "Action '%s': observed field(s) would have overwritten a namespace or "
+            "another observed field on the record. Flat keys are namespace-qualified "
+            "(%s) — an action reading the bare key will not find it; read the "
+            "qualified key instead.",
+            action_name,
+            ", ".join(sorted(qualified_keys)),
+        )
 
     if skipped:
         reason_counts = Counter(s["reason"] for s in skipped)
