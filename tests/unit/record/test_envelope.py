@@ -33,6 +33,12 @@ class TestBuild:
         result = RecordEnvelope.build("act", {"v": 1}, inp)
         assert result["source_guid"] == "guid-42"
 
+    def test_carries_parent_source_guid(self):
+        """Expansion attribution must survive every stage, or source resolution dead-ends."""
+        inp = {"source_guid": "minted", "parent_source_guid": "original", "content": {}}
+        result = RecordEnvelope.build("act", {"v": 1}, inp)
+        assert result["parent_source_guid"] == "original"
+
     def test_no_input_record(self):
         result = RecordEnvelope.build("first", {"a": 1})
         assert result == {"content": {"first": {"a": 1}}}
