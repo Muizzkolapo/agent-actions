@@ -594,18 +594,21 @@ def _inject_flat_observed_keys(
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
     action_name: str,
+    reserved_namespaces: frozenset[str],
 ) -> set[str]:
     """Inject flat observed keys into post-drop content for FILE mode enrichment.
 
-    Every namespace already in *content* is reserved: the enriched record keeps
-    all of them because downstream guards need full namespace visibility, so a
-    flat key must never be written over one.
+    *reserved_namespaces* is the union of namespace names across the batch (see
+    caller): a flat key must never be written over a namespace, and reserving
+    only this record's own namespaces would let the same ref qualify on one
+    record and stay bare on the next, purely because of which namespace an
+    unrelated upstream branch happened to populate for that record.
     """
     flat, announced = plan_flat_observed_keys(
         content,
         resolved_observe,
         qualify_wildcards,
-        reserved_names=frozenset(content),
+        reserved_names=reserved_namespaces,
         action_name=action_name,
     )
     content.update(flat)
@@ -699,11 +702,16 @@ def apply_context_scope_for_records(
         _apply_drops_to_content(enriched_content, drop_refs)
         prepared.append((record, enriched_content))
 
+    # Namespace presence can differ per record; reserving the batch union rather
+    # than each record's own subset keeps a given ref qualified the same way on
+    # every record in this call, not just the ones that happen to carry it.
+    namespace_union: frozenset[str] = frozenset(ns for _, content in prepared for ns in content)
+
     enriched: list[dict] = []
     qualified_keys: set[str] = set()
     for record, enriched_content in prepared:
         qualified_keys |= _inject_flat_observed_keys(
-            enriched_content, resolved_observe, qualify_wildcards, action_name
+            enriched_content, resolved_observe, qualify_wildcards, action_name, namespace_union
         )
         enriched.append({**record, "content": enriched_content})
 
