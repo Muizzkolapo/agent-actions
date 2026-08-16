@@ -34,6 +34,7 @@ Every record that flows through the pipeline is a plain dict with this shape:
         "classification": {"type": ".."},
     },
     "source_guid": "abc-123-...",        ← stable identity (first-stage: UUID5 content hash)
+    "parent_source_guid": "xyz-789-...", ← original pool identity, set when expansion re-mints source_guid
     "version_correlation_id": "def-...", ← links versions across re-runs
     "_state": "processed",               ← current lifecycle state
     "_state_history": [                  ← audit trail (capped at 64)
@@ -71,6 +72,7 @@ The module defines four frozen sets that classify every framework field. These s
 ```
 RECORD_TRACKING_FIELDS (stable identity — set once, carried forward)
 ├── source_guid
+├── parent_source_guid
 └── version_correlation_id
 
 RECORD_LIFECYCLE_FIELDS (cumulative — carried forward AND appended to)
@@ -113,8 +115,8 @@ All three are `@staticmethod` on `RecordEnvelope`. All return new dicts.
 │                                                                      │
 │  Normal record assembly. Wraps action_output under action_name       │
 │  inside content, preserves upstream namespaces from input_record,    │
-│  carries persistent fields (source_guid, version_correlation_id,     │
-│  _state_history, _state_schema_version).                             │
+│  carries persistent fields (source_guid, parent_source_guid,         │
+│  version_correlation_id, _state_history, _state_schema_version).     │
 │                                                                      │
 │  action_output is stored by REFERENCE inside content.                │
 │  Collision on action_name overwrites the existing namespace.         │
