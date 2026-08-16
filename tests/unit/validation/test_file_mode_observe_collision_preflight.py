@@ -273,6 +273,28 @@ class TestSchemalessNamespaces:
         assert "gen_b.content" in warnings[0].message
         assert "gen_a." not in warnings[0].message
 
+    def test_wildcard_shape_excludes_schemaless_fields_directly(self):
+        """Direct unit test on the shape builder, isolated from the
+        wildcard-elsewhere rule that confounds the check above: a schemaless
+        namespace's wildcard must contribute no fields, not its schema's
+        generic placeholder fields (e.g. a schemaless LLM's "content")."""
+        from agent_actions.validation.static_analyzer.data_flow_graph import OutputSchema
+
+        schemas = {"gen_a": OutputSchema(schema_fields={"content"}, is_schemaless=True)}
+
+        shape = WorkflowStaticAnalyzer._observed_namespace_fields(["gen_a.*"], schemas)
+
+        assert shape == {"gen_a": {}}
+
+    def test_dynamic_namespace_wildcard_also_contributes_nothing(self):
+        from agent_actions.validation.static_analyzer.data_flow_graph import OutputSchema
+
+        schemas = {"gen_a": OutputSchema(schema_fields={"result"}, is_dynamic=True)}
+
+        shape = WorkflowStaticAnalyzer._observed_namespace_fields(["gen_a.*"], schemas)
+
+        assert shape == {"gen_a": {}}
+
 
 class TestNoFalsePositives:
     def test_distinct_field_names_are_silent(self):

@@ -16,7 +16,10 @@ from copy import deepcopy
 
 import pytest
 
-from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
+from agent_actions.prompt.context.scope_application import (
+    apply_context_scope_for_records,
+    plan_flat_observed_keys,
+)
 from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
 _SCOPE_LOGGER = "agent_actions.prompt.context.scope_application"
@@ -151,6 +154,70 @@ class TestKeyShapeIsDeclarationDerived:
 
         for key, value in payload.items():
             assert enriched[0]["content"][key] == value
+
+
+class TestNamespaceProtectionIsBatchStable:
+    """An unobserved namespace present on only some records of a batch must not
+    make a guard see a namespace dict on one record and the observed value on
+    the next, for the identical observe ref."""
+
+    def test_namespace_present_on_only_one_record_qualifies_on_both(self):
+        cs = {"observe": ["a.c"]}
+        records = [
+            {"source_guid": "r1", "content": {"a": {"c": "CLOBBER1"}, "c": {"z": 1}}},
+            {"source_guid": "r2", "content": {"a": {"c": "CLOBBER2"}}},
+        ]
+        enriched, _ = apply_context_scope_for_records(
+            records=records, context_scope=cs, action_name="agg"
+        )
+
+        assert enriched[0]["content"]["a.c"] == "CLOBBER1"
+        assert enriched[0]["content"]["c"] == {"z": 1}
+        # r2 never had a "c" namespace, but the batch did — qualified here too.
+        assert enriched[1]["content"]["a.c"] == "CLOBBER2"
+        assert "c" not in enriched[1]["content"]
+
+    def test_a_guard_on_the_bare_name_sees_the_same_thing_for_every_record(self):
+        from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
+
+        cs = {"observe": ["a.c"]}
+        records = [
+            {"source_guid": "r1", "content": {"a": {"c": "TARGET"}, "c": {"z": 1}}},
+            {"source_guid": "r2", "content": {"a": {"c": "TARGET"}}},
+        ]
+        enriched, _ = apply_context_scope_for_records(
+            records=records, context_scope=cs, action_name="agg"
+        )
+
+        passing, _, _, filtered = prefilter_by_guard(
+            enriched, {"guard": {"clause": "c == 'TARGET'", "behavior": "filter"}}, "agg"
+        )
+
+        # Both records observed the identical value under the identical ref;
+        # the bare-key guard must not accept one and reject the other.
+        assert {r["source_guid"] for r in passing} == set()
+        assert {r["source_guid"] for r in filtered} == {"r1", "r2"}
+
+
+class TestPlanFlatObservedKeysDotCollision:
+    """A field name containing a literal dot can produce the same qualified key
+    as another namespace's own qualified key. The second write must not
+    silently clobber the first."""
+
+    def test_second_claimant_of_an_already_written_key_is_dropped_not_overwritten(
+        self, scope_warnings
+    ):
+        # "enrich" observes a field literally named "b.x" (dot-in-name), which
+        # qualifies to the same key "b.x" that qualifying (ns=b, field=x) would.
+        content = {"enrich": {"b.x": "FIRST"}, "b": {"x": "SECOND"}}
+        resolved = [("enrich", "b.x", "b.x"), ("b", "x", "x")]
+
+        flat, _ = plan_flat_observed_keys(
+            content, resolved, qualify_wildcards=False, reserved_names={"x"}, action_name="probe"
+        )
+
+        assert flat["b.x"] == "FIRST"
+        assert any("probe" in m and "b.x" in m for m in scope_warnings)
 
 
 class TestSiblingNamespaceShadowing:
