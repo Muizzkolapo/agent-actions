@@ -31,7 +31,7 @@ Source data (the user's original staging input) reaches `SourceNamespaceBuilder.
 | Path | When | How source data arrives | Entry point |
 |------|------|------------------------|-------------|
 | **Staging file load** | First action, initial run | Read from the user-configured `data_source` path (`folder` + `file_type` in workflow config) by `FileReader` | `initial_pipeline.process_initial_stage()` |
-| **Storage lookup** | Downstream actions | Saved to storage during first action; retrieved by `source_guid` | `task_preparer._get_source_content()` |
+| **Storage lookup** | Downstream actions | Saved to storage during first action; retrieved by identity (own `source_guid`, then `parent_source_guid`) | `processing.source_resolution.resolve_source_content()` |
 | **FILE mode index** | FILE-granularity actions | Resolved by identity from a shared source index: own `source_guid`, then carried `parent_source_guid` (expansion attribution); a miss on both skips the record with reason `source_unresolved` (no positional fallback) | `scope_application._resolve_source_content()` |
 | **Batch resume** | Batch re-run after prior submission | Records already in memory/storage from prior batch prep | `params.data` pre-loaded, skips `initial_pipeline` |
 

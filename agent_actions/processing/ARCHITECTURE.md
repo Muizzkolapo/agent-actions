@@ -578,7 +578,7 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `prepared_task.py` | `PreparedTask`, `GuardStatus`, `PreparationContext` |
 | `record_helpers.py` | Tombstone builders, `derive_relative_path` |
 | `exhausted_builder.py` | Build exhausted retry tombstones |
-| `source_resolution.py` | Three-tier resolution for non-first-stage content |
+| `source_resolution.py` | Identity resolution for non-first-stage content — own guid, then parent_source_guid, then None |
 | `batch_context_adapter.py` | Bridge batch state into `ProcessingContext` |
 | `error_handling.py` | `ProcessorErrorHandlerMixin` |
 | `recovery/retry.py` | `RetryService` — transport-layer retry with backoff |
