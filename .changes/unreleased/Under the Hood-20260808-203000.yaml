@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "RELEASING.md said pushing a v* tag publishes to PyPI. It does not — publish.yml triggers on `release: published`, so a tag alone reaches nothing. Corrected, and documented the release-PR changelog entry the CI job requires, the pre-tag version check, and the manual VS Code extension publish."
+time: 2026-08-08T20:30:00Z

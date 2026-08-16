@@ -47,6 +47,8 @@ The manifest tracks the execution plan and status for the entire workflow run. C
   "schema_version": "1.0",
   "workflow_name": "product_pipeline",
   "workflow_run_id": "run_abc123",
+  "pid": 48213,
+  "host_id": "9f2c1a77b4e03d58",
   "started_at": "2026-03-24T10:00:00Z",
   "completed_at": "2026-03-24T10:02:30Z",
   "status": "completed",
@@ -64,6 +66,14 @@ The manifest tracks the execution plan and status for the entire workflow run. C
   }
 }
 ```
+
+`pid` and `host_id` identify the process that owns the run. A process killed
+outright never records a terminal status, so readers use them to check whether
+that process still exists and report its in-flight actions as `interrupted`
+rather than showing them as running forever. `host_id` is a hash of the
+hostname, not the hostname, because this file is published by `agac docs`.
+A reader that finds no `pid`, or a `host_id` that is not its own, makes no
+judgement at all.
 
 The VS Code Workflow Navigator reads this file to display the sidebar tree view and DAG visualization.
 
@@ -87,7 +97,7 @@ Persists per-action execution state for resumable runs:
 | `running` | Currently executing |
 | `completed` | Successfully finished |
 | `failed` | Terminated with error |
-| `interrupted` | The run was killed (Ctrl-C, SIGTERM) while this action was executing |
+| `interrupted` | The run was killed while this action was executing, or the process that owned it no longer exists |
 | `skipped` | Skipped by guard |
 | `batch_submitted` | Batch job submitted, awaiting results |
 

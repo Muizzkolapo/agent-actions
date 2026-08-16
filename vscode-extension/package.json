@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "Language support and workflow navigation for Agent Actions projects",
-  "version": "0.1.21",
+  "version": "0.2.0",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -381,6 +381,8 @@
     "react": "^19",
     "react-dom": "^19",
     "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.5.5",
     "vscode-languageclient": "^9.0.1",

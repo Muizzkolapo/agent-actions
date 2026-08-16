@@ -64,6 +64,36 @@ class TestExpansionSourceGuidUniqueness:
         for item in enriched.data:
             assert item["parent_source_guid"] == parent_guid
 
+    def test_nested_expansion_preserves_original_parent_source_guid(self):
+        """Re-expanding an expansion child keeps the original pool-resolvable attribution."""
+        items = [
+            {
+                "source_guid": "minted-gen1",
+                "parent_source_guid": "original-staged-guid",
+                "target_id": "tid-1",
+                "content": "a",
+            },
+            {
+                "source_guid": "minted-gen1",
+                "parent_source_guid": "original-staged-guid",
+                "target_id": "tid-1",
+                "content": "b",
+            },
+        ]
+        result = ProcessingResult(
+            data=items,
+            status=ProcessingStatus.SUCCESS,
+            is_expansion=True,
+        )
+        context = _make_context()
+
+        enricher = LineageEnricher()
+        enriched = enricher.enrich(result, context)
+
+        for item in enriched.data:
+            assert item["parent_source_guid"] == "original-staged-guid"
+            assert item["source_guid"] != "minted-gen1"
+
     def test_non_expansion_keeps_original_source_guid(self):
         original_guid = "keep-this-guid"
         items = [{"source_guid": original_guid, "content": "data"}]

@@ -21,7 +21,6 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.record.reasons import OBSERVE_FIELD_MISSING
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
@@ -561,7 +560,7 @@ class ProcessingPipeline:
                         self.config.action_name,
                         str(skip["source_guid"]),
                         DISPOSITION_SKIPPED,
-                        OBSERVE_FIELD_MISSING,
+                        skip["reason"],
                         None,
                         None,
                         None,

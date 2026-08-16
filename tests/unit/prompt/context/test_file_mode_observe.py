@@ -194,8 +194,8 @@ class TestApplyContextScopeForRecords:
         assert result[1]["content"]["text"] == "Q2"
         assert result[1]["content"]["url"] == "https://b.com"
 
-    def test_source_guid_fallback_to_first_source(self):
-        """Record whose source_guid doesn't match falls back to source_data[0]."""
+    def test_source_guid_miss_single_source_skips_record(self):
+        """A guid miss skips the record even against a one-record pool."""
         data = [
             {"source_guid": "sg-unknown", "content": {"extract": {"text": "Q"}}},
         ]
@@ -203,19 +203,19 @@ class TestApplyContextScopeForRecords:
             {"source_guid": "sg-other", "content": {"url": "https://fallback.com"}},
         ]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result, _ = apply_context_scope_for_records(
+        enriched, skipped = apply_context_scope_for_records(
             records=data,
             context_scope=context_scope,
             action_name="classify",
             source_data=source_data,
         )
-        assert result[0]["content"]["text"] == "Q"
-        assert result[0]["content"]["url"] == "https://fallback.com"
+        assert enriched == []
+        assert skipped == [{"source_guid": "sg-unknown", "reason": "source_unresolved"}]
 
     def test_source_data_flat_format(self):
         """source_data in flat format (no content wrapper) still works."""
-        data = [{"content": {"extract": {"text": "Q"}}}]
-        source_data = [{"url": "https://example.com", "title": "Example"}]
+        data = [{"source_guid": "sg-flat", "content": {"extract": {"text": "Q"}}}]
+        source_data = [{"source_guid": "sg-flat", "url": "https://example.com", "title": "Example"}]
         context_scope = {"observe": ["extract.text", "source.url"]}
         result, _ = apply_context_scope_for_records(
             records=data,

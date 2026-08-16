@@ -58,6 +58,81 @@ export interface ManifestData {
     execution_order?: string[];
     levels?: string[][];
     actions?: Record<string, ManifestActionInfo>;
+    /** Run-level status: 'running' until the workflow finishes. */
+    status?: string;
+    /** Process that owns the run, and a hash of the host it runs on. */
+    pid?: number;
+    host_id?: string;
+}
+
+/**
+ * Whether the process that started the run still exists.
+ *
+ * 'unknown' is the safe answer and the common one: a manifest written by an
+ * older framework has no pid, and a pid from another machine says nothing.
+ * Callers must not downgrade anything on 'unknown'.
+ */
+export type RunLiveness = 'live' | 'dead' | 'unknown';
+
+export function runLiveness(
+    manifest: ManifestData | null,
+    localHostId: string,
+    isProcessAlive: (pid: number) => boolean
+): RunLiveness {
+    if (!manifest) {
+        return 'unknown';
+    }
+    if (manifest.status && manifest.status !== 'running') {
+        // The run recorded its own ending, so nothing in it is still going.
+        return 'dead';
+    }
+    if (typeof manifest.pid !== 'number') {
+        return 'unknown';
+    }
+    // Fails closed: an absent host id is as unjudgeable as a foreign one,
+    // since a pid only means something on the machine that issued it.
+    if (manifest.host_id !== localHostId) {
+        return 'unknown';
+    }
+    return isProcessAlive(manifest.pid) ? 'live' : 'dead';
+}
+
+/**
+ * Whether a process with this id exists.
+ *
+ * Signal 0 performs the existence and permission checks without delivering
+ * anything. Only ESRCH — no such process — counts as gone. Every other
+ * outcome is "could not tell", and must report alive: the caller downgrades a
+ * running action on a `false`, so guessing here relabels live work as dead.
+ * EPERM (owned by another user) and Windows' EACCES both mean it exists.
+ */
+export function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+}
+
+/** Statuses that claim work is happening right now. */
+const IN_FLIGHT: readonly ActionStatus[] = ['running', 'checking_batch'];
+
+/**
+ * Correct an in-flight status when the run that wrote it is gone.
+ *
+ * A process killed outright — SIGKILL, OOM, power loss — never gets to record
+ * a terminal status, so the file keeps claiming 'running' indefinitely. The
+ * action did not fail; we simply know it never finished.
+ */
+export function reconcileWithLiveness(
+    status: ActionStatus,
+    liveness: RunLiveness
+): ActionStatus {
+    if (liveness === 'dead' && IN_FLIGHT.includes(status)) {
+        return 'interrupted';
+    }
+    return status;
 }
 
 /** Runtime status from agent_io/.agent_status.json */
@@ -132,4 +207,119 @@ export function resolveActionStatus(
     }
 
     return 'pending';
+}
+
+/**
+ * The status a workflow should show given its actions.
+ *
+ * Ordered by what a reader needs to act on first: a live run outranks a
+ * failure, which outranks an interruption, so the top of the tree answers
+ * "is anything happening, and did anything go wrong" without expanding.
+ * An empty workflow reads as pending, not completed — nothing ran.
+ */
+const ROLLUP_PRECEDENCE: readonly ActionStatus[] = [
+    'running',
+    'checking_batch',
+    'batch_submitted',
+    'failed',
+    'interrupted',
+    'completed_with_failures',
+];
+
+/** Statuses that mean the action reached an acceptable end. */
+const SETTLED: readonly ActionStatus[] = ['completed', 'skipped'];
+
+export function rollupStatus(statuses: readonly ActionStatus[]): ActionStatus {
+    if (statuses.length === 0) {
+        return 'pending';
+    }
+    for (const rank of ROLLUP_PRECEDENCE) {
+        if (statuses.includes(rank)) {
+            return rank;
+        }
+    }
+    if (statuses.every((s) => SETTLED.includes(s))) {
+        return 'completed';
+    }
+    return 'pending';
+}
+
+/**
+ * Sort key placing workflows that need attention at the top of the tree.
+ *
+ * Lower sorts first. Ties are broken by name at the call site so ordering is
+ * stable between refreshes.
+ */
+export function workflowSortRank(status: ActionStatus): number {
+    switch (status) {
+        case 'running':
+        case 'checking_batch':
+            return 0;
+        case 'batch_submitted':
+            return 1;
+        case 'failed':
+            return 2;
+        case 'interrupted':
+            return 3;
+        case 'completed_with_failures':
+            return 4;
+        case 'pending':
+            return 5;
+        case 'completed':
+        case 'skipped':
+            return 6;
+    }
+    // No default: adding a status to the union must fail the build here rather
+    // than silently sorting it last. That omission is what let three real
+    // statuses render as never-started.
+    return assertNever(status);
+}
+
+function assertNever(value: never): never {
+    throw new Error(`Unhandled ActionStatus: ${String(value)}`);
+}
+
+/** Status counts for workflow progress display. */
+export interface StatusSummary {
+    total: number;
+    pending: number;
+    running: number;
+    batch_submitted: number;
+    checking_batch: number;
+    completed: number;
+    completed_with_failures: number;
+    failed: number;
+    skipped: number;
+    interrupted: number;
+}
+
+/**
+ * The one-line summary shown on a collapsed workflow row.
+ *
+ * Reports at most one detail, the most actionable one. Skipped is included so
+ * a workflow that finished with completed < total does not look unexplained.
+ */
+export function formatWorkflowSummary(
+    status: ActionStatus,
+    summary: StatusSummary,
+    liveActionName?: string
+): string {
+    const parts = [`${summary.completed}/${summary.total}`];
+
+    if (summary.running > 1) {
+        // A parallel level runs several at once; naming one implies it is alone.
+        parts.push(`${summary.running} running`);
+    } else if (liveActionName) {
+        parts.push(liveActionName);
+    } else if (status === 'batch_submitted' || status === 'checking_batch') {
+        parts.push('awaiting batch');
+    } else if (summary.failed > 0) {
+        parts.push(`${summary.failed} failed`);
+    } else if (summary.interrupted > 0) {
+        parts.push(`${summary.interrupted} interrupted`);
+    } else if (summary.skipped > 0) {
+        parts.push(`${summary.skipped} skipped`);
+    }
+
+    return parts.join(' \u00B7 ');
 }

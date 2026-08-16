@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _RECORD_METADATA_KEYS = frozenset(
     {
         "source_guid",
+        "parent_source_guid",
         "lineage",
         "node_id",
         "metadata",

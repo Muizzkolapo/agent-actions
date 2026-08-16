@@ -66,9 +66,12 @@ class LineageEnricher(Enricher):
                     item["parent_target_id"] = old_target_id
                 # Each expansion child gets its own source_guid to prevent
                 # UNIQUE constraint collisions when written to source_data.
+                # parent_source_guid keeps the original pool-resolvable identity:
+                # on nested expansion it is preserved, not overwritten with the
+                # intermediate minted guid (which matches nothing in the pool).
                 old_source_guid = item.get("source_guid")
                 item["source_guid"] = IDGenerator.generate_source_guid()
-                if old_source_guid:
+                if old_source_guid and not item.get("parent_source_guid"):
                     item["parent_source_guid"] = old_source_guid
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"

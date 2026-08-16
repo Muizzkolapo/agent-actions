@@ -104,7 +104,12 @@ def _reattach_source_guid(
 
         parent_guid = None
         if isinstance(source_idx, int) and original_data and source_idx < len(original_data):
-            parent_guid = original_data[source_idx].get("source_guid")
+            parent = original_data[source_idx]
+            parent_guid = parent.get("source_guid")
+            # Hand the attribution chain on: if the parent is itself an expansion
+            # child, its minted guid matches nothing in the source pool.
+            if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
+                item["parent_source_guid"] = parent["parent_source_guid"]
 
         item["source_guid"] = parent_guid or IDGenerator.generate_source_guid()
 

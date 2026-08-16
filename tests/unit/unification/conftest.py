@@ -147,13 +147,12 @@ def paired_execution():
 
             def online_evaluate(*, item, guard_config, context=None, **kwargs):
                 result = MagicMock()
-                # Context comes from build_guard_context — upstream_ns may be
-                # at top level or nested under "source" depending on kwargs.
+                # item is get_existing_content(record) — the record's own
+                # namespaces. upstream_ns is a dependency namespace, not
+                # source content, so it lives here, never under context["source"].
                 is_ready = False
-                if isinstance(context, dict):
-                    ns = context.get("upstream_ns")
-                    if ns is None:
-                        ns = context.get("source", {}).get("upstream_ns")
+                if isinstance(item, dict):
+                    ns = item.get("upstream_ns")
                     if isinstance(ns, dict):
                         is_ready = ns.get("status") == "ready"
                 result.should_execute = is_ready

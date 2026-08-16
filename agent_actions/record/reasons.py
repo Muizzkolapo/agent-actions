@@ -19,6 +19,7 @@ LLM_LAYER_GUARD_FILTER = "llm_layer_guard_filter"
 # -- Cascade / upstream ------------------------------------------------------
 UPSTREAM_UNPROCESSED = "upstream_unprocessed"
 OBSERVE_FIELD_MISSING = "observe_field_missing"
+SOURCE_UNRESOLVED = "source_unresolved"
 ALL_VERSIONS_FILTERED = "all_versions_filtered"
 
 # -- Prep failures -----------------------------------------------------------

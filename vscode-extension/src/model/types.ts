@@ -16,9 +16,10 @@ import type {
     AgentStatusData,
     ManifestActionInfo,
     ManifestData,
+    StatusSummary,
 } from './status';
 
-export type { ActionStatus, AgentStatusData, ManifestActionInfo, ManifestData };
+export type { ActionStatus, AgentStatusData, ManifestActionInfo, ManifestData, StatusSummary };
 
 /**
  * Action type inferred from dependencies and configuration
@@ -84,22 +85,6 @@ export interface WorkflowInfo {
     levels: Map<number, ActionInfo[]>;
     /** Summary of action statuses */
     statusSummary: StatusSummary;
-}
-
-/**
- * Status counts for workflow progress display
- */
-export interface StatusSummary {
-    total: number;
-    pending: number;
-    running: number;
-    batch_submitted: number;
-    checking_batch: number;
-    completed: number;
-    completed_with_failures: number;
-    failed: number;
-    skipped: number;
-    interrupted: number;
 }
 
 /**
