@@ -139,8 +139,9 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
 
     Reads post-drop enriched content and plans keys through the same function
     enrichment uses, so the payload and the record agree. Names come from the
-    observe refs alone, so they do not vary with the data. When no observe is
-    configured, flattens all content namespaces.
+    observe refs alone, so they do not vary with the data. Flattens all content
+    namespaces only when no ``observe`` key is declared — an explicit
+    ``observe: []`` gates every business field, matching the prompt path.
     """
     from agent_actions.prompt.context.scope_application import (
         _resolve_observe_refs_for_flat_keys,
@@ -151,10 +152,10 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     if not isinstance(content, dict):
         return {}
 
-    observe_refs = context_scope.get("observe", [])
-
-    if not observe_refs:
-        # No observe declared — flatten all content namespaces
+    if "observe" not in context_scope:
+        # No observe directive at all — flatten every content namespace.
+        # An explicit `observe: []` is a declared gate, not an absent key, and
+        # falls through to the planning path below (which yields {}).
         business: dict = {}
         for ns_data in content.values():
             if isinstance(ns_data, dict):
@@ -164,7 +165,7 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     # Drops and collision diagnostics were already handled by
     # apply_context_scope_for_records().
     resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
-        observe_refs, emit_diagnostics=False
+        context_scope["observe"], emit_diagnostics=False
     )
     flat, _ = plan_flat_observed_keys(content, resolved, qualify_wildcards)
     return flat
