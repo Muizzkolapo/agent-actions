@@ -1451,10 +1451,10 @@ class TestExtractToolInput:
         records = [{"content": {"extract": {"q": "What?", "secret": "LEAK"}}}]
 
         gated = framework_prepare_input(records, observe_refs=[])
-        assert gated[0].data == {}
+        assert dict(gated[0]) == {}
 
         undeclared = framework_prepare_input(records, observe_refs=None)
-        assert undeclared[0].data == {"q": "What?", "secret": "LEAK"}
+        assert dict(undeclared[0]) == {"q": "What?", "secret": "LEAK"}
 
     def test_extracts_observed_fields_only(self):
         from agent_actions.workflow.pipeline_file_mode import extract_tool_input
