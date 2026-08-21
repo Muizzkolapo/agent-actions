@@ -709,3 +709,25 @@ class TestAdditionalPropertiesUnderStrictMode:
             {"a": "x", "extra": 1}, {"a": "string"}, "a", strict_mode=True
         )
         assert not report.is_compliant
+
+    def test_inline_shorthand_with_flag_is_still_recognised_as_shorthand(self):
+        """The shape test has twins — all of them must tolerate meta-keys.
+
+        Gate 5 sibling of the extraction fix. `_is_inline_schema_dict` gates
+        expansion in render_workflow, so if the bool makes it return False the
+        schema is never expanded and `compile_output_schema` emits
+        `properties: {}` — a field-less structured-output schema sent to the
+        model, with the required-field preflight reading `required` from that
+        same empty object. Accepting the output at the validator while the
+        vendor schema is empty removes the only signal that was catching it.
+        """
+        from agent_actions.prompt.render_workflow import _is_inline_schema_dict
+        from agent_actions.utils.schema_utils import is_inline_schema_shorthand
+
+        flagged = {"a": "string", "additionalProperties": True}
+        assert _is_inline_schema_dict(flagged)
+        assert is_inline_schema_shorthand(flagged)
+
+        # Invariant: a genuinely non-shorthand value is still not shorthand.
+        assert not _is_inline_schema_dict({"a": {"type": "string"}})
+        assert not is_inline_schema_shorthand({"a": {"type": "string"}})
