@@ -702,9 +702,8 @@ class TestAdditionalPropertiesUnderStrictMode:
         assert not junk.is_compliant
 
         # Unchanged from main: this shape's fields are not extractable, so the
-        # flag cannot take effect. Widening the shorthand shape test to fix that
-        # is a separate change — it crashes _expand_inline_schema, which walks
-        # every value and calls .endswith() on it.
+        # flag cannot take effect. Widening the shape test to fix that is a
+        # separate change — it crashes _expand_inline_schema.
         still_strict = validate_output_against_schema(
             {"a": "x", "extra": 1}, schema, "a", strict_mode=True
         )
