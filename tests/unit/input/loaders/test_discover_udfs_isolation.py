@@ -203,3 +203,31 @@ def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path)
     assert "normalize_text" in UDF_REGISTRY
     assert mock_warning.call_count == 1
     assert "bad_cookie" in str(mock_warning.call_args)
+
+
+def test_non_text_codec_cookie_does_not_abort_the_sweep(tmp_path):
+    """A `# -*- coding: base64 -*-` file is skipped, not fatal.
+
+    tokenize.detect_encoding accepts any registered codec, but TextIOWrapper
+    then rejects non-text ones with LookupError — which is neither OSError nor
+    ValueError. Uncaught, it aborts the whole directory sweep over one file,
+    which is worse than the silent drop this fix removes.
+    """
+    (tmp_path / "aaa_weird.py").write_bytes(b"# -*- coding: base64 -*-\nx = 1\n")
+    (tmp_path / "zzz_good.py").write_text(_GOOD_UDF)
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+
+
+def test_undecodable_file_declaring_a_udf_still_raises_attributed(tmp_path):
+    """An undecodable file that declares a decorator fails loudly, naming itself.
+
+    Matches the policy the unparseable branch already applies: proving intent
+    keeps the file on the import path so the user sees this file named, rather
+    than a missing-function error much later with no mention of encoding.
+    """
+    bad = "# -*- coding: not-a-real-codec -*-\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef ghost(data):\n    return data\n"
+    (tmp_path / "ghost_udf.py").write_bytes(bad.encode("ascii"))
+    with pytest.raises(UDFLoadError) as exc_info:
+        discover_udfs(tmp_path)
+    assert "ghost_udf.py" in exc_info.value.context["file"]
