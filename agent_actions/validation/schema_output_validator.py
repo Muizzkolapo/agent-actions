@@ -145,8 +145,12 @@ def validate_output_against_schema(
 
     type_errors = _check_field_types(llm_output, field_types)
 
+    # An explicit `additionalProperties: true` is the author declaring that
+    # undeclared keys are expected; strict_mode must not override it.
+    extras_permitted = _additional_properties_allowed(schema)
+
     is_compliant = len(missing_required) == 0 and len(type_errors) == 0
-    if strict_mode and extra_fields:
+    if strict_mode and extra_fields and not extras_permitted:
         is_compliant = False
     if schema_structure_errors:
         is_compliant = False
@@ -186,7 +190,7 @@ def validate_output_against_schema(
             validation_errors.append(
                 f"Type mismatch for '{field_name}': expected {expected}, got {actual}"
             )
-    if strict_mode and extra_fields:
+    if strict_mode and extra_fields and not extras_permitted:
         validation_errors.append(
             f"Extra fields not allowed in strict mode: {', '.join(extra_fields)}"
         )
@@ -261,6 +265,20 @@ def _check_properties_type(schema: dict[str, Any]) -> list[str]:
             actual = type(items["properties"]).__name__
             errors.append(f"Schema items 'properties' must be a dict, got {actual}")
     return errors
+
+
+def _additional_properties_allowed(schema: dict[str, Any]) -> bool:
+    """Whether the schema explicitly permits keys it does not declare.
+
+    Descends the nested ``schema`` wrapper the same way ``_extract_schema_fields``
+    does, so the flag is read at the level the declared fields came from.
+    """
+    if schema.get("additionalProperties") is True:
+        return True
+    nested = schema.get("schema")
+    if isinstance(nested, dict):
+        return _additional_properties_allowed(nested)
+    return False
 
 
 def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], dict[str, str]]:
