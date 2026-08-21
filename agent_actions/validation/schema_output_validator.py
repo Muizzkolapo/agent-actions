@@ -267,6 +267,11 @@ def _check_properties_type(schema: dict[str, Any]) -> list[str]:
     return errors
 
 
+_INLINE_META: frozenset[str] = frozenset(
+    {"name", "description", "additionalProperties", "required_by_default"}
+)
+
+
 def _additional_properties_allowed(schema: dict[str, Any]) -> bool:
     """Whether the schema explicitly permits keys it does not declare.
 
@@ -344,13 +349,14 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
                     if isinstance(prop_def, dict) and "type" in prop_def:
                         field_types[prop_name] = prop_def["type"]
 
-    # Handle inline schema: keys are field names, values are type strings
-    # e.g. {"optimal_code": "string", "score": "number"}
-    elif schema and all(isinstance(v, str) for v in schema.values() if v is not None):
-        # Exclude known meta-keys (name, description) that aren't field definitions
-        meta = {"name", "description"}
+    # Inline schema: keys are field names, values are type strings. Meta-keys are
+    # excluded from the shape test too — a bool like `additionalProperties: true`
+    # would otherwise fail it and drop the schema to zero fields.
+    elif schema and all(
+        isinstance(v, str) for k, v in schema.items() if v is not None and k not in _INLINE_META
+    ):
         for k, v in schema.items():
-            if k not in meta and isinstance(v, str):
+            if k not in _INLINE_META and isinstance(v, str):
                 all_fields.add(k)
                 field_types[k] = v
 
