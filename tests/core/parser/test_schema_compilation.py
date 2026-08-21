@@ -355,3 +355,25 @@ class TestCompileActionSchemasWarning:
         # No warning should fire — valid shorthand gets expanded
         for call in mock_warn.call_args_list:
             assert "not in shorthand or compiled format" not in call[0][0]
+
+
+def test_inline_shorthand_survives_the_injected_required_by_default_key():
+    """A shorthand schema file still yields its fields after SchemaLoader injects policy.
+
+    SchemaLoader.load_schema injects `required_by_default` into every schema
+    file that does not declare it (loader.py:128-130). That bool used to fail
+    the all-values-must-be-strings shape test, so every inline-shorthand schema
+    file extracted ZERO fields at the output validator — no type checks, no
+    empty-object or schema-echo guard. Meta-keys are now excluded from the
+    shape test, so shorthand files are validated as written.
+    """
+    from agent_actions.utils.schema_utils import is_inline_schema_shorthand
+    from agent_actions.validation.schema_output_validator import _extract_schema_fields
+
+    as_loaded = {"a": "string", "b": "number", "required_by_default": False}
+
+    assert is_inline_schema_shorthand(as_loaded)
+    all_fields, _, field_types = _extract_schema_fields(as_loaded)
+    assert all_fields == {"a", "b"}
+    assert field_types == {"a": "string", "b": "number"}
+    assert "required_by_default" not in all_fields
