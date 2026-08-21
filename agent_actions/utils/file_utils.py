@@ -27,15 +27,15 @@ def load_structured_file(path: Path) -> Any:
 
 
 def read_python_source(path: Path) -> str:
-    """Read a ``.py`` file the way the import machinery would.
+    """Read a ``.py`` file the way the import machinery would (PEP 263 cookie, BOM).
 
-    Honours the PEP 263 encoding cookie and a UTF-8 BOM. Reading user tool
-    files as plain UTF-8 silently drops any that declare another encoding —
-    ``UnicodeDecodeError`` is a ``ValueError``, so a broad handler swallows it
-    and the file disappears from discovery or analysis.
-
-    Raises ``SyntaxError`` when the encoding declaration is bad or missing for
-    non-UTF-8 bytes; callers must handle it alongside ``OSError``/``ValueError``.
+    Raises only ``OSError``, ``ValueError`` or ``SyntaxError``. ``LookupError``
+    is normalised to ``ValueError`` because ``detect_encoding`` accepts non-text
+    codecs that ``TextIOWrapper`` then rejects, and uncaught it would abort a
+    whole directory sweep over one file.
     """
-    with tokenize.open(path) as handle:
-        return handle.read()
+    try:
+        with tokenize.open(path) as handle:
+            return handle.read()
+    except LookupError as e:
+        raise ValueError(f"{path}: {e}") from e
