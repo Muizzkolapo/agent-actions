@@ -24,11 +24,6 @@ def is_compiled_schema(schema: dict[str, Any]) -> bool:
     return False
 
 
-INLINE_SCHEMA_META_KEYS: frozenset[str] = frozenset(
-    {"name", "description", "additionalProperties", "required_by_default"}
-)
-
-
 def is_inline_schema_shorthand(schema_value: Any) -> bool:
     """Check if a schema value is in inline shorthand format (e.g. ``{"field": "string!"}``)."""
     if not isinstance(schema_value, dict):
@@ -41,9 +36,7 @@ def is_inline_schema_shorthand(schema_value: Any) -> bool:
         return False
 
     valid_types = {"string", "number", "integer", "boolean", "array", "object"}
-    for key, value in schema_value.items():
-        if key in INLINE_SCHEMA_META_KEYS:
-            continue
+    for value in schema_value.values():
         if not isinstance(value, str):
             # Non-string values cause AttributeError in downstream .endswith("!")
             # calls. Reject here so callers get False, not a crash.

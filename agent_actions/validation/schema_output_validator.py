@@ -9,7 +9,6 @@ import jsonschema  # type: ignore[import-untyped]
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.schema_utils import INLINE_SCHEMA_META_KEYS
 from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -147,8 +146,9 @@ def validate_output_against_schema(
     type_errors = _check_field_types(llm_output, field_types)
 
     # An explicit `additionalProperties: true` is the author declaring that
-    # undeclared keys are expected; strict_mode must not override it.
-    extras_permitted = _additional_properties_allowed(schema)
+    # undeclared keys are expected. Requires declared fields: a shape that
+    # extracts none would otherwise accept arbitrary output wholesale.
+    extras_permitted = bool(expected_fields) and _additional_properties_allowed(schema)
 
     is_compliant = len(missing_required) == 0 and len(type_errors) == 0
     if strict_mode and extra_fields and not extras_permitted:
@@ -345,16 +345,13 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
                     if isinstance(prop_def, dict) and "type" in prop_def:
                         field_types[prop_name] = prop_def["type"]
 
-    # Inline schema: keys are field names, values are type strings. Meta-keys are
-    # excluded from the shape test too — a bool like `additionalProperties: true`
-    # would otherwise fail it and drop the schema to zero fields.
-    elif schema and all(
-        isinstance(v, str)
-        for k, v in schema.items()
-        if v is not None and k not in INLINE_SCHEMA_META_KEYS
-    ):
+    # Handle inline schema: keys are field names, values are type strings
+    # e.g. {"optimal_code": "string", "score": "number"}
+    elif schema and all(isinstance(v, str) for v in schema.values() if v is not None):
+        # Exclude known meta-keys (name, description) that aren't field definitions
+        meta = {"name", "description"}
         for k, v in schema.items():
-            if k not in INLINE_SCHEMA_META_KEYS and isinstance(v, str):
+            if k not in meta and isinstance(v, str):
                 all_fields.add(k)
                 field_types[k] = v
 
