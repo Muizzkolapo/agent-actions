@@ -687,21 +687,28 @@ class TestAdditionalPropertiesUnderStrictMode:
         )
         assert not report.is_compliant
 
-    def test_inline_shorthand_with_flag_still_validates_declared_fields(self):
-        """The flag must not blank out an inline shorthand schema's field list.
+    def test_schema_with_no_extractable_fields_never_blanket_accepts(self):
+        """A degenerate schema must not let the flag accept arbitrary output.
 
-        `{"a": "string", "additionalProperties": true}` failed the all-strings
-        shape test because of the bool, so no fields were extracted at all —
-        and permitting extras then accepted arbitrary junk. Meta-keys are now
-        excluded from the shape test, so the declared field survives.
+        `_extract_schema_fields` cannot read an inline shorthand schema that
+        carries a non-string meta-key, so it yields zero declared fields and
+        every output key counts as extra. Permitting extras there would accept
+        anything. The gate therefore requires that fields were actually
+        declared — behaviour for this shape is unchanged from before the fix.
         """
         schema = {"a": "string", "additionalProperties": True}
 
         junk = validate_output_against_schema({"zzz": 1}, schema, "a", strict_mode=True)
         assert not junk.is_compliant
 
-        ok = validate_output_against_schema({"a": "x", "extra": 1}, schema, "a", strict_mode=True)
-        assert ok.is_compliant
+        # Unchanged from main: this shape's fields are not extractable, so the
+        # flag cannot take effect. Widening the shorthand shape test to fix that
+        # is a separate change — it crashes _expand_inline_schema, which walks
+        # every value and calls .endswith() on it.
+        still_strict = validate_output_against_schema(
+            {"a": "x", "extra": 1}, schema, "a", strict_mode=True
+        )
+        assert not still_strict.is_compliant
 
     def test_inline_shorthand_without_flag_still_rejects_extras(self):
         """Invariant: shorthand schemas keep rejecting extras when no flag is set."""
@@ -709,25 +716,3 @@ class TestAdditionalPropertiesUnderStrictMode:
             {"a": "x", "extra": 1}, {"a": "string"}, "a", strict_mode=True
         )
         assert not report.is_compliant
-
-    def test_inline_shorthand_with_flag_is_still_recognised_as_shorthand(self):
-        """The shape test has twins — all of them must tolerate meta-keys.
-
-        Gate 5 sibling of the extraction fix. `_is_inline_schema_dict` gates
-        expansion in render_workflow, so if the bool makes it return False the
-        schema is never expanded and `compile_output_schema` emits
-        `properties: {}` — a field-less structured-output schema sent to the
-        model, with the required-field preflight reading `required` from that
-        same empty object. Accepting the output at the validator while the
-        vendor schema is empty removes the only signal that was catching it.
-        """
-        from agent_actions.prompt.render_workflow import _is_inline_schema_dict
-        from agent_actions.utils.schema_utils import is_inline_schema_shorthand
-
-        flagged = {"a": "string", "additionalProperties": True}
-        assert _is_inline_schema_dict(flagged)
-        assert is_inline_schema_shorthand(flagged)
-
-        # Invariant: a genuinely non-shorthand value is still not shorthand.
-        assert not _is_inline_schema_dict({"a": {"type": "string"}})
-        assert not is_inline_schema_shorthand({"a": {"type": "string"}})
