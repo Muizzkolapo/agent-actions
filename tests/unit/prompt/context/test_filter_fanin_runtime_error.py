@@ -9,6 +9,7 @@ import logging
 import pytest
 
 from agent_actions.errors.operations import TemplateVariableError
+from agent_actions.prompt.context.null_namespace import SKIPPED_NAMESPACE
 from agent_actions.prompt.context.scope_application import apply_context_scope
 from agent_actions.prompt.service import PromptPreparationService
 
@@ -169,3 +170,90 @@ class TestTemplateNullNamespaceError:
         err = exc_info.value
         assert "null_namespace_hints" in err.context
         assert "filtered_ns" in err.context["null_namespace_hints"]
+
+
+# ── service.py: the NullNamespace sentinel gets the same hints as None ──
+
+
+class TestTemplateNullNamespaceSentinelError:
+    """Spec 595: guard-skipped namespaces reach the renderer as the
+    ``NullNamespace`` sentinel, not legacy ``None``. Jinja names the object
+    (``'...NullNamespace object' has no attribute 'x'``), so a hint gated on
+    the literal ``'None'`` never fired on the shape production actually builds.
+    """
+
+    def test_sentinel_attribute_error_includes_null_namespace_hints(self):
+        """Production shape: {{ ns.field }} on SKIPPED_NAMESPACE -> hints name ns."""
+        prompt_context = {
+            "auto_review_quality": SKIPPED_NAMESPACE,
+            "other_dep": {"score": 42},
+        }
+        raw_prompt = "Score: {{ other_dep.score }}, T: {{ auto_review_quality.telegraph_score }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="write_scenario_question",
+            )
+
+        err = exc_info.value
+        assert err.null_namespace_hints
+        assert "auto_review_quality" in err.null_namespace_hints
+        hint = err.null_namespace_hints["auto_review_quality"]
+        assert "other_dep" in hint["alternate_deps"]
+        assert "skipped" in hint["remediation"].lower()
+
+    def test_sentinel_message_appends_remediation(self):
+        """The rendered error text carries the null-safe remediation, as None does."""
+        prompt_context = {
+            "filtered_action": SKIPPED_NAMESPACE,
+            "other_dep": {"score": 42},
+        }
+        raw_prompt = "{{ filtered_action.answer_letter }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        msg = str(exc_info.value)
+        assert "undefined variables" in msg.lower()
+        assert "null" in msg.lower()
+        assert "null-safe" in msg.lower()
+
+    def test_sentinel_context_dict_includes_null_namespace_hints(self):
+        """Downstream consumers read hints off the error context dict."""
+        prompt_context = {
+            "filtered_ns": SKIPPED_NAMESPACE,
+            "good_ns": {"val": 1},
+        }
+        raw_prompt = "{{ filtered_ns.some_field }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert "null_namespace_hints" in exc_info.value.context
+
+    def test_sentinel_coexisting_with_typo_on_good_ns_no_false_blame(self):
+        """A sentinel in scope must not be blamed for a typo on a real namespace."""
+        prompt_context = {
+            "dep_a": SKIPPED_NAMESPACE,
+            "good": {"x": 1},
+        }
+        raw_prompt = "{{ good.nonexistent_field }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert not exc_info.value.null_namespace_hints
