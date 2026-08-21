@@ -15,7 +15,7 @@ from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
-from agent_actions.utils.schema_utils import is_compiled_schema
+from agent_actions.utils.schema_utils import INLINE_SCHEMA_META_KEYS, is_compiled_schema
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,9 @@ def _is_inline_schema_dict(schema_value: Any) -> bool:
 
     # Check if all values are type strings (inline schema format)
     valid_types = {"string", "number", "integer", "boolean", "array", "object"}
-    for value in schema_value.values():
+    for key, value in schema_value.items():
+        if key in INLINE_SCHEMA_META_KEYS:
+            continue
         if not isinstance(value, str):
             return False
         # Strip required marker for type check

@@ -9,6 +9,7 @@ import jsonschema  # type: ignore[import-untyped]
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import SchemaValidationError
+from agent_actions.utils.schema_utils import INLINE_SCHEMA_META_KEYS
 from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -267,11 +268,6 @@ def _check_properties_type(schema: dict[str, Any]) -> list[str]:
     return errors
 
 
-_INLINE_META: frozenset[str] = frozenset(
-    {"name", "description", "additionalProperties", "required_by_default"}
-)
-
-
 def _additional_properties_allowed(schema: dict[str, Any]) -> bool:
     """Whether the schema explicitly permits keys it does not declare.
 
@@ -353,10 +349,12 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
     # excluded from the shape test too — a bool like `additionalProperties: true`
     # would otherwise fail it and drop the schema to zero fields.
     elif schema and all(
-        isinstance(v, str) for k, v in schema.items() if v is not None and k not in _INLINE_META
+        isinstance(v, str)
+        for k, v in schema.items()
+        if v is not None and k not in INLINE_SCHEMA_META_KEYS
     ):
         for k, v in schema.items():
-            if k not in _INLINE_META and isinstance(v, str):
+            if k not in INLINE_SCHEMA_META_KEYS and isinstance(v, str):
                 all_fields.add(k)
                 field_types[k] = v
 
