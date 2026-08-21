@@ -257,3 +257,51 @@ class TestTemplateNullNamespaceSentinelError:
             )
 
         assert not exc_info.value.null_namespace_hints
+
+    def test_sentinel_field_named_after_its_namespace_still_raises(self):
+        """`{{ ns.ns_score }}` on a null namespace raises — it does not render empty.
+
+        Spec 595 strictness change. The removed `_PermissiveNamespace` recovery
+        matched `action in str(ue)` against the whole Jinja message, so a field
+        name *containing* its namespace name (`observe: [ns.ns_field]`, a common
+        convention) made the message contain the namespace name and silently
+        rendered the reference empty — while `{{ ns.other_field }}` raised. Same
+        null namespace, opposite outcome, decided by field naming. Both raise now.
+        """
+        prompt_context = {
+            "adjacent_architectures": SKIPPED_NAMESPACE,
+            "author": {"name": "x"},
+        }
+        raw_prompt = "{{ adjacent_architectures.adjacent_architectures }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert "adjacent_architectures" in exc_info.value.null_namespace_hints
+
+    def test_bare_sentinel_reference_renders_empty_not_repr(self):
+        """`{{ ns }}` on a null namespace renders "" — never the sentinel's repr.
+
+        The `finalize` callback tested `x is None`, so the sentinel fell through
+        and leaked `NullNamespace(reason='skipped')` into the prompt sent to the
+        provider. Sibling of the hint gate: same None-vs-sentinel blind spot.
+        """
+        result = PromptPreparationService._render_prompt_template(
+            "[{{ skipped_ns }}]",
+            {"skipped_ns": SKIPPED_NAMESPACE, "other": {"x": 1}},
+            agent_name="consumer",
+        )
+        assert result == "[]"
+
+    def test_bare_none_reference_still_renders_empty(self):
+        """Parity: the legacy None namespace keeps rendering empty."""
+        result = PromptPreparationService._render_prompt_template(
+            "[{{ skipped_ns }}]",
+            {"skipped_ns": None, "other": {"x": 1}},
+            agent_name="consumer",
+        )
+        assert result == "[]"
