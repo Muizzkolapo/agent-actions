@@ -532,3 +532,76 @@ class TestNamespacedKeyHint:
         report = validate_output_against_schema(output, schema, "test_action")
         assert report.is_compliant
         assert not any("action namespaces" in e for e in report.validation_errors)
+
+
+class TestAdditionalPropertiesUnderStrictMode:
+    """`additionalProperties: true` must relax extra-field rejection.
+
+    `strict_mode` is set by `on_schema_mismatch: reject`
+    (processing/helpers.py:216) and receives the raw user schema, so a schema
+    that explicitly permits extra keys was still failed on that path. The
+    framework advises exactly this setting — `udf_passthrough_validator.py:181`
+    tells authors to "set additionalProperties: true" so extra upstream keys are
+    not "rejected at runtime" — and then rejected them anyway.
+    """
+
+    def test_additional_properties_true_allows_extra_fields(self):
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+        assert not [e for e in report.validation_errors if "Extra fields" in e]
+
+    def test_additional_properties_true_in_nested_schema_allows_extra_fields(self):
+        """Compiled/nested `schema` shapes carry the flag one level down."""
+        schema = {
+            "name": "s",
+            "schema": {
+                "additionalProperties": True,
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_additional_properties_false_still_rejects(self):
+        """Invariant: an explicit deny keeps rejecting."""
+        schema = {
+            "name": "s",
+            "additionalProperties": False,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_absent_additional_properties_still_rejects_in_strict_mode(self):
+        """Invariant: the default must not move — silence still means strict."""
+        schema = {"name": "s", "fields": [{"id": "name", "type": "string", "required": True}]}
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_additional_properties_true_does_not_mask_missing_required(self):
+        """Permitting extras must not excuse a missing required field."""
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"other": "x", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
