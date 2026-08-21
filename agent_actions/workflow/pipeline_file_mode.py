@@ -264,7 +264,9 @@ def framework_prepare_input(
     observe_refs: list[str] | None = None,
 ) -> list[TrackedItem]:
     """Strip framework fields and wrap in TrackedItem for tool input."""
-    context_scope: dict[str, Any] = {"observe": observe_refs} if observe_refs else {}
+    # None = no directive; [] = a declared gate. Collapsing them here would
+    # reintroduce the truthiness bug this helper delegates past.
+    context_scope: dict[str, Any] = {} if observe_refs is None else {"observe": observe_refs}
     return [
         TrackedItem(extract_tool_input(record, context_scope), source_index=i)
         for i, record in enumerate(records)
