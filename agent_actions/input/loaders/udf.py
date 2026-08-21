@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError
+from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 logger = logging.getLogger(__name__)
@@ -19,9 +20,15 @@ _TOOL_DECORATORS = frozenset({"udf_tool", "reprompt_validation"})
 def _declares_tool_decorator(py_file: Path) -> bool:
     """True if the file declares a tool-registering decorated function, without executing it."""
     try:
-        source = py_file.read_text(encoding="utf-8")
-    except (OSError, ValueError) as e:
-        logger.debug("Skipping unreadable file %s: %s", py_file, e)
+        source = read_python_source(py_file)
+    except (OSError, ValueError, SyntaxError) as e:
+        logger.warning(
+            "Skipping %s: cannot decode as Python source (%s). If it registers "
+            "UDFs they will not be available — fix its encoding declaration or "
+            "move it out of the user-code directory.",
+            py_file,
+            e,
+        )
         return False
     try:
         tree = ast.parse(source)
