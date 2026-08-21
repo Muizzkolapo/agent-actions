@@ -643,3 +643,69 @@ class TestAdditionalPropertiesUnderStrictMode:
         )
         assert not report.is_compliant
         assert "extra" in report.extra_fields
+
+    def test_flag_in_an_unused_nested_wrapper_does_not_permit_extras(self):
+        """Reverse direction: the flag must not be read from a level whose fields were ignored.
+
+        Extraction stops at a top-level `fields` block, so a nested `schema`
+        wrapper's properties are never used — its flag must not apply either.
+        This is what separates mirroring the descent from "search anywhere for
+        additionalProperties: true", which would pass every other test here.
+        """
+        schema = {
+            "name": "s",
+            "fields": [{"id": "name", "type": "string", "required": True}],
+            "schema": {"additionalProperties": True, "properties": {"unused": {}}},
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_properties_format_with_flag_allows_extra_fields(self):
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_non_boolean_additional_properties_is_not_permission(self):
+        """Only the literal `true` permits extras — a schema object does not."""
+        schema = {
+            "name": "s",
+            "additionalProperties": {"type": "string"},
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+
+    def test_inline_shorthand_with_flag_still_validates_declared_fields(self):
+        """The flag must not blank out an inline shorthand schema's field list.
+
+        `{"a": "string", "additionalProperties": true}` failed the all-strings
+        shape test because of the bool, so no fields were extracted at all —
+        and permitting extras then accepted arbitrary junk. Meta-keys are now
+        excluded from the shape test, so the declared field survives.
+        """
+        schema = {"a": "string", "additionalProperties": True}
+
+        junk = validate_output_against_schema({"zzz": 1}, schema, "a", strict_mode=True)
+        assert not junk.is_compliant
+
+        ok = validate_output_against_schema({"a": "x", "extra": 1}, schema, "a", strict_mode=True)
+        assert ok.is_compliant
+
+    def test_inline_shorthand_without_flag_still_rejects_extras(self):
+        """Invariant: shorthand schemas keep rejecting extras when no flag is set."""
+        report = validate_output_against_schema(
+            {"a": "x", "extra": 1}, {"a": "string"}, "a", strict_mode=True
+        )
+        assert not report.is_compliant
