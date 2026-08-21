@@ -270,14 +270,21 @@ def _check_properties_type(schema: dict[str, Any]) -> list[str]:
 def _additional_properties_allowed(schema: dict[str, Any]) -> bool:
     """Whether the schema explicitly permits keys it does not declare.
 
-    Descends the nested ``schema`` wrapper the same way ``_extract_schema_fields``
-    does, so the flag is read at the level the declared fields came from.
+    Mirrors ``_extract_schema_fields``'s descent precedence, so the flag is read
+    at the level the declared fields came from. Reading it anywhere else lets the
+    two disagree — e.g. an array schema whose fields come from ``items`` while
+    the flag is looked up at the top.
     """
     if schema.get("additionalProperties") is True:
         return True
+    # These shapes are terminal for field extraction — do not descend past them.
+    if "fields" in schema or "properties" in schema:
+        return False
     nested = schema.get("schema")
     if isinstance(nested, dict):
         return _additional_properties_allowed(nested)
+    if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
+        return _additional_properties_allowed(schema["items"])
     return False
 
 
