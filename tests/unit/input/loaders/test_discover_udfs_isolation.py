@@ -190,14 +190,9 @@ def test_udf_with_utf8_bom_is_discovered(tmp_path):
 def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path):
     """An undecodable file is skipped, warns, and does not abort the sweep.
 
-    tokenize.open raises SyntaxError (not ValueError) for a bad encoding
-    declaration, so the handler must cover it or discovery crashes outright.
-
-    Asserts against the module logger rather than caplog: the framework
-    configures ``agent_actions`` loggers with propagation off, so once any
-    earlier test initialises logging, caplog's root handler sees nothing and a
-    caplog assertion passes vacuously. Verified — this test passed alone and
-    failed in the full suite while the warning was visibly on stderr.
+    tokenize.open raises SyntaxError, not ValueError, for a bad encoding cookie.
+    Asserts on the module logger because agent_actions loggers run with
+    propagation off, which makes caplog assertions pass vacuously mid-suite.
     """
     (tmp_path / "good.py").write_text(_GOOD_UDF)
     (tmp_path / "bad_cookie.py").write_bytes(b"# -*- coding: not-a-real-codec -*-\nx = 1\n")
