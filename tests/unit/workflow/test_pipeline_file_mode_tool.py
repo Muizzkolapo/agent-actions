@@ -1397,6 +1397,47 @@ class TestExtractToolInput:
             "summary": "Short version",
         }
 
+    def test_explicit_empty_observe_gates_every_business_field(self):
+        """`observe: []` is a declared gate, not an absent directive (issue #871).
+
+        The prompt path already draws this distinction and documents it at
+        scope_application.py:152 — "no directive keys declared at all = pass
+        everything through. Distinct from {"observe": []} which means gate to
+        framework namespaces only." FILE mode used a truthiness test, so an
+        author who gated a tool with `observe: []` got the exact opposite:
+        every upstream namespace flattened into the tool's input.
+        """
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
+
+        record = {
+            "content": {
+                "extract": {"question_text": "What?", "internal_secret": "LEAK"},
+                "summarize": {"summary": "Short version"},
+            }
+        }
+        assert extract_tool_input(record, {"observe": []}) == {}
+
+    def test_absent_observe_key_still_flattens_all(self):
+        """Invariant: an absent `observe` key keeps meaning "pass everything"."""
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
+
+        record = {"content": {"extract": {"q": "What?"}, "summarize": {"s": "Short"}}}
+        assert extract_tool_input(record, {}) == {"q": "What?", "s": "Short"}
+
+    def test_drop_only_scope_still_flattens_all(self):
+        """Invariant: `drop` without `observe` still flattens.
+
+        Drops are applied to content by apply_context_scope_for_records() before
+        this runs, so "everything that survived" is the correct payload.
+        """
+        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
+
+        record = {"content": {"extract": {"q": "What?"}, "summarize": {"s": "Short"}}}
+        assert extract_tool_input(record, {"drop": ["extract.gone"]}) == {
+            "q": "What?",
+            "s": "Short",
+        }
+
     def test_extracts_observed_fields_only(self):
         from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
