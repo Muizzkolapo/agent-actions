@@ -1,11 +1,12 @@
 """UDF discovery imports only udf_tool-declaring files; broken helpers must not block it."""
 
-import logging
 import sys
+from unittest.mock import patch
 
 import pytest
 
 from agent_actions.errors import UDFLoadError
+from agent_actions.input.loaders import udf as udf_loader
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.processing.recovery.validation import _VALIDATION_REGISTRY
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, clear_registry
@@ -186,15 +187,24 @@ def test_udf_with_utf8_bom_is_discovered(tmp_path):
     assert "tag_bom" in UDF_REGISTRY
 
 
-def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path, caplog):
+def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path):
     """An undecodable file is skipped, warns, and does not abort the sweep.
 
     tokenize.open raises SyntaxError (not ValueError) for a bad encoding
     declaration, so the handler must cover it or discovery crashes outright.
+
+    Asserts against the module logger rather than caplog: the framework
+    configures ``agent_actions`` loggers with propagation off, so once any
+    earlier test initialises logging, caplog's root handler sees nothing and a
+    caplog assertion passes vacuously. Verified — this test passed alone and
+    failed in the full suite while the warning was visibly on stderr.
     """
     (tmp_path / "good.py").write_text(_GOOD_UDF)
     (tmp_path / "bad_cookie.py").write_bytes(b"# -*- coding: not-a-real-codec -*-\nx = 1\n")
-    with caplog.at_level(logging.WARNING):
+
+    with patch.object(udf_loader.logger, "warning") as mock_warning:
         discover_udfs(tmp_path)
+
     assert "normalize_text" in UDF_REGISTRY
-    assert any("bad_cookie" in r.getMessage() for r in caplog.records)
+    assert mock_warning.call_count == 1
+    assert "bad_cookie" in str(mock_warning.call_args)
