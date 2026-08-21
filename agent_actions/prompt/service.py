@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, UndefinedError
+from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -31,22 +31,6 @@ from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
-
-
-class _PermissiveNamespace(dict):
-    """Dict that returns None for any missing key or attribute access.
-
-    Used as a stand-in for skipped-dependency namespaces in Jinja2
-    templates.  The ``finalize`` callback on the Environment converts
-    ``None`` → ``""`` so template references render as empty strings
-    instead of crashing.
-    """
-
-    def __getattr__(self, name: str) -> None:  # type: ignore[override]
-        return None
-
-    def __getitem__(self, key: str) -> None:
-        return None
 
 
 @dataclass
@@ -264,17 +248,12 @@ class PromptPreparationService:
         )
         logger.debug("Built LLM context for %s mode with %d keys", request.mode, len(llm_context))
 
-        # Identify skipped dependency namespaces so the template renderer
-        # can substitute empty dicts instead of crashing on UndefinedError.
-        skipped_actions: set[str] = {k for k, v in prompt_context.items() if is_null_namespace(v)}
-
         formatted_prompt = PromptPreparationService._render_prompt_template(
             raw_prompt,
             prompt_context,
             agent_name=request.agent_name,
             mode=request.mode,
             field_context_metadata=field_context_metadata,
-            skipped_actions=skipped_actions or None,
         )
 
         formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
@@ -314,16 +293,8 @@ class PromptPreparationService:
         agent_name: str | None = None,
         mode: str | None = None,
         field_context_metadata: dict[str, Any] | None = None,
-        skipped_actions: set[str] | None = None,
     ) -> str:
-        """
-        Render Jinja2 template with the given context.
-
-        Args:
-            skipped_actions: Action namespaces known to be absent because
-                their upstream dependency was skipped.  Missing template
-                variables matching these names get an empty namespace
-                instead of crashing.
+        """Render the Jinja2 template with the given context.
 
         Raises:
             TemplateVariableError: If template syntax is invalid or rendering fails.
@@ -343,31 +314,7 @@ class PromptPreparationService:
 
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
             template = jinja_env.from_string(raw_prompt)
-            try:
-                formatted_prompt = template.render(**prompt_context)
-            except UndefinedError as ue:
-                # Tolerate missing variables from skipped dependencies.
-                # Inject a _PermissiveNamespace that returns None for any
-                # attribute access; the finalize callback converts None → "".
-                if skipped_actions:
-                    for action in skipped_actions:
-                        if action in str(ue):
-                            logger.warning(
-                                "Template variable from skipped dependency '%s' "
-                                "— substituting empty namespace: %s",
-                                action,
-                                ue,
-                            )
-                            prompt_context[action] = _PermissiveNamespace()
-                            for other in skipped_actions:
-                                if other not in prompt_context:
-                                    prompt_context[other] = _PermissiveNamespace()
-                            formatted_prompt = template.render(**prompt_context)
-                            break
-                    else:
-                        raise
-                else:
-                    raise
+            formatted_prompt = template.render(**prompt_context)
             logger.debug("Rendered prompt template with Jinja2")
             return str(formatted_prompt)
 
@@ -471,12 +418,11 @@ class PromptPreparationService:
                                 }
                                 break
 
-            # Null namespace hint for guard-filter at fan-in (spec 415).
-            # Only triggers when Jinja dereferences None (not a dict missing
-            # a key), and only blames the namespace the template actually
-            # tried to access — not every null namespace in scope.
+            # Null namespace hint at fan-in (spec 415). Gate on a null namespace
+            # being in scope, not on the error text — Jinja names the dereferenced
+            # object, so a "'None'" prefix silently misses the sentinel.
             null_namespace_hints: dict[str, dict[str, Any]] = {}
-            if error_str.startswith("'None' has no attribute"):
+            if any(is_null_namespace(v) for v in prompt_context.values()):
                 attribute_name = missing[0] if missing else None
                 if attribute_name:
                     # Find which null namespace the template referenced with
