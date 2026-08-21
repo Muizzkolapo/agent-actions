@@ -1438,6 +1438,24 @@ class TestExtractToolInput:
             "s": "Short",
         }
 
+    def test_framework_prepare_input_distinguishes_empty_refs_from_none(self):
+        """The public helper must not collapse `[]` into "no directive" either.
+
+        Found in review: framework_prepare_input built its context_scope with
+        `{"observe": refs} if refs else {}`, so an explicit empty list produced
+        an empty scope and flattened everything — the same truthiness bug as
+        extract_tool_input, 100 lines below it in the same module.
+        """
+        from agent_actions.workflow.pipeline_file_mode import framework_prepare_input
+
+        records = [{"content": {"extract": {"q": "What?", "secret": "LEAK"}}}]
+
+        gated = framework_prepare_input(records, observe_refs=[])
+        assert gated[0].data == {}
+
+        undeclared = framework_prepare_input(records, observe_refs=None)
+        assert undeclared[0].data == {"q": "What?", "secret": "LEAK"}
+
     def test_extracts_observed_fields_only(self):
         from agent_actions.workflow.pipeline_file_mode import extract_tool_input
 
