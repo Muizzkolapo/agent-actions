@@ -150,7 +150,9 @@ _LATIN1_VALIDATION = (
     "    return True\n"
 )
 
-_BOM_UDF = "from agent_actions import udf_tool\n\n@udf_tool()\ndef tag_bom(data):\n    return data\n"
+_BOM_UDF = (
+    "from agent_actions import udf_tool\n\n@udf_tool()\ndef tag_bom(data):\n    return data\n"
+)
 
 
 def test_udf_with_encoding_cookie_is_discovered(tmp_path):
