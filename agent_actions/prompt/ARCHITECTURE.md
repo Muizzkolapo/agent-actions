@@ -244,7 +244,8 @@ Step 5: BUILD LLM CONTEXT
   
 Step 6: RENDER JINJA2 TEMPLATE
   _render_prompt_template(raw_prompt, prompt_context)
-  --> Jinja2 with StrictUndefined, skipped-dep fallback
+  --> Jinja2 with StrictUndefined; bare null namespace renders empty,
+  |       field access on one raises with remediation hints
   --> Produces formatted_prompt string
   
 Step 7: RESOLVE DISPATCH_TASK() CALLS

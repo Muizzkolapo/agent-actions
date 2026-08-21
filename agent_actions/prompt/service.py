@@ -309,7 +309,7 @@ class PromptPreparationService:
                 trim_blocks=True,
                 lstrip_blocks=True,
                 keep_trailing_newline=True,
-                finalize=lambda x: "" if x is None else x,
+                finalize=lambda x: "" if is_null_namespace(x) else x,
             )
 
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
