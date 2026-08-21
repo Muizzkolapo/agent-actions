@@ -605,3 +605,41 @@ class TestAdditionalPropertiesUnderStrictMode:
             {"other": "x", "extra": "value"}, schema, "a", strict_mode=True
         )
         assert not report.is_compliant
+
+    def test_additional_properties_true_in_array_items_allows_extra_fields(self):
+        """Array schemas take their declared fields from `items` — read the flag there.
+
+        Found while checking my own fix: a top-level-only lookup disagrees with
+        _extract_schema_fields, which descends into items.properties.
+        """
+        schema = {
+            "name": "s",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": True,
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            [{"name": "John", "extra": "value"}], schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_array_items_without_flag_still_rejects(self):
+        """Invariant: the array shape keeps rejecting when the flag is absent."""
+        schema = {
+            "name": "s",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            [{"name": "John", "extra": "value"}], schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
