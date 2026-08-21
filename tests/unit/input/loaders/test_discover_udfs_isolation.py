@@ -1,5 +1,6 @@
 """UDF discovery imports only udf_tool-declaring files; broken helpers must not block it."""
 
+import logging
 import sys
 
 import pytest
@@ -123,3 +124,75 @@ def test_reprompt_validation_only_file_is_imported(tmp_path):
     (tmp_path / "citation_checks.py").write_text(_VALIDATION_ONLY)
     discover_udfs(tmp_path)
     assert "check_citation" in _VALIDATION_REGISTRY
+
+
+# ── Source encoding: discovery must decode like the import machinery ──
+
+# PEP 263 cookie with a non-UTF-8 body. Python imports this fine.
+_LATIN1_UDF = (
+    "# -*- coding: latin-1 -*-\n"
+    "from agent_actions import udf_tool\n"
+    "\n"
+    "# R\xe9duit les accents.\n"
+    "@udf_tool()\n"
+    "def strip_accents(data):\n"
+    "    return data\n"
+)
+
+# Same, but registering the OTHER decorator the gate admits.
+_LATIN1_VALIDATION = (
+    "# -*- coding: latin-1 -*-\n"
+    "from agent_actions import reprompt_validation\n"
+    "\n"
+    "# V\xe9rifie la citation.\n"
+    '@reprompt_validation("answer must cite a source")\n'
+    "def check_accent_citation(data):\n"
+    "    return True\n"
+)
+
+_BOM_UDF = "from agent_actions import udf_tool\n\n@udf_tool()\ndef tag_bom(data):\n    return data\n"
+
+
+def test_udf_with_encoding_cookie_is_discovered(tmp_path):
+    """A PEP 263 non-UTF-8 UDF registers — it must not be dropped at the decode step."""
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "accent_tools.py").write_bytes(_LATIN1_UDF.encode("latin-1"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "strip_accents" in UDF_REGISTRY
+
+
+def test_validation_only_file_with_encoding_cookie_is_discovered(tmp_path):
+    """The reprompt_validation side effect survives the same path as udf_tool.
+
+    The gate admits two registering decorators; a decode fix that only covered
+    one of them would leave the other silently unregistered.
+    """
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "accent_checks.py").write_bytes(_LATIN1_VALIDATION.encode("latin-1"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "check_accent_citation" in _VALIDATION_REGISTRY
+
+
+def test_udf_with_utf8_bom_is_discovered(tmp_path):
+    """A BOM-prefixed UDF registers."""
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "bom_tools.py").write_bytes(b"\xef\xbb\xbf" + _BOM_UDF.encode("utf-8"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "tag_bom" in UDF_REGISTRY
+
+
+def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path, caplog):
+    """An undecodable file is skipped, warns, and does not abort the sweep.
+
+    tokenize.open raises SyntaxError (not ValueError) for a bad encoding
+    declaration, so the handler must cover it or discovery crashes outright.
+    """
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "bad_cookie.py").write_bytes(b"# -*- coding: not-a-real-codec -*-\nx = 1\n")
+    with caplog.at_level(logging.WARNING):
+        discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert any("bad_cookie" in r.getMessage() for r in caplog.records)
