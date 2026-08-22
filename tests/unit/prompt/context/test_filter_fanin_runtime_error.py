@@ -9,6 +9,7 @@ import logging
 import pytest
 
 from agent_actions.errors.operations import TemplateVariableError
+from agent_actions.prompt.context.null_namespace import SKIPPED_NAMESPACE
 from agent_actions.prompt.context.scope_application import apply_context_scope
 from agent_actions.prompt.service import PromptPreparationService
 
@@ -169,3 +170,138 @@ class TestTemplateNullNamespaceError:
         err = exc_info.value
         assert "null_namespace_hints" in err.context
         assert "filtered_ns" in err.context["null_namespace_hints"]
+
+
+# ── service.py: the NullNamespace sentinel gets the same hints as None ──
+
+
+class TestTemplateNullNamespaceSentinelError:
+    """Guard-skipped namespaces reach the renderer as the ``NullNamespace``
+    sentinel, not legacy ``None``. Jinja names the object
+    (``'...NullNamespace object' has no attribute 'x'``), so a hint gated on
+    the literal ``'None'`` never fired on the shape production actually builds.
+    """
+
+    def test_sentinel_attribute_error_includes_null_namespace_hints(self):
+        """Production shape: {{ ns.field }} on SKIPPED_NAMESPACE -> hints name ns."""
+        prompt_context = {
+            "auto_review_quality": SKIPPED_NAMESPACE,
+            "other_dep": {"score": 42},
+        }
+        raw_prompt = "Score: {{ other_dep.score }}, T: {{ auto_review_quality.telegraph_score }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="write_scenario_question",
+            )
+
+        err = exc_info.value
+        assert err.null_namespace_hints
+        assert "auto_review_quality" in err.null_namespace_hints
+        hint = err.null_namespace_hints["auto_review_quality"]
+        assert "other_dep" in hint["alternate_deps"]
+        assert "skipped" in hint["remediation"].lower()
+
+    def test_sentinel_message_appends_remediation(self):
+        """The rendered error text carries the null-safe remediation, as None does."""
+        prompt_context = {
+            "filtered_action": SKIPPED_NAMESPACE,
+            "other_dep": {"score": 42},
+        }
+        raw_prompt = "{{ filtered_action.answer_letter }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        msg = str(exc_info.value)
+        assert "undefined variables" in msg.lower()
+        assert "null" in msg.lower()
+        assert "null-safe" in msg.lower()
+
+    def test_sentinel_context_dict_includes_null_namespace_hints(self):
+        """Downstream consumers read hints off the error context dict."""
+        prompt_context = {
+            "filtered_ns": SKIPPED_NAMESPACE,
+            "good_ns": {"val": 1},
+        }
+        raw_prompt = "{{ filtered_ns.some_field }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert "null_namespace_hints" in exc_info.value.context
+
+    def test_sentinel_coexisting_with_typo_on_good_ns_no_false_blame(self):
+        """A sentinel in scope must not be blamed for a typo on a real namespace."""
+        prompt_context = {
+            "dep_a": SKIPPED_NAMESPACE,
+            "good": {"x": 1},
+        }
+        raw_prompt = "{{ good.nonexistent_field }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert not exc_info.value.null_namespace_hints
+
+    def test_sentinel_field_named_after_its_namespace_still_raises(self):
+        """`{{ ns.ns_score }}` on a null namespace raises — it does not render empty.
+
+        This is a deliberate strictness change. The removed `_PermissiveNamespace`
+        recovery matched `action in str(ue)` against the whole Jinja message, so a field
+        name *containing* its namespace name (`observe: [ns.ns_field]`, a common
+        convention) made the message contain the namespace name and silently
+        rendered the reference empty — while `{{ ns.other_field }}` raised. Same
+        null namespace, opposite outcome, decided by field naming. Both raise now.
+        """
+        prompt_context = {
+            "adjacent_architectures": SKIPPED_NAMESPACE,
+            "author": {"name": "x"},
+        }
+        raw_prompt = "{{ adjacent_architectures.adjacent_architectures }}"
+
+        with pytest.raises(TemplateVariableError) as exc_info:
+            PromptPreparationService._render_prompt_template(
+                raw_prompt,
+                prompt_context,
+                agent_name="consumer",
+            )
+
+        assert "adjacent_architectures" in exc_info.value.null_namespace_hints
+
+    def test_bare_sentinel_reference_renders_empty_not_repr(self):
+        """`{{ ns }}` on a null namespace renders "" — never the sentinel's repr.
+
+        The `finalize` callback tested `x is None`, so the sentinel fell through
+        and leaked `NullNamespace(reason='skipped')` into the prompt sent to the
+        provider. Sibling of the hint gate: same None-vs-sentinel blind spot.
+        """
+        result = PromptPreparationService._render_prompt_template(
+            "[{{ skipped_ns }}]",
+            {"skipped_ns": SKIPPED_NAMESPACE, "other": {"x": 1}},
+            agent_name="consumer",
+        )
+        assert result == "[]"
+
+    def test_bare_none_reference_still_renders_empty(self):
+        """Parity: the legacy None namespace keeps rendering empty."""
+        result = PromptPreparationService._render_prompt_template(
+            "[{{ skipped_ns }}]",
+            {"skipped_ns": None, "other": {"x": 1}},
+            agent_name="consumer",
+        )
+        assert result == "[]"

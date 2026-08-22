@@ -1,4 +1,4 @@
-"""Tests for skipped-dependency template tolerance and None finalize."""
+"""Tests for None finalize in prompt template rendering."""
 
 from __future__ import annotations
 
@@ -6,53 +6,6 @@ import pytest
 
 from agent_actions.errors import TemplateVariableError
 from agent_actions.prompt.service import PromptPreparationService
-
-
-class TestSkippedDependencyTolerance:
-    """Defect 3: Skipped-dep template variables get empty namespace, not crash."""
-
-    def test_skipped_dep_renders_empty(self):
-        """Missing variable from skipped dependency renders as empty string."""
-        result = PromptPreparationService._render_prompt_template(
-            "Result: {{ upstream_action.output_field }}",
-            {"other_action": {"field": "value"}},
-            agent_name="test",
-            mode="online",
-            skipped_actions={"upstream_action"},
-        )
-        assert result == "Result: "
-
-    def test_genuine_typo_still_raises(self):
-        """Missing variable NOT in skipped_actions still raises."""
-        with pytest.raises(TemplateVariableError):
-            PromptPreparationService._render_prompt_template(
-                "Result: {{ typo_action.output_field }}",
-                {"other_action": {"field": "value"}},
-                agent_name="test",
-                mode="online",
-                skipped_actions={"upstream_action"},
-            )
-
-    def test_no_skipped_actions_raises_as_before(self):
-        """Without skipped_actions, missing variables raise as before."""
-        with pytest.raises(TemplateVariableError):
-            PromptPreparationService._render_prompt_template(
-                "Result: {{ upstream_action.output_field }}",
-                {"other_action": {"field": "value"}},
-                agent_name="test",
-                mode="online",
-            )
-
-    def test_multiple_skipped_deps_tolerated(self):
-        """Multiple skipped dependencies are all tolerated."""
-        result = PromptPreparationService._render_prompt_template(
-            "A: {{ dep_a.x }}, B: {{ dep_b.y }}",
-            {"real_dep": {"z": "val"}},
-            agent_name="test",
-            mode="online",
-            skipped_actions={"dep_a", "dep_b"},
-        )
-        assert result == "A: , B: "
 
 
 class TestNoneFinalize:

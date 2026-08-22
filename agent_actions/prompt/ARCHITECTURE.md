@@ -179,7 +179,7 @@ When a guard skips or filters an upstream action, the downstream record has `{ac
 
 `is_null_namespace(value)` returns True for both `NullNamespace` instances and legacy `None` values. This is used by:
 - `apply_context_scope` -- resolves observe/passthrough fields to `None` instead of crashing
-- `_render_prompt_template` -- identifies skipped actions for `_PermissiveNamespace` injection
+- `_render_prompt_template` -- blames the dereferenced null namespace in the render error and attaches remediation hints
 - Guard evaluator AST nodes -- null-safe field access
 
 ---
@@ -199,21 +199,17 @@ _render_prompt_template(raw_prompt, prompt_context)
   |
   4. template.render(**prompt_context)
   |     |
-  |     +-- UndefinedError?
-  |           |
-  |           +-- Is the missing variable a skipped dependency?
-  |           |     YES --> Inject _PermissiveNamespace (returns None for
-  |           |             any attribute; finalize converts None --> "")
-  |           |             Re-render with all skipped deps injected
-  |           |     NO  --> Raise TemplateVariableError with diagnostics:
-  |           |             - namespace_context (available refs per namespace)
-  |           |             - storage_hints (field exists in DB but not loaded)
-  |           |             - null_namespace_hints (guard-filtered dep advice)
+  |     +-- UndefinedError --> Raise TemplateVariableError with diagnostics:
+  |           |                - namespace_context (available refs per namespace)
+  |           |                - storage_hints (field exists in DB but not loaded)
+  |           |                - null_namespace_hints (guard-skipped/filtered dep
+  |           |                  advice; fires whenever a null namespace is in
+  |           |                  scope and the template dereferenced it)
   |
   5. Return rendered string
 ```
 
-**StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. The `_PermissiveNamespace` exception is narrow: it only applies to namespaces known to be skipped by guards, not arbitrary missing variables.
+**StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. Dereferencing a guard-skipped namespace is no exception: it raises, but the error carries `null_namespace_hints` naming the namespace and the remediation (`ns.*` null-safe access, or a guard on the consuming action).
 
 ---
 
@@ -248,7 +244,8 @@ Step 5: BUILD LLM CONTEXT
   
 Step 6: RENDER JINJA2 TEMPLATE
   _render_prompt_template(raw_prompt, prompt_context)
-  --> Jinja2 with StrictUndefined, skipped-dep fallback
+  --> Jinja2 with StrictUndefined; bare null namespace renders empty,
+  |       field access on one raises with remediation hints
   --> Produces formatted_prompt string
   
 Step 7: RESOLVE DISPATCH_TASK() CALLS
@@ -422,7 +419,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 
 8. **dispatch_task() runs after Jinja2 rendering.** The resolution order is: Jinja2 template render first (step 6), then `dispatch_task()` resolution (step 7). This means `dispatch_task()` calls see the fully rendered prompt with all template variables resolved. User functions receive the LLM context as a JSON string argument.
 
-9. **StrictUndefined with _PermissiveNamespace is a narrow exception.** Jinja2 uses `StrictUndefined` so typos in template references fail loudly. The `_PermissiveNamespace` fallback only activates for namespaces identified as guard-skipped (via `NullNamespace` detection). It returns `None` for any attribute, which the `finalize` callback converts to `""`. This prevents template crashes when an upstream action was legitimately skipped by a guard.
+9. **StrictUndefined has no exceptions.** Jinja2 uses `StrictUndefined` so typos in template references fail loudly. Dereferencing a guard-skipped namespace fails loudly too — silently rendering `""` would send a half-empty prompt to the provider. The failure is made actionable instead: `null_namespace_hints` names the null namespace the template touched, lists the non-null namespaces available, and points at `ns.*` null-safe access or a guard on the consuming action.
 
 10. **Drop order matters for passthrough.** Passthrough fields are extracted from the pre-drop prompt_context, then drop is applied to both prompt_context and passthrough_fields. This means passthrough captures the value before drop, but drop still removes it. If the order were reversed (drop then passthrough), passthrough would never see the field. The current order ensures drop is the final authority.
 
