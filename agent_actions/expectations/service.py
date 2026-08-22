@@ -55,6 +55,11 @@ class ExpectationService:
         """Generate once, then validate. Repair modes arrive with the loop."""
         response, executed = llm_operation(original_prompt)
 
+        # A real record-granularity online call arrives as a length-1 list, not a
+        # bare dict; a longer list (file granularity) has no expect: semantics.
+        if isinstance(response, list) and len(response) == 1 and isinstance(response[0], dict):
+            response = response[0]
+
         if not executed or not isinstance(response, dict):
             return ExpectationRunResult(response=response, executed=executed)
 
