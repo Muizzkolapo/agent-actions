@@ -387,6 +387,70 @@ def _build_over_declared_dep_project(root: Path) -> str:
     return wf
 
 
+def _build_expect_block_project(root: Path, *, field_name: str) -> str:
+    """Scaffold a real on-disk project with an inline expect: block on one
+    action. `field_name` controls whether the referenced field exists on the
+    action's own schema. Returns the workflow name."""
+    wf = "demo"
+    (root / "agent_actions.yml").write_text("version: '1.0'\n")
+    for name in ("templates", "rendered_workflows", "prompt_store"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    (root / "agent_workflow" / wf / "agent_io").mkdir(parents=True, exist_ok=True)
+    cfg_dir = root / "agent_workflow" / wf / "agent_config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / f"{wf}.yml").write_text(
+        textwrap.dedent(f"""\
+        name: {wf}
+        description: demo
+        defaults:
+          json_mode: true
+          granularity: Record
+          run_mode: online
+          model_name: gpt-4o-mini
+          model_vendor: openai
+          api_key: OPENAI_API_KEY
+        actions:
+          - name: brainstorm
+            intent: generate ideas
+            kind: llm
+            prompt: "List ideas."
+            context_scope:
+              observe: ["source.*"]
+            schema:
+              fields:
+                - id: ideas
+                  type: string
+                  required: true
+            expect:
+              repair: none
+              expectations:
+                - type: not_null
+                  field: {field_name}
+        """)
+    )
+    return wf
+
+
+class TestInspectExpectBlockEndToEnd:
+    """An action's expect: block must survive the real config -> ActionExpander
+    -> preflight pipeline, not just direct Pydantic construction against
+    ActionConfig or a hand-built dict passed straight to
+    find_expectation_defects."""
+
+    def test_valid_expect_block_passes_inspect(self, tmp_path, monkeypatch):
+        wf = _build_expect_block_project(tmp_path, field_name="ideas")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code == 0, result.output
+
+    def test_expect_block_naming_a_nonexistent_field_refuses_preflight(self, tmp_path, monkeypatch):
+        wf = _build_expect_block_project(tmp_path, field_name="nonexistent_field")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["inspect", "-a", wf])
+        assert result.exit_code != 0
+        assert "nonexistent_field" in result.output
+
+
 def _build_versioned_merge_project(root: Path) -> str:
     """Scaffold a real on-disk project with a fan-out producer (versions) and
     a merge consumer whose dependency stays on the base name after the loader
