@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.expectations.expression import _expression_unreachable
 from agent_actions.expectations.judge import _llm_judge_unreachable
 
 Check = Callable[[Any, dict[str, Any]], tuple[bool, str]]
@@ -181,4 +182,11 @@ _REGISTRY["llm_judge"] = ExpectationType(
     frozenset({"rule", "model", "votes", "context"}),
     frozenset({"rule"}),
     _llm_judge_unreachable,
+)
+
+_REGISTRY["expression"] = ExpectationType(
+    "expression",
+    frozenset({"condition"}),
+    frozenset({"condition"}),
+    _expression_unreachable,
 )
