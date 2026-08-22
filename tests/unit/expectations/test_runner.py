@@ -1,5 +1,7 @@
 """Running a suite over a record."""
 
+from unittest.mock import patch
+
 import pytest
 
 from agent_actions.expectations.runner import UnknownExpectationTypeError, run_suite
@@ -273,9 +275,12 @@ def test_llm_judge_unresolvable_context_ref_is_a_failed_outcome_not_a_crash():
 
 def test_llm_judge_without_context_declared_never_calls_resolve_context():
     judge = recording_judge([(True, "ok", False)])
-    run_suite(
-        suite_of({"id": "plain", "type": "llm_judge", "field": "answer", "rule": "r"}),
-        RECORD,
-        judge=judge,
-    )
+    with patch("agent_actions.expectations.runner.resolve_context") as mock_resolve:
+        run_suite(
+            suite_of({"id": "plain", "type": "llm_judge", "field": "answer", "rule": "r"}),
+            RECORD,
+            judge=judge,
+            context_source={"some_action": {"some_field": "present but unrelated"}},
+        )
+    mock_resolve.assert_not_called()
     assert judge.calls[0][1] is None

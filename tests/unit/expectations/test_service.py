@@ -234,6 +234,25 @@ def test_factory_judge_budget_is_shared_across_every_record_the_service_processe
     assert second.suite_result.overall_pass is False
 
 
+def test_a_cache_hit_bypasses_an_already_exhausted_budget():
+    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none", "judge_budget": 1},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        first = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+        # Same record content as the first call -- same cache key, budget already spent.
+        second = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert first.suite_result.overall_pass is True
+    assert second.suite_result.overall_pass is True
+    assert second.suite_result.outcomes[0].skipped is False
+    mock_invoke.assert_called_once()
+
+
 def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_record():
     judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
     service = create_expectation_service_from_config(
