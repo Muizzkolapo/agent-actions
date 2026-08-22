@@ -315,3 +315,4 @@ class TestExpectationCheckDiscovery:
         with pytest.raises(UDFLoadError) as exc_info:
             discover_udfs(temp_user_code_dir)
         assert "bad_checks" in str(exc_info.value)
+        assert "built-in" in str(exc_info.value)
