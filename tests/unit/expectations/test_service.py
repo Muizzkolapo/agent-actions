@@ -72,10 +72,7 @@ def test_a_non_dict_response_is_not_validated():
 
 
 def test_a_single_item_list_response_is_unwrapped_and_validated():
-    # create_dynamic_agent (and therefore _call_llm/generate) always returns a
-    # list -- a real single online record arrives as a length-1 list, not a
-    # bare dict, even though every mocked llm_operation in this file (and in
-    # Plan 1's own tests) injects a bare dict directly.
+    # A real online record arrives as a length-1 list, not a bare dict.
     result = ExpectationService(SUITE, repair="none").execute(
         lambda p: ([{"ideas": ["a", "b", "c"]}], True), "P"
     )
