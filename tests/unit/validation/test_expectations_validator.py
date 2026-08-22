@@ -1,5 +1,7 @@
 """Preflight defect detection for expect blocks."""
 
+import yaml
+
 from agent_actions.validation.expectations_validator import find_expectation_defects
 
 FIELDS = {"write_q": {"options", "answer", "answer_explanation"}}
@@ -7,6 +9,18 @@ FIELDS = {"write_q": {"options", "answer", "answer_explanation"}}
 
 def config(expectations, name="write_q"):
     return {name: {"name": name, "expect": {"expectations": expectations}}}
+
+
+def suite_config(suite_name, name="write_q"):
+    return {name: {"name": name, "expect": {"suite": suite_name}}}
+
+
+def write_suite(tmp_path, workflow, suite_name, expectations):
+    suite_dir = tmp_path / "expectations" / workflow
+    suite_dir.mkdir(parents=True)
+    (suite_dir / f"{suite_name}.yml").write_text(
+        yaml.safe_dump({"name": suite_name, "expectations": expectations})
+    )
 
 
 def test_clean_suite_reports_no_defects():
@@ -90,3 +104,55 @@ def test_multiple_defects_on_one_action_are_all_reported():
         FIELDS,
     )
     assert len(defects["write_q"]) == 2
+
+
+def test_field_check_still_fires_when_the_action_produces_zero_fields():
+    defects = find_expectation_defects(
+        config([{"type": "not_null", "field": "anything"}]), {"write_q": set()}
+    )
+    assert "write_q" in defects
+    assert "anything" in defects["write_q"][0]
+
+
+def test_malformed_field_value_is_reported_not_crashed():
+    defects = find_expectation_defects(config([{"type": "not_null", "field": 42}]), FIELDS)
+    assert "write_q" in defects
+    assert "int" in defects["write_q"][0]
+
+
+def test_named_suite_with_an_unregistered_type_is_reported(tmp_path):
+    write_suite(tmp_path, "write_q", "scenario", [{"type": "vibe_check", "field": "options"}])
+    defects = find_expectation_defects(
+        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert "vibe_check" in defects["write_q"][0]
+
+
+def test_named_suite_with_a_missing_field_is_reported(tmp_path):
+    write_suite(tmp_path, "write_q", "scenario", [{"type": "not_null", "field": "nonexistent"}])
+    defects = find_expectation_defects(
+        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert "nonexistent" in defects["write_q"][0]
+
+
+def test_named_suite_that_does_not_exist_is_reported(tmp_path):
+    defects = find_expectation_defects(
+        suite_config("missing_suite"), FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert "missing_suite" in defects["write_q"][0]
+
+
+def test_clean_named_suite_reports_no_defects(tmp_path):
+    write_suite(
+        tmp_path, "write_q", "scenario", [{"type": "item_count", "field": "options", "equals": 4}]
+    )
+    defects = find_expectation_defects(
+        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert defects == {}
+
+
+def test_named_suite_is_skipped_without_project_context():
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS)
+    assert defects == {}
