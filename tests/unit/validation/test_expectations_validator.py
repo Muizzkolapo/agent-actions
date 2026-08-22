@@ -469,7 +469,9 @@ def test_expression_unknown_field_reference_is_a_defect():
 
 
 def test_expression_dotted_reference_checks_the_top_segment():
-    assert _expr_defects({"id": "m", "type": "expression", "condition": 'meta.status == "ok"'}) == []
+    assert (
+        _expr_defects({"id": "m", "type": "expression", "condition": 'meta.status == "ok"'}) == []
+    )
 
 
 def test_expression_missing_condition_reports_once():
