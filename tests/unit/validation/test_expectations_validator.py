@@ -505,3 +505,15 @@ def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
         suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path, workflow="write_q"
     )
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
+
+
+def test_whitespace_only_condition_is_a_defect():
+    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "   "})
+    assert any("condition must be a non-empty string" in d for d in defects)
+
+
+def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields():
+    defects = find_expectation_defects(
+        config([{"id": "floor", "type": "expression", "condition": "points >= 80"}]), {}
+    ).get("write_q", [])
+    assert defects == []
