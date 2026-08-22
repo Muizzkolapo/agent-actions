@@ -23,10 +23,10 @@ orchestration, prompts, and processing to concrete implementations.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Direct import of `WorkflowConfig` from `schema` (backward-compat alias `WorkflowConfigV2`). | `configuration` |
-| `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `ActionConfig` and `DefaultsConfig`, cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). | `configuration`, `validation` |
+| `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `ActionConfig` and `DefaultsConfig`, cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). `ExpectConfig` binds an expectation suite to an action via `ActionConfig.expect`. | `configuration`, `validation` |
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
-| `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
+| `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`, `get_expectations_path` (defaults to `"expectations"` rather than raising, unlike `get_schema_path`). | `paths`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
@@ -89,6 +89,7 @@ Key Functions
 | `get_tool_dirs` | `agent_actions.yml` | Reads | `tool_path` |
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
+| `get_expectations_path` | `agent_actions.yml` | Reads | `expectations_path` |
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |
 | `ProjectPathsFactory.create_project_paths` | `prompt_store/{workflow}.md` | Reads | — |

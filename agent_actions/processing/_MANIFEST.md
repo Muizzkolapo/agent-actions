@@ -11,7 +11,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. |
+| [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. `OnlineStrategy` accepts an optional `expectation_service: ExpectationService \| None` (from `agent_actions.expectations`), composed as the outermost recovery layer around the existing retry/reprompt dispatch when an action's config sets `expect:`. |
 | [strategies](strategies/) | Pipeline-level processing strategies for FILE-granularity modes (`FileToolStrategy`, `HITLStrategy`). |
 | [recovery](recovery/_MANIFEST.md) | Retry, checkpoint, and recovery helpers for failed batches. |
 
@@ -57,3 +57,4 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `output` | outbound | Uses ResponseSchemaCompiler for schema validation during reprompt |
 | `storage` | outbound | ResultCollector writes dispositions to StorageBackend |
 | `config` | outbound | Reads action configuration types and run mode from config |
+| `expectations` | outbound | `OnlineStrategy`/`InvocationStrategyFactory` build and compose an `ExpectationService` from an action's `expect:` config |
