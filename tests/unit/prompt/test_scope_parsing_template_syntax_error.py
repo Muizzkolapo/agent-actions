@@ -16,16 +16,6 @@ from agent_actions.prompt.context.scope_parsing import extract_action_names_from
 _LOGGER_NAME = "agent_actions.prompt.context.scope_parsing"
 
 
-@pytest.fixture(autouse=True)
-def _enable_propagate():
-    """Ensure the agent_actions logger propagates to root so caplog captures records."""
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = original
-
-
 class TestTemplateSyntaxErrorRaisesAndLogs:
     """TemplateSyntaxError must raise and log a warning, not return empty set."""
 

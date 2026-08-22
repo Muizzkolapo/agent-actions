@@ -50,16 +50,6 @@ def manager(mock_storage_backend):
     )
 
 
-@pytest.fixture(autouse=True)
-def _enable_log_propagation():
-    """Ensure the agent_actions logger propagates so caplog can capture it."""
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = original
-
-
 class TestOrphanDeferredWarning:
     """F3: orphan warning must distinguish genuine orphans from stale DEFERRED rows."""
 

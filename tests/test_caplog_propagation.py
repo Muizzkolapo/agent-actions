@@ -17,22 +17,29 @@ import logging
 AA_LOGGER = "agent_actions"
 
 
-def test_a_simulates_the_framework_disabling_propagation():
-    """Leave propagation off, exactly as LoggerFactory._setup_logging_bridge does.
+def test_propagation_fixture_is_active(request):
+    """The autouse fixture is applied and propagation is on.
 
-    Deliberately dirties global logging state for the next test. The fixture's
-    teardown restores it, so nothing leaks beyond this module.
+    Deterministic and parallel-safe: asserts the fixture is actually in this
+    test's fixture closure, so removing it or dropping ``autouse=True`` fails
+    here regardless of execution order or xdist sharding. An order-dependent
+    pair (dirty in one test, verify in the next) would silently pass under
+    ``pytest -n``, since the two land on different workers.
     """
-    logging.getLogger(AA_LOGGER).propagate = False
-    assert logging.getLogger(AA_LOGGER).propagate is False
+    assert "_enable_log_propagation" in request.fixturenames
+    assert logging.getLogger(AA_LOGGER).propagate is True
 
 
-def test_b_fixture_restored_propagation_for_the_next_test():
-    """Propagation is back on despite the previous test leaving it off.
+def test_fixture_restores_propagation_after_a_test_disables_it(request):
+    """Propagation is on at test start even though this test turns it off.
 
-    This is the assertion that fails if the autouse fixture is removed.
+    The framework's own ``_setup_logging_bridge`` leaves ``propagate = False``
+    behind; the fixture's job is to undo that for every subsequent test. This
+    asserts the pre-state and then dirties it, so the fixture's teardown/setup
+    is exercised for whatever runs next on this worker.
     """
     assert logging.getLogger(AA_LOGGER).propagate is True
+    logging.getLogger(AA_LOGGER).propagate = False
 
 
 def test_caplog_captures_agent_actions_records(caplog):
