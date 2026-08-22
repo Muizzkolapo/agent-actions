@@ -235,6 +235,27 @@ def get_schema_path(project_root: Path) -> str:
     return str(schema_path)
 
 
+def get_expectations_path(project_root: Path) -> str:
+    """Return the expectations folder name from project config.
+
+    Reads the optional ``expectations_path`` key from ``agent_actions.yml``.
+    Unlike ``schema_path`` this defaults rather than raising, because existing
+    projects predate the key and must keep loading without it.
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug(
+            "Could not load expectations_path from project config, defaulting to "
+            "'expectations': %s",
+            exc,
+        )
+        return "expectations"
+    if not config:
+        return "expectations"
+    return str(config.get("expectations_path") or "expectations")
+
+
 def get_seed_data_path(project_root: Path) -> str:
     """Return the seed data folder name from project config.
 
