@@ -77,6 +77,7 @@ class InvocationStrategyFactory:
                     expect_config,
                     action_name=action_name,
                     schema_name=agent_config.get("schema_name") or None,
+                    agent_config=agent_config,
                 ),
             )
 
@@ -98,6 +99,7 @@ class InvocationStrategyFactory:
                 expect_config,
                 action_name=action_name,
                 schema_name=agent_config.get("schema_name") or None,
+                agent_config=agent_config,
             ),
         )
 

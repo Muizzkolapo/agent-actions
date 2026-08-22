@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
-from agent_actions.expectations.runner import run_suite
-from agent_actions.expectations.types import Suite, SuiteResult
+from agent_actions.expectations.runner import JudgeDispatch, run_suite
+from agent_actions.expectations.types import Expectation, Suite, SuiteResult
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,23 @@ class ExpectationService:
     so this composes as the outermost recovery layer.
     """
 
-    def __init__(self, suite: Suite, repair: str | dict[str, Any]) -> None:
+    def __init__(
+        self,
+        suite: Suite,
+        repair: str | dict[str, Any],
+        *,
+        judge: JudgeDispatch | None = None,
+    ) -> None:
         self.suite = suite
         self.repair = repair
+        self._judge = judge
 
     def execute(
         self,
         llm_operation: Callable[[str], tuple[Any, bool]],
         original_prompt: str,
         context: str = "",
+        llm_context: dict[str, Any] | None = None,
     ) -> ExpectationRunResult:
         """Generate once, then validate. Repair modes arrive with the loop."""
         response, executed = llm_operation(original_prompt)
@@ -50,7 +58,9 @@ class ExpectationService:
         if not executed or not isinstance(response, dict):
             return ExpectationRunResult(response=response, executed=executed)
 
-        suite_result = run_suite(self.suite, response)
+        suite_result = run_suite(
+            self.suite, response, judge=self._judge, context_source=llm_context
+        )
         if not suite_result.overall_pass:
             logger.info(
                 "[%s] Expectations failed: %s",
@@ -72,6 +82,7 @@ def create_expectation_service_from_config(
     *,
     action_name: str,
     schema_name: str | None = None,
+    agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent."""
@@ -118,4 +129,22 @@ def create_expectation_service_from_config(
     else:
         suite = build_inline_suite(entries or [], action_name)
 
-    return ExpectationService(suite, repair=repair)
+    judge_dispatch: JudgeDispatch | None = None
+    if any(expectation.type == "llm_judge" for expectation in suite.expectations):
+        from agent_actions.expectations.judge import CachedJudge, JudgeBudget
+
+        cached_judge = CachedJudge(agent_config or {}, action_name=action_name)
+        budget = JudgeBudget(expect_config.get("judge_budget"))
+
+        def judge_dispatch(
+            expectation: Expectation, value: Any, context: dict[str, Any] | None
+        ) -> tuple[bool, str, bool]:
+            cached = cached_judge.lookup(expectation, value)
+            if cached is not None:
+                return (*cached, False)
+            if not budget.try_acquire():
+                return False, f"judge budget exhausted ({budget.remaining} calls remaining)", True
+            passed, detail = cached_judge.call_and_cache(expectation, value, context=context)
+            return passed, detail, False
+
+    return ExpectationService(suite, repair=repair, judge=judge_dispatch)
