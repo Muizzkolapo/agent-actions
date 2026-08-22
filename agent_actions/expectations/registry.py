@@ -112,10 +112,10 @@ def _matches_regex(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     matched = re.search(pattern, str(value)) is not None
     if params.get("negate", False):
         if matched:
-            return False, f"matched forbidden pattern {pattern!r}"
+            return False, f"value {str(value)!r} matched forbidden pattern {pattern!r}"
         return True, ""
     if not matched:
-        return False, f"did not match pattern {pattern!r}"
+        return False, f"value {str(value)!r} did not match pattern {pattern!r}"
     return True, ""
 
 
@@ -123,7 +123,7 @@ def _matches_regex(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
 def _no_forbidden_phrases(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     cased = params.get("case_sensitive", False)
     haystack = str(value) if cased else str(value).lower()
-    found = [p for p in params["phrases"] if (p if cased else str(p).lower()) in haystack]
+    found = [p for p in params["phrases"] if (str(p) if cased else str(p).lower()) in haystack]
     if found:
         return False, "contains forbidden phrase(s): " + ", ".join(repr(p) for p in found)
     return True, ""
