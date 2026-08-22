@@ -47,6 +47,42 @@ def _redact_sensitive_data(
     return data
 
 
+def _compile_redaction_patterns(pattern_list: list[str]) -> list[tuple[Pattern, str]]:
+    """Compile a pattern list into (regex, replacement) pairs, skipping invalid ones."""
+    compiled_patterns: list[tuple[Pattern, str]] = []
+    for pattern in pattern_list:
+        try:
+            compiled = re.compile(pattern, re.IGNORECASE)
+            # Determine replacement based on pattern type
+            if "api" in pattern.lower():
+                replacement = "api_key=***"
+            elif "secret" in pattern.lower():
+                replacement = "secret=***"
+            elif "token" in pattern.lower():
+                replacement = "token=***"
+            elif "password" in pattern.lower():
+                replacement = "password=***"
+            elif pattern.startswith(r"sk-ant"):
+                replacement = "sk-ant-***"
+            elif pattern.startswith(r"sk-"):
+                replacement = "sk-***"
+            elif pattern.startswith(r"AIza"):
+                replacement = "AIza***"
+            else:
+                replacement = "***"
+            compiled_patterns.append((compiled, replacement))
+        except re.error as e:
+            logger.warning("Skipping invalid redaction pattern %r: %s", pattern, e)
+    return compiled_patterns
+
+
+def _apply_redaction_patterns(text: str, compiled_patterns: list[tuple[Pattern, str]]) -> str:
+    result = text
+    for pattern, replacement in compiled_patterns:
+        result = pattern.sub(replacement, result)
+    return result
+
+
 class RedactingFilter(logging.Filter):
     """Redacts sensitive information (API keys, tokens, etc.) from log records."""
 
@@ -68,43 +104,14 @@ class RedactingFilter(logging.Filter):
         """Initialize the redacting filter."""
         super().__init__(name)
         pattern_list = patterns if patterns is not None else self.DEFAULT_PATTERNS
-        self._compiled_patterns: list[tuple[Pattern, str]] = []
-
-        for pattern in pattern_list:
-            try:
-                compiled = re.compile(pattern, re.IGNORECASE)
-                # Determine replacement based on pattern type
-                if "api" in pattern.lower():
-                    replacement = "api_key=***"
-                elif "secret" in pattern.lower():
-                    replacement = "secret=***"
-                elif "token" in pattern.lower():
-                    replacement = "token=***"
-                elif "password" in pattern.lower():
-                    replacement = "password=***"
-                elif pattern.startswith(r"sk-ant"):
-                    replacement = "sk-ant-***"
-                elif pattern.startswith(r"sk-"):
-                    replacement = "sk-***"
-                elif pattern.startswith(r"AIza"):
-                    replacement = "AIza***"
-                else:
-                    replacement = "***"
-                self._compiled_patterns.append((compiled, replacement))
-            except re.error as e:
-                logger.warning("Skipping invalid redaction pattern %r: %s", pattern, e)
+        self._compiled_patterns = _compile_redaction_patterns(pattern_list)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(patterns={len(self._compiled_patterns)})"
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive patterns from message and extra fields; always returns True."""
-        msg = record.getMessage()
-
-        for pattern, replacement in self._compiled_patterns:
-            msg = pattern.sub(replacement, msg)
-
-        record.msg = msg
+        record.msg = _apply_redaction_patterns(record.getMessage(), self._compiled_patterns)
         record.args = ()
 
         self._redact_extra_fields(record)
@@ -157,12 +164,23 @@ class RedactingFilter(logging.Filter):
             elif isinstance(value, dict | list):
                 setattr(record, attr, self._redact_nested(value))
             elif isinstance(value, str):
-                redacted_value = value
-                for pattern, replacement in self._compiled_patterns:
-                    redacted_value = pattern.sub(replacement, redacted_value)
+                redacted_value = _apply_redaction_patterns(value, self._compiled_patterns)
                 if redacted_value != value:
                     setattr(record, attr, redacted_value)
 
     def _redact_nested(self, data):
         """Redact sensitive data from nested structures."""
         return _redact_sensitive_data(data)
+
+
+_DEFAULT_COMPILED_PATTERNS = _compile_redaction_patterns(RedactingFilter.DEFAULT_PATTERNS)
+
+
+def redact_text(text: str) -> str:
+    """Redact sensitive patterns from arbitrary text using the default pattern set.
+
+    Same patterns `RedactingFilter` applies to a record's message — used for
+    text that never passes through a `LogRecord` (e.g. a formatted exception
+    traceback), so redaction stays consistent across both paths.
+    """
+    return _apply_redaction_patterns(text, _DEFAULT_COMPILED_PATTERNS)

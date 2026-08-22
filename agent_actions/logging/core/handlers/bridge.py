@@ -116,7 +116,12 @@ class LogEvent(BaseEvent):
         if self.has_exception and self.exc_info is not None:
             import traceback
 
-            d["exc_info"] = "".join(traceback.format_exception(*self.exc_info))
+            from agent_actions.logging.filters import redact_text
+
+            # Redact the formatted STRING, never the live exception object —
+            # other code may still hold and inspect it after it's logged.
+            formatted = "".join(traceback.format_exception(*self.exc_info))
+            d["exc_info"] = redact_text(formatted)
         return d
 
 
