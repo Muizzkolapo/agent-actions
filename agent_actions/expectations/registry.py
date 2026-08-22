@@ -52,6 +52,16 @@ def register(
     return decorate
 
 
+_USER_CHECK_SOURCES: dict[str, tuple[str, str]] = {}
+
+
+def expectation_check(
+    name: str, params: Iterable[str] = (), required: Iterable[str] = ()
+) -> Callable[[Check], Check]:
+    """Register a project-defined expectation type under the built-in check contract."""
+    raise NotImplementedError
+
+
 def get(name: str) -> ExpectationType | None:
     return _REGISTRY.get(name)
 
