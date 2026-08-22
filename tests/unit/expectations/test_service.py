@@ -232,3 +232,20 @@ def test_factory_judge_budget_is_shared_across_every_record_the_service_processe
     assert first.suite_result.overall_pass is True
     assert second.suite_result.outcomes[0].skipped is True
     assert second.suite_result.overall_pass is False
+
+
+def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_record():
+    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none"},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes",
+        side_effect=ConnectionError("provider unreachable"),
+    ):
+        result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert result.suite_result.overall_pass is False
+    assert result.suite_result.outcomes[0].skipped is False
+    assert "provider unreachable" in result.suite_result.outcomes[0].detail
