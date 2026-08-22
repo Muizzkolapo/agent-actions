@@ -130,3 +130,68 @@ def test_rules_without_ids_do_not_collide():
         ],
     )
     assert len({e.resolved_id for e in suite.expectations}) == 2
+
+
+def test_outcome_skipped_defaults_to_false():
+    outcome = _outcome("a", True)
+    assert outcome.skipped is False
+
+
+def test_outcome_accepts_skipped_true():
+    outcome = Outcome(
+        id="a",
+        type="llm_judge",
+        severity="fail",
+        passed=False,
+        skipped=True,
+        detail="judge budget exhausted: 10/10 calls used this run",
+        definition_hash="abc123",
+    )
+    assert outcome.skipped is True
+    assert outcome.passed is False
+
+
+def test_skipped_fail_severity_outcome_still_blocks_overall_pass():
+    skipped = Outcome(
+        id="a",
+        type="llm_judge",
+        severity="fail",
+        passed=False,
+        skipped=True,
+        detail="judge budget exhausted",
+        definition_hash="abc123",
+    )
+    result = SuiteResult(suite_name="s", outcomes=[skipped])
+    assert result.overall_pass is False
+
+
+def test_to_record_dict_lists_skipped_ids_separately_from_failed():
+    skipped = Outcome(
+        id="a",
+        type="llm_judge",
+        severity="fail",
+        passed=False,
+        skipped=True,
+        detail="judge budget exhausted",
+        definition_hash="abc123",
+    )
+    genuinely_failed = _outcome("b", False)
+    result = SuiteResult(suite_name="s", outcomes=[skipped, genuinely_failed])
+    payload = result.to_record_dict()
+    assert payload["skipped"] == ["a"]
+    assert payload["failed"] == ["a", "b"]
+
+
+def test_to_record_dict_skipped_excludes_warn_and_info_severity():
+    skipped_info = Outcome(
+        id="a",
+        type="llm_judge",
+        severity="info",
+        passed=False,
+        skipped=True,
+        detail="judge budget exhausted",
+        definition_hash="abc123",
+    )
+    result = SuiteResult(suite_name="s", outcomes=[skipped_info])
+    payload = result.to_record_dict()
+    assert payload["skipped"] == []
