@@ -43,6 +43,8 @@ class ExpectationService:
         judge: JudgeDispatch | None = None,
         max_iterations: int = 3,
     ) -> None:
+        if max_iterations < 1:
+            raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
         self.suite = suite
         self.repair = repair
         self._judge = judge
@@ -60,6 +62,8 @@ class ExpectationService:
         suite_result: SuiteResult | None = None
         response: Any = None
         executed = False
+        last_response: dict[str, Any] | None = None
+        last_suite_result: SuiteResult | None = None
 
         for iteration in range(1, iterations + 1):
             response, executed = llm_operation(self._prompt_for(iteration, original_prompt))
@@ -70,6 +74,16 @@ class ExpectationService:
                 response = response[0]
 
             if not executed or not isinstance(response, dict):
+                if last_response is not None and last_suite_result is not None:
+                    # A regeneration that collapsed (inner recovery exhausted)
+                    # must not downgrade a record that already had data.
+                    return ExpectationRunResult(
+                        response=last_response,
+                        executed=True,
+                        suite_result=last_suite_result,
+                        iterations=iteration,
+                        exhausted=True,
+                    )
                 return ExpectationRunResult(response=response, executed=executed)
 
             suite_result = run_suite(
@@ -82,13 +96,21 @@ class ExpectationService:
                     suite_result=suite_result,
                     iterations=iteration,
                 )
-            logger.info(
-                "[%s] Expectations failed (iteration %d/%d): %s",
-                context or "expectations",
-                iteration,
-                iterations,
-                ", ".join(o.id for o in suite_result.failed),
-            )
+            last_response, last_suite_result = response, suite_result
+            if self.repair == "none":
+                logger.info(
+                    "[%s] Expectations failed: %s",
+                    context or "expectations",
+                    ", ".join(o.id for o in suite_result.failed),
+                )
+            else:
+                logger.info(
+                    "[%s] Expectations failed (iteration %d/%d): %s",
+                    context or "expectations",
+                    iteration,
+                    iterations,
+                    ", ".join(o.id for o in suite_result.failed),
+                )
 
         return ExpectationRunResult(
             response=response,
