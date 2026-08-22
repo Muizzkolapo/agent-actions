@@ -369,3 +369,35 @@ def test_expression_entry_loads_from_a_suite_file(tmp_path):
     suite = load_suite_file(suite_yaml)
     result = run_suite(suite, {"score": 85})
     assert result.overall_pass is True
+
+
+def test_two_expressions_and_a_judged_rule_coexist_in_one_suite():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "floor", "type": "expression", "condition": "score >= 10"},
+            {"id": "cap", "type": "expression", "condition": "score <= 90"},
+            {"id": "on_topic", "type": "llm_judge", "field": "title", "rule": "on topic"},
+        ],
+    )
+    result = run_suite(
+        suite, {"score": 120, "title": "t"}, judge=lambda e, v, c: (True, "ok", False)
+    )
+    assert [o.passed for o in result.outcomes] == [True, False, True]
+    assert "score=120" in result.outcomes[1].detail
+
+
+def test_hint_on_an_expression_entry_stays_out_of_condition_params():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "floor",
+                "type": "expression",
+                "condition": "score >= 10",
+                "hint": "raise the score",
+            }
+        ],
+    )
+    result = run_suite(suite, {"score": 50})
+    assert result.outcomes[0].passed is True
