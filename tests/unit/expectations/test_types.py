@@ -30,6 +30,18 @@ def test_definition_hash_ignores_id_but_tracks_params():
     assert a.definition_hash() != c.definition_hash()
 
 
+def test_definition_hash_is_independent_of_extra_param_order():
+    a = Expectation(id="one", type="item_count", field="options", equals=4, min=1)
+    b = Expectation(min=1, equals=4, field="options", type="item_count", id="two")
+    assert a.definition_hash() == b.definition_hash()
+
+
+def test_definition_hash_tracks_hint():
+    a = Expectation(type="item_count", field="options", equals=4, hint="add more options")
+    b = Expectation(type="item_count", field="options", equals=4, hint="different remedy text")
+    assert a.definition_hash() != b.definition_hash()
+
+
 def test_severity_defaults_to_fail():
     assert Expectation(type="not_null", field="answer").severity == "fail"
 
