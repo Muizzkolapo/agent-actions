@@ -195,3 +195,29 @@ def test_to_record_dict_skipped_excludes_warn_and_info_severity():
     result = SuiteResult(suite_name="s", outcomes=[skipped_info])
     payload = result.to_record_dict()
     assert payload["skipped"] == []
+
+
+def test_expression_type_constructs_without_field():
+    e = Expectation(type="expression", condition="score >= 80")
+    assert e.field is None
+    assert e.params()["condition"] == "score >= 80"
+
+
+def test_expression_type_rejects_field():
+    with pytest.raises(ValidationError, match="does not take field"):
+        Expectation(type="expression", field="score", condition="score >= 80")
+
+
+def test_non_expression_type_still_requires_field():
+    with pytest.raises(ValidationError, match="requires field"):
+        Expectation(type="not_null")
+
+
+def test_expression_resolved_id_derives_from_definition():
+    e = Expectation(type="expression", condition="score >= 80")
+    assert e.resolved_id == f"expression_{e.definition_hash()}"
+
+
+def test_definition_hash_unchanged_for_field_bearing_entry():
+    e = Expectation(type="item_count", field="ideas", min=2)
+    assert e.definition_hash() == "dab77281bcc2"
