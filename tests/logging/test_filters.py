@@ -479,8 +479,11 @@ class TestRedactingFilterWiring:
     def test_child_logger_extra_fields_are_redacted(self, bridge_records):
         """Structured `extra=` values are redacted too, not just the message.
 
-        The bridge copies record attributes into event.data, so an unredacted
-        extra field reaches the sink exactly like an unredacted message.
+        `_redact_extra_fields` rewrites the record's own attributes. The bridge
+        copies only `operation`, `action_name` and `workflow_name` into
+        `event.data`, so this is not by itself a sink leak — it is the guarantee
+        that anything reading the record (a handler attached later, a formatter)
+        sees redacted attributes rather than raw ones.
         """
         logging.getLogger("agent_actions.llm.client").warning(
             "authenticating", extra={"api_key": self.SECRET}
