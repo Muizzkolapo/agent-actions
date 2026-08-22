@@ -423,7 +423,7 @@ class TestRedactingFilterWiring:
     SECRET = "sk-" + "a" * 30
 
     @pytest.fixture
-    def bridge_messages(self):
+    def bridge_records(self):
         """Configure the real bridge and capture what it receives."""
         from agent_actions.logging.core.handlers import LoggingBridgeHandler
         from agent_actions.logging.factory import LoggerFactory
@@ -431,11 +431,11 @@ class TestRedactingFilterWiring:
         aa = logging.getLogger("agent_actions")
         saved = (list(aa.handlers), list(aa.filters), aa.level, aa.propagate)
 
-        seen: list[str] = []
+        seen: list[logging.LogRecord] = []
         original_emit = LoggingBridgeHandler.emit
 
         def capturing_emit(self, record):
-            seen.append(record.getMessage())
+            seen.append(record)
 
         LoggingBridgeHandler.emit = capturing_emit
         try:
@@ -445,32 +445,46 @@ class TestRedactingFilterWiring:
             LoggingBridgeHandler.emit = original_emit
             aa.handlers, aa.filters, aa.level, aa.propagate = saved
 
-    def test_child_logger_message_is_redacted(self, bridge_messages):
+    def test_child_logger_message_is_redacted(self, bridge_records):
         """A key logged by any framework module must not reach the sink in clear text."""
         logging.getLogger("agent_actions.llm.providers.openai.client").warning(
             "calling with %s", self.SECRET
         )
 
-        assert bridge_messages, "bridge handler received nothing"
-        assert self.SECRET not in bridge_messages[0]
-        assert "sk-***" in bridge_messages[0]
+        assert bridge_records, "bridge handler received nothing"
+        message = bridge_records[0].getMessage()
+        assert self.SECRET not in message
+        assert "sk-***" in message
 
-    def test_direct_logger_message_is_redacted(self, bridge_messages):
+    def test_direct_logger_message_is_redacted(self, bridge_records):
         """Invariant: the case that already worked keeps working."""
         logging.getLogger("agent_actions").warning("calling with %s", self.SECRET)
 
-        assert bridge_messages
-        assert self.SECRET not in bridge_messages[0]
+        assert bridge_records
+        assert self.SECRET not in bridge_records[0].getMessage()
 
-    def test_deeply_nested_child_is_redacted(self, bridge_messages):
+    def test_deeply_nested_child_is_redacted(self, bridge_records):
         """Depth must not matter — filters do not accumulate down the hierarchy."""
         logging.getLogger("agent_actions.a.b.c.d").error("token=%s", self.SECRET)
 
-        assert bridge_messages
-        assert self.SECRET not in bridge_messages[0]
+        assert bridge_records
+        assert self.SECRET not in bridge_records[0].getMessage()
 
-    def test_non_secret_message_is_untouched(self, bridge_messages):
+    def test_non_secret_message_is_untouched(self, bridge_records):
         """No over-redaction: ordinary messages pass through verbatim."""
         logging.getLogger("agent_actions.workflow.executor").info("processed 12 records")
 
-        assert bridge_messages == ["processed 12 records"]
+        assert [r.getMessage() for r in bridge_records] == ["processed 12 records"]
+
+    def test_child_logger_extra_fields_are_redacted(self, bridge_records):
+        """Structured `extra=` values are redacted too, not just the message.
+
+        The bridge copies record attributes into event.data, so an unredacted
+        extra field reaches the sink exactly like an unredacted message.
+        """
+        logging.getLogger("agent_actions.llm.client").warning(
+            "authenticating", extra={"api_key": self.SECRET}
+        )
+
+        assert bridge_records
+        assert getattr(bridge_records[0], "api_key", None) == "[REDACTED]"
