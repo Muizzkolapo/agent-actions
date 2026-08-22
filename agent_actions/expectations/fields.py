@@ -44,6 +44,25 @@ def referenced_names(selector: str | list[str]) -> list[str]:
     return [selector]
 
 
+def resolve_context(llm_context: dict[str, Any], refs: list[str]) -> dict[str, Any]:
+    """Resolve a judged expectation's ``context:`` refs against ``llm_context``.
+
+    Each ref uses the same ``action.field`` syntax ``context_scope.observe``
+    already uses. ``llm_context`` is nested one level by action name, unlike
+    a record's own flat fields, so this does not reuse ``_lookup``.
+    """
+    resolved: dict[str, Any] = {}
+    for ref in refs:
+        action_name, sep, field_name = ref.partition(".")
+        if not sep:
+            raise FieldResolutionError(f"context reference '{ref}' must be 'action.field'")
+        action_data = llm_context.get(action_name)
+        if not isinstance(action_data, dict) or field_name not in action_data:
+            raise FieldResolutionError(f"context reference '{ref}' is not present in llm_context")
+        resolved[ref] = action_data[field_name]
+    return resolved
+
+
 def _lookup(record: dict[str, Any], name: str) -> Any:
     if name not in record:
         raise FieldResolutionError(f"Field '{name}' is not present in the record")

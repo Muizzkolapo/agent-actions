@@ -64,3 +64,17 @@ def initialize_optional_fields(agent: dict[str, Any]) -> None:
     agent.setdefault("add_dispatch", None)
     agent.setdefault("conditional_clause", None)
     agent.setdefault("guard", None)
+
+
+def collect_judge_context_refs(expect: dict[str, Any] | None) -> list[str]:
+    """The context: refs named by every inline llm_judge expectation on an action."""
+    if not expect:
+        return []
+    entries = expect.get("expectations")
+    if not isinstance(entries, list):
+        return []
+    refs: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("type") == "llm_judge":
+            refs.extend(entry.get("context") or [])
+    return refs
