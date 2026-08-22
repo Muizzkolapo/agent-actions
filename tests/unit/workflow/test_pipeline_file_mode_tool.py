@@ -1398,7 +1398,7 @@ class TestExtractToolInput:
         }
 
     def test_explicit_empty_observe_gates_every_business_field(self):
-        """`observe: []` is a declared gate, not an absent directive (issue #871).
+        """`observe: []` is a declared gate, not an absent directive.
 
         The prompt path already draws this distinction and documents it at
         scope_application.py:152 — "no directive keys declared at all = pass

@@ -600,8 +600,8 @@ def test_file_mode_hitl_no_observe_flattens_all_namespaces():
 def test_file_mode_hitl_empty_observe_gates_all():
     """observe: [] is a declared gate — the reviewer sees no business fields.
 
-    Inverted for issue #871. The previous assertion pinned flatten-all and
-    justified it by the implementation ("Empty observe = falsy"), not by intent,
+    The previous assertion pinned flatten-all and justified it by the
+    implementation ("Empty observe = falsy"), not by intent,
     which contradicts the contract the prompt path documents at
     scope_application.py:152-153: no directive keys at all = pass everything
     through, distinct from {"observe": []} = gate to framework namespaces only.
