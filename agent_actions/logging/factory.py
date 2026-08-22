@@ -250,12 +250,9 @@ class LoggerFactory:
 
         from agent_actions.logging.filters import RedactingFilter
 
-        # On the handler, not the logger: a logger's own filters run only for
-        # records logged directly to it, and every framework module logs through
-        # a child whose records reach this handler but not this logger's filters.
         bridge = LoggingBridgeHandler(level=logging.DEBUG)
-        bridge.addFilter(RedactingFilter())
         root_logger.addHandler(bridge)
+        root_logger.addFilter(RedactingFilter())
 
         root_logger.propagate = False
 
