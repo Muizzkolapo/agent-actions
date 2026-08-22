@@ -183,6 +183,28 @@ class CachedJudge:
         return verdict
 
 
+class JudgeBudget:
+    """Caps how many real judge calls one action's ExpectationService may make this run.
+
+    `max_calls=None` is uncapped — the budget is opt-in, not a default limit.
+    """
+
+    def __init__(self, max_calls: int | None) -> None:
+        self._remaining = max_calls
+
+    def try_acquire(self) -> bool:
+        if self._remaining is None:
+            return True
+        if self._remaining <= 0:
+            return False
+        self._remaining -= 1
+        return True
+
+    @property
+    def remaining(self) -> int | None:
+        return self._remaining
+
+
 def _llm_judge_unreachable(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     raise NotImplementedError(
         "llm_judge is dispatched by the runner's judge caller, not registry.check"

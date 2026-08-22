@@ -222,6 +222,12 @@ class ExpectConfig(BaseModel):
         default="return_last",
         description="Behavior when iterations exhaust: return_last, fail (tombstone), or raise",
     )
+    judge_budget: int | None = Field(
+        default=None,
+        ge=1,
+        description="Max real judge LLM calls this action's suite may make across the run; "
+        "None is uncapped",
+    )
 
     @field_validator("repair")
     @classmethod
