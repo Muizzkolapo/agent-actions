@@ -71,6 +71,28 @@ def test_a_non_dict_response_is_not_validated():
     assert result.suite_result is None
 
 
+def test_a_single_item_list_response_is_unwrapped_and_validated():
+    # create_dynamic_agent (and therefore _call_llm/generate) always returns a
+    # list -- a real single online record arrives as a length-1 list, not a
+    # bare dict, even though every mocked llm_operation in this file (and in
+    # Plan 1's own tests) injects a bare dict directly.
+    result = ExpectationService(SUITE, repair="none").execute(
+        lambda p: ([{"ideas": ["a", "b", "c"]}], True), "P"
+    )
+    assert result.suite_result is not None
+    assert result.suite_result.overall_pass is True
+    assert result.response == {"ideas": ["a", "b", "c"]}
+
+
+def test_a_multi_item_list_response_is_not_validated():
+    # File-granularity (multiple records per call) has no expect: semantics
+    # defined -- left alone, matching the existing not-a-dict skip behavior.
+    result = ExpectationService(SUITE, repair="none").execute(
+        lambda p: ([{"ideas": ["a"]}, {"ideas": ["b"]}], True), "P"
+    )
+    assert result.suite_result is None
+
+
 def test_factory_returns_none_without_an_expect_block():
     assert create_expectation_service_from_config(None, action_name="a") is None
 
