@@ -30,15 +30,6 @@ class TestResolveNullNamespaceDebugLog:
     resolution function that fires N×M times per workflow.
     """
 
-    @pytest.fixture(autouse=True)
-    def _enable_propagation(self):
-        """Ensure the agent_actions logger propagates to root so caplog captures records."""
-        aa_logger = logging.getLogger("agent_actions")
-        original = aa_logger.propagate
-        aa_logger.propagate = True
-        yield
-        aa_logger.propagate = original
-
     def test_null_namespace_resolves_to_none_with_debug_log(self, caplog):
         """Null namespace with alt deps present -> field resolves to None, logs at DEBUG."""
         fc = _make_field_context(

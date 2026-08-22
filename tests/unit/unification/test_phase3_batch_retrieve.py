@@ -25,16 +25,6 @@ from agent_actions.processing.types import ProcessingStatus
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True)
-def _enable_log_propagation():
-    """Ensure agent_actions loggers propagate to root so caplog captures them."""
-    aa_logger = logging.getLogger("agent_actions")
-    orig = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = orig
-
-
 @pytest.fixture
 def strategy() -> BatchResultStrategy:
     """BatchResultStrategy instance for testing."""

@@ -3,26 +3,9 @@
 import logging
 from unittest.mock import patch
 
-import pytest
-
 from agent_actions.output.response.schema import ResponseSchemaCompiler
 
 LOGGER_NAME = "agent_actions.output.response.schema"
-
-
-@pytest.fixture(autouse=True)
-def _enable_propagation():
-    """Ensure the entire agent_actions logger hierarchy propagates for caplog."""
-    loggers = [
-        logging.getLogger("agent_actions"),
-        logging.getLogger(LOGGER_NAME),
-    ]
-    originals = [(lgr, lgr.propagate) for lgr in loggers]
-    for lgr in loggers:
-        lgr.propagate = True
-    yield
-    for lgr, orig in originals:
-        lgr.propagate = orig
 
 
 class TestResponseSchemaCompilerWarning:

@@ -4,7 +4,6 @@ Provides reusable fixtures for testing both batch and online processing paths,
 guard evaluation, and paired-mode execution for parity verification.
 """
 
-import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -14,21 +13,6 @@ from agent_actions.llm.batch.core.batch_models import BatchTaskPreparationStats
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
-
-
-@pytest.fixture(autouse=True)
-def _enable_log_propagation():
-    """Ensure agent_actions loggers propagate to root so caplog captures them.
-
-    The agent_actions root logger has propagate=False (set by LoggingBridgeHandler),
-    so caplog (which hooks the Python root logger) can't see child log records.
-    Temporarily enable propagation for the duration of each test.
-    """
-    aa_logger = logging.getLogger("agent_actions")
-    orig = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = orig
 
 
 @pytest.fixture

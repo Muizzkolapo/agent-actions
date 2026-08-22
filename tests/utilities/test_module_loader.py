@@ -155,7 +155,7 @@ def test_resolve_module_file_flat_takes_precedence(tmp_path):
     assert result == flat
 
 
-def test_resolve_module_file_ambiguous_returns_none(tmp_path, capsys):
+def test_resolve_module_file_ambiguous_returns_none(tmp_path, caplog):
     """Ambiguous match (same name in multiple subdirs) returns None and logs error."""
     for name in ("sub_a", "sub_b"):
         d = tmp_path / name
@@ -163,7 +163,7 @@ def test_resolve_module_file_ambiguous_returns_none(tmp_path, capsys):
         (d / "my_function.py").write_text("X = 1")
     result = _resolve_module_file("my_function", tmp_path)
     assert result is None
-    assert "Ambiguous module resolution" in capsys.readouterr().err
+    assert "Ambiguous module resolution" in caplog.text
 
 
 def test_resolve_module_file_dotted_name_no_recursive(tmp_path):

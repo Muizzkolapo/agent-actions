@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock
 
-import pytest
-
 from agent_actions.processing.result_collector import (
     collect_results_from_processing_results,
 )
@@ -20,16 +18,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
 )
-
-
-@pytest.fixture(autouse=True)
-def _enable_log_propagation():
-    """Enable propagation so caplog captures agent_actions log records."""
-    aa_logger = logging.getLogger("agent_actions")
-    orig = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = orig
 
 
 def _mock_backend() -> MagicMock:
