@@ -418,8 +418,8 @@ class PromptPreparationService:
                                 }
                                 break
 
-            # Null namespace hint at fan-in (spec 415). Gate on a null namespace
-            # being in scope, not on the error text — Jinja names the dereferenced
+            # Null namespace hint at fan-in. Gate on a null namespace being in
+            # scope, not on the error text — Jinja names the dereferenced
             # object, so a "'None'" prefix silently misses the sentinel.
             null_namespace_hints: dict[str, dict[str, Any]] = {}
             if any(is_null_namespace(v) for v in prompt_context.values()):

@@ -176,8 +176,8 @@ class TestTemplateNullNamespaceError:
 
 
 class TestTemplateNullNamespaceSentinelError:
-    """Spec 595: guard-skipped namespaces reach the renderer as the
-    ``NullNamespace`` sentinel, not legacy ``None``. Jinja names the object
+    """Guard-skipped namespaces reach the renderer as the ``NullNamespace``
+    sentinel, not legacy ``None``. Jinja names the object
     (``'...NullNamespace object' has no attribute 'x'``), so a hint gated on
     the literal ``'None'`` never fired on the shape production actually builds.
     """
@@ -261,8 +261,8 @@ class TestTemplateNullNamespaceSentinelError:
     def test_sentinel_field_named_after_its_namespace_still_raises(self):
         """`{{ ns.ns_score }}` on a null namespace raises — it does not render empty.
 
-        Spec 595 strictness change. The removed `_PermissiveNamespace` recovery
-        matched `action in str(ue)` against the whole Jinja message, so a field
+        This is a deliberate strictness change. The removed `_PermissiveNamespace`
+        recovery matched `action in str(ue)` against the whole Jinja message, so a field
         name *containing* its namespace name (`observe: [ns.ns_field]`, a common
         convention) made the message contain the namespace name and silently
         rendered the reference empty — while `{{ ns.other_field }}` raised. Same
