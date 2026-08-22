@@ -145,3 +145,31 @@ def test_contains_terms_from_fails_when_min_matches_not_reached():
     passed, detail = run("contains_terms_from", "uses TLS", terms=["TLS", "mTLS"], min_matches=2)
     assert passed is False
     assert "1" in detail
+
+
+def test_item_count_max_passes_on_the_exact_bound():
+    assert run("item_count", [1, 2], max=2)[0] is True
+
+
+def test_item_count_min_passes_on_the_exact_bound():
+    assert run("item_count", [1, 2], min=2)[0] is True
+
+
+def test_word_count_between_min_passes_on_the_exact_bound():
+    assert run("word_count_between", "one two", min=2)[0] is True
+
+
+def test_word_count_ratio_passes_on_the_exact_max_ratio_boundary():
+    assert run("word_count_ratio", ["a", "a b"], max_ratio=2.0)[0] is True
+
+
+def test_matches_regex_detail_names_the_observed_value():
+    passed, detail = run("matches_regex", "nope", pattern=r"^[A-Z]{2}-\d+$")
+    assert passed is False
+    assert "nope" in detail
+
+
+def test_no_forbidden_phrases_handles_a_non_string_phrase_under_case_sensitive():
+    passed, detail = run("no_forbidden_phrases", "the value is 5", phrases=[5], case_sensitive=True)
+    assert passed is False
+    assert "5" in detail
