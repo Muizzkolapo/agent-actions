@@ -17,6 +17,7 @@ from agent_actions.processing.types import (
 )
 
 if TYPE_CHECKING:
+    from agent_actions.expectations.service import ExpectationService
     from agent_actions.processing.recovery.reprompt import RepromptService
     from agent_actions.processing.recovery.retry import RetryResult, RetryService
     from agent_actions.processing.types import ProcessingContext
@@ -31,9 +32,11 @@ class OnlineStrategy(InvocationStrategy):
         self,
         retry_service: RetryService | None = None,
         reprompt_service: RepromptService | None = None,
+        expectation_service: ExpectationService | None = None,
     ):
         self._retry_service = retry_service
         self._reprompt_service = reprompt_service
+        self._expectation_service = expectation_service
 
     def invoke(
         self,
@@ -53,20 +56,34 @@ class OnlineStrategy(InvocationStrategy):
         retry_service = self._retry_service
         reprompt_service = self._reprompt_service
 
-        if reprompt_service and retry_service:
-            response, executed, recovery_metadata = self._invoke_with_retry_and_reprompt(
-                task, context, recovery_metadata, retry_service, reprompt_service
+        def generate(prompt: str) -> tuple[Any, bool]:
+            if reprompt_service and retry_service:
+                response, executed, _ = self._invoke_with_retry_and_reprompt(
+                    task, context, recovery_metadata, retry_service, reprompt_service, prompt
+                )
+            elif reprompt_service:
+                response, executed, _ = self._invoke_with_reprompt(
+                    task, context, recovery_metadata, reprompt_service, prompt
+                )
+            elif retry_service:
+                response, executed, _ = self._invoke_with_retry(
+                    task, context, recovery_metadata, retry_service, prompt
+                )
+            else:
+                response, executed = self._call_llm(task, context, prompt)
+            return response, executed
+
+        if self._expectation_service:
+            run = self._expectation_service.execute(
+                generate, task.formatted_prompt, context=f"action={context.agent_name}"
             )
-        elif reprompt_service:
-            response, executed, recovery_metadata = self._invoke_with_reprompt(
-                task, context, recovery_metadata, reprompt_service
-            )
-        elif retry_service:
-            response, executed, recovery_metadata = self._invoke_with_retry(
-                task, context, recovery_metadata, retry_service
-            )
+            response, executed = run.response, run.executed
+            if run.suite_result is not None and isinstance(response, dict):
+                from agent_actions.expectations.service import attach_verdict
+
+                response = attach_verdict(response, run.suite_result)
         else:
-            response, executed = self._call_llm(task, context, task.formatted_prompt)
+            response, executed = generate(task.formatted_prompt)
 
         return InvocationResult.immediate(
             response=response,
@@ -125,10 +142,11 @@ class OnlineStrategy(InvocationStrategy):
         context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
         retry_service: RetryService,
+        prompt: str | None = None,
     ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with retry protection."""
         retry_result = retry_service.execute(
-            lambda: self._call_llm(task, context, task.formatted_prompt),
+            lambda: self._call_llm(task, context, prompt or task.formatted_prompt),
             context=f"action={context.agent_name}",
         )
 
@@ -156,11 +174,12 @@ class OnlineStrategy(InvocationStrategy):
         context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
         reprompt_service: RepromptService,
+        prompt: str | None = None,
     ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with reprompt validation."""
         reprompt_result = reprompt_service.execute(
-            llm_operation=lambda prompt: self._call_llm(task, context, prompt),
-            original_prompt=task.formatted_prompt,
+            llm_operation=lambda p: self._call_llm(task, context, p),
+            original_prompt=prompt or task.formatted_prompt,
             context=f"action={context.agent_name}",
         )
 
@@ -191,12 +210,13 @@ class OnlineStrategy(InvocationStrategy):
         recovery_metadata: RecoveryMetadata,
         retry_service: RetryService,
         reprompt_service: RepromptService,
+        prompt: str | None = None,
     ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with both retry and reprompt (reprompt wraps retry)."""
 
-        def llm_with_retry(prompt: str):
+        def llm_with_retry(p: str):
             retry_result = retry_service.execute(
-                lambda: self._call_llm(task, context, prompt),
+                lambda: self._call_llm(task, context, p),
                 context=f"action={context.agent_name}",
             )
             self._track_retry_metadata(retry_result, recovery_metadata)
@@ -207,7 +227,7 @@ class OnlineStrategy(InvocationStrategy):
 
         reprompt_result = reprompt_service.execute(
             llm_operation=llm_with_retry,
-            original_prompt=task.formatted_prompt,
+            original_prompt=prompt or task.formatted_prompt,
             context=f"action={context.agent_name}",
         )
 
