@@ -117,6 +117,7 @@ def test_field_check_still_fires_when_the_action_produces_zero_fields():
 def test_malformed_field_value_is_reported_not_crashed():
     defects = find_expectation_defects(config([{"type": "not_null", "field": 42}]), FIELDS)
     assert "write_q" in defects
+    assert "must be a string or list" in defects["write_q"][0]
     assert "int" in defects["write_q"][0]
 
 
@@ -156,3 +157,16 @@ def test_clean_named_suite_reports_no_defects(tmp_path):
 def test_named_suite_is_skipped_without_project_context():
     defects = find_expectation_defects(suite_config("scenario"), FIELDS)
     assert defects == {}
+
+
+def test_named_suite_with_invalid_yaml_syntax_is_reported_not_crashed(tmp_path):
+    suite_dir = tmp_path / "expectations" / "write_q"
+    suite_dir.mkdir(parents=True)
+    (suite_dir / "scenario.yml").write_text(
+        "name: scenario\nexpectations:\n  - type: not_null\n    field: [unterminated\n"
+    )
+    defects = find_expectation_defects(
+        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert "write_q" in defects
+    assert "scenario" in defects["write_q"][0]
