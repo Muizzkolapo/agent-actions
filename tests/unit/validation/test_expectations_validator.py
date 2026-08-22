@@ -403,3 +403,17 @@ def test_llm_judge_malformed_context_ref_is_a_defect():
     }
     defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
     assert defects and "must be 'action.field'" in defects["write_q"][0]
+
+
+def test_llm_judge_non_list_context_value_is_a_defect_not_a_crash():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {"id": "r", "type": "llm_judge", "field": "options", "rule": "x", "context": 5}
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "context must be a list" in defects["write_q"][0]

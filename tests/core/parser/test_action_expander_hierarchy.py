@@ -195,6 +195,32 @@ class TestJudgeContextAutoInjection:
             "another_action.other_field",
         }
 
+    def test_non_list_context_value_does_not_crash_expansion(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {"id": "a", "type": "llm_judge", "field": "ideas", "rule": "r1", "context": 5}
+            ],
+        }
+        agent = self._agent_for(expect, context_scope={"observe": ["source.*"]})
+        assert agent["context_scope"]["observe"] == ["source.*"]
+
+    def test_two_refs_with_the_same_field_name_on_different_actions_stay_distinct(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "a",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "rule": "r1",
+                    "context": ["action_one.text", "action_two.text"],
+                }
+            ],
+        }
+        agent = self._agent_for(expect)
+        assert set(agent["context_scope"]["observe"]) == {"action_one.text", "action_two.text"}
+
 
 class TestOutputSchemaContract:
     """Test uniform output schema across all action types."""

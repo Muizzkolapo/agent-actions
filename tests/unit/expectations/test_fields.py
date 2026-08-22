@@ -83,3 +83,8 @@ class TestResolveContext:
     def test_raises_on_malformed_ref_without_a_dot(self):
         with pytest.raises(FieldResolutionError):
             resolve_context({"a": {"x": 1}}, ["no_dot_here"])
+
+    def test_same_field_name_on_different_actions_does_not_collide(self):
+        llm_context = {"action_one": {"text": "from one"}, "action_two": {"text": "from two"}}
+        result = resolve_context(llm_context, ["action_one.text", "action_two.text"])
+        assert result == {"action_one.text": "from one", "action_two.text": "from two"}
