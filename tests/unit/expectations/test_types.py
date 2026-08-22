@@ -22,6 +22,11 @@ def test_resolved_id_is_derived_when_id_omitted():
     assert len(exp.resolved_id) > len("item_count_")
 
 
+def test_resolved_id_treats_an_explicit_empty_string_id_as_given_not_omitted():
+    exp = Expectation(id="", type="item_count", field="options", equals=4)
+    assert exp.resolved_id == ""
+
+
 def test_definition_hash_ignores_id_but_tracks_params():
     a = Expectation(id="one", type="item_count", field="options", equals=4)
     b = Expectation(id="two", type="item_count", field="options", equals=4)
@@ -40,6 +45,20 @@ def test_definition_hash_tracks_hint():
     a = Expectation(type="item_count", field="options", equals=4, hint="add more options")
     b = Expectation(type="item_count", field="options", equals=4, hint="different remedy text")
     assert a.definition_hash() != b.definition_hash()
+
+
+def test_definition_hash_tracks_type_field_and_severity():
+    base = Expectation(type="item_count", field="options", severity="fail", equals=4)
+    diff_type = Expectation(type="word_count_between", field="options", severity="fail", equals=4)
+    diff_field = Expectation(type="item_count", field="answer", severity="fail", equals=4)
+    diff_severity = Expectation(type="item_count", field="options", severity="warn", equals=4)
+    hashes = {
+        base.definition_hash(),
+        diff_type.definition_hash(),
+        diff_field.definition_hash(),
+        diff_severity.definition_hash(),
+    }
+    assert len(hashes) == 4
 
 
 def test_severity_defaults_to_fail():
