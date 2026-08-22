@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,23 @@ def pytest_configure():
     root = Path(__file__).resolve().parents[1]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+
+
+@pytest.fixture(autouse=True)
+def _enable_log_propagation():
+    """Ensure agent_actions loggers propagate to root so caplog captures them.
+
+    ``LoggerFactory.configure`` sets ``propagate = False`` on the ``agent_actions``
+    logger (``logging/factory.py:257``) so its bridge handler owns output. caplog
+    hooks the Python root logger, so without this a caplog assertion sees nothing
+    once the framework's logging has been configured anywhere in the session —
+    presence assertions fail confusingly and absence assertions pass vacuously.
+    """
+    aa_logger = logging.getLogger("agent_actions")
+    orig = aa_logger.propagate
+    aa_logger.propagate = True
+    yield
+    aa_logger.propagate = orig
 
 
 @pytest.fixture

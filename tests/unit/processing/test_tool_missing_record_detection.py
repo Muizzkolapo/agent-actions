@@ -4,6 +4,7 @@ When a tool returns fewer records than it received, the missing records
 should be detected and tombstoned — not silently lost.
 """
 
+import logging
 from unittest.mock import patch
 
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
@@ -174,8 +175,9 @@ class TestToolMissingRecordDetection:
         assert len(missing) == 1
         assert missing[0].input_record == records[1]
 
-    def test_warning_logged_for_missing_records(self, capsys):
+    def test_warning_logged_for_missing_records(self, caplog):
         """Missing records produce a warning log for each."""
+        caplog.set_level(logging.WARNING)
         records = _make_records("r1", "r2", "r3")
         context = _make_context("dropper_tool")
         context.source_data = records
@@ -193,12 +195,13 @@ class TestToolMissingRecordDetection:
         ):
             FileToolStrategy().invoke(records, context)
 
-        stderr = capsys.readouterr().err
-        assert "dropper_tool" in stderr
-        assert "r2" in stderr
+        logged = caplog.text
+        assert "dropper_tool" in logged
+        assert "r2" in logged
 
-    def test_high_drop_ratio_logs_many_to_one_guidance(self, capsys):
+    def test_high_drop_ratio_logs_many_to_one_guidance(self, caplog):
         """When >50% of records are missing, log guidance about source_index lists."""
+        caplog.set_level(logging.WARNING)
         records = _make_records("r1", "r2", "r3", "r4", "r5")
         context = _make_context("batch_tool")
         context.source_data = records
@@ -213,16 +216,17 @@ class TestToolMissingRecordDetection:
         ):
             FileToolStrategy().invoke(records, context)
 
-        stderr = capsys.readouterr().err
-        assert "batch_tool" in stderr
-        assert "4 of 5" in stderr
-        assert "many-to-one" in stderr
-        assert "source_index" in stderr
+        logged = caplog.text
+        assert "batch_tool" in logged
+        assert "4 of 5" in logged
+        assert "many-to-one" in logged
+        assert "source_index" in logged
         # No per-record spam
-        assert stderr.count("did not return") == 1
+        assert logged.count("did not return") == 1
 
-    def test_low_drop_ratio_logs_summary_with_guids(self, capsys):
+    def test_low_drop_ratio_logs_summary_with_guids(self, caplog):
         """When <=50% of records are missing, log summary with missing GUIDs."""
+        caplog.set_level(logging.WARNING)
         records = _make_records("r1", "r2", "r3", "r4")
         context = _make_context("filter_tool")
         context.source_data = records
@@ -241,11 +245,11 @@ class TestToolMissingRecordDetection:
         ):
             FileToolStrategy().invoke(records, context)
 
-        stderr = capsys.readouterr().err
-        assert "filter_tool" in stderr
-        assert "1 of 4" in stderr
-        assert "r3" in stderr
-        assert "many-to-one" not in stderr
+        logged = caplog.text
+        assert "filter_tool" in logged
+        assert "1 of 4" in logged
+        assert "r3" in logged
+        assert "many-to-one" not in logged
 
     def test_synthetic_record_no_false_positives(self):
         """Tool merging N inputs into synthetic output — no false tombstones."""

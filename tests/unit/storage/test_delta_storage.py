@@ -1432,7 +1432,7 @@ class TestIssue11_FallbackWarning:
         yield b
         b.close()
 
-    def test_missing_action_in_graph_still_works(self, backend, capsys):
+    def test_missing_action_in_graph_still_works(self, backend, caplog):
         """Action not in dep graph falls back to flat order with warning."""
         backend.write_target(
             "a1",
@@ -1467,6 +1467,4 @@ class TestIssue11_FallbackWarning:
 
         # Should still reconstruct (using flat order fallback)
         assert "a3" in result[0]["content"]
-        # Warning fires via logging to stderr
-        stderr = capsys.readouterr().err
-        assert "not found in dependency graph" in stderr
+        assert "not found in dependency graph" in caplog.text
