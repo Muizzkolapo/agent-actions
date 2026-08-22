@@ -597,8 +597,15 @@ def test_file_mode_hitl_no_observe_flattens_all_namespaces():
     assert captured_context["context"][0] == {"question": "What?", "answer": "Yes"}
 
 
-def test_file_mode_hitl_empty_observe_flattens_all():
-    """observe: [] is treated same as no observe — flattens all namespaces."""
+def test_file_mode_hitl_empty_observe_gates_all():
+    """observe: [] is a declared gate — the reviewer sees no business fields.
+
+    The previous assertion pinned flatten-all and justified it by the
+    implementation ("Empty observe = falsy"), not by intent,
+    which contradicts the contract the prompt path documents at
+    scope_application.py:152-153: no directive keys at all = pass everything
+    through, distinct from {"observe": []} = gate to framework namespaces only.
+    """
     action_config = {
         "kind": "hitl",
         "granularity": "file",
@@ -630,8 +637,34 @@ def test_file_mode_hitl_empty_observe_flattens_all():
     ):
         HITLStrategy().invoke(records, context)
 
-    # Empty observe = falsy = flatten all (same as no observe)
-    assert captured_context["context"][0] == {"question": "What?", "answer": "Yes"}
+    # Declared gate — nothing upstream reaches the reviewer.
+    assert captured_context["context"][0] == {}
+
+
+def test_file_mode_hitl_intentional_gate_does_not_warn(caplog):
+    """`observe: []` gates on purpose — no "check your observe references" advice.
+
+    The empty-payload warning exists to catch refs that match no upstream
+    namespace. An author who declared an empty gate has no refs to check, so the
+    advice would be misdirection.
+    """
+    action_config = {"kind": "hitl", "granularity": "file", "context_scope": {"observe": []}}
+    records = [{"source_guid": "sg-1", "content": {"upstream": {"question": "What?"}}}]
+    context = ProcessingContext(
+        agent_config=action_config, agent_name="review", source_data=records
+    )
+
+    def mock_run(**kwargs):
+        return ({"hitl_status": "approved", "timestamp": "2026-01-01T00:00:00Z"}, True)
+
+    with caplog.at_level(logging.WARNING):
+        with patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            side_effect=mock_run,
+        ):
+            HITLStrategy().invoke(records, context)
+
+    assert not [r for r in caplog.records if "no visible fields" in r.getMessage()]
 
 
 def test_file_mode_hitl_bad_namespace_in_observe_warns():

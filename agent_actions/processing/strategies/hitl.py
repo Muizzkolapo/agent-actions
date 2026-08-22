@@ -72,8 +72,11 @@ class HITLStrategy:
             context_scope = context.agent_config.get("context_scope") or {}
             filtered_records = [extract_tool_input(r, context_scope) for r in records]
 
+            # An explicit `observe: []` gates every field on purpose — do not
+            # advise the author to check refs they deliberately left empty.
+            declared_refs = bool(context_scope.get("observe"))
             empty_count = sum(1 for r in filtered_records if not r)
-            if empty_count:
+            if empty_count and declared_refs:
                 logger.warning(
                     "[%s] %d/%d records have no visible fields after observe filtering — "
                     "check context_scope.observe references match upstream namespaces",
