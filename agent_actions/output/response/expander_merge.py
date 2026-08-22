@@ -76,5 +76,7 @@ def collect_judge_context_refs(expect: dict[str, Any] | None) -> list[str]:
     refs: list[str] = []
     for entry in entries:
         if isinstance(entry, dict) and entry.get("type") == "llm_judge":
-            refs.extend(entry.get("context") or [])
+            context = entry.get("context")
+            if isinstance(context, list):
+                refs.extend(context)
     return refs

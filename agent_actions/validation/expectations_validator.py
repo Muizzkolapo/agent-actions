@@ -226,21 +226,28 @@ def _rule_defects(
         if not isinstance(votes, int) or isinstance(votes, bool) or votes < 1:
             messages.append(f"{label}: votes must be a positive integer, got {votes!r}")
 
-    if expectation.type == "llm_judge":
-        for ref in expectation.params.get("context") or []:
-            if not isinstance(ref, str) or "." not in ref:
-                messages.append(f"{label}: context reference '{ref}' must be 'action.field'")
-                continue
-            ref_action, _, ref_field = ref.partition(".")
-            ref_fields = all_fields.get(ref_action)
-            if ref_fields is None:
-                messages.append(
-                    f"{label}: context reference '{ref}' names unknown action '{ref_action}'"
-                )
-            elif ref_field not in ref_fields:
-                messages.append(
-                    f"{label}: context reference '{ref}' — action '{ref_action}' "
-                    f"does not produce field '{ref_field}'"
-                )
+    if expectation.type == "llm_judge" and "context" in expectation.params:
+        context_refs = expectation.params["context"]
+        if not isinstance(context_refs, list):
+            messages.append(
+                f"{label}: context must be a list of 'action.field' strings, "
+                f"got {type(context_refs).__name__}"
+            )
+        else:
+            for ref in context_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    messages.append(f"{label}: context reference '{ref}' must be 'action.field'")
+                    continue
+                ref_action, _, ref_field = ref.partition(".")
+                ref_fields = all_fields.get(ref_action)
+                if ref_fields is None:
+                    messages.append(
+                        f"{label}: context reference '{ref}' names unknown action '{ref_action}'"
+                    )
+                elif ref_field not in ref_fields:
+                    messages.append(
+                        f"{label}: context reference '{ref}' — action '{ref_action}' "
+                        f"does not produce field '{ref_field}'"
+                    )
 
     return messages
