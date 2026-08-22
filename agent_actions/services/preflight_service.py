@@ -299,7 +299,10 @@ class PreflightService:
     def _check_expectation_defects(self) -> None:
         """Refuse when an expect block names an unknown type, parameter, or field."""
         defects = find_expectation_defects(
-            self.action_configs, self._collect_action_output_fields()
+            self.action_configs,
+            self._collect_action_output_fields(),
+            project_root=self.project_root,
+            workflow=self.agent_name,
         )
         if defects:
             raise PreFlightValidationError(
