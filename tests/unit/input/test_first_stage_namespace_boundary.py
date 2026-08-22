@@ -1,4 +1,4 @@
-"""First-stage user payload lives in its own namespace — framework can't touch it (spec 584).
+"""First-stage user payload lives in its own namespace — framework can't touch it.
 
 The batch envelope used to spread the user row FLAT alongside framework fields, so a user
 column named like a framework field (`node_id`/`target_id`/…) was overwritten in storage, and

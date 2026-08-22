@@ -1,4 +1,4 @@
-"""Tests for loader contract fixes (P1 #2).
+"""Tests for loader contract fixes.
 
 Verifies that CSV and XML loaders can process files via file_path,
 and that XLSX FileReader output (list[dict]) is usable directly.

@@ -1,4 +1,4 @@
-"""Tests for operator semantics fixes (P2 #4, #7).
+"""Tests for operator semantics fixes.
 
 Verifies that NOT_* operators return False (not True) on invalid input,
 matching the behavior of their positive counterparts.

@@ -479,8 +479,8 @@ class ActionExecutor:
         underlying query / value parse fails.  This is called immediately
         before and after running an action so the delta yields the
         per-execution record count.  A silent fallback to 0 here would let a
-        broken telemetry path masquerade as "action wrote nothing," exactly
-        the failure mode spec 554 is eliminating.
+        broken telemetry path masquerade as "action wrote nothing" instead of
+        raising.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:

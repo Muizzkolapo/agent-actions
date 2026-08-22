@@ -1,4 +1,4 @@
-"""Regression tests for issue #1224 — parallel actions fail when upstream is
+"""Regression tests: parallel actions fail when upstream is
 'completed' in the status file but has no output in the SQLite storage backend.
 
 Root cause: execute_level_async filtered out 'completed' actions via
@@ -104,7 +104,7 @@ class TestExecuteLevelAsyncVerification:
     @pytest.mark.asyncio
     async def test_stale_completed_action_is_reset_and_re_run(self):
         """
-        Regression for issue #1224: if write_description is 'completed' but has no
+        Regression: if write_description is 'completed' but has no
         SQLite output, execute_level_async must reset it to 'pending' and dispatch it
         rather than silently skipping the entire level.
         """

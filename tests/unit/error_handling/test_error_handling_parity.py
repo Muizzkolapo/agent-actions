@@ -1,7 +1,7 @@
 """
 Test error handling parity between batch and online modes.
 
-Behavioral tests for guard exception handling (GitHub Issue #800).
+Behavioral tests for guard exception handling.
 """
 
 from unittest.mock import patch

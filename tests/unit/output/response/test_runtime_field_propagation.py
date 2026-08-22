@@ -1,6 +1,6 @@
 """Tests for runtime field propagation through the expander pipeline.
 
-Issue #1050: Action-level runtime fields (anthropic_version,
+Action-level runtime fields (anthropic_version,
 enable_prompt_caching, max_execution_time, where_clause, enable_caching)
 must survive expansion and appear in the final agent dict.
 """

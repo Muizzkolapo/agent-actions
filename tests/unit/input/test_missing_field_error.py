@@ -1,4 +1,4 @@
-"""Tests for MissingFieldError (P2 #6).
+"""Tests for MissingFieldError.
 
 Verifies that:
 - MissingFieldError is raised for missing fields (not generic ValueError)

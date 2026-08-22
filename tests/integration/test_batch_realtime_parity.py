@@ -8,8 +8,6 @@ mode but fail in another.
 ARCHITECTURE INVARIANT: Both modes MUST use PromptPreparationService as the
 single source of truth for context building. These tests act as a regression
 gate to catch any divergence.
-
-See: https://github.com/Muizzkolapo/agent-actions/issues/640
 """
 
 from typing import Any

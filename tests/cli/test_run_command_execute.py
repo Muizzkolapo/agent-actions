@@ -96,7 +96,7 @@ class TestRunCommandProjectRootWiring:
 
 
 # ---------------------------------------------------------------------------
-# Status message tests (issue #81)
+# Status message tests
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ def _build_workflow_mock(tmp_path, state_overrides=None):
 
 
 class TestRunCommandStatusMessages:
-    """Post-execution status determination emits accurate messages (issue #81)."""
+    """Post-execution status determination emits accurate messages."""
 
     @pytest.fixture(autouse=True)
     def _reset_singleton(self):

@@ -485,7 +485,7 @@ class TestMergeJsonFiles:
 
 
 # ---------------------------------------------------------------------------
-# Fan-in merge via merge_branch_records (spec 205)
+# Fan-in merge via merge_branch_records
 # ---------------------------------------------------------------------------
 
 

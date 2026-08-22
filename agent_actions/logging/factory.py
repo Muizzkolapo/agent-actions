@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from agent_actions.logging.events.handlers import RunResultsCollector
 
 
-# Clamped to WARNING on init so SDK/HTTP chatter never reaches the CLI (spec 555).
+# Clamped to WARNING on init so SDK/HTTP chatter never reaches the CLI.
 _THIRD_PARTY_NOISY_LOGGERS: tuple[str, ...] = (
     "httpx",
     "httpcore",
