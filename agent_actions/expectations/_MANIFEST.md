@@ -81,6 +81,36 @@ synthetic dict or direct service construction — see Plan 2 Task 8):
    git history on `output/response/expander.py`); this plan re-verified that
    fix still holds and found no regression.
 
+A narrow, real, and deliberately **not** worked around side effect of fix 1,
+found by review: `agent_actions/processing/strategies/online_llm.py` passes
+the SAME (now-unwrapped) `response` on to `MetadataExtractor.extract_from_response`
+as `raw_response`, which branches on `isinstance(response, dict)` — a dict routes
+to `_extract_from_dict`, which reads `model`/`finish_reason`/`stop_reason`/
+`status_code`/`http_status`/`request_id`/`id`/`usage` keys as provider metadata;
+a list routes to `_extract_from_object` (attribute/`hasattr`-based), which
+returns near-empty for a plain `list`. Before this fix, EVERY online action's
+`raw_response` was always a list (since `create_dynamic_agent` always returns
+one) — so `_extract_from_object`'s near-empty result was universal, and metadata
+extraction from response content was already a no-op for every online action,
+`expect:`-configured or not. This fix makes an `expect:`-configured action's
+`raw_response` a dict for the first time, so `_extract_from_dict` fires for
+that action category specifically — if its business schema happens to emit a
+field literally named one of the keys above (`id` is the most plausible),
+that value is misread as provider metadata. `hitl.py`'s own list-unwrap
+(`processing/strategies/hitl.py:112-120`, "Unwrap single-item list from
+invocation service") avoids this exact trap by keeping the *original*
+`raw_response` for its `ProcessingResult` and using a separate unwrapped
+variable only for its own internal decision logic — deliberately not mirrored
+here, because doing so would mean `ExpectationRunResult.response` (returned to
+`OnlineStrategy.invoke()` and merged with the verdict via `attach_verdict`)
+would need to become list-shaped again after annotation, which would in turn
+require a third file's (`online_llm.py`) contract to change to keep `_transform_response`
+happy — a bigger, riskier change than this plan's real bug fix, for a narrow
+key-name-collision that a project can trivially avoid by not naming an output
+field `id`/`model`/`usage`/`finish_reason`/`stop_reason`/`status_code`/
+`http_status`/`request_id`. Flagged for whoever owns `online_llm.py`/`enrichment.py`
+next, not fixed here.
+
 One confirmed, pre-existing bug found and **not** fixed (out of scope — it is
 in shared parallel-execution infrastructure, not this package):
 `action_executor.py:compute_execution_levels` buckets `execution_order` into
