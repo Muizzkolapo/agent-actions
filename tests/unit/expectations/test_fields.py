@@ -38,6 +38,11 @@ def test_wildcard_on_a_non_list_raises_naming_the_actual_type():
         resolve(RECORD, "count[*]")
 
 
+def test_wildcard_on_a_missing_field_raises_rather_than_defaulting_to_empty():
+    with pytest.raises(FieldResolutionError, match="missing"):
+        resolve(RECORD, "missing[*]")
+
+
 def test_wildcard_on_empty_list_yields_no_inputs():
     assert resolve({"options": []}, "options[*]") == []
 
