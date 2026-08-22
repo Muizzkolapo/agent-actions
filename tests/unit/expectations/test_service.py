@@ -90,6 +90,16 @@ def test_a_multi_item_list_response_is_not_validated():
     assert result.suite_result is None
 
 
+def test_an_empty_list_response_is_not_validated():
+    result = ExpectationService(SUITE, repair="none").execute(lambda p: ([], True), "P")
+    assert result.suite_result is None
+
+
+def test_a_single_item_list_of_a_non_dict_is_not_validated():
+    result = ExpectationService(SUITE, repair="none").execute(lambda p: (["text"], True), "P")
+    assert result.suite_result is None
+
+
 def test_factory_returns_none_without_an_expect_block():
     assert create_expectation_service_from_config(None, action_name="a") is None
 
