@@ -91,7 +91,8 @@ def _word_count_ratio(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     if not counts:
         return False, "no items to compare"
     if min(counts) == 0:
-        return False, "cannot compare word counts: an item is empty"
+        empty_at = [i for i, c in enumerate(counts) if c == 0]
+        return False, f"cannot compare word counts: item(s) at index {empty_at} are empty"
     ratio = max(counts) / min(counts)
     if ratio > params["max_ratio"]:
         return False, f"longest/shortest word ratio {ratio:.2f} exceeds {params['max_ratio']}"
