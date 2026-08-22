@@ -367,6 +367,103 @@ class TestRedactingFilter:
         assert record.api_key == "[REDACTED]"
 
 
+class TestExcInfoRedaction:
+    """Exception tracebacks are the third leak path (message and extra fields are
+    handled by RedactingFilter). ``record.exc_info`` is a raw
+    ``(type, exception, traceback)`` tuple that the filter never touches — it
+    only rewrites ``record.msg``/``record.args`` and record attributes.
+    ``LoggingBridgeHandler``/``LogEvent.to_dict()`` is the ONLY place that tuple
+    becomes text (``traceback.format_exception``), so redaction belongs there,
+    on the formatted string — never on the live exception object, which callers
+    may still be holding and whose ``args`` other code may read.
+    """
+
+    SECRET = "sk-" + "a" * 30
+
+    def _event_with_exc_info(self, message: str = "request failed"):
+        import sys
+
+        from agent_actions.logging.core.handlers import LogEvent
+
+        try:
+            raise ValueError(f"auth failed for {self.SECRET}")
+        except ValueError:
+            return LogEvent(message=message, exc_info=sys.exc_info())
+
+    def test_to_dict_redacts_the_formatted_traceback(self):
+        """The secret in the exception message must not appear in the serialized event."""
+        event = self._event_with_exc_info()
+
+        serialized = event.to_dict()
+
+        assert self.SECRET not in serialized["exc_info"]
+        assert "sk-***" in serialized["exc_info"]
+
+    def test_to_dict_preserves_traceback_structure(self):
+        """Redaction must not turn the traceback into an unreadable stub."""
+        event = self._event_with_exc_info()
+
+        serialized = event.to_dict()
+
+        assert "ValueError" in serialized["exc_info"]
+        assert "Traceback (most recent call last)" in serialized["exc_info"]
+
+    def test_to_dict_without_exception_has_no_exc_info_key(self):
+        """Invariant: events with no exception still omit the field entirely."""
+        from agent_actions.logging.core.handlers import LogEvent
+
+        event = LogEvent(message="ok", exc_info=None)
+
+        assert "exc_info" not in event.to_dict()
+
+    def test_live_exception_object_is_not_mutated(self):
+        """Redaction must operate on the formatted string, never the exception itself.
+
+        Other code (retry logic, error handlers) may still hold and inspect the
+        same exception object after it has been logged. Redacting record.exc_info
+        in place would corrupt it for every other reader.
+        """
+        import sys
+
+        try:
+            raise ValueError(f"auth failed for {self.SECRET}")
+        except ValueError as exc:
+            original_args = exc.args
+            from agent_actions.logging.core.handlers import LogEvent
+
+            event = LogEvent(message="x", exc_info=sys.exc_info())
+            event.to_dict()
+
+            assert exc.args == original_args
+            assert self.SECRET in str(exc)
+
+    def test_end_to_end_through_the_real_bridge(self):
+        """Drive the actual LoggerFactory wiring, not just the dataclass in isolation."""
+        from agent_actions.logging.core.manager import EventManager
+        from agent_actions.logging.factory import LoggerFactory
+
+        events = []
+
+        def capturing_fire(self, event):
+            events.append(event)
+
+        LoggerFactory._setup_logging_bridge()
+        original_fire = EventManager.fire
+        EventManager.fire = capturing_fire
+        try:
+            try:
+                raise ValueError(f"auth failed for {self.SECRET}")
+            except ValueError:
+                logging.getLogger("agent_actions.llm.client").exception("request failed")
+        finally:
+            EventManager.fire = original_fire
+
+        assert events, "no event fired"
+        serialized = events[0].to_dict()
+        assert self.SECRET not in serialized["exc_info"]
+        assert "sk-***" in serialized["exc_info"]
+
+
 class TestStandaloneRedactSensitiveData:
     """Tests for the standalone _redact_sensitive_data function (2-A)."""
 
