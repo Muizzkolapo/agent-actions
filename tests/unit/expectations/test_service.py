@@ -448,3 +448,56 @@ def test_repair_with_max_iterations_one_validates_once_and_exhausts():
     assert len(calls) == 1
     assert result.exhausted is True
     assert result.suite_result.overall_pass is False
+
+
+def test_auto_repair_sends_a_composed_prompt_on_the_second_iteration():
+    responses = iter([{"ideas": ["a"]}, {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    service = ExpectationService(SUITE, repair="auto", max_iterations=3)
+    result = service.execute(flaky, "ORIGINAL")
+    assert result.suite_result.overall_pass is True
+    assert prompts[0] == "ORIGINAL"
+    assert prompts[1] != "ORIGINAL"
+    assert "ORIGINAL" in prompts[1]
+    assert "count" in prompts[1]
+
+
+def test_retry_repair_still_uses_the_original_prompt_every_iteration():
+    responses = iter([{"ideas": ["a"]}, {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    ExpectationService(SUITE, repair="retry", max_iterations=3).execute(flaky, "ORIGINAL")
+    assert prompts == ["ORIGINAL", "ORIGINAL"]
+
+
+def test_auto_repair_hint_reaches_the_composed_prompt():
+    hinted_suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "count",
+                "type": "item_count",
+                "field": "ideas",
+                "min": 2,
+                "hint": "brainstorm additional distinct ideas",
+            }
+        ],
+    )
+    responses = iter([{"ideas": ["a"]}, {"ideas": ["a", "b"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    ExpectationService(hinted_suite, repair="auto", max_iterations=2).execute(flaky, "O")
+    assert "brainstorm additional distinct ideas" in prompts[1]
