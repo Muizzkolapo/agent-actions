@@ -421,3 +421,85 @@ def test_llm_judge_non_list_context_value_is_a_defect_not_a_crash():
     }
     defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
     assert defects and "context must be a list" in defects["write_q"][0]
+
+
+EXPR_FIELDS = {"write_q": {"score", "verdict", "meta"}}
+
+
+def _expr_defects(entry, fields=EXPR_FIELDS):
+    return find_expectation_defects(config([entry]), fields).get("write_q", [])
+
+
+def test_valid_expression_entry_has_no_defects():
+    assert _expr_defects({"id": "floor", "type": "expression", "condition": "score >= 80"}) == []
+
+
+def test_expression_with_field_is_a_defect():
+    defects = _expr_defects(
+        {"id": "floor", "type": "expression", "field": "score", "condition": "score >= 80"}
+    )
+    assert any("does not take field" in d for d in defects)
+
+
+def test_expression_udf_condition_defect_names_the_decorator():
+    defects = _expr_defects(
+        {"id": "floor", "type": "expression", "condition": "udf:tools.checks.my_check"}
+    )
+    assert any("expectation_check" in d for d in defects)
+
+
+def test_expression_unparseable_condition_is_a_defect():
+    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "score >="})
+    assert any("does not parse" in d for d in defects)
+
+
+def test_expression_non_string_condition_is_a_defect():
+    defects = _expr_defects({"id": "floor", "type": "expression", "condition": 5})
+    assert any("condition must be a non-empty string" in d for d in defects)
+
+
+def test_expression_constant_condition_is_a_defect():
+    defects = _expr_defects({"id": "floor", "type": "expression", "condition": '"80"'})
+    assert any("references no record fields" in d for d in defects)
+
+
+def test_expression_unknown_field_reference_is_a_defect():
+    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "points >= 80"})
+    assert any("does not produce field 'points'" in d for d in defects)
+
+
+def test_expression_dotted_reference_checks_the_top_segment():
+    assert _expr_defects({"id": "m", "type": "expression", "condition": 'meta.status == "ok"'}) == []
+
+
+def test_expression_missing_condition_reports_once():
+    defects = _expr_defects({"id": "floor", "type": "expression"})
+    assert len([d for d in defects if "condition" in d]) == 1
+
+
+def test_missing_field_on_a_deterministic_entry_is_now_a_preflight_defect():
+    defects = _expr_defects({"id": "present", "type": "not_null"})
+    assert any("requires field" in d for d in defects)
+
+
+def test_empty_string_field_is_a_defect():
+    defects = _expr_defects({"id": "present", "type": "not_null", "field": ""})
+    assert any("must not be empty" in d for d in defects)
+
+
+def test_empty_list_field_is_a_defect():
+    defects = _expr_defects({"id": "present", "type": "not_null", "field": []})
+    assert any("must not be empty" in d for d in defects)
+
+
+def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
+    write_suite(
+        tmp_path,
+        "write_q",
+        "scenario",
+        [{"id": "floor", "type": "expression", "condition": "points >= 80"}],
+    )
+    defects = find_expectation_defects(
+        suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path, workflow="write_q"
+    )
+    assert any("does not produce field 'points'" in d for d in defects["write_q"])
