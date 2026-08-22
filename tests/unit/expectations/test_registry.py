@@ -159,6 +159,16 @@ def test_word_count_between_min_passes_on_the_exact_bound():
     assert run("word_count_between", "one two", min=2)[0] is True
 
 
+def test_word_count_between_max_passes_on_the_exact_bound():
+    assert run("word_count_between", "one two", max=2)[0] is True
+
+
+def test_word_count_ratio_empty_item_detail_names_the_index():
+    passed, detail = run("word_count_ratio", ["a b", "", "c"], max_ratio=2.0)
+    assert passed is False
+    assert "1" in detail
+
+
 def test_word_count_ratio_passes_on_the_exact_max_ratio_boundary():
     assert run("word_count_ratio", ["a", "a b"], max_ratio=2.0)[0] is True
 
