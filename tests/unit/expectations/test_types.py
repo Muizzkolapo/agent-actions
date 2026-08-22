@@ -41,7 +41,12 @@ def test_severity_rejects_unknown_level():
 
 def _outcome(oid, passed, severity="fail"):
     return Outcome(
-        id=oid, type="item_count", severity=severity, passed=passed, detail="", definition_hash="abc123"
+        id=oid,
+        type="item_count",
+        severity=severity,
+        passed=passed,
+        detail="",
+        definition_hash="abc123",
     )
 
 
@@ -60,14 +65,16 @@ def test_overall_pass_is_false_when_a_fail_severity_expectation_fails():
 
 def test_failed_lists_every_failing_outcome_regardless_of_severity():
     result = SuiteResult(
-        suite_name="s", outcomes=[_outcome("a", False), _outcome("b", False, "warn"), _outcome("c", True)]
+        suite_name="s",
+        outcomes=[_outcome("a", False), _outcome("b", False, "warn"), _outcome("c", True)],
     )
     assert [o.id for o in result.failed] == ["a", "b"]
 
 
 def test_to_record_dict_reports_only_fail_severity_ids_as_failed():
     result = SuiteResult(
-        suite_name="s", outcomes=[_outcome("a", False), _outcome("b", False, "warn"), _outcome("c", True)]
+        suite_name="s",
+        outcomes=[_outcome("a", False), _outcome("b", False, "warn"), _outcome("c", True)],
     )
     payload = result.to_record_dict()
     assert payload["overall_pass"] is False
