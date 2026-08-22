@@ -144,7 +144,16 @@ def create_expectation_service_from_config(
                 return (*cached, False)
             if not budget.try_acquire():
                 return False, f"judge budget exhausted ({budget.remaining} calls remaining)", True
-            passed, detail = cached_judge.call_and_cache(expectation, value, context=context)
+            try:
+                passed, detail = cached_judge.call_and_cache(expectation, value, context=context)
+            except Exception as exc:
+                logger.warning(
+                    "[%s] Judge call failed for '%s', treating as a failed outcome",
+                    action_name,
+                    expectation.resolved_id,
+                    exc_info=True,
+                )
+                return False, f"judge call failed: {exc}", False
             return passed, detail, False
 
     return ExpectationService(suite, repair=repair, judge=judge_dispatch)
