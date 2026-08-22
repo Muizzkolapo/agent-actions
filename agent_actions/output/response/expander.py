@@ -287,6 +287,10 @@ class ActionExpander:
         if interceptors:
             agent["interceptors"] = interceptors
 
+        # Pass through the expect block unchanged; ExpectConfig validated its
+        # shape already, and AgentConfig (extra="allow") preserves it as-is.
+        agent["expect"] = action.get("expect")
+
         return agent
 
     @staticmethod
