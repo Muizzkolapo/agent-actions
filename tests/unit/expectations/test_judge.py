@@ -191,3 +191,123 @@ class TestVotesRegistration:
     def test_llm_judge_accepts_votes_param(self):
         etype = registry.get("llm_judge")
         assert "votes" in etype.params
+
+
+from agent_actions.expectations.types import Expectation
+
+
+def _judged_expectation(**overrides):
+    defaults = {
+        "id": "generic_options",
+        "type": "llm_judge",
+        "field": "options",
+        "rule": "be specific",
+    }
+    return Expectation(**{**defaults, **overrides})
+
+
+class TestCacheKey:
+    def test_same_expectation_and_value_produce_same_key(self):
+        from agent_actions.expectations.judge import cache_key
+
+        exp = _judged_expectation()
+        assert cache_key(exp, "value a") == cache_key(exp, "value a")
+
+    def test_different_value_produces_different_key(self):
+        from agent_actions.expectations.judge import cache_key
+
+        exp = _judged_expectation()
+        assert cache_key(exp, "value a") != cache_key(exp, "value b")
+
+    def test_different_id_produces_different_key(self):
+        from agent_actions.expectations.judge import cache_key
+
+        a = _judged_expectation(id="rule_one")
+        b = _judged_expectation(id="rule_two")
+        assert cache_key(a, "value") != cache_key(b, "value")
+
+    def test_editing_the_rule_changes_the_key(self):
+        from agent_actions.expectations.judge import cache_key
+
+        original = _judged_expectation(rule="be specific")
+        edited = _judged_expectation(rule="be extremely specific")
+        assert cache_key(original, "value") != cache_key(edited, "value")
+
+    def test_different_model_produces_different_key(self):
+        from agent_actions.expectations.judge import cache_key
+
+        a = _judged_expectation(model="claude-sonnet-5")
+        b = _judged_expectation(model="claude-opus-5")
+        assert cache_key(a, "value") != cache_key(b, "value")
+
+
+class TestCachedJudge:
+    def test_lookup_is_none_before_any_call(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config())
+        assert judge.lookup(_judged_expectation(), "value") is None
+
+    def test_call_and_cache_invokes_the_judge_and_stores_the_result(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config())
+        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
+            mock_invoke.return_value = (True, "meets the rule")
+            passed, detail = judge.call_and_cache(_judged_expectation(), "value")
+        assert (passed, detail) == (True, "meets the rule")
+        mock_invoke.assert_called_once()
+
+    def test_lookup_returns_the_cached_verdict_after_call_and_cache(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config())
+        exp = _judged_expectation()
+        with patch(
+            "agent_actions.expectations.judge.invoke_judge_with_votes",
+            return_value=(False, "too vague"),
+        ):
+            judge.call_and_cache(exp, "value")
+        assert judge.lookup(exp, "value") == (False, "too vague")
+
+    def test_call_and_cache_does_not_consult_its_own_cache(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config())
+        exp = _judged_expectation()
+        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
+            mock_invoke.side_effect = [(True, "first"), (False, "second")]
+            judge.call_and_cache(exp, "value")
+            judge.call_and_cache(exp, "value")
+        assert mock_invoke.call_count == 2
+        assert judge.lookup(exp, "value") == (False, "second")
+
+    def test_call_and_cache_passes_rule_votes_model_and_context_through(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config(), action_name="write_q")
+        exp = _judged_expectation(votes=3, model="claude-opus-5")
+        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
+            mock_invoke.return_value = (True, "ok")
+            judge.call_and_cache(exp, "value", context={"source_context": "docs say X"})
+        mock_invoke.assert_called_once_with(
+            _agent_config(),
+            "be specific",
+            "value",
+            votes=3,
+            context={"source_context": "docs say X"},
+            model="claude-opus-5",
+            action_name="write_q",
+        )
+
+    def test_distinct_values_cache_independently(self):
+        from agent_actions.expectations.judge import CachedJudge
+
+        judge = CachedJudge(_agent_config())
+        exp = _judged_expectation()
+        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
+            mock_invoke.side_effect = [(True, "a passes"), (False, "b fails")]
+            judge.call_and_cache(exp, "value a")
+            judge.call_and_cache(exp, "value b")
+        assert judge.lookup(exp, "value a") == (True, "a passes")
+        assert judge.lookup(exp, "value b") == (False, "b fails")
