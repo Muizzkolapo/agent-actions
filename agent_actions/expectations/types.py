@@ -42,7 +42,7 @@ class Expectation(BaseModel):
     @property
     def resolved_id(self) -> str:
         """The authored id, or one derived from type and definition so it survives reordering."""
-        return self.id or f"{self.type}_{self.definition_hash()}"
+        return self.id if self.id is not None else f"{self.type}_{self.definition_hash()}"
 
 
 class Outcome(BaseModel):
