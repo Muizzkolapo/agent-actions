@@ -295,3 +295,77 @@ def test_llm_judge_without_context_declared_never_calls_resolve_context():
         )
     mock_resolve.assert_not_called()
     assert judge.calls[0][1] is None
+
+
+def test_expression_true_produces_a_passing_outcome():
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+    )
+    result = run_suite(suite, {"score": 91})
+    assert result.overall_pass is True
+    assert result.outcomes[0].passed is True
+    assert result.outcomes[0].detail == ""
+
+
+def test_expression_false_outcome_detail_names_values():
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+    )
+    result = run_suite(suite, {"score": 64})
+    assert result.overall_pass is False
+    assert result.outcomes[0].passed is False
+    assert "score=64" in result.outcomes[0].detail
+
+
+def test_expression_missing_field_is_a_failed_outcome_not_a_crash():
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+    )
+    result = run_suite(suite, {"points": 90})
+    assert result.outcomes[0].passed is False
+    assert "does not exist" in result.outcomes[0].detail
+
+
+def test_expression_warn_severity_does_not_block_overall_pass():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "score_floor",
+                "type": "expression",
+                "condition": "score >= 80",
+                "severity": "warn",
+            }
+        ],
+    )
+    result = run_suite(suite, {"score": 10})
+    assert result.outcomes[0].passed is False
+    assert result.overall_pass is True
+
+
+def test_expression_runs_alongside_deterministic_checks_in_one_suite():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "has_ideas", "type": "item_count", "field": "ideas", "min": 1},
+            {"id": "score_floor", "type": "expression", "condition": "score >= 80"},
+        ],
+    )
+    result = run_suite(suite, {"ideas": ["a"], "score": 95})
+    assert [o.passed for o in result.outcomes] == [True, True]
+
+
+def test_expression_entry_loads_from_a_suite_file(tmp_path):
+    from agent_actions.expectations.loader import load_suite_file
+
+    suite_yaml = tmp_path / "quality.yml"
+    suite_yaml.write_text(
+        "expectations:\n  - id: score_floor\n    type: expression\n    condition: score >= 80\n",
+        encoding="utf-8",
+    )
+    suite = load_suite_file(suite_yaml)
+    result = run_suite(suite, {"score": 85})
+    assert result.overall_pass is True
