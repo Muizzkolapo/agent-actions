@@ -130,7 +130,7 @@ class TestCheckPriorOutputIntentionalNoOutput:
 class TestCheckPriorOutputDoesNotRunStatsQuery:
     """The cached-completion branch is THIS execution didn't produce records.
 
-    Regression for the spec 554 review finding: the previous implementation
+    Regression: the previous implementation
     called _count_output_records eagerly while building the `completed`
     tuple — even on the cold-start path that returned (False, None).  For a
     50-action workflow with all-pending status, that was ~50 wasted

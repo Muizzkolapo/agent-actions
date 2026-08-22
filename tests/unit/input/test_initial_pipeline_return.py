@@ -1,9 +1,9 @@
-"""Tests for initial pipeline return contract (P1 #1).
+"""Tests for initial pipeline return contract.
 
 Both _process_batch_mode() and _process_online_mode_with_record_processor()
 must return a string path to the output file.
 
-Also covers failure-path behaviour (#82): zero-output detection, guard-skip
+Also covers failure-path behaviour: zero-output detection, guard-skip
 disposition, and tool-action empty-output check.
 """
 
@@ -183,7 +183,7 @@ class TestInitialPipelineZeroSuccessFailure:
 
 
 # ---------------------------------------------------------------------------
-# Guard-skip, empty-input, and tool-action tests (#82)
+# Guard-skip, empty-input, and tool-action tests
 # ---------------------------------------------------------------------------
 
 _PATCH_PREFIX = "agent_actions.input.preprocessing.staging.initial_pipeline"

@@ -1,7 +1,7 @@
 """Tests for data scanners: scan_logs, extract_action_metrics, extract_runtime_warnings.
 
-Also covers SQLiteBackend.scan_data() prompt trace attachment (spec 015)
-and namespace unwrapping (spec 092).
+Also covers SQLiteBackend.scan_data() prompt trace attachment
+and namespace unwrapping.
 """
 
 from __future__ import annotations

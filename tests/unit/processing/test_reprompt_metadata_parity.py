@@ -1,6 +1,6 @@
 """Tests for reprompt metadata parity between online and batch paths.
 
-Spec 417: Reprompt metadata parity (R2 + NEW1 + NEW2).
+Reprompt metadata parity (R2 + NEW1 + NEW2).
 
 Ensures batch _recovery.reprompt output matches online shape:
 - failure-type counters populated

@@ -1,4 +1,4 @@
-"""Unit tests for TaskPreparer (Phase 2 #890)."""
+"""Unit tests for TaskPreparer."""
 
 from unittest.mock import MagicMock, patch
 

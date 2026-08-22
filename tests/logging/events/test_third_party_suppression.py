@@ -1,4 +1,4 @@
-"""Spec 555 step 1: framework clamps noisy SDK/HTTP loggers to WARNING; module_levels overrides win."""
+"""Framework clamps noisy SDK/HTTP loggers to WARNING; module_levels overrides win."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def reset_factory_and_logger_state():
 
 
 class TestThirdPartySuppression:
-    """Spec 555 step 1: framework explicitly clamps SDK/HTTP loggers to WARNING."""
+    """Framework explicitly clamps SDK/HTTP loggers to WARNING."""
 
     @pytest.mark.parametrize("logger_name", NOISY_LOGGERS)
     def test_logger_is_explicitly_clamped(self, logger_name):
@@ -45,7 +45,7 @@ class TestThirdPartySuppression:
         actual = logging.getLogger(logger_name).level
         assert actual == logging.WARNING, (
             f"{logger_name!r} level is {logging.getLevelName(actual)}; "
-            "spec 555 step 1 requires the framework to clamp it to WARNING"
+            "the framework must clamp it to WARNING"
         )
 
     def test_info_messages_from_third_party_are_silenced(self):

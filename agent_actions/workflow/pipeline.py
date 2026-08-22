@@ -173,7 +173,7 @@ class ProcessingPipeline:
         method to build pipeline-level context (agent indices, dependency configs,
         version context).  Do not add mode-specific context building outside
         this function.  This prevents the divergence class of bugs where a new
-        context field is added to one path but missed in the other (see #87).
+        context field is added to one path but missed in the other.
 
         Returns:
             (agent_indices, dependency_configs, version_context)

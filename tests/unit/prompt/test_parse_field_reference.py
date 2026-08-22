@@ -1,7 +1,7 @@
 """Backward-compat safety-net tests for parse_field_reference.
 
 Locks in the exact behavior of parse_field_reference() before the
-wrapper refactor (spec 122). These tests must pass identically before
+wrapper refactor. These tests must pass identically before
 AND after parse_field_reference delegates to ReferenceParser.
 """
 

@@ -1,4 +1,4 @@
-"""Regression tests for spec 557 — clear stale NODE_LEVEL disposition when an
+"""Regression tests for clearing a stale NODE_LEVEL disposition when an
 action begins executing.
 
 Cross-run scenario:

@@ -92,7 +92,7 @@ def test_transformer_double_nesting():
 
 def main():
     print("=" * 70)
-    print("Reproduction: version merge double-nesting bug (spec 093)")
+    print("Reproduction: version merge double-nesting bug")
     print("=" * 70)
 
     results = []

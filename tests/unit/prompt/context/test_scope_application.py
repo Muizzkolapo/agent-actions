@@ -233,8 +233,6 @@ class TestVersionedActionObserve:
     After normalization, observe: [action.*] becomes
     observe: [action_1.*, action_2.*, action_3.*].
     These are standard wildcard refs — no special handling needed.
-
-    Regression: github.com/Muizzkolapo/agent-actions/issues/193
     """
 
     def test_observe_concrete_versioned_wildcards(self):

@@ -1,4 +1,4 @@
-"""Manual test: PassthroughEnricher with namespaced content (spec 088).
+"""Manual test: PassthroughEnricher with namespaced content.
 
 Run: python -m tests.manual.passthrough_enricher_namespaced
 """

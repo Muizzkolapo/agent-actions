@@ -1,4 +1,4 @@
-"""Tests for staging batch pipeline parity (spec 422).
+"""Tests for staging batch pipeline parity.
 
 Verifies that batch first-stage processing receives the same pipeline context
 as downstream batch: agent_indices, dependency_configs, version_context,

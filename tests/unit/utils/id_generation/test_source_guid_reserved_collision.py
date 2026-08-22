@@ -1,4 +1,4 @@
-"""Reserved-named user fields must not collapse distinct records' identity (spec 577).
+"""Reserved-named user fields must not collapse distinct records' identity.
 
 `derive_source_guid` historically projected identity by *subtracting framework field
 names* (`node_id`, `target_id`, `batch_id`, …) from the record. A user CSV/JSON column

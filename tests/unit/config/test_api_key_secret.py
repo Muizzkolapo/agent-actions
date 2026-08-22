@@ -216,7 +216,7 @@ class TestBatchClientFactorySecretStr:
 
 
 class TestAgentConfigApiKeySecret:
-    """Verify AgentConfig.api_key uses SecretStr (runtime pipeline gap fix, #1160)."""
+    """Verify AgentConfig.api_key uses SecretStr."""
 
     def test_repr_does_not_expose_raw_key(self):
         config = AgentConfig(agent_type="test", api_key="secret123")
@@ -320,7 +320,7 @@ class TestEndToEndSecretStrPipeline:
     def test_manager_serialization_path_preserves_secret_str(self):
         """When manager.py serializes a validated ActionConfig via model_dump(mode='python'),
         api_key must remain SecretStr through the expander to the final agent dict.
-        This verifies the fix for the validate-and-discard pattern (issue #1174)."""
+        This verifies the fix for the validate-and-discard pattern."""
         from agent_actions.output.response.expander import ActionExpander
 
         action_model = ActionConfig(

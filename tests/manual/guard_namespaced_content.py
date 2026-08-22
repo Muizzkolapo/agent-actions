@@ -1,4 +1,4 @@
-"""Manual test: guard evaluation with namespaced content (spec 085).
+"""Manual test: guard evaluation with namespaced content.
 
 Tests whether guards resolve dotted paths against namespaced content.
 Run: python -m pytest tests/manual/guard_namespaced_content.py -v

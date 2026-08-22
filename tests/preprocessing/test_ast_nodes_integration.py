@@ -308,7 +308,7 @@ class TestMissingFieldError:
 
 
 class TestParserBooleanLiterals:
-    """Regression tests for GitHub issue #1221 — lowercase boolean literals in guard conditions.
+    """Regression tests for lowercase boolean literals in guard conditions.
 
     Before the fix, 'true'/'false' were parsed as FieldNode (field references) rather than
     LiteralNode because 'field_name' appeared before 'boolean' in the operand alternation.
@@ -376,7 +376,7 @@ class TestParserBooleanLiterals:
 
 
 class TestParserOperatorMapping:
-    """Regression tests for issue #98: parser must map all operator symbols correctly.
+    """Regression tests: parser must map all operator symbols correctly.
 
     These tests parse WHERE clauses through WhereClauseParser and verify the resulting
     AST contains the correct ComparisonOperator enum value, catching any silent
@@ -469,7 +469,7 @@ class TestParserOperatorMapping:
     # --- Critical regression tests ---
 
     def test_ne_does_not_silently_become_eq(self, parser):
-        """The exact bug from issue #98: != must produce NE, not EQ."""
+        """!= must produce NE, not EQ."""
         result = parser.parse('status != "active"')
         assert result.success
         # With the bug: this would return True (== "active" matches "active")

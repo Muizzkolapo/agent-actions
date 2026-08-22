@@ -1,7 +1,5 @@
 """
 Tests for the unified GuardEvaluator.
-
-Related: GitHub Issue #875, #888 (Phase 1a)
 """
 
 from unittest.mock import MagicMock
@@ -771,7 +769,7 @@ class TestNamespacedContentGuardEvaluation:
 
 
 class TestGuardMissingFieldLogNoise:
-    """Spec 408: missing-field WARNING log removed; G002 event preserved."""
+    """Missing-field WARNING log removed; G002 event preserved."""
 
     @pytest.fixture(scope="class")
     def evaluator(self):

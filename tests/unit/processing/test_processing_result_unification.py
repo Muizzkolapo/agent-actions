@@ -1,4 +1,4 @@
-"""ProcessingResult construction unification guards (spec 406).
+"""ProcessingResult construction unification guards.
 
 Each test exercises production code paths and asserts on observable output.
 """

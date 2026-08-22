@@ -1,4 +1,4 @@
-"""The first-stage batch envelope's literal shape + identity-through-task-prep (spec 584).
+"""The first-stage batch envelope's literal shape + identity-through-task-prep.
 
 Complements test_first_stage_namespace_boundary.py (which asserts via the resolved
 `source.*` namespace) by pinning the *literal* record shape — a wrong impl that puts the

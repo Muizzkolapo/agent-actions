@@ -295,7 +295,7 @@ class TestValidateMethod:
 
 
 # ---------------------------------------------------------------------------
-# validate() with workflow_name scoping (issue #179)
+# validate() with workflow_name scoping
 # ---------------------------------------------------------------------------
 
 

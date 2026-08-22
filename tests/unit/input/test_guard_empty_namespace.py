@@ -1,4 +1,4 @@
-"""Tests for guard evaluation on empty/null upstream namespaces (spec 126).
+"""Tests for guard evaluation on empty/null upstream namespaces.
 
 When an upstream action fails (e.g., prompt too long), its namespace is an
 empty dict {}. When an upstream action is guard-skipped, its namespace is
@@ -204,11 +204,11 @@ class TestMixedNamespaces:
         assert evaluate_node(node, data) is False
 
 
-# ── Reproduction case from spec 126 ─────────────────────────────────
+# ── Reproduction case from a real production incident ──────────────
 
 
-class TestSpec126Reproduction:
-    """Exact reproduction of the production scenario from spec 126.
+class TestProductionGuardOnEmptyNamespace:
+    """Exact reproduction of the production scenario that motivated this test module.
 
     Guard condition: summarize_page_content.exam_density == "high" or
                      summarize_page_content.exam_density == "medium"

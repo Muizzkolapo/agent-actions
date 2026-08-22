@@ -1,6 +1,6 @@
 """Tests for enriched runtime errors when filter+fan-in produces null namespaces.
 
-Spec 415 Option C: instead of bare 'NoneType has no attribute', errors should
+Instead of bare 'NoneType has no attribute', errors should
 name the filtered namespace, alternate dependency path, and remediation options.
 """
 

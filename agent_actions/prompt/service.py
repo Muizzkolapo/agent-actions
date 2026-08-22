@@ -91,8 +91,6 @@ class PromptPreparationService:
         ARCHITECTURE INVARIANT: Single source of truth for context building.
         Both batch and online MUST use this method to ensure context parity.
         Do not add mode-specific context building logic here or in callers.
-
-        See: https://github.com/Muizzkolapo/agent-actions/issues/640
         """
         request = PromptPreparationRequest(
             agent_config=agent_config,

@@ -1,4 +1,4 @@
-"""derive_source_guid: deterministic content identity over the RAW payload (spec 577).
+"""derive_source_guid: deterministic content identity over the RAW payload.
 
 No field is stripped by name. Identity stability across runs comes from callers deriving
 over the raw record BEFORE the volatile framework envelope is added (see

@@ -1,6 +1,6 @@
 """Tests for batch parse error detection in ValidationStrategy.
 
-Spec 418: Batch parse error reprompt detection (R4).
+Batch parse error reprompt detection (R4).
 
 When a batch LLM response fails JSON parsing (_parse_error present or
 content is a string in json_mode), the record must be explicitly classified

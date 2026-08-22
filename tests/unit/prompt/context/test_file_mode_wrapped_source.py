@@ -1,4 +1,4 @@
-"""FILE-mode source.* resolves against the wrapped content.source envelope (spec 584).
+"""FILE-mode source.* resolves against the wrapped content.source envelope.
 
 When first-stage records nest the user payload under content.source, a downstream FILE-mode
 action that observes source.<field> must still resolve it. Guards the double-nesting bug:

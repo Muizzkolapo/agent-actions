@@ -135,7 +135,7 @@ class PreflightService:
 
         # 9. DAG schema-fit: per producer/consumer edge, does the producer's schema
         # guarantee every field the tool consumer requires (implicit), or does the
-        # consumer declare `defaults:` for it? (Spec 592 Phase 2, warn-only.)
+        # consumer declare `defaults:` for it? (warn-only.)
         self._warn_dag_schema_compatibility_gaps()
 
     def _collect_prompts(self) -> dict[str, str]:

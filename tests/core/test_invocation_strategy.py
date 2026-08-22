@@ -1,4 +1,4 @@
-"""Unit tests for InvocationStrategy pattern (Phase 3 #891)."""
+"""Unit tests for InvocationStrategy pattern."""
 
 from unittest.mock import MagicMock, patch
 
