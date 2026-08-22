@@ -16,6 +16,7 @@ from agent_actions.input.preprocessing.parsing.ast_nodes import (
     ComparisonNode,
     FieldNode,
     FunctionNode,
+    GuardSemanticError,
     LogicalNode,
     MissingFieldError,
     WhereClauseAST,
@@ -76,7 +77,7 @@ def evaluate_condition(condition: str, record: dict[str, Any]) -> tuple[bool, st
     ast = parse_condition(condition)
     try:
         passed = bool(ast.evaluate(record))
-    except MissingFieldError as exc:
+    except (MissingFieldError, GuardSemanticError) as exc:
         return False, str(exc)
     if passed:
         return True, ""
