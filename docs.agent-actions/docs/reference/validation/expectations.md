@@ -88,6 +88,7 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 | `matches_regex` | `pattern` *(required)*, `negate` | Value matches (or, with `negate: true`, must not match) a regex |
 | `no_forbidden_phrases` | `phrases` *(required)*, `case_sensitive` | Value doesn't contain any of a list of substrings |
 | `contains_terms_from` | `terms` *(required)*, `min_matches` | Value contains at least `min_matches` (default 1) terms from a list |
+| `expression` | `condition` *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
 
 ```yaml
 - id: category_is_valid
@@ -123,6 +124,33 @@ A wildcard selector works on arrays of objects too — each element is passed th
 ```
 
 Nested paths inside a wildcard element (`options[*].text`) aren't supported — select the whole element and let the rule (or check) read the field it needs.
+
+## Expressions
+
+`type: expression` evaluates a condition against the **whole record**, using the same syntax as [guard](../execution/guards.md) conditions — a condition string is portable between a `guard:` block and an `expect:` entry unchanged. It takes no `field:` (the fields it reads are named inside the condition):
+
+```yaml
+- id: score_consistent_with_verdict
+  type: expression
+  condition: 'score >= 80 or verdict != "approved"'
+
+- id: summary_present_when_flagged
+  type: expression
+  condition: 'needs_summary == false or summary IS NOT NULL'
+  severity: warn
+```
+
+Use it when a rule spans multiple fields or needs comparison logic no single-field type expresses — the declarative middle ground between the built-in types and writing Python.
+
+Behavior worth knowing:
+
+- **A false condition's detail carries the actual values** of every field the condition read: `condition 'score >= 80' is false (score=64)` — so a reader (or a future repair loop) sees why, not just that.
+- **A missing field is a failed outcome, not a crash**, carrying the evaluator's own message listing the fields the record does have.
+- **An unquoted string literal** (`verdict == approved` instead of `verdict == "approved"`) is a classic typo: `approved` parses as a field reference. On records without that field the rule fails with a remediation message telling you to quote it — and preflight flags the unknown field reference before any run.
+- **`udf:`-prefixed conditions are not supported** here (unlike guards). The Python extension point for expectations is [`@expectation_check`](#extending-with-your-own-checks); preflight rejects a `udf:` condition with exactly that pointer.
+- **Function calls (`LENGTH(...)` etc.) are not available** in condition syntax.
+
+Preflight validates every condition before any LLM call: syntax, the dangerous-pattern blocklist, field references against the action's schema (dotted paths checked at their top segment), and rejects a constant condition that references no record fields (it would always evaluate the same way).
 
 ## `llm_judge`
 
@@ -235,13 +263,48 @@ A suite file has no `repair`, `judge_budget`, or `context_scope` of its own — 
 
 - `votes` must be a positive integer.
 - `context` must be a list of `action.field` strings; each referenced action must exist upstream and each field must appear in that action's declared output.
-- Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected.
+- Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
+- Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not.
+- `expression` conditions are parsed and checked in full (syntax, blocklist, field references, constant conditions) — see [Expressions](#expressions).
 
 ```bash
 agac inspect -a my_workflow
 ```
 
 Reaching the action list at all means these checks passed.
+
+## Extending with your own checks
+
+When the built-in types and `expression` conditions aren't enough, register a project-defined check with the `expectation_check` decorator — the same pattern as `udf_tool` for tool actions. The check is a pure function receiving one resolved value plus the entry's parameters, returning `(passed, detail)`:
+
+```python
+# tools/my_workflow/quality_checks.py
+from agent_actions import expectation_check
+
+@expectation_check("valid_isbn", params=("allow_isbn10",))
+def valid_isbn(value, params):
+    digits = str(value).replace("-", "")
+    if _isbn_checksum_ok(digits, allow_isbn10=params.get("allow_isbn10", False)):
+        return True, ""
+    return False, f"'{value}' has an invalid ISBN check digit"
+```
+
+```yaml
+- id: isbn_is_real
+  type: valid_isbn
+  field: isbn
+  allow_isbn10: true
+```
+
+How it works:
+
+- **Where the file lives:** anywhere under your project's tool path (`tools/` by default) — the same directory tool-action UDFs live in. Discovery imports any file there that declares the decorator.
+- **When it registers:** at config load, before preflight — so `agac inspect` validates your type's parameters (`params=`, `required=`) exactly like a built-in's, and an unknown parameter or missing required parameter on your type is a preflight defect.
+- **Failure detail:** write the `detail` string to name the observed value (`"'X' has an invalid check digit"`), not to restate the rule — it's what a reader sees in the record's verdict.
+- **A check that raises** doesn't crash the record: the outcome fails with `check raised {ExceptionType}: {message}` and the traceback is logged at warning level.
+- **Name collisions fail loudly:** shadowing a built-in type name (or `llm_judge`/`expression`) raises at load with the offending file named; registering the same name from two different files or functions raises a duplicate-function error. Re-importing the same file is safe.
+
+Prefer the tiers in this order: a built-in type (zero code), an `expression` condition (declarative, cross-field), `llm_judge` (semantic, natural-language), and only then a custom check — Python you now own and test.
 
 ## Current limitations
 
