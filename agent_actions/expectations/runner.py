@@ -87,7 +87,15 @@ def _run_one(
             )
 
     if expectation.type == "expression":
-        passed, detail = evaluate_condition(str(expectation.params["condition"]), record)
+        try:
+            passed, detail = evaluate_condition(str(expectation.params["condition"]), record)
+        except Exception as exc:
+            logger.warning(
+                "Expectation '%s' check raised, treating as a failed outcome",
+                expectation.resolved_id,
+                exc_info=True,
+            )
+            return outcome(False, f"check raised {type(exc).__name__}: {exc}")
         return outcome(passed, detail)
 
     if expectation.field is None:
@@ -126,9 +134,19 @@ def _run_one(
             return outcome(False, "; ".join(detail for detail, _ in failing), skipped=skipped_any)
         return outcome(True, "; ".join(detail for _, detail, _ in results if detail))
 
-    details = [
-        detail for value in inputs for passed, detail in [etype.check(value, params)] if not passed
-    ]
+    details = []
+    for value in inputs:
+        try:
+            passed, detail = etype.check(value, params)
+        except Exception as exc:
+            logger.warning(
+                "Expectation '%s' check raised, treating as a failed outcome",
+                expectation.resolved_id,
+                exc_info=True,
+            )
+            passed, detail = False, f"check raised {type(exc).__name__}: {exc}"
+        if not passed:
+            details.append(detail)
     if details:
         return outcome(False, "; ".join(details))
     return outcome(True, "")
