@@ -4,9 +4,9 @@ import json
 from unittest.mock import patch
 
 import pytest
-from agent_actions.expectations.judge import build_judge_prompt, invoke_judge
 
 from agent_actions.expectations import registry
+from agent_actions.expectations.judge import build_judge_prompt, invoke_judge
 
 INVOKE = "agent_actions.llm.realtime.services.invocation.ClientInvocationService.invoke_client"
 
