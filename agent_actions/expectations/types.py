@@ -15,6 +15,8 @@ _RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
 
 _RENAMED_SEVERITIES = {"fail": "error"}
 
+_RECORD_SCOPED_TYPES = frozenset({"expression"})
+
 
 # Measured against every argument name the registered types accept: the closest
 # any of them comes to a rule key is 0.615, while the common typos — a
@@ -40,7 +42,10 @@ class Expectation(BaseModel):
 
     id: str | None = Field(default=None, description="Stable identifier; derived when omitted")
     type: str = Field(..., description="Registered expectation type name")
-    field: str | list[str] = Field(..., description="Field selector this rule is tested against")
+    field: str | list[str] | None = Field(
+        default=None,
+        description="Field selector this rule is tested against; absent for record-scoped types",
+    )
     params: dict[str, Any] = Field(
         default_factory=dict, description="Type-specific arguments for the registered check"
     )
@@ -78,6 +83,18 @@ class Expectation(BaseModel):
         if problems:
             raise ValueError("; ".join(problems))
         return data
+
+    @model_validator(mode="after")
+    def _field_matches_type(self) -> Expectation:
+        if self.type in _RECORD_SCOPED_TYPES:
+            if self.field is not None:
+                raise ValueError(
+                    f"type '{self.type}' evaluates against the whole record and does not "
+                    "take field:; it reads the fields named in its condition"
+                )
+        elif self.field is None:
+            raise ValueError(f"type '{self.type}' requires field:")
+        return self
 
     def definition_hash(self) -> str:
         """Stable digest of what this rule tests, ignoring its name."""

@@ -63,6 +63,12 @@ def _run_one(
             skipped=skipped,
         )
 
+    if expectation.field is None:
+        raise ValueError(
+            f"Expectation '{expectation.resolved_id}' has no field selector and "
+            f"type '{expectation.type}' has no record-scoped dispatch in this runner"
+        )
+
     try:
         inputs = resolve(record, expectation.field)
     except FieldResolutionError as exc:
