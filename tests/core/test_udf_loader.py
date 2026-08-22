@@ -295,9 +295,7 @@ class TestExpectationCheckDiscovery:
         configs = {
             "a": {
                 "expect": {
-                    "expectations": [
-                        {"id": "q", "type": "preflightable_check", "field": "title"}
-                    ]
+                    "expectations": [{"id": "q", "type": "preflightable_check", "field": "title"}]
                 }
             }
         }
