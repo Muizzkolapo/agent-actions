@@ -26,6 +26,7 @@ from agent_actions.utils.constants import (
     SCHEMA_NAME_KEY,
     SPECIAL_NAMESPACES,
 )
+from agent_actions.utils.file_utils import read_python_source
 
 from .data_flow_graph import (
     ActionKind,
@@ -2011,8 +2012,8 @@ class WorkflowStaticAnalyzer:
                 continue
             for py_file in tool_path.rglob("*.py"):
                 try:
-                    tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-                except (SyntaxError, UnicodeDecodeError):
+                    tree = ast.parse(read_python_source(py_file), filename=str(py_file))
+                except (OSError, SyntaxError, ValueError):
                     continue
                 for node in ast.walk(tree):
                     if not isinstance(node, ast.FunctionDef):

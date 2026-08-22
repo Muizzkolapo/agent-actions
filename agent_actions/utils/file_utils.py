@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tokenize
 from pathlib import Path
 from typing import Any
 
@@ -23,3 +24,18 @@ def load_structured_file(path: Path) -> Any:
         if result is None:
             raise ValueError(f"Empty or null YAML file: {path}")
         return result
+
+
+def read_python_source(path: Path) -> str:
+    """Read a ``.py`` file the way the import machinery would (PEP 263 cookie, BOM).
+
+    Raises only ``OSError``, ``ValueError`` or ``SyntaxError``. ``LookupError``
+    is normalised to ``ValueError`` because ``detect_encoding`` accepts non-text
+    codecs that ``TextIOWrapper`` then rejects, and uncaught it would abort a
+    whole directory sweep over one file.
+    """
+    try:
+        with tokenize.open(path) as handle:
+            return handle.read()
+    except LookupError as e:
+        raise ValueError(f"{path}: {e}") from e

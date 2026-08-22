@@ -1,10 +1,12 @@
 """UDF discovery imports only udf_tool-declaring files; broken helpers must not block it."""
 
 import sys
+from unittest.mock import patch
 
 import pytest
 
 from agent_actions.errors import UDFLoadError
+from agent_actions.input.loaders import udf as udf_loader
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.processing.recovery.validation import _VALIDATION_REGISTRY
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, clear_registry
@@ -123,3 +125,109 @@ def test_reprompt_validation_only_file_is_imported(tmp_path):
     (tmp_path / "citation_checks.py").write_text(_VALIDATION_ONLY)
     discover_udfs(tmp_path)
     assert "check_citation" in _VALIDATION_REGISTRY
+
+
+# ── Source encoding: discovery must decode like the import machinery ──
+
+# PEP 263 cookie with a non-UTF-8 body. Python imports this fine.
+_LATIN1_UDF = (
+    "# -*- coding: latin-1 -*-\n"
+    "from agent_actions import udf_tool\n"
+    "\n"
+    "# R\xe9duit les accents.\n"
+    "@udf_tool()\n"
+    "def strip_accents(data):\n"
+    "    return data\n"
+)
+
+# Same, but registering the OTHER decorator the gate admits.
+_LATIN1_VALIDATION = (
+    "# -*- coding: latin-1 -*-\n"
+    "from agent_actions import reprompt_validation\n"
+    "\n"
+    "# V\xe9rifie la citation.\n"
+    '@reprompt_validation("answer must cite a source")\n'
+    "def check_accent_citation(data):\n"
+    "    return True\n"
+)
+
+_BOM_UDF = (
+    "from agent_actions import udf_tool\n\n@udf_tool()\ndef tag_bom(data):\n    return data\n"
+)
+
+
+def test_udf_with_encoding_cookie_is_discovered(tmp_path):
+    """A PEP 263 non-UTF-8 UDF registers — it must not be dropped at the decode step."""
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "accent_tools.py").write_bytes(_LATIN1_UDF.encode("latin-1"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "strip_accents" in UDF_REGISTRY
+
+
+def test_validation_only_file_with_encoding_cookie_is_discovered(tmp_path):
+    """The reprompt_validation side effect survives the same path as udf_tool.
+
+    The gate admits two registering decorators; a decode fix that only covered
+    one of them would leave the other silently unregistered.
+    """
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "accent_checks.py").write_bytes(_LATIN1_VALIDATION.encode("latin-1"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "check_accent_citation" in _VALIDATION_REGISTRY
+
+
+def test_udf_with_utf8_bom_is_discovered(tmp_path):
+    """A BOM-prefixed UDF registers."""
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "bom_tools.py").write_bytes(b"\xef\xbb\xbf" + _BOM_UDF.encode("utf-8"))
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+    assert "tag_bom" in UDF_REGISTRY
+
+
+def test_undecodable_file_is_skipped_loudly_without_aborting_discovery(tmp_path):
+    """An undecodable file is skipped, warns, and does not abort the sweep.
+
+    tokenize.open raises SyntaxError, not ValueError, for a bad encoding cookie.
+    Asserts on the module logger because agent_actions loggers run with
+    propagation off, which makes caplog assertions pass vacuously mid-suite.
+    """
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "bad_cookie.py").write_bytes(b"# -*- coding: not-a-real-codec -*-\nx = 1\n")
+
+    with patch.object(udf_loader.logger, "warning") as mock_warning:
+        discover_udfs(tmp_path)
+
+    assert "normalize_text" in UDF_REGISTRY
+    assert mock_warning.call_count == 1
+    assert "bad_cookie" in str(mock_warning.call_args)
+
+
+def test_non_text_codec_cookie_does_not_abort_the_sweep(tmp_path):
+    """A `# -*- coding: base64 -*-` file is skipped, not fatal.
+
+    tokenize.detect_encoding accepts any registered codec, but TextIOWrapper
+    then rejects non-text ones with LookupError — which is neither OSError nor
+    ValueError. Uncaught, it aborts the whole directory sweep over one file,
+    which is worse than the silent drop this fix removes.
+    """
+    (tmp_path / "aaa_weird.py").write_bytes(b"# -*- coding: base64 -*-\nx = 1\n")
+    (tmp_path / "zzz_good.py").write_text(_GOOD_UDF)
+    discover_udfs(tmp_path)
+    assert "normalize_text" in UDF_REGISTRY
+
+
+def test_undecodable_file_declaring_a_udf_still_raises_attributed(tmp_path):
+    """An undecodable file that declares a decorator fails loudly, naming itself.
+
+    Matches the policy the unparseable branch already applies: proving intent
+    keeps the file on the import path so the user sees this file named, rather
+    than a missing-function error much later with no mention of encoding.
+    """
+    bad = "# -*- coding: not-a-real-codec -*-\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef ghost(data):\n    return data\n"
+    (tmp_path / "ghost_udf.py").write_bytes(bad.encode("ascii"))
+    with pytest.raises(UDFLoadError) as exc_info:
+        discover_udfs(tmp_path)
+    assert "ghost_udf.py" in exc_info.value.context["file"]

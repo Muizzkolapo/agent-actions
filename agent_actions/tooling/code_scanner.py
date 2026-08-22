@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.path_utils import resolve_relative_to
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
 
         for py_file in py_files:
             try:
-                source = py_file.read_text()
+                source = read_python_source(py_file)
                 tree = ast.parse(source)
 
                 # First pass: collect all TypedDict classes in this file
@@ -66,7 +67,7 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
                         if func_data:
                             tool_functions[func_name] = func_data
 
-            except (OSError, SyntaxError, UnicodeDecodeError) as e:
+            except (OSError, SyntaxError, ValueError) as e:
                 # OSError covers broken symlinks, file deleted between rglob
                 # and read_text, permission errors. One bad file must not
                 # abort the whole catalog generation.

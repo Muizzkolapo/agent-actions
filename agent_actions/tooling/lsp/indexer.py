@@ -11,7 +11,7 @@ from ruamel.yaml import YAML
 from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
-from agent_actions.utils.file_utils import load_structured_file
+from agent_actions.utils.file_utils import load_structured_file, read_python_source
 from agent_actions.utils.path_utils import resolve_relative_to
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
@@ -537,7 +537,7 @@ def _index_tools(index: ProjectIndex, project_root: Path, tool_paths: list[str])
 def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
     """Index a single Python file for UDF tools."""
     try:
-        content = py_file.read_text()
+        content = read_python_source(py_file)
         tree = ast.parse(content)
 
         for node in ast.walk(tree):
