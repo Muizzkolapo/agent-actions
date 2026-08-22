@@ -337,3 +337,18 @@ def test_user_check_flows_through_the_preflight_validator(preserve_registry):
     }
     defects = find_expectation_defects(configs, {"a": {"title"}})["a"]
     assert any("takes no parameter 'at_most'" in d for d in defects)
+
+
+def test_two_different_functions_same_name_same_file_raises(preserve_registry):
+    from agent_actions import expectation_check
+    from agent_actions.errors import DuplicateFunctionError
+
+    @expectation_check("ambiguous_check")
+    def first(value, params):
+        return True, "first"
+
+    with pytest.raises(DuplicateFunctionError):
+
+        @expectation_check("ambiguous_check")
+        def second(value, params):
+            return True, "second"
