@@ -386,9 +386,59 @@ def test_observe_mode_never_iterates_regardless_of_max_iterations():
     assert result.exhausted is False
 
 
-def test_a_mid_loop_guard_skip_stops_the_loop():
+def test_a_mid_loop_collapse_makes_exactly_two_calls():
+    calls = []
+    responses = iter([({"ideas": ["a"]}, True), (None, False)])
+
+    def op(prompt):
+        calls.append(prompt)
+        return next(responses)
+
+    ExpectationService(SUITE, repair="retry", max_iterations=3).execute(op, "PROMPT")
+    assert len(calls) == 2
+
+
+def test_a_mid_loop_collapse_keeps_the_last_failing_verdict():
+    # Inner recovery (retry/reprompt) can exhaust to (None, False) on a later
+    # iteration; a record that had data must not be downgraded below what
+    # observe mode would have shipped.
     responses = iter([({"ideas": ["a"]}, True), (None, False)])
     service = ExpectationService(SUITE, repair="retry", max_iterations=3)
     result = service.execute(lambda p: next(responses), "PROMPT")
+    assert result.executed is True
+    assert result.response == {"ideas": ["a"]}
+    assert result.suite_result is not None
+    assert result.suite_result.overall_pass is False
+    assert result.exhausted is True
+
+
+def test_a_first_call_guard_skip_returns_unvalidated():
+    calls = []
+
+    def skipped(prompt):
+        calls.append(prompt)
+        return None, False
+
+    result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(skipped, "P")
     assert result.executed is False
+    assert result.response is None
     assert result.suite_result is None
+    assert len(calls) == 1
+
+
+def test_max_iterations_below_one_raises_at_construction():
+    with pytest.raises(ValueError, match="max_iterations"):
+        ExpectationService(SUITE, repair="retry", max_iterations=0)
+
+
+def test_repair_with_max_iterations_one_validates_once_and_exhausts():
+    calls = []
+
+    def bad(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = ExpectationService(SUITE, repair="retry", max_iterations=1).execute(bad, "P")
+    assert len(calls) == 1
+    assert result.exhausted is True
+    assert result.suite_result.overall_pass is False
