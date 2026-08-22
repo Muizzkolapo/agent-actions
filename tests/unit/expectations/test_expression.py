@@ -39,9 +39,25 @@ def test_parse_condition_rejects_unparseable_syntax():
         parse_condition("score >=")
 
 
-def test_referenced_field_paths_walks_logic_comparisons_and_functions():
-    ast = parse_condition('score >= 80 and (verdict != "rejected" or LENGTH(tags) > 0)')
+def test_parse_condition_rejects_function_call_syntax():
+    # The grammar's pre-validation rejects call syntax outright, so a function
+    # vocabulary is unreachable through parse; expressions inherit that.
+    with pytest.raises(ExpressionParseError, match="does not parse"):
+        parse_condition("LENGTH(tags) > 0")
+
+
+def test_referenced_field_paths_walks_nested_logic_and_comparisons():
+    ast = parse_condition('score >= 80 and (verdict != "rejected" or tags != [])')
     assert referenced_field_paths(ast.root) == ["score", "verdict", "tags"]
+
+
+def test_referenced_field_paths_covers_function_nodes():
+    # Unreachable via parse today, but the AST type exists; the walker must
+    # not silently skip it if the grammar ever admits calls.
+    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode, FunctionNode
+
+    node = FunctionNode("LENGTH", [FieldNode("tags")])
+    assert referenced_field_paths(node) == ["tags"]
 
 
 def test_referenced_field_paths_deduplicates():
