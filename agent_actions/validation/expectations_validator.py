@@ -209,4 +209,9 @@ def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str
             if name not in fields:
                 messages.append(f"{label}: field '{name}' is not produced by this action")
 
+    if type_name == "llm_judge" and "votes" in entry:
+        votes = entry["votes"]
+        if not isinstance(votes, int) or isinstance(votes, bool) or votes < 1:
+            messages.append(f"{label}: votes must be a positive integer, got {votes!r}")
+
     return messages

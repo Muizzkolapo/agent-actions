@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,43 @@ def invoke_judge(
         return False, f"judge response missing a boolean 'passed' key: {text[:200]!r}"
 
     return parsed["passed"], str(parsed.get("reason", ""))
+
+
+def invoke_judge_with_votes(
+    agent_config: dict[str, Any],
+    rule: str,
+    value: Any,
+    *,
+    votes: int = 1,
+    context: dict[str, Any] | None = None,
+    model: str | None = None,
+    action_name: str = "unknown",
+) -> tuple[bool, str]:
+    """Run the judge `votes` times independently and take the majority.
+
+    A tie fails closed: `passed_count * 2 > votes` is a strict majority, so
+    an even split never counts as a pass.
+    """
+    if votes <= 1:
+        return invoke_judge(
+            agent_config, rule, value, context=context, model=model, action_name=action_name
+        )
+
+    def one_vote(_: int) -> tuple[bool, str]:
+        return invoke_judge(
+            agent_config, rule, value, context=context, model=model, action_name=action_name
+        )
+
+    with ThreadPoolExecutor(max_workers=votes) as pool:
+        results = list(pool.map(one_vote, range(votes)))
+
+    passed_count = sum(1 for passed, _ in results if passed)
+    majority = passed_count * 2 > votes
+    if majority:
+        return True, f"{passed_count}/{votes} judge votes passed"
+
+    dissents = "; ".join(detail for passed, detail in results if not passed)
+    return False, f"{passed_count}/{votes} judge votes passed: {dissents}"
 
 
 def _llm_judge_unreachable(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
