@@ -532,3 +532,186 @@ class TestNamespacedKeyHint:
         report = validate_output_against_schema(output, schema, "test_action")
         assert report.is_compliant
         assert not any("action namespaces" in e for e in report.validation_errors)
+
+
+class TestAdditionalPropertiesUnderStrictMode:
+    """`additionalProperties: true` must relax extra-field rejection.
+
+    `strict_mode` is set by `on_schema_mismatch: reject`
+    (processing/helpers.py:216) and receives the raw user schema, so a schema
+    that explicitly permits extra keys was still failed on that path. The
+    framework advises exactly this setting — `udf_passthrough_validator.py:181`
+    tells authors to "set additionalProperties: true" so extra upstream keys are
+    not "rejected at runtime" — and then rejected them anyway.
+    """
+
+    def test_additional_properties_true_allows_extra_fields(self):
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+        assert not [e for e in report.validation_errors if "Extra fields" in e]
+
+    def test_additional_properties_true_in_nested_schema_allows_extra_fields(self):
+        """Compiled/nested `schema` shapes carry the flag one level down."""
+        schema = {
+            "name": "s",
+            "schema": {
+                "additionalProperties": True,
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_additional_properties_false_still_rejects(self):
+        """Invariant: an explicit deny keeps rejecting."""
+        schema = {
+            "name": "s",
+            "additionalProperties": False,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_absent_additional_properties_still_rejects_in_strict_mode(self):
+        """Invariant: the default must not move — silence still means strict."""
+        schema = {"name": "s", "fields": [{"id": "name", "type": "string", "required": True}]}
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_additional_properties_true_does_not_mask_missing_required(self):
+        """Permitting extras must not excuse a missing required field."""
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"other": "x", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+
+    def test_additional_properties_true_in_array_items_allows_extra_fields(self):
+        """Array schemas take their declared fields from `items` — read the flag there.
+
+        Found while checking my own fix: a top-level-only lookup disagrees with
+        _extract_schema_fields, which descends into items.properties.
+        """
+        schema = {
+            "name": "s",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": True,
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            [{"name": "John", "extra": "value"}], schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_array_items_without_flag_still_rejects(self):
+        """Invariant: the array shape keeps rejecting when the flag is absent."""
+        schema = {
+            "name": "s",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        }
+        report = validate_output_against_schema(
+            [{"name": "John", "extra": "value"}], schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_flag_in_an_unused_nested_wrapper_does_not_permit_extras(self):
+        """Reverse direction: the flag must not be read from a level whose fields were ignored.
+
+        Extraction stops at a top-level `fields` block, so a nested `schema`
+        wrapper's properties are never used — its flag must not apply either.
+        This is what separates mirroring the descent from "search anywhere for
+        additionalProperties: true", which would pass every other test here.
+        """
+        schema = {
+            "name": "s",
+            "fields": [{"id": "name", "type": "string", "required": True}],
+            "schema": {"additionalProperties": True, "properties": {"unused": {}}},
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+        assert "extra" in report.extra_fields
+
+    def test_properties_format_with_flag_allows_extra_fields(self):
+        schema = {
+            "name": "s",
+            "additionalProperties": True,
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert report.is_compliant
+
+    def test_non_boolean_additional_properties_is_not_permission(self):
+        """Only the literal `true` permits extras — a schema object does not."""
+        schema = {
+            "name": "s",
+            "additionalProperties": {"type": "string"},
+            "fields": [{"id": "name", "type": "string", "required": True}],
+        }
+        report = validate_output_against_schema(
+            {"name": "John", "extra": "value"}, schema, "a", strict_mode=True
+        )
+        assert not report.is_compliant
+
+    def test_schema_with_no_extractable_fields_never_blanket_accepts(self):
+        """A degenerate schema must not let the flag accept arbitrary output.
+
+        `_extract_schema_fields` cannot read an inline shorthand schema that
+        carries a non-string meta-key, so it yields zero declared fields and
+        every output key counts as extra. Permitting extras there would accept
+        anything. The gate therefore requires that fields were actually
+        declared — behaviour for this shape is unchanged from before the fix.
+        """
+        schema = {"a": "string", "additionalProperties": True}
+
+        junk = validate_output_against_schema({"zzz": 1}, schema, "a", strict_mode=True)
+        assert not junk.is_compliant
+
+        # Unchanged from main: this shape's fields are not extractable, so the
+        # flag cannot take effect. Widening the shape test to fix that is a
+        # separate change — it crashes _expand_inline_schema.
+        still_strict = validate_output_against_schema(
+            {"a": "x", "extra": 1}, schema, "a", strict_mode=True
+        )
+        assert not still_strict.is_compliant
+
+    def test_inline_shorthand_without_flag_still_rejects_extras(self):
+        """Invariant: shorthand schemas keep rejecting extras when no flag is set."""
+        report = validate_output_against_schema(
+            {"a": "x", "extra": 1}, {"a": "string"}, "a", strict_mode=True
+        )
+        assert not report.is_compliant
