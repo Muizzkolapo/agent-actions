@@ -25,7 +25,6 @@ their results, and the service that runs them around generation.
 | `attach_verdict` | `agent_io/target/{action}/` | Writes | — |
 | `CachedJudge` | agent's own `model_vendor`/`model_name` | Reads | `actions[].expect.expectations[].model` |
 | `JudgeBudget` | — | Bounds | `actions[].expect.judge_budget` |
-
 | `expectation_check` | `tools/{workflow}/*.py` | Reads (import side effect) | `actions[].expect.expectations[].type` |
 
 **Internal only**: `Outcome`, `SuiteResult`, `ExpectationType`, `ExpectationRunResult`, `resolve`, `referenced_names`, `resolve_context`, `parse_condition`, `referenced_field_paths`, `evaluate_condition` -- no direct project surface.
@@ -43,7 +42,7 @@ their results, and the service that runs them around generation.
 
 ## Notes
 
-The engine core (`types`, `fields`, `registry`, `loader`, `runner`) imports nothing
+The engine core (`types`, `fields`, `registry`, `expression`, `loader`, `runner`) imports nothing
 from `workflow/`, `processing/` or `storage/`. `service.py` is the only module here
 that knows about the pipeline. Keeping that boundary is what lets the runner be
 tested without a network and the CLI start without loading the workflow stack.

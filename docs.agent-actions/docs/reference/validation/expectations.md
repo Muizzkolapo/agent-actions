@@ -298,7 +298,7 @@ def valid_isbn(value, params):
 
 How it works:
 
-- **Where the file lives:** anywhere under your project's tool path (`tools/` by default) — the same directory tool-action UDFs live in. Discovery imports any file there that declares the decorator.
+- **Where the file lives:** anywhere under your project's tool path (`tools/` by default) — the same directory tool-action UDFs live in. Discovery imports any file there that declares the decorator, except `_`-prefixed and `test_`-prefixed files, which are always skipped — a check in `_helpers.py` silently never registers.
 - **When it registers:** at config load, before preflight — so `agac inspect` validates your type's parameters (`params=`, `required=`) exactly like a built-in's, and an unknown parameter or missing required parameter on your type is a preflight defect.
 - **Failure detail:** write the `detail` string to name the observed value (`"'X' has an invalid check digit"`), not to restate the rule — it's what a reader sees in the record's verdict.
 - **A check that raises** doesn't crash the record: the outcome fails with `check raised {ExceptionType}: {message}` and the traceback is logged at warning level.
