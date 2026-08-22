@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from agent_actions.expectations import registry
 from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import _DECLARED_FIELDS as _DECLARED_KEYS
@@ -72,7 +74,7 @@ def _suite_defects(
         suite = load_named_suite(project_root, workflow, suite_name)
     except SuiteNotFoundError as exc:
         return [f"suite '{suite_name}': {exc}"]
-    except ValueError as exc:
+    except (ValueError, TypeError, OSError, yaml.YAMLError) as exc:
         return [f"suite '{suite_name}' could not be loaded: {exc}"]
 
     messages: list[str] = []
