@@ -8,10 +8,13 @@ structured-output schema.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+from agent_actions.expectations.types import Expectation
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +134,53 @@ def invoke_judge_with_votes(
 
     dissents = "; ".join(detail for passed, detail in results if not passed)
     return False, f"{passed_count}/{votes} judge votes passed: {dissents}"
+
+
+def _content_hash(value: Any) -> str:
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
+def cache_key(expectation: Expectation, value: Any) -> tuple[str, str, str, str | None]:
+    """The `(id, definition hash, field content hash, model)` verdict-cache key."""
+    return (
+        expectation.resolved_id,
+        expectation.definition_hash(),
+        _content_hash(value),
+        expectation.params().get("model"),
+    )
+
+
+class CachedJudge:
+    """Caches judge verdicts for one action across every record it processes.
+
+    `lookup` and `call_and_cache` are separate on purpose — the budget check
+    (a later task) has to run between a cache miss and the LLM call that follows it.
+    """
+
+    def __init__(self, agent_config: dict[str, Any], action_name: str = "unknown") -> None:
+        self._agent_config = agent_config
+        self._action_name = action_name
+        self._cache: dict[tuple[str, str, str, str | None], tuple[bool, str]] = {}
+
+    def lookup(self, expectation: Expectation, value: Any) -> tuple[bool, str] | None:
+        return self._cache.get(cache_key(expectation, value))
+
+    def call_and_cache(
+        self, expectation: Expectation, value: Any, context: dict[str, Any] | None = None
+    ) -> tuple[bool, str]:
+        params = expectation.params()
+        verdict = invoke_judge_with_votes(
+            self._agent_config,
+            params["rule"],
+            value,
+            votes=params.get("votes", 1),
+            context=context,
+            model=params.get("model"),
+            action_name=self._action_name,
+        )
+        self._cache[cache_key(expectation, value)] = verdict
+        return verdict
 
 
 def _llm_judge_unreachable(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
