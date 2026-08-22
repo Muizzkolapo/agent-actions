@@ -642,3 +642,24 @@ def test_missing_judge_dispatcher_still_raises():
     )
     with pytest.raises(ValueError, match="no judge"):
         run_suite(suite, {"title": "hello"})
+
+
+def test_a_mid_list_raise_still_checks_the_remaining_wildcard_inputs(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("explodes_on_marker")
+    def explodes_on_marker(value, params):
+        if value == "BOOM":
+            raise RuntimeError("marker")
+        if value == "bad":
+            return False, f"value {value!r} rejected"
+        return True, ""
+
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "e", "type": "explodes_on_marker", "field": "options[*]"}],
+    )
+    result = run_suite(suite, {"options": ["ok", "BOOM", "bad"]})
+    assert result.outcomes[0].passed is False
+    detail = result.outcomes[0].detail
+    assert detail.index("check raised RuntimeError: marker") < detail.index("'bad' rejected")
