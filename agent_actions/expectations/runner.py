@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agent_actions.expectations import registry
+from agent_actions.expectations.expression import evaluate_condition
 from agent_actions.expectations.fields import FieldResolutionError, resolve, resolve_context
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 
@@ -62,6 +63,10 @@ def _run_one(
             definition_hash=expectation.definition_hash(),
             skipped=skipped,
         )
+
+    if expectation.type == "expression":
+        passed, detail = evaluate_condition(str(expectation.params()["condition"]), record)
+        return outcome(passed, detail)
 
     if expectation.field is None:
         raise ValueError(
