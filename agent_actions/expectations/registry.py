@@ -77,7 +77,9 @@ def expectation_check(
         existing = _USER_CHECK_SOURCES.get(name)
         if existing is not None:
             existing_location, existing_file = existing
-            if existing_file == source_file:
+            # Idempotency requires the same function, not just the same file:
+            # a second function claiming the name in one file is a collision.
+            if existing_file == source_file and existing_location == location:
                 return _REGISTRY[name].check
             raise DuplicateFunctionError(
                 function_name=name,
