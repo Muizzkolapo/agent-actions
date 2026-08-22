@@ -6,6 +6,7 @@ from agent_actions.expectations.fields import (
     FieldResolutionError,
     referenced_names,
     resolve,
+    resolve_context,
 )
 
 RECORD = {"options": ["alpha", "beta"], "answer": "alpha", "count": 2}
@@ -57,3 +58,28 @@ def test_referenced_names_returns_every_name_in_a_list_selector():
 
 def test_referenced_names_of_a_bare_name_is_that_name():
     assert referenced_names("answer") == ["answer"]
+
+
+class TestResolveContext:
+    def test_resolves_a_single_ref(self):
+        llm_context = {"extract_quote_context": {"source_context": "the docs say X"}}
+        assert resolve_context(llm_context, ["extract_quote_context.source_context"]) == {
+            "extract_quote_context.source_context": "the docs say X"
+        }
+
+    def test_resolves_multiple_refs(self):
+        llm_context = {"a": {"x": 1}, "b": {"y": 2}}
+        result = resolve_context(llm_context, ["a.x", "b.y"])
+        assert result == {"a.x": 1, "b.y": 2}
+
+    def test_raises_when_action_missing(self):
+        with pytest.raises(FieldResolutionError):
+            resolve_context({}, ["missing_action.field"])
+
+    def test_raises_when_field_missing_on_present_action(self):
+        with pytest.raises(FieldResolutionError):
+            resolve_context({"a": {"other_field": 1}}, ["a.field"])
+
+    def test_raises_on_malformed_ref_without_a_dot(self):
+        with pytest.raises(FieldResolutionError):
+            resolve_context({"a": {"x": 1}}, ["no_dot_here"])
