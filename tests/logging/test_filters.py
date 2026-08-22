@@ -407,3 +407,87 @@ class TestStandaloneRedactSensitiveData:
 
         source = inspect.getsource(mod)
         assert "from agent_actions.llm.providers" not in source
+
+
+class TestRedactingFilterWiring:
+    """The filter must actually run for the records the framework emits.
+
+    Every framework module logs via ``logging.getLogger(__name__)``, i.e. a
+    CHILD of ``agent_actions``. Python applies a logger's own filters only to
+    records logged directly to that logger — ``callHandlers`` walks ancestor
+    *handlers*, never ancestor *logger-level filters*. So a filter attached with
+    ``agent_actions_logger.addFilter(...)`` never sees child records, and the
+    tests above pass while nothing is redacted in practice.
+    """
+
+    SECRET = "sk-" + "a" * 30
+
+    @pytest.fixture
+    def bridge_records(self):
+        """Configure the real bridge and capture what it receives."""
+        from agent_actions.logging.core.handlers import LoggingBridgeHandler
+        from agent_actions.logging.factory import LoggerFactory
+
+        aa = logging.getLogger("agent_actions")
+        saved = (list(aa.handlers), list(aa.filters), aa.level, aa.propagate)
+
+        seen: list[logging.LogRecord] = []
+        original_emit = LoggingBridgeHandler.emit
+
+        def capturing_emit(self, record):
+            seen.append(record)
+
+        LoggingBridgeHandler.emit = capturing_emit
+        try:
+            LoggerFactory._setup_logging_bridge()
+            yield seen
+        finally:
+            LoggingBridgeHandler.emit = original_emit
+            aa.handlers, aa.filters, aa.level, aa.propagate = saved
+
+    def test_child_logger_message_is_redacted(self, bridge_records):
+        """A key logged by any framework module must not reach the sink in clear text."""
+        logging.getLogger("agent_actions.llm.providers.openai.client").warning(
+            "calling with %s", self.SECRET
+        )
+
+        assert bridge_records, "bridge handler received nothing"
+        message = bridge_records[0].getMessage()
+        assert self.SECRET not in message
+        assert "sk-***" in message
+
+    def test_direct_logger_message_is_redacted(self, bridge_records):
+        """Invariant: the case that already worked keeps working."""
+        logging.getLogger("agent_actions").warning("calling with %s", self.SECRET)
+
+        assert bridge_records
+        assert self.SECRET not in bridge_records[0].getMessage()
+
+    def test_deeply_nested_child_is_redacted(self, bridge_records):
+        """Depth must not matter — filters do not accumulate down the hierarchy."""
+        logging.getLogger("agent_actions.a.b.c.d").error("token=%s", self.SECRET)
+
+        assert bridge_records
+        assert self.SECRET not in bridge_records[0].getMessage()
+
+    def test_non_secret_message_is_untouched(self, bridge_records):
+        """No over-redaction: ordinary messages pass through verbatim."""
+        logging.getLogger("agent_actions.workflow.executor").info("processed 12 records")
+
+        assert [r.getMessage() for r in bridge_records] == ["processed 12 records"]
+
+    def test_child_logger_extra_fields_are_redacted(self, bridge_records):
+        """Structured `extra=` values are redacted too, not just the message.
+
+        `_redact_extra_fields` rewrites the record's own attributes. The bridge
+        copies only `operation`, `action_name` and `workflow_name` into
+        `event.data`, so this is not by itself a sink leak — it is the guarantee
+        that anything reading the record (a handler attached later, a formatter)
+        sees redacted attributes rather than raw ones.
+        """
+        logging.getLogger("agent_actions.llm.client").warning(
+            "authenticating", extra={"api_key": self.SECRET}
+        )
+
+        assert bridge_records
+        assert getattr(bridge_records[0], "api_key", None) == "[REDACTED]"
