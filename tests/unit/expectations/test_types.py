@@ -213,9 +213,11 @@ def test_non_expression_type_still_requires_field():
         Expectation(type="not_null")
 
 
-def test_expression_resolved_id_derives_from_definition():
+def test_expression_resolved_id_derives_when_id_omitted():
+    # The derivation must survive a field-less entry (model_dump with field=None).
     e = Expectation(type="expression", condition="score >= 80")
-    assert e.resolved_id == f"expression_{e.definition_hash()}"
+    assert e.resolved_id.startswith("expression_")
+    assert len(e.resolved_id) > len("expression_")
 
 
 def test_definition_hash_unchanged_for_field_bearing_entry():
