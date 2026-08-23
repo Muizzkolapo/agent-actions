@@ -69,14 +69,11 @@ class RecordingProvider(BaseBatchClient):
         self.submitted = tasks
         return "batch-1", BatchStatus.SUBMITTED
 
-    def check_batch_status(self, batch_id):  # pragma: no cover - unused here
+    def check_status(self, batch_id):  # pragma: no cover - unused here
         return BatchStatus.COMPLETED
 
     def retrieve_results(self, batch_id, output_directory):  # pragma: no cover - unused here
         return []
-
-    def cancel_batch(self, batch_id):  # pragma: no cover - unused here
-        return True
 
     # Abstract surface this test never exercises.
     def _submit_to_provider_api(self, *a, **k):  # pragma: no cover
@@ -114,11 +111,14 @@ class RecordingProvider(BaseBatchClient):
 def _registered_validation():
     """Register at call time, not import time — the registry is process-global."""
 
+    from agent_actions.processing.recovery import validation as validation_module
+
     @reprompt_validation("Every record must carry a non-empty density field.")
     def density_is_present(record: dict) -> bool:
         return bool(record.get("density"))
 
     yield
+    validation_module._VALIDATION_REGISTRY.pop("density_is_present", None)
 
 
 def _submit() -> RecordingProvider:
@@ -180,5 +180,99 @@ class TestFeedbackReachesTheProvider:
             "the model is told to retry without being told what was wrong"
         )
 
-    def test_the_original_prompt_survives_alongside_the_feedback(self):
-        assert ORIGINAL_PROMPT in _system_message(_submit())
+    def test_the_feedback_is_appended_rather_than_replacing_the_prompt(self):
+        delivered = _system_message(_submit())
+        assert ORIGINAL_PROMPT in delivered
+        assert "density" in delivered
+        assert delivered.index(ORIGINAL_PROMPT) < delivered.index("density"), (
+            "the original instruction must come first, with the feedback after it"
+        )
+
+
+class TestBothResubmissionSitesDeliver:
+    """The synchronous loop is the default path via BatchRetryService, so it
+    needs its own coverage — dropping the kwarg there left every test green."""
+
+    def test_validate_and_reprompt_also_delivers_the_feedback(self):
+        from agent_actions.llm.batch.services import reprompt_ops
+
+        provider = RecordingProvider()
+        failing = BatchResult(
+            custom_id=CUSTOM_ID, content={"wrong_key": "no density"}, success=True
+        )
+        passing = BatchResult(custom_id=CUSTOM_ID, content={"density": "high"}, success=True)
+        context_map = {
+            CUSTOM_ID: {
+                "target_id": CUSTOM_ID,
+                "source_guid": "sg-1",
+                "content": {"source": {"text": "the original input"}},
+            }
+        }
+
+        prepared = MagicMock()
+        prepared.formatted_prompt = ORIGINAL_PROMPT
+        prepared.llm_context = {"source": {"text": "the original input"}}
+        prepared.should_execute = True
+
+        provider.retrieve_results = lambda batch_id, output_directory: [passing]
+
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=prepared,
+            ),
+            patch.object(
+                reprompt_ops, "wait_for_batch_completion", return_value=BatchStatus.COMPLETED
+            ),
+        ):
+            reprompt_ops.validate_and_reprompt(
+                action_indices={ACTION: 0},
+                dependency_configs={},
+                storage_backend=None,
+                results=[failing],
+                provider=provider,
+                context_map=context_map,
+                output_directory="/tmp/test",
+                file_name="f.json",
+                agent_config=AGENT_CONFIG,
+            )
+
+        assert provider.submitted, "the synchronous loop submitted nothing"
+        delivered = provider.submitted[0]["body"]["messages"][0]["content"]
+        assert "density" in delivered, (
+            "the synchronous reprompt loop resubmitted without the feedback"
+        )
+
+
+class TestEveryProviderCarriesThePrompt:
+    """The prompt a row carries has to survive each provider's own wire format."""
+
+    @pytest.mark.parametrize(
+        "module_path, class_name",
+        [
+            ("agent_actions.llm.providers.openai.batch_client", "OpenAIBatchClient"),
+            ("agent_actions.llm.providers.anthropic.batch_client", "AnthropicBatchClient"),
+            ("agent_actions.llm.providers.gemini.batch_client", "GeminiBatchClient"),
+        ],
+    )
+    def test_the_prompt_reaches_the_request_body(self, module_path, class_name):
+        import importlib
+        import json as json_module
+
+        client_cls = getattr(importlib.import_module(module_path), class_name)
+        client = client_cls.__new__(client_cls)
+        # Constructed without __init__ so no API key is needed; only the
+        # attributes format_task_for_provider reads are supplied.
+        client.enable_prompt_caching = False
+        marker = "FEEDBACK-MARKER-XYZ"
+        task = BatchTask(
+            custom_id=CUSTOM_ID,
+            prompt=f"{ORIGINAL_PROMPT}\n\n{marker}",
+            user_content='{"source": {}}',
+            model_config={"model_name": "m", "temperature": 0.0, "max_tokens": None},
+            metadata={},
+        )
+        payload = client.format_task_for_provider(task, None)
+        assert marker in json_module.dumps(payload), (
+            f"{class_name} drops the prompt, so feedback would never reach the model"
+        )
