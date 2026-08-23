@@ -422,13 +422,13 @@ class TestReEnteringADeferredRoundDoesNotDuplicate:
         assert sorted(ids) == sorted(set(ids)), f"a record was pooled more than once: {ids}"
 
 
-class TestAStaleStateFileCannotStarveTheJudge:
-    """`_process_original_batch` passes recovery_state=None deliberately — an
-    existing file there may be left over from a crashed run.
+class TestTheLoadedStateIsTrustedWhole:
+    """The re-entry paths pass None, and the persisted state is the only record
+    of where the loop got to.
 
-    Reading the counter back is what stops the loop resubmitting forever, but a
-    stale budget of 0 would turn every judged expectation into a hard failure on
-    an otherwise fresh run.
+    A phase guard cannot separate a stale file from a live one — a run that
+    crashed mid-repair leaves a REPAIR state too — and discarding the state
+    throws away the retry and reprompt bookkeeping the reprompt handoff needs.
     """
 
     JUDGED = [{"id": "j", "type": "llm_judge", "field": "options", "rule": "on topic"}]
@@ -439,42 +439,46 @@ class TestAStaleStateFileCannotStarveTheJudge:
         config["model_vendor"] = "anthropic"
         return config
 
-    def test_a_state_left_by_a_crashed_run_does_not_supply_a_spent_budget(self):
+    def test_a_live_reprompt_state_is_not_discarded_by_the_repair_round(self):
+        """`handle_reprompt_recovery` hands repair a None, so repair reloads.
+
+        Driven through `check_and_submit_repair` rather than `carry_forward`,
+        because it is the reload that decides what survives — calling the
+        composer directly with an explicit prior proves nothing about it.
+        """
         import json
 
-        from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
-
-        stale = RecoveryState(phase=RecoveryPhase.RETRY, repair_judge_budget_remaining=0)
+        live = RecoveryState(
+            phase=RecoveryPhase.REPROMPT,
+            missing_ids=["m1"],
+            record_failure_counts={"m1": 3},
+            retry_attempt=3,
+            reprompt_attempt=2,
+            validation_name="schema",
+        )
         backend = _Backend()
-        backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(stale.to_dict())
+        backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(live.to_dict())
 
-        seen = {}
-        import agent_actions.llm.batch.services.repair_ops as repair_ops
-
-        original = repair_ops.build_repair_strategy
-
-        def spy(agent_config, judge_budget_remaining=None):
-            seen["budget"] = judge_budget_remaining
-            return original(agent_config, judge_budget_remaining)
-
-        passing = BatchResult(custom_id="r1", content=PASSING, success=True)
-        with (
-            patch.object(repair_ops, "build_repair_strategy", spy),
-            patch(
-                "agent_actions.expectations.judge.invoke_judge_with_votes",
-                return_value=(True, "ok"),
-            ),
+        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
+        provider = RecordingProvider()
+        with patch(
+            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
         ):
             pr.check_and_submit_repair(
-                _context(RecordingProvider(), backend, self._judged_config()),
+                _context(provider, backend, _agent_config(max_iterations=2)),
                 _identity(),
-                batch_results=[passing],
+                batch_results=[failing],
                 context_map=_context_map("r1"),
                 recovery_state=None,
             )
-        assert seen["budget"] is None, (
-            "a stale non-repair state supplied a spent judge budget to a fresh pass"
+        saved = _state(backend)
+        assert saved.missing_ids == ["m1"], (
+            "the repair round discarded the retry bookkeeping finalisation rebuilds "
+            "exhausted_recovery from"
         )
+        assert saved.record_failure_counts == {"m1": 3}
+        assert saved.reprompt_attempt == 2
+        assert saved.validation_name == "schema"
 
     def test_an_in_flight_repair_state_still_supplies_its_balance(self):
         import json
