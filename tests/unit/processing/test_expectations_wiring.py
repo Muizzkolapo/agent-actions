@@ -190,3 +190,42 @@ def test_a_guard_skip_is_not_misrouted_to_the_exhaustion_channel(monkeypatch):
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is False
     assert result.recovery_metadata is None or result.recovery_metadata.expectations is None
+
+
+class _ScriptedReprompt:
+    def __init__(self, results):
+        self._results = iter(results)
+
+    def execute(self, llm_operation, original_prompt, context=""):
+        return next(self._results)
+
+
+def test_recovery_metadata_describes_the_shipped_generation_only():
+    # Iteration 1's inner reprompt needs 2 attempts and its output fails the
+    # suite; iteration 2 passes first try. The shipped record must not carry
+    # the discarded generation's reprompt metadata.
+    from agent_actions.processing.recovery.reprompt import RepromptResult
+
+    reprompt = _ScriptedReprompt(
+        [
+            RepromptResult(
+                response={"ideas": ["a"]},
+                executed=True,
+                attempts=2,
+                passed=True,
+                validation_name="check",
+            ),
+            RepromptResult(
+                response={"ideas": ["a", "b", "c"]},
+                executed=True,
+                attempts=1,
+                passed=True,
+                validation_name="check",
+            ),
+        ]
+    )
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    strategy = OnlineStrategy(reprompt_service=reprompt, expectation_service=service)
+    result = strategy.invoke(make_task(), make_context())
+    assert result.response["ideas"] == ["a", "b", "c"]
+    assert result.recovery_metadata is None or result.recovery_metadata.reprompt is None

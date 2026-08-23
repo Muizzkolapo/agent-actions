@@ -651,3 +651,49 @@ def test_record_granularity_repair_reports_no_defects():
         {"a": {"options"}},
     )
     assert defects == {}
+
+
+def test_repair_on_a_tool_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(kind="tool", expect={"repair": "retry", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("tool" in m for m in defects["a"])
+
+
+def test_repair_on_a_tool_vendor_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(model_vendor="tool", expect={"repair": "auto", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("tool" in m for m in defects["a"])
+
+
+def test_observe_on_a_tool_action_is_allowed():
+    defects = find_expectation_defects(
+        action_config(kind="tool", expect={"repair": "none", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_repair_with_an_unresolved_schema_name_is_a_defect():
+    # A declared schema that failed to inline leaves schema absent and
+    # schema_name set; the structural gate would silently check shape only.
+    defects = find_expectation_defects(
+        action_config(schema_name="a_schema", expect={"repair": "auto", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("schema" in m for m in defects["a"])
+
+
+def test_repair_with_an_inlined_schema_and_residual_name_is_allowed():
+    defects = find_expectation_defects(
+        action_config(
+            schema={"type": "object"},
+            schema_name="a_schema",
+            expect={"repair": "auto", "expectations": NOT_NULL},
+        ),
+        {"a": {"options"}},
+    )
+    assert defects == {}
