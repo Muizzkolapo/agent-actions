@@ -21,7 +21,13 @@ def _agent_config(**overrides):
 
 
 def _client_result(passed: bool, reason: str = "looks fine"):
-    return [{"content": json.dumps({"passed": passed, "reason": reason})}]
+    """What a JSON-mode provider returns: the verdict, already parsed."""
+    return [{"passed": passed, "reason": reason}]
+
+
+def _raw_result(text: str):
+    """What a provider returns when the reply did not parse as JSON."""
+    return [{"raw_response": text}]
 
 
 class TestBuildJudgePrompt:
@@ -81,19 +87,19 @@ class TestInvokeJudge:
         assert mock_invoke.call_args.kwargs["schema"] is None
 
     def test_malformed_json_response_is_a_failure(self):
-        with patch(INVOKE, return_value=[{"content": "not json at all"}]):
+        with patch(INVOKE, return_value=_raw_result("not json at all")):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_missing_passed_key_is_a_failure(self):
-        with patch(INVOKE, return_value=[{"content": json.dumps({"reason": "no verdict field"})}]):
+        with patch(INVOKE, return_value=_raw_result(json.dumps({"reason": "no verdict field"}))):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "boolean 'passed'" in detail
 
     def test_non_boolean_passed_value_is_a_failure(self):
-        with patch(INVOKE, return_value=[{"content": json.dumps({"passed": "yes"})}]):
+        with patch(INVOKE, return_value=_raw_result(json.dumps({"passed": "yes"}))):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
 
@@ -120,25 +126,25 @@ class TestTheVerdictDialectsAccepted:
     FENCED_PYTHON_LITERAL = "```\n{'passed': False, 'reason': 'a definition prompt'}\n```"
 
     def test_python_literal_pass_is_a_pass(self):
-        with patch(INVOKE, return_value=[{"content": self.PYTHON_LITERAL_PASS}]):
+        with patch(INVOKE, return_value=_raw_result(self.PYTHON_LITERAL_PASS)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is True
         assert detail == "Concrete situation with goal and constraint"
 
     def test_python_literal_fail_reports_the_judges_reason(self):
-        with patch(INVOKE, return_value=[{"content": self.PYTHON_LITERAL_FAIL}]):
+        with patch(INVOKE, return_value=_raw_result(self.PYTHON_LITERAL_FAIL)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert detail == "It is a definition prompt"
 
     def test_fenced_verdict_is_read(self):
-        with patch(INVOKE, return_value=[{"content": self.FENCED}]):
+        with patch(INVOKE, return_value=_raw_result(self.FENCED)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is True
         assert detail == "reads as a scenario"
 
     def test_fenced_python_literal_is_read(self):
-        with patch(INVOKE, return_value=[{"content": self.FENCED_PYTHON_LITERAL}]):
+        with patch(INVOKE, return_value=_raw_result(self.FENCED_PYTHON_LITERAL)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert detail == "a definition prompt"
@@ -148,14 +154,54 @@ class TestTheVerdictDialectsAccepted:
         from agent_actions.expectations.judge import invoke_judge_with_votes
 
         replies = [
-            [{"content": self.PYTHON_LITERAL_PASS}],
-            [{"content": self.FENCED}],
-            [{"content": "I am not going to answer that."}],
+            _raw_result(self.PYTHON_LITERAL_PASS),
+            _raw_result(self.FENCED),
+            _raw_result("I am not going to answer that."),
         ]
         with patch(INVOKE, side_effect=replies):
             passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
         assert passed is True
         assert detail == "2/3 judge votes passed"
+
+
+class TestTheEnvelopesProvidersActuallyReturn:
+    """`invoke_client` hands back one of two shapes, and neither is `content`.
+
+    Under `json_mode` (the default) the provider has already parsed the reply and
+    returns the verdict object itself. Otherwise it wraps the raw text under the
+    configured output field. A reader that looks for keys no provider writes
+    falls through to `str(first)` and reads the repr of an object it was handed.
+    """
+
+    def test_a_verdict_the_provider_already_parsed_is_used_as_is(self):
+        with patch(INVOKE, return_value=[{"passed": True, "reason": "specific enough"}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is True
+        assert detail == "specific enough"
+
+    def test_a_parsed_failing_verdict_keeps_its_reason(self):
+        with patch(INVOKE, return_value=[{"passed": False, "reason": "too generic"}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert detail == "too generic"
+
+    def test_a_verdict_under_the_output_field_is_read(self):
+        with patch(INVOKE, return_value=_raw_result('{"passed": true, "reason": "ok"}')):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is True
+        assert detail == "ok"
+
+    def test_an_empty_output_field_fails_closed(self):
+        with patch(INVOKE, return_value=[{"raw_response": "", "_parse_error": "Empty response"}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert "not a verdict object" in detail
+
+    def test_a_parsed_object_that_is_not_a_verdict_fails_closed(self):
+        with patch(INVOKE, return_value=[{"verdict": "pass", "reason": "nested"}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert "boolean 'passed'" in detail
 
 
 class TestAVerdictIsNeverScavengedOutOfProse:
@@ -175,7 +221,7 @@ class TestAVerdictIsNeverScavengedOutOfProse:
             'For reference, a passing reply would look like {"passed": true, '
             '"reason": "one sentence"}.'
         )
-        with patch(INVOKE, return_value=[{"content": reply}]):
+        with patch(INVOKE, return_value=_raw_result(reply)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
@@ -185,45 +231,45 @@ class TestAVerdictIsNeverScavengedOutOfProse:
             'Draft: {"passed": true, "reason": "seems specific"}\n'
             "Correction: on closer reading it is generic, so the verdict is fail."
         )
-        with patch(INVOKE, return_value=[{"content": reply}]):
+        with patch(INVOKE, return_value=_raw_result(reply)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_fragments_are_not_merged_into_a_verdict(self):
         reply = 'It fails because the JSON {"foo": 1 is broken and passed: true is not right'
-        with patch(INVOKE, return_value=[{"content": reply}]):
+        with patch(INVOKE, return_value=_raw_result(reply)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_a_list_is_not_a_verdict(self):
-        with patch(INVOKE, return_value=[{"content": '[{"passed": true, "reason": "ok"}]'}]):
+        with patch(INVOKE, return_value=_raw_result('[{"passed": true, "reason": "ok"}]')):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_two_verdicts_are_not_resolved_by_taking_one(self):
         reply = '{"passed": true, "reason": "first"}\n{"passed": false, "reason": "second"}'
-        with patch(INVOKE, return_value=[{"content": reply}]):
+        with patch(INVOKE, return_value=_raw_result(reply)):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_a_truncated_verdict_fails_closed(self):
-        with patch(INVOKE, return_value=[{"content": '{"passed": true, "reason": "the val'}]):
+        with patch(INVOKE, return_value=_raw_result('{"passed": true, "reason": "the val')):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_prose_with_no_object_fails_closed(self):
-        with patch(INVOKE, return_value=[{"content": "The value is fine, I would pass it."}]):
+        with patch(INVOKE, return_value=_raw_result("The value is fine, I would pass it.")):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
 
     def test_empty_reply_fails_closed(self):
-        with patch(INVOKE, return_value=[{"content": ""}]):
+        with patch(INVOKE, return_value=_raw_result("")):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
         assert "not a verdict object" in detail
