@@ -288,6 +288,42 @@ class TestProcessRecordResponseHandling:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_expectations_exhausted_returns_tombstone_with_reason(
+        self, mock_fire, mock_get_preparer
+    ):
+        from agent_actions.processing.types import ExpectationsMetadata
+
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        recovery = RecoveryMetadata(
+            expectations=ExpectationsMetadata(attempts=3, failed=["count", "_structural"])
+        )
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response=None,
+            executed=False,
+            recovery=recovery,
+        )
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        result = strategy.process_record({"field": "value"}, _make_context())
+
+        assert result.status == ProcessingStatus.EXHAUSTED
+        assert "3 iteration" in result.error
+        tombstone = result.data[0]
+        assert tombstone["_tombstone"] is True
+        assert tombstone["_tombstone_reason"] == "expectations_exhausted"
+        assert tombstone["metadata"]["expectations_failed"] == ["count", "_structural"]
+        assert tombstone["metadata"]["expectations_iterations"] == 3
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
     def test_not_executed_with_response_returns_skipped(self, mock_fire, mock_get_preparer):
         """executed=False with non-None response → guard_skip → SKIPPED."""
         prepared = _make_prepared()

@@ -164,3 +164,34 @@ class TestProcessRecordRepromptExhaustion:
     def test_reprompt_exhaustion_tombstone_reason_is_reprompt(self, reprompt_exhausted_result):
         """Tombstone must carry _tombstone_reason='reprompt_exhausted', not 'retry_exhausted'."""
         assert reprompt_exhausted_result.data[0]["_tombstone_reason"] == "reprompt_exhausted"
+
+
+class TestExhaustedStateStampReason:
+    """The EXHAUSTED lifecycle stamp must carry the tombstone's own reason."""
+
+    def test_stamp_reason_follows_the_tombstone_reason(self):
+        from agent_actions.processing.record_helpers import build_exhausted_tombstone
+        from agent_actions.processing.result_collector import (
+            collect_results_from_processing_results,
+        )
+        from agent_actions.processing.types import ProcessingResult
+
+        tombstone = build_exhausted_tombstone(
+            "test_action",
+            {"content": {"field1": "v"}, "source_guid": "sg-1"},
+            {"field1": None},
+            source_guid="sg-1",
+            reason="reprompt_exhausted",
+        )
+        result = ProcessingResult(
+            status=ProcessingStatus.EXHAUSTED,
+            data=[tombstone],
+            source_guid="sg-1",
+            error="Reprompt exhausted after 3 attempts",
+        )
+        output, _stats = collect_results_from_processing_results(
+            [result], "test_action", agent_config={"name": "test_action"}
+        )
+        stamped = output[0]
+        assert stamped["_state"] == "exhausted"
+        assert stamped["_state_history"][-1]["reason"] == "reprompt_exhausted"
