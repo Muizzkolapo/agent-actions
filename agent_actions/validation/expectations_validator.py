@@ -24,7 +24,7 @@ EXPECTATIONS_REMEDY = (
     "and target a field the action's schema produces."
 )
 
-_VERDICT_KEY = "expect"
+from agent_actions.utils.constants import VERDICT_KEY as _VERDICT_KEY
 
 
 def find_expectation_defects(

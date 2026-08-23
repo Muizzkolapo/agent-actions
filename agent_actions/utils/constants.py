@@ -14,6 +14,8 @@ PROMPT_KEY = "prompt"
 NON_PROMPT_ACTION_KINDS = ("tool", "hitl", "seed", "source")
 SCHEMA_NAME_KEY = "schema_name"
 SCHEMA_KEY = "schema"
+# The key an action's expectation verdict is attached under.
+VERDICT_KEY = "expect"
 CHUNK_CONFIG_KEY = "chunk_config"
 
 # Reserved agent/action names that cannot be used in workflows.

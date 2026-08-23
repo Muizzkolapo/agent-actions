@@ -14,11 +14,9 @@ from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
-from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
 
 logger = logging.getLogger(__name__)
-
-VERDICT_KEY = "expect"
 
 
 @dataclass

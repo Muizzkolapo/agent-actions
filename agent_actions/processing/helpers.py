@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -157,8 +157,6 @@ def _content_keys(record: Any) -> int:
     An expectations verdict is framework metadata, not output — a record that
     carries nothing else is still empty.
     """
-    from agent_actions.expectations.service import VERDICT_KEY
-
     if not isinstance(record, dict):
         return 1
     return len([key for key in record if key != VERDICT_KEY])
