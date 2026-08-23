@@ -111,20 +111,6 @@ def _load_validation_udf(
         import_validation_module(validation_module, None)
 
 
-def apply_feedback_to_tasks(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
-    """Append each record's validation feedback to the prompt that is sent.
-
-    Feedback has to go on the prepared task, not the input row: ``prepare_tasks``
-    re-renders every task from the llm_context and the formatted prompt, and the
-    provider builds its user content from the task, so a row-level key is
-    silently discarded before submission.
-    """
-    for task in tasks:
-        feedback = feedback_by_id.get(str(task.get("target_id", "")))
-        if feedback:
-            task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
-
-
 def build_evaluation_loop(
     agent_config: dict[str, Any] | None,
     *,
@@ -355,8 +341,8 @@ def validate_and_reprompt(
                 batch_name=reprompt_batch_name,
                 source_data=source_data,
                 attempt=attempt + 1,
+                feedback_by_id=feedback_by_id,
             )
-            apply_feedback_to_tasks(prepared.tasks, feedback_by_id)
 
             batch_id, status = provider.submit_batch(
                 tasks=prepared.tasks,
@@ -615,8 +601,8 @@ def submit_reprompt_batch(
             batch_name=reprompt_batch_name,
             source_data=source_data,
             attempt=attempt,
+            feedback_by_id=feedback_by_id,
         )
-        apply_feedback_to_tasks(prepared.tasks, feedback_by_id)
 
         batch_id, _ = provider.submit_batch(
             tasks=prepared.tasks,

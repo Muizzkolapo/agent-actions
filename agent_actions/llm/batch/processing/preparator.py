@@ -28,6 +28,27 @@ logger = logging.getLogger(__name__)
 _PREFLIGHT_SAMPLE_SIZE: int = 5
 
 
+def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
+    """Append each record's validation feedback to the prompt it will be sent with.
+
+    Called on the pre-provider rows, whose ``prompt`` becomes the provider's
+    system message. A record with no entry is left alone, but that is an
+    invariant violation worth seeing: feedback is built from the same failed set
+    these rows come from.
+    """
+    for task in tasks:
+        key = str(task.get("target_id", ""))
+        feedback = feedback_by_id.get(key)
+        if feedback is None:
+            logger.warning(
+                "No reprompt feedback for resubmitted record %r — it will be "
+                "re-sent with the original prompt",
+                key,
+            )
+            continue
+        task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
+
+
 class BatchTaskPreparator:
     """Prepares batch tasks from raw data using TaskPreparer for unified preparation."""
 
@@ -53,6 +74,7 @@ class BatchTaskPreparator:
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
         attempt: int = 0,
+        feedback_by_id: dict[str, str] | None = None,
     ) -> PreparedBatchTasks:
         """Prepare batch tasks from raw data.
 
@@ -136,6 +158,12 @@ class BatchTaskPreparator:
                     e,
                     storage_backend=self.storage_backend,
                 )
+
+        # Feedback must be applied here, before the provider converts each row
+        # into its own wire format — the converted task keeps neither target_id
+        # nor prompt, so there is nothing left to attach it to afterwards.
+        if feedback_by_id:
+            _append_feedback(tasks_builder, feedback_by_id)
 
         # Finalize tasks with provider
         provider_config = agent_config.copy()
