@@ -149,3 +149,15 @@ def submit_repair_batch(
         attempt,
     )
     return batch_id, len(prepared.tasks)
+
+
+def carry_forward(prior, *, repair_attempt, repair_max_attempts, graduated, submitted_ids=None):
+    """Placeholder."""
+    from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
+
+    return RecoveryState()
+
+
+def dropped_from(submitted_ids, returned):
+    """Placeholder."""
+    return set()

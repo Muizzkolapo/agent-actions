@@ -46,6 +46,7 @@ class RecoveryState:
 
     # Repair state (expect: regeneration rounds)
     repair_attempt: int = 0
+    repair_submitted_ids: list[str] = field(default_factory=list)
     repair_max_attempts: int = 1
 
     # Accumulated results (serialized BatchResult dicts)
