@@ -258,3 +258,43 @@ def test_an_expansion_keeps_its_own_fields_after_annotation(monkeypatch):
     )
     result = strategy.invoke(make_task(), make_context())
     assert [r["ideas"] for r in result.response] == [["a", "b"], ["c"]]
+
+
+def test_return_last_ships_the_annotated_records_of_an_expansion(monkeypatch):
+    """return_last means "ship the last attempt"; an expansion is no exception."""
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=2, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is True, "a repairable expansion must not be tombstoned"
+    assert isinstance(result.response, list) and len(result.response) == 2
+    assert [r["expect"]["overall_pass"] for r in result.response] == [True, False]
+
+
+def test_an_all_empty_expansion_still_counts_as_empty_output(monkeypatch):
+    """Annotating each record must not disguise an empty response."""
+    from agent_actions.processing.helpers import _is_empty_output
+
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{}, {}], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert _is_empty_output(result.response) is True, (
+        "the verdict made a content-free response look non-empty, so on_empty never fires"
+    )
+
+
+def test_an_empty_single_record_still_counts_as_empty_output(monkeypatch):
+    from agent_actions.processing.helpers import _is_empty_output
+
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({}, True))
+    result = strategy.invoke(make_task(), make_context())
+    assert _is_empty_output(result.response) is True
