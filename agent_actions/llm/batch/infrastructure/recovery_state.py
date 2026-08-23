@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy, RecoveryPhase
@@ -64,24 +64,12 @@ class RecoveryState:
     failure_type_counts: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "phase": self.phase,
-            "retry_attempt": self.retry_attempt,
-            "retry_max_attempts": self.retry_max_attempts,
-            "missing_ids": self.missing_ids,
-            "record_failure_counts": self.record_failure_counts,
-            "reprompt_attempt": self.reprompt_attempt,
-            "reprompt_max_attempts": self.reprompt_max_attempts,
-            "validation_name": self.validation_name,
-            "reprompt_attempts_per_record": self.reprompt_attempts_per_record,
-            "validation_status": self.validation_status,
-            "on_exhausted": self.on_exhausted,
-            "accumulated_results": self.accumulated_results,
-            "graduated_results": self.graduated_results,
-            "unrepromptable_results": self.unrepromptable_results,
-            "evaluation_strategy_name": self.evaluation_strategy_name,
-            "failure_type_counts": self.failure_type_counts,
-        }
+        """Every declared field, so adding one cannot silently stop persisting it.
+
+        A dropped field does not fail loudly: the deferred loop reads it back as
+        the dataclass default on the next pass and never advances.
+        """
+        return {f.name: getattr(self, f.name) for f in fields(self)}
 
 
 class RecoveryStateManager:
