@@ -20,7 +20,7 @@ SUITE = Suite(
 
 
 def _service(**kwargs) -> ExpectationService:
-    return ExpectationService(suite=SUITE, repair="auto", max_iterations=2, **kwargs)
+    return ExpectationService(suite=SUITE, **{"repair": "auto", "max_iterations": 2, **kwargs})
 
 
 def _result(custom_id: str, content) -> BatchResult:
