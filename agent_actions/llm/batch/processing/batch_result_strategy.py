@@ -74,6 +74,10 @@ class BatchProcessingContext:
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None
 
+    # The action's expectation service, built lazily on first use. None is a
+    # real answer (no expect: block), so _UNSET marks "not yet built".
+    expectation_service: Any = _UNSET
+
 
 class BatchResultStrategy:
     """Converts batch provider results into ProcessingResult objects.
@@ -96,7 +100,6 @@ class BatchResultStrategy:
     def __init__(self) -> None:
         self._pending_batch_results: list[BatchResult] | None = None
         self._pending_kwargs: dict[str, Any] = {}
-        self._expectations: Any = _UNSET
 
     def prepare_invoke(
         self,
@@ -305,25 +308,28 @@ class BatchResultStrategy:
 
         return results
 
-    def _expectation_service(self, ctx: BatchProcessingContext):
+    @staticmethod
+    def _expectation_service(ctx: BatchProcessingContext):
         """The action's expectation service, built once per batch.
 
-        One instance per action is what the online path uses, and the judge
-        cache and per-run budget both live on it — rebuilding per record would
-        reset the budget and lose every cache hit.
+        Cached on the context, not on the strategy: one strategy instance is
+        built per workflow and reused for every batch action, so caching it
+        here would hand the first action's suite and judge budget to the rest.
+        The context is per-action, and reusing it across that action's records
+        is what the judge cache and the per-run budget need.
         """
-        if self._expectations is _UNSET:
+        if ctx.expectation_service is _UNSET:
             from agent_actions.expectations.service import (
                 create_expectation_service_from_config,
             )
 
             agent_config = ctx.agent_config or {}
-            self._expectations = create_expectation_service_from_config(
+            ctx.expectation_service = create_expectation_service_from_config(
                 agent_config.get("expect"),
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
             )
-        return self._expectations
+        return ctx.expectation_service
 
     def _process_successful_result(
         self,
