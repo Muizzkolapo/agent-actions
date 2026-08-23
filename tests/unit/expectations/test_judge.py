@@ -113,7 +113,9 @@ class TestVerdictParsingMatchesTheRestOfTheCodebase:
     reports a passing record as failing.
     """
 
-    PYTHON_LITERAL_PASS = "{'passed': True, 'reason': 'Concrete situation with goal and constraint'}"
+    PYTHON_LITERAL_PASS = (
+        "{'passed': True, 'reason': 'Concrete situation with goal and constraint'}"
+    )
     PYTHON_LITERAL_FAIL = "{'passed': False, 'reason': 'It is a definition prompt'}"
     FENCED = '```json\n{"passed": true, "reason": "reads as a scenario"}\n```'
 
