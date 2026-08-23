@@ -60,11 +60,7 @@ class ExpectationService:
         self._judge = judge
         self._max_iterations = max_iterations
         self._schema = schema if isinstance(schema, dict) else None
-        self._schema_digest = hashlib.sha256(
-            json.dumps(
-                self._schema or {}, sort_keys=True, separators=(",", ":"), default=str
-            ).encode("utf-8")
-        ).hexdigest()[:12]
+        self._schema_digest: str | None = None
         self._hints = {e.resolved_id: e.hint for e in suite.expectations if e.hint}
 
     def execute(
@@ -107,7 +103,7 @@ class ExpectationService:
 
             if self.repair == "none":
                 if not isinstance(response, dict):
-                    return ExpectationRunResult(response=response, executed=True)
+                    return ExpectationRunResult(response=response, executed=executed)
                 suite_result = run_suite(
                     self.suite, response, judge=self._judge, context_source=llm_context
                 )
@@ -170,11 +166,21 @@ class ExpectationService:
         if not isinstance(response, dict):
             detail = f"response was {type(response).__name__}, expected a JSON object"
             if self._schema:
-                from agent_actions.processing.recovery.reprompt import _extract_field_names
+                try:
+                    from agent_actions.processing.recovery.reprompt import _extract_field_names
 
-                fields = _extract_field_names(self._schema)
+                    fields = _extract_field_names(self._schema)
+                except Exception:
+                    # A schema the extractor cannot walk degrades to feedback
+                    # without field names; it must never crash the record.
+                    logger.debug(
+                        "Could not extract field names from the schema for '%s'",
+                        self.suite.name,
+                        exc_info=True,
+                    )
+                    fields = []
                 if fields:
-                    detail += " with the fields: " + ", ".join(fields)
+                    detail += " with the fields: " + ", ".join(str(f) for f in fields)
             return self._failing_structural(detail)
         if self._schema:
             from agent_actions.processing.recovery.response_validator import SchemaValidator
@@ -187,6 +193,10 @@ class ExpectationService:
         return None
 
     def _failing_structural(self, detail: str) -> SuiteResult:
+        if self._schema_digest is None:
+            # Lazy: observe-mode services never digest, and an idempotent
+            # concurrent double-compute is harmless.
+            self._schema_digest = self._digest_schema()
         outcome = Outcome(
             id="_structural",
             type="schema",
@@ -196,6 +206,19 @@ class ExpectationService:
             definition_hash=self._schema_digest,
         )
         return SuiteResult(suite_name=self.suite.name, outcomes=[outcome])
+
+    def _digest_schema(self) -> str:
+        try:
+            canonical = json.dumps(
+                self._schema or {}, sort_keys=True, separators=(",", ":"), default=str
+            )
+        except (TypeError, ValueError):
+            logger.debug(
+                "Schema for '%s' is not JSON-canonicalizable; digesting its repr",
+                self.suite.name,
+            )
+            canonical = repr(self._schema)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
 def attach_verdict(response: dict[str, Any], suite_result: SuiteResult) -> dict[str, Any]:
