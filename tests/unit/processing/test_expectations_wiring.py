@@ -314,3 +314,11 @@ def test_a_single_item_list_of_a_non_record_is_tombstoned_not_crashed(monkeypatc
     assert result.executed is False
     assert result.response is None
     assert result.recovery_metadata.expectations is not None
+
+
+def test_a_lone_field_named_expect_is_not_mistaken_for_a_verdict(monkeypatch):
+    """Emptiness discounts the attached verdict, not any field sharing its name."""
+    from agent_actions.processing.helpers import _is_empty_output
+
+    assert _is_empty_output({"expect": "renewal"}) is False
+    assert _is_empty_output([{"expect": "renewal"}]) is False

@@ -923,7 +923,9 @@ class TestExpansionResponses:
             calls.append(prompt)
             return [PASS_RECORD, PASS_RECORD], True
 
-        result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(generate, "P")
+        result = ExpectationService(SUITE, repair="retry", max_iterations=3, schema=SCHEMA).execute(
+            generate, "P"
+        )
         assert len(calls) == 1, "a valid expansion was regenerated"
         assert result.exhausted is False
         assert result.suite_result.overall_pass is True
@@ -960,6 +962,8 @@ def test_a_non_record_response_still_yields_a_single_verdict():
         lambda p: ("not a record", True), "P"
     )
     assert len(result.suite_results) == 1
+    assert result.suite_results[0].overall_pass is False
+    assert result.suite_results[0].outcomes[0].id == "_structural"
 
 
 class TestCombinedVerdictNamesTheRecord:
@@ -1016,3 +1020,21 @@ class TestCombinedVerdictNamesTheRecord:
         )
         assert [o.id for o in result.suite_results[1].outcomes] == ["_structural"]
         assert result.suite_results[1].overall_pass is False
+
+
+class TestHeterogeneousExpansion:
+    """A list holding one bad element must not change how the good ones are
+    treated — the same principle the schema-malformed sibling already follows."""
+
+    def test_the_well_formed_records_are_still_validated(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "junk", FAIL_RECORD], True), "P"
+        )
+        assert result.suite_results is not None, "one bad element voided the whole response"
+        assert [s.overall_pass for s in result.suite_results] == [True, False, False]
+
+    def test_the_bad_element_reports_a_structural_failure(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "junk"], True), "P"
+        )
+        assert [o.id for o in result.suite_results[1].outcomes] == ["_structural"]
