@@ -707,3 +707,46 @@ def test_repair_with_an_inlined_schema_and_residual_name_is_allowed():
         {"a": {"options"}},
     )
     assert defects == {}
+
+
+JUDGE_WITH_CONTEXT = [
+    {
+        "id": "grounded",
+        "type": "llm_judge",
+        "field": "options",
+        "rule": "grounded in the source",
+        "context": ["research.findings"],
+    }
+]
+
+
+def test_a_judged_context_ref_on_a_batch_action_is_a_defect():
+    # Batch has no llm_context to resolve the ref against, so every record
+    # would fail on "no context source was provided" and a downstream guard
+    # would drop the whole action's output.
+    defects = find_expectation_defects(
+        action_config(
+            run_mode="batch", expect={"repair": "none", "expectations": JUDGE_WITH_CONTEXT}
+        ),
+        {"a": {"options"}, "research": {"findings"}},
+    )
+    assert any("context" in m and "batch" in m for m in defects["a"])
+
+
+def test_a_judged_rule_without_context_is_allowed_in_batch():
+    judged = [{"id": "ok", "type": "llm_judge", "field": "options", "rule": "is good"}]
+    defects = find_expectation_defects(
+        action_config(run_mode="batch", expect={"repair": "none", "expectations": judged}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_a_judged_context_ref_is_allowed_online():
+    defects = find_expectation_defects(
+        action_config(
+            run_mode="online", expect={"repair": "none", "expectations": JUDGE_WITH_CONTEXT}
+        ),
+        {"a": {"options"}, "research": {"findings"}},
+    )
+    assert defects == {}

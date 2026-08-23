@@ -188,3 +188,50 @@ class TestServiceIsScopedToTheAction:
         strategy = BatchResultStrategy()
         ctx = self._ctx_for("assess", EXPECT_BLOCK)
         assert strategy._expectation_service(ctx) is strategy._expectation_service(ctx)
+
+
+class TestConfigErrorsAreNotDowngraded:
+    def test_a_config_error_is_fatal_rather_than_a_per_record_failure(self):
+        """A bad expect: block must stop the action, not quietly fail every record."""
+        import pytest
+
+        from agent_actions.errors import ConfigurationError
+
+        custom_id = "t-001"
+        row = {"target_id": custom_id, "source_guid": "sg-001", "content": {}}
+        agent_config = {
+            "name": ACTION,
+            "action_name": ACTION,
+            "json_mode": True,
+            "run_mode": "batch",
+            # A named suite cannot be resolved without project root/workflow.
+            "expect": {"repair": "none", "suite": "some_suite"},
+        }
+        with pytest.raises(ConfigurationError):
+            BatchResultStrategy().process(
+                [BatchResult(custom_id=custom_id, content=PASSING, success=True)],
+                context_map={custom_id: row},
+                output_directory="/tmp/test",
+                agent_config=agent_config,
+            )
+
+    def test_a_repair_service_reaching_batch_fails_loudly(self):
+        """validate() cannot repair, so a repair service here means preflight was bypassed."""
+        import pytest
+
+        custom_id = "t-001"
+        row = {"target_id": custom_id, "source_guid": "sg-001", "content": {}}
+        agent_config = {
+            "name": ACTION,
+            "action_name": ACTION,
+            "json_mode": True,
+            "run_mode": "batch",
+            "expect": {"repair": "auto", "expectations": EXPECT_BLOCK["expectations"]},
+        }
+        with pytest.raises(Exception, match="repair"):
+            BatchResultStrategy().process(
+                [BatchResult(custom_id=custom_id, content=PASSING, success=True)],
+                context_map={custom_id: row},
+                output_directory="/tmp/test",
+                agent_config=agent_config,
+            )
