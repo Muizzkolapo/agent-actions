@@ -9,6 +9,7 @@ pauses, what it persists, and what reaches the output.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services import processing_recovery as pr
@@ -218,7 +219,9 @@ class TestTheRoundIsBounded:
         import json
 
         backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(
-            RecoveryState(repair_attempt=1, repair_max_attempts=1).to_dict()
+            RecoveryState(
+                phase=RecoveryPhase.REPAIR, repair_attempt=1, repair_max_attempts=1
+            ).to_dict()
         )
         with patch(
             "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
@@ -395,8 +398,12 @@ class TestReEnteringADeferredRoundDoesNotDuplicate:
         failing = BatchResult(custom_id="r1", content=FAILING, success=True)
         provider = RecordingProvider()
         backend = _Backend()
-        with patch(
-            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json"),
         ):
             for _pass in range(2):
                 pr.handle_repair_recovery(
@@ -442,7 +449,6 @@ class TestAStaleStateFileCannotStarveTheJudge:
         backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(stale.to_dict())
 
         seen = {}
-        real = pr.__dict__.get("_noop")
         import agent_actions.llm.batch.services.repair_ops as repair_ops
 
         original = repair_ops.build_repair_strategy
@@ -452,7 +458,13 @@ class TestAStaleStateFileCannotStarveTheJudge:
             return original(agent_config, judge_budget_remaining)
 
         passing = BatchResult(custom_id="r1", content=PASSING, success=True)
-        with patch.object(repair_ops, "build_repair_strategy", spy):
+        with (
+            patch.object(repair_ops, "build_repair_strategy", spy),
+            patch(
+                "agent_actions.expectations.judge.invoke_judge_with_votes",
+                return_value=(True, "ok"),
+            ),
+        ):
             pr.check_and_submit_repair(
                 _context(RecordingProvider(), backend, self._judged_config()),
                 _identity(),
@@ -485,7 +497,13 @@ class TestAStaleStateFileCannotStarveTheJudge:
             return original(agent_config, judge_budget_remaining)
 
         passing = BatchResult(custom_id="r1", content=PASSING, success=True)
-        with patch.object(repair_ops, "build_repair_strategy", spy):
+        with (
+            patch.object(repair_ops, "build_repair_strategy", spy),
+            patch(
+                "agent_actions.expectations.judge.invoke_judge_with_votes",
+                return_value=(True, "ok"),
+            ),
+        ):
             pr.check_and_submit_repair(
                 _context(RecordingProvider(), backend, self._judged_config()),
                 _identity(),
