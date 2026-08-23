@@ -115,3 +115,13 @@ def test_a_partly_skipped_outcome_still_reaches_the_repair_prompt():
     prompt = compose_repair_prompt("P", {"ideas": ["bad"]}, result, hints={})
     assert "off topic" in prompt
     assert "(none)" not in prompt
+
+
+def test_a_hint_still_reaches_a_record_indexed_outcome():
+    # A multi-record response tags outcomes with their record index; the hint
+    # is authored against the rule, not the record.
+    result = SuiteResult(
+        suite_name="s", outcomes=[_outcome("option_count[1]", False, detail="found 2")]
+    )
+    prompt = compose_repair_prompt("P", {}, result, hints={"option_count": "add distractors"})
+    assert "add distractors" in prompt
