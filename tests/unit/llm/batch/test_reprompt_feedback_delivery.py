@@ -25,7 +25,8 @@ AGENT_CONFIG: dict[str, Any] = {
     "name": ACTION,
     "action_name": ACTION,
     "agent_type": ACTION,
-    "json_mode": True,
+    # json_mode off keeps the fixture focused on prompt delivery, not schema compilation.
+    "json_mode": False,
     "model_name": "test-model",
     "prompt": ORIGINAL_PROMPT,
     "reprompt": {
@@ -76,6 +77,37 @@ class RecordingProvider(BaseBatchClient):
 
     def cancel_batch(self, batch_id):  # pragma: no cover - unused here
         return True
+
+    # Abstract surface this test never exercises.
+    def _submit_to_provider_api(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _prepare_batch_input_file(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _fetch_status(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _normalize_status(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _fetch_raw_results(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _get_result_file_name(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _extract_content_from_response(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _extract_error_from_response(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _extract_metadata_from_response(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
+
+    def _extract_usage_from_response(self, *a, **k):  # pragma: no cover
+        raise NotImplementedError
 
 
 @pytest.fixture(autouse=True)
