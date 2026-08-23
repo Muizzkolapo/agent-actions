@@ -209,7 +209,7 @@ def test_llm_judge_wildcard_selector_calls_judge_once_per_element():
     assert len(judge.calls) == 4
 
 
-def test_llm_judge_wildcard_skipped_if_any_element_was_skipped():
+def test_llm_judge_wildcard_skipped_when_the_only_failing_element_was_skipped():
     judge = recording_judge(
         [
             (True, "ok", False),
@@ -227,6 +227,27 @@ def test_llm_judge_wildcard_skipped_if_any_element_was_skipped():
     )
     assert result.overall_pass is False
     assert result.outcomes[0].skipped is True
+
+
+def test_llm_judge_wildcard_is_not_skipped_when_an_element_genuinely_failed():
+    # A real judged failure alongside a budget skip is actionable: marking the
+    # whole outcome skipped drops its detail out of the repair feedback.
+    judge = recording_judge(
+        [
+            (False, "off topic", False),
+            (True, "ok", False),
+            (False, "budget exhausted", True),
+            (True, "ok", False),
+        ]
+    )
+    result = run_suite(
+        suite_of({"id": "each", "type": "llm_judge", "field": "options[*]", "rule": "r"}),
+        RECORD,
+        judge=judge,
+    )
+    assert result.overall_pass is False
+    assert result.outcomes[0].skipped is False
+    assert "off topic" in result.outcomes[0].detail
 
 
 def test_llm_judge_context_ref_is_resolved_and_passed_to_the_judge():
