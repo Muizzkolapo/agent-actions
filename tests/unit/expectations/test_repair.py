@@ -4,7 +4,7 @@ from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.types import Outcome, SuiteResult
 
 
-def _outcome(oid, passed, severity="fail", detail=""):
+def _outcome(oid, passed, severity="fail", detail="", skipped=False):
     return Outcome(
         id=oid,
         type="item_count",
@@ -12,6 +12,7 @@ def _outcome(oid, passed, severity="fail", detail=""):
         passed=passed,
         detail=detail,
         definition_hash="abc123",
+        skipped=skipped,
     )
 
 
@@ -63,3 +64,28 @@ def test_empty_passing_list_renders_no_empty_header_content():
     result = SuiteResult(suite_name="s", outcomes=[_outcome("only", False, detail="d")])
     prompt = compose_repair_prompt("P", {}, result, hints={})
     assert "(none yet)" in prompt
+
+
+def test_skipped_outcomes_are_not_presented_as_failures_to_fix():
+    result = SuiteResult(
+        suite_name="s",
+        outcomes=[
+            _outcome("judged", False, detail="judge budget exhausted", skipped=True),
+            _outcome("kept", True),
+        ],
+    )
+    prompt = compose_repair_prompt("P", {}, result, hints={"judged": "be concise"})
+    assert "judged" not in prompt
+    assert "judge budget exhausted" not in prompt
+    assert "(none)" in prompt
+
+
+def test_multiline_detail_and_hint_render_on_one_bullet_line():
+    result = SuiteResult(
+        suite_name="s",
+        outcomes=[_outcome("raiser", False, detail="check raised ValueError:\nline two")],
+    )
+    prompt = compose_repair_prompt("P", {}, result, hints={"raiser": "keep it\nshort"})
+    line = next(li for li in prompt.splitlines() if li.startswith("- raiser"))
+    assert "check raised ValueError: line two" in line
+    assert "keep it short" in line

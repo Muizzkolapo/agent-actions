@@ -465,6 +465,25 @@ def test_auto_repair_sends_a_composed_prompt_on_the_second_iteration():
     assert prompts[1] != "ORIGINAL"
     assert "ORIGINAL" in prompts[1]
     assert "count" in prompts[1]
+    assert '"ideas": ["a"]' in prompts[1]
+
+
+def test_auto_repair_composes_from_the_latest_failing_response():
+    responses = iter([{"ideas": ["first"]}, {"ideas": ["second"]}, {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    ExpectationService(SUITE, repair="auto", max_iterations=3).execute(flaky, "O")
+    assert "second" in prompts[2]
+    assert "first" not in prompts[2]
+
+
+def test_unknown_repair_value_is_rejected_at_construction():
+    with pytest.raises(ValueError, match="repair must be"):
+        ExpectationService(SUITE, repair={"prompt": "fix it"})
 
 
 def test_retry_repair_still_uses_the_original_prompt_every_iteration():
