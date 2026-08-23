@@ -231,3 +231,30 @@ def test_recovery_metadata_describes_the_shipped_generation_only():
     result = strategy.invoke(make_task(), make_context())
     assert result.response["ideas"] == ["a", "b", "c"]
     assert result.recovery_metadata is None or result.recovery_metadata.reprompt is None
+
+
+def test_every_record_of_an_expansion_carries_its_own_verdict(monkeypatch):
+    """An LLM returning an array produces one record per element; each needs
+    its verdict so a downstream guard can filter them independently."""
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert isinstance(result.response, list), "the expansion shape must survive"
+    assert len(result.response) == 2
+    verdicts = [r["expect"]["overall_pass"] for r in result.response]
+    assert verdicts == [True, False]
+
+
+def test_an_expansion_keeps_its_own_fields_after_annotation(monkeypatch):
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert [r["ideas"] for r in result.response] == [["a", "b"], ["c"]]

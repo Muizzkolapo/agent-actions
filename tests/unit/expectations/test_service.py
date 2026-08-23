@@ -82,13 +82,13 @@ def test_a_single_item_list_response_is_unwrapped_and_validated():
     assert result.response == {"ideas": ["a", "b", "c"]}
 
 
-def test_a_multi_item_list_response_is_not_validated():
-    # File-granularity (multiple records per call) has no expect: semantics
-    # defined -- left alone, matching the existing not-a-dict skip behavior.
+def test_a_multi_item_list_response_is_validated_per_record():
+    # An LLM returning an array produces one record per element, and each one
+    # is validated on its own -- see TestExpansionResponses for the contract.
     result = ExpectationService(SUITE, repair="none").execute(
         lambda p: ([{"ideas": ["a"]}, {"ideas": ["b"]}], True), "P"
     )
-    assert result.suite_result is None
+    assert [s.overall_pass for s in result.suite_results] == [False, False]
 
 
 def test_an_empty_list_response_is_not_validated():
