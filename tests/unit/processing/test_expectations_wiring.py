@@ -108,7 +108,6 @@ def test_llm_context_reaches_a_judged_expectations_context_ref(monkeypatch):
     assert result.response["expect"]["overall_pass"] is True
 
 
-@pytest.mark.xfail(reason="the factory refuses repair modes until the unlock lands", strict=True)
 def test_factory_threads_the_schema_into_the_structural_gate(monkeypatch):
     agent_config = {
         "name": "brainstorm",

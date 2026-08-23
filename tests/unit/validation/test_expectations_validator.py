@@ -577,3 +577,77 @@ def test_a_row_condition_over_a_produced_field_is_accepted():
         FIELDS,
     )
     assert defects == {}
+
+
+NOT_NULL = [{"type": "not_null", "field": "options"}]
+
+
+def action_config(name="a", *, expect, **action_keys):
+    return {name: {"name": name, "expect": expect, **action_keys}}
+
+
+def test_repair_prompt_mapping_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(expect={"repair": {"prompt": "$wf.Fix"}, "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("not implemented" in m for m in defects["a"])
+
+
+def test_expect_on_a_batch_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(run_mode="batch", expect={"repair": "none", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("batch" in m for m in defects["a"])
+
+
+def test_repair_on_a_file_granularity_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(granularity="file", expect={"repair": "retry", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("granularity" in m for m in defects["a"])
+
+
+def test_repair_file_granularity_defect_fires_for_the_enum_value():
+    from agent_actions.config.types import Granularity
+
+    defects = find_expectation_defects(
+        action_config(
+            granularity=Granularity.FILE, expect={"repair": "auto", "expectations": NOT_NULL}
+        ),
+        {"a": {"options"}},
+    )
+    assert any("granularity" in m for m in defects["a"])
+
+
+def test_observe_on_a_file_granularity_action_is_allowed():
+    defects = find_expectation_defects(
+        action_config(granularity="file", expect={"repair": "none", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_repair_with_a_non_mapping_schema_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(
+            schema="schema/wf/a.yml", expect={"repair": "auto", "expectations": NOT_NULL}
+        ),
+        {"a": {"options"}},
+    )
+    assert any("schema" in m for m in defects["a"])
+
+
+def test_record_granularity_repair_reports_no_defects():
+    defects = find_expectation_defects(
+        action_config(
+            granularity="Record",
+            run_mode="online",
+            schema={"type": "object"},
+            expect={"repair": "retry", "expectations": NOT_NULL},
+        ),
+        {"a": {"options"}},
+    )
+    assert defects == {}
