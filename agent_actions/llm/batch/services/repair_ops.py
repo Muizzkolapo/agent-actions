@@ -173,10 +173,18 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
     """
     from agent_actions.llm.batch.services.retry_serialization import serialize_results
 
-    by_id = {str(record.get("custom_id")): record for record in pooled}
-    for record in serialize_results(added):
-        by_id[str(record.get("custom_id"))] = record
-    return list(by_id.values())
+    by_id: dict[str, dict[str, Any]] = {}
+    unkeyed: list[dict[str, Any]] = []
+    for record in [*pooled, *serialize_results(added)]:
+        # Identity is the record id. Without one there is nothing to dedupe on,
+        # and folding those together would silently drop records rather than
+        # duplicate them — the worse of the two failures.
+        key = record.get("custom_id")
+        if key:
+            by_id[str(key)] = record
+        else:
+            unkeyed.append(record)
+    return [*by_id.values(), *unkeyed]
 
 
 def carry_forward(

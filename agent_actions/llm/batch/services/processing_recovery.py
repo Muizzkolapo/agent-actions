@@ -711,11 +711,16 @@ def check_and_submit_repair(
     # counter as attempt 0 can never stop iterating, and one that rebuilds the
     # service without the balance spends the budget again every round.
     if recovery_state is None:
-        recovery_state = RecoveryStateManager.load(
+        loaded = RecoveryStateManager.load(
             context.service._storage_backend,
             context.service._resolve_action_name(context.action_name),
             identity.file_name,
         )
+        # Only a state already in the repair phase describes this loop. The
+        # original-batch path passes None deliberately because a file here may
+        # be left by a crashed run, and a stale spent budget would turn every
+        # judged expectation into a hard failure on an otherwise fresh pass.
+        recovery_state = loaded if loaded and loaded.phase is RecoveryPhase.REPAIR else None
 
     strategy = build_repair_strategy(
         context.agent_config,
@@ -835,7 +840,7 @@ def handle_repair_recovery(
     graduated, still_failing, _failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
     strategy.write_verdicts(graduated)
-    state.graduated_results.extend(serialize_results(graduated))
+    state.graduated_results = pool_records(state.graduated_results, graduated)
     state.evaluation_strategy_name = strategy.name
 
     # A record submitted for repair that the provider never returned is in
