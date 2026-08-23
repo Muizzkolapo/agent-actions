@@ -15,6 +15,7 @@ their results, and the service that runs them around generation.
 | `judge.py` | Module | `llm_judge` invocation, `votes:` majority voting, the per-action verdict cache (`CachedJudge`), and the per-run judge budget (`JudgeBudget`). `invoke_judge()` parses the model's verdict as strict JSON text, never a vendor-native structured-output schema — a malformed response is always a failure. | `processing` |
 | `runner.py` | Module | Evaluates every expectation against one record via `run_suite()`. A rule's `row_condition` argument is the first gate: false waives the rule (a passing outcome marked skipped, naming the condition), a condition that cannot be evaluated fails it, and the argument is withheld from the check. Deterministic types call `registry.get(...).check()` directly; `expression` dispatches to `expression.evaluate_condition` against the whole record before field resolution; `llm_judge` dispatches through an injected `judge` callable and an optional `context_source`, keeping this module free of any pipeline or network import. Every rule runs even after an earlier failure, and a check call that raises is isolated into a failed outcome (`check raised {Type}: ...`) with a warning-level traceback. Still raised, deliberately: an unregistered type, a judge dispatched with no caller wired, and a `None`-field expectation reaching field resolution without a record-scoped dispatch branch — each is a wiring bug, not a data outcome. | `validation` |
 | `service.py` | Module | Runs one generation through `ExpectationService.execute()`, taking the same `llm_operation` callable contract as `RepromptService`. Unwraps a real online record's length-1 list response before validating — `create_dynamic_agent` always returns `list[Any]`, so a bare dict is never what a real single-record call produces. `create_expectation_service_from_config()` is the composition point: it builds a `CachedJudge`/`JudgeBudget` pair from `agent_config`/`judge_budget` only when a suite actually contains `llm_judge`, and injects the composed dispatcher into `run_suite()`. `attach_verdict()` writes the verdict under the record's `expect` key. | `processing` |
+| `repair.py` | Module | Composes the `repair: auto` regeneration prompt from a failed iteration: the original prompt, the previous output as JSON, every failed expectation with severity, detail and the author's `hint`, and the list of passing expectations the regeneration must preserve. Outcomes that were never evaluated (judge budget) are omitted — they say nothing actionable — but a partly-skipped outcome that also holds a real failure is kept. Pipeline-free. | `processing` |
 
 ## Project Surface
 
@@ -26,15 +27,18 @@ their results, and the service that runs them around generation.
 | `attach_verdict` | `agent_io/target/{action}/` | Writes | — |
 | `CachedJudge` | agent's own `model_vendor`/`model_name` | Reads | `actions[].expect.expectations[].params.model` |
 | `JudgeBudget` | — | Bounds | `actions[].expect.judge_budget` |
+| `ExpectationService` | `agent_config/{workflow}.yml` | Reads | `actions[].expect.repair`, `actions[].expect.max_iterations`, `actions[].expect.on_exhausted` |
+| `ExpectationService` | `schema/{workflow}/{action}.yml` | Validates | `actions[].schema` |
 | `expectation_check` | `tools/{workflow}/*.py` | Reads (import side effect) | `actions[].expect.expectations[].type` |
 
-**Internal only**: `Outcome`, `SuiteResult`, `ExpectationType`, `ExpectationRunResult`, `resolve`, `referenced_names`, `resolve_context`, `parse_condition`, `referenced_field_paths`, `evaluate_condition` -- no direct project surface.
+**Internal only**: `Outcome`, `SuiteResult`, `ExpectationType`, `ExpectationRunResult`, `ExpectationsExhaustedError`, `compose_repair_prompt`, `resolve`, `referenced_names`, `resolve_context`, `parse_condition`, `referenced_field_paths`, `evaluate_condition` -- no direct project surface.
 
 ## Dependencies
 
 | Package | Direction | Why |
 |---------|-----------|-----|
-| `processing` | inbound | `OnlineStrategy` composes `ExpectationService` as the outermost recovery layer |
+| `processing` | inbound | `OnlineStrategy` composes `ExpectationService` as the outermost recovery layer, and converts an exhausted run into `RecoveryMetadata.expectations` for the `expectations_exhausted` tombstone arm |
+| `processing` | outbound | `service.py` consumes `SchemaValidator` and `_extract_field_names` for the structural gate — constructed per call, since the validator carries per-call feedback state |
 | `validation` | inbound | `expectations_validator` reads the registry, field selectors, and expression parsing at preflight |
 | `input` | inbound | `input/loaders/udf.py` imports `tools/` files declaring `expectation_check`, registering user types before preflight |
 | `config` | outbound | `ExpectConfig` lives in `config/schema.py` |
@@ -43,9 +47,28 @@ their results, and the service that runs them around generation.
 
 ## Notes
 
-The engine core (`types`, `fields`, `registry`, `expression`, `loader`, `runner`) imports nothing
-from `workflow/`, `processing/` or `storage/`. `service.py` is the only module here
-that knows about the pipeline. Keeping that boundary is what lets the runner be
+The engine core (`types`, `fields`, `registry`, `expression`, `loader`, `runner`, `repair`) imports
+nothing from `workflow/`, `processing/` or `storage/`. `service.py` is the only module here
+that knows about the pipeline.
+
+**Cost shape of the repair loop.** A repair policy multiplies LLM spend in two
+directions that are easy to under-budget. `judge_budget` is per action per run,
+and each regenerated response is a fresh cache key, so judged calls scale with
+iterations, not records — size the budget for `records x iterations`. Once it is
+spent, later records carry a skipped fail-severity outcome and can never reach a
+passing verdict, which is a bounded and deliberate degradation: the loop keeps
+repairing every other rule, and one measured attempt showed that abandoning
+those iterations early ships a strictly worse record for zero judge-call
+savings. Separately, `reprompt:` nests *inside* each iteration, so an action
+carrying both pays `max_iterations x reprompt.max_attempts x retry attempts` in
+the worst case (18 at the defaults) — with a repair policy the structural gate
+already covers schema mismatch, so `reprompt:` on the same action is redundant.
+
+**The prompt trace pairs the original prompt with the final response.** The
+trace row is written at prep time from the compiled prompt and updated once
+after the loop, so a record repaired on iteration 2 or later has a trace whose
+prompt is not the one that produced the stored response, and whose response
+carries the attached verdict. Keeping that boundary is what lets the runner be
 tested without a network and the CLI start without loading the workflow stack.
 
 A named `suite:` reference (or the bare-block default, which reads the action's

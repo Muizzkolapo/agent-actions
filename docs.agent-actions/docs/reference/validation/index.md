@@ -18,6 +18,7 @@ Agent Actions catches these problems through multiple validation layers, from sc
 | **Reprompting** | On validation failure | Automatic retry with feedback |
 | **Guards** | After validation | Filter or skip based on semantic conditions |
 | **AI Expectations** | After schema validation | Deterministic + LLM-judged semantic checks, observed and reported |
+| **Expectation Repair** | On expectation failure | Regenerate and re-validate until the suite passes, or exhaust into a verdict, tombstone, or halt |
 
 ## Schema Analysis
 
@@ -100,5 +101,5 @@ The error context shows exactly what field failed and why, helping you fix issue
 
 - **[Output Validation Pipeline](./output-validation.md)** - Multi-layer validation with guards and reprompting
 - **[Reprompting](./reprompting.md)** - Automatic retry with presets (basic, smart, thorough)
-- **[AI Expectations](./expectations.md)** - Deterministic and LLM-judged semantic checks via `expect:`
+- **[AI Expectations](./expectations.md)** - Deterministic and LLM-judged semantic checks via `expect:`, and the repair loop that regenerates on failure
 - **[Troubleshooting](../../guides/troubleshooting.md)** - Debug errors, trace data lineage, common fixes
