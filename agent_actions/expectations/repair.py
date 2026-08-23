@@ -37,8 +37,8 @@ def compose_repair_prompt(
 ) -> str:
     """One instruction from the full failure list, naming what must be preserved.
 
-    Skipped outcomes are omitted: a rule that was never evaluated (judge budget,
-    missing context) is not something the regeneration can act on.
+    Skipped outcomes are omitted: a rule the judge budget left unevaluated says
+    nothing the regeneration can act on.
     """
     failed_lines = "\n".join(
         f"- {o.id}"
