@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from agent_actions.expectations.service import _records_of
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
@@ -91,9 +90,16 @@ class OnlineStrategy(InvocationStrategy):
             # Annotatable on the same terms the service validated on: the
             # response has to hold records, one per verdict.
             verdicts = run.suite_results or []
-            annotated_records = _records_of(response)
+            # Annotatable only where a verdict can actually be attached: every
+            # element must be a mapping, one per verdict. A malformed element
+            # still gets a verdict from the service, but nothing to hold it.
             annotatable = bool(verdicts) and (
-                annotated_records is not None and len(annotated_records) == len(verdicts)
+                (isinstance(response, dict) and len(verdicts) == 1)
+                or (
+                    isinstance(response, list)
+                    and len(response) == len(verdicts)
+                    and all(isinstance(record, dict) for record in response)
+                )
             )
             if run.exhausted and (not executed or not annotatable):
                 # Exhaustion with nothing annotatable (fail mode, or return_last

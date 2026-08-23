@@ -42,7 +42,7 @@ def _records_of(response: Any) -> list[dict[str, Any]] | None:
     """
     if isinstance(response, dict):
         return [response]
-    if isinstance(response, list) and response and all(isinstance(r, dict) for r in response):
+    if isinstance(response, list) and any(isinstance(r, dict) for r in response):
         return list(response)
     return None
 
@@ -157,7 +157,10 @@ class ExpectationService:
             if self.repair == "none":
                 if records is None:
                     return ExpectationRunResult(response=response, executed=executed)
-                suite_results = self._validate_records(records, llm_context)
+                suite_results = [
+                    self._record_verdict(record, llm_context, check_schema=False)
+                    for record in records
+                ]
             else:
                 if records is None:
                     suite_results = [self._non_record_verdict(response)]
@@ -166,10 +169,7 @@ class ExpectationService:
                     # failure, a conforming one is judged on its own rules —
                     # a bad sibling must not buy it a pass it did not earn.
                     suite_results = [
-                        self._schema_verdict(record)
-                        or run_suite(
-                            self.suite, record, judge=self._judge, context_source=llm_context
-                        )
+                        self._record_verdict(record, llm_context, check_schema=True)
                         for record in records
                     ]
             suite_result = _combine(suite_results, self.suite.name)
@@ -223,14 +223,6 @@ class ExpectationService:
                 suite_results=suite_results,
             )
         return self._exhausted_result(response, suite_result, iterations, suite_results)
-
-    def _validate_records(
-        self, records: list[dict[str, Any]], llm_context: dict[str, Any] | None
-    ) -> list[SuiteResult]:
-        return [
-            run_suite(self.suite, record, judge=self._judge, context_source=llm_context)
-            for record in records
-        ]
 
     def validate(
         self, response: Any, llm_context: dict[str, Any] | None = None
@@ -289,6 +281,22 @@ class ExpectationService:
                 original_prompt, last_response, last_suite_result, self._hints
             )
         return original_prompt
+
+    def _record_verdict(
+        self, record: Any, llm_context: dict[str, Any] | None, *, check_schema: bool
+    ) -> SuiteResult:
+        """One record's verdict: structural failure if malformed, else its own rules.
+
+        Observe mode marks a malformed element but never applies the schema
+        gate, which belongs to the repair loop.
+        """
+        if not isinstance(record, dict):
+            return self._non_record_verdict(record)
+        if check_schema:
+            schema_failure = self._schema_verdict(record)
+            if schema_failure is not None:
+                return schema_failure
+        return run_suite(self.suite, record, judge=self._judge, context_source=llm_context)
 
     def _non_record_verdict(self, response: Any) -> SuiteResult:
         """The verdict for a response that carries no records at all."""

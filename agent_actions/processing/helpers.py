@@ -159,7 +159,9 @@ def _content_keys(record: Any) -> int:
     """
     if not isinstance(record, dict):
         return 1
-    return len([key for key in record if key != VERDICT_KEY])
+    verdict = record.get(VERDICT_KEY)
+    is_verdict = isinstance(verdict, dict) and "overall_pass" in verdict
+    return len(record) - (1 if is_verdict else 0)
 
 
 def _is_empty_output(response: Any) -> bool:
