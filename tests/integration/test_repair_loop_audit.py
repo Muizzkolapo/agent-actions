@@ -22,6 +22,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.expectations import registry as registry_module
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     reset_global_guard_filter,
 )
@@ -107,11 +108,17 @@ REPROMPT_ONLY = """\
 def project(tmp_path):
     """A real agac project on disk; `write_actions` swaps the action block.
 
-    A completed `agac run` shuts down the process-global guard filter's thread
-    pool, so it is reset around every test — otherwise the next test anywhere in
-    the session hits "cannot schedule new futures after shutdown".
+    A real run touches three process-global things, so all three are restored
+    around every test: the path manager, the guard filter's thread pool (a
+    completed run leaves an instance other tests would inherit), and the
+    expectation type registry (`tools/` discovery registers user checks into it).
     """
     reset_path_manager()
+    reset_global_guard_filter()
+    saved_types = dict(registry_module._REGISTRY)
+    saved_sources = dict(registry_module._USER_CHECK_SOURCES)
+    saved_key = os.environ.get("OPENAI_API_KEY")
+    os.environ["OPENAI_API_KEY"] = "sk-audit-not-used"
     root = tmp_path / "proj"
     for sub in (
         "prompt_store",
@@ -146,6 +153,14 @@ def project(tmp_path):
     yield p
     reset_path_manager()
     reset_global_guard_filter()
+    registry_module._REGISTRY.clear()
+    registry_module._REGISTRY.update(saved_types)
+    registry_module._USER_CHECK_SOURCES.clear()
+    registry_module._USER_CHECK_SOURCES.update(saved_sources)
+    if saved_key is None:
+        os.environ.pop("OPENAI_API_KEY", None)
+    else:
+        os.environ["OPENAI_API_KEY"] = saved_key
 
 
 @contextmanager
@@ -177,6 +192,7 @@ class Run:
     def _stored(self):
         """Every JSON body the run persisted, from SQLite and target files."""
         bodies = []
+        self._payload_columns_seen = 0
         io_dir = self._root / WF / "agent_io"
         for db in io_dir.rglob("*.db"):
             con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -187,6 +203,7 @@ class Run:
                 for table in tables:
                     cols = [r[1] for r in con.execute(f"pragma table_info({table})")]
                     payloads = [c for c in cols if c in ("content", "data", "record", "payload")]
+                    self._payload_columns_seen += len(payloads)
                     for row in (
                         con.execute(f"select {', '.join(payloads)} from {table}")
                         if payloads
@@ -226,6 +243,14 @@ class Run:
         for body in self._stored():
             walk(body)
         return hits
+
+    def assert_store_is_readable(self):
+        """Guard the negative assertions: an unreadable store must not read as empty."""
+        self._stored()
+        assert self._payload_columns_seen > 0, (
+            "no payload column was found in the store — negative assertions below "
+            "would pass vacuously; the reader needs updating, not the test"
+        )
 
     def verdicts(self):
         return self.find(lambda d: isinstance(d.get("expect"), dict))
@@ -273,7 +298,6 @@ def run_workflow(project, responses, *, by_action=None):
             side_effect=fake_invoke,
         ),
     ):
-        os.environ.setdefault("OPENAI_API_KEY", "sk-audit-not-used")
         result = CliRunner().invoke(cli, ["run", "-a", WF], catch_exceptions=False)
     return Run(result, prompts, project.path)
 
@@ -395,10 +419,10 @@ class TestStructuralGate:
         )
         run = run_workflow(project, [{"wrong_key": "not the schema"}])
         assert run.calls == 1
+        verdicts = run.verdicts()
+        assert verdicts, "observe mode must still attach a verdict"
         assert not any(
-            o.get("id") == "_structural"
-            for v in run.verdicts()
-            for o in v["expect"].get("outcomes", [])
+            o.get("id") == "_structural" for v in verdicts for o in v["expect"].get("outcomes", [])
         )
 
 
@@ -456,8 +480,10 @@ class TestExhaustion:
         project.write_actions(REPROMPT_ONLY)
         reprompt_run = run_workflow(project, [{"wrong_key": "never conforms"}])
 
+        assert expectations_run.calls == 2
+        assert reprompt_run.calls == 2
+        assert expectations_run.exit_code != 0
         assert expectations_run.exit_code == reprompt_run.exit_code
-        assert expectations_run.tombstones() == reprompt_run.tombstones()
         assert not expectations_run.verdicts()
 
     def test_raise_halts_the_run(self, project):
@@ -469,7 +495,9 @@ class TestExhaustion:
             )
         )
         run = run_workflow(project, [{"ideas": ["never enough"]}])
+        assert run.calls == 2, "raise must fire from the loop, not from a config error"
         assert run.exit_code != 0
+        run.assert_store_is_readable()
         assert not run.verdicts(), "a halted run must not ship the failing record"
 
     def test_max_iterations_counts_the_first_generation(self, project):
@@ -508,7 +536,9 @@ class TestObserveMode:
         )
         run = run_workflow(project, [{"ideas": ["a", "b", "c"]}])
         assert run.calls == 1
-        assert all(v["expect"]["overall_pass"] is True for v in run.verdicts())
+        verdicts = run.verdicts()
+        assert verdicts
+        assert all(v["expect"]["overall_pass"] is True for v in verdicts)
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +603,10 @@ class TestVerdictAsAGate:
                 "publish": [{"headline": "should never be generated"}],
             },
         )
+        assert run.exit_code == 0
+        assert run.calls == 2, "brainstorm must have run its two iterations"
+        run.assert_store_is_readable()
+        assert run.verdicts(), "the unrepaired record must still be stored"
         assert not run.find(lambda d: d.get("headline") == "should never be generated"), (
             "a failing verdict must stop the record at the guard"
         )
@@ -647,30 +681,18 @@ class TestExtensionPointsDriveRepair:
 
 
 # ---------------------------------------------------------------------------
-# Preflight refuses shapes the loop cannot serve
+# Not covered here, deliberately
 # ---------------------------------------------------------------------------
-
-
-class TestPreflightRefusals:
-    @pytest.mark.parametrize(
-        "mutation, expected",
-        [
-            ("    granularity: File\n", "granularity"),
-            ("    run_mode: batch\n", "batch"),
-        ],
-    )
-    def test_repair_is_refused_on_shapes_it_cannot_serve(self, project, mutation, expected):
-        actions = BRAINSTORM.format(
-            expect_body=_expect("repair: auto\nmax_iterations: 3\n" + ENOUGH_IDEAS)
-        ).replace("    intent: generate ideas\n", "    intent: generate ideas\n" + mutation)
-        project.write_actions(actions)
-        run = run_workflow(project, [{"ideas": ["a", "b", "c"]}])
-        assert run.exit_code != 0
-        assert run.calls == 0, "preflight must refuse before any provider call"
-        assert expected in run.result.output.lower()
-
-    # The tool-action refusal and the observe-at-file-granularity allowance are
-    # covered in tests/unit/validation/test_expectations_validator.py: a valid
-    # tool action needs a UDF implementation and the FILE path needs a different
-    # record shape, so asserting either here would exercise the fixture rather
-    # than the guard.
+#
+# The repair-mode preflight guards (batch run_mode, file granularity, tool
+# actions, the reserved prompt-mapping form, an unresolved schema) are covered
+# in tests/unit/validation/test_expectations_validator.py, not here.
+#
+# Driving them through the CLI looked appealing and was actively misleading. A
+# `granularity: File` action is rejected by an earlier validator ("FILE
+# granularity is only supported for tool and hitl actions"), so the run failed
+# for a reason that had nothing to do with `repair:` — deleting the whole
+# `expect:` block left the test green. A `run_mode: batch` action does not go
+# through the mocked provider seam at all, so it reached the real batch
+# submission path and made a live HTTPS request. Both tests passed while
+# proving nothing, which is worse than not having them.

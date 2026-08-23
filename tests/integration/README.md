@@ -77,7 +77,7 @@ All tests are deterministic, mock all I/O, and complete in < 1 second.
 
 ## test_repair_loop_audit.py
 
-Audit of the expectations repair loop (`expect:` with a `repair:` policy). 20 tests, all driven through the **real `agac run` CLI against a project scaffolded on disk**. Only the provider call is mocked, so the config loader, action expander, preflight, invocation strategy, loop, record envelope and SQLite store all execute for real.
+Audit of the expectations repair loop (`expect:` with a `repair:` policy). 18 tests, all driven through the **real `agac run` CLI against a project scaffolded on disk**. Only the provider call is mocked, so the config loader, action expander, preflight, invocation strategy, loop, record envelope and SQLite store all execute for real.
 
 ### Why CLI-level rather than service-level
 
@@ -98,7 +98,6 @@ Both were caught only by driving the actual CLI. These tests keep that path cove
 | `TestObserveMode` | 2 | One call, verdict attached, record unchanged — passing and failing |
 | `TestVerdictAsAGate` | 2 | A repaired record satisfies a downstream `guard:` on `expect.overall_pass`; an unrepaired one is filtered |
 | `TestExtensionPointsDriveRepair` | 2 | A project's own `@expectation_check` from `tools/` drives regeneration and its detail reaches the prompt; an `expression` rule does the same |
-| `TestPreflightRefusals` | 2 | `repair` at file granularity and on a batch action are refused before any provider call |
 
 ### Mutation-verified
 
@@ -106,7 +105,7 @@ The suite was checked against four deliberate regressions in `agent_actions/expe
 
 | Mutation | Tests that fail |
 |---|---|
-| Loop never iterates (`iterations = 1`) | 11 |
+| Loop never iterates (`iterations = 1`) | 14 |
 | `auto` degrades to `retry` (composed feedback never sent) | 3 |
 | Structural gate disabled | 1 |
 | `on_exhausted: raise` ignored | 1 |
@@ -117,4 +116,14 @@ The suite was checked against four deliberate regressions in `agent_actions/expe
 pytest tests/integration/test_repair_loop_audit.py -v
 ```
 
-Deterministic, no network, ~1.7s.
+Deterministic, no network, ~1.4s.
+
+### What is deliberately not here
+
+The repair-mode **preflight guards** live in `tests/unit/validation/test_expectations_validator.py`, not here. Driving them through the CLI produced two tests that passed while proving nothing: a `granularity: File` action is rejected by an earlier validator, so the run failed for an unrelated reason and stayed green with the whole `expect:` block deleted; and a `run_mode: batch` action never reaches the mocked provider seam, so it hit the real batch submission path and made a live HTTPS request.
+
+### Isolation
+
+A real run touches three process-global singletons. The fixture restores all of them — the path manager, the guard filter's thread pool, and the expectation type registry (`tools/` discovery registers user checks into it) — and scopes `OPENAI_API_KEY` to the test. Leak-checked: running the suite in a fresh interpreter leaves the registry and environment unchanged.
+
+Adding this suite is what surfaced a latent bug in `reset_global_guard_filter()`: it shut down the filter's pool without clearing the guard *evaluator* singleton that caches it, so nine unrelated tests failed depending on ordering. Fixed in the same branch.
