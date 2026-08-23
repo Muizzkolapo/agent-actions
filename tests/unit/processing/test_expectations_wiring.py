@@ -2,8 +2,6 @@
 
 from types import SimpleNamespace
 
-import pytest
-
 from agent_actions.config.types import RunMode
 from agent_actions.expectations.service import ExpectationService
 from agent_actions.expectations.types import Suite

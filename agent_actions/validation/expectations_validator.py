@@ -48,6 +48,7 @@ def find_expectation_defects(
 
         fields = available_fields.get(action_name)
         messages: list[str] = []
+        messages.extend(_repair_mode_defects(action, expect))
 
         if fields is not None and _VERDICT_KEY in fields:
             messages.append(
@@ -73,6 +74,41 @@ def find_expectation_defects(
             defects[action_name] = sorted(messages)
 
     return defects
+
+
+def _config_token(value: Any) -> str:
+    """Normalize a config value that may be an enum member or a cased string."""
+    raw = getattr(value, "value", value)
+    return str(raw).lower() if raw is not None else ""
+
+
+def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+    """Defects for the repair-loop keys against the action's execution shape."""
+    messages: list[str] = []
+    if _config_token(action.get("run_mode")) == "batch":
+        messages.append(
+            "expect: has no effect under batch run_mode — expectations run only on "
+            "the online path; remove the block or run the action online"
+        )
+    repair = expect.get("repair", "auto")
+    if repair == "none":
+        return messages
+    if isinstance(repair, dict):
+        messages.append("repair: {prompt:} is not implemented; use retry or auto")
+        return messages
+    if _config_token(action.get("granularity")) == "file":
+        messages.append(
+            f"repair: {repair} cannot run at file granularity — a multi-record "
+            "response can never satisfy the record-shaped structural gate; use "
+            "repair: none or record granularity"
+        )
+    schema = action.get("schema")
+    if schema is not None and not isinstance(schema, dict):
+        messages.append(
+            f"repair: {repair} found a non-mapping schema ({type(schema).__name__}); "
+            "the structural gate would silently check record shape only — fix the schema"
+        )
+    return messages
 
 
 def _default_suite_defects(

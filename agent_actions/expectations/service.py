@@ -280,11 +280,10 @@ def create_expectation_service_from_config(
         return None
 
     repair = expect_config.get("repair", "auto")
-    if repair != "none":
+    if isinstance(repair, dict):
         raise ConfigurationError(
-            f"Action '{action_name}' sets repair: {repair!r}, but this build only "
-            "implements observe mode. Use repair: none to validate and report "
-            "without regenerating.",
+            f"Action '{action_name}' uses the repair prompt-mapping form; custom "
+            "repair prompts are not implemented yet. Use repair: retry or auto.",
             context={"action": action_name, "repair": repair},
         )
 
@@ -348,5 +347,7 @@ def create_expectation_service_from_config(
         suite,
         repair=repair,
         judge=judge_dispatch,
+        max_iterations=expect_config.get("max_iterations", 3),
         schema=(agent_config or {}).get(SCHEMA_KEY),
+        on_exhausted=expect_config.get("on_exhausted", "return_last"),
     )
