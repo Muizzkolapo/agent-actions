@@ -14,8 +14,8 @@ their results, and the service that runs them around generation.
 | `loader.py` | Module | Builds a `Suite` from a schema-path file's rules — those declared under a `fields:` entry, which carry that field as their selector, and those in the file's own `expectations:` block (`load_named_suite` via `SchemaLoader`, `build_suite_from_schema_data`) — or from an action's inline list (`build_inline_suite`). | `output` |
 | `judge.py` | Module | `llm_judge` invocation, `votes:` majority voting, the per-action verdict cache (`CachedJudge`), and the per-run judge budget (`JudgeBudget`). `invoke_judge()` parses the model's verdict as strict JSON text, never a vendor-native structured-output schema — a malformed response is always a failure. | `processing` |
 | `runner.py` | Module | Evaluates every expectation against one record via `run_suite()`. A rule's `row_condition` argument is the first gate: false waives the rule (a passing outcome marked skipped, naming the condition), a condition that cannot be evaluated fails it, and the argument is withheld from the check. Deterministic types call `registry.get(...).check()` directly; `expression` dispatches to `expression.evaluate_condition` against the whole record before field resolution; `llm_judge` dispatches through an injected `judge` callable and an optional `context_source`, keeping this module free of any pipeline or network import. Every rule runs even after an earlier failure, and a check call that raises is isolated into a failed outcome (`check raised {Type}: ...`) with a warning-level traceback. Still raised, deliberately: an unregistered type, a judge dispatched with no caller wired, and a `None`-field expectation reaching field resolution without a record-scoped dispatch branch — each is a wiring bug, not a data outcome. | `validation` |
-| `service.py` | Module | Runs one generation through `ExpectationService.execute()`, taking the same `llm_operation` callable contract as `RepromptService`. Unwraps a real online record's length-1 list response before validating — `create_dynamic_agent` always returns `list[Any]`, so a bare dict is never what a real single-record call produces. `create_expectation_service_from_config()` is the composition point: it builds a `CachedJudge`/`JudgeBudget` pair from `agent_config`/`judge_budget` only when a suite actually contains `llm_judge`, and injects the composed dispatcher into `run_suite()`. `attach_verdict()` writes the verdict under the record's `expect` key. | `processing` |
-| `repair.py` | Module | Composes the `repair: auto` regeneration prompt from a failed iteration: the original prompt, the previous output as JSON, every failed expectation with severity, detail and the author's `hint`, and the list of passing expectations the regeneration must preserve. Outcomes that were never evaluated (judge budget) are omitted — they say nothing actionable — but a partly-skipped outcome that also holds a real failure is kept. Pipeline-free. | `processing` |
+| `service.py` | Module | Runs generation through `ExpectationService.execute()`, taking the same `llm_operation` callable contract as `RepromptService`. Under a repair policy it loops generate → unwrap → structural gate → suite up to `max_iterations`, returning as soon as the suite passes; observe mode (`repair: none`) is a single unlooped pass and never consults the schema. Unwraps a real online record's length-1 list response before validating — `create_dynamic_agent` always returns `list[Any]`, so a bare dict is never what a real single-record call produces. The structural gate turns a non-record response or a schema-non-conforming record into a synthetic `_structural` outcome (underscore-prefixed by convention; nothing validates authored ids against it, but collision is impossible by control flow — a structural failure returns its own `SuiteResult` *instead of* running the suite) carrying the validator's own feedback and a digest of the schema, computed lazily so a schema that will not JSON-canonicalize cannot crash construction. `_exhausted_result()` owns `on_exhausted`: `return_last` ships the annotated last attempt, `fail` returns the tombstone shape (`executed=False`, response `None`, verdict kept), `raise` raises `ExpectationsExhaustedError`. All loop state lives in `execute()` locals — one service serves every record of an action, possibly concurrently. `create_expectation_service_from_config()` is the composition point: it builds a `CachedJudge`/`JudgeBudget` pair from `agent_config`/`judge_budget` only when a suite actually contains `llm_judge`, threads `max_iterations`/`on_exhausted`/`schema`, and refuses the reserved `repair: {prompt:}` form. `attach_verdict()` writes the verdict under the record's `expect` key. | `processing` |
+| `repair.py` | Module | Composes the `repair: auto` regeneration prompt from a failed iteration: the original prompt, the previous output as JSON, every failed expectation with severity, detail and the author's `hint`, and the list of passing expectations the regeneration must preserve. Skipped outcomes are omitted from both lists — one that failed was never evaluated (judge budget), one that passed was waived by its `row_condition`, and neither is something the regeneration can be asked to preserve — but a partly-skipped outcome that also holds a real failure is kept. Pipeline-free. | `processing` |
 
 ## Project Surface
 
@@ -51,18 +51,24 @@ The engine core (`types`, `fields`, `registry`, `expression`, `loader`, `runner`
 nothing from `workflow/`, `processing/` or `storage/`. `service.py` is the only module here
 that knows about the pipeline.
 
-**Cost shape of the repair loop.** A repair policy multiplies LLM spend in two
-directions that are easy to under-budget. `judge_budget` is per action per run,
-and each regenerated response is a fresh cache key, so judged calls scale with
-iterations, not records — size the budget for `records x iterations`. Once it is
+**Cost shape of the repair loop.** `judge_budget` is per action per run and its
+units are acquired per rule per value, NOT per provider call — `votes: N` spends
+N real calls inside one unit, so divide by `votes` when sizing. The verdict
+cache keys on the resolved *field* value, not the response, so a repair that
+leaves a judged field untouched is still cache-served; iterations only multiply
+judge spend for rules whose fields actually change, making `records x
+iterations` an upper bound rather than the expected cost. Once the budget is
 spent, later records carry a skipped fail-severity outcome and can never reach a
 passing verdict, which is a bounded and deliberate degradation: the loop keeps
 repairing every other rule, and one measured attempt showed that abandoning
 those iterations early ships a strictly worse record for zero judge-call
 savings. Separately, `reprompt:` nests *inside* each iteration, so an action
-carrying both pays `max_iterations x reprompt.max_attempts x retry attempts` in
-the worst case (18 at the defaults) — with a repair policy the structural gate
-already covers schema mismatch, so `reprompt:` on the same action is redundant.
+carrying both pays `max_iterations x reprompt.max_attempts` in the worst case
+(6 at the defaults, more again when `retry:` is configured — it is not on by
+default). The structural gate covers schema mismatch, so a schema-only
+`reprompt:` block is redundant under `repair: auto`; a block that also runs a
+`validation:` UDF or `use_llm_critique`/`use_self_reflection` is NOT replaced by
+it, and deleting such a block silently drops those checks.
 
 **The prompt trace pairs the original prompt with the final response.** The
 trace row is written at prep time from the compiled prompt and updated once
