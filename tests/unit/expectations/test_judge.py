@@ -137,11 +137,57 @@ class TestVerdictParsingMatchesTheRestOfTheCodebase:
         assert passed is True
         assert detail == "reads as a scenario"
 
+    def test_prose_wrapped_verdict_is_read(self):
+        reply = 'Sure, here is my verdict:\n{"passed": true, "reason": "ok"}'
+        with patch(INVOKE, return_value=[{"content": reply}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is True
+        assert detail == "ok"
+
+    def test_trailing_comma_verdict_is_read(self):
+        with patch(INVOKE, return_value=[{"content": '{"passed": false, "reason": "no",}'}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert detail == "no"
+
+    def test_a_list_is_not_a_verdict(self):
+        with patch(INVOKE, return_value=[{"content": '[{"passed": true, "reason": "ok"}]'}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert "not a verdict object" in detail
+
+    def test_several_objects_take_the_last(self):
+        reply = '{"passed": true, "reason": "first"}\n{"passed": false, "reason": "second"}'
+        with patch(INVOKE, return_value=[{"content": reply}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert detail == "second"
+
     def test_unreadable_reply_still_fails_closed(self):
         with patch(INVOKE, return_value=[{"content": "The value is fine, I would pass it."}]):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
-        assert "The value is fine" in detail
+        assert "not a verdict object" in detail
+
+    def test_empty_reply_still_fails_closed(self):
+        with patch(INVOKE, return_value=[{"content": ""}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert "not a verdict object" in detail
+
+    def test_votes_are_tallied_across_dialects(self):
+        """The majority runs on parsed verdicts, so a dialect no longer costs a vote."""
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        replies = [
+            [{"content": self.PYTHON_LITERAL_PASS}],
+            [{"content": self.FENCED}],
+            [{"content": "I am not going to answer that."}],
+        ]
+        with patch(INVOKE, side_effect=replies):
+            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+        assert passed is True
+        assert detail == "2/3 judge votes passed"
 
 
 class TestRegistration:
