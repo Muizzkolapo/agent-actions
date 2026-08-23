@@ -87,6 +87,23 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
     """Defects for the repair-loop keys against the action's execution shape."""
     messages: list[str] = []
     is_batch = _config_token(action.get("run_mode")) == "batch"
+    if is_batch:
+        # Batch validates from the stored result and has no llm_context, so a
+        # judged rule with context: refs would fail every record on a missing
+        # context source rather than on its own rule.
+        entries = expect.get("expectations")
+        for entry in entries if isinstance(entries, list) else []:
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "llm_judge"
+                and entry.get("context")
+            ):
+                label = entry.get("id") or entry.get("type")
+                messages.append(
+                    f"{label}: context: refs are not available under batch run_mode — "
+                    "the judge would fail every record on a missing context source; "
+                    "drop context: or run the action online"
+                )
     repair = expect.get("repair", "auto")
     if repair == "none":
         return messages

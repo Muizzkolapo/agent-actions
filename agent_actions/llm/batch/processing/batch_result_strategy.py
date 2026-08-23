@@ -169,6 +169,9 @@ class BatchResultStrategy:
             exhausted_recovery,
         )
         ctx.reconciler = BatchResultReconciler(ctx.context_map)
+        # Built here, outside the per-record try: a bad expect: block is a
+        # config error for the whole action, not a failure of one record.
+        self._expectation_service(ctx)
 
         results = self._process_batch_results(ctx)
         results.extend(self._reconcile_passthroughs(ctx))
@@ -324,11 +327,22 @@ class BatchResultStrategy:
             )
 
             agent_config = ctx.agent_config or {}
-            ctx.expectation_service = create_expectation_service_from_config(
+            service = create_expectation_service_from_config(
                 agent_config.get("expect"),
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
             )
+            if service is not None and service.repair != "none":
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{agent_config.get('action_name')}' reached the batch "
+                    f"path with repair: {service.repair!r}. The batch path validates "
+                    "and reports but does not regenerate, so this would silently "
+                    "behave as repair: none. Use repair: none, or run it online.",
+                    context={"action": agent_config.get("action_name")},
+                )
+            ctx.expectation_service = service
         return ctx.expectation_service
 
     def _process_successful_result(

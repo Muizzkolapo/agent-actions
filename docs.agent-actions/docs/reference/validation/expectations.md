@@ -363,7 +363,7 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 
 ## Current limitations
 
-- **Online mode only.** Expectations run on the online path. An `expect:` block on a `run_mode: batch` action is refused at preflight rather than silently ignored, and expectation recovery metadata is not carried across a batch reload.
+- **Repair is online only.** The checks themselves run in both modes and attach the same verdict, so `expect:` with `repair: none` behaves identically whichever `run_mode` you set. Regeneration does not: the batch path validates and reports but does not yet re-submit failing records, so `repair: retry`/`auto` on a batch action is refused at preflight rather than silently ignored. Expectation recovery metadata is also not carried across a batch reload.
 - **Record granularity only.** A repair policy needs one record per response to validate; preflight refuses `repair` on a `granularity: file` action. Observe mode on such an action attaches a verdict only when the response happens to hold exactly one record; a multi-record response is passed through unvalidated.
 - **No custom repair prompt.** The `repair: {prompt: $wf.X}` mapping form is reserved in the schema but not implemented; it is refused with a message saying so. Use `retry` or `auto`.
 - **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight; observe mode works normally.
