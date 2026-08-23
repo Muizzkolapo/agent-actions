@@ -151,6 +151,19 @@ class ExpectationService:
                     iterations,
                     ", ".join(o.id for o in suite_result.failed),
                 )
+                skipped_fail = [
+                    o.id for o in suite_result.outcomes if o.skipped and o.severity == "fail"
+                ]
+                if skipped_fail:
+                    # A budget- or context-skipped fail-severity rule cannot be
+                    # satisfied by regenerating; burn no more iterations.
+                    logger.info(
+                        "[%s] Fail-severity rule(s) skipped and unsatisfiable (%s); "
+                        "ending the repair loop",
+                        context or "expectations",
+                        ", ".join(skipped_fail),
+                    )
+                    return self._exhausted_result(response, suite_result, iteration)
 
         if self.repair == "none":
             return ExpectationRunResult(
