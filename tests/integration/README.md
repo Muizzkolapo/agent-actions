@@ -72,3 +72,49 @@ pytest tests/integration/test_retry_reprompt_audit.py -v
 ```
 
 All tests are deterministic, mock all I/O, and complete in < 1 second.
+
+---
+
+## test_repair_loop_audit.py
+
+Audit of the expectations repair loop (`expect:` with a `repair:` policy). 20 tests, all driven through the **real `agac run` CLI against a project scaffolded on disk**. Only the provider call is mocked, so the config loader, action expander, preflight, invocation strategy, loop, record envelope and SQLite store all execute for real.
+
+### Why CLI-level rather than service-level
+
+The two genuine bugs this subsystem shipped with were both invisible to tests that mocked the generation seam directly:
+
+- a real online record arrives as a **length-1 list**, not a bare dict, so validation silently never ran;
+- `agent_config["expect"]` was **never forwarded** through the action expander.
+
+Both were caught only by driving the actual CLI. These tests keep that path covered.
+
+### Coverage
+
+| Class | Tests | What it covers |
+|-------|-------|----------------|
+| `TestRepairSucceeds` | 4 | Regenerated record ships; a passing first attempt costs one call; `auto` sends the failure detail, the hint and the previous output to the model; `retry` re-sends the original prompt |
+| `TestStructuralGate` | 3 | A schema-violating record is repaired; the `_structural` failure reaches the repair prompt; observe mode never applies the gate |
+| `TestExhaustion` | 5 | `return_last` ships the annotated record; `fail` refuses to ship it; `fail` matches reprompt exhaustion exactly; `raise` halts the run; `max_iterations` counts the first generation |
+| `TestObserveMode` | 2 | One call, verdict attached, record unchanged — passing and failing |
+| `TestVerdictAsAGate` | 2 | A repaired record satisfies a downstream `guard:` on `expect.overall_pass`; an unrepaired one is filtered |
+| `TestExtensionPointsDriveRepair` | 2 | A project's own `@expectation_check` from `tools/` drives regeneration and its detail reaches the prompt; an `expression` rule does the same |
+| `TestPreflightRefusals` | 2 | `repair` at file granularity and on a batch action are refused before any provider call |
+
+### Mutation-verified
+
+The suite was checked against four deliberate regressions in `agent_actions/expectations/service.py`; each is caught:
+
+| Mutation | Tests that fail |
+|---|---|
+| Loop never iterates (`iterations = 1`) | 11 |
+| `auto` degrades to `retry` (composed feedback never sent) | 3 |
+| Structural gate disabled | 1 |
+| `on_exhausted: raise` ignored | 1 |
+
+### Running
+
+```bash
+pytest tests/integration/test_repair_loop_audit.py -v
+```
+
+Deterministic, no network, ~1.7s.
