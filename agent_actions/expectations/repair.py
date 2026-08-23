@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from agent_actions.expectations.types import Outcome, SuiteResult
@@ -29,12 +30,18 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
+_RECORD_INDEX = re.compile(r"\[\d+\]$")
+
+
 def _hint_for(outcome_id: str, hints: dict[str, str]) -> str | None:
-    """The author's hint for an outcome, whose id may carry a record index."""
+    """The author's hint for an outcome, whose id may carry a record index.
+
+    Only a trailing ``[n]`` is stripped, so a rule genuinely named
+    ``latency[p99]`` keeps its own hint instead of borrowing ``latency``'s.
+    """
     if outcome_id in hints:
         return hints[outcome_id]
-    base = outcome_id.rsplit("[", 1)[0]
-    return hints.get(base)
+    return hints.get(_RECORD_INDEX.sub("", outcome_id))
 
 
 def _failed_line(outcome: Outcome, hint: str | None) -> str:

@@ -137,9 +137,9 @@ def _repair_mode_defects(
         )
     if _config_token(action.get("granularity")) == "file":
         messages.append(
-            f"repair: {repair} cannot run at file granularity — a multi-record "
-            "response can never satisfy the record-shaped structural gate; use "
-            "repair: none or record granularity"
+            f"repair: {repair} cannot run at file granularity — one call "
+            "produces the whole file, so a single failing record would "
+            "regenerate all of them; use repair: none or record granularity"
         )
     schema = action.get("schema")
     if schema is not None and not isinstance(schema, dict):
