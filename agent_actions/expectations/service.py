@@ -50,10 +50,20 @@ def _records_of(response: Any) -> list[dict[str, Any]] | None:
 
 
 def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
-    """One verdict for the whole response: it passes only if every record does."""
+    """One verdict for the whole response: it passes only if every record does.
+
+    With several records the same authored id appears once per record, so each
+    outcome is tagged with its record index — otherwise a rule that failed on
+    one record and passed on another is reported as both, and the repair prompt
+    asks the model to fix and preserve the same thing.
+    """
     if len(results) == 1:
         return results[0]
-    outcomes = [outcome for result in results for outcome in result.outcomes]
+    outcomes = [
+        outcome.model_copy(update={"id": f"{outcome.id}[{index}]"})
+        for index, result in enumerate(results)
+        for outcome in result.outcomes
+    ]
     return SuiteResult(suite_name=suite_name, outcomes=outcomes)
 
 
@@ -149,9 +159,9 @@ class ExpectationService:
                     return ExpectationRunResult(response=response, executed=executed)
                 suite_results = self._validate_records(records, llm_context)
             else:
-                structural = self._structural_result(response, records)
+                structural = self._structural_results(response, records)
                 suite_results = (
-                    [structural]
+                    structural
                     if structural is not None
                     else self._validate_records(records or [], llm_context)
                 )
@@ -272,6 +282,25 @@ class ExpectationService:
                 original_prompt, last_response, last_suite_result, self._hints
             )
         return original_prompt
+
+    def _structural_results(
+        self, response: Any, records: list[dict[str, Any]] | None
+    ) -> list[SuiteResult] | None:
+        """One verdict per record when any is not schema-conforming, else None.
+
+        Each record carries its own outcome so a conforming record is never
+        annotated with another record's failure.
+        """
+        if records is None:
+            single = self._structural_result(response, None)
+            return [single] if single is not None else None
+        per_record = [self._structural_result(record, [record]) for record in records]
+        if all(result is None for result in per_record):
+            return None
+        return [
+            result if result is not None else SuiteResult(suite_name=self.suite.name, outcomes=[])
+            for result in per_record
+        ]
 
     def _structural_result(
         self, response: Any, records: list[dict[str, Any]] | None = None

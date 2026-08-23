@@ -87,7 +87,11 @@ class OnlineStrategy(InvocationStrategy):
                 llm_context=task.llm_context,
             )
             response, executed = run.response, run.executed
-            if run.exhausted and (not executed or not isinstance(response, dict)):
+            annotatable = bool(run.suite_results) and (
+                isinstance(response, dict)
+                or (isinstance(response, list) and len(response) == len(run.suite_results or []))
+            )
+            if run.exhausted and (not executed or not annotatable):
                 # Exhaustion with nothing annotatable (fail mode, or return_last
                 # ending on a non-record) routes to the tombstone channel.
                 response, executed = None, False
@@ -104,12 +108,14 @@ class OnlineStrategy(InvocationStrategy):
 
                 if isinstance(response, dict):
                     response = attach_verdict(response, run.suite_results[0])
-                elif isinstance(response, list):
+                elif isinstance(response, list) and len(response) == len(run.suite_results):
                     # An expansion carries one record per element; each gets the
-                    # verdict for its own content, not the combined one.
+                    # verdict for its own content, not the combined one. strict
+                    # pairing so a length mismatch raises rather than dropping
+                    # records off the end.
                     response = [
                         attach_verdict(record, verdict)
-                        for record, verdict in zip(response, run.suite_results, strict=False)
+                        for record, verdict in zip(response, run.suite_results, strict=True)
                     ]
         else:
             response, executed = generate(task.formatted_prompt)

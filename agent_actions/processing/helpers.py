@@ -151,16 +151,29 @@ def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
     return result
 
 
+def _content_keys(record: Any) -> int:
+    """How many real content keys a record has, ignoring the attached verdict.
+
+    An expectations verdict is framework metadata, not output — a record that
+    carries nothing else is still empty.
+    """
+    from agent_actions.expectations.service import VERDICT_KEY
+
+    if not isinstance(record, dict):
+        return 1
+    return len([key for key in record if key != VERDICT_KEY])
+
+
 def _is_empty_output(response: Any) -> bool:
     """Check if a tool/LLM response is effectively empty."""
     if response is None:
         return True
-    if isinstance(response, dict) and len(response) == 0:
+    if isinstance(response, dict) and _content_keys(response) == 0:
         return True
     if isinstance(response, list):
         if len(response) == 0:
             return True
-        if all(isinstance(item, dict) and len(item) == 0 for item in response):
+        if all(isinstance(item, dict) and _content_keys(item) == 0 for item in response):
             return True
     return False
 
