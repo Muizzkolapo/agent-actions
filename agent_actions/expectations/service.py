@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
+from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Suite, SuiteResult
 
@@ -49,6 +50,7 @@ class ExpectationService:
         self.repair = repair
         self._judge = judge
         self._max_iterations = max_iterations
+        self._hints = {e.resolved_id: e.hint for e in suite.expectations if e.hint}
 
     def execute(
         self,
@@ -66,7 +68,9 @@ class ExpectationService:
         last_suite_result: SuiteResult | None = None
 
         for iteration in range(1, iterations + 1):
-            response, executed = llm_operation(self._prompt_for(iteration, original_prompt))
+            response, executed = llm_operation(
+                self._prompt_for(iteration, original_prompt, last_response, last_suite_result)
+            )
 
             # A real record-granularity online call arrives as a length-1 list, not a
             # bare dict; a longer list (file granularity) has no expect: semantics.
@@ -120,8 +124,23 @@ class ExpectationService:
             exhausted=self.repair != "none",
         )
 
-    def _prompt_for(self, iteration: int, original_prompt: str) -> str:
-        """The prompt for one generation; retry always re-samples the original."""
+    def _prompt_for(
+        self,
+        iteration: int,
+        original_prompt: str,
+        last_response: dict[str, Any] | None,
+        last_suite_result: SuiteResult | None,
+    ) -> str:
+        """The prompt for one generation; retry re-samples the original, auto composes feedback."""
+        if (
+            self.repair == "auto"
+            and iteration > 1
+            and last_response is not None
+            and last_suite_result is not None
+        ):
+            return compose_repair_prompt(
+                original_prompt, last_response, last_suite_result, self._hints
+            )
         return original_prompt
 
 
