@@ -102,30 +102,6 @@ class EvaluationLoop:
             )
             result.recovery_metadata = meta
 
-    def build_resubmission(self, failed: list[BatchResult], context_map: dict) -> list[dict]:
-        """Append strategy.build_feedback() to each, return submission records."""
-        submissions: list[dict] = []
-
-        for result in failed:
-            custom_id = result.custom_id
-            context = context_map.get(custom_id, {})
-            feedback = self.strategy.build_feedback(result)
-
-            submission = {
-                "custom_id": custom_id,
-                "context": context,
-                "feedback": feedback,
-                "user_content": context.get("user_content", "") + "\n\n" + feedback,
-            }
-            submissions.append(submission)
-
-        logger.info(
-            "EvaluationLoop[%s].build_resubmission: %d records",
-            self.strategy.name,
-            len(submissions),
-        )
-        return submissions
-
 
 def accumulate_failure_types(
     target: dict[str, dict[str, int]],

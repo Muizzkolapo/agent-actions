@@ -316,30 +316,3 @@ class TestGraduatedPoolIntegration:
 
         assert [r.custom_id for r in graduated] == ["pass-1", "pass-2"]
         assert [r.custom_id for r in failing] == ["api-fail", "val-fail"]
-
-    def test_api_failure_resubmission_uses_api_error_feedback(self):
-        """Resubmission of API-failed records uses API error feedback, not validation."""
-        strategy = ValidationStrategy(validation_func=_always_fail, feedback_message="validate")
-        loop = EvaluationLoop(strategy)
-        result = _make_result("api-fail", content=None, success=False)
-        context_map = {"api-fail": {"user_content": "original prompt"}}
-
-        submissions = loop.build_resubmission([result], context_map)
-
-        assert len(submissions) == 1
-        assert "API error" in submissions[0]["feedback"]
-        assert "validate" not in submissions[0]["feedback"]
-
-    def test_build_feedback_for_failing(self):
-        strategy = ValidationStrategy(
-            validation_func=_always_fail, feedback_message="Missing required field"
-        )
-        loop = EvaluationLoop(strategy)
-        result = _make_result("r1", content={"incomplete": True})
-        context_map = {"r1": {"user_content": "original prompt"}}
-
-        submissions = loop.build_resubmission([result], context_map)
-
-        assert len(submissions) == 1
-        assert "Missing required field" in submissions[0]["feedback"]
-        assert "original prompt" in submissions[0]["user_content"]
