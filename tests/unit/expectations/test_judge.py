@@ -84,7 +84,7 @@ class TestInvokeJudge:
         with patch(INVOKE, return_value=[{"content": "not json at all"}]):
             passed, detail = invoke_judge(_agent_config(), "rule", "value")
         assert passed is False
-        assert "not valid JSON" in detail
+        assert "not a verdict object" in detail
 
     def test_missing_passed_key_is_a_failure(self):
         with patch(INVOKE, return_value=[{"content": json.dumps({"reason": "no verdict field"})}]):
