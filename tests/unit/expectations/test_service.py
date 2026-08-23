@@ -729,3 +729,95 @@ def test_auto_repair_hint_reaches_the_composed_prompt():
 
     ExpectationService(hinted_suite, repair="auto", max_iterations=2).execute(flaky, "O")
     assert "brainstorm additional distinct ideas" in prompts[1]
+
+
+JUDGED_TWO_FIELD = [
+    {"id": "count", "type": "item_count", "field": "ideas", "min": 2},
+    {"id": "on_topic", "type": "llm_judge", "field": "title", "rule": "on topic"},
+]
+JUDGE_AGENT = {"model_vendor": "anthropic", "model_name": "claude-sonnet-5"}
+
+
+def test_a_repair_that_keeps_a_judged_field_identical_reuses_the_cached_verdict():
+    service = create_expectation_service_from_config(
+        {"expectations": JUDGED_TWO_FIELD, "repair": "retry", "max_iterations": 3},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    responses = iter([{"ideas": ["a"], "title": "T"}, {"ideas": ["a", "b"], "title": "T"}])
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+    mock_invoke.assert_called_once()
+
+
+def test_a_budget_exhausted_mid_loop_never_produces_a_false_green():
+    service = create_expectation_service_from_config(
+        {
+            "expectations": JUDGED_TWO_FIELD,
+            "repair": "retry",
+            "max_iterations": 3,
+            "judge_budget": 1,
+        },
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    titles = iter(["T1", "T2", "T3"])
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        result = service.execute(lambda p: ({"ideas": ["a"], "title": next(titles)}, True), "P")
+    assert result.suite_result.overall_pass is False
+    assert result.exhausted is True
+    assert any(o.skipped and o.severity == "fail" for o in result.suite_result.outcomes)
+
+
+def test_a_deterministic_failure_does_not_short_circuit_judged_rules():
+    service = create_expectation_service_from_config(
+        {"expectations": JUDGED_TWO_FIELD, "repair": "none"},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: ({"ideas": ["a"], "title": "T"}, True), "P")
+    mock_invoke.assert_called_once()
+    assert [(o.id, o.passed) for o in result.suite_result.outcomes] == [
+        ("count", False),
+        ("on_topic", True),
+    ]
+
+
+def test_a_budget_skipped_fail_rule_ends_the_loop_without_burning_iterations():
+    # Once a fail-severity rule is budget-skipped, no regeneration can ever
+    # satisfy it -- the loop must exit to on_exhausted instead of spending
+    # the remaining generations.
+    service = create_expectation_service_from_config(
+        {
+            "expectations": JUDGED_TWO_FIELD,
+            "repair": "retry",
+            "max_iterations": 3,
+            "judge_budget": 1,
+        },
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    titles = iter(["T1", "T2", "T3"])
+    calls = []
+
+    def generate(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"], "title": next(titles)}, True
+
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        result = service.execute(generate, "P")
+    assert len(calls) == 2
+    assert result.iterations == 2
+    assert result.exhausted is True
+    assert result.suite_result.overall_pass is False
