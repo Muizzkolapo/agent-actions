@@ -938,12 +938,12 @@ class TestExpansionResponses:
         assert result.iterations == 2
         assert result.suite_result.overall_pass is True
 
-    def test_a_list_holding_a_non_record_is_still_not_validated(self):
+    def test_a_list_holding_a_non_record_validates_the_records_beside_it(self):
         result = ExpectationService(SUITE, repair="none").execute(
             lambda p: ([PASS_RECORD, "not a record"], True), "P"
         )
-        assert result.suite_result is None
-        assert result.suite_results is None
+        assert [s.overall_pass for s in result.suite_results] == [True, False]
+        assert result.suite_result.overall_pass is False
 
 
 def test_a_structural_failure_yields_one_verdict_per_record():
