@@ -47,6 +47,7 @@ class RecoveryState:
     # Repair state (expect: regeneration rounds)
     repair_attempt: int = 0
     repair_submitted_ids: list[str] = field(default_factory=list)
+    repair_judge_budget_remaining: int | None = None
     repair_max_attempts: int = 1
 
     # Accumulated results (serialized BatchResult dicts)
@@ -68,9 +69,12 @@ class RecoveryState:
         """Every declared field, so adding one cannot silently stop persisting it.
 
         A dropped field does not fail loudly: the deferred loop reads it back as
-        the dataclass default on the next pass and never advances.
+        the dataclass default on the next pass and never advances. Only
+        init fields, since load() reconstructs via ``RecoveryState(**data)`` and
+        an unexpected keyword there raises a TypeError that load swallows —
+        wiping the whole state rather than reporting it.
         """
-        return {f.name: getattr(self, f.name) for f in fields(self)}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.init}
 
 
 class RecoveryStateManager:

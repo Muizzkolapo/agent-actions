@@ -294,6 +294,17 @@ def handle_reprompt_recovery(
         final_results = deserialize_results(state.graduated_results)
         final_results.extend(deserialize_results(state.unrepromptable_results))
         final_results.extend(recovery_results)
+        # Repair still owes these records a verdict: under a repair policy the
+        # result assembler does not write one, so a finalize that skips this
+        # check ships them with no `expect` block at all.
+        if not check_and_submit_repair(
+            context,
+            identity,
+            batch_results=final_results,
+            context_map=context_map,
+            recovery_state=None,
+        ):
+            return None
         return _finalize_and_cleanup(
             context,
             identity,
@@ -689,6 +700,7 @@ def check_and_submit_repair(
     from agent_actions.llm.batch.services.repair_ops import (
         apply_exhaustion_policy,
         build_repair_strategy,
+        carry_forward,
         stamp_exhausted,
         submit_repair_batch,
     )
@@ -698,12 +710,27 @@ def check_and_submit_repair(
     if strategy is None:
         return True
 
+    # The counter lives in persisted state, so read it here rather than trust
+    # whichever caller happened to have it: an entry point that receives None
+    # and reads it as attempt 0 can never stop iterating.
+    if recovery_state is None:
+        recovery_state = RecoveryStateManager.load(
+            context.service._storage_backend,
+            context.service._resolve_action_name(context.action_name),
+            identity.file_name,
+        )
+
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(batch_results)
     loop.tag_graduated(graduated)
     strategy.write_verdicts(graduated)
 
+    # A result with no content failed at the provider, not at its expectations,
+    # so there is nothing to regenerate from. It still has to reach the output
+    # carrying its own error — dropping it here would turn a reported API
+    # failure into a silent "never returned" passthrough.
     repairable = [r for r in still_failing if r.content is not None]
+    unrepairable = [r for r in still_failing if r.content is None]
     if not repairable:
         strategy.write_verdicts(still_failing)
         return True
@@ -746,14 +773,13 @@ def check_and_submit_repair(
         next_attempt,
     )
 
-    state = RecoveryState(
-        phase=RecoveryPhase.REPAIR,
+    state = carry_forward(
+        recovery_state,
         repair_attempt=next_attempt,
         repair_max_attempts=max_rounds,
-        evaluation_strategy_name=strategy.name,
-        graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
-        + serialize_results(graduated),
-        accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
+        graduated=graduated + unrepairable,
+        submitted_ids=[r.custom_id for r in repairable],
+        judge_budget_remaining=strategy.judge_budget_remaining,
     )
     RecoveryStateManager.save(
         context.service._storage_backend,
@@ -783,12 +809,13 @@ def handle_repair_recovery(
     from agent_actions.llm.batch.services.repair_ops import (
         apply_exhaustion_policy,
         build_repair_strategy,
+        dropped_from,
         stamp_exhausted,
         submit_repair_batch,
     )
     from agent_actions.processing.evaluation import EvaluationLoop
 
-    strategy = build_repair_strategy(context.agent_config)
+    strategy = build_repair_strategy(context.agent_config, state.repair_judge_budget_remaining)
     prior = deserialize_results(state.graduated_results)
 
     if strategy is None:
@@ -805,6 +832,33 @@ def handle_repair_recovery(
     strategy.write_verdicts(graduated)
     state.graduated_results.extend(serialize_results(graduated))
     state.evaluation_strategy_name = strategy.name
+
+    # A record submitted for repair that the provider never returned is in
+    # neither bucket. It still has to reach the output, carrying the verdict it
+    # had when it was sent.
+    dropped_ids = dropped_from(state.repair_submitted_ids, recovery_results)
+    if dropped_ids:
+        logger.warning(
+            "[%s] Repair round %d: provider dropped %d record(s): %s",
+            identity.file_name,
+            state.repair_attempt,
+            len(dropped_ids),
+            sorted(dropped_ids),
+        )
+        # The record was sent for repair, so it is in none of the pools this
+        # pass has: it must be reconstructed as a failure rather than left to
+        # become a silent "never returned" passthrough.
+        dropped = [
+            BatchResult(
+                custom_id=cid,
+                content=None,
+                success=False,
+                error=f"Repair round {state.repair_attempt} did not return this record",
+            )
+            for cid in sorted(dropped_ids)
+        ]
+        stamp_exhausted(dropped, strategy, state.repair_attempt)
+        still_failing.extend(dropped)
 
     repairable = [r for r in still_failing if r.content is not None]
     if repairable and state.repair_attempt < state.repair_max_attempts:
@@ -832,6 +886,8 @@ def handle_repair_recovery(
                 next_attempt,
             )
             state.repair_attempt = next_attempt
+            state.repair_submitted_ids = [r.custom_id for r in repairable]
+            state.repair_judge_budget_remaining = strategy.judge_budget_remaining
             RecoveryStateManager.save(
                 context.service._storage_backend,
                 context.service._resolve_action_name(context.action_name),
@@ -846,11 +902,21 @@ def handle_repair_recovery(
         apply_exhaustion_policy(still_failing, strategy, identity.file_name)
 
     final_results = deserialize_results(state.graduated_results) + still_failing
+
+    # Rebuilt from the retry bookkeeping the repair round carried forward, so a
+    # record's retry exhaustion is not lost just because a repair also happened.
+    exhausted_recovery = None
+    if state.missing_ids:
+        exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
+            set(state.missing_ids), state.record_failure_counts
+        )
+
     return _finalize_and_cleanup(
         context,
         identity,
         batch_results=final_results,
         context_map=context_map,
+        exhausted_recovery=exhausted_recovery,
     )
 
 

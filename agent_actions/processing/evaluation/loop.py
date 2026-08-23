@@ -47,14 +47,23 @@ class EvaluationLoop:
         self.strategy = strategy
 
     def _is_already_graduated(self, result: BatchResult) -> bool:
-        """Check if a result was already graduated in a prior cycle."""
+        """Whether *this* strategy already passed the record in a prior cycle.
+
+        The flag names the strategy that set it: several loops run over the same
+        results, and one loop's pass says nothing about another's rules. Without
+        the name, a record reprompt graduated would skip its expectations
+        entirely — no repair, and no verdict, since nothing else validates under
+        a repair policy.
+        """
         meta = getattr(result, "recovery_metadata", None)
         if meta is None:
             return False
         eval_meta = getattr(meta, "evaluation", None)
         if eval_meta is None:
             return False
-        return getattr(eval_meta, "passed", False) is True
+        if getattr(eval_meta, "passed", False) is not True:
+            return False
+        return getattr(eval_meta, "strategy_name", None) == self.strategy.name
 
     def split(
         self, results: list[BatchResult]

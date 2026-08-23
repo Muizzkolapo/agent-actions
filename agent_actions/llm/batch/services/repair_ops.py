@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
 
 if TYPE_CHECKING:
+    from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
     from agent_actions.processing.evaluation.strategies import ExpectationStrategy
     from agent_actions.storage.backend import StorageBackend
@@ -22,8 +23,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_repair_strategy(agent_config: dict[str, Any] | None) -> ExpectationStrategy | None:
-    """The action's repair strategy, or None when it does not repair."""
+def build_repair_strategy(
+    agent_config: dict[str, Any] | None,
+    judge_budget_remaining: int | None = None,
+) -> ExpectationStrategy | None:
+    """The action's repair strategy, or None when it does not repair.
+
+    Each deferred round rebuilds this, so the judge budget left from the
+    previous round is handed back in — otherwise the budget would bound a round
+    instead of the run, and `max_iterations` rounds could spend that many times
+    the configured cap.
+    """
     from agent_actions.expectations.service import create_expectation_service_from_config
     from agent_actions.processing.evaluation.strategies import ExpectationStrategy
 
@@ -32,6 +42,7 @@ def build_repair_strategy(agent_config: dict[str, Any] | None) -> ExpectationStr
         config.get("expect"),
         action_name=config.get("action_name") or config.get("name", "unknown"),
         agent_config=config,
+        judge_budget_remaining=judge_budget_remaining,
     )
     if service is None or service.repair == "none":
         return None
@@ -151,13 +162,56 @@ def submit_repair_batch(
     return batch_id, len(prepared.tasks)
 
 
-def carry_forward(prior, *, repair_attempt, repair_max_attempts, graduated, submitted_ids=None):
-    """Placeholder."""
+def carry_forward(
+    prior: RecoveryState | None,
+    *,
+    repair_attempt: int,
+    repair_max_attempts: int,
+    graduated: list[BatchResult],
+    submitted_ids: list[str] | None = None,
+    judge_budget_remaining: int | None = None,
+) -> RecoveryState:
+    """The state a repair round persists, keeping what retry and reprompt put there.
+
+    Finalisation rebuilds `exhausted_recovery` from `missing_ids` and
+    `record_failure_counts`, so a repair round that replaced the state with a
+    fresh one would drop every record's retry-exhaustion metadata purely because
+    a repair happened to fire.
+    """
+    from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
     from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
+    from agent_actions.llm.batch.services.retry_serialization import serialize_results
 
-    return RecoveryState()
+    state = RecoveryState(
+        phase=RecoveryPhase.REPAIR,
+        repair_attempt=repair_attempt,
+        repair_max_attempts=repair_max_attempts,
+        repair_submitted_ids=list(submitted_ids or []),
+        repair_judge_budget_remaining=judge_budget_remaining,
+        graduated_results=(list(prior.graduated_results) if prior else [])
+        + serialize_results(graduated),
+        evaluation_strategy_name="expectations",
+    )
+    if prior is None:
+        return state
+
+    state.missing_ids = list(prior.missing_ids)
+    state.record_failure_counts = dict(prior.record_failure_counts)
+    state.retry_attempt = prior.retry_attempt
+    state.retry_max_attempts = prior.retry_max_attempts
+    state.reprompt_attempt = prior.reprompt_attempt
+    state.reprompt_max_attempts = prior.reprompt_max_attempts
+    state.reprompt_attempts_per_record = dict(prior.reprompt_attempts_per_record)
+    state.validation_name = prior.validation_name
+    state.validation_status = dict(prior.validation_status)
+    state.on_exhausted = prior.on_exhausted
+    state.accumulated_results = list(prior.accumulated_results)
+    state.failure_type_counts = dict(prior.failure_type_counts)
+    return state
 
 
-def dropped_from(submitted_ids, returned):
-    """Placeholder."""
-    return set()
+def dropped_from(submitted_ids: list[str], returned: list[BatchResult]) -> set[str]:
+    """The ids sent in a repair round that the provider never returned."""
+    from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+
+    return set(submitted_ids) - BatchResultReconciler.collect_result_custom_ids(returned)

@@ -40,6 +40,11 @@ class ExpectationStrategy:
     def on_exhausted(self) -> str:
         return self._service.on_exhausted
 
+    @property
+    def judge_budget_remaining(self) -> int | None:
+        """Judge calls left, for the next deferred round to start from."""
+        return self._service.judge_budget_remaining
+
     def verdict_for(self, custom_id: str) -> SuiteResult | None:
         """The verdict this strategy last computed for a record."""
         return self._verdicts.get(custom_id)

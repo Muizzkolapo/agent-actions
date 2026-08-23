@@ -67,8 +67,13 @@ def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
     return SuiteResult(suite_name=suite_name, outcomes=outcomes)
 
 
-class ExpectationsExhaustedError(Exception):
-    """The repair loop ended without a pass and ``on_exhausted`` is ``raise``."""
+class ExpectationsExhaustedError(RuntimeError):
+    """The repair loop ended without a pass and ``on_exhausted`` is ``raise``.
+
+    A RuntimeError so it halts the run: the batch result loop re-raises those
+    and logs-and-continues past anything else, and ``raise`` is the policy that
+    is supposed to stop everything.
+    """
 
     def __init__(self, action_name: str, failed_ids: list[str], iterations: int) -> None:
         self.action_name = action_name
@@ -116,6 +121,9 @@ class ExpectationService:
         self._schema = schema if isinstance(schema, dict) else None
         self._schema_digest: str | None = None
         self._hints = {e.resolved_id: e.hint for e in suite.expectations if e.hint}
+        # Set by the factory when the suite judges; the deferred batch path
+        # reads what is left so the budget bounds the run, not one round.
+        self._judge_budget: Any = None
 
     def execute(
         self,
@@ -207,6 +215,16 @@ class ExpectationService:
                 suite_results=suite_results,
             )
         return self._exhausted_result(response, suite_result, iterations, suite_results)
+
+    @property
+    def judge_budget_remaining(self) -> int | None:
+        """Judge calls still available, or None when the budget is uncapped.
+
+        A deferred batch rebuilds this service on every pass, so the caller
+        persists this between rounds to keep the budget bounding the run rather
+        than each round.
+        """
+        return self._judge_budget.remaining if self._judge_budget is not None else None
 
     @property
     def max_iterations(self) -> int:
@@ -415,8 +433,14 @@ def create_expectation_service_from_config(
     schema_name: str | None = None,
     agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
+    judge_budget_remaining: int | None = None,
 ) -> ExpectationService | None:
-    """Build a service from an action's ``expect:`` block, or None if absent."""
+    """Build a service from an action's ``expect:`` block, or None if absent.
+
+    ``judge_budget_remaining`` replaces the configured budget for this
+    construction. A deferred batch rebuilds the service each pass, so the caller
+    carries the balance rather than letting every round start from full.
+    """
     from agent_actions.errors import ConfigurationError
 
     if expect_config is None:
@@ -464,7 +488,14 @@ def create_expectation_service_from_config(
         from agent_actions.expectations.judge import CachedJudge, JudgeBudget
 
         cached_judge = CachedJudge(agent_config or {}, action_name=action_name)
-        budget = JudgeBudget(expect_config.get("judge_budget"))
+        # judge_budget bounds the whole run, not one construction of the
+        # service. A deferred batch rebuilds the service on each pass, so the
+        # caller carries what is left and hands it back here.
+        budget = JudgeBudget(
+            judge_budget_remaining
+            if judge_budget_remaining is not None
+            else expect_config.get("judge_budget")
+        )
 
         def judge_dispatch(
             expectation: Expectation, value: Any, context: dict[str, Any] | None
@@ -486,7 +517,7 @@ def create_expectation_service_from_config(
                 return False, f"judge call failed: {exc}", False
             return passed, detail, False
 
-    return ExpectationService(
+    service = ExpectationService(
         suite,
         repair=repair,
         judge=judge_dispatch,
@@ -494,3 +525,5 @@ def create_expectation_service_from_config(
         schema=(agent_config or {}).get(SCHEMA_KEY),
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
     )
+    service._judge_budget = budget if judge_dispatch is not None else None
+    return service
