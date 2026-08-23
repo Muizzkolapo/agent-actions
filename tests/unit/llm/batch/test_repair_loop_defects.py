@@ -168,3 +168,53 @@ class TestRecordsTheProviderDropsAreNotLost:
 
         returned = [BatchResult(custom_id="r1", content={"score": 1}, success=True)]
         assert dropped_from(["r1"], returned) == set()
+
+
+class TestTheGraduatedPoolIsASet:
+    """A record graduates once, however many times its batch is re-processed.
+
+    The original batch stays COMPLETED at the provider, so every resume
+    re-processes it and re-graduates the same records. Appending them to the
+    persisted pool ships each one again for the same source.
+    """
+
+    def test_re_graduating_a_record_does_not_duplicate_it(self):
+        from agent_actions.llm.batch.services.repair_ops import carry_forward
+
+        ok = BatchResult(custom_id="ok", content={"score": 5}, success=True)
+        first = carry_forward(None, repair_attempt=1, repair_max_attempts=2, graduated=[ok])
+        second = carry_forward(first, repair_attempt=1, repair_max_attempts=2, graduated=[ok])
+        assert [r["custom_id"] for r in second.graduated_results] == ["ok"]
+
+    def test_a_later_verdict_for_the_same_record_replaces_the_earlier_one(self):
+        from agent_actions.llm.batch.services.repair_ops import carry_forward
+
+        first_try = BatchResult(custom_id="r1", content={"score": -1}, success=True)
+        repaired = BatchResult(custom_id="r1", content={"score": 9}, success=True)
+        first = carry_forward(None, repair_attempt=1, repair_max_attempts=2, graduated=[first_try])
+        second = carry_forward(first, repair_attempt=2, repair_max_attempts=2, graduated=[repaired])
+        assert len(second.graduated_results) == 1
+        assert second.graduated_results[0]["content"]["score"] == 9
+
+    def test_distinct_records_still_accumulate(self):
+        from agent_actions.llm.batch.services.repair_ops import carry_forward
+
+        a = BatchResult(custom_id="a", content={"score": 1}, success=True)
+        b = BatchResult(custom_id="b", content={"score": 2}, success=True)
+        first = carry_forward(None, repair_attempt=1, repair_max_attempts=2, graduated=[a])
+        second = carry_forward(first, repair_attempt=2, repair_max_attempts=2, graduated=[b])
+        assert sorted(r["custom_id"] for r in second.graduated_results) == ["a", "b"]
+
+
+class TestProviderErrorsSurviveSerialisation:
+    def test_the_error_message_is_not_lost(self):
+        """A carried provider failure whose error is dropped reports a generic
+        'Batch processing failed' downstream instead of what actually happened."""
+        from agent_actions.llm.batch.services.retry_serialization import (
+            deserialize_results,
+            serialize_results,
+        )
+
+        failed = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limited")
+        restored = deserialize_results(serialize_results([failed]))
+        assert restored[0].error == "429 rate limited"
