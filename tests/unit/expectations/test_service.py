@@ -996,13 +996,23 @@ class TestCombinedVerdictNamesTheRecord:
         )
         assert result.suite_result.to_record_dict()["failed"] == ["count"]
 
-    def test_each_record_gets_its_own_structural_feedback(self):
+    def test_a_conforming_record_is_judged_on_its_own_rules(self):
+        # The malformed sibling must not buy this record a free pass: its own
+        # expectations have to actually run.
         mixed = [{"ideas": ["a", "b"]}, {"wrong": 1}]
         result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
             lambda p: (mixed, True), "P"
         )
-        assert result.suite_results[0] is not result.suite_results[1], (
-            "every record was handed the same shared verdict object"
+        conforming = result.suite_results[0]
+        assert conforming.outcomes, (
+            "the conforming record claims a pass from an empty verdict — its expectations never ran"
         )
-        assert result.suite_results[0].overall_pass is True
+        assert [o.id for o in conforming.outcomes] == ["count"]
+
+    def test_the_malformed_record_reports_the_structural_failure(self):
+        mixed = [{"ideas": ["a", "b"]}, {"wrong": 1}]
+        result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
+            lambda p: (mixed, True), "P"
+        )
+        assert [o.id for o in result.suite_results[1].outcomes] == ["_structural"]
         assert result.suite_results[1].overall_pass is False

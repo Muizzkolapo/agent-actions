@@ -298,3 +298,19 @@ def test_an_empty_single_record_still_counts_as_empty_output(monkeypatch):
     monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({}, True))
     result = strategy.invoke(make_task(), make_context())
     assert _is_empty_output(result.response) is True
+
+
+def test_a_single_item_list_of_a_non_record_is_tombstoned_not_crashed(monkeypatch):
+    """A one-element list holding a string is not a record; annotating it
+    would hand attach_verdict a non-mapping."""
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=1, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (["just a string"], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.response is None
+    assert result.recovery_metadata.expectations is not None
