@@ -104,6 +104,44 @@ class TestInvokeJudge:
         assert "empty" in detail
 
 
+class TestVerdictParsingMatchesTheRestOfTheCodebase:
+    """A verdict is scored on the value under test, not on the judge's reply syntax.
+
+    Every other consumer of LLM text in the framework goes through
+    ``parse_llm_json``. Real judge models routinely answer with a Python literal
+    (single quotes, ``True``) or a fenced block; scoring those as rule failures
+    reports a passing record as failing.
+    """
+
+    PYTHON_LITERAL_PASS = "{'passed': True, 'reason': 'Concrete situation with goal and constraint'}"
+    PYTHON_LITERAL_FAIL = "{'passed': False, 'reason': 'It is a definition prompt'}"
+    FENCED = '```json\n{"passed": true, "reason": "reads as a scenario"}\n```'
+
+    def test_python_literal_pass_is_a_pass(self):
+        with patch(INVOKE, return_value=[{"content": self.PYTHON_LITERAL_PASS}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is True
+        assert detail == "Concrete situation with goal and constraint"
+
+    def test_python_literal_fail_reports_the_judges_reason(self):
+        with patch(INVOKE, return_value=[{"content": self.PYTHON_LITERAL_FAIL}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert detail == "It is a definition prompt"
+
+    def test_fenced_verdict_is_read(self):
+        with patch(INVOKE, return_value=[{"content": self.FENCED}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is True
+        assert detail == "reads as a scenario"
+
+    def test_unreadable_reply_still_fails_closed(self):
+        with patch(INVOKE, return_value=[{"content": "The value is fine, I would pass it."}]):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value")
+        assert passed is False
+        assert "The value is fine" in detail
+
+
 class TestRegistration:
     def test_llm_judge_is_registered(self):
         etype = registry.get("llm_judge")
