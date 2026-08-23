@@ -46,6 +46,11 @@ class ExpectationService:
     ) -> None:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
+        if repair not in ("none", "retry", "auto"):
+            raise ValueError(
+                f"repair must be 'none', 'retry', or 'auto'; got: {repair!r}. "
+                "The prompt-mapping form is not supported yet."
+            )
         self.suite = suite
         self.repair = repair
         self._judge = judge

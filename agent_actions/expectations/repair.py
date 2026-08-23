@@ -25,20 +25,28 @@ Regenerate the complete output, fixing every failed expectation while
 preserving everything the passing expectations already verified."""
 
 
+def _one_line(text: str) -> str:
+    return " ".join(text.split())
+
+
 def compose_repair_prompt(
     original_prompt: str,
     response: dict[str, Any],
     suite_result: SuiteResult,
     hints: dict[str, str],
 ) -> str:
-    """One instruction from the full failure list, naming what must be preserved."""
+    """One instruction from the full failure list, naming what must be preserved.
+
+    Skipped outcomes are omitted: a rule that was never evaluated (judge budget,
+    missing context) is not something the regeneration can act on.
+    """
     failed_lines = "\n".join(
         f"- {o.id}"
         + (f" [{o.severity}]" if o.severity != "fail" else "")
-        + (f": {o.detail}" if o.detail else "")
-        + (f" (hint: {hints[o.id]})" if o.id in hints else "")
+        + (f": {_one_line(o.detail)}" if o.detail else "")
+        + (f" (hint: {_one_line(hints[o.id])})" if o.id in hints else "")
         for o in suite_result.outcomes
-        if not o.passed
+        if not o.passed and not o.skipped
     )
     passing = [o.id for o in suite_result.outcomes if o.passed]
     passing_lines = "\n".join(f"- {oid}" for oid in passing) if passing else "(none yet)"
