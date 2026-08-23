@@ -18,9 +18,10 @@ from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 
 EXPECTATIONS_REMEDY = (
-    "Fix the expectation declaration: use a registered type (each defect below "
-    "lists the registered ones), put the type's arguments under params:, and "
-    "target a field the action's schema produces."
+    "Fix the expect: block — each defect names its correction. For "
+    "type/parameter/field defects: use a registered type (each unknown-type "
+    "defect lists the registered ones), put the type's arguments under params:, "
+    "and target a field the action's schema produces."
 )
 
 _VERDICT_KEY = "expect"
@@ -96,6 +97,13 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
     if isinstance(repair, dict):
         messages.append("repair: {prompt:} is not implemented; use retry or auto")
         return messages
+    from agent_actions.processing.helpers import _is_tool_action
+
+    if _is_tool_action(action):
+        messages.append(
+            f"repair: {repair} cannot run on a tool action — re-running a "
+            "deterministic UDF yields the same output; use repair: none"
+        )
     if _config_token(action.get("granularity")) == "file":
         messages.append(
             f"repair: {repair} cannot run at file granularity — a multi-record "
@@ -107,6 +115,12 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
         messages.append(
             f"repair: {repair} found a non-mapping schema ({type(schema).__name__}); "
             "the structural gate would silently check record shape only — fix the schema"
+        )
+    elif schema is None and action.get("schema_name"):
+        messages.append(
+            f"repair: {repair} declared, but the named schema "
+            f"'{action['schema_name']}' was not inlined — the structural gate "
+            "would silently check record shape only; fix the schema reference"
         )
     return messages
 

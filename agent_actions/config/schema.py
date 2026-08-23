@@ -216,7 +216,8 @@ class ExpectConfig(BaseModel):
     )
     repair: str | dict[str, Any] = Field(
         default="auto",
-        description="none (observe), retry (re-run prompt), auto (mechanical), or {prompt: $wf.X}",
+        description="none (observe), retry (re-run prompt), or auto (composed feedback); "
+        "the {prompt: $wf.X} mapping form is reserved and not implemented yet",
     )
     on_exhausted: Literal["return_last", "fail", "raise"] = Field(
         default="return_last",
@@ -234,10 +235,7 @@ class ExpectConfig(BaseModel):
     def validate_repair(cls, v):
         if isinstance(v, str):
             if v not in ("none", "retry", "auto"):
-                raise ValueError(
-                    f"repair must be one of: none, retry, auto — or a mapping "
-                    f"{{prompt: $wf.Name}}. Got: {v!r}"
-                )
+                raise ValueError(f"repair must be one of: none, retry, auto. Got: {v!r}")
             return v
         if isinstance(v, dict):
             if set(v) != {"prompt"}:

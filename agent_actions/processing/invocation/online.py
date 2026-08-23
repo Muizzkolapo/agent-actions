@@ -58,6 +58,11 @@ class OnlineStrategy(InvocationStrategy):
         reprompt_service = self._reprompt_service
 
         def generate(prompt: str) -> tuple[Any, bool]:
+            # Under an expectation repair loop this runs once per iteration;
+            # shipped metadata must describe the generation that ships, not a
+            # discarded earlier one.
+            recovery_metadata.retry = None
+            recovery_metadata.reprompt = None
             if reprompt_service and retry_service:
                 response, executed, _ = self._invoke_with_retry_and_reprompt(
                     task, context, recovery_metadata, retry_service, reprompt_service, prompt
