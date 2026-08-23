@@ -134,7 +134,7 @@ def test_factory_threads_the_schema_for_the_structural_gate():
     service = create_expectation_service_from_config(
         {"expectations": INLINE, "repair": "retry", "max_iterations": 1},
         action_name="a",
-        agent_config={"name": "a", "schema": {"type": "object", "required": ["ideas"]}},
+        agent_config={"name": "a", "schema": SCHEMA},
     )
     result = service.execute(lambda p: ({"bad": 1}, True), "P")
     assert [o.id for o in result.suite_result.outcomes] == ["_structural"]
