@@ -498,6 +498,92 @@ def test_retry_repair_still_uses_the_original_prompt_every_iteration():
     assert prompts == ["ORIGINAL", "ORIGINAL"]
 
 
+SCHEMA = {
+    "type": "object",
+    "properties": {"ideas": {"type": "array"}},
+    "required": ["ideas"],
+    "additionalProperties": False,
+}
+
+
+def test_schema_mismatch_under_repair_regenerates_with_feedback():
+    responses = iter([{"wrong_key": 1}, {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    service = ExpectationService(SUITE, repair="auto", max_iterations=3, schema=SCHEMA)
+    result = service.execute(flaky, "ORIGINAL")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+    assert "_structural" in prompts[1]
+    assert "ideas" in prompts[1]
+
+
+def test_a_schema_conforming_record_still_runs_the_semantic_suite():
+    responses = iter([{"ideas": ["a"]}, {"ideas": ["a", "b", "c"]}])
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3, schema=SCHEMA)
+    result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+
+
+def test_non_record_response_under_repair_regenerates():
+    responses = iter(["not json at all", {"ideas": ["a", "b", "c"]}])
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+
+
+def test_non_record_feedback_names_the_expected_fields_under_auto():
+    responses = iter(["plain text", {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    ExpectationService(SUITE, repair="auto", max_iterations=3, schema=SCHEMA).execute(flaky, "O")
+    assert "expected a JSON object" in prompts[1]
+    assert "ideas" in prompts[1]
+
+
+def test_schema_mismatch_in_observe_mode_is_not_checked():
+    result = ExpectationService(SUITE, repair="none", schema=SCHEMA).execute(
+        lambda p: ({"wrong_key": 1}, True), "P"
+    )
+    assert [o.id for o in result.suite_result.outcomes] == ["count"]
+
+
+def test_structural_failure_skips_semantic_rules_that_iteration():
+    service = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA)
+    result = service.execute(lambda p: ({"bad": 1}, True), "P")
+    assert [o.id for o in result.suite_result.outcomes] == ["_structural"]
+    assert result.exhausted is True
+
+
+def test_a_structural_outcome_carries_a_schema_digest():
+    service = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA)
+    result = service.execute(lambda p: ("text", True), "P")
+    outcome = result.suite_result.outcomes[0]
+    assert outcome.type == "schema"
+    assert outcome.severity == "fail"
+    assert len(outcome.definition_hash) == 12
+
+
+def test_a_collapse_after_a_structural_failure_keeps_the_structural_verdict():
+    responses = iter([("text", True), (None, False)])
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    result = service.execute(lambda p: next(responses), "P")
+    assert result.executed is True
+    assert result.response == "text"
+    assert result.suite_result.outcomes[0].id == "_structural"
+    assert result.exhausted is True
+
+
 def test_auto_repair_hint_reaches_the_composed_prompt():
     hinted_suite = Suite(
         name="s",

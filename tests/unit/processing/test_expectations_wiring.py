@@ -2,8 +2,12 @@
 
 from types import SimpleNamespace
 
+import pytest
+
+from agent_actions.config.types import RunMode
 from agent_actions.expectations.service import ExpectationService
 from agent_actions.expectations.types import Suite
+from agent_actions.processing.invocation.factory import InvocationStrategyFactory
 from agent_actions.processing.invocation.online import OnlineStrategy
 
 SUITE = Suite(
@@ -102,3 +106,34 @@ def test_llm_context_reaches_a_judged_expectations_context_ref(monkeypatch):
     result = strategy.invoke(task, make_context())
     assert captured["context"] == {"extract_context.source_context": "the docs say X"}
     assert result.response["expect"]["overall_pass"] is True
+
+
+@pytest.mark.xfail(reason="the factory refuses repair modes until the unlock lands", strict=True)
+def test_factory_threads_the_schema_into_the_structural_gate(monkeypatch):
+    agent_config = {
+        "name": "brainstorm",
+        "schema": {
+            "type": "object",
+            "properties": {"ideas": {"type": "array"}},
+            "required": ["ideas"],
+            "additionalProperties": False,
+        },
+        "expect": {
+            "repair": "retry",
+            "expectations": [{"id": "count", "type": "item_count", "field": "ideas", "min": 1}],
+        },
+    }
+    calls = []
+
+    def fake_call(self, task, ctx, prompt):
+        calls.append(prompt)
+        if len(calls) == 1:
+            return [{"wrong_key": 1}], True
+        return [{"ideas": ["a"]}], True
+
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", fake_call)
+    strategy = InvocationStrategyFactory.create(RunMode.ONLINE, agent_config)
+    result = strategy.invoke(make_task(), make_context())
+    assert len(calls) == 2
+    assert result.response["expect"]["overall_pass"] is True
+    assert result.response["ideas"] == ["a"]
