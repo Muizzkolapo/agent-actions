@@ -10,6 +10,8 @@ degrades into a plain re-roll.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
@@ -47,9 +49,19 @@ PREPARED_TASK = {
 }
 
 
-@reprompt_validation("Every record must carry a non-empty density field.")
-def density_is_present(record: dict) -> bool:
-    return bool(record.get("density"))
+@pytest.fixture(autouse=True)
+def _registered_validation():
+    """Register at call time, not import time.
+
+    The validation registry is process-global and other tests clear it, so a
+    module-level decorator can be gone by the time this module runs.
+    """
+
+    @reprompt_validation("Every record must carry a non-empty density field.")
+    def density_is_present(record: dict) -> bool:
+        return bool(record.get("density"))
+
+    yield
 
 
 def _submit(capture: dict[str, Any]):
