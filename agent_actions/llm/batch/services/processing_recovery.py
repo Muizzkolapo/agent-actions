@@ -165,6 +165,15 @@ def process_recovery_batch(
             accumulated=accumulated,
             context_map=context_map,
         )
+    elif entry.recovery_type == RecoveryType.REPAIR:
+        return handle_repair_recovery(
+            context,
+            identity,
+            state=state,
+            recovery_results=recovery_results,
+            accumulated=accumulated,
+            context_map=context_map,
+        )
 
     logger.error("Unknown recovery_type: %s", entry.recovery_type)
     return None
@@ -238,6 +247,11 @@ def handle_retry_recovery(
         exhausted_recovery=exhausted_recovery,
     )
     if not should_continue:
+        return None
+
+    if not check_and_submit_repair(
+        context, identity, batch_results=merged, context_map=context_map, recovery_state=state
+    ):
         return None
 
     return _finalize_and_cleanup(
@@ -397,6 +411,11 @@ def handle_reprompt_recovery(
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             set(state.missing_ids), state.record_failure_counts
         )
+
+    if not check_and_submit_repair(
+        context, identity, batch_results=final_results, context_map=context_map, recovery_state=None
+    ):
+        return None
 
     return _finalize_and_cleanup(
         context,
@@ -652,6 +671,187 @@ def cleanup_recovery(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def check_and_submit_repair(
+    context: RecoveryContext,
+    identity: BatchIdentity,
+    batch_results: list[BatchResult],
+    context_map: dict[str, Any],
+    recovery_state: RecoveryState | None = None,
+) -> bool:
+    """Evaluate `expect:` and, under a repair policy, submit the next round.
+
+    Returns True when processing should continue — the suite passed, the action
+    does not repair, or the iterations are spent. False when a repair batch was
+    submitted and the caller should defer.
+    """
+    from agent_actions.llm.batch.services.repair_ops import (
+        apply_exhaustion_policy,
+        build_repair_strategy,
+        stamp_exhausted,
+        submit_repair_batch,
+    )
+    from agent_actions.processing.evaluation import EvaluationLoop
+
+    strategy = build_repair_strategy(context.agent_config)
+    if strategy is None:
+        return True
+
+    loop = EvaluationLoop(strategy)
+    graduated, still_failing, _failure_types = loop.split(batch_results)
+    loop.tag_graduated(graduated)
+    strategy.write_verdicts(graduated)
+
+    repairable = [r for r in still_failing if r.content is not None]
+    if not repairable:
+        strategy.write_verdicts(still_failing)
+        return True
+
+    # max_iterations counts total generations, and the first one already
+    # happened — so the rounds available here are one fewer.
+    max_rounds = max(strategy.max_attempts - 1, 0)
+    current_attempt = recovery_state.repair_attempt if recovery_state else 0
+
+    if current_attempt >= max_rounds:
+        strategy.write_verdicts(still_failing)
+        stamp_exhausted(still_failing, strategy, current_attempt + 1)
+        apply_exhaustion_policy(still_failing, strategy, identity.file_name)
+        return True
+
+    next_attempt = current_attempt + 1
+    submission = submit_repair_batch(
+        action_indices=context.service._action_indices,
+        dependency_configs=context.service._dependency_configs,
+        storage_backend=context.service._storage_backend,
+        provider=context.provider,
+        failed_results=repairable,
+        strategy=strategy,
+        context_map=context_map,
+        output_directory=context.output_directory,
+        file_name=identity.file_name,
+        agent_config=context.agent_config,
+        attempt=next_attempt,
+    )
+    if not submission:
+        strategy.write_verdicts(still_failing)
+        return True
+
+    register_recovery_batch(
+        context.manager,
+        submission,
+        identity.file_name,
+        identity.entry.provider,
+        RecoveryType.REPAIR,
+        next_attempt,
+    )
+
+    state = RecoveryState(
+        phase=RecoveryPhase.REPAIR,
+        repair_attempt=next_attempt,
+        repair_max_attempts=max_rounds,
+        evaluation_strategy_name=strategy.name,
+        graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
+        + serialize_results(graduated),
+        accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
+    )
+    RecoveryStateManager.save(
+        context.service._storage_backend,
+        context.service._resolve_action_name(context.action_name),
+        identity.file_name,
+        state,  # type: ignore[arg-type]
+    )
+    logger.info(
+        "[%s] Repair round %d/%d submitted for %d record(s); deferring",
+        identity.file_name,
+        next_attempt,
+        max_rounds,
+        len(repairable),
+    )
+    return False
+
+
+def handle_repair_recovery(
+    context: RecoveryContext,
+    identity: BatchIdentity,
+    state: RecoveryState,
+    recovery_results: list[BatchResult],
+    accumulated: list[BatchResult],
+    context_map: dict[str, Any],
+) -> str | None:
+    """Continue the repair loop when a repair batch comes back."""
+    from agent_actions.llm.batch.services.repair_ops import (
+        apply_exhaustion_policy,
+        build_repair_strategy,
+        stamp_exhausted,
+        submit_repair_batch,
+    )
+    from agent_actions.processing.evaluation import EvaluationLoop
+
+    strategy = build_repair_strategy(context.agent_config)
+    prior = deserialize_results(state.graduated_results)
+
+    if strategy is None:
+        return _finalize_and_cleanup(
+            context,
+            identity,
+            batch_results=prior + recovery_results,
+            context_map=context_map,
+        )
+
+    loop = EvaluationLoop(strategy)
+    graduated, still_failing, _failure_types = loop.split(recovery_results)
+    loop.tag_graduated(graduated)
+    strategy.write_verdicts(graduated)
+    state.graduated_results.extend(serialize_results(graduated))
+    state.evaluation_strategy_name = strategy.name
+
+    repairable = [r for r in still_failing if r.content is not None]
+    if repairable and state.repair_attempt < state.repair_max_attempts:
+        next_attempt = state.repair_attempt + 1
+        submission = submit_repair_batch(
+            action_indices=context.service._action_indices,
+            dependency_configs=context.service._dependency_configs,
+            storage_backend=context.service._storage_backend,
+            provider=context.provider,
+            failed_results=repairable,
+            strategy=strategy,
+            context_map=context_map,
+            output_directory=context.output_directory,
+            file_name=identity.file_name,
+            agent_config=context.agent_config,
+            attempt=next_attempt,
+        )
+        if submission:
+            register_recovery_batch(
+                context.manager,
+                submission,
+                identity.file_name,
+                identity.entry.provider,
+                RecoveryType.REPAIR,
+                next_attempt,
+            )
+            state.repair_attempt = next_attempt
+            RecoveryStateManager.save(
+                context.service._storage_backend,
+                context.service._resolve_action_name(context.action_name),
+                identity.file_name,
+                state,  # type: ignore[arg-type]
+            )
+            return None
+
+    if still_failing:
+        strategy.write_verdicts(still_failing)
+        stamp_exhausted(still_failing, strategy, state.repair_attempt + 1)
+        apply_exhaustion_policy(still_failing, strategy, identity.file_name)
+
+    final_results = deserialize_results(state.graduated_results) + still_failing
+    return _finalize_and_cleanup(
+        context,
+        identity,
+        batch_results=final_results,
+        context_map=context_map,
+    )
 
 
 def _finalize_and_cleanup(

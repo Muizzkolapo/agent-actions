@@ -1,9 +1,10 @@
-"""Batch repair rounds for `expect:` — the same loop reprompt runs, different strategy.
+"""Batch repair rounds for `expect:` — the same deferred loop reprompt runs.
 
-Under a repair policy an action regenerates records whose expectations failed.
-Online, `ExpectationService.execute` loops around one call; in batch the loop is
-the graduated pool: evaluate the whole set, resubmit only what failed, and never
-re-evaluate what already passed.
+Online, `ExpectationService.execute` loops around one call. Batch cannot: a
+round is a whole batch submission, so the loop is the graduated pool — evaluate
+the set, resubmit only what failed, never re-evaluate what passed — and each
+round defers exactly like a reprompt round, so a long-running provider batch
+does not hold the process open.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def build_repair_strategy(agent_config: dict[str, Any] | None) -> ExpectationStr
     return ExpectationStrategy(service)
 
 
-def _stamp_exhausted(
+def stamp_exhausted(
     results: list[BatchResult],
     strategy: ExpectationStrategy,
     attempts: int,
@@ -53,129 +54,7 @@ def _stamp_exhausted(
         result.recovery_metadata = meta
 
 
-def repair_expectations(
-    *,
-    action_indices: dict[str, int],
-    dependency_configs: dict[str, dict],
-    storage_backend: StorageBackend | None,
-    results: list[BatchResult],
-    provider: BaseBatchClient,
-    context_map: dict[str, Any],
-    output_directory: str,
-    file_name: str,
-    agent_config: dict[str, Any] | None,
-) -> list[BatchResult]:
-    """Regenerate records whose expectations failed, up to `max_iterations` total.
-
-    Returns every record — repaired, still failing, or never failing — with its
-    verdict written onto the record and, on exhaustion, the policy the config
-    asked for applied.
-    """
-    from agent_actions.llm.batch.services.reprompt_ops import _load_source_data_for_reprompt
-    from agent_actions.llm.batch.services.resubmission import resubmit_round
-    from agent_actions.processing.evaluation import EvaluationLoop
-
-    strategy = build_repair_strategy(agent_config)
-    if strategy is None:
-        return results
-
-    stamp = _stamp_exhausted
-    source_data = _load_source_data_for_reprompt(storage_backend)
-    loop = EvaluationLoop(strategy)
-    all_graduated: list[BatchResult] = []
-    active_results = results
-    max_iterations = strategy.max_attempts
-
-    for iteration in range(1, max_iterations + 1):
-        graduated, still_failing, _failure_types = loop.split(active_results)
-        all_graduated.extend(graduated)
-
-        if not still_failing:
-            break
-
-        logger.info(
-            "[%s] Expectations failed (iteration %d/%d): %d record(s)",
-            file_name,
-            iteration,
-            max_iterations,
-            len(still_failing),
-        )
-
-        if iteration == max_iterations:
-            stamp(still_failing, strategy, iteration)
-            all_graduated.extend(still_failing)
-            break
-
-        repair_records: list[dict[str, Any]] = []
-        feedback_by_id: dict[str, str] = {}
-        for failed in still_failing:
-            if failed.custom_id not in context_map:
-                logger.warning("Cannot repair %s: not found in context_map", failed.custom_id)
-                continue
-            record = context_map[failed.custom_id].copy()
-            record.setdefault("target_id", failed.custom_id)
-            feedback_by_id[str(failed.custom_id)] = strategy.build_feedback(failed)
-            repair_records.append(record)
-
-        if not repair_records:
-            stamp(still_failing, strategy, iteration)
-            all_graduated.extend(still_failing)
-            break
-
-        outcome = resubmit_round(
-            records=repair_records,
-            feedback_by_id=feedback_by_id,
-            batch_name=f"{file_name}_repair_{iteration}",
-            submitted_ids={r.custom_id for r in still_failing},
-            provider=provider,
-            output_directory=output_directory,
-            agent_config=agent_config or {},
-            action_indices=action_indices,
-            dependency_configs=dependency_configs,
-            storage_backend=storage_backend,
-            source_data=source_data,
-            attempt=iteration,
-        )
-
-        if outcome.results is None:
-            stamp(still_failing, strategy, iteration)
-            all_graduated.extend(still_failing)
-            break
-
-        if outcome.dropped_ids:
-            dropped = [r for r in still_failing if r.custom_id in outcome.dropped_ids]
-            stamp(dropped, strategy, iteration)
-            all_graduated.extend(dropped)
-
-        # Carry the inner recovery layers forward: a record repaired on this
-        # round still has whatever retry and reprompt did to reach the first one.
-        previous = {r.custom_id: r for r in still_failing}
-        for repaired in outcome.results:
-            earlier = previous.get(repaired.custom_id)
-            if earlier is None or earlier.recovery_metadata is None:
-                continue
-            if repaired.recovery_metadata is None:
-                repaired.recovery_metadata = RecoveryMetadata()
-            repaired.recovery_metadata.retry = earlier.recovery_metadata.retry
-            repaired.recovery_metadata.reprompt = earlier.recovery_metadata.reprompt
-
-        active_results = outcome.results
-
-    strategy.write_verdicts(all_graduated)
-
-    exhausted = [r for r in all_graduated if _is_exhausted(r)]
-    if exhausted:
-        _apply_exhaustion_policy(exhausted, strategy, file_name)
-
-    return all_graduated
-
-
-def _is_exhausted(result: BatchResult) -> bool:
-    meta = result.recovery_metadata
-    return bool(meta and meta.expectations)
-
-
-def _apply_exhaustion_policy(
+def apply_exhaustion_policy(
     exhausted: list[BatchResult],
     strategy: ExpectationStrategy,
     action_name: str,
@@ -184,13 +63,12 @@ def _apply_exhaustion_policy(
     from agent_actions.expectations.service import ExpectationsExhaustedError
 
     policy = strategy.on_exhausted
-    if policy == "return_last":
+    if policy == "return_last" or not exhausted:
         return
 
     if policy == "raise":
-        first = exhausted[0]
-        meta = first.recovery_metadata
-        expectations = meta.expectations if meta else None
+        first = exhausted[0].recovery_metadata
+        expectations = first.expectations if first else None
         raise ExpectationsExhaustedError(
             action_name,
             expectations.failed if expectations else [],
@@ -204,3 +82,70 @@ def _apply_exhaustion_policy(
         attempts = expectations.attempts if expectations else strategy.max_attempts
         result.success = False
         result.error = f"Expectations exhausted after {attempts} iteration(s) (failed: {failed})"
+
+
+def submit_repair_batch(
+    *,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
+    storage_backend: StorageBackend | None,
+    provider: BaseBatchClient,
+    failed_results: list[BatchResult],
+    strategy: ExpectationStrategy,
+    context_map: dict[str, Any],
+    output_directory: str,
+    file_name: str,
+    agent_config: dict[str, Any] | None,
+    attempt: int,
+) -> tuple[str, int] | None:
+    """Submit a repair batch for records whose expectations failed, without blocking.
+
+    Returns ``(batch_id, record_count)``, or None when there is nothing to send.
+    """
+    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+    from agent_actions.llm.batch.services.reprompt_ops import _load_source_data_for_reprompt
+
+    repair_records: list[dict[str, Any]] = []
+    feedback_by_id: dict[str, str] = {}
+    for failed in failed_results:
+        custom_id = failed.custom_id
+        if custom_id not in context_map:
+            logger.warning("Cannot repair %s: not found in context_map", custom_id)
+            continue
+        record = context_map[custom_id].copy()
+        record.setdefault("target_id", custom_id)
+        feedback_by_id[str(custom_id)] = strategy.build_feedback(failed)
+        repair_records.append(record)
+
+    if not repair_records:
+        logger.debug("No records to repair")
+        return None
+
+    batch_name = f"{file_name}_repair_{attempt}"
+    preparator = BatchTaskPreparator(
+        action_indices=action_indices,
+        dependency_configs=dependency_configs,
+        storage_backend=storage_backend,
+    )
+    prepared = preparator.prepare_tasks(
+        agent_config=agent_config or {},
+        data=repair_records,
+        provider=provider,
+        output_directory=output_directory,
+        batch_name=batch_name,
+        source_data=_load_source_data_for_reprompt(storage_backend),
+        feedback_by_id=feedback_by_id,
+    )
+
+    batch_id, _status = provider.submit_batch(
+        tasks=prepared.tasks,
+        batch_name=batch_name,
+        output_directory=output_directory,
+    )
+    logger.info(
+        "Async repair batch submitted: %s with %d records (iteration %d)",
+        batch_id,
+        len(prepared.tasks),
+        attempt,
+    )
+    return batch_id, len(prepared.tasks)

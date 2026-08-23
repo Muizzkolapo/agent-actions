@@ -44,6 +44,10 @@ class RecoveryState:
     validation_status: dict[str, bool] = field(default_factory=dict)
     on_exhausted: OnExhaustedPolicy = OnExhaustedPolicy.RETURN_LAST
 
+    # Repair state (expect: regeneration rounds)
+    repair_attempt: int = 0
+    repair_max_attempts: int = 1
+
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
 

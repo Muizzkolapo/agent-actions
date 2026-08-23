@@ -37,6 +37,9 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.processing_recovery import (
+    check_and_submit_repair as _check_and_submit_repair_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -682,6 +685,15 @@ class BatchProcessingService:
         )
         if not should_continue:
             return None  # Reprompt submitted, processing paused
+
+        if not _check_and_submit_repair_impl(
+            context=context,
+            identity=identity,
+            batch_results=batch_results,
+            context_map=context_map,
+            recovery_state=None,
+        ):
+            return None  # Repair round submitted, processing paused
 
         return self._finalize_batch_output(
             context=context,
