@@ -182,14 +182,24 @@ def carry_forward(
     from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
     from agent_actions.llm.batch.services.retry_serialization import serialize_results
 
+    # Keyed by custom_id, latest wins: the original batch stays COMPLETED at the
+    # provider, so every resume re-processes it and re-graduates the same
+    # records. Appending would ship each one again for the same source, and a
+    # later round's repaired content must replace the attempt it superseded.
+    pooled: dict[str, dict[str, Any]] = {
+        str(record.get("custom_id")): record
+        for record in (prior.graduated_results if prior else [])
+    }
+    for record in serialize_results(graduated):
+        pooled[str(record.get("custom_id"))] = record
+
     state = RecoveryState(
         phase=RecoveryPhase.REPAIR,
         repair_attempt=repair_attempt,
         repair_max_attempts=repair_max_attempts,
         repair_submitted_ids=list(submitted_ids or []),
         repair_judge_budget_remaining=judge_budget_remaining,
-        graduated_results=(list(prior.graduated_results) if prior else [])
-        + serialize_results(graduated),
+        graduated_results=list(pooled.values()),
         evaluation_strategy_name="expectations",
     )
     if prior is None:

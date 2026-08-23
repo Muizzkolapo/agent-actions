@@ -706,19 +706,23 @@ def check_and_submit_repair(
     )
     from agent_actions.processing.evaluation import EvaluationLoop
 
-    strategy = build_repair_strategy(context.agent_config)
-    if strategy is None:
-        return True
-
-    # The counter lives in persisted state, so read it here rather than trust
-    # whichever caller happened to have it: an entry point that receives None
-    # and reads it as attempt 0 can never stop iterating.
+    # Load before building the strategy: the counter and the judge budget both
+    # live in persisted state. An entry point that receives None and reads the
+    # counter as attempt 0 can never stop iterating, and one that rebuilds the
+    # service without the balance spends the budget again every round.
     if recovery_state is None:
         recovery_state = RecoveryStateManager.load(
             context.service._storage_backend,
             context.service._resolve_action_name(context.action_name),
             identity.file_name,
         )
+
+    strategy = build_repair_strategy(
+        context.agent_config,
+        recovery_state.repair_judge_budget_remaining if recovery_state else None,
+    )
+    if strategy is None:
+        return True
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(batch_results)
@@ -861,6 +865,11 @@ def handle_repair_recovery(
         still_failing.extend(dropped)
 
     repairable = [r for r in still_failing if r.content is not None]
+    # Anything not going back to the model — a provider failure, or a record the
+    # last round never returned — has to enter the persisted pool now. Only
+    # what is resubmitted comes back on the next pass; the rest would be in no
+    # pool at all and would vanish from the output.
+    carried = [r for r in still_failing if r.content is None]
     if repairable and state.repair_attempt < state.repair_max_attempts:
         next_attempt = state.repair_attempt + 1
         submission = submit_repair_batch(
@@ -888,6 +897,7 @@ def handle_repair_recovery(
             state.repair_attempt = next_attempt
             state.repair_submitted_ids = [r.custom_id for r in repairable]
             state.repair_judge_budget_remaining = strategy.judge_budget_remaining
+            state.graduated_results.extend(serialize_results(carried))
             RecoveryStateManager.save(
                 context.service._storage_backend,
                 context.service._resolve_action_name(context.action_name),

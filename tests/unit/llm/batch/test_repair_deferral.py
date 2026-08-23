@@ -287,3 +287,94 @@ class TestResumingTheRound:
         repaired = BatchResult(custom_id="r1", content=PASSING, success=True)
         _out, finalize, _ = self._resume(state, [repaired])
         assert finalize.call_args.kwargs["exhausted_recovery"] is not None
+
+
+class TestTheBudgetBoundsTheRunNotTheRound:
+    """Each deferred pass rebuilds the service, so the balance has to be carried.
+
+    Without it, `max_iterations` rounds each start from a full `judge_budget`
+    and can spend that many times the configured cap.
+    """
+
+    JUDGED = [
+        {"id": "enough", "type": "item_count", "field": "options", "min": 2},
+        {"id": "on_topic", "type": "llm_judge", "field": "options", "rule": "on topic"},
+    ]
+
+    def _judged_config(self, **expect):
+        config = _agent_config(**expect)
+        config["expect"]["expectations"] = self.JUDGED
+        config["model_vendor"] = "anthropic"
+        return config
+
+    def test_the_balance_is_persisted_when_a_round_defers(self):
+        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
+        _should, _provider, backend = _submit([failing], self._judged_config(judge_budget=5))
+        assert _state(backend).repair_judge_budget_remaining is not None
+
+    def test_the_resuming_pass_starts_from_the_balance(self):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        strategy = build_repair_strategy(self._judged_config(judge_budget=5), 2)
+        assert strategy.judge_budget_remaining == 2
+
+    def test_an_uncapped_budget_stays_uncapped(self):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        strategy = build_repair_strategy(self._judged_config(), None)
+        assert strategy.judge_budget_remaining is None
+
+    def test_a_spent_balance_of_zero_is_honoured_not_treated_as_absent(self):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        strategy = build_repair_strategy(self._judged_config(judge_budget=5), 0)
+        assert strategy.judge_budget_remaining == 0
+
+    def test_a_suite_that_never_judges_has_no_budget_to_carry(self):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        assert build_repair_strategy(_agent_config(judge_budget=5)).judge_budget_remaining is None
+
+
+class TestANonTerminalRoundKeepsWhatItCannotResubmit:
+    """The default max_iterations is 3, so the first round is not the last one.
+
+    Only resubmitted records come back on the next pass; anything else has to
+    enter the persisted pool before the run defers, or it is in no pool at all.
+    """
+
+    def _resume_continuing(self, recovery_results):
+        state = RecoveryState(
+            repair_attempt=1,
+            repair_max_attempts=2,
+            repair_submitted_ids=[r.custom_id for r in recovery_results],
+        )
+        provider = RecordingProvider()
+        backend = _Backend()
+        with patch(
+            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
+        ):
+            out = pr.handle_repair_recovery(
+                _context(provider, backend, _agent_config(max_iterations=3)),
+                _identity(),
+                state=state,
+                recovery_results=recovery_results,
+                accumulated=[],
+                context_map=_context_map(*[r.custom_id for r in recovery_results]),
+            )
+        return out, state
+
+    def test_a_provider_failure_is_pooled_before_the_next_round(self):
+        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
+        api_error = BatchResult(custom_id="e1", content=None, success=False, error="429")
+        out, state = self._resume_continuing([failing, api_error])
+        assert out is None, "another round was due, so the run should have deferred"
+        pooled = [r.get("custom_id") for r in state.graduated_results]
+        assert "e1" in pooled, "a provider failure vanished when another round was submitted"
+
+    def test_the_error_message_survives_being_pooled(self):
+        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
+        api_error = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limit")
+        _out, state = self._resume_continuing([failing, api_error])
+        pooled = {r.get("custom_id"): r for r in state.graduated_results}
+        assert pooled["e1"].get("error") == "429 rate limit"

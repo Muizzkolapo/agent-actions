@@ -23,6 +23,9 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             "success": r.success,
         }
         if r.error:
+            # Without this a failure carried across a deferred round arrives with
+            # error=None and reports a generic "Batch processing failed" instead
+            # of what the provider actually said.
             d["error"] = r.error
         if r.metadata:
             d["metadata"] = r.metadata
@@ -47,19 +50,31 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
     for d in data:
         recovery = None
         if d.get("recovery_metadata"):
-            from agent_actions.processing.types import EvaluationMetadata, RepromptMetadata
+            from agent_actions.processing.types import (
+                EvaluationMetadata,
+                ExpectationsMetadata,
+                RepromptMetadata,
+            )
 
             rm = d["recovery_metadata"]
             retry = None
             reprompt = None
             evaluation = None
+            expectations = None
             if rm.get("retry"):
                 retry = RetryMetadata(**rm["retry"])
             if rm.get("reprompt"):
                 reprompt = RepromptMetadata(**rm["reprompt"])
             if rm.get("evaluation"):
                 evaluation = EvaluationMetadata(**rm["evaluation"])
-            recovery = RecoveryMetadata(retry=retry, reprompt=reprompt, evaluation=evaluation)
+            if rm.get("expectations"):
+                expectations = ExpectationsMetadata(**rm["expectations"])
+            recovery = RecoveryMetadata(
+                retry=retry,
+                reprompt=reprompt,
+                evaluation=evaluation,
+                expectations=expectations,
+            )
 
         result = BatchResult(
             custom_id=d["custom_id"],
