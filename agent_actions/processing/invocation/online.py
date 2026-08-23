@@ -99,10 +99,18 @@ class OnlineStrategy(InvocationStrategy):
                         else []
                     ),
                 )
-            elif run.suite_result is not None and isinstance(response, dict):
+            elif run.suite_results:
                 from agent_actions.expectations.service import attach_verdict
 
-                response = attach_verdict(response, run.suite_result)
+                if isinstance(response, dict):
+                    response = attach_verdict(response, run.suite_results[0])
+                elif isinstance(response, list):
+                    # An expansion carries one record per element; each gets the
+                    # verdict for its own content, not the combined one.
+                    response = [
+                        attach_verdict(record, verdict)
+                        for record, verdict in zip(response, run.suite_results, strict=False)
+                    ]
         else:
             response, executed = generate(task.formatted_prompt)
 

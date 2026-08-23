@@ -30,6 +30,31 @@ class ExpectationRunResult:
     suite_result: SuiteResult | None = None
     iterations: int = 0
     exhausted: bool = False
+    # One verdict per record the response carries. A response is usually a
+    # single record, but an action whose LLM returns a JSON array produces one
+    # record per element and each is validated on its own.
+    suite_results: list[SuiteResult] | None = None
+
+
+def _records_of(response: Any) -> list[dict[str, Any]] | None:
+    """The record(s) a response carries, or None if it is not record-shaped.
+
+    A single-record call arrives as a bare dict or a length-1 list; an action
+    whose LLM returns a JSON array carries one record per element.
+    """
+    if isinstance(response, dict):
+        return [response]
+    if isinstance(response, list) and response and all(isinstance(r, dict) for r in response):
+        return list(response)
+    return None
+
+
+def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
+    """One verdict for the whole response: it passes only if every record does."""
+    if len(results) == 1:
+        return results[0]
+    outcomes = [outcome for result in results for outcome in result.outcomes]
+    return SuiteResult(suite_name=suite_name, outcomes=outcomes)
 
 
 class ExpectationsExhaustedError(Exception):
@@ -96,6 +121,7 @@ class ExpectationService:
         executed = False
         last_response: Any = None
         last_suite_result: SuiteResult | None = None
+        last_suite_results: list[SuiteResult] | None = None
 
         for iteration in range(1, iterations + 1):
             response, executed = llm_operation(
@@ -111,32 +137,35 @@ class ExpectationService:
                 if last_suite_result is not None:
                     # A regeneration that collapsed (inner recovery exhausted)
                     # must not downgrade a record that already had a verdict.
-                    return self._exhausted_result(last_response, last_suite_result, iteration)
+                    return self._exhausted_result(
+                        last_response, last_suite_result, iteration, last_suite_results
+                    )
                 return ExpectationRunResult(response=response, executed=executed)
 
+            records = _records_of(response)
+
             if self.repair == "none":
-                if not isinstance(response, dict):
+                if records is None:
                     return ExpectationRunResult(response=response, executed=executed)
-                suite_result = run_suite(
-                    self.suite, response, judge=self._judge, context_source=llm_context
-                )
+                suite_results = self._validate_records(records, llm_context)
             else:
-                structural = self._structural_result(response)
-                suite_result = (
-                    structural
+                structural = self._structural_result(response, records)
+                suite_results = (
+                    [structural]
                     if structural is not None
-                    else run_suite(
-                        self.suite, response, judge=self._judge, context_source=llm_context
-                    )
+                    else self._validate_records(records or [], llm_context)
                 )
+            suite_result = _combine(suite_results, self.suite.name)
             if suite_result.overall_pass:
                 return ExpectationRunResult(
                     response=response,
                     executed=True,
                     suite_result=suite_result,
                     iterations=iteration,
+                    suite_results=suite_results,
                 )
             last_response, last_suite_result = response, suite_result
+            last_suite_results = suite_results
 
             # A rule that was skipped was never evaluated, so regenerating cannot
             # change its outcome — and the repair composer leaves it out of both
@@ -174,8 +203,17 @@ class ExpectationService:
                 executed=True,
                 suite_result=suite_result,
                 iterations=iterations,
+                suite_results=suite_results,
             )
-        return self._exhausted_result(response, suite_result, iterations)
+        return self._exhausted_result(response, suite_result, iterations, suite_results)
+
+    def _validate_records(
+        self, records: list[dict[str, Any]], llm_context: dict[str, Any] | None
+    ) -> list[SuiteResult]:
+        return [
+            run_suite(self.suite, record, judge=self._judge, context_source=llm_context)
+            for record in records
+        ]
 
     def validate(
         self, response: Any, llm_context: dict[str, Any] | None = None
@@ -191,7 +229,11 @@ class ExpectationService:
         return run_suite(self.suite, response, judge=self._judge, context_source=llm_context)
 
     def _exhausted_result(
-        self, response: Any, suite_result: SuiteResult | None, iterations: int
+        self,
+        response: Any,
+        suite_result: SuiteResult | None,
+        iterations: int,
+        suite_results: list[SuiteResult] | None = None,
     ) -> ExpectationRunResult:
         """Apply the on_exhausted policy to a loop that ended without a pass."""
         if self._on_exhausted == "raise":
@@ -206,6 +248,7 @@ class ExpectationService:
                 suite_result=suite_result,
                 iterations=iterations,
                 exhausted=True,
+                suite_results=suite_results,
             )
         return ExpectationRunResult(
             response=response,
@@ -213,6 +256,7 @@ class ExpectationService:
             suite_result=suite_result,
             iterations=iterations,
             exhausted=True,
+            suite_results=suite_results,
         )
 
     def _prompt_for(
@@ -229,9 +273,11 @@ class ExpectationService:
             )
         return original_prompt
 
-    def _structural_result(self, response: Any) -> SuiteResult | None:
+    def _structural_result(
+        self, response: Any, records: list[dict[str, Any]] | None = None
+    ) -> SuiteResult | None:
         """A failing verdict when the response is not a schema-conforming record, else None."""
-        if not isinstance(response, dict):
+        if records is None:
             detail = f"response was {type(response).__name__}, expected a JSON object"
             if self._schema:
                 try:
@@ -253,11 +299,12 @@ class ExpectationService:
         if self._schema:
             from agent_actions.processing.recovery.response_validator import SchemaValidator
 
-            # The validator keeps per-call feedback state and records validate
-            # concurrently, so it is constructed per call, never held on self.
-            validator = SchemaValidator(self._schema, self.suite.name)
-            if not validator.validate(response):
-                return self._failing_structural(validator.feedback_message)
+            for record in records:
+                # The validator keeps per-call feedback state and records validate
+                # concurrently, so it is constructed per call, never held on self.
+                validator = SchemaValidator(self._schema, self.suite.name)
+                if not validator.validate(record):
+                    return self._failing_structural(validator.feedback_message)
         return None
 
     def _failing_structural(self, detail: str) -> SuiteResult:
