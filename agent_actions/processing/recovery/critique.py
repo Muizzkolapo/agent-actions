@@ -87,9 +87,14 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
 
     logger.debug("[%s] Invoking critique LLM via %s", action_name, model_vendor)
 
+    # A critique is prose. Inheriting the action's json_mode makes the provider
+    # try to parse it, which on some vendors yields an empty _parse_error
+    # envelope and loses the criticism entirely.
+    text_config = {**agent_config, "json_mode": False}
+
     result = ClientInvocationService.invoke_client(
         model_vendor=model_vendor,
-        agent_config=agent_config,
+        agent_config=text_config,
         prompt_config=prompt,
         context_data="",
         schema=None,
@@ -100,4 +105,4 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
     if not result:
         raise ValueError("Critique LLM returned empty response")
 
-    return str(ResponseBuilder.unwrap(result, agent_config))
+    return str(ResponseBuilder.unwrap(result, text_config))

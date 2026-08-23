@@ -117,13 +117,17 @@ class ResponseBuilder:
 
     @staticmethod
     def unwrap(result: list[Any], agent_config: dict[str, Any]) -> Any:
-        """The payload behind a provider's return value.
+        """The payload behind a provider's return value, or None if there is none.
 
-        The counterpart to :meth:`wrap_non_json`. A JSON-mode call returns the
-        parsed object itself; a plain-text call returns it wrapped under the
-        configured output field. Callers that only want the payload should not
-        have to know which happened.
+        The counterpart to :meth:`wrap_non_json`: a JSON-mode call returns the
+        parsed object itself, a plain-text call returns it under the configured
+        output field, and callers should not have to know which happened. The
+        output field cannot collide with a model's own key, because
+        `granularity_output_field_validator` rejects `output_field` alongside
+        `json_mode: true`.
         """
+        if not isinstance(result, list) or not result:
+            return None
         first = result[0]
         if not isinstance(first, dict):
             return first

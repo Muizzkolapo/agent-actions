@@ -72,6 +72,37 @@ class TestWrapNonJson:
         assert isinstance(result[0], dict)
 
 
+class TestUnwrap:
+    """The counterpart to wrap_non_json, over the shapes providers return."""
+
+    def test_round_trips_wrap_non_json(self):
+        assert ResponseBuilder.unwrap(ResponseBuilder.wrap_non_json("hello", {}), {}) == "hello"
+
+    def test_round_trips_a_custom_output_field(self):
+        config = {"output_field": "summary"}
+        wrapped = ResponseBuilder.wrap_non_json("hello", config)
+        assert ResponseBuilder.unwrap(wrapped, config) == "hello"
+
+    def test_an_already_parsed_object_comes_back_whole(self):
+        parsed = {"passed": True, "reason": "ok"}
+        assert ResponseBuilder.unwrap([parsed], {}) == parsed
+
+    def test_a_parse_error_envelope_yields_its_empty_text(self):
+        envelope = [{"raw_response": "", "_parse_error": "Empty response from API"}]
+        assert ResponseBuilder.unwrap(envelope, {}) == ""
+
+    def test_a_bare_string_element_is_returned_as_is(self):
+        assert ResponseBuilder.unwrap(["plain text"], {}) == "plain text"
+
+    def test_an_empty_or_non_list_result_has_no_payload(self):
+        assert ResponseBuilder.unwrap([], {}) is None
+        assert ResponseBuilder.unwrap({"passed": True}, {}) is None
+        assert ResponseBuilder.unwrap("yes", {}) is None
+
+    def test_only_the_first_element_is_read(self):
+        assert ResponseBuilder.unwrap([{"raw_response": "a"}, {"raw_response": "b"}], {}) == "a"
+
+
 # ---------------------------------------------------------------------------
 # Tests — extract_usage per shape
 # ---------------------------------------------------------------------------

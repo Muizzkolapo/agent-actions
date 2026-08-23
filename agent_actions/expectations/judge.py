@@ -87,7 +87,12 @@ def invoke_judge(
     if not model_vendor:
         raise ValueError("agent_config missing required 'model_vendor' for judge LLM call")
 
-    effective_config = agent_config if model is None else {**agent_config, "model_name": model}
+    # json_mode: False so the provider hands back the model's text rather than
+    # parsing it through the best-effort reader, which would scavenge a verdict
+    # out of prose before `_read_verdict` ever saw the reply.
+    effective_config = {**agent_config, "json_mode": False}
+    if model is not None:
+        effective_config["model_name"] = model
     prompt = build_judge_prompt(rule, value, context)
 
     result = ClientInvocationService.invoke_client(
