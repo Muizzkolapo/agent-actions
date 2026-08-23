@@ -64,6 +64,8 @@ def _get_retry_attempts(result: ProcessingResult) -> str | int:
     """
     if result.recovery_metadata and result.recovery_metadata.retry:
         return result.recovery_metadata.retry.attempts
+    if result.recovery_metadata and result.recovery_metadata.expectations:
+        return result.recovery_metadata.expectations.attempts
     return "unknown"
 
 
@@ -920,7 +922,14 @@ class ResultCollector:
         For return_last (default): logs at INFO and returns.
         For raise: writes EXHAUSTED dispositions and raises AgentActionsError.
         """
-        exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
+        exhausted_results = [
+            r
+            for r in results
+            if r.status == ProcessingStatus.EXHAUSTED
+            # Expectations exhaustion resolved its own on_exhausted policy in
+            # the service; the retry config's policy does not apply to it.
+            and not (r.recovery_metadata and r.recovery_metadata.expectations)
+        ]
         if not exhausted_results:
             return
 

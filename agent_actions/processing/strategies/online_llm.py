@@ -21,6 +21,7 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
+from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
@@ -297,6 +298,9 @@ class OnlineLLMStrategy:
                 # UDF output validation runs per item and is ungated, so this
                 # can indict one value rather than the action. Re-raised, as
                 # the loop cannot tombstone it, but not declared fatal.
+                raise
+            except ExpectationsExhaustedError:
+                # on_exhausted: raise means halt the run, not fail the record.
                 raise
             except Exception as e:
                 # An on_exhausted: raise halt is action-fatal by definition —
