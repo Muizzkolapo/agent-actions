@@ -323,3 +323,15 @@ def get_guard_evaluator() -> GuardEvaluator:
             if _GLOBAL_GUARD_EVALUATOR is None:
                 _GLOBAL_GUARD_EVALUATOR = GuardEvaluator()
     return _GLOBAL_GUARD_EVALUATOR
+
+
+def reset_guard_evaluator() -> None:
+    """Drop the global evaluator so the next caller rebuilds it.
+
+    The evaluator captures a guard filter at construction, so it must be
+    dropped whenever that filter is retired — otherwise it keeps submitting to
+    a thread pool that has already been shut down.
+    """
+    global _GLOBAL_GUARD_EVALUATOR
+    with _GUARD_EVALUATOR_LOCK:
+        _GLOBAL_GUARD_EVALUATOR = None
