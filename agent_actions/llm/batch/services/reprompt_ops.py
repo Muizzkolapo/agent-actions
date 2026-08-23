@@ -111,6 +111,20 @@ def _load_validation_udf(
         import_validation_module(validation_module, None)
 
 
+def apply_feedback_to_tasks(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
+    """Append each record's validation feedback to the prompt that is sent.
+
+    Feedback has to go on the prepared task, not the input row: ``prepare_tasks``
+    re-renders every task from the llm_context and the formatted prompt, and the
+    provider builds its user content from the task, so a row-level key is
+    silently discarded before submission.
+    """
+    for task in tasks:
+        feedback = feedback_by_id.get(str(task.get("target_id", "")))
+        if feedback:
+            task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
+
+
 def build_evaluation_loop(
     agent_config: dict[str, Any] | None,
     *,
@@ -275,6 +289,7 @@ def validate_and_reprompt(
                 )
 
         reprompt_records = []
+        feedback_by_id: dict[str, str] = {}
         for failed_result in still_failing:
             custom_id = failed_result.custom_id
 
@@ -311,8 +326,7 @@ def validate_and_reprompt(
                         exc_info=True,
                     )
 
-            original_user_content = original_record.get("user_content", "")
-            original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
+            feedback_by_id[str(custom_id)] = feedback
 
             if "target_id" not in original_record:
                 original_record["target_id"] = custom_id
@@ -342,6 +356,7 @@ def validate_and_reprompt(
                 source_data=source_data,
                 attempt=attempt + 1,
             )
+            apply_feedback_to_tasks(prepared.tasks, feedback_by_id)
 
             batch_id, status = provider.submit_batch(
                 tasks=prepared.tasks,
@@ -553,6 +568,7 @@ def submit_reprompt_batch(
         return None
 
     reprompt_records = []
+    feedback_by_id: dict[str, str] = {}
     for failed_result in failed_results:
         custom_id = failed_result.custom_id
         if BatchResultReconciler.is_provider_placeholder(custom_id):
@@ -568,14 +584,11 @@ def submit_reprompt_batch(
 
         original_record = context_map[custom_id].copy()
 
-        feedback = build_validation_feedback(
+        feedback_by_id[str(custom_id)] = build_validation_feedback(
             failed_response=failed_result.content,
             feedback_message=feedback_message,
             strategies=strategies,
         )
-
-        original_user_content = original_record.get("user_content", "")
-        original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
 
         if "target_id" not in original_record:
             original_record["target_id"] = custom_id
@@ -603,6 +616,7 @@ def submit_reprompt_batch(
             source_data=source_data,
             attempt=attempt,
         )
+        apply_feedback_to_tasks(prepared.tasks, feedback_by_id)
 
         batch_id, _ = provider.submit_batch(
             tasks=prepared.tasks,
