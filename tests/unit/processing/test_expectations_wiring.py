@@ -184,3 +184,12 @@ def test_exhausted_return_last_record_still_ships_annotated(monkeypatch):
     assert result.response["expect"]["overall_pass"] is False
     assert result.response["expect"]["failed"] == ["count"]
     assert result.recovery_metadata is None or result.recovery_metadata.expectations is None
+
+
+def test_a_guard_skip_is_not_misrouted_to_the_exhaustion_channel(monkeypatch):
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3, on_exhausted="fail")
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (None, False))
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.recovery_metadata is None or result.recovery_metadata.expectations is None

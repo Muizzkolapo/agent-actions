@@ -324,6 +324,26 @@ class TestProcessRecordResponseHandling:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
+    def test_expectations_raise_policy_propagates_out_of_invoke(self, mock_fire, mock_get_preparer):
+        from agent_actions.expectations.service import ExpectationsExhaustedError
+
+        prepared = _make_prepared()
+        mock_get_preparer.return_value.prepare.return_value = prepared
+
+        mock_invocation = MagicMock()
+        mock_invocation.invoke.side_effect = ExpectationsExhaustedError("test", ["count"], 3)
+
+        strategy = OnlineLLMStrategy(
+            agent_config={"agent_type": "test"},
+            agent_name="test",
+            invocation_strategy=mock_invocation,
+        )
+
+        with pytest.raises(ExpectationsExhaustedError):
+            strategy.invoke([{"field": "value"}], _make_context())
+
+    @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
+    @patch("agent_actions.processing.strategies.online_llm.fire_event")
     def test_not_executed_with_response_returns_skipped(self, mock_fire, mock_get_preparer):
         """executed=False with non-None response → guard_skip → SKIPPED."""
         prepared = _make_prepared()

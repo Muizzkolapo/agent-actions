@@ -195,3 +195,46 @@ class TestExhaustedStateStampReason:
         stamped = output[0]
         assert stamped["_state"] == "exhausted"
         assert stamped["_state_history"][-1]["reason"] == "reprompt_exhausted"
+
+
+class TestExpectationsExhaustionInCollect:
+    """Expectations exhaustion must not be misattributed to the retry layer."""
+
+    @staticmethod
+    def _expectations_exhausted_result():
+        from agent_actions.processing.record_helpers import build_exhausted_tombstone
+        from agent_actions.processing.types import ExpectationsMetadata, ProcessingResult
+
+        tombstone = build_exhausted_tombstone(
+            "test_action",
+            {"content": {"field1": "v"}, "source_guid": "sg-1"},
+            {"field1": None},
+            source_guid="sg-1",
+            reason="expectations_exhausted",
+        )
+        return ProcessingResult(
+            status=ProcessingStatus.EXHAUSTED,
+            data=[tombstone],
+            source_guid="sg-1",
+            error="Expectations exhausted after 3 iteration(s) (failed: count)",
+            recovery_metadata=RecoveryMetadata(
+                expectations=ExpectationsMetadata(attempts=3, failed=["count"])
+            ),
+        )
+
+    def test_retry_raise_policy_ignores_expectations_exhaustion(self):
+        from agent_actions.processing.result_collector import (
+            collect_results_from_processing_results,
+        )
+
+        output, _stats = collect_results_from_processing_results(
+            [self._expectations_exhausted_result()],
+            "test_action",
+            agent_config={"name": "test_action", "retry": {"on_exhausted": "raise"}},
+        )
+        assert output[0]["_tombstone_reason"] == "expectations_exhausted"
+
+    def test_exhausted_attempts_reads_expectations_metadata(self):
+        from agent_actions.processing.result_collector import _get_retry_attempts
+
+        assert _get_retry_attempts(self._expectations_exhausted_result()) == 3

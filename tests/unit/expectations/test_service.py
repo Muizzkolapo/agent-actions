@@ -664,6 +664,26 @@ def test_a_mid_loop_collapse_under_fail_mode_still_converts():
     assert result.response is None
     assert result.suite_result is not None
     assert result.exhausted is True
+    assert result.iterations == 2
+
+
+def test_on_exhausted_raise_also_fires_on_a_mid_loop_collapse():
+    from agent_actions.expectations.service import ExpectationsExhaustedError
+
+    responses = iter([({"ideas": ["a"]}, True), (None, False)])
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3, on_exhausted="raise")
+    with pytest.raises(ExpectationsExhaustedError, match="count"):
+        service.execute(lambda p: next(responses), "P")
+
+
+def test_observe_mode_ignores_non_default_exhaustion_policies():
+    for policy in ("fail", "raise"):
+        result = ExpectationService(SUITE, repair="none", on_exhausted=policy).execute(
+            failing_llm, "P"
+        )
+        assert result.executed is True
+        assert result.response == {"ideas": ["a"]}
+        assert result.exhausted is False
 
 
 def test_auto_repair_hint_reaches_the_composed_prompt():
