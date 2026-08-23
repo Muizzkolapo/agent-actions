@@ -574,6 +574,45 @@ def test_a_structural_outcome_carries_a_schema_digest():
     assert len(outcome.definition_hash) == 12
 
 
+UNSORTABLE_SCHEMA = {
+    "type": "object",
+    "properties": {2024: {"type": "string"}, "name": {"type": "string"}},
+}
+
+
+def test_an_unsortable_schema_does_not_crash_observe_construction():
+    service = ExpectationService(SUITE, repair="none", schema=UNSORTABLE_SCHEMA)
+    result = service.execute(passing_llm, "P")
+    assert result.suite_result.overall_pass is True
+
+
+def test_an_unsortable_schema_still_digests_for_the_structural_outcome():
+    service = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=UNSORTABLE_SCHEMA)
+    result = service.execute(lambda p: ("text", True), "P")
+    outcome = result.suite_result.outcomes[0]
+    assert outcome.id == "_structural"
+    assert len(outcome.definition_hash) == 12
+
+
+def test_a_malformed_schema_omits_field_names_from_non_record_feedback():
+    # _extract_field_names raises on this shape; the gate must degrade, not crash.
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=1, schema={"fields": ["name", "age"]}
+    )
+    result = service.execute(lambda p: ("text", True), "P")
+    outcome = result.suite_result.outcomes[0]
+    assert outcome.id == "_structural"
+    assert "expected a JSON object" in outcome.detail
+
+
+def test_observe_mode_non_record_result_fields_are_pinned():
+    result = ExpectationService(SUITE, repair="none").execute(lambda p: ("text", True), "P")
+    assert result.response == "text"
+    assert result.executed is True
+    assert result.iterations == 0
+    assert result.exhausted is False
+
+
 def test_a_collapse_after_a_structural_failure_keeps_the_structural_verdict():
     responses = iter([("text", True), (None, False)])
     service = ExpectationService(SUITE, repair="retry", max_iterations=3)
