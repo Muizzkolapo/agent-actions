@@ -15,6 +15,7 @@ SUITE = Suite(
     name="s",
     expectations=[{"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}}],
 )
+
 INLINE = [{"type": "item_count", "field": "ideas", "params": {"min": 2}}]
 
 
@@ -735,6 +736,7 @@ JUDGED_TWO_FIELD = [
     {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}},
     {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}},
 ]
+
 JUDGE_AGENT = {"model_vendor": "anthropic", "model_name": "claude-sonnet-5"}
 
 
@@ -871,3 +873,72 @@ def test_a_suite_failing_only_on_skipped_rules_stops_generating():
     assert after.exhausted is True
     assert after.suite_result.overall_pass is False
     assert all(o.skipped for o in after.suite_result.failed)
+
+
+# ---------------------------------------------------------------------------
+# A response can carry more than one record (1 -> N expansion)
+# ---------------------------------------------------------------------------
+
+PASS_RECORD = {"ideas": ["a", "b", "c"]}
+
+FAIL_RECORD = {"ideas": ["only one"]}
+
+
+class TestExpansionResponses:
+    """An action whose LLM returns a JSON array produces one record per element,
+    and every one of them has to be validated — batch already does this."""
+
+    def test_observe_validates_every_record_of_an_expansion(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        assert result.suite_results is not None, "an expansion was left unvalidated"
+        assert [s.overall_pass for s in result.suite_results] == [True, False]
+
+    def test_the_combined_verdict_fails_when_any_record_fails(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        assert result.suite_result.overall_pass is False
+
+    def test_the_combined_verdict_passes_when_every_record_passes(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, PASS_RECORD], True), "P"
+        )
+        assert result.suite_result.overall_pass is True
+
+    def test_a_single_record_still_reports_one_verdict(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD], True), "P"
+        )
+        assert result.response == PASS_RECORD
+        assert len(result.suite_results) == 1
+        assert result.suite_result.overall_pass is True
+
+    def test_a_valid_expansion_does_not_trip_the_structural_gate(self):
+        # The whole response is well-formed; nothing here should be repaired.
+        calls = []
+
+        def generate(prompt):
+            calls.append(prompt)
+            return [PASS_RECORD, PASS_RECORD], True
+
+        result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(generate, "P")
+        assert len(calls) == 1, "a valid expansion was regenerated"
+        assert result.exhausted is False
+        assert result.suite_result.overall_pass is True
+
+    def test_repair_regenerates_until_every_record_passes(self):
+        responses = iter([[PASS_RECORD, FAIL_RECORD], [PASS_RECORD, PASS_RECORD]])
+        result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(
+            lambda p: (next(responses), True), "P"
+        )
+        assert result.iterations == 2
+        assert result.suite_result.overall_pass is True
+
+    def test_a_list_holding_a_non_record_is_still_not_validated(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "not a record"], True), "P"
+        )
+        assert result.suite_result is None
+        assert result.suite_results is None
