@@ -184,6 +184,13 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
             by_id[str(key)] = record
         else:
             unkeyed.append(record)
+    if unkeyed:
+        # Correlation is already broken upstream if this happens — the record
+        # cannot be matched to its input either. Say so rather than let it look
+        # like an ordinary duplicate in the output.
+        logger.warning(
+            "%d pooled record(s) have no custom_id and cannot be deduplicated", len(unkeyed)
+        )
     return [*by_id.values(), *unkeyed]
 
 
