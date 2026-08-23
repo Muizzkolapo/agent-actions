@@ -32,6 +32,19 @@ class ExpectationRunResult:
     exhausted: bool = False
 
 
+class ExpectationsExhaustedError(Exception):
+    """The repair loop ended without a pass and ``on_exhausted`` is ``raise``."""
+
+    def __init__(self, action_name: str, failed_ids: list[str], iterations: int) -> None:
+        self.action_name = action_name
+        self.failed_ids = failed_ids
+        self.iterations = iterations
+        super().__init__(
+            f"Action '{action_name}' exhausted {iterations} expectation iteration(s); "
+            f"still failing: {', '.join(failed_ids) or '(none)'}"
+        )
+
+
 class ExpectationService:
     """Wraps LLM execution with expectation validation.
 
@@ -47,6 +60,7 @@ class ExpectationService:
         judge: JudgeDispatch | None = None,
         max_iterations: int = 3,
         schema: dict[str, Any] | None = None,
+        on_exhausted: str = "return_last",
     ) -> None:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
@@ -55,7 +69,12 @@ class ExpectationService:
                 f"repair must be 'none', 'retry', or 'auto'; got: {repair!r}. "
                 "The prompt-mapping form is not supported yet."
             )
+        if on_exhausted not in ("return_last", "fail", "raise"):
+            raise ValueError(
+                f"on_exhausted must be 'return_last', 'fail', or 'raise'; got: {on_exhausted!r}"
+            )
         self.suite = suite
+        self._on_exhausted = on_exhausted
         self.repair = repair
         self._judge = judge
         self._max_iterations = max_iterations
@@ -92,13 +111,7 @@ class ExpectationService:
                 if last_suite_result is not None:
                     # A regeneration that collapsed (inner recovery exhausted)
                     # must not downgrade a record that already had a verdict.
-                    return ExpectationRunResult(
-                        response=last_response,
-                        executed=True,
-                        suite_result=last_suite_result,
-                        iterations=iteration,
-                        exhausted=True,
-                    )
+                    return self._exhausted_result(last_response, last_suite_result, iteration)
                 return ExpectationRunResult(response=response, executed=executed)
 
             if self.repair == "none":
@@ -139,12 +152,38 @@ class ExpectationService:
                     ", ".join(o.id for o in suite_result.failed),
                 )
 
+        if self.repair == "none":
+            return ExpectationRunResult(
+                response=response,
+                executed=True,
+                suite_result=suite_result,
+                iterations=iterations,
+            )
+        return self._exhausted_result(response, suite_result, iterations)
+
+    def _exhausted_result(
+        self, response: Any, suite_result: SuiteResult | None, iterations: int
+    ) -> ExpectationRunResult:
+        """Apply the on_exhausted policy to a loop that ended without a pass."""
+        if self._on_exhausted == "raise":
+            failed = (
+                [o.id for o in suite_result.failed if o.severity == "fail"] if suite_result else []
+            )
+            raise ExpectationsExhaustedError(self.suite.name, failed, iterations)
+        if self._on_exhausted == "fail":
+            return ExpectationRunResult(
+                response=None,
+                executed=False,
+                suite_result=suite_result,
+                iterations=iterations,
+                exhausted=True,
+            )
         return ExpectationRunResult(
             response=response,
             executed=True,
             suite_result=suite_result,
             iterations=iterations,
-            exhausted=self.repair != "none",
+            exhausted=True,
         )
 
     def _prompt_for(

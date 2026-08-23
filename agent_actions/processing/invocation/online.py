@@ -11,6 +11,7 @@ from agent_actions.processing.invocation.strategy import InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
 from agent_actions.processing.recovery.retry import RetryExhaustedException
 from agent_actions.processing.types import (
+    ExpectationsMetadata,
     RecoveryMetadata,
     RepromptMetadata,
     RetryMetadata,
@@ -81,7 +82,19 @@ class OnlineStrategy(InvocationStrategy):
                 llm_context=task.llm_context,
             )
             response, executed = run.response, run.executed
-            if run.suite_result is not None and isinstance(response, dict):
+            if run.exhausted and (not executed or not isinstance(response, dict)):
+                # Exhaustion with nothing annotatable (fail mode, or return_last
+                # ending on a non-record) routes to the tombstone channel.
+                response, executed = None, False
+                recovery_metadata.expectations = ExpectationsMetadata(
+                    attempts=run.iterations,
+                    failed=(
+                        [o.id for o in run.suite_result.failed if o.severity == "fail"]
+                        if run.suite_result
+                        else []
+                    ),
+                )
+            elif run.suite_result is not None and isinstance(response, dict):
                 from agent_actions.expectations.service import attach_verdict
 
                 response = attach_verdict(response, run.suite_result)

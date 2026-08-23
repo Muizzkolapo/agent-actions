@@ -115,12 +115,25 @@ class EvaluationMetadata:
 
 
 @dataclass
+class ExpectationsMetadata:
+    """Metadata for expectations exhaustion, stored in output _recovery.expectations field."""
+
+    attempts: int
+    failed: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {"attempts": self.attempts, "failed": self.failed}
+
+
+@dataclass
 class RecoveryMetadata:
     """Container for recovery metadata, stored under the _recovery output key."""
 
     retry: RetryMetadata | None = None
     reprompt: RepromptMetadata | None = None
     evaluation: EvaluationMetadata | None = None
+    expectations: ExpectationsMetadata | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization. Returns empty dict if no recovery."""
@@ -131,11 +144,18 @@ class RecoveryMetadata:
             result["reprompt"] = self.reprompt.to_dict()
         if self.evaluation:
             result["evaluation"] = self.evaluation.to_dict()
+        if self.expectations:
+            result["expectations"] = self.expectations.to_dict()
         return result
 
     def is_empty(self) -> bool:
         """Return True if no recovery occurred."""
-        return self.retry is None and self.reprompt is None and self.evaluation is None
+        return (
+            self.retry is None
+            and self.reprompt is None
+            and self.evaluation is None
+            and self.expectations is None
+        )
 
 
 @dataclass
