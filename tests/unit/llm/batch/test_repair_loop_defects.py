@@ -218,3 +218,41 @@ class TestProviderErrorsSurviveSerialisation:
         failed = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limited")
         restored = deserialize_results(serialize_results([failed]))
         assert restored[0].error == "429 rate limited"
+
+
+class TestPoolingIsOneAuthority:
+    """Both the submit path and the resume path add to the graduated pool.
+
+    Two call sites means two chances to forget the dedupe, and the pool is what
+    finalisation ships — a record in it twice is a duplicate output row.
+    """
+
+    def test_pooling_the_same_record_twice_keeps_one(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        err = BatchResult(custom_id="e1", content=None, success=False, error="429")
+        pooled = pool_records([], [err])
+        pooled = pool_records(pooled, [err])
+        assert [r["custom_id"] for r in pooled] == ["e1"]
+
+    def test_the_later_record_wins(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        first = BatchResult(custom_id="r1", content={"score": -1}, success=True)
+        later = BatchResult(custom_id="r1", content={"score": 9}, success=True)
+        pooled = pool_records(pool_records([], [first]), [later])
+        assert pooled[0]["content"]["score"] == 9
+
+    def test_distinct_records_accumulate(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        a = BatchResult(custom_id="a", content={"score": 1}, success=True)
+        b = BatchResult(custom_id="b", content={"score": 2}, success=True)
+        pooled = pool_records(pool_records([], [a]), [b])
+        assert sorted(r["custom_id"] for r in pooled) == ["a", "b"]
+
+    def test_the_error_survives_pooling(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        err = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limited")
+        assert pool_records([], [err])[0]["error"] == "429 rate limited"
