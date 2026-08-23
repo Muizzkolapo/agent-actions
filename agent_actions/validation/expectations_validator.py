@@ -86,13 +86,16 @@ def _config_token(value: Any) -> str:
 def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list[str]:
     """Defects for the repair-loop keys against the action's execution shape."""
     messages: list[str] = []
-    if _config_token(action.get("run_mode")) == "batch":
-        messages.append(
-            "expect: has no effect under batch run_mode — expectations run only on "
-            "the online path; remove the block or run the action online"
-        )
+    is_batch = _config_token(action.get("run_mode")) == "batch"
     repair = expect.get("repair", "auto")
     if repair == "none":
+        return messages
+    if is_batch:
+        messages.append(
+            f"repair: {repair} is not supported under batch run_mode — the batch "
+            "path validates and reports but does not regenerate; use repair: none "
+            "or run the action online"
+        )
         return messages
     if isinstance(repair, dict):
         messages.append("repair: {prompt:} is not implemented; use retry or auto")

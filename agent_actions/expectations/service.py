@@ -177,6 +177,19 @@ class ExpectationService:
             )
         return self._exhausted_result(response, suite_result, iterations)
 
+    def validate(
+        self, response: Any, llm_context: dict[str, Any] | None = None
+    ) -> SuiteResult | None:
+        """Run the suite over an already-produced record, or None if it is not one.
+
+        The batch path has its response before this service is reached, so it
+        validates through here rather than through ``execute``. Sharing the
+        service keeps the judge cache and budget identical on both paths.
+        """
+        if not isinstance(response, dict):
+            return None
+        return run_suite(self.suite, response, judge=self._judge, context_source=llm_context)
+
     def _exhausted_result(
         self, response: Any, suite_result: SuiteResult | None, iterations: int
     ) -> ExpectationRunResult:

@@ -594,9 +594,19 @@ def test_repair_prompt_mapping_is_a_defect():
     assert any("not implemented" in m for m in defects["a"])
 
 
-def test_expect_on_a_batch_action_is_a_defect():
+def test_observe_on_a_batch_action_is_allowed():
+    # The batch path validates and attaches the verdict, so the same expect:
+    # block works in either run_mode.
     defects = find_expectation_defects(
         action_config(run_mode="batch", expect={"repair": "none", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_repair_on_a_batch_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(run_mode="batch", expect={"repair": "auto", "expectations": NOT_NULL}),
         {"a": {"options"}},
     )
     assert any("batch" in m for m in defects["a"])

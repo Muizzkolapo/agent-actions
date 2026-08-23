@@ -49,6 +49,11 @@ from agent_actions.utils.transformation.passthrough import merge_passthrough_nam
 logger = logging.getLogger(__name__)
 
 
+# Sentinel: None is a real answer here (the action has no expect: block), so
+# "not yet built" needs its own value.
+_UNSET = object()
+
+
 @dataclass
 class BatchProcessingContext:
     """Internal context for batch result parsing."""
@@ -91,6 +96,7 @@ class BatchResultStrategy:
     def __init__(self) -> None:
         self._pending_batch_results: list[BatchResult] | None = None
         self._pending_kwargs: dict[str, Any] = {}
+        self._expectations: Any = _UNSET
 
     def prepare_invoke(
         self,
@@ -299,6 +305,26 @@ class BatchResultStrategy:
 
         return results
 
+    def _expectation_service(self, ctx: BatchProcessingContext):
+        """The action's expectation service, built once per batch.
+
+        One instance per action is what the online path uses, and the judge
+        cache and per-run budget both live on it — rebuilding per record would
+        reset the budget and lose every cache hit.
+        """
+        if self._expectations is _UNSET:
+            from agent_actions.expectations.service import (
+                create_expectation_service_from_config,
+            )
+
+            agent_config = ctx.agent_config or {}
+            self._expectations = create_expectation_service_from_config(
+                agent_config.get("expect"),
+                action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
+                agent_config=agent_config,
+            )
+        return self._expectations
+
     def _process_successful_result(
         self,
         ctx: BatchProcessingContext,
@@ -371,9 +397,17 @@ class BatchResultStrategy:
             else:
                 envelope_input = original_row
 
+        expectation_service = self._expectation_service(ctx)
+
         structured_items = []
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
+            if expectation_service is not None:
+                from agent_actions.expectations.service import attach_verdict
+
+                verdict = expectation_service.validate(item_dict)
+                if verdict is not None:
+                    item_dict = attach_verdict(item_dict, verdict)
             if is_tool_version_merge:
                 content = {**(existing_content or {}), **item_dict}
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
