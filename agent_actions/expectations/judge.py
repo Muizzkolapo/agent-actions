@@ -3,7 +3,9 @@
 Mirrors `processing/recovery/critique.py`'s auxiliary-LLM-call pattern —
 same ad-hoc invocation entry point, same default of reusing the generating
 action's own model, same plain-text-JSON verdict instead of a vendor-native
-structured-output schema.
+structured-output schema. The verdict text goes through `parse_llm_json`, the
+same reader every provider uses, so a judge is never penalised for answering
+in a dialect the rest of the framework already accepts.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from agent_actions.expectations.types import Expectation
+from agent_actions.utils.json_parsing import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +59,8 @@ def invoke_judge(
 
     Raises whatever `ClientInvocationService.invoke_client` raises — network,
     auth, and provider errors are the caller's to handle, exactly like
-    `invoke_critique`. A malformed judge response (not JSON, no boolean
-    `passed` key) is this function's own call to make: it is always a
+    `invoke_critique`. A reply that cannot be read as a verdict (no object, no
+    boolean `passed` key) is this function's own call to make: it is always a
     failure, never a silent pass.
     """
     from agent_actions.llm.realtime.services.invocation import ClientInvocationService
@@ -88,12 +91,11 @@ def invoke_judge(
         else str(first)
     )
 
-    try:
-        parsed = json.loads(text.strip())
-    except json.JSONDecodeError:
-        return False, f"judge response was not valid JSON: {text[:200]!r}"
+    parsed = parse_llm_json(text.strip())
+    if not isinstance(parsed, dict):
+        return False, f"judge response was not a verdict object: {text[:200]!r}"
 
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("passed"), bool):
+    if not isinstance(parsed.get("passed"), bool):
         return False, f"judge response missing a boolean 'passed' key: {text[:200]!r}"
 
     return parsed["passed"], str(parsed.get("reason", ""))
