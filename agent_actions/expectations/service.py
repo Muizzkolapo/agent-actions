@@ -152,27 +152,11 @@ class ExpectationService:
                     )
                 return ExpectationRunResult(response=response, executed=executed)
 
-            records = _records_of(response)
-
-            if self.repair == "none":
-                if records is None:
-                    return ExpectationRunResult(response=response, executed=executed)
-                suite_results = [
-                    self._record_verdict(record, llm_context, check_schema=False)
-                    for record in records
-                ]
-            else:
-                if records is None:
-                    suite_results = [self._non_record_verdict(response)]
-                else:
-                    # Per record: a malformed one reports its own structural
-                    # failure, a conforming one is judged on its own rules —
-                    # a bad sibling must not buy it a pass it did not earn.
-                    suite_results = [
-                        self._record_verdict(record, llm_context, check_schema=True)
-                        for record in records
-                    ]
-            suite_result = _combine(suite_results, self.suite.name)
+            suite_result, suite_results = self.verdict_for_response(
+                response, llm_context, check_schema=self.repair != "none"
+            )
+            if suite_result is None:
+                return ExpectationRunResult(response=response, executed=executed)
             if suite_result.overall_pass:
                 return ExpectationRunResult(
                     response=response,
@@ -223,6 +207,47 @@ class ExpectationService:
                 suite_results=suite_results,
             )
         return self._exhausted_result(response, suite_result, iterations, suite_results)
+
+    @property
+    def max_iterations(self) -> int:
+        """Total generations per record under a repair policy, counting the first."""
+        return self._max_iterations
+
+    @property
+    def on_exhausted(self) -> str:
+        return self._on_exhausted
+
+    @property
+    def hints(self) -> dict[str, str]:
+        """Each rule's author-supplied remedy text, keyed by resolved id."""
+        return self._hints
+
+    def verdict_for_response(
+        self,
+        response: Any,
+        llm_context: dict[str, Any] | None = None,
+        *,
+        check_schema: bool,
+    ) -> tuple[SuiteResult | None, list[SuiteResult]]:
+        """One verdict for a whole response, plus the per-record verdicts behind it.
+
+        A response carries one record or many; each is judged on its own so a
+        malformed sibling neither fails a conforming record nor buys it a pass.
+        Returns ``(None, [])`` when the response is not record-shaped and the
+        caller does not want the structural gate — observe mode has nothing to
+        say about a response it cannot read.
+        """
+        records = _records_of(response)
+        if records is None:
+            if not check_schema:
+                return None, []
+            suite_results = [self._non_record_verdict(response)]
+        else:
+            suite_results = [
+                self._record_verdict(record, llm_context, check_schema=check_schema)
+                for record in records
+            ]
+        return _combine(suite_results, self.suite.name), suite_results
 
     def validate(
         self, response: Any, llm_context: dict[str, Any] | None = None
@@ -364,6 +389,23 @@ class ExpectationService:
 def attach_verdict(response: dict[str, Any], suite_result: SuiteResult) -> dict[str, Any]:
     """Return *response* with the verdict under the ``expect`` key."""
     return {**response, VERDICT_KEY: suite_result.to_record_dict()}
+
+
+def attach_verdicts(response: Any, suite_results: list[SuiteResult]) -> Any:
+    """Return *response* with each record carrying its own verdict.
+
+    Pairs one verdict per record in order, which is the order
+    `verdict_for_response` produced them in. A response whose record count no
+    longer matches its verdicts is returned untouched rather than mis-paired.
+    """
+    records = _records_of(response)
+    if records is None or len(records) != len(suite_results):
+        return response
+    annotated = [
+        attach_verdict(record, verdict) if isinstance(record, dict) else record
+        for record, verdict in zip(records, suite_results, strict=True)
+    ]
+    return annotated[0] if isinstance(response, dict) else annotated
 
 
 def create_expectation_service_from_config(

@@ -332,17 +332,13 @@ class BatchResultStrategy:
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
             )
-            if service is not None and service.repair != "none":
-                from agent_actions.errors import ConfigurationError
-
-                raise ConfigurationError(
-                    f"Action '{agent_config.get('action_name')}' reached the batch "
-                    f"path with repair: {service.repair!r}. The batch path validates "
-                    "and reports but does not regenerate, so this would silently "
-                    "behave as repair: none. Use repair: none, or run it online.",
-                    context={"action": agent_config.get("action_name")},
-                )
-            ctx.expectation_service = service
+            # Under a repair policy the verdict is already on the record: the
+            # repair loop wrote the one it regenerated against. Re-validating
+            # here would spend the judge budget a second time on the same
+            # content and could disagree with the verdict the loop acted on.
+            ctx.expectation_service = (
+                None if service is not None and service.repair != "none" else service
+            )
         return ctx.expectation_service
 
     def _process_successful_result(

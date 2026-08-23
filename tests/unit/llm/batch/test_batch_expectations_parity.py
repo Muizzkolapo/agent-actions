@@ -215,10 +215,13 @@ class TestConfigErrorsAreNotDowngraded:
                 agent_config=agent_config,
             )
 
-    def test_a_repair_service_reaching_batch_fails_loudly(self):
-        """validate() cannot repair, so a repair service here means preflight was bypassed."""
-        import pytest
+    def test_the_assembler_does_not_re_judge_a_record_the_repair_loop_already_judged(self):
+        """Under a repair policy the verdict is written by the loop, not here.
 
+        Re-running the suite would spend the judge budget a second time on
+        content it has already judged, and could reach a different verdict from
+        the one the loop acted on.
+        """
         custom_id = "t-001"
         row = {"target_id": custom_id, "source_guid": "sg-001", "content": {}}
         agent_config = {
@@ -228,10 +231,11 @@ class TestConfigErrorsAreNotDowngraded:
             "run_mode": "batch",
             "expect": {"repair": "auto", "expectations": EXPECT_BLOCK["expectations"]},
         }
-        with pytest.raises(Exception, match="repair"):
-            BatchResultStrategy().process(
-                [BatchResult(custom_id=custom_id, content=PASSING, success=True)],
-                context_map={custom_id: row},
-                output_directory="/tmp/test",
-                agent_config=agent_config,
-            )
+        results = BatchResultStrategy().process(
+            [BatchResult(custom_id=custom_id, content=PASSING, success=True)],
+            context_map={custom_id: row},
+            output_directory="/tmp/test",
+            agent_config=agent_config,
+        )
+        content = results[0].data[0]["content"][ACTION]
+        assert "expect" not in content

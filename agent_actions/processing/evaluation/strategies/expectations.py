@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from agent_actions.processing.types import EvaluationOutcome
 
@@ -18,14 +18,15 @@ logger = logging.getLogger(__name__)
 class ExpectationStrategy:
     """Drives batch repair rounds from the same suite the online loop runs.
 
-    The verdict computed here is kept per record so the result assembler can
-    attach it without re-running the suite — re-running would spend the judge
-    budget twice on the same content.
+    Each verdict is kept against its record so the result assembler can attach
+    it without re-running the suite; a second run would spend the judge budget
+    again on content it has already judged.
     """
 
     def __init__(self, service: ExpectationService) -> None:
         self._service = service
         self._verdicts: dict[str, SuiteResult] = {}
+        self._record_verdicts: dict[str, list[SuiteResult]] = {}
 
     @property
     def name(self) -> str:
@@ -44,10 +45,57 @@ class ExpectationStrategy:
         return self._verdicts.get(custom_id)
 
     def evaluate(self, result: BatchResult) -> EvaluationOutcome:
-        return EvaluationOutcome(passed=True)
+        if not result.success:
+            return EvaluationOutcome(passed=False, failure_type="api_error", error=result.error)
+
+        # check_schema mirrors the online repair loop: a response that is not
+        # record-shaped, or a record the schema rejects, becomes a structural
+        # failure the regeneration can act on rather than an unjudged pass.
+        verdict, per_record = self._service.verdict_for_response(result.content, check_schema=True)
+        if verdict is None:
+            return EvaluationOutcome(passed=False, failure_type="expectation_fail")
+
+        self._verdicts[result.custom_id] = verdict
+        self._record_verdicts[result.custom_id] = per_record
+        if verdict.overall_pass:
+            return EvaluationOutcome(passed=True)
+        return EvaluationOutcome(
+            passed=False,
+            failure_type="expectation_fail",
+            error=", ".join(outcome.id for outcome in verdict.failed),
+        )
 
     def build_feedback(self, result: BatchResult) -> str:
-        return ""
+        """What to append to the prompt this record was already sent.
 
-    def _hints(self) -> dict[str, Any]:
-        return {}
+        ``repair: retry`` re-sends the original prompt untouched, so it has
+        nothing to append.
+        """
+        if self._service.repair != "auto":
+            return ""
+        verdict = self._verdicts.get(result.custom_id)
+        if verdict is None:
+            logger.warning(
+                "No expectation verdict for %s — re-sending the original prompt",
+                result.custom_id,
+            )
+            return ""
+
+        from agent_actions.expectations.repair import compose_repair_feedback
+
+        return compose_repair_feedback(result.content, verdict, self._service.hints)
+
+    def write_verdicts(self, results: list[BatchResult]) -> None:
+        """Put each record's verdict on the record, as the online path does.
+
+        The result assembler skips its own validation under a repair policy, so
+        this is where the verdict enters the record — and it is the one this
+        loop already computed, not a second run that would spend the judge
+        budget again on the same content.
+        """
+        from agent_actions.expectations.service import attach_verdicts
+
+        for result in results:
+            per_record = self._record_verdicts.get(result.custom_id)
+            if per_record:
+                result.content = attach_verdicts(result.content, per_record)

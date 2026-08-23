@@ -8,9 +8,7 @@ from typing import Any
 
 from agent_actions.expectations.types import Outcome, SuiteResult
 
-REPAIR_TEMPLATE = """{original_prompt}
-
-## Your previous output failed validation
+REPAIR_FEEDBACK_TEMPLATE = """## Your previous output failed validation
 
 ```json
 {response_json}
@@ -62,7 +60,16 @@ def compose_repair_prompt(
     suite_result: SuiteResult,
     hints: dict[str, str],
 ) -> str:
-    """One instruction from the full failure list, naming what must be preserved.
+    """The original prompt followed by what the regeneration must fix and keep."""
+    return f"{original_prompt}\n\n{compose_repair_feedback(response, suite_result, hints)}"
+
+
+def compose_repair_feedback(
+    response: Any,
+    suite_result: SuiteResult,
+    hints: dict[str, str],
+) -> str:
+    """The failure list on its own, for a path that appends to the prompt it already sent.
 
     Skipped outcomes are omitted: a rule the judge budget left unevaluated says
     nothing the regeneration can act on.
@@ -77,8 +84,7 @@ def compose_repair_prompt(
     # regenerated output can be asked to preserve.
     passing = [o.id for o in suite_result.outcomes if o.passed and not o.skipped]
     passing_lines = "\n".join(f"- {oid}" for oid in passing) if passing else "(none yet)"
-    return REPAIR_TEMPLATE.format(
-        original_prompt=original_prompt,
+    return REPAIR_FEEDBACK_TEMPLATE.format(
         response_json=json.dumps(response, default=str),
         failed_lines=failed_lines or "(none)",
         passing_lines=passing_lines,

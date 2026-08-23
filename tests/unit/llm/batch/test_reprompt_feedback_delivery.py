@@ -194,7 +194,7 @@ class TestBothResubmissionSitesDeliver:
     needs its own coverage — dropping the kwarg there left every test green."""
 
     def test_validate_and_reprompt_also_delivers_the_feedback(self):
-        from agent_actions.llm.batch.services import reprompt_ops
+        from agent_actions.llm.batch.services import reprompt_ops, resubmission
 
         provider = RecordingProvider()
         failing = BatchResult(
@@ -222,7 +222,7 @@ class TestBothResubmissionSitesDeliver:
                 return_value=prepared,
             ),
             patch.object(
-                reprompt_ops, "wait_for_batch_completion", return_value=BatchStatus.COMPLETED
+                resubmission, "wait_for_batch_completion", return_value=BatchStatus.COMPLETED
             ),
         ):
             reprompt_ops.validate_and_reprompt(

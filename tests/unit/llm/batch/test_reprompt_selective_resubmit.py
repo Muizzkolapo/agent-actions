@@ -143,11 +143,11 @@ class TestSelectiveRepromptResubmission:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -243,11 +243,11 @@ class TestSelectiveRepromptResubmission:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -445,11 +445,11 @@ class TestRepromptDroppedRecordReconciliation:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -512,11 +512,11 @@ class TestRepromptDroppedRecordReconciliation:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -573,11 +573,11 @@ class TestRepromptDroppedRecordReconciliation:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -649,11 +649,11 @@ class TestRepromptDroppedRecordReconciliation:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"
@@ -873,11 +873,11 @@ class TestRepromptErrorPathBehavior:
                 return_value=(_validation_func_for_bad_content, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="failed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"

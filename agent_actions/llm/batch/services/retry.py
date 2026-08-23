@@ -149,6 +149,16 @@ class BatchRetryService:
                 agent_config=agent_config,
             )
 
+            # PHASE 3: REPAIR — regenerate records whose expect: suite failed
+            all_results = self.repair_expectations(
+                results=all_results,
+                provider=provider,
+                context_map=context_map,
+                output_directory=output_directory,
+                file_name=file_name,
+                agent_config=agent_config,
+            )
+
         return all_results, exhausted_recovery
 
     def _resubmit_missing_records(
@@ -236,6 +246,30 @@ class BatchRetryService:
     ) -> list[BatchResult]:
         """Validate results and reprompt failures with feedback."""
         return _reprompt.validate_and_reprompt(
+            action_indices=self._action_indices,
+            dependency_configs=self._dependency_configs,
+            storage_backend=self._storage_backend,
+            results=results,
+            provider=provider,
+            context_map=context_map,
+            output_directory=output_directory,
+            file_name=file_name,
+            agent_config=agent_config,
+        )
+
+    def repair_expectations(
+        self,
+        results: list[BatchResult],
+        provider: BaseBatchClient,
+        context_map: dict[str, Any],
+        output_directory: str,
+        file_name: str,
+        agent_config: dict[str, Any] | None,
+    ) -> list[BatchResult]:
+        """Regenerate records whose expect: suite failed, under a repair policy."""
+        from agent_actions.llm.batch.services import repair_ops as _repair
+
+        return _repair.repair_expectations(
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
             storage_backend=self._storage_backend,
