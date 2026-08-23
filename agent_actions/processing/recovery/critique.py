@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent_actions.output.response.response_builder import ResponseBuilder
+
 logger = logging.getLogger(__name__)
 
 CRITIQUE_PROMPT_TEMPLATE = """The following LLM response failed validation.
@@ -98,8 +100,4 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
     if not result:
         raise ValueError("Critique LLM returned empty response")
 
-    # Extract text from the response — providers return list[dict] or list[str]
-    first = result[0]
-    if isinstance(first, dict):
-        return str(first.get("content", first.get("text", str(first))))
-    return str(first)
+    return str(ResponseBuilder.unwrap(result, agent_config))

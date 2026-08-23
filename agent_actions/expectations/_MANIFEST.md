@@ -45,7 +45,8 @@ their results, and the service that runs them around generation.
 | `config` | outbound | `ExpectConfig` lives in `config/schema.py` |
 | `output` | outbound | `loader.py` resolves suite names through `SchemaLoader`, exactly as `schema:` resolves |
 | `guards`, `input` | outbound | `expression.py` reuses `GuardParser`'s blocklist and the `input/preprocessing/parsing` grammar/AST |
-| `utils` | outbound | `judge.py` reads the judge's verdict through `json_parsing.parse_llm_json`, the reader every provider already shares |
+| `utils` | outbound | `judge.py` reuses `json_parsing.strip_code_fences` to unwrap a fenced verdict; it deliberately does not reuse `parse_llm_json`, whose best-effort repair would scavenge a verdict out of prose |
+| `output` | outbound | `judge.py` takes the provider payload from `response.ResponseBuilder.unwrap`, the counterpart to the `wrap_non_json` that produced the envelope |
 
 ## Notes
 

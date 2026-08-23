@@ -1,15 +1,14 @@
 """LLM-judged expectations: prompt, invocation, and verdict parsing.
 
-Mirrors `processing/recovery/critique.py`'s auxiliary-LLM-call pattern —
-same ad-hoc invocation entry point, same default of reusing the generating
-action's own model, same plain-text-JSON verdict instead of a vendor-native
-structured-output schema. The verdict text goes through `parse_llm_json`, the
-same reader every provider uses, so a judge is never penalised for answering
-in a dialect the rest of the framework already accepts.
+Mirrors `processing/recovery/critique.py`'s auxiliary-LLM-call pattern — same
+ad-hoc invocation entry point, same default of reusing the generating action's
+own model, same plain-text-JSON verdict instead of a vendor-native
+structured-output schema.
 """
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import logging
@@ -17,7 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from agent_actions.expectations.types import Expectation
-from agent_actions.utils.json_parsing import parse_llm_json
+from agent_actions.output.response.response_builder import ResponseBuilder
+from agent_actions.utils.json_parsing import strip_code_fences
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,24 @@ def build_judge_prompt(rule: str, value: Any, context: dict[str, Any] | None) ->
     return JUDGE_PROMPT_TEMPLATE.format(
         rule=rule, context_section=context_section, value=rendered_value
     )
+
+
+def _read_verdict(text: str) -> dict[str, Any] | None:
+    """The reply as a verdict object, or None when it is not one.
+
+    Both readers consume the whole reply or refuse, which is the point: the
+    judge prompt shows the model the exact object to emit, so a reply that
+    merely quotes that example while arguing the opposite must not be mistaken
+    for a verdict.
+    """
+    candidate = strip_code_fences(text).strip()
+    for reader in (json.loads, ast.literal_eval):
+        try:
+            parsed = reader(candidate)
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            continue
+        return parsed if isinstance(parsed, dict) else None
+    return None
 
 
 def invoke_judge(
@@ -84,19 +102,13 @@ def invoke_judge(
     if not result:
         return False, "judge call returned an empty response"
 
-    first = result[0]
-    text = (
-        str(first.get("content", first.get("text", str(first))))
-        if isinstance(first, dict)
-        else str(first)
-    )
-
-    parsed = parse_llm_json(text.strip())
-    if not isinstance(parsed, dict):
-        return False, f"judge response was not a verdict object: {text[:200]!r}"
+    payload = ResponseBuilder.unwrap(result, effective_config)
+    parsed = payload if isinstance(payload, dict) else _read_verdict(str(payload))
+    if parsed is None:
+        return False, f"judge response was not a verdict object: {str(payload)[:200]!r}"
 
     if not isinstance(parsed.get("passed"), bool):
-        return False, f"judge response missing a boolean 'passed' key: {text[:200]!r}"
+        return False, f"judge response missing a boolean 'passed' key: {str(payload)[:200]!r}"
 
     return parsed["passed"], str(parsed.get("reason", ""))
 

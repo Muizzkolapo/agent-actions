@@ -285,7 +285,7 @@ def test_a_judge_reply_in_another_dialect_still_scores_the_record():
         action_name="brainstorm",
         agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
     )
-    reply = [{"content": "{'passed': True, 'reason': 'stays on topic'}"}]
+    reply = [{"raw_response": "{'passed': True, 'reason': 'stays on topic'}"}]
     with patch(
         "agent_actions.llm.realtime.services.invocation.ClientInvocationService.invoke_client",
         return_value=reply,

@@ -116,6 +116,23 @@ class ResponseBuilder:
         return [{output_field: content}]
 
     @staticmethod
+    def unwrap(result: list[Any], agent_config: dict[str, Any]) -> Any:
+        """The payload behind a provider's return value.
+
+        The counterpart to :meth:`wrap_non_json`. A JSON-mode call returns the
+        parsed object itself; a plain-text call returns it wrapped under the
+        configured output field. Callers that only want the payload should not
+        have to know which happened.
+        """
+        first = result[0]
+        if not isinstance(first, dict):
+            return first
+        output_field: str = agent_config.get("output_field", get_default("output_field"))
+        if output_field in first:
+            return first[output_field]
+        return first
+
+    @staticmethod
     def extract_usage(response: Any, provider: str) -> UsageResult:
         """Extract token usage from a provider response.
 
