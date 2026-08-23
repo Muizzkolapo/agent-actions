@@ -162,6 +162,23 @@ def submit_repair_batch(
     return batch_id, len(prepared.tasks)
 
 
+def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list[dict[str, Any]]:
+    """The graduated pool with *added* folded in, keyed by record, latest winning.
+
+    The pool is what finalisation ships, and both the submitting and the
+    resuming pass add to it. The original batch also stays COMPLETED at the
+    provider, so every resume re-processes it and re-graduates the same records
+    — appending would ship each one again for one source, and a later round's
+    repaired content has to replace the attempt it superseded.
+    """
+    from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+    by_id = {str(record.get("custom_id")): record for record in pooled}
+    for record in serialize_results(added):
+        by_id[str(record.get("custom_id"))] = record
+    return list(by_id.values())
+
+
 def carry_forward(
     prior: RecoveryState | None,
     *,
@@ -180,18 +197,6 @@ def carry_forward(
     """
     from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
     from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
-    from agent_actions.llm.batch.services.retry_serialization import serialize_results
-
-    # Keyed by custom_id, latest wins: the original batch stays COMPLETED at the
-    # provider, so every resume re-processes it and re-graduates the same
-    # records. Appending would ship each one again for the same source, and a
-    # later round's repaired content must replace the attempt it superseded.
-    pooled: dict[str, dict[str, Any]] = {
-        str(record.get("custom_id")): record
-        for record in (prior.graduated_results if prior else [])
-    }
-    for record in serialize_results(graduated):
-        pooled[str(record.get("custom_id"))] = record
 
     state = RecoveryState(
         phase=RecoveryPhase.REPAIR,
@@ -199,7 +204,7 @@ def carry_forward(
         repair_max_attempts=repair_max_attempts,
         repair_submitted_ids=list(submitted_ids or []),
         repair_judge_budget_remaining=judge_budget_remaining,
-        graduated_results=list(pooled.values()),
+        graduated_results=pool_records(prior.graduated_results if prior else [], graduated),
         evaluation_strategy_name="expectations",
     )
     if prior is None:

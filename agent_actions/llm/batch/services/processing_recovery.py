@@ -814,6 +814,7 @@ def handle_repair_recovery(
         apply_exhaustion_policy,
         build_repair_strategy,
         dropped_from,
+        pool_records,
         stamp_exhausted,
         submit_repair_batch,
     )
@@ -897,7 +898,7 @@ def handle_repair_recovery(
             state.repair_attempt = next_attempt
             state.repair_submitted_ids = [r.custom_id for r in repairable]
             state.repair_judge_budget_remaining = strategy.judge_budget_remaining
-            state.graduated_results.extend(serialize_results(carried))
+            state.graduated_results = pool_records(state.graduated_results, carried)
             RecoveryStateManager.save(
                 context.service._storage_backend,
                 context.service._resolve_action_name(context.action_name),
