@@ -378,3 +378,119 @@ class TestANonTerminalRoundKeepsWhatItCannotResubmit:
         _out, state = self._resume_continuing([failing, api_error])
         pooled = {r.get("custom_id"): r for r in state.graduated_results}
         assert pooled["e1"].get("error") == "429 rate limit"
+
+
+class TestReEnteringADeferredRoundDoesNotDuplicate:
+    """A deferring round leaves its registry entry COMPLETED at the provider.
+
+    The runner iterates every completed job each pass, so the same repair round
+    is handed back more than once. What it graduates must land in the pool once.
+    """
+
+    def _resume_twice(self):
+        state = RecoveryState(
+            repair_attempt=1, repair_max_attempts=2, repair_submitted_ids=["g1", "r1"]
+        )
+        graduated = BatchResult(custom_id="g1", content=PASSING, success=True)
+        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
+        provider = RecordingProvider()
+        backend = _Backend()
+        with patch(
+            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
+        ):
+            for _pass in range(2):
+                pr.handle_repair_recovery(
+                    _context(provider, backend, _agent_config(max_iterations=3)),
+                    _identity(),
+                    state=state,
+                    recovery_results=[graduated, failing],
+                    accumulated=[],
+                    context_map=_context_map("g1", "r1"),
+                )
+        return state
+
+    def test_the_pool_holds_one_entry_per_record(self):
+        state = self._resume_twice()
+        ids = [r.get("custom_id") for r in state.graduated_results]
+        assert sorted(ids) == sorted(set(ids)), f"a record was pooled more than once: {ids}"
+
+
+class TestAStaleStateFileCannotStarveTheJudge:
+    """`_process_original_batch` passes recovery_state=None deliberately — an
+    existing file there may be left over from a crashed run.
+
+    Reading the counter back is what stops the loop resubmitting forever, but a
+    stale budget of 0 would turn every judged expectation into a hard failure on
+    an otherwise fresh run.
+    """
+
+    JUDGED = [{"id": "j", "type": "llm_judge", "field": "options", "rule": "on topic"}]
+
+    def _judged_config(self):
+        config = _agent_config(judge_budget=5)
+        config["expect"]["expectations"] = self.JUDGED
+        config["model_vendor"] = "anthropic"
+        return config
+
+    def test_a_state_left_by_a_crashed_run_does_not_supply_a_spent_budget(self):
+        import json
+
+        from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
+
+        stale = RecoveryState(phase=RecoveryPhase.RETRY, repair_judge_budget_remaining=0)
+        backend = _Backend()
+        backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(stale.to_dict())
+
+        seen = {}
+        real = pr.__dict__.get("_noop")
+        import agent_actions.llm.batch.services.repair_ops as repair_ops
+
+        original = repair_ops.build_repair_strategy
+
+        def spy(agent_config, judge_budget_remaining=None):
+            seen["budget"] = judge_budget_remaining
+            return original(agent_config, judge_budget_remaining)
+
+        passing = BatchResult(custom_id="r1", content=PASSING, success=True)
+        with patch.object(repair_ops, "build_repair_strategy", spy):
+            pr.check_and_submit_repair(
+                _context(RecordingProvider(), backend, self._judged_config()),
+                _identity(),
+                batch_results=[passing],
+                context_map=_context_map("r1"),
+                recovery_state=None,
+            )
+        assert seen["budget"] is None, (
+            "a stale non-repair state supplied a spent judge budget to a fresh pass"
+        )
+
+    def test_an_in_flight_repair_state_still_supplies_its_balance(self):
+        import json
+
+        from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
+
+        live = RecoveryState(
+            phase=RecoveryPhase.REPAIR, repair_attempt=1, repair_judge_budget_remaining=2
+        )
+        backend = _Backend()
+        backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(live.to_dict())
+
+        seen = {}
+        import agent_actions.llm.batch.services.repair_ops as repair_ops
+
+        original = repair_ops.build_repair_strategy
+
+        def spy(agent_config, judge_budget_remaining=None):
+            seen["budget"] = judge_budget_remaining
+            return original(agent_config, judge_budget_remaining)
+
+        passing = BatchResult(custom_id="r1", content=PASSING, success=True)
+        with patch.object(repair_ops, "build_repair_strategy", spy):
+            pr.check_and_submit_repair(
+                _context(RecordingProvider(), backend, self._judged_config()),
+                _identity(),
+                batch_results=[passing],
+                context_map=_context_map("r1"),
+                recovery_state=None,
+            )
+        assert seen["budget"] == 2

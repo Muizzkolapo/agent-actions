@@ -256,3 +256,13 @@ class TestPoolingIsOneAuthority:
 
         err = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limited")
         assert pool_records([], [err])[0]["error"] == "429 rate limited"
+
+
+class TestTheDedupeKeyCannotCollapseDistinctRecords:
+    def test_two_records_without_an_id_are_not_merged(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        a = BatchResult(custom_id="", content={"score": 1}, success=True)
+        b = BatchResult(custom_id="", content={"score": 2}, success=True)
+        pooled = pool_records([], [a, b])
+        assert len(pooled) == 2, "records with no id collapsed into one"
