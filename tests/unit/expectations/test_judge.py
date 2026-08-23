@@ -204,6 +204,34 @@ class TestTheEnvelopesProvidersActuallyReturn:
         assert "boolean 'passed'" in detail
 
 
+class TestTheJudgeAsksForTextSoItDoesItsOwnReading:
+    """The verdict must reach `_read_verdict`, not a provider's parser.
+
+    Under `json_mode` the provider parses the reply itself — through the
+    best-effort reader that scavenges an object out of prose. A judge that
+    inherits the action's `json_mode: true` therefore never sees the text, and
+    the strict reading below it is dead code on the default path.
+    """
+
+    def test_the_judge_call_does_not_inherit_json_mode(self):
+        with patch(INVOKE, return_value=_raw_result('{"passed": true, "reason": "ok"}')) as mock:
+            invoke_judge(_agent_config(json_mode=True), "rule", "value")
+        assert mock.call_args.kwargs["agent_config"]["json_mode"] is False
+
+    def test_the_critique_call_does_not_inherit_json_mode(self):
+        from agent_actions.processing.recovery.critique import invoke_critique
+
+        with patch(INVOKE, return_value=_raw_result("too vague")) as mock:
+            invoke_critique(_agent_config(json_mode=True), {"a": 1}, "errors")
+        assert mock.call_args.kwargs["agent_config"]["json_mode"] is False
+
+    def test_the_caller_config_is_not_mutated(self):
+        config = _agent_config(json_mode=True)
+        with patch(INVOKE, return_value=_raw_result('{"passed": true, "reason": "ok"}')):
+            invoke_judge(config, "rule", "value")
+        assert config["json_mode"] is True
+
+
 class TestAVerdictIsNeverScavengedOutOfProse:
     """The reply is read whole or refused.
 
