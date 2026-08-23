@@ -13,12 +13,12 @@ from agent_actions.expectations.service import (
     ExpectationService,
     create_expectation_service_from_config,
 )
-from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchProcessingContext,
     BatchResultStrategy,
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.providers.batch_base import BatchResult
 
 ACTION = "assess"
 
