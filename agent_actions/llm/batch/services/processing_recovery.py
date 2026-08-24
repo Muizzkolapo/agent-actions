@@ -829,13 +829,14 @@ def handle_repair_recovery(
     from agent_actions.processing.evaluation import EvaluationLoop
 
     strategy = build_repair_strategy(context.agent_config, state.repair_judge_budget_remaining)
-    prior = deserialize_results(state.graduated_results)
 
     if strategy is None:
         return _finalize_and_cleanup(
             context,
             identity,
-            batch_results=prior + recovery_results,
+            batch_results=deserialize_results(
+                pool_records(state.graduated_results, recovery_results)
+            ),
             context_map=context_map,
         )
 
@@ -906,7 +907,9 @@ def handle_repair_recovery(
             state.repair_attempt = next_attempt
             state.repair_submitted_ids = [r.custom_id for r in repairable]
             state.repair_judge_budget_remaining = strategy.judge_budget_remaining
-            state.graduated_results = pool_records(state.graduated_results, carried)
+            state.graduated_results = pool_records(
+                state.graduated_results, carried, in_flight=state.repair_submitted_ids
+            )
             RecoveryStateManager.save(
                 context.service._storage_backend,
                 context.service._resolve_action_name(context.action_name),
@@ -923,7 +926,9 @@ def handle_repair_recovery(
             still_failing, strategy, context.service._resolve_action_name(context.action_name)
         )
 
-    final_results = deserialize_results(state.graduated_results) + still_failing
+    # Through the pool rather than concatenated: the returning copy of a record
+    # supersedes whatever the pool still holds for it, so one id is one row.
+    final_results = deserialize_results(pool_records(state.graduated_results, still_failing))
 
     # Rebuilt from the retry bookkeeping the repair round carried forward, so a
     # record's retry exhaustion is not lost just because a repair also happened.

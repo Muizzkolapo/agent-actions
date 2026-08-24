@@ -169,7 +169,12 @@ def submit_repair_batch(
     return batch_id, len(prepared.tasks)
 
 
-def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list[dict[str, Any]]:
+def pool_records(
+    pooled: list[dict[str, Any]],
+    added: list[BatchResult],
+    *,
+    in_flight: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """The graduated pool with *added* folded in, keyed by record, latest winning.
 
     The pool is what finalisation ships, and both the submitting and the
@@ -181,9 +186,16 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
     from agent_actions.llm.batch.services.retry_serialization import serialize_results
     from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
 
+    # A record that went back to the model is not finished, so it leaves the
+    # pool: it returns through the next round and would otherwise be merged
+    # with its own stale copy, shipping the record twice under one id.
+    sent_back = set(in_flight or ())
+
     by_id: dict[str, dict[str, Any]] = {}
     unkeyed: list[dict[str, Any]] = []
     for record in [*pooled, *serialize_results(added)]:
+        if record.get("custom_id") in sent_back:
+            continue
         # Identity is the record id — and the sentinel a provider stamps on a
         # result carrying none is not one. Folding those together would drop
         # records rather than duplicate them, the worse of the two failures.
@@ -235,7 +247,9 @@ def carry_forward(
         repair_max_attempts=repair_max_attempts,
         repair_submitted_ids=list(submitted_ids or []),
         repair_judge_budget_remaining=judge_budget_remaining,
-        graduated_results=pool_records(prior.graduated_results if prior else [], graduated),
+        graduated_results=pool_records(
+            prior.graduated_results if prior else [], graduated, in_flight=submitted_ids
+        ),
         evaluation_strategy_name="expectations",
     )
     if prior is None:
