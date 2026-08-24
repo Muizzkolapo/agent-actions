@@ -6,6 +6,7 @@ and `handle_repair_recovery` — the two functions that decide whether a run
 pauses, what it persists, and what reaches the output.
 """
 
+from contextlib import ExitStack
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -1329,3 +1330,70 @@ class TestEveryEntryPointActuallyConsultsRepair:
             )
         assert provider.submitted, "the reprompt recovery path never consulted the repair loop"
         assert returned is None and finalize.call_count == 0, "it wrote the file anyway"
+
+
+class TestEveryExitAppliesTheSamePolicy:
+    """Which pass noticed the loop was over must not change what happens.
+
+    `check_and_submit_repair` has three ways to stop: the rounds are spent,
+    nothing can be repaired, or the submission failed. Only the first applied
+    `on_exhausted`, so a run halted or tombstoned depending on which one it hit
+    — while `handle_repair_recovery` applied the policy on the same fall-through.
+    """
+
+    def _stop_via(self, exit_kind: str, policy: str):
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=3, on_exhausted=policy)
+        )
+        if exit_kind == "nothing_repairable":
+            results = [
+                BatchResult(custom_id="r1", content=None, success=False, error="429 rate limited")
+            ]
+            patches = []
+        else:
+            results = [BatchResult(custom_id="r1", content=dict(FAILING), success=True)]
+            patches = [
+                patch.object(pr, "submit_repair_batch", return_value=None),
+                patch(
+                    "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                    return_value=_prepared(),
+                ),
+            ]
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            should_continue = pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=results,
+                context_map=_context_map("r1"),
+                recovery_state=None,
+            )
+        return context, should_continue, results
+
+    def test_nothing_repairable_still_halts_under_raise(self):
+        context, should_continue, _r = self._stop_via("nothing_repairable", "raise")
+        assert should_continue is True
+        assert context.pending_exhaustion is not None, (
+            "the loop gave up but on_exhausted: raise did nothing, purely because this exit was "
+            "taken instead of the spent-rounds one"
+        )
+
+    def test_a_failed_submission_still_halts_under_raise(self):
+        context, should_continue, _r = self._stop_via("submit_failed", "raise")
+        assert should_continue is True
+        assert context.pending_exhaustion is not None
+
+    def test_fail_marks_the_record_at_every_exit(self):
+        for exit_kind in ("nothing_repairable", "submit_failed"):
+            _ctx, _sc, results = self._stop_via(exit_kind, "fail")
+            assert results[0].success is False, f"{exit_kind} left the record looking successful"
+
+    def test_a_provider_failure_keeps_its_cause_at_these_exits(self):
+        _ctx, _sc, results = self._stop_via("nothing_repairable", "fail")
+        assert "429 rate limited" in (results[0].error or "")
+
+    def test_return_last_parks_nothing_at_every_exit(self):
+        for exit_kind in ("nothing_repairable", "submit_failed"):
+            context, _sc, _r = self._stop_via(exit_kind, "return_last")
+            assert context.pending_exhaustion is None, exit_kind
