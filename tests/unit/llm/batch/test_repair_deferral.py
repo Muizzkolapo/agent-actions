@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.expectations.service import ExpectationsExhaustedError
-from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
+from agent_actions.llm.batch.core.batch_constants import RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_models import (
     BatchIdentity,
     BatchJobEntry,
@@ -1399,3 +1399,78 @@ class TestEveryExitAppliesTheSamePolicy:
         for exit_kind in ("nothing_repairable", "submit_failed"):
             context, _sc, _r = self._stop_via(exit_kind, "return_last")
             assert context.pending_exhaustion is None, exit_kind
+
+
+class TestAResumeDoesNotSubmitASecondRoundForTheSameRecords:
+    """The original batch entry is never retired, so every resume re-enters here.
+
+    With a repair round still in flight, submitting another means two paid
+    generations for one record: whichever lands first finalises, deletes the
+    state, and orphans the other — and the counter advances on no new
+    information, burning an iteration each pass.
+    """
+
+    def _resume_with_a_round_in_flight(self, in_flight: bool):
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=3,
+            repair_submitted_ids=["r1"],
+            evaluation_strategy_name="expectations",
+        )
+        provider = RecordingProvider()
+        context = _context(
+            provider, _Backend(), _agent_config(max_iterations=4, on_exhausted="fail")
+        )
+        context.service = MagicMock()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._action_indices = {ACTION: 0}
+        context.service._dependency_configs = {}
+        context.service._storage_backend = None
+        live = BatchJobEntry(
+            batch_id="b-repair-1",
+            status="in_progress" if in_flight else "completed",
+            timestamp="t",
+            provider="p",
+            file_name="f.json_repair_1",
+            parent_file_name="f.json",
+            recovery_type=RecoveryType.REPAIR,
+            recovery_attempt=1,
+        )
+        context.manager.get_all_jobs.return_value = {"f.json_repair_1": live}
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr.RecoveryStateManager, "save"),
+            patch.object(pr.RecoveryStateManager, "load", return_value=state),
+            patch.object(pr, "register_recovery_batch"),
+        ):
+            should_continue = pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=[BatchResult(custom_id="r1", content=dict(FAILING), success=True)],
+                context_map=_context_map("r1"),
+                recovery_state=None,
+            )
+        return should_continue, provider.submitted, state
+
+    def test_it_does_not_resubmit_while_a_round_is_in_flight(self):
+        should_continue, submitted, _s = self._resume_with_a_round_in_flight(in_flight=True)
+        assert submitted == [], (
+            "a second repair batch went out for a record already in flight; both are paid for and "
+            "only one can finalise"
+        )
+        assert should_continue is False, "the pass must defer to the round that is already running"
+
+    def test_the_round_counter_does_not_advance(self):
+        _sc, _submitted, state = self._resume_with_a_round_in_flight(in_flight=True)
+        assert state.repair_attempt == 1, (
+            f"the counter advanced to {state.repair_attempt} on no new information, so the "
+            "iterations run out without the model being asked anything"
+        )
+
+    def test_a_finished_round_does_not_block_the_next_one(self):
+        _sc, submitted, _s = self._resume_with_a_round_in_flight(in_flight=False)
+        assert submitted, "no round is running, so this pass must be free to submit one"
