@@ -395,7 +395,8 @@ def handle_reprompt_recovery(
         failed_ids = {r.custom_id for r in still_failing}
         # Parked, not thrown: the file has not been written yet, and halting
         # here would discard every record the reprompt rounds graduated.
-        context.pending_exhaustion = (
+        park_halt(
+            context,
             context.service._retry_service.apply_exhausted_reprompt_metadata(
                 results=still_failing,
                 failed_ids=failed_ids,
@@ -404,8 +405,7 @@ def handle_reprompt_recovery(
                 on_exhausted=state.on_exhausted,
                 per_record_attempts=state.reprompt_attempts_per_record or None,
                 failure_type_counts=state.failure_type_counts or None,
-            )
-            or context.pending_exhaustion
+            ),
         )
 
     final_results = deserialize_results(state.graduated_results)
@@ -499,7 +499,8 @@ def check_and_submit_reprompt(
         per_record_attempts = (
             recovery_state.reprompt_attempts_per_record if recovery_state else None
         )
-        context.pending_exhaustion = (
+        park_halt(
+            context,
             context.service._retry_service.apply_exhausted_reprompt_metadata(
                 results=still_failing,
                 failed_ids=failed_ids,
@@ -508,8 +509,7 @@ def check_and_submit_reprompt(
                 on_exhausted=on_exhausted,
                 per_record_attempts=per_record_attempts,
                 failure_type_counts=ftc or None,
-            )
-            or context.pending_exhaustion
+            ),
         )
         return True
 
@@ -619,6 +619,25 @@ def check_and_submit_reprompt(
 # ---------------------------------------------------------------------------
 
 
+def park_halt(context: RecoveryContext, pending: Exception | None) -> None:
+    """Keep the first halt decided for this file, and say so when a second is dropped.
+
+    Only one error can be raised, and the run stops either way — but an operator
+    reading the message would otherwise never learn the other policy had also
+    given up.
+    """
+    if pending is None:
+        return
+    if context.pending_exhaustion is None:
+        context.pending_exhaustion = pending
+        return
+    logger.warning(
+        "A second exhaustion policy also stopped this file; raising the first. Also: %s: %s",
+        type(pending).__name__,
+        pending,
+    )
+
+
 def finalize_batch_output(
     context: RecoveryContext,
     identity: BatchIdentity,
@@ -639,8 +658,7 @@ def finalize_batch_output(
     # The conversion hands back a retry-exhaustion halt rather than throwing it,
     # for the same reason the expectations policy does. An expectations halt was
     # decided first, so it keeps precedence.
-    if context.pending_exhaustion is None:
-        context.pending_exhaustion = converted_halt
+    park_halt(context, converted_halt)
 
     effective_action_name = service._resolve_action_name(context.action_name)
 
@@ -815,11 +833,11 @@ def check_and_submit_repair(
         """
         strategy.write_verdicts(exhausted)
         stamp_exhausted(exhausted, strategy, current_attempt + 1)
-        context.pending_exhaustion = (
+        park_halt(
+            context,
             apply_exhaustion_policy(
                 exhausted, strategy, context.service._resolve_action_name(context.action_name)
-            )
-            or context.pending_exhaustion
+            ),
         )
         return True
 

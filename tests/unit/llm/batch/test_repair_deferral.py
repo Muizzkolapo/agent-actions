@@ -1474,3 +1474,33 @@ class TestAResumeDoesNotSubmitASecondRoundForTheSameRecords:
     def test_a_finished_round_does_not_block_the_next_one(self):
         _sc, submitted, _s = self._resume_with_a_round_in_flight(in_flight=False)
         assert submitted, "no round is running, so this pass must be free to submit one"
+
+
+class TestASecondHaltIsNotDroppedSilently:
+    """Only one error can be raised, but the operator should hear about both."""
+
+    def test_the_first_halt_is_the_one_raised(self):
+        context = _context(RecordingProvider(), _Backend(), _agent_config())
+        first = ExpectationsExhaustedError(ACTION, ["enough"], 1)
+        pr.park_halt(context, first)
+        pr.park_halt(context, RuntimeError("Retry exhausted for record gone"))
+        assert context.pending_exhaustion is first
+
+    def test_the_dropped_one_is_logged(self, caplog):
+        import logging
+
+        context = _context(RecordingProvider(), _Backend(), _agent_config())
+        pr.park_halt(context, ExpectationsExhaustedError(ACTION, ["enough"], 1))
+        with caplog.at_level(logging.WARNING):
+            pr.park_halt(context, RuntimeError("Retry exhausted for record gone"))
+        assert "Retry exhausted for record gone" in caplog.text, (
+            "the second policy also gave up and nothing said so; the operator sees one cause and "
+            "never learns the other"
+        )
+
+    def test_parking_nothing_changes_nothing(self):
+        context = _context(RecordingProvider(), _Backend(), _agent_config())
+        first = ExpectationsExhaustedError(ACTION, ["enough"], 1)
+        pr.park_halt(context, first)
+        pr.park_halt(context, None)
+        assert context.pending_exhaustion is first

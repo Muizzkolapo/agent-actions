@@ -72,10 +72,17 @@ def stamp_exhausted(
     """Record which expectations were still failing when the iterations ran out."""
     for result in results:
         verdict = strategy.verdict_for(result.custom_id)
-        failed = [outcome.id for outcome in verdict.failed] if verdict else []
         meta = result.recovery_metadata
         if not isinstance(meta, RecoveryMetadata):
             meta = RecoveryMetadata()
+        if verdict is not None:
+            failed = [outcome.id for outcome in verdict.failed]
+        else:
+            # The map is rebuilt each round, so a record this one never
+            # evaluated — one the provider did not return — has no fresh
+            # verdict. It still failed whatever it failed when it was sent.
+            previous = meta.expectations
+            failed = list(previous.failed) if previous else []
         meta.expectations = ExpectationsMetadata(attempts=attempts, failed=failed)
         result.recovery_metadata = meta
 
