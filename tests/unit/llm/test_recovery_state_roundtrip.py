@@ -39,3 +39,42 @@ def test_the_reprompt_counters_still_survive():
 def test_the_phase_survives_as_an_enum():
     restored = RecoveryState(**RecoveryState(phase=RecoveryPhase.REPAIR).to_dict())
     assert restored.phase is RecoveryPhase.REPAIR
+
+
+def test_what_to_dict_produces_is_actually_json():
+    """Key presence is not enough — save() writes it with json.dumps.
+
+    to_dict derives from the dataclass fields, so a newly declared field is
+    persisted automatically. That is the point, but it also means a field whose
+    type json cannot encode reaches disk only as a runtime failure mid-run.
+    """
+    import json
+
+    state = RecoveryState(
+        phase=RecoveryPhase.REPAIR,
+        repair_attempt=1,
+        repair_max_attempts=2,
+        repair_submitted_ids=["r1"],
+        repair_judge_budget_remaining=3,
+        graduated_results=[{"custom_id": "g1", "content": {"a": 1}, "success": True}],
+    )
+    json.dumps(state.to_dict())
+
+
+def test_a_state_file_from_before_the_repair_fields_still_loads():
+    """A run started on an older build resumes on this one, not from scratch.
+
+    load() answers a construction failure with None, which restarts the deferred
+    loop having lost the graduated pool — so this must not be left to chance.
+    """
+    old_shape = {
+        "phase": "reprompt",
+        "reprompt_attempt": 1,
+        "reprompt_max_attempts": 3,
+        "graduated_results": [{"custom_id": "g1", "content": {"a": 1}, "success": True}],
+        "evaluation_strategy_name": "validation",
+    }
+    restored = RecoveryState(**old_shape)
+    assert restored.graduated_results[0]["custom_id"] == "g1"
+    assert restored.repair_attempt == 0
+    assert restored.repair_submitted_ids == []
