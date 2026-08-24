@@ -87,3 +87,23 @@ class TestWhatIsRegisteredIsStillCorrect:
             manager, ("b-1", 1), "f.json", "openai", RecoveryType.REPROMPT, 1
         )
         manager.save_batch_job.assert_called_once()
+
+
+class TestTheCallersActuallyPassTheRegistry:
+    """The protection is inert unless a caller says what already exists."""
+
+    def test_every_registration_site_consults_it(self):
+        import inspect
+
+        from agent_actions.llm.batch.services import processing_recovery as module
+
+        source = inspect.getsource(module)
+        # the definition matches the same shape; only call sites take a registry
+        calls = source.count("register_recovery_batch(\n") - source.count(
+            "def register_recovery_batch(\n"
+        )
+        consulted = source.count("existing=context.manager.get_all_jobs()")
+        assert consulted == calls, (
+            f"{calls} registration sites but {consulted} pass the registry; the ones that do not "
+            "will still write over a live entry"
+        )

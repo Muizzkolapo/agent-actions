@@ -10,6 +10,7 @@ Entry points:
     cleanup_recovery() — remove registry entries after finalization
 """
 
+import itertools
 import json
 import logging
 import time
@@ -221,6 +222,7 @@ def handle_retry_recovery(
                 identity.entry.provider,
                 RecoveryType.RETRY,
                 next_attempt,
+                existing=context.manager.get_all_jobs(),
             )
             state.retry_attempt = next_attempt
             state.missing_ids = list(still_missing)
@@ -367,6 +369,7 @@ def handle_reprompt_recovery(
                 identity.entry.provider,
                 RecoveryType.REPROMPT,
                 next_attempt,
+                existing=context.manager.get_all_jobs(),
             )
             fire_event(
                 RepromptRetryEvent(
@@ -558,6 +561,7 @@ def check_and_submit_reprompt(
         identity.entry.provider,
         RecoveryType.REPROMPT,
         next_attempt,
+        existing=context.manager.get_all_jobs(),
     )
 
     state = RecoveryState(
@@ -931,6 +935,7 @@ def check_and_submit_repair(
         identity.entry.provider,
         RecoveryType.REPAIR,
         next_attempt,
+        existing=context.manager.get_all_jobs(),
     )
 
     state = carry_forward(
@@ -1054,6 +1059,7 @@ def handle_repair_recovery(
                 identity.entry.provider,
                 RecoveryType.REPAIR,
                 next_attempt,
+                existing=context.manager.get_all_jobs(),
             )
             state.repair_attempt = next_attempt
             state.repair_submitted_ids = list(submission.sent_ids)
@@ -1175,6 +1181,15 @@ def _stamp_withheld(
     return records
 
 
+def _free_recovery_key(preferred: str, existing: dict[str, Any]) -> str:
+    """*preferred*, or the first suffixed variant nothing has claimed."""
+    if preferred not in existing:
+        return preferred
+    return next(
+        candidate for n in itertools.count(2) if (candidate := f"{preferred}_{n}") not in existing
+    )
+
+
 def register_recovery_batch(
     manager: BatchRegistryManager,
     submission: "tuple[str, int] | RepairSubmission",
@@ -1182,6 +1197,7 @@ def register_recovery_batch(
     provider: str,
     recovery_type: RecoveryType,
     attempt: int,
+    existing: dict[str, Any] | None = None,
 ) -> None:
     """Register a new recovery batch entry, replacing the attempt it supersedes.
 
@@ -1189,12 +1205,20 @@ def register_recovery_batch(
     in place, a spent attempt is still COMPLETED, so the next run re-processes it
     and finalizes on stale results — deleting the live attempt's entry, and with
     it whatever that attempt recovered.
+
+    The key is `{parent}_{type}_{attempt}`, which is unique only while the
+    attempt counter climbs. A budget that renews per round makes an attempt
+    recur, so *existing* is consulted first: the successor is saved under a free
+    key and the entry it supersedes is then removed by name, rather than being
+    silently written over while it is still running.
     """
     if isinstance(submission, tuple):
         batch_id, record_count = submission
     else:
         batch_id, record_count = submission.batch_id, submission.record_count
-    recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
+    recovery_file_name = _free_recovery_key(
+        f"{parent_file_name}_{recovery_type}_{attempt}", existing or {}
+    )
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,
         status=BatchStatus.SUBMITTED,
