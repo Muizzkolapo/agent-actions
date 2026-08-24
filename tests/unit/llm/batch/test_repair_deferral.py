@@ -13,7 +13,12 @@ import pytest
 
 from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
-from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
+from agent_actions.llm.batch.core.batch_models import (
+    BatchIdentity,
+    BatchJobEntry,
+    BatchRegistryStats,
+    RecoveryContext,
+)
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services import processing_recovery as pr
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -1022,3 +1027,75 @@ class TestARecordIsNeverBothPooledAndInFlight:
             f"r1 was pooled by the graduating copy and resubmitted by the failing one "
             f"({pooled_ids}); next round it ships twice"
         )
+
+
+class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
+    """A broken `expect:` block is not a per-file mishap.
+
+    The loop tombstones the records and moves to the next file when one batch
+    fails, which is right for a provider or convert failure. A configuration
+    error fails identically for every file, so continuing lets the run finish
+    reporting success while every affected file is missing from the output.
+    """
+
+    def _run_two_files(self, first_error):
+        """One file fails, a second succeeds — so the run has something to report."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+            storage_backend=MagicMock(),
+            workflow_name=ACTION,
+        )
+        jobs = {
+            name: BatchJobEntry(
+                batch_id=f"b-{name}",
+                status="completed",
+                timestamp="t",
+                provider="p",
+                file_name=name,
+            )
+            for name in ("bad.json", "good.json")
+        }
+        manager = MagicMock()
+        manager.get_all_jobs.return_value = jobs
+        manager.get_registry_stats.return_value = BatchRegistryStats(
+            total_jobs=2, completed=2, failed=0, in_progress=0, cancelled=0
+        )
+
+        def per_file(*_a, file_name=None, **_k):
+            if file_name == "bad.json":
+                raise first_error
+            return "/out/good.json"
+
+        with (
+            patch.object(service, "_registry_manager_factory", return_value=manager),
+            patch.object(service, "_is_batch_ready_for_processing", return_value=True),
+            patch.object(service, "_process_single_batch_file", side_effect=per_file),
+            patch.object(service, "_fail_abandoned_records") as tombstone,
+        ):
+            try:
+                written = service.process_all_batch_results(
+                    output_directory="/out", agent_config=_agent_config(), action_name=ACTION
+                )
+            except BaseException as exc:  # noqa: BLE001 - the test is about which one
+                return exc, None, tombstone
+        return None, written, tombstone
+
+    def test_a_configuration_error_reaches_the_caller(self):
+        from agent_actions.errors import ConfigurationError
+
+        raised, written, _t = self._run_two_files(ConfigurationError("names suite 'x'"))
+        assert isinstance(raised, ConfigurationError), (
+            f"the run swallowed a config error and reported success with {written}; every file with "
+            "that action's config fails the same way, so they are all silently missing"
+        )
+
+    def test_a_per_file_failure_still_only_costs_that_file(self):
+        raised, written, tombstone = self._run_two_files(ValueError("one bad convert"))
+        assert raised is None, "a single bad file must not take the whole run down"
+        assert written == ["/out/good.json"]
+        assert tombstone.call_count == 1, "its records still need tombstoning for the retry command"
