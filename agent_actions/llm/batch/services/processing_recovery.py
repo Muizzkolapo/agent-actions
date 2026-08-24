@@ -319,7 +319,9 @@ def handle_reprompt_recovery(
     validation_name = strategy.name
     graduated, still_failing, failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
-    state.graduated_results = pool_records(state.graduated_results, graduated)
+    state.graduated_results = pool_records(
+        state.graduated_results, graduated, in_flight=state.repair_submitted_ids
+    )
     state.evaluation_strategy_name = validation_name
 
     accumulate_failure_types(state.failure_type_counts, failure_types)
@@ -565,8 +567,14 @@ def check_and_submit_reprompt(
         validation_name=strategy.name,
         on_exhausted=on_exhausted,
         evaluation_strategy_name=strategy.name,
+        # Whatever this round puts in flight leaves the pool, and so does
+        # anything the repair loop still holds: a record is never both pooled as
+        # finished and out being regenerated.
         graduated_results=pool_records(
-            list(recovery_state.graduated_results) if recovery_state else [], graduated
+            list(recovery_state.graduated_results) if recovery_state else [],
+            graduated,
+            in_flight=[r.custom_id for r in repromptable]
+            + (list(recovery_state.repair_submitted_ids) if recovery_state else []),
         ),
         unrepromptable_results=pool_records(
             list(recovery_state.unrepromptable_results) if recovery_state else [], unrepromptable

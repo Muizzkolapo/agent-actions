@@ -142,3 +142,67 @@ class TestRecordsNobodyIsRegeneratingStillShip:
         )
         pooled = [r.get("custom_id") for r in state.graduated_results]
         assert "earlier" in pooled
+
+
+class TestAReturningRepromptRoundRespectsItToo:
+    """The other pool write: a reprompt round coming back, not going out."""
+
+    def _handle_a_returning_round(self, repair_holds: list[str]):
+        graduated = BatchResult(custom_id="out-for-repair", content={"ok": True}, success=True)
+        still_bad = BatchResult(custom_id="r2", content={"ok": False}, success=True)
+        state = RecoveryState(
+            phase=RecoveryPhase.REPROMPT,
+            reprompt_attempt=1,
+            reprompt_max_attempts=3,
+            validation_name="check_it",
+            on_exhausted="return_last",
+            repair_submitted_ids=list(repair_holds),
+            evaluation_strategy_name="validation",
+        )
+        loop = MagicMock()
+        loop.split.return_value = ([graduated], [still_bad], {})
+        strategy = MagicMock()
+        strategy.name = "check_it"
+        strategy.max_attempts = 3
+        strategy.on_exhausted = "return_last"
+
+        context = MagicMock()
+        context.agent_config = _agent_config()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._storage_backend = None
+        context.service._retry_service.submit_reprompt_batch.return_value = ("b-rp2", 1)
+        saved: list[RecoveryState] = []
+        with (
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
+                return_value=(loop, strategy),
+            ),
+            patch.object(
+                pr.RecoveryStateManager, "save", side_effect=lambda *a, **k: saved.append(a[-1])
+            ),
+            patch.object(pr, "register_recovery_batch"),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json"),
+            patch.object(pr, "check_and_submit_repair", return_value=True),
+        ):
+            pr.handle_reprompt_recovery(
+                context,
+                MagicMock(file_name="f.json"),
+                state=state,
+                recovery_results=[graduated, still_bad],
+                accumulated=[],
+                context_map=_context_map("out-for-repair", "r2"),
+            )
+        return state, saved
+
+    def test_a_record_the_repair_loop_holds_is_not_pooled(self):
+        state, _saved = self._handle_a_returning_round(repair_holds=["out-for-repair"])
+        pooled = [r.get("custom_id") for r in state.graduated_results]
+        assert "out-for-repair" not in pooled, (
+            f"the reprompt round pooled a record the repair loop is regenerating ({pooled}); when "
+            "the repair round returns without it, its tombstone overwrites this good copy"
+        )
+
+    def test_a_record_nobody_holds_is_pooled_normally(self):
+        state, _saved = self._handle_a_returning_round(repair_holds=[])
+        pooled = [r.get("custom_id") for r in state.graduated_results]
+        assert "out-for-repair" in pooled, f"a graduated record was dropped: {pooled}"
