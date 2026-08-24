@@ -466,8 +466,12 @@ def create_expectation_service_from_config(
 
     suite_name = expect_config.get("suite")
     entries = expect_config.get("expectations")
+    config = agent_config or {}
     if suite_name is None and entries is None:
-        # A bare block reads the expectations: block of the action's own schema file.
+        # A bare block reads the expectations: block of the action's own schema
+        # file, whose name the expanded config carries as schema_name.
+        if schema_name is None:
+            schema_name = config.get("schema_name") or None
         if not schema_name:
             raise ExpectationConfigurationError(
                 f"Action '{action_name}' has a bare expect: block but no named "
@@ -477,6 +481,12 @@ def create_expectation_service_from_config(
             )
         suite_name = schema_name
     if suite_name:
+        # The action config carries the project root, stamped when the workflow
+        # was loaded. Preflight passes it explicitly and keeps precedence; every
+        # runtime caller has only the config, so reading it here resolves the
+        # suite for all of them.
+        if project_root is None:
+            project_root = Path(config["_project_root"]) if config.get("_project_root") else None
         if project_root is None:
             raise ExpectationConfigurationError(
                 f"Action '{action_name}' resolves suite '{suite_name}' but no "

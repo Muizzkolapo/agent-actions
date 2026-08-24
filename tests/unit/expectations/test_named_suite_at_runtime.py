@@ -73,7 +73,9 @@ class TestTheSuiteResolvesFromTheActionConfig:
             action_name="summarize",
             agent_config={"_project_root": str(project), "_workflow": WORKFLOW},
         )
-        verdict, _per_record = service.verdict_for_response({"options": ["only-one"]})
+        verdict, _per_record = service.verdict_for_response(
+            {"options": ["only-one"]}, check_schema=False
+        )
         assert verdict.overall_pass is False
         assert [o.id for o in verdict.failed] == ["enough_options"]
 
@@ -120,3 +122,68 @@ class TestWhatCannotBeResolvedStillSaysSo:
             agent_config={},
         )
         assert service is not None
+
+
+class TestTheBatchRepairPathResolvesItToo:
+    """The path that used to lose the whole output file for this config."""
+
+    def test_build_repair_strategy_resolves_a_named_suite(self, project: Path):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        strategy = build_repair_strategy(
+            {
+                "name": "summarize",
+                "action_name": "summarize",
+                "_project_root": str(project),
+                "_workflow": WORKFLOW,
+                "expect": {"suite": SUITE, "repair": "auto", "max_iterations": 2},
+            }
+        )
+        assert strategy is not None, (
+            "the repair check raised instead of building, so the batch loop logged it per file "
+            "and the run finished with every affected file missing from the output"
+        )
+
+    def test_observe_mode_with_a_named_suite_does_not_raise(self, project: Path):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        assert (
+            build_repair_strategy(
+                {
+                    "name": "summarize",
+                    "action_name": "summarize",
+                    "_project_root": str(project),
+                    "_workflow": WORKFLOW,
+                    "expect": {"suite": SUITE, "repair": "none"},
+                }
+            )
+            is None
+        )
+
+    def test_the_online_factory_resolves_it(self, project: Path):
+        from agent_actions.processing.invocation.factory import InvocationStrategyFactory
+
+        strategy = InvocationStrategyFactory._create_online_strategy(
+            {
+                "name": "summarize",
+                "action_name": "summarize",
+                "_project_root": str(project),
+                "_workflow": WORKFLOW,
+                "expect": {"suite": SUITE, "repair": "none"},
+            }
+        )
+        assert strategy._expectation_service is not None
+        assert strategy._expectation_service.suite.name == SUITE
+
+
+class TestTheWorkflowNameIsStampedOnEveryAction:
+    def test_the_loader_stamps_it_next_to_the_project_root(self):
+        """Without this the config carries a root but no workflow, and the
+        resolution still cannot find the file."""
+        import inspect
+
+        from agent_actions.workflow import config_pipeline
+
+        source = inspect.getsource(config_pipeline.load_workflow_configs)
+        assert '"_workflow"' in source
+        assert '"_project_root"' in source
