@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import ConfigurationError, ProcessingError
+from agent_actions.errors import ProcessingError
+from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     OnExhaustedPolicy,
@@ -351,11 +352,13 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except (RuntimeError, ConfigurationError):
-                # A config error is not this file's problem: every remaining
-                # file carries the same action config and fails the same way,
-                # so continuing would finish the run reporting success with each
-                # of them missing from the output.
+            except (RuntimeError, ExpectationConfigurationError):
+                # An unresolvable `expect:` block is not this file's problem:
+                # every remaining file carries the same action config and fails
+                # the same way, so continuing would finish the run reporting
+                # success with each of them missing from the output. A plain
+                # ConfigurationError is per record — a malformed lifecycle state
+                # — and stays below, costing only its own file.
                 raise
             except Exception as e:
                 logger.exception(
@@ -1038,8 +1041,9 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
 
+        ctx.defer_exhaustion = True
         output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
-        return output_records, stats, self._result_processor.pending_exhaustion
+        return output_records, stats, ctx.pending_exhaustion
 
     @staticmethod
     def _apply_workflow_session_id(

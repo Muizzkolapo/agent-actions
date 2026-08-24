@@ -233,7 +233,10 @@ def validate_and_reprompt(
             )
 
             failed_ids = {r.custom_id for r in still_failing}
-            apply_exhausted_reprompt(
+            # Raised in place: this loop writes nothing, so there is no
+            # deferred output for a halt to protect. The deferred batch paths
+            # park it on their context instead.
+            pending = apply_exhausted_reprompt(
                 results=still_failing,
                 failed_ids=failed_ids,
                 validation_name=validation_name,
@@ -242,6 +245,8 @@ def validate_and_reprompt(
                 per_record_attempts=reprompted_ids,
                 failure_type_counts=failure_type_counts or None,
             )
+            if pending is not None:
+                raise pending
             all_graduated.extend(still_failing)
             break
 

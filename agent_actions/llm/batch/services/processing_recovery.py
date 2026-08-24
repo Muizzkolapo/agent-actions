@@ -45,7 +45,7 @@ from agent_actions.processing.types import RecoveryMetadata
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
 
-from agent_actions.llm.batch.services.repair_ops import pool_records
+from agent_actions.llm.batch.services.repair_ops import RepairSubmission, pool_records
 
 logger = logging.getLogger(__name__)
 
@@ -393,14 +393,19 @@ def handle_reprompt_recovery(
     # Exhausted or all graduated — finalize.
     if still_failing:
         failed_ids = {r.custom_id for r in still_failing}
-        context.service._retry_service.apply_exhausted_reprompt_metadata(
-            results=still_failing,
-            failed_ids=failed_ids,
-            validation_name=validation_name,
-            attempt=state.reprompt_attempt,
-            on_exhausted=state.on_exhausted,
-            per_record_attempts=state.reprompt_attempts_per_record or None,
-            failure_type_counts=state.failure_type_counts or None,
+        # Parked, not thrown: the file has not been written yet, and halting
+        # here would discard every record the reprompt rounds graduated.
+        context.pending_exhaustion = (
+            context.service._retry_service.apply_exhausted_reprompt_metadata(
+                results=still_failing,
+                failed_ids=failed_ids,
+                validation_name=validation_name,
+                attempt=state.reprompt_attempt,
+                on_exhausted=state.on_exhausted,
+                per_record_attempts=state.reprompt_attempts_per_record or None,
+                failure_type_counts=state.failure_type_counts or None,
+            )
+            or context.pending_exhaustion
         )
 
     final_results = deserialize_results(state.graduated_results)
@@ -494,14 +499,17 @@ def check_and_submit_reprompt(
         per_record_attempts = (
             recovery_state.reprompt_attempts_per_record if recovery_state else None
         )
-        context.service._retry_service.apply_exhausted_reprompt_metadata(
-            results=still_failing,
-            failed_ids=failed_ids,
-            validation_name=validation_name,
-            attempt=current_attempt,
-            on_exhausted=on_exhausted,
-            per_record_attempts=per_record_attempts,
-            failure_type_counts=ftc or None,
+        context.pending_exhaustion = (
+            context.service._retry_service.apply_exhausted_reprompt_metadata(
+                results=still_failing,
+                failed_ids=failed_ids,
+                validation_name=validation_name,
+                attempt=current_attempt,
+                on_exhausted=on_exhausted,
+                per_record_attempts=per_record_attempts,
+                failure_type_counts=ftc or None,
+            )
+            or context.pending_exhaustion
         )
         return True
 
@@ -816,7 +824,7 @@ def check_and_submit_repair(
         repair_attempt=next_attempt,
         repair_max_attempts=max_rounds,
         graduated=graduated + unrepairable,
-        submitted_ids=[r.custom_id for r in repairable],
+        submitted_ids=list(submission.sent_ids),
         judge_budget_remaining=strategy.judge_budget_remaining,
     )
     RecoveryStateManager.save(
@@ -931,7 +939,7 @@ def handle_repair_recovery(
                 next_attempt,
             )
             state.repair_attempt = next_attempt
-            state.repair_submitted_ids = [r.custom_id for r in repairable]
+            state.repair_submitted_ids = list(submission.sent_ids)
             state.repair_judge_budget_remaining = strategy.judge_budget_remaining
             state.graduated_results = pool_records(
                 state.graduated_results, carried, in_flight=state.repair_submitted_ids
@@ -1051,7 +1059,7 @@ def _stamp_withheld(
 
 def register_recovery_batch(
     manager: BatchRegistryManager,
-    submission: tuple[str, int],
+    submission: "tuple[str, int] | RepairSubmission",
     parent_file_name: str,
     provider: str,
     recovery_type: RecoveryType,
@@ -1064,7 +1072,10 @@ def register_recovery_batch(
     and finalizes on stale results — deleting the live attempt's entry, and with
     it whatever that attempt recovered.
     """
-    batch_id, record_count = submission
+    if isinstance(submission, tuple):
+        batch_id, record_count = submission
+    else:
+        batch_id, record_count = submission.batch_id, submission.record_count
     recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,

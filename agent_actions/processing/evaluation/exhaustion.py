@@ -29,10 +29,13 @@ def apply_exhausted_reprompt(
     on_exhausted: str,
     per_record_attempts: dict[str, int] | None = None,
     failure_type_counts: dict[str, dict[str, int]] | None = None,
-) -> list[BatchResult]:
+) -> Exception | None:
     """Apply reprompt exhaustion metadata to records that failed validation.
 
-    Mutates results in-place and returns the same list.
+    Mutates results in-place and hands back the halt `on_exhausted: raise` wants
+    thrown, or None. It is handed back rather than thrown because batch writes
+    its output file once at the end: throwing here would discard every record in
+    it the reprompt rounds had already graduated.
 
     Args:
         results: Batch results (mutated in-place for failed IDs).
@@ -51,10 +54,7 @@ def apply_exhausted_reprompt(
             ``schema_fail_count``, ``udf_fail_count`` on RepromptMetadata.
 
     Returns:
-        The same results list with exhaustion metadata applied.
-
-    Raises:
-        RuntimeError: When ``on_exhausted="raise"`` and failed records exist.
+        The halt to raise once the output is written, or None.
     """
     if failed_ids:
         fire_event(
@@ -65,12 +65,13 @@ def apply_exhausted_reprompt(
             )
         )
 
+    pending: Exception | None = None
     for result in results:
         if result.custom_id not in failed_ids:
             continue
 
-        if on_exhausted == "raise":
-            raise exhaustion_halt(
+        if on_exhausted == "raise" and pending is None:
+            pending = exhaustion_halt(
                 f"Reprompt validation exhausted for {result.custom_id} "
                 f"after {attempt} attempts (validation: {validation_name})"
             )
@@ -93,4 +94,4 @@ def apply_exhausted_reprompt(
             udf_fail_count=counts.get("udf_fail", 0),
         )
 
-    return results
+    return pending

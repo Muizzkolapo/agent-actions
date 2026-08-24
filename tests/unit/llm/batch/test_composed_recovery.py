@@ -67,6 +67,8 @@ def _make_state(**kwargs) -> RecoveryState:
 def _mock_service():
     service = MagicMock()
     service._retry_service = MagicMock()
+    # returns the halt to raise after the write, or None
+    service._retry_service.apply_exhausted_reprompt_metadata.return_value = None
     service._storage_backend = MagicMock()
     service._workflow_name = "test_action"
     service._resolve_action_name = lambda override=None: override or service._workflow_name

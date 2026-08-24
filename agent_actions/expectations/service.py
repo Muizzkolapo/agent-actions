@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
@@ -426,6 +427,15 @@ def attach_verdicts(response: Any, suite_results: list[SuiteResult]) -> Any:
     return annotated[0] if isinstance(response, dict) else annotated
 
 
+class ExpectationConfigurationError(ConfigurationError):
+    """An `expect:` block that cannot be resolved for the action at all.
+
+    Distinct from a per-record configuration problem: this one fails identically
+    for every input file, so a batch run must stop rather than log it per file
+    and finish reporting success with each of them missing from the output.
+    """
+
+
 def create_expectation_service_from_config(
     expect_config: dict[str, Any] | None,
     *,
@@ -459,7 +469,7 @@ def create_expectation_service_from_config(
     if suite_name is None and entries is None:
         # A bare block reads the expectations: block of the action's own schema file.
         if not schema_name:
-            raise ConfigurationError(
+            raise ExpectationConfigurationError(
                 f"Action '{action_name}' has a bare expect: block but no named "
                 "schema: file to read expectations from. Name one with suite: "
                 "or declare expectations: inline.",
@@ -468,7 +478,7 @@ def create_expectation_service_from_config(
         suite_name = schema_name
     if suite_name:
         if project_root is None:
-            raise ConfigurationError(
+            raise ExpectationConfigurationError(
                 f"Action '{action_name}' resolves suite '{suite_name}' but no "
                 "project root was available to resolve it.",
                 context={"action": action_name, "suite": suite_name},

@@ -302,8 +302,11 @@ class BatchRetryService:
         on_exhausted: str,
         per_record_attempts: dict[str, int] | None = None,
         failure_type_counts: dict[str, dict[str, int]] | None = None,
-    ) -> list[BatchResult]:
-        """Apply reprompt exhaustion metadata to failed records."""
+    ) -> Exception | None:
+        """Apply reprompt exhaustion metadata; hand back the halt, if any.
+
+        *results* is mutated in place, so the caller already has the records.
+        """
         from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
 
         return apply_exhausted_reprompt(

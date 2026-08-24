@@ -12,9 +12,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
 
-from agent_actions.errors import exhaustion_halt
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.llm.batch.core.batch_constants import FilterStatus, OnExhaustedPolicy
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -100,10 +99,6 @@ class BatchResultStrategy:
     def __init__(self) -> None:
         self._pending_batch_results: list[BatchResult] | None = None
         self._pending_kwargs: dict[str, Any] = {}
-        # Set when `retry: on_exhausted: raise` has decided the run must stop.
-        # The caller raises it after writing the file. Cleared per conversion so
-        # one file's halt cannot stop a later, healthy one.
-        self.pending_exhaustion: Exception | None = None
 
     def prepare_invoke(
         self,
@@ -165,7 +160,6 @@ class BatchResultStrategy:
         The caller is responsible for enriching, flattening ``result.data``
         into output records, and writing dispositions.
         """
-        self.pending_exhaustion = None
         ctx = self._init_context(
             batch_results,
             context_map,
@@ -524,9 +518,11 @@ class BatchResultStrategy:
     ) -> tuple[RecoveryMetadata, RetryMetadata] | None:
         """Retry-exhaustion metadata for *custom_id*, or None if it still has attempts.
 
-        Applies ``on_exhausted`` here so the policy reaches every record that
-        spent its attempts, including one the provider answered with an error
-        and therefore left a result behind for.
+        The ``on_exhausted`` policy is not applied here. This reports the
+        exhaustion so the caller can build the EXHAUSTED tombstone; the
+        collector reads that status and owns the policy for both run modes, so
+        deciding it twice meant whichever fired first won and the other was
+        unreachable.
         """
         if not ctx.exhausted_recovery or custom_id not in ctx.exhausted_recovery:
             return None
@@ -537,21 +533,6 @@ class BatchResultStrategy:
             raise RuntimeError(
                 "RecoveryMetadata.retry is None for exhausted record "
                 f"custom_id={custom_id}; expected retry metadata with attempt count"
-            )
-
-        on_exhausted = OnExhaustedPolicy.RETURN_LAST
-        if ctx.agent_config:
-            retry_config = ctx.agent_config.get("retry") or {}
-            on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted") or "return_last")
-
-        if on_exhausted == OnExhaustedPolicy.RAISE and self.pending_exhaustion is None:
-            # Handed back rather than thrown: conversion runs before the single
-            # write at the end of the file, so halting here would discard every
-            # record that converted cleanly. The record still becomes a
-            # tombstone below, and the caller raises once the file is on disk.
-            self.pending_exhaustion = exhaustion_halt(
-                f"Retry exhausted for record {custom_id} after "
-                f"{retry_meta.attempts} attempts (on_exhausted=raise)"
             )
 
         return recovery_meta, retry_meta

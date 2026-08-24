@@ -1085,14 +1085,30 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
                 return exc, None, tombstone
         return None, written, tombstone
 
-    def test_a_configuration_error_reaches_the_caller(self):
+    def test_an_action_wide_config_error_reaches_the_caller(self):
+        from agent_actions.expectations.service import ExpectationConfigurationError
+
+        raised, written, _t = self._run_two_files(
+            ExpectationConfigurationError("names suite 'x' but no project root")
+        )
+        assert isinstance(raised, ExpectationConfigurationError), (
+            f"the run swallowed an action-wide config error and reported success with {written}; "
+            "every file carries that same action config, so they are all silently missing"
+        )
+
+    def test_a_per_record_config_error_only_costs_its_own_file(self):
+        """A malformed lifecycle state is one record's problem, not the run's."""
         from agent_actions.errors import ConfigurationError
 
-        raised, written, _t = self._run_two_files(ConfigurationError("names suite 'x'"))
-        assert isinstance(raised, ConfigurationError), (
-            f"the run swallowed a config error and reported success with {written}; every file with "
-            "that action's config fails the same way, so they are all silently missing"
+        raised, written, tombstone = self._run_two_files(
+            ConfigurationError("Record is missing `_state`")
         )
+        assert raised is None, (
+            "one record with a bad lifecycle state aborted the whole run; every other file's "
+            "results were already paid for and are now unprocessed"
+        )
+        assert written == ["/out/good.json"]
+        assert tombstone.call_count == 1, "its records still need tombstoning for the retry command"
 
     def test_a_per_file_failure_still_only_costs_that_file(self):
         raised, written, tombstone = self._run_two_files(ValueError("one bad convert"))

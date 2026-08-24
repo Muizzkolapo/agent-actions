@@ -118,3 +118,60 @@ class TestPolicyComesFromTheService:
 
     def test_the_strategy_is_named_for_the_recovery_key_it_writes(self):
         assert ExpectationStrategy(_service()).name == "expectations"
+
+
+class TestTheVerdictMapNeedsAnIdentityToo:
+    """Two records that lost their correlation are not the same record.
+
+    The verdict map keys on custom_id. A provider that returns results with no
+    id stamps the same sentinel on each, so without a guard the second record's
+    verdict overwrites the first's — and a record that genuinely passed ships an
+    `expect` block that is factually wrong about its own data.
+    """
+
+    def _strategy(self):
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        return build_repair_strategy(
+            {
+                "name": "author",
+                "action_name": "author",
+                "expect": {
+                    "repair": "auto",
+                    "max_iterations": 2,
+                    "expectations": [
+                        {"id": "enough", "type": "item_count", "field": "options", "min": 2}
+                    ],
+                },
+            }
+        )
+
+    def test_two_unidentified_records_keep_their_own_verdicts(self):
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        strategy = self._strategy()
+        good = BatchResult(
+            custom_id=UNIDENTIFIED_RECORD, content={"options": ["a", "b"]}, success=True
+        )
+        bad = BatchResult(
+            custom_id=UNIDENTIFIED_RECORD, content={"options": ["only-one"]}, success=True
+        )
+        assert strategy.evaluate(good).passed is True
+        assert strategy.evaluate(bad).passed is False
+        strategy.write_verdicts([good, bad])
+
+        assert good.content["expect"]["overall_pass"] is True, (
+            "a record that passed shipped the other record's failing verdict, which is factually "
+            f"wrong about its own data: {good.content['expect']}"
+        )
+        assert bad.content["expect"]["overall_pass"] is False
+
+    def test_identified_records_are_unaffected(self):
+        strategy = self._strategy()
+        good = BatchResult(custom_id="r1", content={"options": ["a", "b"]}, success=True)
+        bad = BatchResult(custom_id="r2", content={"options": ["only-one"]}, success=True)
+        strategy.evaluate(good)
+        strategy.evaluate(bad)
+        strategy.write_verdicts([good, bad])
+        assert good.content["expect"]["overall_pass"] is True
+        assert bad.content["expect"]["overall_pass"] is False

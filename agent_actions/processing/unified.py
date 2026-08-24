@@ -389,6 +389,7 @@ class UnifiedProcessor:
             context.agent_name,
             is_first_stage=context.is_first_stage,
             storage_backend=context.storage_backend,
+            context=context,
         )
 
 

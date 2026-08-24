@@ -273,3 +273,40 @@ class TestOnlyWhatWasSentCountsAsInFlight:
         assert submission.batch_id
         assert submission.record_count == 1
         assert submission.sent_ids == [CUSTOM_ID]
+
+
+class TestFailKeepsTheRealCause:
+    """A record that failed at the provider did not fail its expectations.
+
+    `still_failing` carries both: records the suite rejected, and records that
+    never produced content at all. Overwriting the second kind's error replaces
+    a true, actionable cause with a claim that is false — and the message even
+    reports `failed: none`, because there was no verdict to report.
+    """
+
+    def _apply(self, *results: BatchResult):
+        strategy = build_repair_strategy(_agent_config(repair="auto", on_exhausted="fail"))
+        for r in results:
+            if r.content is not None:
+                strategy.evaluate(r)
+        stamp_exhausted(list(results), strategy, attempts=2)
+        apply_exhaustion_policy(list(results), strategy, ACTION)
+        return results
+
+    def test_a_provider_failure_keeps_its_own_error(self):
+        provider_failure = BatchResult(
+            custom_id="gone", content=None, success=False, error="429 rate limited"
+        )
+        rejected = BatchResult(custom_id=CUSTOM_ID, content=dict(FAILING), success=True)
+        self._apply(provider_failure, rejected)
+        assert "429 rate limited" in (provider_failure.error or ""), (
+            f"the provider's cause was replaced by {provider_failure.error!r}; the operator is "
+            "told the expectations failed when the model was never reached"
+        )
+
+    def test_a_rejected_record_still_reports_its_expectations(self):
+        rejected = BatchResult(custom_id=CUSTOM_ID, content=dict(FAILING), success=True)
+        self._apply(rejected)
+        assert rejected.success is False
+        assert "Expectations exhausted" in (rejected.error or "")
+        assert "enough_options" in (rejected.error or "")

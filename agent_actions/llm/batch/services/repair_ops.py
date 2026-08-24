@@ -10,6 +10,7 @@ does not hold the process open.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
@@ -21,6 +22,20 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RepairSubmission:
+    """What a repair round actually put in flight.
+
+    `sent_ids` is what the preparator accepted, not what the caller asked for: a
+    record with no context_map row is skipped, and recording it as submitted
+    makes the next round reconstruct it as a provider drop over real content.
+    """
+
+    batch_id: str
+    record_count: int
+    sent_ids: list[str]
 
 
 def build_repair_strategy(
@@ -93,6 +108,13 @@ def apply_exhaustion_policy(
         )
 
     for result in exhausted:
+        # A record that never produced content failed at the provider, not at
+        # its expectations. Overwriting that error replaces a true cause with a
+        # false one, and the message would read "failed: none" because there was
+        # no verdict to report.
+        if result.content is None and result.error:
+            result.success = False
+            continue
         meta = result.recovery_metadata
         expectations = meta.expectations if meta else None
         failed = ", ".join(expectations.failed) if expectations and expectations.failed else "none"
@@ -115,10 +137,10 @@ def submit_repair_batch(
     file_name: str,
     agent_config: dict[str, Any] | None,
     attempt: int,
-) -> tuple[str, int] | None:
+) -> RepairSubmission | None:
     """Submit a repair batch for records whose expectations failed, without blocking.
 
-    Returns ``(batch_id, record_count)``, or None when there is nothing to send.
+    Returns the submission, or None when there is nothing to send.
     """
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.services.reprompt_ops import _load_source_data_for_reprompt
@@ -166,7 +188,11 @@ def submit_repair_batch(
         len(prepared.tasks),
         attempt,
     )
-    return batch_id, len(prepared.tasks)
+    return RepairSubmission(
+        batch_id=batch_id,
+        record_count=len(prepared.tasks),
+        sent_ids=[str(r.get("target_id")) for r in repair_records],
+    )
 
 
 def pool_records(
@@ -194,7 +220,13 @@ def pool_records(
     by_id: dict[str, dict[str, Any]] = {}
     unkeyed: list[dict[str, Any]] = []
     for record in [*pooled, *serialize_results(added)]:
-        if record.get("custom_id") in sent_back:
+        key = record.get("custom_id")
+        identified = bool(key) and key != UNIDENTIFIED_RECORD
+        # Eviction needs an identity for the same reason deduplication does. The
+        # sentinel is not one, so matching on it would evict every record that
+        # lost its correlation because one of them went back to the model — a
+        # silent loss, which is the failure the identity rule below avoids.
+        if identified and key in sent_back:
             continue
         # Identity is the record id — and the sentinel a provider stamps on a
         # result carrying none is not one. Folding those together would drop
@@ -205,8 +237,7 @@ def pool_records(
         # and appears once per processing pass instead of deduplicating. That
         # is the wrong answer for a case nothing here can distinguish, and it
         # errs towards a visible duplicate rather than a silent loss.
-        key = record.get("custom_id")
-        if key and key != UNIDENTIFIED_RECORD:
+        if identified:
             by_id[str(key)] = record
         else:
             unkeyed.append(record)
