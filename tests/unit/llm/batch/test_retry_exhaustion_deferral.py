@@ -117,3 +117,73 @@ class TestTheOtherPoliciesAreUnchanged:
         assert strategy.pending_exhaustion is None, (
             "a halt from an earlier file would stop a later, healthy one"
         )
+
+
+class TestTheRunStillHaltsAfterTheFileIsWritten:
+    """Deferring the raise must not lose it — only move it after the write."""
+
+    def _finalise(self, converted_halt):
+        from unittest.mock import MagicMock, patch
+
+        from agent_actions.llm.batch.core.batch_models import (
+            BatchIdentity,
+            BatchJobEntry,
+            RecoveryContext,
+        )
+        from agent_actions.llm.batch.services import processing_recovery as pr
+
+        service = MagicMock()
+        service._convert_batch_results_to_workflow_format.return_value = (
+            [{"target_id": "paid-for"}],
+            None,
+            converted_halt,
+        )
+        service._resolve_action_name.return_value = ACTION
+        service._storage_backend = None
+        context = RecoveryContext(
+            service=service,
+            manager=MagicMock(),
+            provider=MagicMock(),
+            agent_config=_agent_config("raise"),
+            output_directory="/out",
+            action_name=ACTION,
+            start_time=0.0,
+        )
+        identity = BatchIdentity(
+            batch_id="b-1",
+            file_name="f.json",
+            entry=BatchJobEntry(
+                batch_id="b-1", status="completed", timestamp="t", provider="p", file_name="f.json"
+            ),
+        )
+        order: list[str] = []
+        service._write_batch_output.side_effect = lambda *a, **k: order.append("write")
+        with (
+            patch.object(pr, "RecoveryStateManager"),
+            patch.object(pr, "cleanup_recovery", side_effect=lambda *a: order.append("cleanup")),
+            patch.object(pr, "_remove_batch_placeholder"),
+        ):
+            raised = None
+            try:
+                pr._finalize_and_cleanup(
+                    context=context, identity=identity, batch_results=[], context_map={}
+                )
+            except BaseException as exc:  # noqa: BLE001 - the test is about which one
+                raised = exc
+        return order, raised
+
+    def test_the_halt_reaches_the_caller(self):
+        _order, raised = self._finalise(RuntimeError("Retry exhausted for record gone"))
+        assert isinstance(raised, RuntimeError)
+        assert "Retry exhausted" in str(raised)
+
+    def test_the_file_is_written_before_it_halts(self):
+        order, _raised = self._finalise(RuntimeError("Retry exhausted for record gone"))
+        assert order[:1] == ["write"], (
+            f"the run halted before writing the file ({order}); every record in it is lost"
+        )
+
+    def test_a_clean_conversion_does_not_halt(self):
+        order, raised = self._finalise(None)
+        assert raised is None
+        assert "write" in order
