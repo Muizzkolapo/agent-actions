@@ -121,8 +121,12 @@ class TestRepairDoesNotDiscardTheRestOfRecoveryState:
         assert state.missing_ids == ["m1"]
         assert state.record_failure_counts == {"m1": 2}
         assert state.retry_attempt == 1
-        assert state.reprompt_attempt == 2
-        assert state.reprompt_attempts_per_record == {"r1": 1}
+        # The reprompt budget renews for the new round — online invokes the
+        # reprompt service anew inside every repair iteration — while the
+        # configured ceiling and the retry bookkeeping below carry forward.
+        assert state.reprompt_attempt == 0
+        assert state.reprompt_attempts_per_record == {}
+        assert state.reprompt_max_attempts == prior.reprompt_max_attempts
         assert state.validation_name == "schema"
         assert state.failure_type_counts == {"r1": {"udf_fail": 1}}
 

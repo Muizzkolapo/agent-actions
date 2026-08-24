@@ -208,15 +208,17 @@ class TestEachRepairRoundGetsAFreshRepromptBudget:
     """Online invokes the reprompt service anew inside every repair iteration.
 
     The service loops internally up to `max_attempts` on each call, so a repair
-    round is never denied schema repair because an earlier round used its
-    attempts. Carrying a spent counter into the nested check means the second
-    repair round onwards is judged on raw, unrepaired output.
+    round is never denied schema repair because an earlier one used the
+    attempts. The budget renews where a round is *created*, not where one
+    returns: renewing on return would renew again every time the same round is
+    re-processed, and reprompt could never exhaust.
 
     Worst case stays bounded: max_iterations rounds, each with at most
     reprompt max_attempts.
     """
 
-    def _reprompt_rounds_submitted(self, prior_attempt: int, max_attempts: int) -> int:
+    def test_the_round_a_resubmit_creates_starts_with_a_clean_budget(self):
+        """The site inside handle_repair_recovery that launches the next round."""
         from agent_actions.llm.providers.batch_base import BatchResult
 
         state = RecoveryState(
@@ -224,8 +226,9 @@ class TestEachRepairRoundGetsAFreshRepromptBudget:
             repair_attempt=1,
             repair_max_attempts=3,
             repair_submitted_ids=["r1"],
-            reprompt_attempt=prior_attempt,
-            reprompt_max_attempts=max_attempts,
+            reprompt_attempt=2,
+            reprompt_max_attempts=2,
+            reprompt_attempts_per_record={"r1": 2},
             validation_name="check_it",
             evaluation_strategy_name="expectations",
         )
@@ -240,7 +243,6 @@ class TestEachRepairRoundGetsAFreshRepromptBudget:
             "json_mode": False,
             "model_name": "test-model",
             "prompt": "Write the options.",
-            "reprompt": {"validation": "check_it", "max_attempts": max_attempts},
             "expect": {
                 "repair": "auto",
                 "max_iterations": 3,
@@ -252,25 +254,12 @@ class TestEachRepairRoundGetsAFreshRepromptBudget:
         }
         context.pending_exhaustion = None
         context.provider.submit_batch.return_value = ("b-repair-2", "submitted")
-
-        submitted = []
-        context.service._retry_service.submit_reprompt_batch.side_effect = (
-            lambda *a, **k: submitted.append(1) or ("b-rp", 1)
-        )
-        bad = BatchResult(custom_id="r1", content={"options": ["one"]}, success=True)
-        loop = MagicMock()
-        loop.split.return_value = ([], [bad], {})
-        strategy = MagicMock()
-        strategy.name = "check_it"
-        strategy.max_attempts = max_attempts
-        strategy.on_exhausted = "return_last"
+        saved: list[RecoveryState] = []
         with (
-            patch(
-                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
-                return_value=(loop, strategy),
+            patch.object(pr, "check_and_submit_reprompt", return_value=True),
+            patch.object(
+                pr.RecoveryStateManager, "save", side_effect=lambda *a, **k: saved.append(a[-1])
             ),
-            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json"),
-            patch.object(pr.RecoveryStateManager, "save"),
             patch.object(pr, "register_recovery_batch"),
             patch(
                 "agent_actions.processing.task_preparer.TaskPreparer.prepare",
@@ -281,20 +270,29 @@ class TestEachRepairRoundGetsAFreshRepromptBudget:
                 context,
                 MagicMock(file_name="f.json"),
                 state,
-                recovery_results=[bad],
+                recovery_results=[
+                    BatchResult(custom_id="r1", content={"options": ["one"]}, success=True)
+                ],
                 accumulated=[],
                 context_map={"r1": {"target_id": "r1", "source_guid": "sg-r1", "content": {}}},
             )
-        return len(submitted)
-
-    def test_a_spent_counter_does_not_deny_this_round_its_reprompt(self):
-        assert self._reprompt_rounds_submitted(prior_attempt=2, max_attempts=2) == 1, (
-            "an earlier round used the reprompt attempts, so this repair round was judged on raw "
-            "output; online invokes the reprompt service anew inside every iteration"
+        assert saved, "the next repair round did not persist state"
+        nxt = saved[-1]
+        assert nxt.repair_attempt == 2, "a new round should have been created"
+        assert nxt.reprompt_attempt == 0, (
+            f"the new round inherited a spent reprompt counter ({nxt.reprompt_attempt}), so its "
+            "output is judged raw — online reprompts inside every iteration"
         )
+        assert nxt.reprompt_attempts_per_record == {}
+        assert nxt.reprompt_max_attempts == 2, "the configured ceiling must survive"
 
-    def test_an_unspent_counter_still_reprompts(self):
-        assert self._reprompt_rounds_submitted(prior_attempt=0, max_attempts=2) == 1
+    def test_re_processing_the_same_round_does_not_renew_it_again(self):
+        """Renewing on return would let reprompt loop without ever exhausting."""
+        import inspect
 
-    def test_reprompt_turned_off_still_reprompts_nothing(self):
-        assert self._reprompt_rounds_submitted(prior_attempt=0, max_attempts=0) == 0
+        source = inspect.getsource(pr.handle_repair_recovery)
+        before_check = source.split("check_and_submit_reprompt")[0]
+        assert "reprompt_attempt = 0" not in before_check, (
+            "the budget is renewed before the reprompt check, so every re-processing of this "
+            "round renews it and reprompt can never exhaust"
+        )

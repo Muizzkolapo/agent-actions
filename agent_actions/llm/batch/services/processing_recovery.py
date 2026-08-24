@@ -1017,6 +1017,8 @@ def handle_repair_recovery(
             )
             state.repair_attempt = next_attempt
             state.repair_submitted_ids = list(submission.sent_ids)
+            state.reprompt_attempt = 0
+            state.reprompt_attempts_per_record = {}
             state.repair_judge_budget_remaining = strategy.judge_budget_remaining
             state.graduated_results = pool_records(
                 state.graduated_results, carried, in_flight=state.repair_submitted_ids
