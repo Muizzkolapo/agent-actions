@@ -848,3 +848,129 @@ class TestNothingSitsBetweenParkingAndRaising:
         assert raised is None
         assert finalize.call_count == 1
         assert isinstance(context.pending_exhaustion, ExpectationsExhaustedError)
+
+
+class TestARecordIsNeverBothPooledAndInFlight:
+    """A record sent back to the model has left the pool of finished work.
+
+    The pool is what finalisation ships. A record an earlier reprompt round
+    graduated sits there tagged with that round's strategy; when the repair loop
+    re-evaluates it and it fails, it is resubmitted — and if its stale copy stays
+    behind, the final merge ships the record twice, once repaired and verdicted
+    and once with no verdict at all.
+    """
+
+    def _state_holding(self, *results: BatchResult) -> RecoveryState:
+        from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+        return RecoveryState(
+            phase=RecoveryPhase.REPROMPT,
+            graduated_results=serialize_results(list(results)),
+            evaluation_strategy_name="validation",
+        )
+
+    def _submit_a_round_for(self, record_id: str):
+        pooled = BatchResult(custom_id=record_id, content=FAILING, success=True)
+        prior = self._state_holding(pooled)
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=3, on_exhausted="fail")
+        )
+        saved: list[RecoveryState] = []
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(
+                pr.RecoveryStateManager, "save", side_effect=lambda *a, **k: saved.append(a[-1])
+            ),
+            patch.object(pr, "register_recovery_batch"),
+        ):
+            pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=[BatchResult(custom_id=record_id, content=FAILING, success=True)],
+                context_map=_context_map(record_id),
+                recovery_state=prior,
+            )
+        assert saved, "the round did not persist state"
+        return saved[-1]
+
+    def test_a_resubmitted_record_leaves_the_pool(self):
+        state = self._submit_a_round_for("r1")
+        pooled_ids = [r.get("custom_id") for r in state.graduated_results]
+        assert "r1" in state.repair_submitted_ids
+        assert "r1" not in pooled_ids, (
+            f"r1 is in flight and still pooled as finished ({pooled_ids}); finalisation merges the "
+            "pool with the returning record and ships it twice, one copy unverdicted"
+        )
+
+    def test_the_pool_keeps_records_that_are_not_in_flight(self):
+        from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+        bystander = BatchResult(custom_id="untouched", content=PASSING, success=True)
+        prior = RecoveryState(
+            phase=RecoveryPhase.REPROMPT,
+            graduated_results=serialize_results([bystander]),
+            evaluation_strategy_name="validation",
+        )
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=3, on_exhausted="fail")
+        )
+        saved: list[RecoveryState] = []
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(
+                pr.RecoveryStateManager, "save", side_effect=lambda *a, **k: saved.append(a[-1])
+            ),
+            patch.object(pr, "register_recovery_batch"),
+        ):
+            pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=[BatchResult(custom_id="r1", content=FAILING, success=True)],
+                context_map=_context_map("r1"),
+                recovery_state=prior,
+            )
+        pooled_ids = [r.get("custom_id") for r in saved[-1].graduated_results]
+        assert "untouched" in pooled_ids, (
+            "a record nobody resubmitted must stay in the pool or it never reaches the output"
+        )
+
+    def test_the_record_reaches_the_output_exactly_once(self):
+        """The whole point: two rows for one record, one of them unverdicted."""
+        from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+        stale = BatchResult(custom_id="r1", content=dict(FAILING), success=True)
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=1,
+            repair_submitted_ids=["r1"],
+            graduated_results=serialize_results([stale]),
+            evaluation_strategy_name="expectations",
+        )
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=2, on_exhausted="fail")
+        )
+        context.service = MagicMock()
+        context.service._retry_service.build_exhausted_recovery.return_value = None
+        returned = [BatchResult(custom_id="r1", content=dict(FAILING), success=True)]
+        with patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize:
+            pr.handle_repair_recovery(
+                context,
+                _identity(),
+                state,
+                recovery_results=returned,
+                accumulated=[],
+                context_map=_context_map("r1"),
+            )
+        shipped = finalize.call_args.kwargs["batch_results"]
+        ids = [r.custom_id for r in shipped]
+        assert ids.count("r1") == 1, f"r1 shipped {ids.count('r1')} times: {ids}"
+        assert all("expect" in (r.content or {}) for r in shipped), (
+            "a shipped copy carries no verdict even though the action declares expect:"
+        )
