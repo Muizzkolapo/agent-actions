@@ -87,6 +87,20 @@ def stamp_exhausted(
         result.recovery_metadata = meta
 
 
+def _can_carry_a_verdict(content: Any) -> bool:
+    """Whether a verdict can actually be written onto this response.
+
+    A record is a mapping, and an expansion is a list of them. Anything else —
+    a bare string the model returned instead of JSON, a list of scalars — has
+    nowhere to hold one.
+    """
+    if isinstance(content, dict):
+        return True
+    if isinstance(content, list):
+        return bool(content) and all(isinstance(record, dict) for record in content)
+    return False
+
+
 def apply_exhaustion_policy(
     exhausted: list[BatchResult],
     strategy: ExpectationStrategy,
@@ -100,7 +114,19 @@ def apply_exhaustion_policy(
     cost a generation. The caller raises it once the file is on disk.
     """
     policy = strategy.on_exhausted
-    if policy == "return_last" or not exhausted:
+    if not exhausted:
+        return None
+
+    # Online routes an exhausted response with nowhere to put a verdict to the
+    # tombstone channel, whatever the policy. Shipping it as a success would
+    # hand a downstream `guard: X.expect.overall_pass` a record with no verdict
+    # rather than one that failed.
+    for result in exhausted:
+        if result.content is not None and not _can_carry_a_verdict(result.content):
+            result.success = False
+            result.content = None
+
+    if policy == "return_last":
         return None
 
     if policy == "raise":
