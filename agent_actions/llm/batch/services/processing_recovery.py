@@ -700,6 +700,23 @@ def cleanup_recovery(
 # ---------------------------------------------------------------------------
 
 
+def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -> bool:
+    """Whether a repair batch for this file is still with the provider.
+
+    A registry read that fails is left to propagate: the per-file handler above
+    logs it and moves on, which beats guessing — guessing "nothing running" pays
+    for a second generation of every record, and guessing "something running"
+    never finalises the file.
+    """
+    jobs = context.manager.get_all_jobs() or {}
+    return any(
+        entry.parent_file_name == identity.file_name
+        and entry.recovery_type == RecoveryType.REPAIR
+        and entry.is_in_flight
+        for entry in jobs.values()
+    )
+
+
 def check_and_submit_repair(
     context: RecoveryContext,
     identity: BatchIdentity,
@@ -751,6 +768,14 @@ def check_and_submit_repair(
     )
     if strategy is None:
         return True
+
+    # The original batch's entry is never retired, so every resume arrives here
+    # with the same records. A round already running owns them: submitting
+    # another buys a second generation for each, and only one of the two can
+    # finalise — the loser is orphaned when the winner deletes the state.
+    if _repair_round_in_flight(context, identity):
+        logger.info("[%s] Repair round already in flight; deferring to it", identity.file_name)
+        return False
 
     # The original batch's registry entry is never retired, so a resume
     # re-enters here holding the pre-repair results. Whatever the loop has
