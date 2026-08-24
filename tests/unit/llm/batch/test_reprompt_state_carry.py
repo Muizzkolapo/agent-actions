@@ -8,7 +8,6 @@ round builds a fresh `RecoveryState` and had the same hole: `missing_ids`,
 everything the repair loop had recorded.
 """
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
