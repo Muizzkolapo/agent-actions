@@ -1510,3 +1510,59 @@ class TestASecondHaltIsNotDroppedSilently:
         pr.park_halt(context, first)
         pr.park_halt(context, None)
         assert context.pending_exhaustion is first
+
+
+class TestParkingNothingNeverClearsADecidedHalt:
+    """Every park goes through one place, so `None` cannot erase a decision.
+
+    `handle_repair_recovery` assigned its policy result straight onto the
+    context. When the repair policy decided nothing — `return_last`, or nothing
+    exhausted — that assignment wrote `None` over a halt another policy had
+    already parked for this file, and the run finished normally.
+    """
+
+    def _finalise_with(self, already_parked, repair_policy: str):
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=1,
+            repair_submitted_ids=["r1"],
+            evaluation_strategy_name="expectations",
+        )
+        context = _context(
+            RecordingProvider(),
+            _Backend(),
+            _agent_config(max_iterations=2, on_exhausted=repair_policy),
+        )
+        context.service = MagicMock()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._retry_service.build_exhausted_recovery.return_value = None
+        context.pending_exhaustion = already_parked
+        with patch.object(pr, "_finalize_and_cleanup", return_value="/out.json"):
+            pr.handle_repair_recovery(
+                context,
+                _identity(),
+                state,
+                recovery_results=[BatchResult(custom_id="r1", content=dict(FAILING), success=True)],
+                accumulated=[],
+                context_map=_context_map("r1"),
+            )
+        return context.pending_exhaustion
+
+    def test_a_policy_that_decides_nothing_leaves_an_earlier_halt_alone(self):
+        earlier = RuntimeError("Reprompt validation exhausted for r1 after 2 attempts")
+        assert self._finalise_with(earlier, "return_last") is earlier, (
+            "the repair policy decided nothing and wrote None over a halt another policy had "
+            "already decided, so the run finished instead of stopping"
+        )
+
+    def test_the_first_halt_still_wins_when_both_decide(self):
+        earlier = RuntimeError("Reprompt validation exhausted for r1 after 2 attempts")
+        assert self._finalise_with(earlier, "raise") is earlier
+
+    def test_with_nothing_earlier_the_repair_halt_is_parked(self):
+        parked = self._finalise_with(None, "raise")
+        assert isinstance(parked, ExpectationsExhaustedError)
+
+    def test_with_nothing_anywhere_nothing_is_parked(self):
+        assert self._finalise_with(None, "return_last") is None
