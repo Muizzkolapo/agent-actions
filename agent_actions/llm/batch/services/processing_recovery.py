@@ -586,6 +586,23 @@ def check_and_submit_reprompt(
         retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
         accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
         failure_type_counts=ftc,
+        # Finalisation rebuilds exhausted_recovery from the retry bookkeeping, so
+        # a record's retry exhaustion must not be lost because a reprompt round
+        # happened — the same reason carry_forward keeps it across a repair one.
+        missing_ids=list(recovery_state.missing_ids) if recovery_state else [],
+        record_failure_counts=(
+            dict(recovery_state.record_failure_counts) if recovery_state else {}
+        ),
+        validation_status=dict(recovery_state.validation_status) if recovery_state else {},
+        # A repair loop can be mid-flight around this round; dropping its counter
+        # would restart its rounds from zero, and dropping the judge budget would
+        # hand each one a full budget again.
+        repair_attempt=recovery_state.repair_attempt if recovery_state else 0,
+        repair_max_attempts=recovery_state.repair_max_attempts if recovery_state else 1,
+        repair_submitted_ids=(list(recovery_state.repair_submitted_ids) if recovery_state else []),
+        repair_judge_budget_remaining=(
+            recovery_state.repair_judge_budget_remaining if recovery_state else None
+        ),
     )
     for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (
