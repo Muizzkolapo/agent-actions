@@ -723,15 +723,17 @@ class TestTheOriginalBatchFinaliserAlsoRaises:
         assert order == ["write", "cleanup"]
 
 
-class TestAFailedWriteCannotCancelTheHalt:
-    """A parked halt fires even if the write or the registry cleanup throws.
+class TestAnUnrelatedFailureIsNotReportedAsAHalt:
+    """A write failure must stay a write failure.
 
-    The outer loop logs a failure like that and moves on to the next file, so
-    without the guard an unrelated convert error would quietly turn
-    `on_exhausted: raise` into a run that finished.
+    The outer loop dispatches on the exception type: RuntimeError re-raises and
+    halts, anything else is logged so the run can tombstone the records and move
+    on. Converting a failed write into the halt takes the RuntimeError branch and
+    skips that tombstoning, leaving records stuck DEFERRED where the retry
+    command cannot find them.
     """
 
-    def _finalise_with_a_broken_write(self, pending):
+    def _finalise_with_a_broken_write(self, pending, error):
         context = _context(RecordingProvider(), _Backend(), _agent_config(on_exhausted="raise"))
         context.service = MagicMock()
         context.pending_exhaustion = pending
@@ -741,7 +743,7 @@ class TestAFailedWriteCannotCancelTheHalt:
             ),
             patch(
                 "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
-                side_effect=ValueError("could not convert record"),
+                side_effect=error,
             ),
         ):
             try:
@@ -755,21 +757,94 @@ class TestAFailedWriteCannotCancelTheHalt:
                 return exc
         return None
 
-    def test_the_halt_still_wins(self):
+    def test_a_failed_write_keeps_its_own_type(self):
         raised = self._finalise_with_a_broken_write(
-            ExpectationsExhaustedError(ACTION, ["enough"], 1)
+            ExpectationsExhaustedError(ACTION, ["enough"], 1), OSError("No space left on device")
         )
-        assert isinstance(raised, ExpectationsExhaustedError), (
-            f"the write failure discarded the halt decision; got {raised!r}"
+        assert isinstance(raised, OSError), (
+            f"the write failure was reported as {type(raised).__name__}; the outer loop then takes "
+            "the RuntimeError branch and never tombstones the abandoned records"
+        )
+        assert "No space left on device" in str(raised), (
+            "the operator has to see the disk error in the logged message, which uses str(exc)"
         )
 
-    def test_the_write_failure_travels_with_it(self):
+    def test_a_keyboard_interrupt_is_not_replaced(self):
         raised = self._finalise_with_a_broken_write(
-            ExpectationsExhaustedError(ACTION, ["enough"], 1)
+            ExpectationsExhaustedError(ACTION, ["enough"], 1), KeyboardInterrupt()
         )
-        assert isinstance(raised.__context__, ValueError)
-        assert "could not convert record" in str(raised.__context__)
+        assert isinstance(raised, KeyboardInterrupt), (
+            f"Ctrl-C during the write surfaced as {type(raised).__name__}"
+        )
 
-    def test_with_nothing_parked_the_write_failure_propagates_unchanged(self):
-        raised = self._finalise_with_a_broken_write(None)
+    def test_the_halt_still_fires_when_the_write_succeeds(self):
+        context = _context(RecordingProvider(), _Backend(), _agent_config(on_exhausted="raise"))
+        context.service = MagicMock()
+        context.pending_exhaustion = ExpectationsExhaustedError(ACTION, ["enough"], 1)
+        with (
+            patch(
+                "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager.delete"
+            ),
+            patch(
+                "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
+                return_value="/out.json",
+            ),
+            patch("agent_actions.llm.batch.services.processing_recovery.cleanup_recovery"),
+            pytest.raises(ExpectationsExhaustedError),
+        ):
+            pr._finalize_and_cleanup(
+                context=context, identity=_identity(), batch_results=[], context_map={}
+            )
+
+
+class TestNothingSitsBetweenParkingAndRaising:
+    """The halt is parked on the statement before the finaliser, not earlier.
+
+    Anything that throws in between — rebuilding the retry metadata, converting
+    the records — reaches the outer loop, which logs a non-RuntimeError and moves
+    to the next file. A halt parked before that work is simply forgotten.
+    """
+
+    def _round_that_exhausts(self, retry_service_error):
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=1,
+            repair_submitted_ids=["r1"],
+            evaluation_strategy_name="expectations",
+        )
+        state.missing_ids = ["gone"]
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=2, on_exhausted="raise")
+        )
+        context.service = MagicMock()
+        context.service._retry_service.build_exhausted_recovery.side_effect = retry_service_error
+        returned = [BatchResult(custom_id="r1", content=FAILING, success=True)]
+        with patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize:
+            try:
+                pr.handle_repair_recovery(
+                    context,
+                    _identity(),
+                    state,
+                    recovery_results=returned,
+                    accumulated=[],
+                    context_map=_context_map("r1"),
+                )
+            except BaseException as exc:  # noqa: BLE001 - the test is about which one
+                return context, finalize, exc
+        return context, finalize, None
+
+    def test_a_throw_before_the_finaliser_leaves_no_forgotten_halt(self):
+        context, finalize, raised = self._round_that_exhausts(ValueError("retry bookkeeping"))
         assert isinstance(raised, ValueError)
+        assert finalize.call_count == 0, "the finaliser should not have been reached"
+        assert context.pending_exhaustion is None, (
+            "a halt was parked and then abandoned: the outer loop logs this ValueError and moves "
+            "to the next file, so the decision to stop is silently lost"
+        )
+
+    def test_the_halt_is_parked_when_the_round_reaches_the_finaliser(self):
+        context, finalize, raised = self._round_that_exhausts(None)
+        assert raised is None
+        assert finalize.call_count == 1
+        assert isinstance(context.pending_exhaustion, ExpectationsExhaustedError)
