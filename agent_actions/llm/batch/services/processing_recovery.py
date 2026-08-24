@@ -993,6 +993,19 @@ def handle_repair_recovery(
             context_map=context_map,
         )
 
+    # Online runs reprompt inside every repair iteration, so output that does not
+    # match the schema is regenerated with that feedback before the suite judges
+    # it. Here a reprompt round is its own batch: it defers, and its handler
+    # resumes into this loop on the way back.
+    if not check_and_submit_reprompt(
+        context,
+        identity,
+        batch_results=recovery_results,
+        context_map=context_map,
+        recovery_state=state,
+    ):
+        return None
+
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
