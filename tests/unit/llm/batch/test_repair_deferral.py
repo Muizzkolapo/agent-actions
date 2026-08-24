@@ -9,6 +9,8 @@ pauses, what it persists, and what reaches the output.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
@@ -591,3 +593,55 @@ class TestRaiseHaltsWithoutLosingWhatWasAlreadyEarned:
         shipped = {r.custom_id: r for r in finalize.call_args.kwargs["batch_results"]}
         assert shipped["r1"].success is False
         assert shipped["paid-for"].success is True
+
+
+class TestTheSubmitSideParksItsErrorToo:
+    """`check_and_submit_repair` exhausts on the pass that runs out of rounds.
+
+    It returns True and its caller finalises, so the error has to travel on the
+    context — raising in place would discard the same round's work as the resume
+    path did.
+    """
+
+    def _exhaust_on_submit(self, policy: str):
+        good = BatchResult(custom_id="paid-for", content=PASSING, success=True)
+        bad = BatchResult(custom_id="r1", content=FAILING, success=True)
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=1, on_exhausted=policy)
+        )
+        with patch(
+            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
+        ):
+            should_continue = pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=[good, bad],
+                context_map=_context_map("paid-for", "r1"),
+                recovery_state=None,
+            )
+        return context, should_continue
+
+    def test_it_does_not_raise_in_place(self):
+        context, should_continue = self._exhaust_on_submit("raise")
+        assert should_continue is True, "the caller must still get a chance to write the file"
+        assert context.pending_exhaustion is not None
+
+    def test_the_finaliser_is_what_raises(self):
+        context, _should = self._exhaust_on_submit("raise")
+        with pytest.raises(ExpectationsExhaustedError):
+            pr.raise_pending_exhaustion(context)
+
+    def test_it_is_raised_once(self):
+        context, _should = self._exhaust_on_submit("raise")
+        with pytest.raises(ExpectationsExhaustedError):
+            pr.raise_pending_exhaustion(context)
+        pr.raise_pending_exhaustion(context)
+
+    def test_return_last_parks_nothing(self):
+        context, should_continue = self._exhaust_on_submit("return_last")
+        assert should_continue is True
+        assert context.pending_exhaustion is None
+
+    def test_fail_parks_nothing_and_marks_the_record(self):
+        context, _should = self._exhaust_on_submit("fail")
+        assert context.pending_exhaustion is None
