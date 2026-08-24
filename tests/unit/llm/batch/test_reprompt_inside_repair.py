@@ -14,7 +14,6 @@ repair round returns, the reprompt check runs on those results and may defer,
 and the reprompt handler resumes into the repair loop on its way back.
 """
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
@@ -110,11 +109,12 @@ class TestARepromptRoundKeepsTheRepairBookkeeping:
 class TestARepairRoundIsRepromptedBeforeItIsJudged:
     """The nesting itself: reprompt gets a look before the suite does."""
 
-    def _repair_round_returns(self, needs_reprompt: bool):
+    def _repair_round_returns(self, needs_reprompt: bool, passes: bool = False):
         from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry
         from agent_actions.llm.providers.batch_base import BatchResult
 
-        returned = [BatchResult(custom_id="r1", content={"options": ["one"]}, success=True)]
+        options = ["a", "b"] if passes else ["one"]
+        returned = [BatchResult(custom_id="r1", content={"options": options}, success=True)]
         context = MagicMock()
         context.service._resolve_action_name.return_value = ACTION
         context.service._storage_backend = None
@@ -122,6 +122,10 @@ class TestARepairRoundIsRepromptedBeforeItIsJudged:
         context.agent_config = {
             "name": ACTION,
             "action_name": ACTION,
+            "agent_type": ACTION,
+            "json_mode": False,
+            "model_name": "test-model",
+            "prompt": "Write the options.",
             "expect": {
                 "repair": "auto",
                 "max_iterations": 3,
@@ -132,6 +136,7 @@ class TestARepairRoundIsRepromptedBeforeItIsJudged:
             },
         }
         context.pending_exhaustion = None
+        context.provider.submit_batch.return_value = ("b-repair-2", "submitted")
         identity = BatchIdentity(
             batch_id="b-1",
             file_name="f.json",
@@ -186,6 +191,14 @@ class TestARepairRoundIsRepromptedBeforeItIsJudged:
         assert finalize.call_count == 0
 
     def test_nothing_to_reprompt_lets_the_suite_judge(self):
-        path, _reprompt_check, finalize = self._repair_round_returns(needs_reprompt=False)
+        """Reprompt passes it through, the suite finds it good, the file is written."""
+        path, _reprompt_check, finalize = self._repair_round_returns(
+            needs_reprompt=False, passes=True
+        )
         assert path == "/out.json"
         assert finalize.call_count == 1
+
+    def test_a_record_the_suite_still_rejects_gets_another_round(self):
+        path, _reprompt_check, finalize = self._repair_round_returns(needs_reprompt=False)
+        assert path is None, "the loop had rounds left and should have used one"
+        assert finalize.call_count == 0

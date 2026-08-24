@@ -578,6 +578,16 @@ def check_and_submit_reprompt(
         retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
         accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
         failure_type_counts=ftc,
+        # A reprompt round can be launched from inside a repair round, and the
+        # repair loop resumes through it. Dropping its counter would start the
+        # rounds again from zero and never reach max_iterations; dropping the
+        # judge budget would hand each nested round a full one.
+        repair_attempt=recovery_state.repair_attempt if recovery_state else 0,
+        repair_max_attempts=recovery_state.repair_max_attempts if recovery_state else 1,
+        repair_submitted_ids=(list(recovery_state.repair_submitted_ids) if recovery_state else []),
+        repair_judge_budget_remaining=(
+            recovery_state.repair_judge_budget_remaining if recovery_state else None
+        ),
     )
     for fr in repromptable:
         state.reprompt_attempts_per_record[fr.custom_id] = (
@@ -927,6 +937,19 @@ def handle_repair_recovery(
             ),
             context_map=context_map,
         )
+
+    # Online runs reprompt inside every repair iteration, so output that does not
+    # match the schema is regenerated with that feedback before the suite judges
+    # it. Here a reprompt round is its own batch: it defers, and its handler
+    # resumes into this loop on the way back.
+    if not check_and_submit_reprompt(
+        context,
+        identity,
+        batch_results=recovery_results,
+        context_map=context_map,
+        recovery_state=state,
+    ):
+        return None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(recovery_results)
