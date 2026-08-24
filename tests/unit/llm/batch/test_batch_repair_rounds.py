@@ -219,3 +219,57 @@ class TestExhaustion:
     def test_nothing_exhausted_is_not_a_failure(self):
         _results, strategy = self._exhausted(on_exhausted="raise")
         apply_exhaustion_policy([], strategy, ACTION)
+
+
+class TestOnlyWhatWasSentCountsAsInFlight:
+    """A record the submission skipped was never sent, so it never went missing.
+
+    `submit_repair_batch` skips a record with no `context_map` row — it has
+    nothing to rebuild the prompt from. Recording it as submitted anyway makes
+    the next round reconstruct it as a provider drop, destroying content that
+    was already generated and paid for and replacing it with a claim that is
+    false.
+    """
+
+    def _submit(self, failed_ids: list[str]):
+        strategy = build_repair_strategy(_agent_config(repair="auto"))
+        failed = [
+            BatchResult(custom_id=cid, content=dict(FAILING), success=True) for cid in failed_ids
+        ]
+        for f in failed:
+            strategy.evaluate(f)
+        provider = RecordingProvider()
+        prepared = MagicMock()
+        prepared.formatted_prompt = ORIGINAL_PROMPT
+        prepared.llm_context = {"source": {"text": "the original input"}}
+        prepared.should_execute = True
+        with patch(
+            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=prepared
+        ):
+            return submit_repair_batch(
+                action_indices={ACTION: 0},
+                dependency_configs={},
+                storage_backend=None,
+                provider=provider,
+                failed_results=failed,
+                strategy=strategy,
+                context_map=_context_map(),
+                output_directory="/tmp/test",
+                file_name="f.json",
+                agent_config=_agent_config(repair="auto"),
+                attempt=1,
+            )
+
+    def test_a_skipped_record_is_not_reported_as_sent(self):
+        submission = self._submit([CUSTOM_ID, "no-context-row"])
+        assert submission is not None
+        assert submission.sent_ids == [CUSTOM_ID], (
+            f"{submission.sent_ids} claims a record was submitted that the preparator skipped; "
+            "next round reconstructs it as a provider drop over its real content"
+        )
+
+    def test_the_batch_id_and_count_still_come_back(self):
+        submission = self._submit([CUSTOM_ID])
+        assert submission.batch_id
+        assert submission.record_count == 1
+        assert submission.sent_ids == [CUSTOM_ID]

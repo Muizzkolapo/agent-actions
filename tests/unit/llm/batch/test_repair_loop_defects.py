@@ -354,3 +354,34 @@ class TestTheSentinelDoesNotCollideWithUserData:
             "two records that both lost their correlation are not known to be the same record; "
             "folding them together drops one"
         )
+
+    def test_evicting_an_in_flight_id_does_not_take_unidentified_records_with_it(self):
+        """Eviction needs an identity too, or one resubmission drops the rest.
+
+        A record with no correlation id cannot be matched to a submission, so it
+        was never sent — evicting it because some *other* unidentified record
+        was is a silent loss, and losing them is worse than duplicating them.
+        """
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        pooled = pool_records(
+            [],
+            [
+                BatchResult(custom_id="r1", content={"score": 1}, success=True),
+                BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 2}, success=True),
+                BatchResult(
+                    custom_id=UNIDENTIFIED_RECORD, content=None, success=False, error="429"
+                ),
+            ],
+        )
+        kept = pool_records(pooled, [], in_flight=[UNIDENTIFIED_RECORD])
+        errors = [r.get("error") for r in kept]
+        assert len(kept) == 3, f"an unidentified record was evicted and lost: {kept}"
+        assert "429" in errors, "the provider's real error was destroyed"
+
+    def test_an_identified_record_in_flight_is_still_evicted(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        pooled = pool_records([], [BatchResult(custom_id="r1", content={"s": 1}, success=True)])
+        assert pool_records(pooled, [], in_flight=["r1"]) == []
