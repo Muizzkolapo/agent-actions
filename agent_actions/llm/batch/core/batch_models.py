@@ -170,6 +170,12 @@ class RecoveryContext:
     action_name: str | None
     start_time: float
 
+    # Set when an exhaustion policy of `raise` has decided the run must stop.
+    # Batch writes its output file once at the end, so the error is carried here
+    # and raised after that write — halting without discarding the records the
+    # round already earned.
+    pending_exhaustion: Exception | None = None
+
 
 @dataclass
 class BatchIdentity:

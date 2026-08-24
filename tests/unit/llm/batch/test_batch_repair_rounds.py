@@ -9,8 +9,6 @@ model is sent, and what happens when the iterations run out.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.llm.batch.services.repair_ops import (
     apply_exhaustion_policy,
@@ -201,10 +199,22 @@ class TestExhaustion:
         assert "Expectations exhausted" in results[0].error
         assert "enough_options" in results[0].error
 
-    def test_raise_halts_the_run(self):
+    def test_raise_hands_back_the_error_rather_than_throwing_it(self):
+        """The caller has not written the output file yet.
+
+        Throwing here would halt by discarding every record the round had
+        already graduated, so the error travels back and is raised once the
+        file is on disk.
+        """
         results, strategy = self._exhausted(on_exhausted="raise")
-        with pytest.raises(ExpectationsExhaustedError):
-            apply_exhaustion_policy(results, strategy, ACTION)
+        pending = apply_exhaustion_policy(results, strategy, ACTION)
+        assert isinstance(pending, ExpectationsExhaustedError)
+        assert pending.failed_ids == ["enough_options"]
+
+    def test_the_other_policies_hand_back_nothing_to_raise(self):
+        for policy in ("return_last", "fail"):
+            results, strategy = self._exhausted(on_exhausted=policy)
+            assert apply_exhaustion_policy(results, strategy, ACTION) is None, policy
 
     def test_nothing_exhausted_is_not_a_failure(self):
         _results, strategy = self._exhausted(on_exhausted="raise")

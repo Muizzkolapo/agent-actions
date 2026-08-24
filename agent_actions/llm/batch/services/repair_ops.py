@@ -69,18 +69,24 @@ def apply_exhaustion_policy(
     exhausted: list[BatchResult],
     strategy: ExpectationStrategy,
     action_name: str,
-) -> None:
-    """`return_last` keeps the annotated record; `fail` tombstones it; `raise` halts the run."""
-    from agent_actions.expectations.service import ExpectationsExhaustedError
+) -> Exception | None:
+    """`return_last` keeps the annotated record; `fail` tombstones it.
 
+    Returns the error `raise` wants thrown rather than throwing it, because the
+    caller has not written the output file yet: raising here would halt the run
+    by discarding every record the round had already graduated, each of which
+    cost a generation. The caller raises it once the file is on disk.
+    """
     policy = strategy.on_exhausted
     if policy == "return_last" or not exhausted:
-        return
+        return None
 
     if policy == "raise":
+        from agent_actions.expectations.service import ExpectationsExhaustedError
+
         first = exhausted[0].recovery_metadata
         expectations = first.expectations if first else None
-        raise ExpectationsExhaustedError(
+        return ExpectationsExhaustedError(
             action_name,
             expectations.failed if expectations else [],
             expectations.attempts if expectations else strategy.max_attempts,
@@ -93,6 +99,7 @@ def apply_exhaustion_policy(
         attempts = expectations.attempts if expectations else strategy.max_attempts
         result.success = False
         result.error = f"Expectations exhausted after {attempts} iteration(s) (failed: {failed})"
+    return None
 
 
 def submit_repair_batch(

@@ -753,7 +753,9 @@ def check_and_submit_repair(
     if current_attempt >= max_rounds:
         strategy.write_verdicts(still_failing)
         stamp_exhausted(still_failing, strategy, current_attempt + 1)
-        apply_exhaustion_policy(still_failing, strategy, identity.file_name)
+        context.pending_exhaustion = apply_exhaustion_policy(
+            still_failing, strategy, identity.file_name
+        )
         return True
 
     next_attempt = current_attempt + 1
@@ -916,7 +918,9 @@ def handle_repair_recovery(
     if still_failing:
         strategy.write_verdicts(still_failing)
         stamp_exhausted(still_failing, strategy, state.repair_attempt + 1)
-        apply_exhaustion_policy(still_failing, strategy, identity.file_name)
+        context.pending_exhaustion = apply_exhaustion_policy(
+            still_failing, strategy, identity.file_name
+        )
 
     final_results = deserialize_results(state.graduated_results) + still_failing
 
@@ -935,6 +939,20 @@ def handle_repair_recovery(
         context_map=context_map,
         exhausted_recovery=exhausted_recovery,
     )
+
+
+def raise_pending_exhaustion(context: RecoveryContext) -> None:
+    """Halt the run for `on_exhausted: raise`, now that the output is on disk.
+
+    Called from the finalisers rather than from the policy itself: batch writes
+    its file once at the end, so raising any earlier takes every record the
+    round had already graduated down with it.
+    """
+    pending = context.pending_exhaustion
+    if pending is None:
+        return
+    context.pending_exhaustion = None
+    raise pending
 
 
 def _finalize_and_cleanup(
@@ -958,6 +976,7 @@ def _finalize_and_cleanup(
         exhausted_recovery=exhausted_recovery,
     )
     cleanup_recovery(context, identity)
+    raise_pending_exhaustion(context)
     return output_path
 
 

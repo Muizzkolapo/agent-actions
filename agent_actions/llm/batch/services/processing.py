@@ -52,6 +52,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
+    raise_pending_exhaustion as _raise_pending_exhaustion_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     register_recovery_batch,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
@@ -782,6 +785,7 @@ class BatchProcessingService:
             exhausted_recovery=exhausted_recovery,
         )
         _cleanup_recovery_impl(context, identity)
+        _raise_pending_exhaustion_impl(context)
         return output_path
 
     def _clear_deferred_dispositions(
