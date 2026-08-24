@@ -754,7 +754,7 @@ def check_and_submit_repair(
         strategy.write_verdicts(still_failing)
         stamp_exhausted(still_failing, strategy, current_attempt + 1)
         context.pending_exhaustion = apply_exhaustion_policy(
-            still_failing, strategy, identity.file_name
+            still_failing, strategy, context.service._resolve_action_name(context.action_name)
         )
         return True
 
@@ -915,11 +915,12 @@ def handle_repair_recovery(
             )
             return None
 
+    pending = None
     if still_failing:
         strategy.write_verdicts(still_failing)
         stamp_exhausted(still_failing, strategy, state.repair_attempt + 1)
-        context.pending_exhaustion = apply_exhaustion_policy(
-            still_failing, strategy, identity.file_name
+        pending = apply_exhaustion_policy(
+            still_failing, strategy, context.service._resolve_action_name(context.action_name)
         )
 
     final_results = deserialize_results(state.graduated_results) + still_failing
@@ -932,6 +933,9 @@ def handle_repair_recovery(
             set(state.missing_ids), state.record_failure_counts
         )
 
+    # Parked last: everything above can throw, and the outer loop answers a
+    # non-RuntimeError by logging and moving to the next file.
+    context.pending_exhaustion = pending
     return _finalize_and_cleanup(
         context,
         identity,
@@ -946,8 +950,9 @@ def raise_pending_exhaustion(context: RecoveryContext) -> None:
 
     Called from the finalisers, not from the policy itself: batch writes its
     file once at the end, so raising earlier takes down every record the round
-    had already graduated. Both call it from `finally` — the outer loop only
-    logs a failed write and moves on, which would otherwise drop the halt.
+    had already graduated. Callers park on the statement before the finaliser,
+    because anything that throws in between reaches the outer loop, which logs
+    a non-RuntimeError and moves on — forgetting the halt.
     """
     pending = context.pending_exhaustion
     if pending is None:
@@ -964,22 +969,20 @@ def _finalize_and_cleanup(
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
 ) -> str:
     """Delete recovery state, finalize output, then clean up registry entries."""
-    try:
-        RecoveryStateManager.delete(
-            context.service._storage_backend,
-            context.service._resolve_action_name(context.action_name),
-            identity.file_name,
-        )
-        output_path = finalize_batch_output(
-            context,
-            identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            exhausted_recovery=exhausted_recovery,
-        )
-        cleanup_recovery(context, identity)
-    finally:
-        raise_pending_exhaustion(context)
+    RecoveryStateManager.delete(
+        context.service._storage_backend,
+        context.service._resolve_action_name(context.action_name),
+        identity.file_name,
+    )
+    output_path = finalize_batch_output(
+        context,
+        identity,
+        batch_results=batch_results,
+        context_map=context_map,
+        exhausted_recovery=exhausted_recovery,
+    )
+    cleanup_recovery(context, identity)
+    raise_pending_exhaustion(context)
     return output_path
 
 
