@@ -1054,8 +1054,9 @@ def handle_repair_recovery(
         )
 
     # Parked last: everything above can throw, and the outer loop answers a
-    # non-RuntimeError by logging and moving to the next file.
-    context.pending_exhaustion = pending
+    # non-RuntimeError by logging and moving to the next file. Through park_halt
+    # so a policy that decided nothing cannot write None over one that did.
+    park_halt(context, pending)
     return _finalize_and_cleanup(
         context,
         identity,
