@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     OnExhaustedPolicy,
@@ -351,7 +351,11 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except RuntimeError:
+            except (RuntimeError, ConfigurationError):
+                # A config error is not this file's problem: every remaining
+                # file carries the same action config and fails the same way,
+                # so continuing would finish the run reporting success with each
+                # of them missing from the output.
                 raise
             except Exception as e:
                 logger.exception(
