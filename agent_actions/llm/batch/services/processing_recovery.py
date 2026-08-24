@@ -702,14 +702,20 @@ def check_and_submit_repair(
     Returns True when processing should continue — the suite passed, the action
     does not repair, or the iterations are spent. False when a repair batch was
     submitted and the caller should defer.
+
+    On True, *batch_results* holds what the caller should write: a resume of the
+    original batch arrives with the results it produced before any repair round,
+    so anything the loop has since rewritten is folded in over them.
     """
     from agent_actions.llm.batch.services.repair_ops import (
         apply_exhaustion_policy,
         build_repair_strategy,
         carry_forward,
+        pool_records,
         stamp_exhausted,
         submit_repair_batch,
     )
+    from agent_actions.llm.batch.services.retry_serialization import serialize_results
     from agent_actions.processing.evaluation import EvaluationLoop
 
     # Load before building the strategy: the counter and the judge budget both
@@ -735,6 +741,18 @@ def check_and_submit_repair(
     )
     if strategy is None:
         return True
+
+    # The original batch's registry entry is never retired, so a resume
+    # re-enters here holding the pre-repair results. Whatever the loop has
+    # already rewritten supersedes them, or finalising this pass would ship the
+    # stale content and throw the pool away.
+    if recovery_state and recovery_state.graduated_results:
+        batch_results[:] = deserialize_results(
+            pool_records(
+                serialize_results(batch_results),
+                deserialize_results(recovery_state.graduated_results),
+            )
+        )
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(batch_results)
