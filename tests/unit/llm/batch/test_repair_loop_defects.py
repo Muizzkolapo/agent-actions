@@ -266,3 +266,55 @@ class TestTheDedupeKeyCannotCollapseDistinctRecords:
         b = BatchResult(custom_id="", content={"score": 2}, success=True)
         pooled = pool_records([], [a, b])
         assert len(pooled) == 2, "records with no id collapsed into one"
+
+
+class TestTheUnidentifiedSentinelIsNotAnIdentity:
+    """A provider stamps a result carrying no correlation id with a sentinel.
+
+    Two such results are two records. Deduplicating on the sentinel folds them
+    into one and loses a record silently, which is worse than shipping both.
+    """
+
+    def test_two_unidentified_results_are_two_records(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        a = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 1}, success=True)
+        b = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 2}, success=True)
+        assert len(pool_records([], [a, b])) == 2
+
+    def test_they_stay_separate_across_rounds(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        a = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 1}, success=True)
+        b = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 2}, success=True)
+        assert len(pool_records(pool_records([], [a]), [b])) == 2
+
+    def test_an_identified_record_still_deduplicates(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        ok = BatchResult(custom_id="r1", content={"score": 1}, success=True)
+        assert len(pool_records([], [ok, ok])) == 1
+
+
+class TestTheSentinelMatchesWhatProvidersEmit:
+    """`pool_records` compares against a constant the providers produce.
+
+    Two copies of a value one side writes and the other compares is how the
+    dedupe silently stops working — pin both ends to the same source.
+    """
+
+    def test_the_base_extractor_defaults_to_the_sentinel(self):
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        from .test_reprompt_feedback_delivery import RecordingProvider
+
+        assert RecordingProvider()._extract_custom_id({}) == UNIDENTIFIED_RECORD
+
+    def test_the_gemini_override_defaults_to_the_same_sentinel(self):
+        pytest.importorskip("google.genai")
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+        from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
+
+        assert GeminiBatchClient.__dict__["_extract_custom_id"](object(), {}) == UNIDENTIFIED_RECORD

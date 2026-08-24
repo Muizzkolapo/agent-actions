@@ -180,6 +180,12 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
         # Identity is the record id — and the sentinel a provider stamps on a
         # result carrying none is not one. Folding those together would drop
         # records rather than duplicate them, the worse of the two failures.
+        #
+        # The sentinel shares a namespace with user data (a target_id could
+        # literally be it), so a record named that is treated as unidentified
+        # and appears once per processing pass instead of deduplicating. That
+        # is the wrong answer for a case nothing here can distinguish, and it
+        # errs towards a visible duplicate rather than a silent loss.
         key = record.get("custom_id")
         if key and key != UNIDENTIFIED_RECORD:
             by_id[str(key)] = record
@@ -190,7 +196,9 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
         # cannot be matched to its input either. Say so rather than let it look
         # like an ordinary duplicate in the output.
         logger.warning(
-            "%d pooled record(s) have no custom_id and cannot be deduplicated", len(unkeyed)
+            "%d pooled record(s) carry no usable correlation id and cannot be "
+            "deduplicated; they will appear once per processing pass",
+            len(unkeyed),
         )
     return [*by_id.values(), *unkeyed]
 
