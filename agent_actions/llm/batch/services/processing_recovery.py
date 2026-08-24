@@ -45,6 +45,8 @@ from agent_actions.processing.types import RecoveryMetadata
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
 
+from agent_actions.llm.batch.services.repair_ops import pool_records
+
 logger = logging.getLogger(__name__)
 
 
@@ -317,7 +319,7 @@ def handle_reprompt_recovery(
     validation_name = strategy.name
     graduated, still_failing, failure_types = loop.split(recovery_results)
     loop.tag_graduated(graduated)
-    state.graduated_results.extend(serialize_results(graduated))
+    state.graduated_results = pool_records(state.graduated_results, graduated)
     state.evaluation_strategy_name = validation_name
 
     accumulate_failure_types(state.failure_type_counts, failure_types)
@@ -555,12 +557,12 @@ def check_and_submit_reprompt(
         validation_name=strategy.name,
         on_exhausted=on_exhausted,
         evaluation_strategy_name=strategy.name,
-        graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
-        + serialize_results(graduated),
-        unrepromptable_results=(
-            list(recovery_state.unrepromptable_results) if recovery_state else []
-        )
-        + serialize_results(unrepromptable),
+        graduated_results=pool_records(
+            list(recovery_state.graduated_results) if recovery_state else [], graduated
+        ),
+        unrepromptable_results=pool_records(
+            list(recovery_state.unrepromptable_results) if recovery_state else [], unrepromptable
+        ),
         reprompt_attempts_per_record=(
             dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
         ),
