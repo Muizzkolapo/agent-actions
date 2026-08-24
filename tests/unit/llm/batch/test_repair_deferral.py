@@ -642,6 +642,134 @@ class TestTheSubmitSideParksItsErrorToo:
         assert should_continue is True
         assert context.pending_exhaustion is None
 
-    def test_fail_parks_nothing_and_marks_the_record(self):
+    def test_fail_parks_nothing_to_raise(self):
         context, _should = self._exhaust_on_submit("fail")
         assert context.pending_exhaustion is None
+
+
+class TestTheOriginalBatchFinaliserAlsoRaises:
+    """The original-batch path has its own finaliser, and it is the common one.
+
+    An action with `max_iterations: 1` exhausts on the first pass — no retry, no
+    reprompt, no repair round — so this is the shortest route to `raise` and it
+    goes through `BatchProcessingService._finalize_batch_output`, not the
+    recovery finaliser the other tests drive.
+    """
+
+    def _service_and_context(self, policy: str):
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+            storage_backend=MagicMock(),
+            workflow_name=ACTION,
+        )
+        context = _context(RecordingProvider(), _Backend(), _agent_config(on_exhausted=policy))
+        context.service = service
+        return service, context
+
+    def _finalise(self, policy: str, pending):
+        service, context = self._service_and_context(policy)
+        context.pending_exhaustion = pending
+        order: list[str] = []
+        with (
+            patch(
+                "agent_actions.llm.batch.services.processing._finalize_batch_output_impl",
+                side_effect=lambda *a, **k: order.append("write") or "/out.json",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.processing._cleanup_recovery_impl",
+                side_effect=lambda *a, **k: order.append("cleanup"),
+            ),
+            patch.object(
+                __import__(
+                    "agent_actions.llm.batch.services.processing", fromlist=["RecoveryStateManager"]
+                ).RecoveryStateManager,
+                "delete",
+            ),
+        ):
+            raised = None
+            try:
+                service._finalize_batch_output(
+                    context=context,
+                    identity=_identity(),
+                    batch_results=[],
+                    context_map={},
+                )
+            except ExpectationsExhaustedError as exc:
+                raised = exc
+        return order, raised
+
+    def test_a_parked_error_is_raised(self):
+        order, raised = self._finalise("raise", ExpectationsExhaustedError(ACTION, ["enough"], 1))
+        assert raised is not None, (
+            "the original-batch finaliser swallowed the halt, so raise degrades to return_last "
+            "on the most common path"
+        )
+
+    def test_the_output_is_written_and_the_registry_tidied_first(self):
+        order, _raised = self._finalise("raise", ExpectationsExhaustedError(ACTION, ["enough"], 1))
+        assert order == ["write", "cleanup"], (
+            "the file and the registry must both be settled before the run halts, or a re-run "
+            "reprocesses and re-raises forever"
+        )
+
+    def test_nothing_parked_means_nothing_raised(self):
+        order, raised = self._finalise("return_last", None)
+        assert raised is None
+        assert order == ["write", "cleanup"]
+
+
+class TestAFailedWriteCannotCancelTheHalt:
+    """A parked halt fires even if the write or the registry cleanup throws.
+
+    The outer loop logs a failure like that and moves on to the next file, so
+    without the guard an unrelated convert error would quietly turn
+    `on_exhausted: raise` into a run that finished.
+    """
+
+    def _finalise_with_a_broken_write(self, pending):
+        context = _context(RecordingProvider(), _Backend(), _agent_config(on_exhausted="raise"))
+        context.service = MagicMock()
+        context.pending_exhaustion = pending
+        with (
+            patch(
+                "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager.delete"
+            ),
+            patch(
+                "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
+                side_effect=ValueError("could not convert record"),
+            ),
+        ):
+            try:
+                pr._finalize_and_cleanup(
+                    context=context,
+                    identity=_identity(),
+                    batch_results=[],
+                    context_map={},
+                )
+            except BaseException as exc:  # noqa: BLE001 - the test is about which one
+                return exc
+        return None
+
+    def test_the_halt_still_wins(self):
+        raised = self._finalise_with_a_broken_write(
+            ExpectationsExhaustedError(ACTION, ["enough"], 1)
+        )
+        assert isinstance(raised, ExpectationsExhaustedError), (
+            f"the write failure discarded the halt decision; got {raised!r}"
+        )
+
+    def test_the_write_failure_travels_with_it(self):
+        raised = self._finalise_with_a_broken_write(
+            ExpectationsExhaustedError(ACTION, ["enough"], 1)
+        )
+        assert isinstance(raised.__context__, ValueError)
+        assert "could not convert record" in str(raised.__context__)
+
+    def test_with_nothing_parked_the_write_failure_propagates_unchanged(self):
+        raised = self._finalise_with_a_broken_write(None)
+        assert isinstance(raised, ValueError)
