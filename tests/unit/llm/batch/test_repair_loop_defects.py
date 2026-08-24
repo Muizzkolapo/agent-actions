@@ -318,3 +318,39 @@ class TestTheSentinelMatchesWhatProvidersEmit:
         from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
 
         assert GeminiBatchClient.__dict__["_extract_custom_id"](object(), {}) == UNIDENTIFIED_RECORD
+
+
+class TestTheSentinelDoesNotCollideWithUserData:
+    """A record whose id is literally the sentinel is still a real record.
+
+    The pool treats the sentinel as "no usable id" and lets those through
+    undeduplicated, which is right for a record that genuinely lost its
+    correlation. It is wrong for a user record that happens to be named that:
+    the original batch is re-processed on every pass, so it accumulates one copy
+    per pass, unbounded.
+    """
+
+    def test_a_record_named_like_the_old_sentinel_deduplicates(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+
+        pooled: list = []
+        for _ in range(3):
+            rec = BatchResult(custom_id="unknown", content={"score": 1}, success=True)
+            pooled = pool_records(pooled, [rec])
+        ids = [r.get("custom_id") for r in pooled]
+        assert ids == ["unknown"], (
+            f"a user record named 'unknown' grew one copy per pass ({ids}); the sentinel must not "
+            "share a namespace with real ids"
+        )
+
+    def test_a_genuinely_unidentified_record_is_still_not_deduplicated(self):
+        from agent_actions.llm.batch.services.repair_ops import pool_records
+        from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
+
+        a = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 1}, success=True)
+        b = BatchResult(custom_id=UNIDENTIFIED_RECORD, content={"score": 2}, success=True)
+        pooled = pool_records([], [a, b])
+        assert len(pooled) == 2, (
+            "two records that both lost their correlation are not known to be the same record; "
+            "folding them together drops one"
+        )
