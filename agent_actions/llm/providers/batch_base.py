@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 # What a provider stamps on a result carrying no correlation id. It is not an
 # identity: two of them are two records, so nothing may deduplicate on it.
-UNIDENTIFIED_RECORD = "unknown"
+# Namespaced so a real target_id cannot collide with it and inherit that rule.
+UNIDENTIFIED_RECORD = "__agac_unidentified__"
 
 
 def retry(
