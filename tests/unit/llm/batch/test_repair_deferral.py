@@ -9,6 +9,7 @@ pauses, what it persists, and what reaches the output.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.llm.batch.core.batch_constants import RecoveryPhase
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
@@ -516,3 +517,72 @@ class TestTheLoadedStateIsTrustedWhole:
                 recovery_state=None,
             )
         assert seen["budget"] == 2
+
+
+class TestRaiseHaltsWithoutLosingWhatWasAlreadyEarned:
+    """`on_exhausted: raise` stops the run — it does not un-earn the round.
+
+    Online, records are persisted as they are processed, so halting keeps
+    everything that already succeeded. Batch writes the file once at the end, so
+    raising before that point throws away every record the loop had graduated —
+    each of which cost a real generation and was already judged.
+    """
+
+    def _drive(self, policy: str):
+        good = BatchResult(custom_id="paid-for", content=PASSING, success=True)
+        bad = BatchResult(custom_id="r1", content=FAILING, success=True)
+        state = RecoveryState(
+            repair_attempt=1, repair_max_attempts=1, repair_submitted_ids=["paid-for", "r1"]
+        )
+        config = _agent_config(max_iterations=2, on_exhausted=policy)
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
+        ):
+            raised = None
+            try:
+                pr.handle_repair_recovery(
+                    _context(RecordingProvider(), _Backend(), config),
+                    _identity(),
+                    state=state,
+                    recovery_results=[good, bad],
+                    accumulated=[],
+                    context_map=_context_map("paid-for", "r1"),
+                )
+            except ExpectationsExhaustedError as exc:
+                raised = exc
+        return finalize, raised
+
+    def test_the_run_still_halts(self):
+        _finalize, raised = self._drive("raise")
+        assert raised is not None, "on_exhausted: raise must stop the run"
+
+    def test_the_output_is_written_before_it_halts(self):
+        finalize, _raised = self._drive("raise")
+        assert finalize.called, "the file was never written, so the round's work was discarded"
+
+    def test_a_graduated_record_survives_the_halt(self):
+        finalize, _raised = self._drive("raise")
+        shipped = [r.custom_id for r in finalize.call_args.kwargs["batch_results"]]
+        assert "paid-for" in shipped, (
+            "a record that passed its expectations was lost when a sibling exhausted"
+        )
+
+    def test_the_exhausted_record_is_shipped_with_its_metadata(self):
+        finalize, _raised = self._drive("raise")
+        shipped = {r.custom_id: r for r in finalize.call_args.kwargs["batch_results"]}
+        assert shipped["r1"].recovery_metadata.expectations.failed == ["enough"]
+
+    def test_return_last_does_not_halt(self):
+        _finalize, raised = self._drive("return_last")
+        assert raised is None
+
+    def test_fail_does_not_halt_but_marks_the_record(self):
+        finalize, raised = self._drive("fail")
+        assert raised is None
+        shipped = {r.custom_id: r for r in finalize.call_args.kwargs["batch_results"]}
+        assert shipped["r1"].success is False
+        assert shipped["paid-for"].success is True
