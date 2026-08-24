@@ -775,22 +775,34 @@ def check_and_submit_repair(
     # failure into a silent "never returned" passthrough.
     repairable = [r for r in still_failing if r.content is not None]
     unrepairable = [r for r in still_failing if r.content is None]
-    if not repairable:
-        strategy.write_verdicts(still_failing)
-        return True
 
     # max_iterations counts total generations, and the first one already
     # happened — so the rounds available here are one fewer.
     max_rounds = max(strategy.max_attempts - 1, 0)
     current_attempt = recovery_state.repair_attempt if recovery_state else 0
 
-    if current_attempt >= max_rounds:
-        strategy.write_verdicts(still_failing)
-        stamp_exhausted(still_failing, strategy, current_attempt + 1)
-        context.pending_exhaustion = apply_exhaustion_policy(
-            still_failing, strategy, context.service._resolve_action_name(context.action_name)
+    def _give_up(exhausted: list[BatchResult]) -> bool:
+        """Stop the loop for *exhausted*, applying the action's on_exhausted.
+
+        Every exit from here is the loop ending for those records, so they all
+        settle the policy the same way — otherwise whether a run halts depends
+        on which exit the pass happened to take.
+        """
+        strategy.write_verdicts(exhausted)
+        stamp_exhausted(exhausted, strategy, current_attempt + 1)
+        context.pending_exhaustion = (
+            apply_exhaustion_policy(
+                exhausted, strategy, context.service._resolve_action_name(context.action_name)
+            )
+            or context.pending_exhaustion
         )
         return True
+
+    if not repairable:
+        return _give_up(still_failing)
+
+    if current_attempt >= max_rounds:
+        return _give_up(still_failing)
 
     next_attempt = current_attempt + 1
     submission = submit_repair_batch(
@@ -807,8 +819,7 @@ def check_and_submit_repair(
         attempt=next_attempt,
     )
     if not submission:
-        strategy.write_verdicts(still_failing)
-        return True
+        return _give_up(still_failing)
 
     register_recovery_batch(
         context.manager,

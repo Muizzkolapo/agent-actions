@@ -1351,22 +1351,24 @@ class TestEveryExitAppliesTheSamePolicy:
             ]
             patches = []
         else:
+            # Nothing prepares: the record has no context_map row to rebuild its
+            # prompt from, so the submission comes back empty.
             results = [BatchResult(custom_id="r1", content=dict(FAILING), success=True)]
             patches = [
-                patch.object(pr, "submit_repair_batch", return_value=None),
                 patch(
                     "agent_actions.processing.task_preparer.TaskPreparer.prepare",
                     return_value=_prepared(),
-                ),
+                )
             ]
+        context_map = {} if exit_kind == "submit_failed" else _context_map("r1")
         with ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
+            for patcher in patches:
+                stack.enter_context(patcher)
             should_continue = pr.check_and_submit_repair(
                 context,
                 _identity(),
                 batch_results=results,
-                context_map=_context_map("r1"),
+                context_map=context_map,
                 recovery_state=None,
             )
         return context, should_continue, results
