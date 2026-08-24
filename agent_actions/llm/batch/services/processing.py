@@ -769,23 +769,25 @@ class BatchProcessingService:
         Delegates to processing_recovery.finalize_batch_output then cleanup_recovery.
         Also cleans up any stale recovery state left by a crashed previous run.
         """
-        # Clean up stale recovery state (e.g. from a crashed previous run).
-        # The recovery path already does this in _finalize_and_cleanup, but the
-        # original batch path goes through this method instead and must also clean up.
-        RecoveryStateManager.delete(
-            self._storage_backend,  # type: ignore[arg-type]
-            self._resolve_action_name(context.action_name),
-            identity.file_name,
-        )
-        output_path = _finalize_batch_output_impl(
-            context,
-            identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            exhausted_recovery=exhausted_recovery,
-        )
-        _cleanup_recovery_impl(context, identity)
-        _raise_pending_exhaustion_impl(context)
+        try:
+            # Clean up stale recovery state (e.g. from a crashed previous run).
+            # The recovery path already does this in _finalize_and_cleanup, but the
+            # original batch path goes through this method instead and must also clean up.
+            RecoveryStateManager.delete(
+                self._storage_backend,  # type: ignore[arg-type]
+                self._resolve_action_name(context.action_name),
+                identity.file_name,
+            )
+            output_path = _finalize_batch_output_impl(
+                context,
+                identity,
+                batch_results=batch_results,
+                context_map=context_map,
+                exhausted_recovery=exhausted_recovery,
+            )
+            _cleanup_recovery_impl(context, identity)
+        finally:
+            _raise_pending_exhaustion_impl(context)
         return output_path
 
     def _clear_deferred_dispositions(
