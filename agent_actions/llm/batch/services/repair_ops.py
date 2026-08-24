@@ -22,9 +22,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# What a provider stamps on a result it cannot correlate.
-UNIDENTIFIED_RECORD = "unknown"
-
 
 def build_repair_strategy(
     agent_config: dict[str, Any] | None,
@@ -175,17 +172,15 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
     repaired content has to replace the attempt it superseded.
     """
     from agent_actions.llm.batch.services.retry_serialization import serialize_results
+    from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
 
     by_id: dict[str, dict[str, Any]] = {}
     unkeyed: list[dict[str, Any]] = []
     for record in [*pooled, *serialize_results(added)]:
-        # Identity is the record id. Without one there is nothing to dedupe on,
-        # and folding those together would silently drop records rather than
-        # duplicate them — the worse of the two failures.
+        # Identity is the record id — and the sentinel a provider stamps on a
+        # result carrying none is not one. Folding those together would drop
+        # records rather than duplicate them, the worse of the two failures.
         key = record.get("custom_id")
-        # Providers stamp an unidentifiable result "unknown", so that is not an
-        # identity either — two of them are two records, and folding them would
-        # drop one rather than duplicate it.
         if key and key != UNIDENTIFIED_RECORD:
             by_id[str(key)] = record
         else:

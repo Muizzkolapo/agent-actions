@@ -20,7 +20,7 @@ except ImportError:
     types = None  # type: ignore[assignment]
 from agent_actions.prompt.message_builder import MessageBuilder
 
-from ..batch_base import BaseBatchClient, BatchTask
+from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
 
 
 class GeminiBatchClient(BaseBatchClient):
@@ -88,7 +88,7 @@ class GeminiBatchClient(BaseBatchClient):
 
     def _extract_custom_id(self, raw_response: dict[str, Any]) -> str:
         """Extract custom_id from Gemini response (uses 'key' instead)."""
-        return raw_response.get("key", "unknown")  # type: ignore[no-any-return]
+        return raw_response.get("key", UNIDENTIFIED_RECORD)  # type: ignore[no-any-return]
 
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from Gemini response."""
