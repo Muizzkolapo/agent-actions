@@ -822,14 +822,6 @@ def check_and_submit_repair(
     if strategy is None:
         return True
 
-    # The original batch's entry is never retired, so every resume arrives here
-    # with the same records. A round already running owns them: submitting
-    # another buys a second generation for each, and only one of the two can
-    # finalise — the loser is orphaned when the winner deletes the state.
-    if _repair_round_in_flight(context, identity):
-        logger.info("[%s] Repair round already in flight; deferring to it", identity.file_name)
-        return False
-
     # The original batch's registry entry is never retired, so a resume
     # re-enters here holding the pre-repair results. Whatever the loop has
     # already rewritten supersedes them, or finalising this pass would ship the
@@ -853,6 +845,22 @@ def check_and_submit_repair(
     # failure into a silent "never returned" passthrough.
     repairable = [r for r in still_failing if r.content is not None]
     unrepairable = [r for r in still_failing if r.content is None]
+
+    # The original batch's entry is never retired, so every resume arrives here
+    # with the same records. A live round owns the ones it is regenerating:
+    # sending them again buys a second generation of each, and only one of the
+    # two can finalise — the loser is orphaned when the winner deletes the
+    # state. Records it never held are not its to hold up.
+    held = set(recovery_state.repair_submitted_ids) if recovery_state else set()
+    if held.intersection(r.custom_id for r in repairable) and _repair_round_in_flight(
+        context, identity
+    ):
+        logger.info(
+            "[%s] A repair round is already regenerating %s; deferring to it",
+            identity.file_name,
+            sorted(held),
+        )
+        return False
 
     # max_iterations counts total generations, and the first one already
     # happened — so the rounds available here are one fewer.
@@ -974,6 +982,9 @@ def handle_repair_recovery(
     # neither bucket. It still has to reach the output, carrying the verdict it
     # had when it was sent.
     dropped_ids = dropped_from(state.repair_submitted_ids, recovery_results)
+    # This round has come back, so it no longer holds anything: leaving the ids
+    # in place reads as a round still running and defers every continuation.
+    state.repair_submitted_ids = []
     if dropped_ids:
         logger.warning(
             "[%s] Repair round %d: provider dropped %d record(s): %s",

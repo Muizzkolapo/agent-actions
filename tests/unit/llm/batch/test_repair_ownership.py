@@ -64,10 +64,30 @@ def _re_enter(failing_ids: list[str], owned_by_a_round: list[str]):
         repair_submitted_ids=list(owned_by_a_round),
         evaluation_strategy_name="expectations",
     )
+    from agent_actions.llm.batch.core.batch_constants import (
+        BatchStatus,
+        RecoveryType,
+    )
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+
     provider = RecordingProvider()
+    provider.status = BatchStatus.IN_PROGRESS
+    live_round = BatchJobEntry(
+        batch_id="b-repair-1",
+        status=BatchStatus.SUBMITTED,
+        timestamp="t",
+        provider="p",
+        file_name="f.json_repair_1",
+        parent_file_name="f.json",
+        recovery_type=RecoveryType.REPAIR,
+        recovery_attempt=1,
+    )
     context = MagicMock()
     context.agent_config = _agent_config()
     context.provider = provider
+    context.manager.get_all_jobs.return_value = (
+        {"f.json_repair_1": live_round} if owned_by_a_round else {}
+    )
     context.pending_exhaustion = None
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = None
@@ -120,7 +140,7 @@ class TestOwnershipEndsWhenTheResultsAreInHand:
         state = RecoveryState(
             phase=RecoveryPhase.REPAIR,
             repair_attempt=1,
-            repair_max_attempts=3,
+            repair_max_attempts=1,
             repair_submitted_ids=["r1"],
             evaluation_strategy_name="expectations",
         )
