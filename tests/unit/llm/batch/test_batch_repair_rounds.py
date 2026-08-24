@@ -310,3 +310,50 @@ class TestFailKeepsTheRealCause:
         assert rejected.success is False
         assert "Expectations exhausted" in (rejected.error or "")
         assert "enough_options" in (rejected.error or "")
+
+
+class TestAnExhaustedRecordKeepsTheRuleThatFailed:
+    """A record the round never re-evaluated still failed something.
+
+    The verdict map is rebuilt each round, so a record sent for repair that the
+    provider never returned has no verdict this pass. Stamping it with an empty
+    `failed` list says nothing failed — and the halt message then reads
+    "still failing: (none)" exactly when a human is being interrupted.
+    """
+
+    def test_a_record_with_no_fresh_verdict_keeps_its_recorded_one(self):
+        strategy = build_repair_strategy(_agent_config(repair="auto"))
+        sent = BatchResult(custom_id=CUSTOM_ID, content=dict(FAILING), success=True)
+        strategy.evaluate(sent)
+        stamp_exhausted([sent], strategy, attempts=1)
+
+        # Next round: the provider never returned it, so it is reconstructed
+        # with no content and a fresh strategy has never seen it.
+        fresh = build_repair_strategy(_agent_config(repair="auto"))
+        dropped = BatchResult(
+            custom_id=CUSTOM_ID, content=None, success=False, error="never returned"
+        )
+        dropped.recovery_metadata = sent.recovery_metadata
+        stamp_exhausted([dropped], fresh, attempts=2)
+
+        expectations = dropped.recovery_metadata.expectations
+        assert expectations.attempts == 2
+        assert expectations.failed == ["enough_options"], (
+            f"the rule it failed was lost ({expectations.failed}); the output and the halt message "
+            "both then claim nothing failed"
+        )
+
+    def test_a_fresh_verdict_still_wins(self):
+        strategy = build_repair_strategy(_agent_config(repair="auto"))
+        result = BatchResult(custom_id=CUSTOM_ID, content=dict(FAILING), success=True)
+        result.recovery_metadata = None
+        strategy.evaluate(result)
+        stamp_exhausted([result], strategy, attempts=3)
+        assert result.recovery_metadata.expectations.failed == ["enough_options"]
+
+    def test_a_record_that_never_failed_anything_records_nothing(self):
+        strategy = build_repair_strategy(_agent_config(repair="auto"))
+        result = BatchResult(custom_id=CUSTOM_ID, content=dict(PASSING), success=True)
+        strategy.evaluate(result)
+        stamp_exhausted([result], strategy, attempts=1)
+        assert result.recovery_metadata.expectations.failed == []
