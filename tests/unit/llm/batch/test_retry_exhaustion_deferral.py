@@ -61,62 +61,91 @@ def _target_ids(processed) -> list[str]:
 
 
 class TestRaiseDoesNotDiscardTheRestOfTheFile:
+    """Driven through the whole conversion, not just the strategy half.
+
+    The strategy builds an EXHAUSTED tombstone and the collector then applies
+    the retry policy to it. Testing only the first half hides the second.
+    """
+
+    def _convert(self, on_exhausted: str):
+        from unittest.mock import MagicMock
+
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=BatchResultStrategy(),
+            registry_manager_factory=MagicMock(),
+            storage_backend=None,
+            workflow_name=ACTION,
+        )
+        returned = [BatchResult(custom_id="paid-for", content={"answer": "kept"}, success=True)]
+        exhausted = {
+            "gone": RecoveryMetadata(
+                retry=RetryMetadata(attempts=2, failures=2, succeeded=False, reason="api_error")
+            )
+        }
+        return service._convert_batch_results_to_workflow_format(
+            returned,
+            context_map=_context_map(),
+            output_directory="/tmp/test",
+            agent_config=_agent_config(on_exhausted),
+            exhausted_recovery=exhausted,
+        )
+
     def test_the_conversion_completes(self):
-        _strategy, processed = _convert("raise")
-        assert processed is not None, (
+        data, _stats, _halt = self._convert("raise")
+        assert data is not None, (
             "conversion raised, so the caller never reached the write and every record in this "
             "file was lost — including the one that succeeded"
         )
 
     def test_the_record_that_succeeded_is_still_there(self):
-        _strategy, processed = _convert("raise")
-        ids = _target_ids(processed)
+        data, _stats, _halt = self._convert("raise")
+        ids = [row.get("target_id") for row in data]
         assert "paid-for" in ids, f"the surviving record is missing from {ids}"
 
     def test_the_halt_is_handed_back_instead(self):
-        strategy, _processed = _convert("raise")
-        pending = strategy.pending_exhaustion
-        assert isinstance(pending, RuntimeError)
-        assert "gone" in str(pending)
-        assert "on_exhausted=raise" in str(pending)
+        _data, _stats, halt = self._convert("raise")
+        assert halt is not None, (
+            "the halt was dropped, so on_exhausted: raise silently does nothing"
+        )
+        assert "Retry exhausted" in str(halt)
 
-    def test_the_exhausted_record_still_carries_its_failure(self):
-        _strategy, processed = _convert("raise")
-        gone = [r for r in processed if r.source_guid == "sg-gone"]
-        assert gone, "the exhausted record must still reach the output as a tombstone"
+    def test_the_exhausted_record_still_reaches_the_output(self):
+        data, _stats, _halt = self._convert("raise")
+        ids = [row.get("target_id") for row in data]
+        assert "gone" in ids, f"the exhausted record was dropped rather than tombstoned: {ids}"
 
 
 class TestTheOtherPoliciesAreUnchanged:
     def test_return_last_hands_back_nothing(self):
-        strategy, processed = _convert("return_last")
-        assert strategy.pending_exhaustion is None
-        assert len(processed) == 2
+        data, _stats, halt = TestRaiseDoesNotDiscardTheRestOfTheFile()._convert("return_last")
+        assert halt is None
+        assert len(data) == 2
 
-    def test_a_run_with_no_exhausted_records_hands_back_nothing(self):
-        strategy = BatchResultStrategy()
-        strategy.process(
-            batch_results=[BatchResult(custom_id="paid-for", content={"a": 1}, success=True)],
-            context_map=_context_map(),
-            output_directory="/tmp/test",
-            agent_config=_agent_config("raise"),
-            exhausted_recovery=None,
-        )
-        assert strategy.pending_exhaustion is None
+    def test_online_still_raises_in_place(self):
+        """Online persists per record, so there is nothing to defer for."""
+        import pytest
 
-    def test_a_later_clean_conversion_clears_the_previous_halt(self):
-        """The strategy instance is reused, so a stale halt must not leak."""
-        strategy, _ = _convert("raise")
-        assert strategy.pending_exhaustion is not None
-        strategy.process(
-            batch_results=[BatchResult(custom_id="paid-for", content={"a": 1}, success=True)],
-            context_map=_context_map(),
-            output_directory="/tmp/test",
-            agent_config=_agent_config("raise"),
-            exhausted_recovery=None,
+        from agent_actions.processing.result_collector import (
+            collect_results_from_processing_results,
         )
-        assert strategy.pending_exhaustion is None, (
-            "a halt from an earlier file would stop a later, healthy one"
+        from agent_actions.processing.types import ProcessingResult
+
+        exhausted = ProcessingResult.exhausted(
+            data=[{"target_id": "gone"}],
+            error="never returned",
+            source_guid="sg-gone",
+            recovery_metadata=RecoveryMetadata(
+                retry=RetryMetadata(attempts=2, failures=2, succeeded=False, reason="api_error")
+            ),
         )
+        with pytest.raises(Exception, match="Retry exhausted"):
+            collect_results_from_processing_results(
+                [exhausted], ACTION, agent_config=_agent_config("raise")
+            )
 
 
 class TestTheRunStillHaltsAfterTheFileIsWritten:
