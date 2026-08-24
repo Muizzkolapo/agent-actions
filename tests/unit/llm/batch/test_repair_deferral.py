@@ -1099,3 +1099,58 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
         assert raised is None, "a single bad file must not take the whole run down"
         assert written == ["/out/good.json"]
         assert tombstone.call_count == 1, "its records still need tombstoning for the retry command"
+
+
+class TestAResumeDoesNotShipThePreRepairResults:
+    """The original batch is re-processed on every resume, with stale content.
+
+    Its registry entry stays COMPLETED at the provider and is never retired, so
+    each pass re-enters with the pre-repair results. When the rounds are spent,
+    that pass finalises — and if it finalises from those results, every record
+    the repair loop rewrote ships unrepaired and the pool is thrown away.
+    """
+
+    def _resume_with_a_spent_loop(self):
+        from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+        repaired = BatchResult(custom_id="r1", content=dict(PASSING), success=True)
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=1,
+            repair_submitted_ids=[],
+            graduated_results=serialize_results([repaired]),
+            evaluation_strategy_name="expectations",
+        )
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=2, on_exhausted="fail")
+        )
+        # What the original batch produced, before any repair round ran.
+        originals = [
+            BatchResult(custom_id="r1", content=dict(FAILING), success=True),
+            BatchResult(custom_id="never-repaired", content=dict(PASSING), success=True),
+        ]
+        with patch.object(pr.RecoveryStateManager, "load", return_value=state):
+            pr.check_and_submit_repair(
+                context,
+                _identity(),
+                batch_results=originals,
+                context_map=_context_map("r1", "never-repaired"),
+                recovery_state=None,
+            )
+        return originals
+
+    def test_the_repaired_content_is_what_ships(self):
+        shipped = {r.custom_id: r.content for r in self._resume_with_a_spent_loop()}
+        assert shipped["r1"]["options"] == PASSING["options"], (
+            f"r1 shipped its pre-repair content {shipped['r1']}; every round the loop paid for "
+            "was discarded"
+        )
+
+    def test_a_record_the_loop_never_touched_still_ships(self):
+        shipped = {r.custom_id: r.content for r in self._resume_with_a_spent_loop()}
+        assert "never-repaired" in shipped, "a record outside the repair loop was dropped"
+
+    def test_no_record_is_duplicated(self):
+        ids = [r.custom_id for r in self._resume_with_a_spent_loop()]
+        assert sorted(ids) == ["never-repaired", "r1"], f"duplicate or missing record: {ids}"
