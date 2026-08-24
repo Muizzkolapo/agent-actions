@@ -202,3 +202,99 @@ class TestARepairRoundIsRepromptedBeforeItIsJudged:
         path, _reprompt_check, finalize = self._repair_round_returns(needs_reprompt=False)
         assert path is None, "the loop had rounds left and should have used one"
         assert finalize.call_count == 0
+
+
+class TestEachRepairRoundGetsAFreshRepromptBudget:
+    """Online invokes the reprompt service anew inside every repair iteration.
+
+    The service loops internally up to `max_attempts` on each call, so a repair
+    round is never denied schema repair because an earlier round used its
+    attempts. Carrying a spent counter into the nested check means the second
+    repair round onwards is judged on raw, unrepaired output.
+
+    Worst case stays bounded: max_iterations rounds, each with at most
+    reprompt max_attempts.
+    """
+
+    def _reprompt_rounds_submitted(self, prior_attempt: int, max_attempts: int) -> int:
+        from agent_actions.llm.providers.batch_base import BatchResult
+
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=3,
+            repair_submitted_ids=["r1"],
+            reprompt_attempt=prior_attempt,
+            reprompt_max_attempts=max_attempts,
+            validation_name="check_it",
+            evaluation_strategy_name="expectations",
+        )
+        context = MagicMock()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._storage_backend = None
+        context.service._retry_service.build_exhausted_recovery.return_value = None
+        context.agent_config = {
+            "name": ACTION,
+            "action_name": ACTION,
+            "agent_type": ACTION,
+            "json_mode": False,
+            "model_name": "test-model",
+            "prompt": "Write the options.",
+            "reprompt": {"validation": "check_it", "max_attempts": max_attempts},
+            "expect": {
+                "repair": "auto",
+                "max_iterations": 3,
+                "on_exhausted": "return_last",
+                "expectations": [
+                    {"id": "enough", "type": "item_count", "field": "options", "min": 2}
+                ],
+            },
+        }
+        context.pending_exhaustion = None
+        context.provider.submit_batch.return_value = ("b-repair-2", "submitted")
+
+        submitted = []
+        context.service._retry_service.submit_reprompt_batch.side_effect = (
+            lambda *a, **k: submitted.append(1) or ("b-rp", 1)
+        )
+        bad = BatchResult(custom_id="r1", content={"options": ["one"]}, success=True)
+        loop = MagicMock()
+        loop.split.return_value = ([], [bad], {})
+        strategy = MagicMock()
+        strategy.name = "check_it"
+        strategy.max_attempts = max_attempts
+        strategy.on_exhausted = "return_last"
+        with (
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
+                return_value=(loop, strategy),
+            ),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json"),
+            patch.object(pr.RecoveryStateManager, "save"),
+            patch.object(pr, "register_recovery_batch"),
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=MagicMock(formatted_prompt="p", llm_context={}, should_execute=True),
+            ),
+        ):
+            pr.handle_repair_recovery(
+                context,
+                MagicMock(file_name="f.json"),
+                state,
+                recovery_results=[bad],
+                accumulated=[],
+                context_map={"r1": {"target_id": "r1", "source_guid": "sg-r1", "content": {}}},
+            )
+        return len(submitted)
+
+    def test_a_spent_counter_does_not_deny_this_round_its_reprompt(self):
+        assert self._reprompt_rounds_submitted(prior_attempt=2, max_attempts=2) == 1, (
+            "an earlier round used the reprompt attempts, so this repair round was judged on raw "
+            "output; online invokes the reprompt service anew inside every iteration"
+        )
+
+    def test_an_unspent_counter_still_reprompts(self):
+        assert self._reprompt_rounds_submitted(prior_attempt=0, max_attempts=2) == 1
+
+    def test_reprompt_turned_off_still_reprompts_nothing(self):
+        assert self._reprompt_rounds_submitted(prior_attempt=0, max_attempts=0) == 0
