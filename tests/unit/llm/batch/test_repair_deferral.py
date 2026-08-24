@@ -535,12 +535,17 @@ class TestRaiseHaltsWithoutLosingWhatWasAlreadyEarned:
             repair_attempt=1, repair_max_attempts=1, repair_submitted_ids=["paid-for", "r1"]
         )
         config = _agent_config(max_iterations=2, on_exhausted=policy)
+        # Patch what the finaliser calls, not the finaliser itself: the ordering
+        # under test lives inside it, and a stub would have to mimic that
+        # ordering to prove anything about it.
         with (
             patch(
                 "agent_actions.processing.task_preparer.TaskPreparer.prepare",
                 return_value=_prepared(),
             ),
-            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
+            patch.object(pr, "finalize_batch_output", return_value="/out.json") as finalize,
+            patch.object(pr, "cleanup_recovery"),
+            patch.object(pr.RecoveryStateManager, "delete"),
         ):
             raised = None
             try:
