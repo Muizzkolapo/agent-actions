@@ -42,6 +42,8 @@ class RecordingProvider(BaseBatchClient):
 
     def __init__(self):
         self.submitted: list[dict[str, Any]] = []
+        # What this provider reports for any batch id; tests that care set it.
+        self.status: str = BatchStatus.COMPLETED
 
     def _get_default_model(self) -> str:
         return "test-model"
@@ -69,8 +71,8 @@ class RecordingProvider(BaseBatchClient):
         self.submitted = tasks
         return "batch-1", BatchStatus.SUBMITTED
 
-    def check_status(self, batch_id):  # pragma: no cover - unused here
-        return BatchStatus.COMPLETED
+    def check_status(self, batch_id):
+        return self.status
 
     def retrieve_results(self, batch_id, output_directory):  # pragma: no cover - unused here
         return []

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.expectations.service import ExpectationsExhaustedError
-from agent_actions.llm.batch.core.batch_constants import RecoveryPhase, RecoveryType
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_models import (
     BatchIdentity,
     BatchJobEntry,
@@ -1429,7 +1429,7 @@ class TestAResumeDoesNotSubmitASecondRoundForTheSameRecords:
         context.service._storage_backend = None
         live = BatchJobEntry(
             batch_id="b-repair-1",
-            status="in_progress" if in_flight else "completed",
+            status="submitted",  # what register_recovery_batch writes, always
             timestamp="t",
             provider="p",
             file_name="f.json_repair_1",
@@ -1438,6 +1438,8 @@ class TestAResumeDoesNotSubmitASecondRoundForTheSameRecords:
             recovery_attempt=1,
         )
         context.manager.get_all_jobs.return_value = {"f.json_repair_1": live}
+        # The provider is the authority on whether the round still owns them.
+        provider.status = BatchStatus.IN_PROGRESS if in_flight else BatchStatus.FAILED
         with (
             patch(
                 "agent_actions.processing.task_preparer.TaskPreparer.prepare",
@@ -1471,9 +1473,13 @@ class TestAResumeDoesNotSubmitASecondRoundForTheSameRecords:
             "iterations run out without the model being asked anything"
         )
 
-    def test_a_finished_round_does_not_block_the_next_one(self):
+    def test_a_round_that_died_at_the_provider_does_not_block_the_next_one(self):
+        """Otherwise a failed round defers every later pass and nothing is written."""
         _sc, submitted, _s = self._resume_with_a_round_in_flight(in_flight=False)
-        assert submitted, "no round is running, so this pass must be free to submit one"
+        assert submitted, (
+            "the round ended at the provider without results, so its records are back in play "
+            "and this pass must be free to submit one"
+        )
 
 
 class TestASecondHaltIsNotDroppedSilently:

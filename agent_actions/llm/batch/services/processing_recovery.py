@@ -718,21 +718,48 @@ def cleanup_recovery(
 # ---------------------------------------------------------------------------
 
 
-def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -> bool:
-    """Whether a repair batch for this file is still with the provider.
+# A repair round in one of these states will never return records, so it no
+# longer owns them and the loop must be free to move on.
+_ROUND_ENDED_WITHOUT_RESULTS = frozenset({BatchStatus.FAILED, BatchStatus.CANCELLED})
 
-    A registry read that fails is left to propagate: the per-file handler above
-    logs it and moves on, which beats guessing — guessing "nothing running" pays
-    for a second generation of every record, and guessing "something running"
-    never finalises the file.
+
+def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -> bool:
+    """Whether a repair round for this file still owns its records.
+
+    The provider is asked, not the registry. A recovery entry is written
+    SUBMITTED and only marked COMPLETED inside `finalize_batch_output`, so its
+    status reads as running for the whole life of the file — a round the
+    provider had failed would defer every later pass and the output would never
+    be written at all.
+
+    A completed round still owns them: its results have not been folded in yet,
+    and starting another would buy a second generation of each record. Only a
+    round that ended without results releases them.
+
+    A status read that fails is left to propagate. The per-file handler logs it
+    and moves to the next file, which beats guessing: "nothing running" pays
+    twice, "something running" never finalises.
     """
     jobs = context.manager.get_all_jobs() or {}
-    return any(
-        entry.parent_file_name == identity.file_name
-        and entry.recovery_type == RecoveryType.REPAIR
-        and entry.is_in_flight
+    rounds = [
+        entry
         for entry in jobs.values()
-    )
+        if entry.parent_file_name == identity.file_name
+        and entry.recovery_type == RecoveryType.REPAIR
+        and entry.batch_id
+    ]
+    for entry in rounds:
+        if context.provider.check_status(entry.batch_id) in _ROUND_ENDED_WITHOUT_RESULTS:
+            logger.warning(
+                "[%s] Repair round %s ended at the provider without results (%s); "
+                "its records are back in play",
+                identity.file_name,
+                entry.recovery_attempt,
+                entry.batch_id,
+            )
+            continue
+        return True
+    return False
 
 
 def check_and_submit_repair(
