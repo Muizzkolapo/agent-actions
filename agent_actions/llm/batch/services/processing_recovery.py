@@ -618,13 +618,19 @@ def finalize_batch_output(
 ) -> str:
     """Finalize batch processing: convert, write output, fire events."""
     service = context.service
-    processed_data, _stats = service._convert_batch_results_to_workflow_format(
+    processed_data, _stats, converted_halt = service._convert_batch_results_to_workflow_format(
         batch_results,
         context_map=context_map,
         output_directory=context.output_directory,
         agent_config=context.agent_config,
         exhausted_recovery=exhausted_recovery,
     )
+
+    # The conversion hands back a retry-exhaustion halt rather than throwing it,
+    # for the same reason the expectations policy does. An expectations halt was
+    # decided first, so it keeps precedence.
+    if context.pending_exhaustion is None:
+        context.pending_exhaustion = converted_halt
 
     effective_action_name = service._resolve_action_name(context.action_name)
 

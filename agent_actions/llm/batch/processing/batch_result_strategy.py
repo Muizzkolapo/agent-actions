@@ -100,6 +100,10 @@ class BatchResultStrategy:
     def __init__(self) -> None:
         self._pending_batch_results: list[BatchResult] | None = None
         self._pending_kwargs: dict[str, Any] = {}
+        # Set when `retry: on_exhausted: raise` has decided the run must stop.
+        # The caller raises it after writing the file. Cleared per conversion so
+        # one file's halt cannot stop a later, healthy one.
+        self.pending_exhaustion: Exception | None = None
 
     def prepare_invoke(
         self,
@@ -161,6 +165,7 @@ class BatchResultStrategy:
         The caller is responsible for enriching, flattening ``result.data``
         into output records, and writing dispositions.
         """
+        self.pending_exhaustion = None
         ctx = self._init_context(
             batch_results,
             context_map,
@@ -539,8 +544,12 @@ class BatchResultStrategy:
             retry_config = ctx.agent_config.get("retry") or {}
             on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted") or "return_last")
 
-        if on_exhausted == OnExhaustedPolicy.RAISE:
-            raise exhaustion_halt(
+        if on_exhausted == OnExhaustedPolicy.RAISE and self.pending_exhaustion is None:
+            # Handed back rather than thrown: conversion runs before the single
+            # write at the end of the file, so halting here would discard every
+            # record that converted cleanly. The record still becomes a
+            # tombstone below, and the caller raises once the file is on disk.
+            self.pending_exhaustion = exhaustion_halt(
                 f"Retry exhausted for record {custom_id} after "
                 f"{retry_meta.attempts} attempts (on_exhausted=raise)"
             )

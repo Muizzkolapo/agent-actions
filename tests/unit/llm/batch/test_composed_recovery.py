@@ -70,7 +70,7 @@ def _mock_service():
     service._storage_backend = MagicMock()
     service._workflow_name = "test_action"
     service._resolve_action_name = lambda override=None: override or service._workflow_name
-    service._convert_batch_results_to_workflow_format = MagicMock(return_value=([], None))
+    service._convert_batch_results_to_workflow_format = MagicMock(return_value=([], None, None))
     service._determine_output_path = MagicMock(return_value="/tmp/output.json")
     service._write_batch_output = MagicMock()
     service._cleanup_recovery_entries = MagicMock()

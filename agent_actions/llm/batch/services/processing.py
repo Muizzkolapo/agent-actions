@@ -1004,7 +1004,7 @@ class BatchProcessingService:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+    ) -> tuple[list[dict[str, Any]], CollectionStats, Exception | None]:
         """Convert batch results to workflow format via UnifiedProcessor.
 
         Routes batch results through the shared enrich → collect pipeline
@@ -1018,7 +1018,9 @@ class BatchProcessingService:
             exhausted_recovery: Per-record recovery metadata for exhausted records
 
         Returns:
-            Tuple of (output_records, CollectionStats).
+            Tuple of (output_records, CollectionStats, pending halt). The halt is
+            what `retry: on_exhausted: raise` decided; it is returned rather than
+            thrown because the caller has not written the output file yet.
         """
         results = self._result_processor.process(
             batch_results=batch_results,
@@ -1036,7 +1038,8 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
 
-        return self._unified_processor.enrich_and_collect(results, ctx)
+        output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
+        return output_records, stats, self._result_processor.pending_exhaustion
 
     @staticmethod
     def _apply_workflow_session_id(

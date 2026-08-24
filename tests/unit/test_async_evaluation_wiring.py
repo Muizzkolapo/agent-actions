@@ -248,7 +248,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),
@@ -275,7 +275,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),
@@ -304,7 +304,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),

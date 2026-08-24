@@ -80,8 +80,12 @@ def test_build_exhausted_passthrough_coalesces_null_yaml_values(agent_config):
 
 
 def test_build_exhausted_passthrough_raise_still_honored():
-    """``on_exhausted=raise`` must still raise — the coalesce must not
-    mask the explicit raise policy."""
+    """``on_exhausted=raise`` must still halt — the coalesce must not mask it.
+
+    The halt is handed back rather than thrown: this runs during conversion,
+    before the file is written, so throwing here would discard every record in
+    the file that converted cleanly. The caller raises it after the write.
+    """
     custom_id = "rec_uat_0031_raise"
     ctx = BatchProcessingContext(
         batch_results=[],
@@ -92,12 +96,15 @@ def test_build_exhausted_passthrough_raise_still_honored():
     )
     strategy = BatchResultStrategy()
 
-    with pytest.raises(RuntimeError, match="Retry exhausted"):
-        strategy._build_exhausted_passthrough(
-            ctx,
-            custom_id=custom_id,
-            original_row={"value": "x"},
-            action_name="always_fail",
-            source_guid="sg-uat-0031",
-            record_index=0,
-        )
+    strategy._build_exhausted_passthrough(
+        ctx,
+        custom_id=custom_id,
+        original_row={"value": "x"},
+        action_name="always_fail",
+        source_guid="sg-uat-0031",
+        record_index=0,
+    )
+
+    assert isinstance(strategy.pending_exhaustion, RuntimeError)
+    assert "Retry exhausted" in str(strategy.pending_exhaustion)
+    assert custom_id in str(strategy.pending_exhaustion)
