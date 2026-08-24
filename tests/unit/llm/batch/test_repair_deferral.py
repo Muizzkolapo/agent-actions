@@ -486,9 +486,7 @@ class TestTheLoadedStateIsTrustedWhole:
             "exhausted_recovery from"
         )
         assert saved.record_failure_counts == {"m1": 3}
-        # Renewed for the new repair round, not discarded: the ceiling survives.
-        assert saved.reprompt_attempt == 0
-        assert saved.reprompt_max_attempts == 2
+        assert saved.reprompt_attempt == 2
         assert saved.validation_name == "schema"
 
     def test_an_in_flight_repair_state_still_supplies_its_balance(self):

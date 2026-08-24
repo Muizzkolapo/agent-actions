@@ -323,14 +323,9 @@ def carry_forward(
     state.record_failure_counts = dict(prior.record_failure_counts)
     state.retry_attempt = prior.retry_attempt
     state.retry_max_attempts = prior.retry_max_attempts
-    # A new repair round renews the reprompt budget: online calls the reprompt
-    # service anew inside every repair iteration, and it loops internally up to
-    # max_attempts each time. Renewed where the round is created, not where one
-    # returns, so re-processing the same round cannot renew it again and leave
-    # reprompt unable to exhaust.
-    state.reprompt_attempt = 0
+    state.reprompt_attempt = prior.reprompt_attempt
     state.reprompt_max_attempts = prior.reprompt_max_attempts
-    state.reprompt_attempts_per_record = {}
+    state.reprompt_attempts_per_record = dict(prior.reprompt_attempts_per_record)
     state.validation_name = prior.validation_name
     state.validation_status = dict(prior.validation_status)
     state.on_exhausted = prior.on_exhausted
