@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# What a provider stamps on a result it cannot correlate.
+UNIDENTIFIED_RECORD = "unknown"
+
 
 def build_repair_strategy(
     agent_config: dict[str, Any] | None,
@@ -180,7 +183,10 @@ def pool_records(pooled: list[dict[str, Any]], added: list[BatchResult]) -> list
         # and folding those together would silently drop records rather than
         # duplicate them — the worse of the two failures.
         key = record.get("custom_id")
-        if key:
+        # Providers stamp an unidentifiable result "unknown", so that is not an
+        # identity either — two of them are two records, and folding them would
+        # drop one rather than duplicate it.
+        if key and key != UNIDENTIFIED_RECORD:
             by_id[str(key)] = record
         else:
             unkeyed.append(record)

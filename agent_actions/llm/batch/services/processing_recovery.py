@@ -711,16 +711,17 @@ def check_and_submit_repair(
     # counter as attempt 0 can never stop iterating, and one that rebuilds the
     # service without the balance spends the budget again every round.
     if recovery_state is None:
-        loaded = RecoveryStateManager.load(
+        # Every caller that has a live state passes it; the ones that pass None
+        # are the re-entry paths, and the persisted bookkeeping is the only
+        # record of where the loop got to. A phase guard cannot separate stale
+        # from live here — a run that crashed mid-repair leaves a REPAIR state
+        # too — so the budget's staleness is a known limitation, not something
+        # to approximate by discarding state the reprompt handoff needs.
+        recovery_state = RecoveryStateManager.load(
             context.service._storage_backend,
             context.service._resolve_action_name(context.action_name),
             identity.file_name,
         )
-        # Only a state already in the repair phase describes this loop. The
-        # original-batch path passes None deliberately because a file here may
-        # be left by a crashed run, and a stale spent budget would turn every
-        # judged expectation into a hard failure on an otherwise fresh pass.
-        recovery_state = loaded if loaded and loaded.phase is RecoveryPhase.REPAIR else None
 
     strategy = build_repair_strategy(
         context.agent_config,
