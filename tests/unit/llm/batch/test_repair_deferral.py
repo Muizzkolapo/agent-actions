@@ -974,3 +974,51 @@ class TestARecordIsNeverBothPooledAndInFlight:
         assert all("expect" in (r.content or {}) for r in shipped), (
             "a shipped copy carries no verdict even though the action declares expect:"
         )
+
+    def test_a_record_the_provider_returned_twice_does_not_stay_pooled(self):
+        """One id, two rows back: one graduates into the pool, one goes back out.
+
+        The pool add and the resubmission both happen in the same round, so the
+        pool has to give the id up again when the round puts it in flight.
+        """
+        state = RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=3,
+            repair_submitted_ids=["r1"],
+            evaluation_strategy_name="expectations",
+        )
+        context = _context(
+            RecordingProvider(), _Backend(), _agent_config(max_iterations=4, on_exhausted="fail")
+        )
+        returned = [
+            BatchResult(custom_id="r1", content=dict(PASSING), success=True),
+            BatchResult(custom_id="r1", content=dict(FAILING), success=True),
+        ]
+        saved: list[RecoveryState] = []
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(
+                pr.RecoveryStateManager, "save", side_effect=lambda *a, **k: saved.append(a[-1])
+            ),
+            patch.object(pr, "register_recovery_batch"),
+        ):
+            pr.handle_repair_recovery(
+                context,
+                _identity(),
+                state,
+                recovery_results=returned,
+                accumulated=[],
+                context_map=_context_map("r1"),
+            )
+        assert saved, "the round did not persist state"
+        final = saved[-1]
+        pooled_ids = [r.get("custom_id") for r in final.graduated_results]
+        assert "r1" in final.repair_submitted_ids
+        assert "r1" not in pooled_ids, (
+            f"r1 was pooled by the graduating copy and resubmitted by the failing one "
+            f"({pooled_ids}); next round it ships twice"
+        )
