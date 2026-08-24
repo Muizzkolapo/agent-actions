@@ -1154,3 +1154,162 @@ class TestAResumeDoesNotShipThePreRepairResults:
     def test_no_record_is_duplicated(self):
         ids = [r.custom_id for r in self._resume_with_a_spent_loop()]
         assert sorted(ids) == ["never-repaired", "r1"], f"duplicate or missing record: {ids}"
+
+
+class TestEveryEntryPointActuallyConsultsRepair:
+    """The loop is only useful if something reaches it.
+
+    Each branch is one `if not check_and_submit_repair(...)` that can be deleted
+    without any other test noticing — and with it gone `expect:` silently stops
+    repairing and `on_exhausted: raise` degrades to return_last. These drive the
+    callers, not the function, so an unwired branch fails here.
+    """
+
+    def _service(self):
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+            storage_backend=None,
+            workflow_name=ACTION,
+        )
+        service._action_indices = {ACTION: 0}
+        service._dependency_configs = {}
+        return service
+
+    def _failing(self):
+        return [BatchResult(custom_id="r1", content=dict(FAILING), success=True)]
+
+    def _run_original_batch(self):
+        """Drive the original-batch path end to end and report what happened."""
+        service = self._service()
+        provider = RecordingProvider()
+        entry = BatchJobEntry(
+            batch_id="b-1", status="completed", timestamp="t", provider="p", file_name="f.json"
+        )
+        service._client_resolver.get_for_batch_id.return_value = provider
+        service._context_manager.load_batch_context_map.return_value = _context_map("r1")
+        with (
+            patch(
+                "agent_actions.llm.batch.services.processing.retrieve_and_reconcile",
+                return_value=self._failing(),
+            ),
+            patch.object(service, "_check_and_submit_reprompt", return_value=True),
+            patch.object(service, "_finalize_batch_output", return_value="/out.json") as finalize,
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr.RecoveryStateManager, "save"),
+            patch.object(pr.RecoveryStateManager, "load", return_value=None),
+            patch.object(pr, "register_recovery_batch"),
+        ):
+            returned = service._process_original_batch(
+                batch_id="b-1",
+                file_name="f.json",
+                entry=entry,
+                output_directory="/out",
+                agent_config=_agent_config(max_iterations=3, on_exhausted="fail"),
+                manager=MagicMock(),
+                action_name=ACTION,
+            )
+        return returned, provider.submitted, finalize
+
+    def test_the_original_batch_path_submits_a_repair_round(self):
+        _returned, submitted, _f = self._run_original_batch()
+        assert submitted, (
+            "a failing record went straight to the output: the original-batch path never "
+            "consulted the repair loop, so expect: does not repair at all here"
+        )
+
+    def test_it_defers_instead_of_writing_the_file(self):
+        returned, _submitted, finalize = self._run_original_batch()
+        assert returned is None, "the pass wrote the file while a repair round was in flight"
+        assert finalize.call_count == 0
+
+    def _run_recovery(self, handler, state, **kw):
+        """Drive one recovery handler and report whether it reached repair."""
+        provider = RecordingProvider()
+        context = _context(
+            provider, _Backend(), _agent_config(max_iterations=3, on_exhausted="fail")
+        )
+        context.service = MagicMock()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._action_indices = {ACTION: 0}
+        context.service._dependency_configs = {}
+        context.service._storage_backend = None
+        context.service._retry_service.build_exhausted_recovery.return_value = None
+        context.service._retry_service.process_retry_results.return_value = (
+            self._failing(),
+            set(),
+            {},
+            None,
+        )
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr.RecoveryStateManager, "save"),
+            patch.object(pr.RecoveryStateManager, "load", return_value=state),
+            patch.object(pr, "register_recovery_batch"),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
+            patch.object(pr, "check_and_submit_reprompt", return_value=True),
+            patch.object(pr, "cleanup_recovery"),
+        ):
+            returned = handler(
+                context,
+                _identity(),
+                state=state,
+                recovery_results=self._failing(),
+                accumulated=self._failing(),
+                context_map=_context_map("r1"),
+                **kw,
+            )
+        return returned, provider.submitted, finalize
+
+    def test_the_retry_recovery_path_submits_a_repair_round(self):
+        state = RecoveryState(phase=RecoveryPhase.RETRY, evaluation_strategy_name="validation")
+        returned, submitted, finalize = self._run_recovery(pr.handle_retry_recovery, state)
+        assert submitted, "the retry recovery path never consulted the repair loop"
+        assert returned is None and finalize.call_count == 0, "it wrote the file anyway"
+
+    def test_the_reprompt_recovery_path_submits_a_repair_round(self):
+        """Reprompt has two exits into repair — this drives the one with no loop."""
+        state = RecoveryState(phase=RecoveryPhase.REPROMPT, evaluation_strategy_name="validation")
+        provider = RecordingProvider()
+        context = _context(
+            provider, _Backend(), _agent_config(max_iterations=3, on_exhausted="fail")
+        )
+        context.service = MagicMock()
+        context.service._resolve_action_name.return_value = ACTION
+        context.service._action_indices = {ACTION: 0}
+        context.service._dependency_configs = {}
+        context.service._storage_backend = None
+        with (
+            patch(
+                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
+                return_value=_prepared(),
+            ),
+            patch.object(pr.RecoveryStateManager, "save"),
+            patch.object(pr.RecoveryStateManager, "load", return_value=state),
+            patch.object(pr, "register_recovery_batch"),
+            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
+                return_value=None,
+            ),
+        ):
+            returned = pr.handle_reprompt_recovery(
+                context,
+                _identity(),
+                state=state,
+                recovery_results=self._failing(),
+                accumulated=self._failing(),
+                context_map=_context_map("r1"),
+            )
+        assert provider.submitted, "the reprompt recovery path never consulted the repair loop"
+        assert returned is None and finalize.call_count == 0, "it wrote the file anyway"
