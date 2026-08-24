@@ -8,6 +8,7 @@ that actually failed validation.
 """
 
 import contextlib
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
@@ -903,3 +904,78 @@ class TestRepromptErrorPathBehavior:
                 assert r.recovery_metadata.reprompt is not None
                 assert r.recovery_metadata.reprompt.passed is False
                 assert r.recovery_metadata.reprompt.validation == "check_it"
+
+
+class TestTheRepromptPoolDoesNotDuplicate:
+    """Reprompt keeps a graduated pool too, and the same re-entry applies to it.
+
+    The original batch's registry entry is never retired, so each pass
+    re-graduates the same records. Appending them grows the pool by one copy per
+    pass and the record ships that many times — a reprompt-only workflow never
+    touches `expect:` and gets this on its own.
+    """
+
+    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
+    def _pool_after_passes(self, passes: int, mock_build_loop=None):
+        from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
+        from agent_actions.llm.batch.services.processing_recovery import (
+            handle_reprompt_recovery,
+        )
+
+        graduated = BatchResult(custom_id="g1", content={"answer": "ok"}, success=True)
+        still_bad = BatchResult(custom_id="b1", content={"answer": "no"}, success=True)
+
+        mock_loop = MagicMock()
+        mock_loop.split.return_value = ([graduated], [still_bad], {})
+        mock_strategy = MagicMock()
+        mock_strategy.name = "check_it"
+        mock_strategy.max_attempts = 5
+        mock_strategy.on_exhausted = "return_last"
+        mock_build_loop.return_value = (mock_loop, mock_strategy)
+
+        service = MagicMock()
+        service._retry_service.submit_reprompt_batch.return_value = ("batch_rp_next", 1)
+        context = RecoveryContext(
+            service=service,
+            manager=MagicMock(),
+            provider=MagicMock(),
+            agent_config={"reprompt": {"validation": "check_it", "max_attempts": 5}},
+            output_directory="/tmp/out",
+            action_name="test_action",
+            start_time=0.0,
+        )
+        identity = BatchIdentity(batch_id="batch_rp_1", file_name="batch_1", entry=MagicMock())
+
+        state = RecoveryState(
+            phase="reprompt",
+            reprompt_attempt=1,
+            reprompt_max_attempts=5,
+            validation_name="check_it",
+            on_exhausted="return_last",
+        )
+        saved: list[Any] = []
+        with patch(
+            "agent_actions.llm.batch.infrastructure.recovery_state.RecoveryStateManager.save",
+            side_effect=lambda *a, **k: saved.append(a[-1]),
+        ):
+            for _ in range(passes):
+                handle_reprompt_recovery(
+                    context,
+                    identity,
+                    state=state,
+                    recovery_results=[graduated, still_bad],
+                    accumulated=[],
+                    context_map=_make_context_map(2),
+                )
+                if saved:
+                    state = saved[-1]
+        return [r.get("custom_id") for r in state.graduated_results]
+
+    def test_one_pass_pools_the_graduated_record(self):
+        assert self._pool_after_passes(1) == ["g1"]
+
+    def test_re_entering_does_not_grow_the_pool(self):
+        pooled = self._pool_after_passes(3)
+        assert pooled == ["g1"], (
+            f"the pool grew one copy per pass ({pooled}); the record ships that many times"
+        )
