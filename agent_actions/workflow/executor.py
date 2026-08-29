@@ -438,7 +438,7 @@ class ActionExecutor:
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
                 params.action_name,
-                ActionStatus.COMPLETED,
+                final_status,
                 **self._completion_metadata(params.action_config),
             )
             logger.info(
@@ -448,7 +448,7 @@ class ActionExecutor:
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
-                status=ActionStatus.COMPLETED,
+                status=final_status,
                 metrics=ExecutionMetrics(
                     duration=duration,
                     record_count=self._records_written_this_run(params.action_name, pre_run_count),
