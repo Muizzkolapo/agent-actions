@@ -222,6 +222,8 @@ class ActionExecutor:
         return {
             "record_limit": cfg.get("record_limit"),
             "file_limit": cfg.get("file_limit"),
+            "model_name": cfg.get("model_name"),
+            "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
         }
 
@@ -237,13 +239,27 @@ class ActionExecutor:
             "record_limit"
         ) or details.get("file_limit") != action_config.get("file_limit")
 
+        # The hash cannot cover the model: it reads a "model" key, and configs
+        # write model_name/model_vendor. Adding them to the hash input would
+        # change every stored digest at once and re-run every workflow. Compared
+        # from the stamp instead, and only when one was written, so state that
+        # predates the stamp is grandfathered rather than mass-invalidated.
+        model_changed = any(
+            details.get(key) is not None and details.get(key) != action_config.get(key)
+            for key in ("model_name", "model_vendor")
+        )
+
         config_hash = _compute_action_config_hash(action_config)
         stored_hash = details.get("config_hash")
         config_changed = stored_hash is not None and stored_hash != config_hash
 
-        if limits_changed or config_changed:
+        if limits_changed or config_changed or model_changed:
             reason = (
-                "limit config" if limits_changed else "action config (prompt/model/schema/guard)"
+                "limit config"
+                if limits_changed
+                else "model"
+                if model_changed
+                else "action config (prompt/schema/guard)"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)

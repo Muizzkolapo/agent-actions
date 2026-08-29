@@ -291,7 +291,13 @@ class TestHandleRunSuccess:
         assert result.status == ActionStatus.COMPLETED
         assert result.output_folder == "/out"
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None, config_hash=ANY
+            "agent_a",
+            ActionStatus.COMPLETED,
+            record_limit=None,
+            file_limit=None,
+            model_name=None,
+            model_vendor=None,
+            config_hash=ANY,
         )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
@@ -555,7 +561,13 @@ class TestHandleAgentSkip:
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
         mock_deps.state_manager.update_status.assert_called_with(
-            "agent_a", ActionStatus.COMPLETED, record_limit=None, file_limit=None, config_hash=ANY
+            "agent_a",
+            ActionStatus.COMPLETED,
+            record_limit=None,
+            file_limit=None,
+            model_name=None,
+            model_vendor=None,
+            config_hash=ANY,
         )
         mock_fire.assert_called_once()
 
