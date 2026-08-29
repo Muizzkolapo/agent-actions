@@ -565,7 +565,9 @@ class TestProcessFromStorageBackend:
             output_directory="/out",
             idx=0,
         )
-        assert process_from_storage_backend(runner, params) == (0, 0, [])
+        found, processed, errors = process_from_storage_backend(runner, params)
+        assert (found, processed) == (0, 0)
+        assert errors.messages == [] and errors.halt is None
 
     def test_skips_staging_directories(self, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
@@ -578,8 +580,9 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        result = process_from_storage_backend(runner_with_backend, params)
-        assert result == (0, 0, [])
+        found, processed, errors = process_from_storage_backend(runner_with_backend, params)
+        assert (found, processed) == (0, 0)
+        assert errors.messages == [] and errors.halt is None
         backend.list_target_files.assert_not_called()
 
     def test_single_source_processes(self, runner_with_backend, tmp_path):

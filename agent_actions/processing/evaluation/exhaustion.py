@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BatchResult
 
+from agent_actions.errors import exhaustion_halt
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RepromptValidationFailedEvent
 from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
@@ -69,7 +70,7 @@ def apply_exhausted_reprompt(
             continue
 
         if on_exhausted == "raise":
-            raise RuntimeError(
+            raise exhaustion_halt(
                 f"Reprompt validation exhausted for {result.custom_id} "
                 f"after {attempt} attempts (validation: {validation_name})"
             )

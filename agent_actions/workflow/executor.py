@@ -12,7 +12,11 @@ from typing import Any, cast
 from rich.console import Console
 
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import AgentActionsError, get_error_detail
+from agent_actions.errors import (
+    AgentActionsError,
+    get_error_detail,
+    raised_by_exhaustion_policy,
+)
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -176,17 +180,10 @@ class ActionExecutionResult:
 def _halt_marker(error: Exception) -> str | None:
     """HALTED_ON_EXHAUSTED if an ``on_exhausted: raise`` policy produced *error*.
 
-    result_collector stamps the policy onto the exception context where it
-    decides to raise.  The whole chain is searched because file processing
-    wraps that exception in a DependencyError before it reaches here.
+    Every exhaustion site tags its exception with the policy; the chain is
+    searched because file processing wraps it before it reaches here.
     """
-    from agent_actions.utils.safe_format import get_error_chain
-
-    for link in get_error_chain(error):
-        context = getattr(link, "context", None)
-        if isinstance(context, dict) and context.get("on_exhausted") == "raise":
-            return HALTED_ON_EXHAUSTED
-    return None
+    return HALTED_ON_EXHAUSTED if raised_by_exhaustion_policy(error) else None
 
 
 def action_is_halted(storage_backend: Any, action_name: str) -> bool:
@@ -1144,6 +1141,33 @@ class ActionExecutor:
                 logger.debug("Could not parse submitted_at %r: %s", submitted_at, e)
         return fallback
 
+    def _handle_batch_exception(
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
+        error: Exception,
+    ) -> ActionExecutionResult:
+        """Record a policy halt raised while checking a batch; re-raise anything else.
+
+        Only a halt is converted. An ordinary polling failure must keep
+        CHECKING_BATCH so the next run re-polls the existing job — turning it
+        into FAILED would reset it to PENDING and submit a duplicate batch.
+        """
+        if not raised_by_exhaustion_policy(error):
+            raise error
+        return self._handle_run_failure(
+            ActionRunParams(
+                action_name=action_name,
+                action_idx=action_idx,
+                action_config=action_config,
+                is_last_action=False,
+                start_time=start_time,
+            ),
+            error,
+        )
+
     def _handle_batch_check(
         self,
         action_name: str,
@@ -1156,9 +1180,14 @@ class ActionExecutor:
         output_directory = self._batch_output_directory(action_name)
 
         pre_run_count = self._count_records_for_action(action_name)
-        output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
-            action_name, output_directory, action_config
-        )
+        try:
+            output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
+                action_name, output_directory, action_config
+            )
+        except Exception as e:
+            return self._handle_batch_exception(
+                action_name, action_idx, action_config, start_time, e
+            )
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(
@@ -1183,12 +1212,17 @@ class ActionExecutor:
         output_directory = self._batch_output_directory(action_name)
 
         pre_run_count = self._count_records_for_action(action_name)
-        output_folder, batch_status = await asyncio.to_thread(
-            self.deps.batch_manager.handle_batch_agent,
-            action_name,
-            output_directory,
-            action_config,
-        )
+        try:
+            output_folder, batch_status = await asyncio.to_thread(
+                self.deps.batch_manager.handle_batch_agent,
+                action_name,
+                output_directory,
+                action_config,
+            )
+        except Exception as e:
+            return self._handle_batch_exception(
+                action_name, action_idx, action_config, start_time, e
+            )
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(

@@ -4,7 +4,9 @@
 from agent_actions.errors.base import (
     AgentActionsError,
     enrich_exception_context,
+    exhaustion_halt,
     get_error_detail,
+    raised_by_exhaustion_policy,
 )
 
 # Common errors
@@ -85,7 +87,9 @@ __all__ = [
     # Base
     "AgentActionsError",
     "enrich_exception_context",
+    "exhaustion_halt",
     "get_error_detail",
+    "raised_by_exhaustion_policy",
     # Common
     "InvalidParameterError",
     # Configuration

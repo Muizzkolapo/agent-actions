@@ -77,15 +77,23 @@ def _write(path: Path) -> None:
     path.write_text(json.dumps([{"id": 1}]))
 
 
-def _run_files_until_it_raises(tmp_path, failures: dict[str, Exception]) -> Exception:
-    """Drive the real process_files with a per-file exception map."""
+def _run_files_until_it_raises(tmp_path, *, ordinary: int, then_halt: bool) -> Exception:
+    """Drive the real process_files, failing *ordinary* files before the halt.
+
+    Ordering is imposed by call count, not filename: ``rglob`` does not promise
+    an order, and an order-dependent test cannot pin "the halt was not first".
+    """
     source = tmp_path / "input"
-    for name in failures:
-        _write(source / name)
+    for i in range(ordinary + (1 if then_halt else 0)):
+        _write(source / f"f{i:03d}.json")
     strategy = MagicMock()
+    seen: list[str] = []
 
     def execute(exec_params):
-        raise failures[Path(exec_params.file_path).name]
+        seen.append(exec_params.file_path)
+        if len(seen) <= ordinary:
+            raise RuntimeError("malformed record")
+        raise _halt_error()
 
     strategy.execute.side_effect = execute
     params = FileProcessParams(
@@ -105,28 +113,19 @@ class TestTheHaltNeedNotFailFirst:
     """process_files chains one cause; it must be the halting one."""
 
     def test_a_halt_behind_an_ordinary_failure_is_still_marked(self, tmp_path):
-        # "a" sorts first, so the ordinary error is recorded before the halt.
-        raised = _run_files_until_it_raises(
-            tmp_path,
-            {"a_boom.json": RuntimeError("malformed record"), "b_halt.json": _halt_error()},
-        )
+        raised = _run_files_until_it_raises(tmp_path, ordinary=1, then_halt=True)
 
         assert _halt_marker(raised) == HALT_MARKER
 
     def test_a_halt_past_the_tracked_error_cap_is_still_marked(self, tmp_path):
-        failures: dict[str, Exception] = {
-            f"f{i:02d}_boom.json": RuntimeError("boom") for i in range(_MAX_TRACKED_ERRORS + 1)
-        }
-        failures["zz_halt.json"] = _halt_error()
-
-        raised = _run_files_until_it_raises(tmp_path, failures)
+        raised = _run_files_until_it_raises(
+            tmp_path, ordinary=_MAX_TRACKED_ERRORS + 1, then_halt=True
+        )
 
         assert _halt_marker(raised) == HALT_MARKER
 
     def test_no_halt_among_the_failures_is_not_marked(self, tmp_path):
-        raised = _run_files_until_it_raises(
-            tmp_path, {"a.json": RuntimeError("boom"), "b.json": ValueError("nope")}
-        )
+        raised = _run_files_until_it_raises(tmp_path, ordinary=2, then_halt=False)
 
         assert _halt_marker(raised) is None
 

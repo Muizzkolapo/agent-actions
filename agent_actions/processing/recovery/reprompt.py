@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.errors import exhaustion_halt
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import (
     RepromptRecoveredEvent,
@@ -212,7 +213,7 @@ class RepromptService:
                     exc.retry_result.last_error,
                 )
                 if exhausted_behavior == "raise":
-                    raise RuntimeError(
+                    raise exhaustion_halt(
                         f"Retry exhausted during reprompt attempt {attempts}/{self.max_attempts}: "
                         f"{exc.retry_result.last_error}"
                     ) from exc
@@ -354,7 +355,7 @@ class RepromptService:
         )
 
         if exhausted_behavior == "raise":
-            raise RuntimeError(
+            raise exhaustion_halt(
                 f"Reprompt validation exhausted after {attempts} attempts "
                 f"(validation: {self.validation_name})"
             )

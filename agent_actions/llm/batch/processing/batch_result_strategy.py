@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
 
+from agent_actions.errors import exhaustion_halt
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.batch.core.batch_constants import FilterStatus, OnExhaustedPolicy
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
@@ -549,7 +550,7 @@ class BatchResultStrategy:
             )
 
         if on_exhausted == OnExhaustedPolicy.RAISE:
-            raise RuntimeError(
+            raise exhaustion_halt(
                 f"Retry exhausted for record {custom_id} after "
                 f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
             )
