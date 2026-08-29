@@ -112,7 +112,7 @@ class TestAnUnresolvableOperandIsAlwaysAnnounced:
         node = _logical(BROKEN, LogicalOperator.OR, TRUE)
         with caplog.at_level(logging.WARNING):
             evaluate_node(node, DATA, None)
-        assert any("broken.field" in r.message % r.args for r in caplog.records), (
+        assert any("broken.field" in r.getMessage() for r in caplog.records), (
             "an unresolvable guard operand must name the field at WARNING level"
         )
 
