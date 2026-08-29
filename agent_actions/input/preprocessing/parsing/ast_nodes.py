@@ -15,9 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class MissingFieldError(ValueError):
-    """Raised when a guard condition references a field that doesn't exist in the data."""
+    """Raised when a guard condition references a field that doesn't exist in the data.
 
-    pass
+    ``is_config_error`` marks the flat-field-in-namespaced-content case, where
+    the field exists but was referenced without its namespace prefix.  That is
+    deterministic for every record, so it must stay a config error rather than
+    being absorbed as an unknown value.
+    """
+
+    def __init__(self, *args: object, is_config_error: bool = False) -> None:
+        super().__init__(*args)
+        self.is_config_error = is_config_error
 
 
 class GuardSemanticError(ValueError):
@@ -70,9 +78,13 @@ _TYPE_CHECKED_OPERATOR_NAMES = frozenset({"EQ", "NE", "LT", "LE", "GT", "GE"})
 _TYPE_MISMATCH_SEEN: set[tuple[str, str, str, str]] = set()
 _TYPE_MISMATCH_SEEN_MAX = 1024
 
+_UNRESOLVABLE_SEEN: set[str] = set()
+_UNRESOLVABLE_SEEN_MAX = 1024
+
 
 def _reset_type_mismatch_warnings() -> None:
     _TYPE_MISMATCH_SEEN.clear()
+    _UNRESOLVABLE_SEEN.clear()
 
 
 def _warn_unresolvable_operand(node: "LogicalNode", error: "MissingFieldError") -> None:
@@ -80,12 +92,17 @@ def _warn_unresolvable_operand(node: "LogicalNode", error: "MissingFieldError") 
 
     Returning the right answer quietly would still hide a broken guard — the
     condition works today only because the surviving operand happens to settle
-    it, and stops working the moment that changes.
+    it, and stops working the moment that changes.  Deduped per clause: guards
+    run once per record, so an undeduped warning is one line per record.
     """
+    clause = format_node(node)
+    if clause in _UNRESOLVABLE_SEEN or len(_UNRESOLVABLE_SEEN) >= _UNRESOLVABLE_SEEN_MAX:
+        return
+    _UNRESOLVABLE_SEEN.add(clause)
     logger.warning(
-        "Guard %s: one operand could not be resolved, so the other decided the "
-        "result. Fix the reference — %s",
-        node.operator.name,
+        "Guard condition %s: an operand could not be resolved, so the other "
+        "operand decided the result. Fix the reference — %s",
+        clause,
         error,
     )
 
@@ -318,7 +335,7 @@ def evaluate_node(
             )
             if suggestions:
                 msg += f". Did you mean: {', '.join(suggestions)}?"
-            raise MissingFieldError(msg)
+            raise MissingFieldError(msg, is_config_error=bool(suggestions))
         return value
 
     if isinstance(node, LiteralNode):
@@ -375,6 +392,8 @@ def evaluate_node(
         try:
             left_result = evaluate_node(node.left, data, functions)
         except MissingFieldError as e:
+            if e.is_config_error:
+                raise
             unknown = e
         else:
             decided = left_result if node.operator == LogicalOperator.OR else not left_result
@@ -388,9 +407,9 @@ def evaluate_node(
         if unknown is None:
             return right_result
 
-        _warn_unresolvable_operand(node, unknown)
         decided = right_result if node.operator == LogicalOperator.OR else not right_result
         if decided:
+            _warn_unresolvable_operand(node, unknown)
             return node.operator == LogicalOperator.OR
         raise unknown
 
