@@ -211,6 +211,7 @@ def test_resolve_batch_outcome_completed_populates_record_count():
     with patch("agent_actions.workflow.executor.fire_event"):
         result = executor._resolve_batch_outcome(
             action_name="batch_action",
+            action_idx=0,
             action_config={"batch_id": "b1"},
             output_folder="/tmp/batch_action",
             batch_status="completed",
