@@ -72,8 +72,10 @@ def _online_result(executor, deps, events, track):
 
 
 def _batch_completed_result(executor, deps, events, track):
+    """Drive the real caller: a batch whose jobs have finished and been processed."""
+    deps.batch_manager.handle_batch_agent.return_value = ("/out", "completed")
     with patch.object(ActionExecutor, "_compute_batch_wall_clock", return_value=1.0):
-        return executor._resolve_batch_outcome(ACTION, CONFIG, "/out", "completed", 1.0, 0)
+        return executor._handle_batch_check(ACTION, 0, CONFIG, datetime.now())
 
 
 def _batch_passthrough_result(executor, deps, events, track):
