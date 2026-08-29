@@ -169,10 +169,14 @@ class DispositionsCommand:
                     (row.get("reason") or "")[:60],
                 )
 
+        action_level = self._action_level_rows(backend, actions)
+
         if found:
             self.console.print(table)
-        else:
+        elif not action_level:
             self.console.print("[green]No quarantined records found.[/green]")
+
+        self._show_action_level(action_level)
 
 
 @click.command()

@@ -419,7 +419,8 @@ A read-only load MUST skip it entirely (AgentWorkflow(read_only=True)).
 
 An action that failed because an `on_exhausted: raise` policy fired is marked
 with `HALTED_ON_EXHAUSTED` in its node-level disposition's `detail`, set from
-the policy `result_collector` attaches to the exception it raises. The failure
+the policy every exhaustion site attaches to the exception it raises (see
+`errors.exhaustion_halt`). The failure
 is deterministic, so re-running it costs the same and ends the same way.
 
 Two mechanisms keep it halted, because either alone is insufficient:
