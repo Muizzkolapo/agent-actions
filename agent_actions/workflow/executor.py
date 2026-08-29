@@ -423,6 +423,12 @@ class ActionExecutor:
 
         final_status = self._resolve_completion_status(params.action_name)
 
+        # check_batch_submission returns None for run_mode: online, so a status
+        # here means the action ran in batch. Without it the same all-filtered
+        # action renders with or without "(batch)" depending on which round
+        # caught it.
+        execution_mode = "batch" if batch_status is not None else None
+
         if final_status == ActionStatus.SKIPPED:
             return self._handle_guard_all_filtered(
                 params.action_name,
@@ -430,10 +436,13 @@ class ActionExecutor:
                 params.action_config,
                 output_folder,
                 duration,
+                execution_mode=execution_mode,
             )
 
         if final_status == ActionStatus.FAILED:
-            return self._finalize_total_failure(params.action_name, duration, output_folder)
+            return self._finalize_total_failure(
+                params.action_name, duration, output_folder, execution_mode=execution_mode
+            )
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
