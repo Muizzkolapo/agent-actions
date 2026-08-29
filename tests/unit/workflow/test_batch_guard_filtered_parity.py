@@ -150,6 +150,29 @@ class TestNothingElseIsReclassifiedAsSkipped:
         _, events, _ = _run(path, executor, deps)
         assert [e for e in events if isinstance(e, ActionSkipEvent)] == []
 
+    @pytest.mark.parametrize("path", ["online", "batch_completed", "batch_passthrough"])
+    def test_a_partial_failure_is_not_flattened_to_a_clean_completion(self, path, executor, deps):
+        """Item-level failures must survive as COMPLETED_WITH_FAILURES in every mode."""
+        deps.action_runner.storage_backend.has_disposition.return_value = False
+        deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
+        ]
+        deps.action_runner.storage_backend.has_successful_items.return_value = True
+        result, _, _ = _run(path, executor, deps)
+        assert result.status == ActionStatus.COMPLETED_WITH_FAILURES
+
+    @pytest.mark.parametrize("path", ["online", "batch_completed", "batch_passthrough"])
+    def test_a_total_failure_is_not_reported_as_success(self, path, executor, deps):
+        """Zero successes among failures must be FAILED in every mode, not a completion."""
+        deps.action_runner.storage_backend.has_disposition.return_value = False
+        deps.action_runner.storage_backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
+        ]
+        deps.action_runner.storage_backend.has_successful_items.return_value = False
+        result, _, _ = _run(path, executor, deps)
+        assert result.status == ActionStatus.FAILED
+        assert result.success is False
+
     def test_total_failure_in_batch_still_resolves_as_failed(self, executor, deps):
         deps.action_runner.storage_backend.has_disposition.return_value = False
         deps.action_runner.storage_backend.get_failed_items.return_value = [
