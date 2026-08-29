@@ -421,6 +421,20 @@ class ActionExecutor:
                 metrics=ExecutionMetrics(duration=duration),
             )
 
+        final_status = self._resolve_completion_status(params.action_name)
+
+        if final_status == ActionStatus.SKIPPED:
+            return self._handle_guard_all_filtered(
+                params.action_name,
+                params.action_idx,
+                params.action_config,
+                output_folder,
+                duration,
+            )
+
+        if final_status == ActionStatus.FAILED:
+            return self._finalize_total_failure(params.action_name, duration, output_folder)
+
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
                 params.action_name,
@@ -440,14 +454,6 @@ class ActionExecutor:
                     record_count=self._records_written_this_run(params.action_name, pre_run_count),
                 ),
             )
-
-        final_status = self._resolve_completion_status(params.action_name)
-
-        if final_status == ActionStatus.SKIPPED:
-            return self._handle_guard_all_filtered(params, output_folder, duration)
-
-        if final_status == ActionStatus.FAILED:
-            return self._finalize_total_failure(params.action_name, duration, output_folder)
 
         self.deps.state_manager.update_status(
             params.action_name,
@@ -519,16 +525,25 @@ class ActionExecutor:
 
     def _handle_guard_all_filtered(
         self,
-        params: ActionRunParams,
-        output_folder: str,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        output_folder: str | None,
         duration: float,
+        *,
+        execution_mode: str | None = None,
     ) -> ActionExecutionResult:
         """Handle the case where all records were guard-filtered (action resolves as SKIPPED)."""
+        status_kwargs: dict[str, Any] = {
+            "execution_time": duration,
+            "skip_reason": GUARD_FILTERED_ALL,
+        }
+        if execution_mode is not None:
+            status_kwargs["execution_mode"] = execution_mode
         self.deps.state_manager.update_status(
-            params.action_name,
+            action_name,
             ActionStatus.SKIPPED,
-            execution_time=duration,
-            skip_reason=GUARD_FILTERED_ALL,
+            **status_kwargs,
         )
         total_actions = (
             len(self.deps.action_runner.execution_order)
@@ -537,15 +552,15 @@ class ActionExecutor:
         )
         fire_event(
             ActionSkipEvent(
-                action_name=params.action_name,
-                action_index=params.action_idx,
+                action_name=action_name,
+                action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason=GUARD_FILTERED_ALL,
-                mode=params.action_config.get("run_mode", ""),
+                mode=action_config.get("run_mode", ""),
             )
         )
         self._track_action_complete(
-            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=GUARD_FILTERED_ALL
+            action_name, duration, ActionStatus.SKIPPED, skip_reason=GUARD_FILTERED_ALL
         )
         return ActionExecutionResult(
             success=True,
@@ -1054,7 +1069,13 @@ class ActionExecutor:
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(
-            action_name, action_config, output_folder, batch_status, duration, pre_run_count
+            action_name,
+            action_idx,
+            action_config,
+            output_folder,
+            batch_status,
+            duration,
+            pre_run_count,
         )
 
     async def _handle_batch_check_async(
@@ -1078,7 +1099,13 @@ class ActionExecutor:
 
         duration = (datetime.now() - start_time).total_seconds()
         return self._resolve_batch_outcome(
-            action_name, action_config, output_folder, batch_status, duration, pre_run_count
+            action_name,
+            action_idx,
+            action_config,
+            output_folder,
+            batch_status,
+            duration,
+            pre_run_count,
         )
 
     def _batch_output_directory(self, action_name: str) -> str:
@@ -1090,6 +1117,7 @@ class ActionExecutor:
     def _resolve_batch_outcome(
         self,
         action_name: str,
+        action_idx: int,
         action_config: ActionConfigDict,
         output_folder: str | None,
         batch_status: str,
@@ -1119,6 +1147,16 @@ class ActionExecutor:
                 )
                 return self._finalize_total_failure(
                     action_name, wall_clock, output_folder, execution_mode="batch"
+                )
+
+            if final_status == ActionStatus.SKIPPED:
+                return self._handle_guard_all_filtered(
+                    action_name,
+                    action_idx,
+                    action_config,
+                    output_folder,
+                    wall_clock,
+                    execution_mode="batch",
                 )
 
             self.deps.state_manager.update_status(
