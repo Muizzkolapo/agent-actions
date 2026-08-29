@@ -14,6 +14,7 @@ import pytest
 
 from agent_actions.logging.events.workflow_events import ActionSkipEvent
 from agent_actions.record.reasons import GUARD_FILTERED_ALL
+from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.executor import (
     ActionExecutor,
     ActionRunParams,
@@ -46,8 +47,16 @@ def executor(deps):
 
 
 def _all_records_guard_filtered(deps, filtered: bool = True):
-    """Node-level SKIPPED disposition is the guard-filtered-all signal."""
-    deps.action_runner.storage_backend.has_disposition.return_value = filtered
+    """Node-level SKIPPED disposition is the guard-filtered-all signal.
+
+    Answers only for that exact query, so an implementation reading a
+    different disposition or a record-level row does not read as filtered.
+    """
+
+    def has_disposition(action_name, disposition, record_id=None, **_):
+        return filtered and disposition == DISPOSITION_SKIPPED and record_id == NODE_LEVEL_RECORD_ID
+
+    deps.action_runner.storage_backend.has_disposition.side_effect = has_disposition
     deps.action_runner.storage_backend.get_failed_items.return_value = []
 
 
@@ -153,7 +162,7 @@ class TestNothingElseIsReclassifiedAsSkipped:
     @pytest.mark.parametrize("path", ["online", "batch_completed", "batch_passthrough"])
     def test_a_partial_failure_is_not_flattened_to_a_clean_completion(self, path, executor, deps):
         """Item-level failures must survive as COMPLETED_WITH_FAILURES in every mode."""
-        deps.action_runner.storage_backend.has_disposition.return_value = False
+        _all_records_guard_filtered(deps, filtered=False)
         deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
         ]
@@ -164,7 +173,7 @@ class TestNothingElseIsReclassifiedAsSkipped:
     @pytest.mark.parametrize("path", ["online", "batch_completed", "batch_passthrough"])
     def test_a_total_failure_is_not_reported_as_success(self, path, executor, deps):
         """Zero successes among failures must be FAILED in every mode, not a completion."""
-        deps.action_runner.storage_backend.has_disposition.return_value = False
+        _all_records_guard_filtered(deps, filtered=False)
         deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
         ]
@@ -174,7 +183,7 @@ class TestNothingElseIsReclassifiedAsSkipped:
         assert result.success is False
 
     def test_total_failure_in_batch_still_resolves_as_failed(self, executor, deps):
-        deps.action_runner.storage_backend.has_disposition.return_value = False
+        _all_records_guard_filtered(deps, filtered=False)
         deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
         ]
