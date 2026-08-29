@@ -3,10 +3,28 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
+
+
+@pytest.fixture(autouse=True)
+def _only_the_name_check():
+    """These cover name-vs-filename reporting, not whole-project validity.
+
+    The fixtures below are deliberately minimal — one action with a prompt and
+    no model — which the structural pass correctly rejects, as `agac run` would.
+    That pass is covered against a real workflow in
+    tests/validation/test_validate_udfs_is_a_complete_gate.py.
+    """
+    with patch(
+        "agent_actions.validation.validate_udfs.ValidateUDFsCommand._run_structural_preflight",
+        new=lambda self: None,
+    ):
+        yield
 
 
 def _project(root: Path, agent_stem: str, name_value: str) -> Path:

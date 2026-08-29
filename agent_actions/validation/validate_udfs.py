@@ -17,6 +17,7 @@ from agent_actions.errors import (
     FunctionNotFoundError,
     UDFLoadError,
     enrich_exception_context,
+    get_error_detail,
 )
 from agent_actions.input.loaders.udf import (
     discover_udfs,
@@ -91,18 +92,42 @@ class ValidateUDFsCommand:
         try:
             validate_udf_references(config)
             impl_refs = self._count_impl_references(config)
-            return {
-                "valid": True,
-                "registry": registry,
-                "impl_refs": impl_refs,
-                "action_names": self._extract_action_names(config),
-            }
         except FunctionNotFoundError as e:
             return {
                 "valid": False,
                 "error": e,
                 "error_type": "not_found",
             }
+
+        structural = self._run_structural_preflight()
+        if structural is not None:
+            return structural
+
+        return {
+            "valid": True,
+            "registry": registry,
+            "impl_refs": impl_refs,
+            "action_names": self._extract_action_names(config),
+        }
+
+    def _run_structural_preflight(self) -> dict[str, Any] | None:
+        """Run the same structural pass inspect/schema/run do. None if it passes.
+
+        UDF references and structure are disjoint checks — a broken ``impl:``
+        passes the structural pass, and a missing ``context_scope`` passes the
+        UDF pass — so a command running only one is not a gate.
+
+        Goes through WorkflowInspector rather than assembling the config here:
+        these checks read the fully expanded action shape, and this command
+        otherwise runs only two of the config pipeline's seven stages.
+        """
+        from agent_actions.services.workflow_inspector import WorkflowInspector
+
+        try:
+            WorkflowInspector(self.agent_name, user_code_path=str(self.user_code)).validate()
+        except Exception as e:
+            return {"valid": False, "error": e, "error_type": "structural"}
+        return None
 
     def execute(self) -> None:
         """Execute the validate-udfs command with formatted CLI output."""
@@ -120,6 +145,8 @@ class ValidateUDFsCommand:
                     self._handle_not_found_error(error)
                 elif error_type == "name_mismatch":
                     self._handle_name_mismatch_error(error)
+                elif error_type == "structural":
+                    self._handle_structural_error(error)
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
@@ -246,6 +273,16 @@ class ValidateUDFsCommand:
         self.console.print("[red]❌ UDF load failed[/red]\n")
         self.console.print(format_user_error(error), markup=False, highlight=False)
         self.console.print()
+
+    def _handle_structural_error(self, error: Exception) -> None:
+        """Surface a structural failure; exiting 1 in silence is not a gate."""
+        from rich.markup import escape
+
+        self.console.print("[red]❌ Workflow configuration is not valid[/red]\n")
+        self.console.print(f"  {escape(get_error_detail(error))}\n")
+        self.console.print(
+            "  This is the same check [cyan]agac inspect[/cyan] runs; run it for the full report.\n"
+        )
 
     def _handle_not_found_error(self, error: FunctionNotFoundError) -> None:
         """Handle function not found error with formatted output."""
