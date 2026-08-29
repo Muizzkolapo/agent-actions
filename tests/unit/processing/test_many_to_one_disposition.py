@@ -5,8 +5,10 @@ framework's own recommended shape for a tool that folds N inputs into fewer
 outputs.  The missing-record safety net builds its "accounted for" set from
 ``structured_data``'s reattached ``source_guid``, and a collapsed output only
 carries the *first* contributing input's guid — so the other N-1 inputs look
-dropped and are tombstoned ``tool_missing_record``.  The data written is right;
-the audit trail that ``agac dispositions`` reports is wrong.
+dropped and are tombstoned ``tool_missing_record``.  Those tombstones are not
+only an audit-trail error: they enter the action's output stamped
+``cascade_skipped``, which is in ``CASCADE_BLOCKING_VALUES``, so every
+downstream action quarantines them as ``upstream_unprocessed``.
 """
 
 from __future__ import annotations
@@ -126,3 +128,37 @@ class TestTheOneToOneCasesAreUnchanged:
         )
 
         assert _tombstoned(results) == []
+
+
+class TestAnIndexTheToolNamedButCannotResolve:
+    """The accounting reads indices the tool wrote; a bad one must not excuse a record."""
+
+    def test_an_out_of_range_index_accounts_for_nobody(self):
+        records = _records("r0", "r1", "r2")
+
+        results = _invoke(
+            records,
+            FileUDFResult(outputs=[{"source_index": [0, 99], "data": {"group": "a"}}]),
+        )
+
+        assert _tombstoned(results) == ["r1", "r2"]
+
+    def test_a_negative_index_accounts_for_nobody(self):
+        records = _records("r0", "r1", "r2")
+
+        results = _invoke(
+            records,
+            FileUDFResult(outputs=[{"source_index": [0, -1], "data": {"group": "a"}}]),
+        )
+
+        assert _tombstoned(results) == ["r1", "r2"]
+
+    def test_a_non_integer_index_accounts_for_nobody(self):
+        records = _records("r0", "r1", "r2")
+
+        results = _invoke(
+            records,
+            FileUDFResult(outputs=[{"source_index": [1, "0"], "data": {"group": "a"}}]),
+        )
+
+        assert _tombstoned(results) == ["r0", "r2"]
