@@ -176,12 +176,16 @@ class ActionExecutionResult:
 def _halt_marker(error: Exception) -> str | None:
     """HALTED_ON_EXHAUSTED if an ``on_exhausted: raise`` policy produced *error*.
 
-    result_collector stamps the policy onto the exception context at the point
-    it decides to raise, which is the only place that distinction still exists.
+    result_collector stamps the policy onto the exception context where it
+    decides to raise.  The whole chain is searched because file processing
+    wraps that exception in a DependencyError before it reaches here.
     """
-    context = getattr(error, "context", None)
-    if isinstance(context, dict) and context.get("on_exhausted") == "raise":
-        return HALTED_ON_EXHAUSTED
+    from agent_actions.utils.safe_format import get_error_chain
+
+    for link in get_error_chain(error):
+        context = getattr(link, "context", None)
+        if isinstance(context, dict) and context.get("on_exhausted") == "raise":
+            return HALTED_ON_EXHAUSTED
     return None
 
 

@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, DependencyError
 from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.coordinator import AgentWorkflow
@@ -123,6 +123,32 @@ class TestTheHaltIsRecorded:
         """return_last carries the same context key with a different value."""
         error = AgentActionsError("exhausted", context={"on_exhausted": "return_last"})
         _fail_through_the_executor(backend, state_manager, ORDINARY, error)
+
+        assert _node_row(backend, ORDINARY)["detail"] != HALT_MARKER
+
+    def test_the_halt_survives_the_file_processing_wrapper(self, backend, state_manager):
+        """Every action runs through process_files, which re-raises its own error.
+
+        The policy lives on the original exception's context, so a marker read
+        only from the outermost error is never written in production.
+        """
+        wrapped = DependencyError(
+            "Action 'summarize_page_content': dbt_pages.json: Retry exhausted "
+            "(Found 1 files but failed to process any.)",
+            context={"action": HALTED, "files_found": 1},
+            cause=_halt_error(),
+        )
+        _fail_through_the_executor(backend, state_manager, HALTED, wrapped)
+
+        assert _node_row(backend, HALTED)["detail"] == HALT_MARKER
+
+    def test_an_unrelated_wrapped_failure_is_not_marked(self, backend, state_manager):
+        wrapped = DependencyError(
+            "Action 'author_stem': a.json: boom (Found 1 files but failed to process any.)",
+            context={"action": ORDINARY, "files_found": 1},
+            cause=RuntimeError("boom"),
+        )
+        _fail_through_the_executor(backend, state_manager, ORDINARY, wrapped)
 
         assert _node_row(backend, ORDINARY)["detail"] != HALT_MARKER
 

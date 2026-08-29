@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# (relative path, the exception it raised).  The exception is kept, not just its
+# text, so the raise below can chain to it — an ``on_exhausted: raise`` halt is
+# only distinguishable by the policy on the original exception's context.
+FileError = tuple[str, Exception]
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers (no runner param)
@@ -43,13 +48,13 @@ _MAX_TRACKED_ERRORS = 10  # Cap to avoid unbounded memory on mass failure
 _ERROR_SAMPLE_SIZE = 3
 
 
-def _format_error_sample(processing_errors: list[str]) -> str:
+def _format_error_sample(processing_errors: list[FileError]) -> str:
     """Join the first few per-file errors for display."""
-    return "; ".join(processing_errors[:_ERROR_SAMPLE_SIZE])
+    return "; ".join(f"{path}: {exc}" for path, exc in processing_errors[:_ERROR_SAMPLE_SIZE])
 
 
 def _log_processing_errors(
-    processing_errors: list[str],
+    processing_errors: list[FileError],
     processed: int,
     total: int,
     action_name: str,
@@ -86,7 +91,7 @@ def _raise_all_files_failed(
     action_name: str,
     files_found: int,
     upstream_dirs: list[str],
-    processing_errors: list[str],
+    processing_errors: list[FileError],
 ) -> None:
     """Raise DependencyError when files were found but all failed processing.
 
@@ -97,18 +102,24 @@ def _raise_all_files_failed(
     The total is ``files_found``, never ``len(processing_errors)``, which the
     collectors cap at ``_MAX_TRACKED_ERRORS``.  Nothing was processed here and
     every counted entry was attempted, so ``files_found`` is exact.
+
+    Chained to the first cause so its type and context survive the wrap — a
+    policy halt is otherwise indistinguishable from an ordinary failure by the
+    time this reaches the executor.
     """
     from agent_actions.errors import DependencyError
 
     detail = _format_error_sample(processing_errors) or "Check logs for details."
+    cause = processing_errors[0][1] if processing_errors else None
     raise DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
             "action": action_name,
             "files_found": files_found,
             "upstream_dirs": upstream_dirs,
-            "processing_errors": processing_errors,
+            "processing_errors": [f"{path}: {exc}" for path, exc in processing_errors],
         },
+        cause=cause,
     )
 
 
@@ -228,10 +239,10 @@ def process_directory_files(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
-) -> tuple[int, int, list[str]]:
+) -> tuple[int, int, list[FileError]]:
     """Process a directory → (files_found, files_processed, per_file_errors)."""
     count = 0
-    processing_errors: list[str] = []
+    processing_errors: list[FileError] = []
     files_seen = 0
     for item in input_path.rglob("*"):
         if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
@@ -248,7 +259,7 @@ def process_directory_files(
             count += 1
         except Exception as e:
             if len(processing_errors) < _MAX_TRACKED_ERRORS:
-                processing_errors.append(f"{relative_path}: {e}")
+                processing_errors.append((str(relative_path), e))
             logger.warning(
                 "Failed to process file %s: %s",
                 relative_path,
@@ -267,12 +278,12 @@ def process_directory_files(
 
 def process_merged_files(
     runner: ActionRunner, params: FileProcessParams
-) -> tuple[int, int, list[str]]:
+) -> tuple[int, int, list[FileError]]:
     """Merge and process files from several upstreams → (found, processed, per_file_errors)."""
     output_path = Path(params.output_directory)
     files_by_path = collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
-    processing_errors: list[str] = []
+    processing_errors: list[FileError] = []
     files_seen = 0
 
     for relative_path, file_paths in files_by_path.items():
@@ -312,7 +323,7 @@ def process_merged_files(
             files_processed_count += 1
         except Exception as e:
             if len(processing_errors) < _MAX_TRACKED_ERRORS:
-                processing_errors.append(f"{relative_path}: {e}")
+                processing_errors.append((str(relative_path), e))
             logger.warning(
                 "Failed to process merged file %s: %s",
                 relative_path,
@@ -412,14 +423,14 @@ def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, in
 
 def process_from_storage_backend(
     runner: ActionRunner, params: FileProcessParams
-) -> tuple[int, int, list[str]]:
+) -> tuple[int, int, list[FileError]]:
     """Process backend data instead of filesystem → (found, processed, per_file_errors)."""
 
     if runner.storage_backend is None:
         return (0, 0, [])
 
     output_path = Path(params.output_directory)
-    processing_errors: list[str] = []
+    processing_errors: list[FileError] = []
 
     data_by_path: dict[str, list[tuple[str, Any]]] = {}
 
@@ -520,7 +531,7 @@ def process_from_storage_backend(
 
         except Exception as e:
             if len(processing_errors) < _MAX_TRACKED_ERRORS:
-                processing_errors.append(f"{relative_path}: {e}")
+                processing_errors.append((str(relative_path), e))
             logger.warning(
                 "Failed to process backend entry %s: %s",
                 relative_path,
@@ -579,7 +590,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
 
     total_found = 0
     total_processed = 0
-    all_errors: list[str] = []
+    all_errors: list[FileError] = []
     output_path = Path(params.output_directory)
     processed_relative_paths: set = set()
 
