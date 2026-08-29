@@ -733,6 +733,21 @@ class ActionExecutor:
                 action_name,
             )
             return ActionStatus.SKIPPED
+        if (
+            storage_backend.has_disposition(
+                action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+            )
+            and self._count_records_for_action(action_name) == 0
+        ):
+            # Batch's spelling of the row above: it returns at the fork in
+            # workflow/pipeline.py before the SKIPPED@NODE_LEVEL writer. The row
+            # is read, never rewritten — it is the resume path's only marker.
+            logger.info(
+                "Action '%s' produced no records behind a node-level passthrough "
+                "— marking as skipped",
+                action_name,
+            )
+            return ActionStatus.SKIPPED
         item_failures = storage_backend.get_failed_items(action_name)
         if item_failures:
             if not storage_backend.has_successful_items(action_name):
