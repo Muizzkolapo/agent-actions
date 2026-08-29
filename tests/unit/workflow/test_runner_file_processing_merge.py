@@ -81,7 +81,7 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
         # Error is now caught per-file (no propagation), returns 0 processed
-        files_found, files_processed = process_merged_files(runner, params)
+        files_found, files_processed, _errors = process_merged_files(runner, params)
         assert files_processed == 0
         assert files_found == 1
 
@@ -201,7 +201,7 @@ class TestProcessDirectoryFilesIsolation:
 
         params = _make_params([str(input_dir)], output_dir)
 
-        files_found, files_processed = process_directory_files(
+        files_found, files_processed, _errors = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
 
@@ -223,7 +223,7 @@ class TestProcessDirectoryFilesIsolation:
 
         params = _make_params([str(input_dir)], output_dir)
 
-        files_found, files_processed = process_directory_files(
+        files_found, files_processed, _errors = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
 
@@ -257,7 +257,7 @@ class TestProcessMergedFilesIsolation:
 
         params = _make_params([str(upstream)], output)
 
-        files_found, files_processed = process_merged_files(runner, params)
+        files_found, files_processed, _errors = process_merged_files(runner, params)
 
         assert files_found == 2
         assert files_processed == 1  # good.json processed, bad.json skipped
@@ -291,7 +291,7 @@ class TestProcessMergedFilesIsolation:
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
-        files_found, files_processed = process_merged_files(runner, params)
+        files_found, files_processed, _errors = process_merged_files(runner, params)
 
         assert files_found == 2
         assert files_processed == 1  # good.json ok, bad.json (merged) failed

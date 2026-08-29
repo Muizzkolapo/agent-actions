@@ -412,7 +412,7 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        _found, processed = process_directory_files(
+        _found, processed, _errors = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
         assert processed == 2
@@ -435,7 +435,7 @@ class TestProcessDirectoryFiles:
             output_directory=str(output_dir),
             idx=0,
         )
-        _found, processed = process_directory_files(
+        _found, processed, _errors = process_directory_files(
             runner, input_dir, output_dir, str(input_dir), params, set()
         )
         assert processed == 1
@@ -499,7 +499,7 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        _found, processed = process_merged_files(runner, params)
+        _found, processed, _errors = process_merged_files(runner, params)
         assert processed == 1
         strategy.execute.assert_called_once()
 
@@ -521,7 +521,7 @@ class TestProcessMergedFiles:
             output_directory=str(output),
             idx=0,
         )
-        _found, processed = process_merged_files(runner, params)
+        _found, processed, _errors = process_merged_files(runner, params)
         assert processed == 1
         mock_merge.assert_called_once()
         strategy.execute.assert_called_once()
@@ -565,7 +565,7 @@ class TestProcessFromStorageBackend:
             output_directory="/out",
             idx=0,
         )
-        assert process_from_storage_backend(runner, params) == (0, 0)
+        assert process_from_storage_backend(runner, params) == (0, 0, [])
 
     def test_skips_staging_directories(self, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
@@ -579,7 +579,7 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         result = process_from_storage_backend(runner_with_backend, params)
-        assert result == (0, 0)
+        assert result == (0, 0, [])
         backend.list_target_files.assert_not_called()
 
     def test_single_source_processes(self, runner_with_backend, tmp_path):
@@ -596,7 +596,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
         strategy.execute.assert_called_once()
@@ -620,7 +620,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
         mock_merge.assert_called_once()
@@ -640,7 +640,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 2
         assert processed == 1
 
@@ -659,7 +659,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         # good.json was read and processed; bad.json failed to read → only 1 file in data_by_path
         assert found == 1
         assert processed == 1
@@ -676,7 +676,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 0
         assert processed == 0
 
@@ -698,7 +698,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
 
@@ -720,7 +720,7 @@ class TestProcessFromStorageBackend:
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
-        found, processed = process_from_storage_backend(runner_with_backend, params)
+        found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
         assert found == 1
         assert processed == 1
 

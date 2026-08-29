@@ -156,7 +156,7 @@ class TestStorageBackendMerge:
         params.idx = 0
 
         # Execute
-        files_found, files_processed = process_from_storage_backend(runner, params)
+        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
 
         # Verify merge happened
         assert files_found == 1  # One unique path
@@ -196,7 +196,7 @@ class TestStorageBackendMerge:
         params.strategy = MagicMock()
         params.idx = 0
 
-        files_found, files_processed = process_from_storage_backend(runner, params)
+        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
 
         # Two unique files processed
         assert files_found == 2
