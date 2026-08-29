@@ -44,10 +44,8 @@ _ERROR_SAMPLE_SIZE = 3
 
 
 def _format_error_sample(processing_errors: list[str]) -> str:
-    """Join the first few per-file errors and say how many were left out."""
-    sample = "; ".join(processing_errors[:_ERROR_SAMPLE_SIZE])
-    remaining = len(processing_errors) - _ERROR_SAMPLE_SIZE
-    return f"{sample} (and {remaining} more)" if remaining > 0 else sample
+    """Join the first few per-file errors for display."""
+    return "; ".join(processing_errors[:_ERROR_SAMPLE_SIZE])
 
 
 def _log_processing_errors(
@@ -61,14 +59,20 @@ def _log_processing_errors(
     if not processing_errors or total == 0:
         return
     error_count = len(processing_errors)
+    suffix = (
+        f" (and {error_count - _ERROR_SAMPLE_SIZE} more)"
+        if error_count > _ERROR_SAMPLE_SIZE
+        else ""
+    )
     logger.error(
-        "%s incomplete for %s: %d/%d files processed (%d errors). Errors: %s",
+        "%s incomplete for %s: %d/%d files processed (%d errors). Errors: %s%s",
         context,
         action_name,
         processed,
         total,
         error_count,
         _format_error_sample(processing_errors),
+        suffix,
         extra={
             "action_name": action_name,
             "files_found": total,
@@ -89,6 +93,10 @@ def _raise_all_files_failed(
     The causes lead the message because the CLI summary panel renders only the
     first 80 characters of it — anything after the counts never reaches the
     reader, and this exception is also what lands in ``record_disposition``.
+
+    ``files_found`` is the true failure count here: nothing was processed, and
+    the file-limit break only follows a success.  ``processing_errors`` is
+    capped at ``_MAX_TRACKED_ERRORS``, so it is not.
     """
     from agent_actions.errors import DependencyError
 

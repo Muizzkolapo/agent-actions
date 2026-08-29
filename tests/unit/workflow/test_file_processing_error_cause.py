@@ -25,7 +25,7 @@ from agent_actions.workflow.executor import (
     ExecutorDependencies,
 )
 from agent_actions.workflow.runner import ActionRunner, FileProcessParams
-from agent_actions.workflow.runner_file_processing import process_files
+from agent_actions.workflow.runner_file_processing import _MAX_TRACKED_ERRORS, process_files
 
 ACTION = "collect_questions"
 CAUSE = "Function 'write_rows' not found"
@@ -153,9 +153,13 @@ class TestTheCauseIsWhereTheReaderLooks:
 
         assert CAUSE in str(exc_info.value)[:SUMMARY_PANEL_WIDTH]
 
-    def test_many_failures_are_sampled_and_counted(self, tmp_path):
+    @pytest.mark.parametrize("failing_files", [5, _MAX_TRACKED_ERRORS + 2])
+    def test_only_the_first_few_causes_are_shown_and_the_total_is_exact(
+        self, tmp_path, failing_files
+    ):
+        """The collector caps the tracked errors, so the total cannot come from it."""
         source = tmp_path / "input"
-        for i in range(5):
+        for i in range(failing_files):
             _write(source / f"page{i}.json")
         runner = ActionRunner(use_tools=True)
         params = _params(
@@ -168,8 +172,8 @@ class TestTheCauseIsWhereTheReaderLooks:
             process_files(runner, params)
 
         message = str(exc_info.value)
-        assert "(and 2 more)" in message
         assert message.count(CAUSE) == 3
+        assert f"Found {failing_files} files but failed to process any." in message
 
 
 class TestTheCauseReachesTheStoredDisposition:
