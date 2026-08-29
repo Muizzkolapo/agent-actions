@@ -276,8 +276,6 @@ class ValidateUDFsCommand:
 
     def _handle_structural_error(self, error: Exception) -> None:
         """Surface a structural failure; exiting 1 in silence is not a gate."""
-        from rich.markup import escape
-
         self.console.print("[red]❌ Workflow configuration is not valid[/red]\n")
         self.console.print(f"  {escape(get_error_detail(error))}\n")
         self.console.print(

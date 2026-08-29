@@ -41,8 +41,10 @@ def project(tmp_path, monkeypatch):
     clear_registry does not evict, so a prior test's copy of a same-named tool
     is reused and validation reads the wrong module.
     """
-    if not EXAMPLE.is_dir():
-        pytest.skip(f"example project not present at {EXAMPLE}")
+    # Deliberately not skip: this example is committed to the repo, so its
+    # absence is a defect. A skip here would delete every check in this file
+    # with no failure signal.
+    assert EXAMPLE.is_dir(), f"fixture workflow missing: {EXAMPLE}"
     for name in [k for k in sys.modules if k.startswith("agent_actions._udfs.")]:
         del sys.modules[name]
     root = tmp_path / "proj"
@@ -80,6 +82,30 @@ class TestItCatchesWhatOnlyTheOtherCommandsCaught:
         result = _run(project)
 
         assert result.exit_code != 0, result.output
+        # Pin the real preflight, not a bespoke "is context_scope present" check.
+        assert "context_scope" in result.output, result.output
+
+    def test_a_dangling_observe_reference_fails(self, project):
+        """A structural fault that is not "context_scope is absent".
+
+        Without this, a bespoke "does every action declare context_scope"
+        check would pass the whole file while catching none of the analysis
+        the other commands actually run.
+        """
+
+        def dangle(data: dict) -> None:
+            for action in data.get("actions", []):
+                scope = action.get("context_scope")
+                if isinstance(scope, dict) and scope.get("observe"):
+                    scope["observe"] = ["no_such_action.no_such_field"]
+                    return
+            raise AssertionError("fixture no longer has an observe reference to dangle")
+
+        _edit_config(project, dangle)
+
+        result = _run(project)
+
+        assert result.exit_code != 0, result.output
 
 
 class TestItStillCatchesWhatItAlreadyDid:
@@ -89,13 +115,14 @@ class TestItStillCatchesWhatItAlreadyDid:
                 if "impl" in action:
                     action["impl"] = "no_such_function_anywhere"
                     return
-            pytest.skip("example has no tool action to break")
+            raise AssertionError("fixture no longer has a tool action to break")
 
         _edit_config(project, break_impl)
 
         result = _run(project)
 
         assert result.exit_code != 0, result.output
+        assert "no_such_function_anywhere" in result.output, result.output
 
 
 class TestACleanProjectStillPasses:
