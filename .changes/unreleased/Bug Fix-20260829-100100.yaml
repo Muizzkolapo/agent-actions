@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "`agac dispositions` now shows action-level state. Both of its views filtered out the node-level record id, so an action halted by `on_exhausted: raise` was invisible in the very command its error message tells you to run — and when the halt was the action's only row, the action was missing from the table altogether, because the summary skips actions with no per-record dispositions. Node-level rows render in their own section with halts labelled and the resume commands beside them. The per-record table is unchanged; node rows are not records and would distort its counts."
+time: 2026-08-29T10:01:00Z
