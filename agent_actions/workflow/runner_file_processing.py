@@ -90,13 +90,13 @@ def _raise_all_files_failed(
 ) -> None:
     """Raise DependencyError when files were found but all failed processing.
 
-    The causes lead the message because the CLI summary panel renders only the
-    first 80 characters of it — anything after the counts never reaches the
-    reader, and this exception is also what lands in ``record_disposition``.
+    The causes lead the message: every reader truncates it — the run summary at
+    80 characters, ``agac dispositions`` at 60 — so anything placed after the
+    counts is invisible.
 
-    ``files_found`` is the true failure count here: nothing was processed, and
-    the file-limit break only follows a success.  ``processing_errors`` is
-    capped at ``_MAX_TRACKED_ERRORS``, so it is not.
+    The total is ``files_found``, never ``len(processing_errors)``, which the
+    collectors cap at ``_MAX_TRACKED_ERRORS``.  Nothing was processed here and
+    every counted entry was attempted, so ``files_found`` is exact.
     """
     from agent_actions.errors import DependencyError
 

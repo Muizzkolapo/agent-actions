@@ -157,7 +157,7 @@ class TestTheCauseIsWhereTheReaderLooks:
     def test_only_the_first_few_causes_are_shown_and_the_total_is_exact(
         self, tmp_path, failing_files
     ):
-        """The collector caps the tracked errors, so the total cannot come from it."""
+        """The collector caps the tracked errors, so no count may come from it."""
         source = tmp_path / "input"
         for i in range(failing_files):
             _write(source / f"page{i}.json")
@@ -174,6 +174,9 @@ class TestTheCauseIsWhereTheReaderLooks:
         message = str(exc_info.value)
         assert message.count(CAUSE) == 3
         assert f"Found {failing_files} files but failed to process any." in message
+        # A second "(and N more)" would be derived from the capped list and
+        # contradict the total beside it.
+        assert "(and " not in message
 
 
 class TestTheCauseReachesTheStoredDisposition:
@@ -224,9 +227,11 @@ class TestOnlyFailingRunsAreAffected:
         source = tmp_path / "input"
         _write(source / "page.json")
         runner = ActionRunner(use_tools=True)
-        params = _params(MagicMock(), [str(source)], tmp_path / "out")
+        strategy = MagicMock()
 
-        process_files(runner, params)
+        process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
+
+        assert strategy.execute.call_count == 1
 
     def test_a_partial_failure_still_raises_nothing(self, tmp_path):
         source = tmp_path / "input"
@@ -245,4 +250,4 @@ class TestOnlyFailingRunsAreAffected:
 
         process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
 
-        assert len(calls) == 2
+        assert sorted(Path(c).name for c in calls) == ["bad.json", "good.json"]
