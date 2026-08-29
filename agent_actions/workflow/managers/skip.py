@@ -229,7 +229,12 @@ class GuardStrategy(SkipStrategy):
                     extra={
                         "action_name": agent_name,
                         "guard": guard_clause,
-                        "context_data": context_data,
+                        # Names only: context_data holds every upstream record
+                        # body, and this is persisted to events.json — the file
+                        # users attach to bug reports. The guard clause names
+                        # the fields that matter; the bodies are already in the
+                        # store if they are needed.
+                        "context_keys": sorted(context_data),
                         "operation": "guard_evaluation",
                     },
                 )
