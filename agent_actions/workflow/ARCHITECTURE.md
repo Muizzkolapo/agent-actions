@@ -70,6 +70,8 @@ Every action has a status that controls what happens on the current run and on r
                      │          On re-run (no --fresh)             │
                      │     _reset_retryable_actions()              │
                      │  RETRYABLE_STATUSES → PENDING               │
+                     │  except a FAILED action halted by           │
+                     │  on_exhausted: raise — see below            │
                      └──────────┬──────────────────────────────────┘
                                 │
     ┌───────────────────────────┼───────────────────────────────────┐
@@ -406,7 +408,31 @@ _reset_retryable_actions MUST run after services init, before execution.
     Why: it queries ActionStateManager (needs status file loaded) and
     calls storage_backend.clear_disposition (needs DB connection).
     If you move it before services init → AttributeError on state_manager.
+
+A read-only load MUST skip it entirely (AgentWorkflow(read_only=True)).
+    Why: dispositions, schema and retry only inspect persisted state.
+    Resetting first destroys the rows they read — retry queries the
+    disposition table after construction, so it finds nothing to retry.
 ```
+
+### A deliberate halt is not a retryable failure
+
+An action that failed because an `on_exhausted: raise` policy fired is marked
+with `HALTED_ON_EXHAUSTED` in its node-level disposition's `detail`, set from
+the policy `result_collector` attaches to the exception it raises. The failure
+is deterministic, so re-running it costs the same and ends the same way.
+
+Two mechanisms keep it halted, because either alone is insufficient:
+
+- `_reset_retryable_actions` excludes marked actions, so the status and the
+  dispositions survive as evidence.
+- `execute_action` refuses to run one. The status alone gates nothing: there is
+  no FAILED branch, and the sequential run loop selects on `not is_completed`.
+  (The parallel loop selects on `get_pending_actions`, which already excludes
+  every terminal status, so there the exclusion alone would do.)
+
+`agac retry` clears the node-level disposition, and `--fresh` clears everything,
+so both remain working resume paths.
 
 ### COMPLETED_WITH_FAILURES is NOT retryable
 
