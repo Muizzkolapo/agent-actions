@@ -12,7 +12,7 @@ from typing import Any, cast
 from rich.console import Console
 
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import get_error_detail
+from agent_actions.errors import AgentActionsError, get_error_detail
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -20,7 +20,11 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
-from agent_actions.record.reasons import ALL_VERSIONS_FILTERED, GUARD_FILTERED_ALL
+from agent_actions.record.reasons import (
+    ALL_VERSIONS_FILTERED,
+    GUARD_FILTERED_ALL,
+    HALTED_ON_EXHAUSTED,
+)
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
@@ -167,6 +171,32 @@ class ActionExecutionResult:
             f"ActionExecutionResult(success={self.success}, "
             f"status={self.status}, duration={self.metrics.duration:.2f})"
         )
+
+
+def _halt_marker(error: Exception) -> str | None:
+    """HALTED_ON_EXHAUSTED if an ``on_exhausted: raise`` policy produced *error*.
+
+    result_collector stamps the policy onto the exception context at the point
+    it decides to raise, which is the only place that distinction still exists.
+    """
+    context = getattr(error, "context", None)
+    if isinstance(context, dict) and context.get("on_exhausted") == "raise":
+        return HALTED_ON_EXHAUSTED
+    return None
+
+
+def action_is_halted(storage_backend: Any, action_name: str) -> bool:
+    """True if *action_name* failed because an ``on_exhausted: raise`` policy fired."""
+    if storage_backend is None:
+        return False
+    try:
+        rows = storage_backend.get_disposition(
+            action_name, record_id=NODE_LEVEL_RECORD_ID, disposition=DISPOSITION_FAILED
+        )
+    except Exception as read_err:
+        logger.warning("Could not read halt marker for %s: %s", action_name, read_err)
+        return False
+    return any(row.get("detail") == HALTED_ON_EXHAUSTED for row in rows)
 
 
 class ActionExecutor:
@@ -681,7 +711,9 @@ class ActionExecutor:
             metrics=ExecutionMetrics(duration=duration),
         )
 
-    def _write_failed_disposition(self, action_name: str, reason: str) -> None:
+    def _write_failed_disposition(
+        self, action_name: str, reason: str, *, detail: str | None = None
+    ) -> None:
         """Write DISPOSITION_FAILED to storage so downstream and future runs detect the failure."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
@@ -691,6 +723,7 @@ class ActionExecutor:
                     record_id=NODE_LEVEL_RECORD_ID,
                     disposition=DISPOSITION_FAILED,
                     reason=reason[:500],
+                    detail=detail,
                 )
             except Exception as disp_err:
                 logger.warning(
@@ -781,6 +814,34 @@ class ActionExecutor:
         if len(item_failures) > 3:
             logger.warning("  ... and %d more failure(s)", len(item_failures) - 3)
 
+    def _handle_halted_action(
+        self, action_name: str, start_time: datetime
+    ) -> ActionExecutionResult:
+        """Refuse to re-run an action that halted on purpose.
+
+        Leaving the status FAILED is not enough on its own — there is no FAILED
+        branch above it, so the action would run again and reach the same halt at
+        the same cost.  Status and dispositions are left untouched: they are the
+        evidence the halt exists to preserve.
+        """
+        duration = (datetime.now() - start_time).total_seconds()
+        logger.error(
+            "Action '%s' halted on an 'on_exhausted: raise' policy and was not re-run. "
+            "The failure is deterministic — inspect it with 'agac dispositions', then "
+            "resume with 'agac retry' or start over with 'agac run --fresh'.",
+            action_name,
+        )
+        return ActionExecutionResult(
+            success=False,
+            status=ActionStatus.FAILED,
+            error=AgentActionsError(
+                f"Action '{action_name}' is halted by on_exhausted: raise — "
+                f"resume with 'agac retry' or 'agac run --fresh'",
+                context={"action": action_name, "halted": True},
+            ),
+            metrics=ExecutionMetrics(duration=duration),
+        )
+
     def _handle_run_failure(
         self, params: ActionRunParams, error: Exception
     ) -> ActionExecutionResult:
@@ -792,7 +853,7 @@ class ActionExecutor:
             execution_time=duration,
             error_message=str(error),
         )
-        self._write_failed_disposition(params.action_name, str(error))
+        self._write_failed_disposition(params.action_name, str(error), detail=_halt_marker(error))
 
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
@@ -970,6 +1031,10 @@ class ActionExecutor:
         if current_status == ActionStatus.BATCH_SUBMITTED:
             return self._handle_batch_check(action_name, action_idx, action_config, start_time)
 
+        # A deliberate halt is not a failure to retry: refuse before any work.
+        if action_is_halted(getattr(self.deps.action_runner, "storage_backend", None), action_name):
+            return self._handle_halted_action(action_name, start_time)
+
         # Circuit breaker: skip if any upstream dependency has failed.
         # Must run BEFORE get_previous_outputs to avoid reading corrupt data.
         failed_dep = self._check_upstream_health(action_name, action_config)
@@ -1033,6 +1098,10 @@ class ActionExecutor:
             return await self._handle_batch_check_async(
                 action_name, action_idx, action_config, start_time
             )
+
+        # A deliberate halt is not a failure to retry: refuse before any work.
+        if action_is_halted(getattr(self.deps.action_runner, "storage_backend", None), action_name):
+            return self._handle_halted_action(action_name, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.
         failed_dep = self._check_upstream_health(action_name, action_config)

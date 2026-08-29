@@ -18,6 +18,7 @@ from agent_actions.validation.preflight.guard_validation import validate_guard_c
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.execution_events import WorkflowEventLogger
+from agent_actions.workflow.executor import action_is_halted
 from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
@@ -176,7 +177,21 @@ class AgentWorkflow:
             for name in state_mgr.execution_order
             if state_mgr.get_status(name) in MID_PROCESSING_STATUSES
         }
-        reset_actions = state_mgr.reset_retryable()
+        halted = {
+            name
+            for name in state_mgr.execution_order
+            if state_mgr.get_status(name) == ActionStatus.FAILED
+            and action_is_halted(self.storage_backend, name)
+        }
+        if halted:
+            logger.warning(
+                "Not resetting %d action(s) halted by 'on_exhausted: raise': %s. "
+                "Inspect with 'agac dispositions', then resume with 'agac retry' "
+                "or start over with 'agac run --fresh'.",
+                len(halted),
+                sorted(halted),
+            )
+        reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:
             return
         for action_name in reset_actions:
