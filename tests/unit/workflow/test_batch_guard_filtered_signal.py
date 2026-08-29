@@ -1,28 +1,32 @@
 """An all-removed action must look the same to the user in batch and online.
 
-Online reports `SKIP` with `↳ skipped: All records guard-filtered — no output
-produced`, and downstream actions cascade-skip.  Batch reported `OK`.
+Online reports SKIP with "All records guard-filtered — no output produced" and
+downstream actions cascade-skip.  Batch reported OK.
 
-The cause is not the executor but the signal it reads.  A `run_mode: batch` LLM
-action never reaches ``CollectionStats.raise_if_terminal_failure`` — the only
-writer of the node-level ``skipped`` disposition — because ``pipeline.py`` forks
-to ``_handle_batch_mode`` and returns first.  Batch instead recorded a
-node-level ``passthrough`` for its empty tombstone, which the classifier does
-not recognise.
+The executor is not the cause; the signal it reads is.  A ``run_mode: batch``
+LLM action never reaches ``CollectionStats.raise_if_terminal_failure`` — the
+only writer of the node-level ``skipped`` disposition — because
+``workflow/pipeline.py`` forks to ``_handle_batch_mode`` and returns first.
+Batch records a node-level ``passthrough`` for its empty tombstone instead.
 
-Uses a real SQLiteBackend: the defect is that the row a mock would fabricate is
-never written.
+That row cannot simply be swapped for ``skipped``: ``set_disposition`` deletes
+every row for ``(action, record_id)``, so it is the batch resume path's only
+marker, and ``_has_blocking_disposition`` clears a node-level ``skipped`` as
+stale whenever target files exist — which they do, since batch writes an empty
+chunk file.  So the classifier learns to read what batch writes.
+
+Real SQLiteBackend throughout: the defect is that the row a mock would
+fabricate is never written.
 """
+
+from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.processing.result_collector import write_tombstone_disposition
-from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
-    DISPOSITION_SKIPPED,
-    NODE_LEVEL_RECORD_ID,
-)
+from agent_actions.processing.result_collector import write_node_level_disposition
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStatus
 
 ACTION = "extract_candidates"
@@ -35,76 +39,48 @@ def backend(tmp_path):
     return b
 
 
-class TestTheSignalBatchWrites:
-    """An empty tombstone means every record was removed and nothing produced."""
+def _executor(backend, record_count):
+    deps = MagicMock(spec=ExecutorDependencies)
+    deps.action_runner = MagicMock()
+    deps.action_runner.storage_backend = backend
+    deps.action_runner.execution_order = [ACTION]
+    ex = ActionExecutor(deps)
+    ex._count_records_for_action = MagicMock(return_value=record_count)
+    return ex
 
-    def test_an_empty_tombstone_is_recorded_as_a_skip(self, backend):
-        write_tombstone_disposition(backend, ACTION, [], "All records tombstoned")
-        assert backend.has_disposition(ACTION, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID)
 
-    def test_a_tombstone_carrying_records_stays_a_passthrough(self, backend):
-        """Records that passed through with data were not skipped."""
-        write_tombstone_disposition(backend, ACTION, [{"id": 1}], "All records tombstoned")
-        assert backend.has_disposition(
-            ACTION, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+def _batch_wrote_an_empty_tombstone(backend):
+    """Exactly what workflow/pipeline.py records for an all-filtered batch action."""
+    write_node_level_disposition(backend, ACTION, DISPOSITION_PASSTHROUGH, "All records tombstoned")
+
+
+class TestBatchsAllRemovedSignalIsClassifiedAsASkip:
+    def test_a_passthrough_that_produced_nothing_is_a_skip(self, backend):
+        _batch_wrote_an_empty_tombstone(backend)
+        assert _executor(backend, 0)._resolve_completion_status(ACTION) == (ActionStatus.SKIPPED)
+
+    def test_the_resume_marker_is_left_intact(self, backend):
+        """The classifier must read the row, never consume it."""
+        _batch_wrote_an_empty_tombstone(backend)
+        _executor(backend, 0)._resolve_completion_status(ACTION)
+        assert backend.has_disposition(ACTION, DISPOSITION_PASSTHROUGH)
+
+
+class TestNothingElseBecomesASkip:
+    def test_a_passthrough_that_produced_records_still_completes(self, backend):
+        """Records that genuinely passed through are not a skip."""
+        _batch_wrote_an_empty_tombstone(backend)
+        assert _executor(backend, 7)._resolve_completion_status(ACTION) == (ActionStatus.COMPLETED)
+
+    def test_an_action_with_no_dispositions_still_completes(self, backend):
+        assert _executor(backend, 0)._resolve_completion_status(ACTION) == (ActionStatus.COMPLETED)
+
+    def test_a_record_level_passthrough_alone_is_not_a_node_level_skip(self, backend):
+        """A per-record passthrough is not a statement about the whole action."""
+        backend.set_disposition(
+            action_name=ACTION,
+            record_id="guid-1",
+            disposition=DISPOSITION_PASSTHROUGH,
+            reason="guard_skip",
         )
-        assert not backend.has_disposition(
-            ACTION, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
-        )
-
-
-class TestTheExecutorClassifiesWhatBatchWrote:
-    """The signal must survive into the status the user sees."""
-
-    def _executor_over(self, backend):
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
-
-        deps = MagicMock(spec=ExecutorDependencies)
-        deps.action_runner = MagicMock()
-        deps.action_runner.storage_backend = backend
-        deps.action_runner.execution_order = [ACTION]
-        return ActionExecutor(deps)
-
-    def test_an_all_removed_batch_action_resolves_as_skipped(self, backend):
-        write_tombstone_disposition(backend, ACTION, [], "All records tombstoned")
-        assert self._executor_over(backend)._resolve_completion_status(ACTION) == (
-            ActionStatus.SKIPPED
-        )
-
-    def test_a_passthrough_with_records_still_completes(self, backend):
-        write_tombstone_disposition(backend, ACTION, [{"id": 1}], "All records tombstoned")
-        assert self._executor_over(backend)._resolve_completion_status(ACTION) == (
-            ActionStatus.COMPLETED
-        )
-
-
-class TestTheBatchResumePathStillRoutesTheAction:
-    """The skip signal must not strand the action as a batch failure.
-
-    set_disposition deletes every row for (action, record_id), so the skip
-    replaces the passthrough marker the resume path used to key on.
-    """
-
-    def _manager_over(self, backend, tmp_path):
-        from unittest.mock import MagicMock
-
-        from agent_actions.workflow.managers.batch import BatchLifecycleManager
-
-        m = BatchLifecycleManager.__new__(BatchLifecycleManager)
-        m.storage_backend = backend
-        m.job_manager = MagicMock()
-        return m
-
-    def test_a_skipped_action_is_not_reported_as_a_batch_failure(self, backend, tmp_path):
-        write_tombstone_disposition(backend, ACTION, [], "All records tombstoned")
-        m = self._manager_over(backend, tmp_path)
-        m.job_manager.get_registry_status.return_value = "no_batches"
-        _, status = m.handle_batch_agent(ACTION, str(tmp_path))
-        assert status != "failed"
-
-    def test_check_batch_submission_still_recognises_the_action(self, backend, tmp_path):
-        write_tombstone_disposition(backend, ACTION, [], "All records tombstoned")
-        m = self._manager_over(backend, tmp_path)
-        assert m.check_batch_submission(ACTION, 0, tmp_path) == "passthrough"
+        assert _executor(backend, 0)._resolve_completion_status(ACTION) == (ActionStatus.COMPLETED)
