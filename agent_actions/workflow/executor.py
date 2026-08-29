@@ -58,9 +58,14 @@ def _compute_action_config_hash(
 ) -> str:
     """Compute a deterministic hash of semantically-meaningful action config.
 
-    Covers: prompt reference, model, schema reference, guard clause + behavior.
-    Changes to these fields invalidate prior results.
+    Covers: prompt reference, schema reference, guard clause + behavior.
     Cosmetic fields (description, tags) are excluded.
+
+    NOT the model: the ``"model"`` key below is permanently ``""`` because
+    configs declare ``model_vendor``/``model_name``.  It is kept so the digest
+    does not rotate.  A model change is caught by comparing those two fields
+    against the completion stamp in ``_maybe_invalidate_completed_status`` —
+    do not delete that as redundant.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
@@ -69,7 +74,7 @@ def _compute_action_config_hash(
 
     hash_input = {
         "prompt": action_config.get("prompt", ""),
-        "model": action_config.get("model", ""),
+        "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
