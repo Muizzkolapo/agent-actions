@@ -21,6 +21,7 @@ import pytest
 from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.core.handlers.bridge import LoggingBridgeHandler
 from agent_actions.logging.core.manager import EventManager
+from agent_actions.logging.filters import RedactingFilter
 
 
 @pytest.fixture(autouse=True)
@@ -44,11 +45,13 @@ class _Capture:
         pass
 
 
-def _emit(extra: dict | None) -> dict:
+def _emit(extra: dict | None, *, redact: bool = False) -> dict:
     """Log through the real handler and return the persisted event's data."""
     capture = _Capture()
     EventManager.get().register(capture)
     handler = LoggingBridgeHandler()
+    if redact:
+        handler.addFilter(RedactingFilter())
 
     logger = logging.getLogger("agent_actions.processing.test_bridge")
     logger.setLevel(logging.DEBUG)
@@ -110,3 +113,21 @@ class TestLoggingInternalsDoNotLeak:
         data = _emit(None)
 
         assert data == {}
+
+
+class TestWideningTheCopyDoesNotWidenExposure:
+    """The one real risk in copying everything rather than naming three keys."""
+
+    def test_a_secret_in_extra_is_still_redacted(self):
+        data = _emit(
+            {"operation": "x", "custom_id": "req-1", "api_key": "sk-SECRET-123"},
+            redact=True,
+        )
+
+        assert data["custom_id"] == "req-1"
+        assert data["api_key"] == "[REDACTED]"
+
+    def test_the_raw_secret_appears_nowhere_in_the_event(self):
+        data = _emit({"operation": "x", "api_key": "sk-SECRET-123"}, redact=True)
+
+        assert not any("sk-SECRET-123" in str(v) for v in data.values())

@@ -9,6 +9,16 @@ if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
 
+# Attributes every LogRecord carries, derived from a real one rather than
+# listed: a hand-kept list drifts (the redaction filter's own copy names
+# batch_id and item_id, which are caller fields, not record internals) and
+# misses attributes added by newer Pythons, such as taskName in 3.12.
+_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
+    "message",
+    "asctime",
+}
+
+
 class LoggingBridgeHandler(logging.Handler):
     """Python logging handler that converts log records to events via EventManager."""
 
@@ -53,12 +63,9 @@ class LoggingBridgeHandler(logging.Handler):
                 exc_info=exc_info_normalized,
             )
 
-            if hasattr(record, "operation"):
-                event.data["operation"] = record.operation
-            if hasattr(record, "action_name"):
-                event.data["action_name"] = record.action_name
-            if hasattr(record, "workflow_name"):
-                event.data["workflow_name"] = record.workflow_name
+            for key, value in record.__dict__.items():
+                if key not in _LOG_RECORD_ATTRS:
+                    event.data[key] = value
 
             self._event_manager.fire(event)
 
