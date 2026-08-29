@@ -72,7 +72,12 @@ class TestACollapseAccountsForEveryContributor:
 
         successes = [r for r in results if r.status == ProcessingStatus.SUCCESS]
         assert len(successes) == 1
-        assert successes[0].data[0]["written"] == 3
+        written = successes[0].data
+        assert len(written) == 1, "three inputs collapse to one output record"
+        assert written[0]["content"]["collect_questions"] == {"written": 3}
+        # The collapsed record inherits its first parent's guid — that is the
+        # asymmetry the accounting has to compensate for, not remove.
+        assert written[0]["source_guid"] == "r1"
 
     def test_two_groups_collapse_independently(self):
         records = _records("r1", "r2", "r3", "r4")
