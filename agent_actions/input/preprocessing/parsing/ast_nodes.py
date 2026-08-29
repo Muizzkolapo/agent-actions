@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 class MissingFieldError(ValueError):
     """Raised when a guard condition references a field that doesn't exist in the data.
 
-    ``is_config_error`` marks the flat-field-in-namespaced-content case, where
-    the field exists but was referenced without its namespace prefix.  That is
-    deterministic for every record, so it must stay a config error rather than
-    being absorbed as an unknown value.
+    ``is_config_error`` marks a dotless reference against namespaced content:
+    the condition names a field without its namespace prefix, so it can never
+    resolve for any record.  Decided from the shape of the context, never from
+    whether one record carries the field — otherwise the same broken guard
+    would filter some records and pass others.
     """
 
     def __init__(self, *args: object, is_config_error: bool = False) -> None:
@@ -335,7 +336,14 @@ def evaluate_node(
             )
             if suggestions:
                 msg += f". Did you mean: {', '.join(suggestions)}?"
-            raise MissingFieldError(msg, is_config_error=bool(suggestions))
+            # A dotless reference against namespaced content can never resolve,
+            # for any record. Deciding this from `suggestions` instead would key
+            # on whether *this* record happens to carry the field, so one broken
+            # guard would filter some records and pass others.
+            is_flat_reference = "." not in node.field_path and (
+                isinstance(data, dict) and any(isinstance(v, dict) for v in data.values())
+            )
+            raise MissingFieldError(msg, is_config_error=is_flat_reference)
         return value
 
     if isinstance(node, LiteralNode):

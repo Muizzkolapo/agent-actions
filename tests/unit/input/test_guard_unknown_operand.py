@@ -152,6 +152,34 @@ class TestAConfigErrorIsNotAnUnknownValue:
             evaluate_node(node, self.NAMESPACED, None)
         assert exc.value.is_config_error is True
 
+    def test_the_same_broken_guard_classifies_the_same_for_every_record(self):
+        """Config-ness must come from the reference, not from what a record holds.
+
+        Deciding it from "does this record have the field somewhere" would make
+        one misconfigured guard filter some records and pass others.
+        """
+        present = {"assess": {"severity": "low", "ok": "yes"}}
+        absent = {"assess": {"ok": "yes"}}
+        nested = {"assess": {"ok": "yes", "meta": {"severity": "low"}}}
+        flags = []
+        for data in (present, absent, nested):
+            with pytest.raises(MissingFieldError) as exc:
+                evaluate_node(_eq("severity", "high"), data, None)
+            flags.append(exc.value.is_config_error)
+        assert flags == [True, True, True], (
+            f"same clause, three records, inconsistent classification: {flags}"
+        )
+
+    def test_a_flat_reference_stays_a_config_error_when_the_other_side_is_true(self):
+        """The record that lacks the field entirely must not slip through."""
+        node = LogicalNode(
+            left=_eq("severity", "high"),
+            operator=LogicalOperator.OR,
+            right=_eq("assess.ok", "yes"),
+        )
+        with pytest.raises(MissingFieldError):
+            evaluate_node(node, {"assess": {"ok": "yes"}}, None)
+
     def test_a_genuinely_missing_field_is_not_a_config_error(self):
         with pytest.raises(MissingFieldError) as exc:
             evaluate_node(_eq("broken.field", "high"), DATA, None)
