@@ -15,9 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 class MissingFieldError(ValueError):
-    """Raised when a guard condition references a field that doesn't exist in the data."""
+    """Raised when a guard condition references a field that doesn't exist in the data.
 
-    pass
+    ``is_config_error`` marks a dotless reference against namespaced content:
+    the condition names a field without its namespace prefix, so it can never
+    resolve for any record.  Decided from the shape of the context, never from
+    whether one record carries the field — otherwise the same broken guard
+    would filter some records and pass others.
+    """
+
+    def __init__(self, *args: object, is_config_error: bool = False) -> None:
+        super().__init__(*args)
+        self.is_config_error = is_config_error
 
 
 class GuardSemanticError(ValueError):
@@ -70,9 +79,33 @@ _TYPE_CHECKED_OPERATOR_NAMES = frozenset({"EQ", "NE", "LT", "LE", "GT", "GE"})
 _TYPE_MISMATCH_SEEN: set[tuple[str, str, str, str]] = set()
 _TYPE_MISMATCH_SEEN_MAX = 1024
 
+_UNRESOLVABLE_SEEN: set[str] = set()
+_UNRESOLVABLE_SEEN_MAX = 1024
+
 
 def _reset_type_mismatch_warnings() -> None:
     _TYPE_MISMATCH_SEEN.clear()
+    _UNRESOLVABLE_SEEN.clear()
+
+
+def _warn_unresolvable_operand(node: "LogicalNode", error: "MissingFieldError") -> None:
+    """Announce an operand the other side had to decide for.
+
+    Returning the right answer quietly would still hide a broken guard — the
+    condition works today only because the surviving operand happens to settle
+    it, and stops working the moment that changes.  Deduped per clause: guards
+    run once per record, so an undeduped warning is one line per record.
+    """
+    clause = format_node(node)
+    if clause in _UNRESOLVABLE_SEEN or len(_UNRESOLVABLE_SEEN) >= _UNRESOLVABLE_SEEN_MAX:
+        return
+    _UNRESOLVABLE_SEEN.add(clause)
+    logger.warning(
+        "Guard condition %s: an operand could not be resolved, so the other "
+        "operand decided the result. Fix the reference — %s",
+        clause,
+        error,
+    )
 
 
 def _warn_comparison_type_mismatch(
@@ -303,7 +336,14 @@ def evaluate_node(
             )
             if suggestions:
                 msg += f". Did you mean: {', '.join(suggestions)}?"
-            raise MissingFieldError(msg)
+            # A dotless reference against namespaced content can never resolve,
+            # for any record. Deciding this from `suggestions` instead would key
+            # on whether *this* record happens to carry the field, so one broken
+            # guard would filter some records and pass others.
+            is_flat_reference = "." not in node.field_path and (
+                isinstance(data, dict) and any(isinstance(v, dict) for v in data.values())
+            )
+            raise MissingFieldError(msg, is_config_error=is_flat_reference)
         return value
 
     if isinstance(node, LiteralNode):
@@ -348,23 +388,38 @@ def evaluate_node(
             return False
 
     if isinstance(node, LogicalNode):
-        left_result = evaluate_node(node.left, data, functions)
-
         if node.operator == LogicalOperator.NOT:
-            return not left_result
-        if node.operator == LogicalOperator.AND:
-            if not left_result:
-                return False
-            if node.right is None:
-                raise ValueError("AND operator requires a right operand")
-            return evaluate_node(node.right, data, functions)
-        if node.operator == LogicalOperator.OR:
-            if left_result:
-                return True
-            if node.right is None:
-                raise ValueError("OR operator requires a right operand")
-            return evaluate_node(node.right, data, functions)
-        raise ValueError(f"Unknown logical operator: {node.operator}")
+            return not evaluate_node(node.left, data, functions)
+        if node.operator not in (LogicalOperator.AND, LogicalOperator.OR):
+            raise ValueError(f"Unknown logical operator: {node.operator}")
+
+        # SQL-style guards follow SQL's three-valued logic: an operand that
+        # cannot be resolved is UNKNOWN, not an immediate failure, because the
+        # surviving operand may still decide the result on its own.
+        unknown: MissingFieldError | None = None
+        try:
+            left_result = evaluate_node(node.left, data, functions)
+        except MissingFieldError as e:
+            if e.is_config_error:
+                raise
+            unknown = e
+        else:
+            decided = left_result if node.operator == LogicalOperator.OR else not left_result
+            if decided:
+                return node.operator == LogicalOperator.OR
+
+        if node.right is None:
+            raise ValueError(f"{node.operator.name} operator requires a right operand")
+        right_result = evaluate_node(node.right, data, functions)
+
+        if unknown is None:
+            return right_result
+
+        decided = right_result if node.operator == LogicalOperator.OR else not right_result
+        if decided:
+            _warn_unresolvable_operand(node, unknown)
+            return node.operator == LogicalOperator.OR
+        raise unknown
 
     if isinstance(node, FunctionNode):
         args = [evaluate_node(arg, data, functions) for arg in node.arguments]
