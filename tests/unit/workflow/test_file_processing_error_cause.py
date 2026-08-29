@@ -1,13 +1,9 @@
 """The error raised when every input file fails must name why they failed.
 
-``process_files`` collects each per-file exception into ``processing_errors``
-and logs it, then raises a ``DependencyError`` built from counts alone.  That
-exception is what the CLI prints and what ``_handle_run_failure`` stores as the
-node-level ``failed`` disposition, so the real cause — a missing UDF, an
-undefined template variable — reaches the log file and nothing else.
-
-All three collectors (storage backend, merged upstreams, single directory)
-build the same list and drop it the same way, so each is covered here.
+That exception is what the CLI prints and what ``_handle_run_failure`` stores
+as the node-level ``failed`` disposition, so a cause it omits reaches the log
+file and nothing else.  All three collectors (storage backend, merged
+upstreams, single directory) collect and drop the causes the same way.
 """
 
 from __future__ import annotations
@@ -196,6 +192,7 @@ class TestTheCauseReachesTheStoredDisposition:
         raised = exc_info.value
 
         deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = MagicMock()
         deps.action_runner = MagicMock()
         deps.action_runner.storage_backend = backend
         executor = ActionExecutor(deps)

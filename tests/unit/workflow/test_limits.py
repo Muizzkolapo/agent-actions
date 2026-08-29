@@ -64,7 +64,7 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        _found, processed = process_directory_files(
+        _found, processed, _errors = process_directory_files(
             runner, input_dir, output, str(input_dir), params, set()
         )
         assert processed == 2
@@ -87,7 +87,7 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        _found, processed = process_directory_files(
+        _found, processed, _errors = process_directory_files(
             runner, input_dir, output, str(input_dir), params, set()
         )
         assert processed == 5
@@ -109,7 +109,7 @@ class TestFileLimitDirectoryFiles:
         params.idx = 0
         params.file_type_filter = None
 
-        _found, processed = process_directory_files(
+        _found, processed, _errors = process_directory_files(
             runner, input_dir, output, str(input_dir), params, set()
         )
         assert processed == 3
@@ -142,7 +142,7 @@ class TestFileLimitMergedFiles:
         params.strategy = MagicMock()
         params.idx = 0
 
-        _found, processed = process_merged_files(runner, params)
+        _found, processed, _errors = process_merged_files(runner, params)
         assert processed == 2
         assert runner._process_single_file.call_count == 2
 
