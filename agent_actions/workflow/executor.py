@@ -58,9 +58,14 @@ def _compute_action_config_hash(
 ) -> str:
     """Compute a deterministic hash of semantically-meaningful action config.
 
-    Covers: prompt reference, model, schema reference, guard clause + behavior.
-    Changes to these fields invalidate prior results.
+    Covers: prompt reference, schema reference, guard clause + behavior.
     Cosmetic fields (description, tags) are excluded.
+
+    NOT the model: the ``"model"`` key below is permanently ``""`` because
+    configs declare ``model_vendor``/``model_name``.  It is kept so the digest
+    does not rotate.  A model change is caught by comparing those two fields
+    against the completion stamp in ``_maybe_invalidate_completed_status`` —
+    do not delete that as redundant.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
@@ -69,7 +74,7 @@ def _compute_action_config_hash(
 
     hash_input = {
         "prompt": action_config.get("prompt", ""),
-        "model": action_config.get("model", ""),
+        "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
@@ -222,6 +227,8 @@ class ActionExecutor:
         return {
             "record_limit": cfg.get("record_limit"),
             "file_limit": cfg.get("file_limit"),
+            "model_name": cfg.get("model_name"),
+            "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
         }
 
@@ -237,13 +244,27 @@ class ActionExecutor:
             "record_limit"
         ) or details.get("file_limit") != action_config.get("file_limit")
 
+        # The hash cannot cover the model: it reads a "model" key, and configs
+        # write model_name/model_vendor. Adding them to the hash input would
+        # change every stored digest at once and re-run every workflow. Compared
+        # from the stamp instead, and only when one was written, so state that
+        # predates the stamp is grandfathered rather than mass-invalidated.
+        model_changed = any(
+            details.get(key) is not None and details.get(key) != action_config.get(key)
+            for key in ("model_name", "model_vendor")
+        )
+
         config_hash = _compute_action_config_hash(action_config)
         stored_hash = details.get("config_hash")
         config_changed = stored_hash is not None and stored_hash != config_hash
 
-        if limits_changed or config_changed:
+        if limits_changed or config_changed or model_changed:
             reason = (
-                "limit config" if limits_changed else "action config (prompt/model/schema/guard)"
+                "limit config"
+                if limits_changed
+                else "model"
+                if model_changed
+                else "action config (prompt/schema/guard)"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
@@ -260,9 +281,27 @@ class ActionExecutor:
         completed but has no output in the storage backend.  Called from
         the level executor before filtering pending actions so that stale
         'completed' upstreams are re-run before their dependents need them.
+
+        The config check lives here rather than in the callers because this is
+        the only thing a run loop calls for a completed action — a caller that
+        checked output first would make it unreachable, which is what happened.
         """
+        if not self._still_matches_its_config(action_name):
+            return False
         should_skip, _ = self._verify_completion_status(action_name)
         return should_skip
+
+    def _still_matches_its_config(self, action_name: str) -> bool:
+        """False if the action's config changed since it completed (and resets it)."""
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        action_config = configs.get(action_name)
+        if action_config is None:
+            return True
+        current = self.deps.state_manager.get_status(action_name)
+        return (
+            self._maybe_invalidate_completed_status(action_name, action_config, current)
+            in COMPLETED_STATUSES
+        )
 
     def _verify_completion_status(
         self, action_name: str
