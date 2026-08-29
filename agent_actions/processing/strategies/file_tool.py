@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Sequence
 from typing import Any, cast
 
 from agent_actions.errors import AgentActionsError
@@ -27,6 +28,26 @@ from agent_actions.workflow.pipeline_file_mode import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _accounted_source_guids(
+    structured_data: list[dict[str, Any]],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    records: list[dict[str, Any]],
+) -> set[str | None]:
+    """Source guids an output accounts for, including every contributor to a collapse.
+
+    A many-to-one output inherits only its *first* parent's guid, so reading
+    structured_data alone reports the other contributors as dropped. The mapping
+    holds the full index list, which is the only place the rest survive.
+    """
+    accounted: set[str | None] = {item.get("source_guid") for item in structured_data}
+    for src in (source_mapping or {}).values():
+        indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
+        for idx in indices:
+            if isinstance(idx, int) and 0 <= idx < len(records):
+                accounted.add(records[idx].get("source_guid"))
+    return accounted
 
 
 class FileToolStrategy:
@@ -145,7 +166,7 @@ class FileToolStrategy:
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
             missing_results: list[ProcessingResult] = []
             if not is_expansion and not has_synthetic:
-                output_guids = {item.get("source_guid") for item in structured_data}
+                output_guids = _accounted_source_guids(structured_data, source_mapping, records)
                 for input_record in records:
                     rid = input_record.get("source_guid")
                     if rid and rid not in output_guids:
