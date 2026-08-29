@@ -42,5 +42,10 @@ REPROMPT_EXHAUSTED = "reprompt_exhausted"
 UNPROCESSED = "unprocessed"
 PARSE_ERROR = "parse_error"
 
+# -- Action-level halt markers -----------------------------------------------
+# Node-level disposition ``detail``; read on the next run to tell a deliberate
+# halt from a transient failure worth retrying.
+HALTED_ON_EXHAUSTED = "halted_on_exhausted"
+
 # -- Action-level skip reasons -----------------------------------------------
 GUARD_FILTERED_ALL = "All records guard-filtered — no output produced"

@@ -26,12 +26,16 @@ def load_workflow(
     use_tools: bool = False,
     fresh: bool = False,
     verify_keys: bool = False,
+    read_only: bool = False,
 ) -> AgentWorkflow:
     """Load and return an initialized AgentWorkflow.
 
     Handles config file resolution, template rendering, and workflow
     construction.  Callers can access ``workflow.execution_order``,
     ``workflow.run()``, etc. on the returned object.
+
+    Pass ``read_only`` when the command only inspects persisted state — the
+    startup reset would otherwise clear the statuses and dispositions it reads.
     """
     from agent_actions.config.project_paths import find_config_file
     from agent_actions.prompt.renderer import ConfigRenderingService
@@ -64,7 +68,8 @@ def load_workflow(
             fresh=fresh,
             verify_keys=verify_keys,
             project_root=project_root,
-        )
+        ),
+        read_only=read_only,
     )
 
 

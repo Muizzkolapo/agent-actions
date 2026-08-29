@@ -12,7 +12,12 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import ConfigurationError, RecordContextError, SchemaValidationError
+from agent_actions.errors import (
+    ConfigurationError,
+    RecordContextError,
+    SchemaValidationError,
+    raised_by_exhaustion_policy,
+)
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.logging.core.manager import fire_event
@@ -208,7 +213,7 @@ class OnlineLLMStrategy:
         Record-specific errors (RecordContextError, TemplateVariableError
         with missing vars) produce tombstones and continue. Action-fatal
         errors (ConfigurationError, TemplateSyntaxError, EmptyOutputError,
-        SchemaValidationError) re-raise.
+        SchemaValidationError, and any ``on_exhausted: raise`` halt) re-raise.
         """
         start_time = datetime.now(UTC)
 
@@ -292,6 +297,11 @@ class OnlineLLMStrategy:
             except SchemaValidationError:
                 raise
             except Exception as e:
+                # An on_exhausted: raise halt is action-fatal by definition —
+                # the config asked the run to stop. Flattening it into a record
+                # result discards the policy with the exception.
+                if raised_by_exhaustion_policy(e):
+                    raise
                 logger.exception(
                     "[%s] Error processing item %d: %s",
                     context.agent_name,

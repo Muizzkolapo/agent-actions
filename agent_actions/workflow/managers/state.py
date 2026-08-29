@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+from collections.abc import Container
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -170,7 +171,10 @@ class ActionStateManager:
         return [agent for agent in agents if self.is_skipped(agent)]
 
     def _bulk_transition(
-        self, from_statuses: frozenset[ActionStatus] | set[ActionStatus], to_status: ActionStatus
+        self,
+        from_statuses: frozenset[ActionStatus] | set[ActionStatus],
+        to_status: ActionStatus,
+        exclude: Container[str] = (),
     ) -> list[str]:
         """Transition all actions matching *from_statuses* to *to_status*.
 
@@ -181,7 +185,7 @@ class ActionStateManager:
             affected = [
                 name
                 for name, details in self.action_status.items()
-                if details.get("status") in from_statuses
+                if details.get("status") in from_statuses and name not in exclude
             ]
             for name in affected:
                 self.action_status[name]["status"] = to_status
@@ -210,15 +214,16 @@ class ActionStateManager:
         """
         return self._mark_running_as(ActionStatus.INTERRUPTED)
 
-    def reset_retryable(self) -> list[str]:
+    def reset_retryable(self, exclude: Container[str] = ()) -> list[str]:
         """Reset retryable actions to PENDING for re-run.
 
         Called at workflow startup so that re-runs retry failed, skipped,
         in-progress, and partially-failed actions while preserving fully
         completed results.  Callers should clear storage dispositions for
-        the returned action names.
+        the returned action names, and name in *exclude* any action whose
+        state must be preserved rather than retried.
         """
-        return self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING)
+        return self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING, exclude=exclude)
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses (current actions only)."""

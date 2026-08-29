@@ -18,6 +18,7 @@ from agent_actions.validation.preflight.guard_validation import validate_guard_c
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.execution_events import WorkflowEventLogger
+from agent_actions.workflow.executor import action_is_halted
 from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
@@ -33,8 +34,13 @@ logger = logging.getLogger(__name__)
 class AgentWorkflow:
     """Orchestrates multi-agent workflow execution."""
 
-    def __init__(self, config: WorkflowRuntimeConfig):
-        """Initialize workflow with configuration and dependencies."""
+    def __init__(self, config: WorkflowRuntimeConfig, *, read_only: bool = False):
+        """Initialize workflow with configuration and dependencies.
+
+        ``read_only`` is for callers that only inspect persisted state.  It
+        suppresses the startup reset, which would otherwise destroy the
+        dispositions and statuses they were opened to read.
+        """
         self.config = config
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console(stderr=True))
 
@@ -54,11 +60,7 @@ class AgentWorkflow:
             self.metadata, config, self.storage_backend, self.console
         )
 
-        # Fresh run: clear stored results + status before anything else
-        if config.fresh:
-            self._clear_for_fresh_run()
-        else:
-            self._reset_retryable_actions()
+        self._prepare_state(read_only=read_only)
 
         # Session
         self.workflow_session_id = self._generate_workflow_session_id()
@@ -92,6 +94,15 @@ class AgentWorkflow:
 
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)
+
+    def _prepare_state(self, *, read_only: bool) -> None:
+        """Reset persisted state for the coming run; a read-only load mutates nothing."""
+        if read_only:
+            return
+        if self.config.fresh:
+            self._clear_for_fresh_run()
+        else:
+            self._reset_retryable_actions()
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
@@ -166,7 +177,21 @@ class AgentWorkflow:
             for name in state_mgr.execution_order
             if state_mgr.get_status(name) in MID_PROCESSING_STATUSES
         }
-        reset_actions = state_mgr.reset_retryable()
+        halted = {
+            name
+            for name in state_mgr.execution_order
+            if state_mgr.get_status(name) == ActionStatus.FAILED
+            and action_is_halted(self.storage_backend, name)
+        }
+        if halted:
+            logger.warning(
+                "Not resetting %d action(s) halted by 'on_exhausted: raise': %s. "
+                "Inspect with 'agac dispositions', then resume with 'agac retry' "
+                "or start over with 'agac run --fresh'.",
+                len(halted),
+                sorted(halted),
+            )
+        reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:
             return
         for action_name in reset_actions:

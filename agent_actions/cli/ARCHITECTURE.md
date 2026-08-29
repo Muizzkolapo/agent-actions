@@ -169,6 +169,11 @@ The split is enforced at two points:
 
 Read-only commands must pass `auto_create=False` explicitly. Forgetting this means `agac schema -a foo` would create empty `agent_io/target/` directories as a side effect.
 
+They must also pass `read_only=True` to `load_workflow()`. Forgetting *that* is
+worse than a stray directory: `AgentWorkflow.__init__` otherwise resets every
+retryable action to PENDING and clears its dispositions, so the command destroys
+the state it was opened to read.
+
 ---
 
 ## `load_workflow()` Shared Helper
@@ -189,9 +194,21 @@ load_workflow(agent_name, paths, project_root, ...)
          fresh=...,
          verify_keys=...,
          project_root=...,
-       )
+       ),
+       read_only=...,            ← suppresses the startup state reset
      )
 ```
+
+| command | `read_only` | why |
+|---------|-------------|-----|
+| `run` | `False` | reset-before-execute is the intent |
+| `schema`, `dispositions` | `True` | pure reads |
+| `retry` | `True` | reads the disposition table *after* loading, then makes its own status transitions |
+
+`retry` is the case that shows why this matters: it calls `_find_failures()`
+after constructing the workflow, so with the reset in place it reported
+"No failed records ... Nothing to retry" about rows its own constructor had
+just deleted.
 
 The inspect commands do NOT use this helper -- `BaseInspectCommand._load_workflow()` has its own copy of this logic because it omits `output_dir` from the rendering step and always sets `use_tools=False`.
 

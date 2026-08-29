@@ -369,6 +369,7 @@ class TestWriteFailedDisposition:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_FAILED,
             reason="Some error",
+            detail=None,
         )
 
     def test_logs_warning_on_storage_error(self, executor, mock_deps, caplog):
@@ -457,6 +458,7 @@ class TestZeroSuccessCircuitBreakerChain:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_FAILED,
             reason=str(error),
+            detail=None,
         )
         # Result indicates failure
         assert result.success is False
@@ -725,6 +727,7 @@ class TestTotalFailureEscalation:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_FAILED,
             reason="Action 'agent_a' failed: all records produced errors"[:500],
+            detail=None,
         )
 
     @patch("agent_actions.workflow.executor.fire_event")

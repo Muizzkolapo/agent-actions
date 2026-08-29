@@ -15,6 +15,7 @@ from rich.table import Table
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.record.reasons import HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     FAILURE_DISPOSITIONS,
@@ -45,7 +46,7 @@ class DispositionsCommand:
         )
         backend.initialize()
 
-        workflow = load_workflow(self.agent_name, paths, project_root)
+        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
         execution_order = list(workflow.execution_order)
 
         if self.action_filter:
@@ -98,10 +99,51 @@ class DispositionsCommand:
                 str(total),
             )
 
+        action_level = self._action_level_rows(backend, actions)
+
         if table.row_count:
             self.console.print(table)
-        else:
+        elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
+
+        self._show_action_level(action_level)
+
+    @staticmethod
+    def _action_level_rows(backend, actions: list[str]) -> list[tuple[str, dict]]:
+        """Node-level dispositions, which describe the action rather than a record."""
+        found = []
+        for action in actions:
+            for row in backend.get_disposition(action, record_id=NODE_LEVEL_RECORD_ID):
+                found.append((action, row))
+        return found
+
+    def _show_action_level(self, rows: list[tuple[str, dict]]) -> None:
+        """Render action-level state, which the per-record table cannot show.
+
+        Without this an action whose only row is a halt is absent from the
+        output entirely, since the summary skips actions with no record rows.
+        """
+        if not rows:
+            return
+        table = Table(title="Action-level state")
+        table.add_column("Action", style="cyan")
+        table.add_column("State", style="red")
+        table.add_column("Reason")
+
+        halted = False
+        for action, row in rows:
+            state = row.get("disposition", "unknown")
+            if row.get("detail") == HALTED_ON_EXHAUSTED:
+                state = f"{state} (halted)"
+                halted = True
+            table.add_row(action, state, (row.get("reason") or "")[:100])
+
+        self.console.print(table)
+        if halted:
+            self.console.print(
+                "[yellow]A halted action is not re-run by 'agac run'. Resume it with "
+                "'agac retry', or start over with 'agac run --fresh'.[/yellow]"
+            )
 
     def _show_quarantined(self, backend, actions: list[str]) -> None:
         """Show details of failed/exhausted/unprocessed records."""
@@ -127,10 +169,14 @@ class DispositionsCommand:
                     (row.get("reason") or "")[:60],
                 )
 
+        action_level = self._action_level_rows(backend, actions)
+
         if found:
             self.console.print(table)
-        else:
+        elif not action_level:
             self.console.print("[green]No quarantined records found.[/green]")
+
+        self._show_action_level(action_level)
 
 
 @click.command()
