@@ -83,6 +83,13 @@ def _apply_redaction_patterns(text: str, compiled_patterns: list[tuple[Pattern, 
     return result
 
 
+_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
+    "message",
+    "asctime",
+    "getMessage",
+}
+
+
 class RedactingFilter(logging.Filter):
     """Redacts sensitive information (API keys, tokens, etc.) from log records."""
 
@@ -122,36 +129,12 @@ class RedactingFilter(logging.Filter):
         """Redact sensitive data from extra fields in the log record."""
         sensitive_keys = ["api_key", "key", "token", "password", "secret", "authorization"]
 
-        standard_attrs = {
-            "name",
-            "msg",
-            "args",
-            "created",
-            "filename",
-            "funcName",
-            "levelname",
-            "levelno",
-            "lineno",
-            "module",
-            "msecs",
-            "message",
-            "pathname",
-            "process",
-            "processName",
-            "relativeCreated",
-            "thread",
-            "threadName",
-            "exc_info",
-            "exc_text",
-            "stack_info",
-            "getMessage",
-            "correlation_id",
-            "workflow_name",
-            "action_name",
-            "action_index",
-            "batch_id",
-            "item_id",
-        }
+        # Derived from a real LogRecord, not listed. The previous literal also
+        # named caller fields — correlation_id, workflow_name, action_name,
+        # action_index, batch_id, item_id — so anything logged under those names
+        # was never scanned. They are exactly the fields a caller controls, so
+        # they are exactly the ones that can carry a secret.
+        standard_attrs = _LOG_RECORD_ATTRS
 
         for attr in record.__dict__.keys():
             if attr in standard_attrs:

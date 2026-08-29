@@ -87,6 +87,24 @@ class TestIdentifiersSurvive:
         assert data["attempt"] == 2
 
 
+class TestStructuredValuesSurviveWhole:
+    """Real call sites pass dicts and lists, not only scalars.
+
+    A copy restricted to scalars passes every other test here while silently
+    dropping guard context, upstream dirs and error details at live sites.
+    """
+
+    def test_a_dict_value_is_kept(self):
+        data = _emit({"operation": "guard_evaluation", "error_details": {"field": "x", "n": 2}})
+
+        assert data["error_details"] == {"field": "x", "n": 2}
+
+    def test_a_list_value_is_kept(self):
+        data = _emit({"operation": "x", "upstream_data_dirs": ["/a", "/b"]})
+
+        assert data["upstream_data_dirs"] == ["/a", "/b"]
+
+
 class TestTheOriginalThreeStillWork:
     def test_operation_action_and_workflow_are_unchanged(self):
         data = _emit(
@@ -127,7 +145,52 @@ class TestWideningTheCopyDoesNotWidenExposure:
         assert data["custom_id"] == "req-1"
         assert data["api_key"] == "[REDACTED]"
 
+    @pytest.mark.parametrize(
+        "field", ["batch_id", "item_id", "correlation_id", "action_index", "workflow_name"]
+    )
+    def test_a_secret_in_a_caller_named_field_is_redacted(self, field):
+        """These names were on the filter's skip list.
+
+        They are caller-controlled — exactly the fields that can carry a secret —
+        and before this change they were persisted without ever being scanned.
+        """
+        data = _emit({"operation": "x", field: "sk-ant-" + "A" * 24}, redact=True)
+
+        assert data[field] == "sk-ant-***", data
+
     def test_the_raw_secret_appears_nowhere_in_the_event(self):
         data = _emit({"operation": "x", "api_key": "sk-SECRET-123"}, redact=True)
 
         assert not any("sk-SECRET-123" in str(v) for v in data.values())
+
+
+class TestAFormattedRecordDoesNotLeakItsRendering:
+    """A Formatter permanently sets record.message/asctime.
+
+    Not reachable in-tree today (the bridge is the only handler on
+    agent_actions), but the union guarding those two names is otherwise
+    unpinned, so a future child handler with its own formatter would start
+    persisting the rendered message as data.
+    """
+
+    def test_message_and_asctime_are_not_copied(self):
+        import logging as _logging
+
+        capture = _Capture()
+        EventManager.get().register(capture)
+        handler = LoggingBridgeHandler()
+        logger = _logging.getLogger("agent_actions.processing.formatted")
+        logger.setLevel(_logging.DEBUG)
+        logger.handlers = [handler]
+        logger.propagate = False
+
+        record = logger.makeRecord(
+            logger.name, _logging.ERROR, "f", 1, "boom", (), None, extra={"custom_id": "c"}
+        )
+        _logging.Formatter("%(asctime)s %(message)s").format(record)
+        handler.emit(record)
+
+        data = capture.events[-1].data
+        assert data["custom_id"] == "c"
+        assert "message" not in data
+        assert "asctime" not in data
