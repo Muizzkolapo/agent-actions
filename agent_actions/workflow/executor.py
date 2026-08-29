@@ -423,11 +423,7 @@ class ActionExecutor:
 
         final_status = self._resolve_completion_status(params.action_name)
 
-        # check_batch_submission returns None for run_mode: online, so a status
-        # here means the action ran in batch. Without it the same all-filtered
-        # action renders with or without "(batch)" depending on which round
-        # caught it.
-        execution_mode = "batch" if batch_status is not None else None
+        execution_mode = "batch" if params.action_config.get("run_mode") == RunMode.BATCH else None
 
         if final_status == ActionStatus.SKIPPED:
             return self._handle_guard_all_filtered(
