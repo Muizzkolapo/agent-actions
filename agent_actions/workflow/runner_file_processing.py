@@ -90,9 +90,9 @@ def _raise_all_files_failed(
 ) -> None:
     """Raise DependencyError when files were found but all failed processing.
 
-    The causes lead the message: every reader truncates it — the run summary at
-    80 characters, ``agac dispositions`` at 60 — so anything placed after the
-    counts is invisible.
+    The causes lead the message: the views that render it truncate it — the run
+    summary at 80 characters, ``agac dispositions`` at 60 — so anything placed
+    after the counts is invisible there.
 
     The total is ``files_found``, never ``len(processing_errors)``, which the
     collectors cap at ``_MAX_TRACKED_ERRORS``.  Nothing was processed here and
