@@ -33,8 +33,13 @@ logger = logging.getLogger(__name__)
 class AgentWorkflow:
     """Orchestrates multi-agent workflow execution."""
 
-    def __init__(self, config: WorkflowRuntimeConfig):
-        """Initialize workflow with configuration and dependencies."""
+    def __init__(self, config: WorkflowRuntimeConfig, *, read_only: bool = False):
+        """Initialize workflow with configuration and dependencies.
+
+        ``read_only`` is for callers that only inspect persisted state.  It
+        suppresses the startup reset, which would otherwise destroy the
+        dispositions and statuses they were opened to read.
+        """
         self.config = config
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console(stderr=True))
 
@@ -54,11 +59,7 @@ class AgentWorkflow:
             self.metadata, config, self.storage_backend, self.console
         )
 
-        # Fresh run: clear stored results + status before anything else
-        if config.fresh:
-            self._clear_for_fresh_run()
-        else:
-            self._reset_retryable_actions()
+        self._prepare_state(read_only=read_only)
 
         # Session
         self.workflow_session_id = self._generate_workflow_session_id()
@@ -92,6 +93,15 @@ class AgentWorkflow:
 
     def _validate_guard_conditions(self) -> list[str]:
         return validate_guard_conditions(self.action_configs)
+
+    def _prepare_state(self, *, read_only: bool) -> None:
+        """Reset persisted state for the coming run; a read-only load mutates nothing."""
+        if read_only:
+            return
+        if self.config.fresh:
+            self._clear_for_fresh_run()
+        else:
+            self._reset_retryable_actions()
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""

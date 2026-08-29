@@ -122,7 +122,10 @@ class RetryCommand:
                 f"Proceeding with retry.[/cyan]"
             )
 
-        workflow = load_workflow(self.agent_name, paths, project_root)
+        # read_only in BOTH modes: _find_failures below reads the disposition
+        # rows the startup reset would have cleared, and the non-dry-run path
+        # makes its own status transitions once it knows what to retry.
+        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
         execution_order = list(workflow.execution_order)
 
         failures = self._find_failures(backend, execution_order)

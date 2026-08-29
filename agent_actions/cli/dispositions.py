@@ -45,7 +45,7 @@ class DispositionsCommand:
         )
         backend.initialize()
 
-        workflow = load_workflow(self.agent_name, paths, project_root)
+        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
         execution_order = list(workflow.execution_order)
 
         if self.action_filter:

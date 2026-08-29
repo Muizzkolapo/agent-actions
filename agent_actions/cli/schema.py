@@ -44,6 +44,7 @@ class SchemaCommand:
             paths,
             project_root,
             user_code_path=str(self.user_code) if self.user_code else None,
+            read_only=True,
         )
 
         workflow_config = WorkflowSchemaService.build_workflow_config(
