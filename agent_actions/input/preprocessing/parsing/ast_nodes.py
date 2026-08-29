@@ -75,6 +75,21 @@ def _reset_type_mismatch_warnings() -> None:
     _TYPE_MISMATCH_SEEN.clear()
 
 
+def _warn_unresolvable_operand(node: "LogicalNode", error: "MissingFieldError") -> None:
+    """Announce an operand the other side had to decide for.
+
+    Returning the right answer quietly would still hide a broken guard — the
+    condition works today only because the surviving operand happens to settle
+    it, and stops working the moment that changes.
+    """
+    logger.warning(
+        "Guard %s: one operand could not be resolved, so the other decided the "
+        "result. Fix the reference — %s",
+        node.operator.name,
+        error,
+    )
+
+
 def _warn_comparison_type_mismatch(
     node: "ComparisonNode", left_value: Any, right_value: Any
 ) -> None:
@@ -348,23 +363,36 @@ def evaluate_node(
             return False
 
     if isinstance(node, LogicalNode):
-        left_result = evaluate_node(node.left, data, functions)
-
         if node.operator == LogicalOperator.NOT:
-            return not left_result
-        if node.operator == LogicalOperator.AND:
-            if not left_result:
-                return False
-            if node.right is None:
-                raise ValueError("AND operator requires a right operand")
-            return evaluate_node(node.right, data, functions)
-        if node.operator == LogicalOperator.OR:
-            if left_result:
-                return True
-            if node.right is None:
-                raise ValueError("OR operator requires a right operand")
-            return evaluate_node(node.right, data, functions)
-        raise ValueError(f"Unknown logical operator: {node.operator}")
+            return not evaluate_node(node.left, data, functions)
+        if node.operator not in (LogicalOperator.AND, LogicalOperator.OR):
+            raise ValueError(f"Unknown logical operator: {node.operator}")
+
+        # SQL-style guards follow SQL's three-valued logic: an operand that
+        # cannot be resolved is UNKNOWN, not an immediate failure, because the
+        # surviving operand may still decide the result on its own.
+        unknown: MissingFieldError | None = None
+        try:
+            left_result = evaluate_node(node.left, data, functions)
+        except MissingFieldError as e:
+            unknown = e
+        else:
+            decided = left_result if node.operator == LogicalOperator.OR else not left_result
+            if decided:
+                return node.operator == LogicalOperator.OR
+
+        if node.right is None:
+            raise ValueError(f"{node.operator.name} operator requires a right operand")
+        right_result = evaluate_node(node.right, data, functions)
+
+        if unknown is None:
+            return right_result
+
+        _warn_unresolvable_operand(node, unknown)
+        decided = right_result if node.operator == LogicalOperator.OR else not right_result
+        if decided:
+            return node.operator == LogicalOperator.OR
+        raise unknown
 
     if isinstance(node, FunctionNode):
         args = [evaluate_node(arg, data, functions) for arg in node.arguments]
