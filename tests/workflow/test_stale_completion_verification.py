@@ -37,6 +37,9 @@ def _make_executor(storage_has_data: bool) -> ActionExecutor:
     storage_backend.list_target_files.return_value = ["output.json"] if storage_has_data else []
     storage_backend.has_disposition.return_value = False
     action_runner.storage_backend = storage_backend
+    # No known config: these cases exercise the storage check in isolation.
+    # The config-change check is covered in test_config_change_reruns_action.py.
+    action_runner.action_configs = {}
 
     deps = ExecutorDependencies(
         action_runner=action_runner,

@@ -260,9 +260,27 @@ class ActionExecutor:
         completed but has no output in the storage backend.  Called from
         the level executor before filtering pending actions so that stale
         'completed' upstreams are re-run before their dependents need them.
+
+        The config check lives here rather than in the callers because this is
+        the only thing a run loop calls for a completed action — a caller that
+        checked output first would make it unreachable, which is what happened.
         """
+        if not self._still_matches_its_config(action_name):
+            return False
         should_skip, _ = self._verify_completion_status(action_name)
         return should_skip
+
+    def _still_matches_its_config(self, action_name: str) -> bool:
+        """False if the action's config changed since it completed (and resets it)."""
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        action_config = configs.get(action_name)
+        if action_config is None:
+            return True
+        current = self.deps.state_manager.get_status(action_name)
+        return (
+            self._maybe_invalidate_completed_status(action_name, action_config, current)
+            in COMPLETED_STATUSES
+        )
 
     def _verify_completion_status(
         self, action_name: str
