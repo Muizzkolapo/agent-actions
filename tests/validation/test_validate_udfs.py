@@ -103,6 +103,14 @@ _CONFIG_MANAGER = "agent_actions.validation.validate_udfs.ConfigManager"
 _DISCOVER = "agent_actions.validation.validate_udfs.discover_udfs"
 _VALIDATE_REFS = "agent_actions.validation.validate_udfs.validate_udf_references"
 _CLEAR_REGISTRY = "agent_actions.validation.validate_udfs.clear_registry"
+# These cases mock the whole config layer, so the structural pass has no real
+# project to read. `new=` rather than a plain patch so no extra mock argument
+# is injected into the existing signatures. The structural pass is covered
+# end-to-end in test_validate_udfs_is_a_complete_gate.py.
+_SKIP_STRUCTURAL = patch(
+    "agent_actions.validation.validate_udfs.ValidateUDFsCommand._run_structural_preflight",
+    new=lambda self: None,
+)
 
 
 def _mock_paths(tmp_path: Path, agent_name: str = "my_agent") -> MagicMock:
@@ -123,6 +131,7 @@ class TestValidate:
     @patch(_VALIDATE_REFS)
     @patch(_DISCOVER)
     @patch(_CONFIG_MANAGER)
+    @_SKIP_STRUCTURAL
     @patch(_PATHS_FACTORY)
     def test_happy_path(
         self, mock_pf, mock_cm_cls, mock_discover, mock_validate_refs, mock_clear, tmp_path
@@ -225,6 +234,7 @@ class TestValidate:
     @patch(_VALIDATE_REFS)
     @patch(_DISCOVER)
     @patch(_CONFIG_MANAGER)
+    @_SKIP_STRUCTURAL
     @patch(_PATHS_FACTORY)
     def test_config_is_none_uses_empty_dict(
         self, mock_pf, mock_cm_cls, mock_discover, mock_validate_refs, mock_clear, tmp_path
