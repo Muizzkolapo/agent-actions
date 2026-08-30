@@ -143,7 +143,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 | Command | Description |
 |---------|-------------|
 | [`init`](./utilities#init) | Initialize a new project |
-| [`clean`](./utilities#clean) | Clean up generated files |
+| [`clean`](./utilities#clean) | Remove regenerable working directories (output/staging opt-in) |
 | [`docs`](./utilities#docs) | Generate documentation |
 | [`status`](./utilities#status) | Check agentic workflow status |
 | [`skills`](./skills) | Install AI assistant skills (Claude Code / Codex) |

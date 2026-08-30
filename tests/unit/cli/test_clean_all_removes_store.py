@@ -1,11 +1,4 @@
-"""Regression test: ``agac clean --all`` must remove the durable
-store — regardless of which backend owns it.
-
-Today the ``remove_all`` branch only appends ``staging/``; the durable store
-directory is silently preserved, so ``--all`` does not mean all and an old
-run's data pollutes the next. These tests pin two invariants:
-  * ``--all`` removes the store paths every registered backend owns.
-  * Plain ``clean`` (no ``--all``) stays source+target only.
+"""``agac clean --all`` must remove the durable store, whichever backend owns it.
 
 The cleaner delegates to ``StorageBackend.paths_to_wipe`` so future backends
 (DuckDB, Postgres, S3) are covered without editing the CLI.
@@ -64,13 +57,13 @@ def test_all_removes_store(tmp_path):
 
 
 def test_no_all_preserves_store(tmp_path):
-    """Baseline: without --all, only source+target are removed (store survives)."""
+    """Baseline: without --all, only source/ is removed (store survives)."""
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=False, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
     assert "store" not in names
     assert "staging" not in names
-    assert names == {"source", "target"}
+    assert names == {"source"}
 
 
 def test_all_confirmation_lists_store(tmp_path, monkeypatch, capsys):
