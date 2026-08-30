@@ -516,6 +516,32 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
 
         assert _run(_service(manager)) == ["batch_child_dead"]
 
+    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+    def test_a_dead_reprompt_leaves_the_parent_processable(self, dead):
+        """Only retry recoveries are continued from a dead batch.
+
+        A reprompt's still-failing records' last responses are not recoverable
+        from state — continuing one with no results would finalize on the
+        graduated records alone and silently drop the rest — so a dead
+        reprompt keeps the processed-from-scratch path.
+        """
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                f"{PARENT}_reprompt_1": _entry(
+                    "batch_reprompt_dead",
+                    dead,
+                    f"{PARENT}_reprompt_1",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_attempt=1,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_parent"]
+
     def test_an_unrecognised_status_leaves_the_parent_processable(self):
         """``BatchJobEntry`` warns on an unknown status but keeps it.
 
