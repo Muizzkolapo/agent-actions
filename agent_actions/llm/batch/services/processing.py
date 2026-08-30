@@ -68,6 +68,35 @@ from agent_actions.utils.path_utils import ensure_directory_exists
 logger = logging.getLogger(__name__)
 
 
+def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
+    """Registry keys that are no longer the live job for their parent.
+
+    A parent is superseded the moment it spawns a recovery; the recovery holds
+    its results. Earlier recovery attempts are superseded by later ones, and the
+    reprompt phase always follows the retry phase for the same parent.
+    """
+    live: dict[str, tuple[int, int, str]] = {}
+    for name, entry in jobs.items():
+        parent = entry.parent_file_name
+        if not parent:
+            continue
+        rank = (
+            1 if entry.recovery_type == RecoveryType.REPROMPT else 0,
+            entry.recovery_attempt or 0,
+            name,
+        )
+        if parent not in live or rank > live[parent]:
+            live[parent] = rank
+
+    superseded = set(live)
+    superseded.update(
+        name
+        for name, entry in jobs.items()
+        if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
+    )
+    return superseded
+
+
 class BatchProcessingService:
     """Service for processing batch job results.
 
@@ -181,6 +210,12 @@ class BatchProcessingService:
                 )
             file_name = entry.file_name
 
+            if file_name in _superseded_entries(manager.get_all_jobs()):
+                raise ProcessingError(
+                    "A later recovery batch supersedes this one — process that instead",
+                    context={"batch_id": batch_id, "file_name": file_name},
+                )
+
             output_file = self._process_single_batch_file(
                 batch_id=batch_id,
                 file_name=file_name,
@@ -237,23 +272,21 @@ class BatchProcessingService:
             )
 
         processed_files = []
-        # A spawned recovery leaves its parent COMPLETED forever, so re-reading
-        # the parent starts a second recovery at attempt 1 and retry_attempt
-        # never climbs to max_attempts.
-        superseded_by_recovery = {
-            entry.parent_file_name for entry in all_jobs.values() if entry.parent_file_name
-        }
+        # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
+        # one: that restarts recovery at attempt 1, or finalizes on stale results
+        # and deletes the live attempt. Stores written before this can hold them.
+        superseded = _superseded_entries(all_jobs)
         for file_name in all_jobs:
-            if file_name in superseded_by_recovery:
-                logger.info("Skipping %s: a recovery batch has taken it over", file_name)
+            if file_name in superseded:
+                logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
                 continue
 
-            # Processing one entry registers the next attempt and deletes
-            # finished siblings, so a snapshot batch_id may already be replaced —
-            # and an unregistered id has no client, which ends the run.
+            # The loop body replaces and deletes entries, so a snapshot batch_id
+            # can already be stale — and an unregistered id has no client, which
+            # ends the run rather than this batch.
             entry = manager.get_batch_job(file_name)
             if entry is None:
-                logger.info("Skipping %s: its registry entry is gone", file_name)
+                logger.info("Skipping %s: consumed earlier in this pass", file_name)
                 continue
 
             batch_id = entry.batch_id

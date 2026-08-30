@@ -608,9 +608,19 @@ def register_recovery_batch(
     recovery_type: RecoveryType,
     attempt: int,
 ) -> None:
-    """Register a new recovery batch entry in the manager."""
+    """Register a new recovery batch entry, replacing the attempt it supersedes.
+
+    One recovery state per parent means one live recovery batch per parent. Left
+    in place, a spent attempt is still COMPLETED, so the next run re-processes it
+    and finalizes on stale results — deleting the live attempt's entry, and with
+    it whatever that attempt recovered.
+    """
     batch_id, record_count = submission
     recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
+    for name, entry in manager.get_all_jobs().items():
+        if entry.parent_file_name == parent_file_name and name != recovery_file_name:
+            logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)
+            manager.remove_batch_job(name)
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,
         status=BatchStatus.SUBMITTED,
