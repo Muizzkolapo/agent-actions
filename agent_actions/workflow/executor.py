@@ -1278,13 +1278,19 @@ class ActionExecutor:
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         return str(agent_io_path / "target" / action_name)
 
-    def _batch_failure_totals(self, action_name: str) -> tuple[str, int]:
-        """``(batch_id, record_count)`` to report for a failed batch action.
+    def _batch_failure_totals(self, action_name: str) -> tuple[str, int] | None:
+        """``(batch_id, record_count)`` for a failed batch, or None if unknown.
 
         action_config carries no batch_id — nothing in production writes one —
-        so the registry is the only place the real id and record count live.
-        It is keyed by input file and one action can own several jobs, so the
-        count is summed; a lone job lends its id, several have no single id.
+        so the registry is the only place the real id and count live. It is
+        keyed by input file and one action owns a job per file, so counts are
+        summed over the original jobs only: recovery entries re-submit a subset
+        of a parent's records and would double-count them.
+
+        None means the registry could not answer. The caller then fires nothing
+        rather than inventing a total, on the same reasoning as
+        ``_count_records_for_action``: a fabricated count is indistinguishable
+        from a real one, and this is the count someone reads to size an outage.
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
@@ -1294,13 +1300,13 @@ class ActionExecutor:
             ).get_all_jobs()
         except Exception as read_err:
             logger.warning("Could not read batch registry for %s: %s", action_name, read_err)
-            return "", 1
+            return None
 
-        if not jobs:
-            return "", 1
-        entries = list(jobs.values())
-        batch_id = entries[0].batch_id if len(entries) == 1 else ""
-        return batch_id, sum(e.record_count or 0 for e in entries) or len(entries)
+        originals = [entry for entry in jobs.values() if entry.parent_file_name is None]
+        counted = [entry.record_count for entry in originals if entry.record_count]
+        if not counted or len(counted) != len(originals):
+            return None
+        return (originals[0].batch_id if len(originals) == 1 else ""), sum(counted)
 
     def _resolve_batch_outcome(
         self,
@@ -1323,8 +1329,10 @@ class ActionExecutor:
             final_status = self._resolve_completion_status(action_name)
 
             if final_status == ActionStatus.FAILED:
-                # No BatchCompleteEvent here: finalize_batch_output already fired
-                # one with the real batch_id and counts, on this same condition.
+                # No BatchCompleteEvent here: _process_batch_results ran on this
+                # same condition and finalize_batch_output fired one with the
+                # real batch_id and counts. (The no_batches passthrough branch
+                # reaches "completed" without it, and fires BatchPassthroughEvent.)
                 return self._finalize_total_failure(
                     action_name, wall_clock, output_folder, execution_mode="batch"
                 )
@@ -1370,17 +1378,27 @@ class ActionExecutor:
         # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
-        batch_id, record_count = self._batch_failure_totals(action_name)
-        fire_event(
-            BatchCompleteEvent(
-                batch_id=batch_id,
-                action_name=action_name,
-                total=record_count,
-                completed=0,
-                failed=record_count,
-                elapsed_time=duration,
+        totals = self._batch_failure_totals(action_name)
+        if totals is None:
+            # The registry cannot say how many records the batch held, and
+            # ActionFailedEvent already reports the failure itself, so there is
+            # nothing to add here that would not be guesswork.
+            logger.warning(
+                "No BatchCompleteEvent for %s: batch registry has no usable record count",
+                action_name,
             )
-        )
+        else:
+            batch_id, record_count = totals
+            fire_event(
+                BatchCompleteEvent(
+                    batch_id=batch_id,
+                    action_name=action_name,
+                    total=record_count,
+                    completed=0,
+                    failed=record_count,
+                    elapsed_time=duration,
+                )
+            )
         return ActionExecutionResult(
             success=False,
             status=ActionStatus.FAILED,

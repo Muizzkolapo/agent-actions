@@ -19,14 +19,16 @@ class TestHandleBatchCheckEventFiring:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock()
         deps.batch_manager = MagicMock()
-        # No registry entry: the failure path then reports the action without a
-        # batch id, which is the honest answer when the registry has nothing.
-        deps.batch_manager.job_manager._get_registry_manager.return_value = None
         deps.action_runner = MagicMock()
         deps.action_runner.workflow_name = "test_workflow"
         deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
         deps.action_runner.storage_backend.get_failed_items.return_value = []
         deps.action_runner.storage_backend.has_disposition.return_value = False
+        # An empty registry, stated explicitly. Left as a bare MagicMock this
+        # returns a Mock from load_metadata(), json.loads raises, and the read
+        # is swallowed — so the test would assert through the error handler
+        # instead of the no-registry path it means to describe.
+        deps.action_runner.storage_backend.load_metadata.return_value = None
         # Pre/post snapshots needed by _count_records_for_action.
         deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
         return deps
@@ -87,12 +89,8 @@ class TestHandleBatchCheckEventFiring:
         assert result.success is False
         assert result.status == ActionStatus.FAILED
 
-        # This is the only event-level signal on the failure path, so it must
-        # still fire — now sourced from the batch registry rather than from an
-        # action_config key nothing writes.
+        # The registry holds no record count, so there is no honest total to
+        # report. ActionFailedEvent carries the failure; a BatchCompleteEvent
+        # here could only invent one.
         fired = [c[0][0] for c in mock_fire.call_args_list]
-        events = [e for e in fired if isinstance(e, BatchCompleteEvent)]
-        assert len(events) == 1
-        assert events[0].action_name == "test_agent"
-        assert events[0].completed == 0
-        assert events[0].failed == events[0].total
+        assert [e for e in fired if isinstance(e, BatchCompleteEvent)] == []

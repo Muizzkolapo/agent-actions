@@ -137,14 +137,48 @@ class TestTheOneRealSignalCarriesRealData:
         assert events[0].failed == 7
         assert events[0].batch_id == "", "two jobs have no single batch id to name"
 
-    def test_it_still_fires_when_the_registry_has_no_entry(self, state_manager):
-        """Losing the signal entirely would be worse than losing its detail."""
+    def test_it_says_nothing_when_the_registry_cannot_give_a_count(self, state_manager):
+        """An invented total is indistinguishable from a real one.
+
+        This is the count someone reads to size an outage, and the empty
+        registry is reachable — a rebuilt store leaves an action stamped
+        BATCH_SUBMITTED with no jobs behind it. ``ActionFailedEvent`` still
+        reports the failure, so nothing is silenced by declining to guess.
+        """
         executor = _executor(state_manager, jobs=None)
+
+        assert _batch_events(_fire(executor, "failed")) == []
+
+    def test_it_ignores_recovery_entries_when_counting(self, state_manager):
+        """Recovery jobs re-submit a subset of a parent's records.
+
+        They live under their own registry key, so summing every entry counts
+        the retried records twice.
+        """
+        parent = BatchJobEntry(
+            batch_id="batch_parent",
+            status="failed",
+            timestamp="2026-08-30T09:00:00",
+            provider="ollama_cloud",
+            record_count=3,
+        )
+        retry = BatchJobEntry(
+            batch_id="batch_retry",
+            status="failed",
+            timestamp="2026-08-30T09:05:00",
+            provider="ollama_cloud",
+            record_count=2,
+            parent_file_name="pages.json",
+            recovery_attempt=1,
+        )
+        executor = _executor(
+            state_manager, jobs={"pages.json": parent, "pages.json_retry_1": retry}
+        )
 
         events = _batch_events(_fire(executor, "failed"))
 
-        assert len(events) == 1
-        assert events[0].action_name == ACTION
+        assert events[0].total == 3, "the two retried records are not extra records"
+        assert events[0].batch_id == "batch_parent"
 
 
 class TestTheFreshSubmissionDuplicateIsGone:

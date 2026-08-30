@@ -125,7 +125,8 @@ class WorkflowEventLogger:
                     mode=params.run_mode,
                 )
             )
-        # batch_submitted: BatchSubmittedEvent already fired by executor
+        # batch_submitted is neither completed nor a failure, so no action-level
+        # event fires here. submission.py raises the BatchSubmittedEvent.
 
     def finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""

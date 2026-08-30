@@ -26,9 +26,6 @@ from agent_actions.workflow.managers.state import ActionStateManager, ActionStat
 def mock_deps():
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock(spec=ActionStateManager)
-    # spec= builds from the class, and job_manager is set in __init__, so the
-    # mock has no job_manager and the registry lookup degrades to "no entry" —
-    # which is the case these tests want anyway.
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
@@ -40,6 +37,10 @@ def mock_deps():
     deps.action_runner.storage_backend.has_disposition.return_value = False
     # Pre/post snapshots needed by _count_records_for_action.
     deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
+    # An empty batch registry, stated explicitly rather than left to a bare
+    # MagicMock, whose load_metadata() would make json.loads raise into the
+    # registry read's error handler.
+    deps.action_runner.storage_backend.load_metadata.return_value = None
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     return deps
 
@@ -99,17 +100,14 @@ class TestBatchCheckCompleteEvent:
         mock_deps.action_runner.storage_backend.set_disposition.assert_called()
         call_args = mock_deps.action_runner.storage_backend.set_disposition.call_args
         assert "failed" in str(call_args).lower()
-        # This path is the only event-level signal it has, so the event stays —
-        # now sourced from the batch registry rather than an action_config key
-        # nothing writes. With no registry entry it reports a single record.
+        # An empty registry has no record count to report, and inventing one
+        # is the bug this change exists to remove.
         complete_events = [
             call[0][0]
             for call in mock_fire.call_args_list
             if isinstance(call[0][0], BatchCompleteEvent)
         ]
-        assert len(complete_events) == 1
-        assert complete_events[0].completed == 0
-        assert complete_events[0].failed == complete_events[0].total
+        assert complete_events == []
 
 
 class TestBatchTotalFailure:
