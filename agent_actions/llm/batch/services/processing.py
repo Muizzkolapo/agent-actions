@@ -72,19 +72,17 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
     A parent is superseded the moment it spawns a recovery; the recovery holds
-    its results. Earlier recovery attempts are superseded by later ones, and the
-    reprompt phase always follows the retry phase for the same parent.
+    its results. Among recoveries the newest wins, ranked by registration time
+    rather than by attempt or phase: a store written before registration started
+    replacing its predecessor can hold a retry that was registered *after* a
+    reprompt, which either of those orderings gets backwards.
     """
-    live: dict[str, tuple[int, int, str]] = {}
+    live: dict[str, tuple[str, str]] = {}
     for name, entry in jobs.items():
         parent = entry.parent_file_name
         if not parent:
             continue
-        rank = (
-            1 if entry.recovery_type == RecoveryType.REPROMPT else 0,
-            entry.recovery_attempt or 0,
-            name,
-        )
+        rank = (entry.timestamp or "", name)
         if parent not in live or rank > live[parent]:
             live[parent] = rank
 
@@ -92,7 +90,7 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     superseded.update(
         name
         for name, entry in jobs.items()
-        if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
+        if entry.parent_file_name in live and name != live[entry.parent_file_name][1]
     )
     return superseded
 
