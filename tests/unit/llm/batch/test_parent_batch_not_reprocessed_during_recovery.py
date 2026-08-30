@@ -1,15 +1,10 @@
-"""A parent batch that a recovery batch superseded must not be re-processed.
+"""Only the live batch job for a parent may be processed.
 
-The parent stays COMPLETED forever, so every run re-reads it, starts a *second*
-recovery at attempt 1 — ``retry_attempt`` never reaches ``max_attempts``, so
-``on_exhausted: raise`` has nothing to fire on — and overwrites the retry entry
-whose batch id the loop's own registry snapshot is still holding, which then
-resolves to no client and ends the run.
-
-Measured on qanalabs ``ql_mc_retryexh`` against ``origin/main``: five runs,
-``retry_attempt`` stuck at 1 of 2, an endless resubmission cycle. The recovery
-child is already COMPLETED when this loop sees it — the caller polls the
-provider first — so the skip cannot depend on the child still being in flight.
+Processing a spent one restarts recovery from attempt 1 — so ``retry_attempt``
+never reaches ``max_attempts`` and ``on_exhausted: raise`` never fires — or
+finalizes on stale results and deletes the live attempt, discarding whatever it
+recovered. The recovery child is already COMPLETED when the loop sees it, so
+"live" means the latest attempt, not "still in flight".
 """
 
 from __future__ import annotations
@@ -19,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -224,3 +219,145 @@ class TestTheLoopReadsTheRegistryNotItsSnapshot:
             return "/out/done.json"
 
         assert _run(_service(manager), on_process=remove_second) == ["batch_first"]
+
+
+class TestOnlyTheLiveAttemptIsProcessed:
+    """A spent attempt is still COMPLETED, so nothing stopped the loop re-reading it.
+
+    Finalizing on a spent attempt runs ``_cleanup_recovery_entries``, which
+    deletes every recovery entry for the parent — including the live one — so
+    whatever that attempt recovered is thrown away.
+    """
+
+    def test_an_earlier_retry_attempt_is_skipped_for_a_later_one(self):
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_retry_1", attempt=1),
+                f"{PARENT}_retry_2": _entry(
+                    "batch_retry_2",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_2",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_retry_2"]
+
+    def test_a_reprompt_supersedes_the_retry_it_followed(self):
+        """The handoff loses a whole completed reprompt batch otherwise."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_retry_1", attempt=1),
+                f"{PARENT}_reprompt_1": _entry(
+                    "batch_reprompt_1",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_reprompt_1",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_attempt=1,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_reprompt_1"]
+
+    def test_registering_an_attempt_removes_the_one_it_supersedes(self):
+        """Prevents new stores from reaching the state above at all."""
+        from agent_actions.llm.batch.services.processing_recovery import register_recovery_batch
+
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_retry_1", attempt=1),
+            }
+        )
+
+        register_recovery_batch(
+            manager, ("batch_retry_2", 1), PARENT, "ollama_cloud", RecoveryType.RETRY, 2
+        )
+
+        assert set(manager.get_all_jobs()) == {PARENT, f"{PARENT}_retry_2"}
+
+    def test_registering_does_not_touch_another_parents_recovery(self):
+        from agent_actions.llm.batch.services.processing_recovery import register_recovery_batch
+
+        other = "other.json"
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_retry_1", attempt=1),
+                f"{other}_retry_1": _entry(
+                    "batch_other_1",
+                    BatchStatus.COMPLETED,
+                    f"{other}_retry_1",
+                    parent_file_name=other,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=1,
+                ),
+            }
+        )
+
+        register_recovery_batch(
+            manager, ("batch_retry_2", 1), PARENT, "ollama_cloud", RecoveryType.RETRY, 2
+        )
+
+        assert f"{other}_retry_1" in manager.get_all_jobs()
+
+
+class TestTheSkippedParentIsPreservedNotDestroyed:
+    def test_the_parent_entry_survives_being_skipped(self):
+        """Removing it would pass every skip assertion and lose the resume point.
+
+        The parent's entry is what ``check_batch_submission`` reads to know the
+        action has jobs at all, and what a recovery's finalization writes output
+        against.
+        """
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child_v1"),
+            }
+        )
+
+        _run(_service(manager))
+
+        assert PARENT in manager.get_all_jobs()
+
+
+class TestTheSingleBatchSiblingRefusesASupersededId:
+    """``process_batch_results`` takes a batch_id straight from its caller.
+
+    Handed the parent's id while a recovery is live, it re-ran the original
+    batch and reset the attempt counter — the same defect, one method over.
+    """
+
+    def test_it_refuses_the_parent_once_a_recovery_exists(self):
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child_v1"),
+            }
+        )
+        service = _service(manager)
+        service._storage_backend = MagicMock()
+
+        with patch.object(service, "_process_single_batch_file") as delegate:
+            with pytest.raises(ProcessingError, match="supersedes"):
+                service.process_batch_results("batch_parent", "/out", action_name=ACTION)
+
+        delegate.assert_not_called()
+
+    def test_it_still_processes_a_batch_with_no_recovery(self):
+        manager = _registry({PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT)})
+        service = _service(manager)
+        service._storage_backend = MagicMock()
+
+        with patch.object(service, "_process_single_batch_file", return_value="/out/done.json"):
+            assert service.process_batch_results("batch_parent", "/out", action_name=ACTION) == (
+                "/out/done.json"
+            )

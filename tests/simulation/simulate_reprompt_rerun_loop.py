@@ -79,11 +79,10 @@ def run_recovery_entry_consumed(work_dir):
         recovery_attempt=1,
     )
 
+    jobs = {"my_action": parent_entry, "my_action_reprompt_1": recovery_entry}
     manager = MagicMock()
-    manager.get_all_jobs.return_value = {
-        "my_action": parent_entry,
-        "my_action_reprompt_1": recovery_entry,
-    }
+    manager.get_all_jobs.return_value = jobs
+    manager.get_batch_job.side_effect = jobs.get
 
     svc = BatchProcessingService.__new__(BatchProcessingService)
     svc._registry_manager_factory = MagicMock(return_value=manager)
@@ -99,9 +98,9 @@ def run_recovery_entry_consumed(work_dir):
     svc.process_all_batch_results(str(work_dir), action_name="test_action")
 
     check(
-        "my_action" in calls_received,
-        "Parent entry was processed",
-        f"Parent entry missing from {calls_received}",
+        "my_action" not in calls_received,
+        "Parent entry was skipped (the reprompt holds its results)",
+        f"Parent re-processed, restarting recovery: {calls_received}",
     )
     check(
         "my_action_reprompt_1" in calls_received,
