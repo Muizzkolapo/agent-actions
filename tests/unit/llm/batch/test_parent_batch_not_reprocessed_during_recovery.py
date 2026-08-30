@@ -701,3 +701,39 @@ class TestTheSuccessorSurvivesAFailedCleanup:
             )
 
         assert f"{PARENT}_retry_2" in manager.get_all_jobs(), "the successor was never registered"
+
+
+class TestTheSkipDoesNotDependOnRegistryKeyOrder:
+    """A parent whose recovery finalized earlier in the same pass stays skipped.
+
+    Finalization removes the child, so a skip decided only from the live
+    registry would un-supersede the parent and re-run the original batch — the
+    reported bug, back. Parents currently precede their children in insertion
+    order, but nothing enforces that, so the skip must not rely on it.
+    """
+
+    def test_a_child_listed_before_its_parent_still_supersedes_it(self):
+        manager = _registry(
+            {
+                CHILD: _child("batch_child"),
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+            }
+        )
+
+        def finalize_and_clean(*, batch_id, **_kw):
+            if batch_id == "batch_child":
+                manager.remove_batch_job(CHILD)
+            return "/out/done.json"
+
+        assert _run(_service(manager), on_process=finalize_and_clean) == ["batch_child"]
+
+    def test_a_parent_listed_first_is_unaffected(self):
+        """The reachable ordering keeps working."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child"),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_child"]
