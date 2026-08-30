@@ -213,8 +213,9 @@ class BatchProcessingService:
     ) -> list[str]:
         """Process all completed batch jobs in the registry.
 
-        Skips recovery entries (processed via their parent). Tolerates empty
-        processed_files when recovery batches are pending (in_progress).
+        Recovery entries are processed in their own right; the parent they
+        superseded is skipped instead. Tolerates empty processed_files when
+        recovery batches are pending (in_progress).
 
         Args:
             output_directory: Output directory path
@@ -236,7 +237,25 @@ class BatchProcessingService:
             )
 
         processed_files = []
-        for file_name, entry in all_jobs.items():
+        # A spawned recovery leaves its parent COMPLETED forever, so re-reading
+        # the parent starts a second recovery at attempt 1 and retry_attempt
+        # never climbs to max_attempts.
+        superseded_by_recovery = {
+            entry.parent_file_name for entry in all_jobs.values() if entry.parent_file_name
+        }
+        for file_name in all_jobs:
+            if file_name in superseded_by_recovery:
+                logger.info("Skipping %s: a recovery batch has taken it over", file_name)
+                continue
+
+            # Processing one entry registers the next attempt and deletes
+            # finished siblings, so a snapshot batch_id may already be replaced —
+            # and an unregistered id has no client, which ends the run.
+            entry = manager.get_batch_job(file_name)
+            if entry is None:
+                logger.info("Skipping %s: its registry entry is gone", file_name)
+                continue
+
             batch_id = entry.batch_id
             if not batch_id:
                 continue
