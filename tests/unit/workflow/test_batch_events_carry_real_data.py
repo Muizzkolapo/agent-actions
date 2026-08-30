@@ -146,7 +146,12 @@ class TestTheOneRealSignalCarriesRealData:
         assert all(e.failed == e.total and e.completed == 0 for e in events)
 
     def test_a_completed_job_is_not_reported_as_failed(self, state_manager):
-        """A mixed registry reaches this branch on an unrecognized status."""
+        """A finished job is not part of the loss.
+
+        Driven directly here: a registry of completed + failed reports
+        ``partial_failed`` upstream and is routed to the in-progress branch, so
+        the mix arrives at this code only on an unrecognized provider status.
+        """
         executor = _executor(
             state_manager,
             jobs={

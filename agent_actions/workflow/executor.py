@@ -1279,18 +1279,22 @@ class ActionExecutor:
         return str(agent_io_path / "target" / action_name)
 
     def _failed_batch_jobs(self, action_name: str) -> list[tuple[str, int]]:
-        """This action's unfinished batch jobs, one per input file.
+        """This action's not-completed batch jobs, one per input file.
 
         action_config carries no batch_id — nothing in production writes one —
         so the registry is the only place the real ids and counts live. Entries
         without a usable record count are left out rather than reported with a
-        guessed one, on the same reasoning as ``_count_records_for_action``: a
-        fabricated count cannot be told from a real one, and this is the number
-        someone reads to size an outage.
+        guessed one: a fabricated count cannot be told from a real one, and
+        this is the number someone reads to size an outage.
 
         Recovery entries are excluded — they re-submit a subset of a parent's
         records, so reporting them alongside the parent counts those records
         twice. Completed entries are excluded because this is the failure path.
+
+        An unreadable registry warns and yields nothing, matching
+        ``_write_failed_disposition`` rather than ``_count_records_for_action``:
+        losing this event costs a detail, and ActionFailedEvent still reports
+        the failure, so it is not worth failing the run over.
         """
         from agent_actions.llm.batch.core.batch_models import BatchStatus
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -1396,8 +1400,10 @@ class ActionExecutor:
             # ActionFailedEvent already reports the failure, so saying nothing
             # here loses no signal — and the registry has no count to report
             # that would not be guesswork.
+            # The specific cause, when it is a read failure, is logged above.
             logger.warning(
-                "No BatchCompleteEvent for %s: batch registry has no usable record count",
+                "No BatchCompleteEvent for %s: batch registry lists no incomplete "
+                "job with a record count",
                 action_name,
             )
         wall_clock = self._compute_batch_wall_clock(action_name, duration)
