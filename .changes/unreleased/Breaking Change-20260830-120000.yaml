@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "`agac clean` no longer deletes generated output by default. The old default removed both `agent_io/source/` and `agent_io/target/` — the documented per-action output path — while the docs described the command as cache/temp cleanup, so a routine clean (or `clean -f` in a script) silently destroyed paid LLM output. The default scope is now `agent_io/source/` only, which is regenerated from `agent_io/staging/` on the next run. Removing `agent_io/target/` requires the new `--target` flag; `--all` is unchanged and still removes everything, including staging and the durable store. Callers that relied on plain `clean` to remove output must pass `--target`."
+time: 2026-08-30T12:00:00Z

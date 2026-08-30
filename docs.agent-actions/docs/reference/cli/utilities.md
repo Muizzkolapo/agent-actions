@@ -87,34 +87,34 @@ Use `agac init list` to see available examples, then `agac init example <name>` 
 
 ## clean
 
-Over time, your project accumulates cached results, generated documentation, and temporary files. The `clean` command removes these artifacts and returns your project to a fresh state.
+The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/` — the preprocessed input copies that are rebuilt from `agent_io/staging/` on the next run. Anything beyond that is opt-in.
 
 ```bash
 agac clean -a <workflow-name> [options]
 ```
 
 Removes:
-- Cached batch results
-- Generated documentation
-- Temporary files
-- Build artifacts
+- `agent_io/source/` — preprocessed inputs, regenerated on the next run (always)
+- `agent_io/target/` — your generated output (only with `--target` or `--all`)
+- `agent_io/staging/` and the durable store — your input data and run history (only with `--all`)
 
 **Options:**
 | Option | Description |
 |--------|-------------|
 | `-a, --agent TEXT` | Agentic workflow name (required) |
 | `-f, --force` | Skip interactive confirmation |
-| `--all` | Remove all directories including staging (default removes source and target only) |
+| `--target` | Also remove `agent_io/target/` — your generated output |
+| `--all` | Remove all directories including target, staging, and the durable store — unrecoverable |
 
 **Examples:**
 ```bash
-# Clean artifacts for a specific workflow (with confirmation)
+# Remove regenerable preprocessed inputs (with confirmation)
 agac clean -a my_workflow
 
-# Force clean without confirmation
-agac clean -a my_workflow -f
+# Also remove generated output
+agac clean -a my_workflow --target
 
-# Remove all directories including staging and target
+# Remove everything, including staging inputs and the durable store
 agac clean -a my_workflow --all
 ```
 
@@ -123,7 +123,7 @@ You can run this command from any subdirectory within your project.
 :::
 
 :::warning Data Loss
-This removes cached batch results. If you haven't retrieved batch results yet, do that first before cleaning.
+`--target` deletes your generated output, and `--all` additionally deletes staging inputs and the durable store — none of it recoverable. If you haven't retrieved batch results yet, do that first before cleaning.
 :::
 
 ## docs
