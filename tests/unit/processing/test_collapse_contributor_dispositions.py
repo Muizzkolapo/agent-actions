@@ -1,13 +1,9 @@
 """Every contributor to a many-to-one collapse gets a disposition row.
 
-A FILE tool folding N inputs into one output writes one ``success`` row keyed
-on the carrier (the first contributor's guid).  The other N-1 inputs were
-consumed as intended, but the store holds no row for them at the consuming
-action — ``agac dispositions`` shows one row for an action that consumed nine
-records.  Under the unit-of-work contract (one disposition per input record
-per action) that is a missing-row bug: contributors get ``success`` with
-``reason=collapsed_into_output`` so the trail distinguishes "produced a
-record" from "was folded into one".
+A collapsed output carries only its first parent's guid, so the other N-1
+consumed inputs would leave no row at the consuming action; they get
+``success`` + ``reason=collapsed_into_output`` under the one-row-per-input
+contract, distinguishing "produced a record" from "was folded into one".
 """
 
 from __future__ import annotations
