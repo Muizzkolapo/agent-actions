@@ -22,7 +22,6 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,
-    BatchSubmittedEvent,
 )
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
@@ -484,7 +483,6 @@ class ActionExecutor:
                 ActionStatus.BATCH_SUBMITTED,
                 batch_submitted_at=datetime.now().isoformat(),
             )
-            fire_event(BatchSubmittedEvent(action_name=params.action_name))
             return ActionExecutionResult(
                 success=True,
                 status=ActionStatus.BATCH_SUBMITTED,
@@ -1280,6 +1278,45 @@ class ActionExecutor:
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         return str(agent_io_path / "target" / action_name)
 
+    def _failed_batch_jobs(self, action_name: str) -> list[tuple[str, int]]:
+        """This action's not-completed batch jobs, one per input file.
+
+        action_config carries no batch_id — nothing in production writes one —
+        so the registry is the only place the real ids and counts live. Entries
+        without a usable record count are left out rather than reported with a
+        guessed one: a fabricated count cannot be told from a real one, and
+        this is the number someone reads to size an outage.
+
+        Recovery entries are excluded — they re-submit a subset of a parent's
+        records, so reporting them alongside the parent counts those records
+        twice. Completed entries are excluded because this is the failure path.
+
+        An unreadable registry warns and yields nothing, matching
+        ``_write_failed_disposition`` rather than ``_count_records_for_action``:
+        losing this event costs a detail, and ActionFailedEvent still reports
+        the failure, so it is not worth failing the run over.
+        """
+        from agent_actions.llm.batch.core.batch_models import BatchStatus
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            logger.warning("Cannot read batch registry for %s: no storage backend", action_name)
+            return []
+        try:
+            jobs = BatchRegistryManager(storage_backend, action_name).get_all_jobs()
+        except Exception as read_err:
+            logger.warning("Could not read batch registry for %s: %s", action_name, read_err)
+            return []
+
+        return [
+            (entry.batch_id, entry.record_count)
+            for entry in jobs.values()
+            if entry.parent_file_name is None
+            and entry.record_count
+            and entry.status != BatchStatus.COMPLETED
+        ]
+
     def _resolve_batch_outcome(
         self,
         action_name: str,
@@ -1301,16 +1338,10 @@ class ActionExecutor:
             final_status = self._resolve_completion_status(action_name)
 
             if final_status == ActionStatus.FAILED:
-                fire_event(
-                    BatchCompleteEvent(
-                        batch_id=action_config.get("batch_id", ""),
-                        action_name=action_name,
-                        total=1,
-                        completed=0,
-                        failed=1,
-                        elapsed_time=wall_clock,
-                    )
-                )
+                # No BatchCompleteEvent here: _process_batch_results ran on this
+                # same condition and finalize_batch_output fired one with the
+                # real batch_id and counts. (The no_batches passthrough branch
+                # reaches "completed" without it, and fires BatchPassthroughEvent.)
                 return self._finalize_total_failure(
                     action_name, wall_clock, output_folder, execution_mode="batch"
                 )
@@ -1332,16 +1363,10 @@ class ActionExecutor:
                 execution_mode="batch",
                 **self._completion_metadata(action_config),
             )
-            fire_event(
-                BatchCompleteEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    total=1,
-                    completed=1,
-                    failed=0,
-                    elapsed_time=wall_clock,
-                )
-            )
+            # No BatchCompleteEvent here either: finalize_batch_output fired one
+            # per input file with the real ids and counts. The no_batches
+            # passthrough branch reaches "completed" without it and is covered
+            # by BatchPassthroughEvent and ActionCompleteEvent.
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
@@ -1353,15 +1378,10 @@ class ActionExecutor:
             )
 
         if batch_status == "in_progress":
+            # No BatchSubmittedEvent: this poll found the job still running and
+            # submitted nothing. Reporting a submission here contradicts the
+            # no-resubmit-on-resume behaviour.
             self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
-            fire_event(
-                BatchSubmittedEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    request_count=0,
-                    provider=action_config.get("model_vendor", ""),
-                )
-            )
             return ActionExecutionResult(
                 success=True,
                 status=ActionStatus.BATCH_SUBMITTED,
@@ -1371,16 +1391,33 @@ class ActionExecutor:
         # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
-        fire_event(
-            BatchCompleteEvent(
-                batch_id=action_config.get("batch_id", ""),
-                action_name=action_name,
-                total=1,
-                completed=0,
-                failed=1,
-                elapsed_time=duration,
+        # One event per job, matching the success path: finalize_batch_output
+        # fires per input file, so an action with several files reports each of
+        # them by id. Aggregating into one event would leave batch_id blank for
+        # exactly those actions — the symptom this branch exists to remove.
+        failed_jobs = self._failed_batch_jobs(action_name)
+        if not failed_jobs:
+            # ActionFailedEvent already reports the failure, so saying nothing
+            # here loses no signal — and the registry has no count to report
+            # that would not be guesswork.
+            # The specific cause, when it is a read failure, is logged above.
+            logger.warning(
+                "No BatchCompleteEvent for %s: batch registry lists no incomplete "
+                "job with a record count",
+                action_name,
             )
-        )
+        wall_clock = self._compute_batch_wall_clock(action_name, duration)
+        for batch_id, record_count in failed_jobs:
+            fire_event(
+                BatchCompleteEvent(
+                    batch_id=batch_id,
+                    action_name=action_name,
+                    total=record_count,
+                    completed=0,
+                    failed=record_count,
+                    elapsed_time=wall_clock,
+                )
+            )
         return ActionExecutionResult(
             success=False,
             status=ActionStatus.FAILED,

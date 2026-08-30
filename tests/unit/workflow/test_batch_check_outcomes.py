@@ -37,6 +37,10 @@ def mock_deps():
     deps.action_runner.storage_backend.has_disposition.return_value = False
     # Pre/post snapshots needed by _count_records_for_action.
     deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
+    # An empty batch registry, stated explicitly rather than left to a bare
+    # MagicMock, whose load_metadata() would make json.loads raise into the
+    # registry read's error handler.
+    deps.action_runner.storage_backend.load_metadata.return_value = None
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     return deps
 
@@ -70,13 +74,11 @@ class TestBatchCheckCompleteEvent:
             for call in mock_fire.call_args_list
             if isinstance(call[0][0], BatchCompleteEvent)
         ]
-        assert len(complete_events) == 1
-        event = complete_events[0]
-        assert event.action_name == "agent_a"
-        assert event.total == 1
-        assert event.completed == 1
-        assert event.failed == 0
-        assert event.elapsed_time > 0
+        # No BatchCompleteEvent from this path any more: finalize_batch_output
+        # already fired one with the real batch_id and counts, on the same
+        # condition. A second, action_config-sourced copy reported every batch
+        # as a single record.
+        assert complete_events == []
 
     def test_failed_batch_fires_event_writes_disposition_sets_error(self, executor, mock_deps):
         """Failed batch: event with failed=1, disposition written, result.error set."""
@@ -98,15 +100,14 @@ class TestBatchCheckCompleteEvent:
         mock_deps.action_runner.storage_backend.set_disposition.assert_called()
         call_args = mock_deps.action_runner.storage_backend.set_disposition.call_args
         assert "failed" in str(call_args).lower()
-        # Event with failed count
+        # An empty registry has no record count to report, and inventing one
+        # is the bug this change exists to remove.
         complete_events = [
             call[0][0]
             for call in mock_fire.call_args_list
             if isinstance(call[0][0], BatchCompleteEvent)
         ]
-        assert len(complete_events) == 1
-        assert complete_events[0].failed == 1
-        assert complete_events[0].completed == 0
+        assert complete_events == []
 
 
 class TestBatchTotalFailure:
@@ -142,9 +143,8 @@ class TestBatchTotalFailure:
             for call in mock_fire.call_args_list
             if isinstance(call[0][0], BatchCompleteEvent)
         ]
-        assert len(complete_events) == 1
-        assert complete_events[0].failed == 1
-        assert complete_events[0].completed == 0
+        # Same duplicate, on the all-records-failed branch.
+        assert complete_events == []
 
 
 class TestBatchCheckStatusTransitions:

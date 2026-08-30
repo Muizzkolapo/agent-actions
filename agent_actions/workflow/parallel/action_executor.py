@@ -295,7 +295,8 @@ class ActionLevelOrchestrator:
                     mode=run_mode,
                 )
             )
-        # batch_submitted: BatchSubmittedEvent already fired by executor
+        # batch_submitted is neither completed nor a failure, so no action-level
+        # event fires here. submission.py raises the BatchSubmittedEvent.
 
     def _check_batch_status(
         self, level_idx: int, level_actions: list[str], state_manager, start_time: datetime

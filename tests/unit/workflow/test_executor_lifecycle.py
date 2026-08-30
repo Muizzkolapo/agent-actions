@@ -1,5 +1,6 @@
 """Tests for ActionExecutor lifecycle: execute_action_sync and helper methods."""
 
+import json
 from datetime import datetime
 from unittest.mock import ANY, MagicMock, patch
 
@@ -158,13 +159,28 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.update_status.assert_any_call(
             "agent_a", ActionStatus.BATCH_SUBMITTED
         )
-        event = mock_fire.call_args[0][0]
-        assert isinstance(event, BatchSubmittedEvent)
+        # A poll that found the job still running has not submitted anything;
+        # submission.py fires the real BatchSubmittedEvent when it does.
+        submitted = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], BatchSubmittedEvent)
+        ]
+        assert submitted == []
 
     def test_batch_failed_returns_failed(self, executor, mock_deps):
-        """Batch failure should mark failed and fire BatchCompleteEvent with failed=1."""
+        """Batch failure marks FAILED and reports the registry's real counts."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         mock_deps.batch_manager.handle_batch_agent.return_value = (None, "failed")
+        mock_deps.action_runner.storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "pages.json": {
+                    "batch_id": "batch_b2",
+                    "status": "failed",
+                    "timestamp": "2026-08-30T09:00:00",
+                    "provider": "ollama_cloud",
+                    "record_count": 5,
+                }
+            }
+        )
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor.execute_action_sync(
@@ -183,10 +199,14 @@ class TestExecuteAgentSync:
         ]
         assert len(fail_calls) >= 1
         assert fail_calls[0][0][0] == "agent_a"
-        event = mock_fire.call_args[0][0]
-        assert isinstance(event, BatchCompleteEvent)
-        assert event.failed == 1
-        assert event.completed == 0
+        events = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], BatchCompleteEvent)
+        ]
+        assert len(events) == 1
+        assert events[0].batch_id == "batch_b2"
+        assert events[0].failed == 5, "a five-record batch must not report as one"
+        assert events[0].total == 5
+        assert events[0].completed == 0
 
     def test_skip_evaluator_marks_completed(self, executor, mock_deps):
         """When skip evaluator says skip, should mark completed without copying data."""
