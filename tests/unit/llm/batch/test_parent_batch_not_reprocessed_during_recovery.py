@@ -609,3 +609,95 @@ class TestARecoveryEntryThatOutlivedItsStateIsDropped:
         manager = _registry({PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT)})
 
         assert _run(_service(manager)) == ["batch_parent"]
+
+
+class TestTheRankingIsNotDecidedByDigitOrdering:
+    def test_attempt_10_beats_attempt_9_on_equal_timestamps(self):
+        """Name order alone puts ``_retry_10`` below ``_retry_9``.
+
+        Single-digit fixtures pass either way, so the attempt number has to be
+        ranked above the name for the tie-break to mean anything.
+        """
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                f"{PARENT}_retry_9": _entry(
+                    "batch_r9",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_9",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=9,
+                ),
+                f"{PARENT}_retry_10": _entry(
+                    "batch_r10",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_10",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=10,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_r10"]
+
+    def test_a_null_timestamp_does_not_kill_the_run(self):
+        """``"timestamp": null`` survives from_dict — dataclasses do not typecheck.
+
+        Comparing it against a populated one raises TypeError out of the whole
+        pass, which is not an exhaustion halt, so the run dies.
+        """
+        parent = _entry("batch_parent", BatchStatus.COMPLETED, PARENT)
+        null_ts = _child("batch_null", at="09:01:00", attempt=1)
+        null_ts.timestamp = None  # type: ignore[assignment]
+        manager = _registry(
+            {
+                PARENT: parent,
+                CHILD: null_ts,
+                f"{PARENT}_retry_2": _entry(
+                    "batch_r2",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_2",
+                    at="09:02:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_r2"]
+
+
+class TestTheSuccessorSurvivesAFailedCleanup:
+    def test_a_removal_error_leaves_the_new_entry_registered(self):
+        """Registering saves first, then removes — never the reverse.
+
+        Removing first and failing before the save leaves the parent with no
+        recovery at all, which restarts it from attempt 1.
+        """
+        from agent_actions.llm.batch.services.processing_recovery import register_recovery_batch
+
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_r1", attempt=1),
+            }
+        )
+        real_remove = manager.remove_batch_job
+
+        def explode(name):
+            real_remove(name)
+            raise RuntimeError("registry write failed")
+
+        manager.remove_batch_job = explode  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError):
+            register_recovery_batch(
+                manager, ("batch_r2", 1), PARENT, "ollama_cloud", RecoveryType.RETRY, 2
+            )
+
+        assert f"{PARENT}_retry_2" in manager.get_all_jobs(), "the successor was never registered"
