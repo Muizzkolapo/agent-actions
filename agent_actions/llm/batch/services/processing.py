@@ -90,7 +90,7 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         usable = entry.status == BatchStatus.COMPLETED or entry.is_in_flight
         if not parent or not usable:
             continue
-        rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
+        rank = (entry.timestamp, entry.recovery_attempt or 0, name)
         if parent not in live or rank > live[parent]:
             live[parent] = rank
 

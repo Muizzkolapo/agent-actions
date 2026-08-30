@@ -82,9 +82,18 @@ def process_recovery_batch(
         parent_file_name,
     )
     if not state:
+        # Without state this entry can never be interpreted, and while it exists
+        # it supersedes its parent — so leaving it registered wedges the action
+        # on the same error every run. Dropping it hands the parent back to the
+        # from-scratch path, which is what a missing state means.
         logger.error(
-            "No recovery state found for parent=%s file_name=%s", parent_file_name, file_name
+            "No recovery state for parent=%s file_name=%s — dropping the entry so %s "
+            "can be processed from scratch",
+            parent_file_name,
+            file_name,
+            parent_file_name,
         )
+        manager.remove_batch_job(file_name)
         return None
 
     agent_config = service._apply_workflow_session_id(agent_config, entry)
