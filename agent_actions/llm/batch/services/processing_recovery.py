@@ -617,10 +617,6 @@ def register_recovery_batch(
     """
     batch_id, record_count = submission
     recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
-    for name, entry in manager.get_all_jobs().items():
-        if entry.parent_file_name == parent_file_name and name != recovery_file_name:
-            logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)
-            manager.remove_batch_job(name)
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,
         status=BatchStatus.SUBMITTED,
@@ -633,6 +629,13 @@ def register_recovery_batch(
         recovery_attempt=attempt,
     )
     manager.save_batch_job(recovery_file_name, recovery_entry)
+
+    # After the save, never before: a crash in between must leave the successor
+    # registered, not leave the parent with no recovery at all.
+    for name, entry in manager.get_all_jobs().items():
+        if entry.parent_file_name == parent_file_name and name != recovery_file_name:
+            logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)
+            manager.remove_batch_job(name)
 
 
 def _remove_batch_placeholder(output_file: Path) -> None:
