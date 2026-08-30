@@ -281,11 +281,13 @@ class BatchProcessingService:
         # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
         # one: that restarts recovery at attempt 1, or finalizes on stale results
         # and deletes the live attempt. Stores written before this can hold them.
+        # Decided once, before the loop mutates anything: a parent whose recovery
+        # finalizes mid-pass has its child removed by the cleanup, and re-reading
+        # the registry would then call that parent live again and re-run the
+        # original batch. Superseded once, skipped for the whole pass.
+        superseded = _superseded_entries(all_jobs)
         for file_name in all_jobs:
-            # Recomputed per entry, not once: the loop body registers and removes
-            # entries, so a set derived from the snapshot drifts from the
-            # registry these reads come from.
-            if file_name in _superseded_entries(manager.get_all_jobs()):
+            if file_name in superseded:
                 logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
                 continue
 
