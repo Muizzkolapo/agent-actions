@@ -72,10 +72,12 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
     A parent is superseded by a recovery that can still yield something — that
-    recovery now holds its results. A recovery the provider FAILED or CANCELLED
-    yields nothing ever, so it supersedes nothing: the parent has to stay
-    processable, or the pass produces no output at all and the action is reset
-    and resubmitted, which is the loop this all exists to stop.
+    recovery now holds its results. "Can yield something" is asserted, not
+    assumed absent: only COMPLETED (readable now) and in-flight (readable later)
+    qualify, so FAILED, CANCELLED and any status this version does not recognise
+    supersede nothing. A parent skipped for a recovery that never produces
+    leaves the pass with no output, which raises, leaves the action retryable,
+    and resubmits — the loop this all exists to stop.
 
     Among live recoveries the newest wins, ranked by registration time rather
     than by attempt or phase: a store written before registration started
@@ -85,7 +87,8 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     live: dict[str, tuple[str, int, str]] = {}
     for name, entry in jobs.items():
         parent = entry.parent_file_name
-        if not parent or entry.status in (BatchStatus.FAILED, BatchStatus.CANCELLED):
+        usable = entry.status == BatchStatus.COMPLETED or entry.is_in_flight
+        if not parent or not usable:
             continue
         rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
         if parent not in live or rank > live[parent]:
