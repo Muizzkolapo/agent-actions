@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Batch lifecycle events report the real batch. BatchSubmittedEvent and BatchCompleteEvent were fired a second time from the executor using a batch_id key nothing writes and a hardcoded count of one, so a three-record batch logged 'Batch  submitted: 0 requests to ' next to the correct line, and completed as 'total: 1'. The duplicates are gone, the failure path reads the batch registry and reports each job by its own id and record count, and both surviving events now name the action rather than the input file."
+time: 2026-08-30T05:45:00Z
