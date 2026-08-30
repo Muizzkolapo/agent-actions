@@ -93,11 +93,16 @@ def _service(manager: BatchRegistryManager) -> BatchProcessingService:
     )
 
     def resolve(batch_id, registry_manager, *_a, **_kw):
-        """The real resolver's contract: an unregistered id has no client."""
-        if registry_manager.get_batch_job_by_id(batch_id) is None:
+        """The real resolver's contract: an unregistered id has no client.
+
+        The provider reports the entry's own status, so a FAILED job is skipped
+        by ``_is_batch_ready_for_processing`` here exactly as it is in production.
+        """
+        entry = registry_manager.get_batch_job_by_id(batch_id)
+        if entry is None:
             raise ConfigurationError(f"Cannot determine client for batch_id {batch_id}")
         provider = MagicMock()
-        provider.check_status.return_value = BatchStatus.COMPLETED
+        provider.check_status.return_value = entry.status
         return provider
 
     service._client_resolver.get_for_batch_id.side_effect = resolve
@@ -122,16 +127,13 @@ def _run(service, *, on_process=None) -> list[str]:
 
 
 class TestTheSupersededParentIsNotReprocessed:
-    @pytest.mark.parametrize(
-        "child_status",
-        [BatchStatus.COMPLETED, BatchStatus.SUBMITTED, BatchStatus.FAILED],
-    )
-    def test_a_parent_with_a_recovery_child_is_skipped(self, child_status):
-        """The child's status is irrelevant — the parent is spent either way.
+    @pytest.mark.parametrize("child_status", [BatchStatus.COMPLETED, BatchStatus.SUBMITTED])
+    def test_a_parent_with_a_usable_recovery_child_is_skipped(self, child_status):
+        """A recovery that can still yield something holds the parent's results.
 
-        Its results live in the recovery state's accumulated_results. Re-reading
-        them is what restarts the attempt counter, so this is the assertion the
-        exhaustion bug turns on. COMPLETED is the case that occurs live.
+        Re-reading the parent restarts the attempt counter, so this is the
+        assertion the exhaustion bug turns on. COMPLETED is the live case; an
+        in-flight child is the same claim one poll earlier.
         """
         manager = _registry(
             {
@@ -492,3 +494,66 @@ class TestRegistryShapesThatCouldStrandWork:
         )
 
         assert _run(_service(manager)) == ["batch_r2"]
+
+
+class TestADeadRecoverySupersedesNothing:
+    """A recovery the provider FAILED or CANCELLED will never yield anything.
+
+    Skipping the parent for it means the pass processes nothing, raises, and
+    leaves the action in a retryable state — so the next run resets it and
+    submits a fresh batch. That is the reported bug, moved one entry over. The
+    pass after that is worse: the new parent batch is skipped while the stale
+    child is processed against the previous run's recovery state, so the action
+    reports COMPLETED on output derived entirely from the old run.
+    """
+
+    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+    def test_the_parent_stays_processable(self, dead):
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child_dead", dead),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_parent"]
+
+    def test_a_usable_sibling_still_supersedes_the_parent(self):
+        """One dead attempt does not un-supersede a parent that has a live one."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_dead", BatchStatus.FAILED, at="09:01:00"),
+                f"{PARENT}_retry_2": _entry(
+                    "batch_live",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_2",
+                    at="09:02:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_live"]
+
+    def test_a_dead_newest_attempt_does_not_hide_a_usable_older_one(self):
+        """Ranking runs over usable entries only, not over all of them."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_usable", BatchStatus.COMPLETED, at="09:01:00"),
+                f"{PARENT}_retry_2": _entry(
+                    "batch_dead",
+                    BatchStatus.CANCELLED,
+                    f"{PARENT}_retry_2",
+                    at="09:02:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_usable"]
