@@ -23,28 +23,30 @@ from agent_actions.utils.path_utils import resolve_relative_to
 
 logger = LoggerFactory.get_logger(__name__)
 
+# Collision pairs already warned about, so repeated discovery walks (one per
+# action in an inspect run) do not repeat the same warning.
+_warned_collisions: set[tuple[str, tuple[str, ...]]] = set()
+
+
+def _warn_new_collisions(collisions: dict[str, list[Path]]) -> None:
+    for name, paths in collisions.items():
+        key = (name, tuple(str(p) for p in paths))
+        if key in _warned_collisions:
+            continue
+        _warned_collisions.add(key)
+        logger.warning(
+            "Schema '%s' found in multiple locations (names must be globally unique): %s",
+            name,
+            ", ".join(str(p) for p in paths),
+        )
+
 
 class SchemaLoader:
     """Loads, validates, and constructs schemas from YAML/JSON files or inline definitions."""
 
     @staticmethod
-    def discover_schema_files(
-        project_root: Path | None = None,
-    ) -> dict[str, Path]:
-        """Discover all schema files across project and workflow directories.
-
-        Searches recursively through:
-
-        1. Project-level: ``{project_root}/{schema_path}/``
-        2. All workflows: ``{project_root}/agent_workflow/*/{schema_path}/``
-
-        ``schema_path`` is read from ``agent_actions.yml`` (required config key).
-
-        Returns a dict mapping ``schema_name`` (file stem) to its ``Path``.
-        When a schema name appears in multiple locations the first occurrence
-        wins and a warning is logged.  Callers that need strict uniqueness
-        (e.g. :meth:`load_schema`) enforce it themselves.
-        """
+    def _discover(project_root: Path | None) -> tuple[dict[str, Path], dict[str, list[Path]]]:
+        """Walk schema dirs once: (stem -> first path, stem -> all colliding paths)."""
         from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
         effective_root = resolve_project_root(project_root)
@@ -64,8 +66,8 @@ class SchemaLoader:
                         search_dirs.append(wf_sp)
 
         # Discover all schema files, deduplicating by resolved path.
-        # First occurrence wins; duplicates are logged but not fatal.
         result: dict[str, Path] = {}
+        collisions: dict[str, list[Path]] = {}
         seen: set[Path] = set()
 
         for search_dir in search_dirs:
@@ -78,16 +80,27 @@ class SchemaLoader:
                 seen.add(resolved)
                 name = match.stem
                 if name in result:
-                    logger.warning(
-                        "Schema '%s' found in multiple locations "
-                        "(names must be globally unique): %s and %s",
-                        name,
-                        result[name],
-                        match,
-                    )
+                    collisions.setdefault(name, [result[name]]).append(match)
                 else:
                     result[name] = match
 
+        return result, collisions
+
+    @staticmethod
+    def discover_schema_files(
+        project_root: Path | None = None,
+    ) -> dict[str, Path]:
+        """Discover all schema files, mapping each file stem to its ``Path``.
+
+        Walks ``{project_root}/{schema_path}/`` and every
+        ``agent_workflow/*/{schema_path}/`` (``schema_path`` from
+        ``agent_actions.yml``). Never fails on a duplicate name — first
+        occurrence wins, warned once per process — because the LSP indexer and
+        docs scanner call this directly and must not crash on a user project
+        state. :meth:`load_schema` is where an ambiguous reference hard-fails.
+        """
+        result, collisions = SchemaLoader._discover(project_root)
+        _warn_new_collisions(collisions)
         return result
 
     @staticmethod
@@ -98,10 +111,10 @@ class SchemaLoader:
         """Load raw schema by name using multi-level resolution.
 
         Supports ``.yml``, ``.yaml``, and ``.json`` schema files.
-        Delegates to :meth:`discover_schema_files` and looks up the
-        requested *schema_name*.  Raises ``FileNotFoundError`` if the
-        schema is not found.  Duplicate names are logged as warnings
-        by ``discover_schema_files``; the first occurrence is used.
+        Raises ``SchemaValidationError`` when *schema_name* matches more
+        than one file — schema names must be globally unique, and picking
+        one by directory sort order can validate output against the wrong
+        shape.  Raises ``FileNotFoundError`` if the schema is not found.
         """
         from agent_actions.config.path_config import (
             get_required_by_default,
@@ -110,7 +123,18 @@ class SchemaLoader:
         )
 
         effective_root = resolve_project_root(project_root)
-        all_schemas = SchemaLoader.discover_schema_files(project_root)
+        all_schemas, collisions = SchemaLoader._discover(project_root)
+
+        if schema_name in collisions:
+            paths = "\n    ".join(str(p) for p in collisions[schema_name])
+            raise SchemaValidationError(
+                f"Schema '{schema_name}' is ambiguous — found in "
+                f"{len(collisions[schema_name])} locations "
+                f"(names must be globally unique):\n    {paths}",
+                validation_type="uniqueness",
+                hint="Rename the colliding files so every schema name is unique.",
+            )
+        _warn_new_collisions(collisions)
 
         if schema_name not in all_schemas:
             sp = get_schema_path(effective_root)

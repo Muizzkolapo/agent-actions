@@ -57,8 +57,8 @@ class TestSchemaLoaderLoadSchema:
         assert isinstance(result, dict)
         assert result["name"] == "NestedSchema"
 
-    def test_multiple_matches_uses_first_found(self, tmp_path):
-        """Multiple files with same name: first found wins (warns, does not raise)."""
+    def test_multiple_matches_raises(self, tmp_path):
+        """Multiple files with the same name make the reference ambiguous."""
         _write_project_config(tmp_path)
         schema_dir = tmp_path / "schema"
         sub1 = schema_dir / "sub1"
@@ -67,8 +67,8 @@ class TestSchemaLoaderLoadSchema:
         sub2.mkdir(parents=True)
         (sub1 / "Dup.yml").write_text("name: Dup1\n")
         (sub2 / "Dup.yml").write_text("name: Dup2\n")
-        result = SchemaLoader.load_schema("Dup", project_root=tmp_path)
-        assert result["name"] == "Dup1"  # first alphabetically
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("Dup", project_root=tmp_path)
 
 
 class TestSchemaLoaderConstructSchemaFromDict:

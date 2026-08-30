@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 
 
@@ -34,15 +35,15 @@ class TestLoadSchemaRecursive:
         result = SchemaLoader.load_schema("my_schema", project_root=tmp_path)
         assert result["name"] == "my_schema"
 
-    def test_multiple_matches_warns_and_uses_first(self, tmp_path):
+    def test_multiple_matches_raises(self, tmp_path):
         schema_dir = _setup_project(tmp_path)
         for subdir in ("a", "b"):
             d = schema_dir / subdir
             d.mkdir(parents=True)
             (d / "dup.yml").write_text(f"name: dup_{subdir}\nfields: []\n")
 
-        result = SchemaLoader.load_schema("dup", project_root=tmp_path)
-        assert result["name"] == "dup_a"  # first alphabetically wins
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("dup", project_root=tmp_path)
 
     def test_no_match_raises(self, tmp_path):
         _setup_project(tmp_path)
@@ -57,16 +58,16 @@ class TestLoadSchemaRecursive:
         with pytest.raises(FileNotFoundError, match="not found"):
             SchemaLoader.load_schema("anything", project_root=tmp_path)
 
-    def test_flat_takes_priority_over_subdirectory(self, tmp_path):
-        """Same name in flat and subdirectory: flat wins (first found)."""
+    def test_flat_and_subdirectory_same_stem_raises(self, tmp_path):
+        """Same name in flat and subdirectory is ambiguous — no silent priority."""
         schema_dir = _setup_project(tmp_path)
         (schema_dir / "priority.yml").write_text("name: flat_version\nfields: []\n")
         sub = schema_dir / "sub"
         sub.mkdir()
         (sub / "priority.yml").write_text("name: sub_version\nfields: []\n")
 
-        result = SchemaLoader.load_schema("priority", project_root=tmp_path)
-        assert result["name"] == "flat_version"
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("priority", project_root=tmp_path)
 
     def test_json_schema_found(self, tmp_path):
         """JSON schema files are discovered and loaded correctly."""
@@ -77,13 +78,12 @@ class TestLoadSchemaRecursive:
         result = SchemaLoader.load_schema("my_schema", project_root=tmp_path)
         assert result["name"] == "json_schema"
 
-    def test_json_and_yml_same_stem_uses_first(self, tmp_path):
-        """When both .yml and .json exist for same stem, first alphabetically wins."""
+    def test_json_and_yml_same_stem_raises(self, tmp_path):
+        """Both .yml and .json for the same stem is ambiguous."""
         schema_dir = _setup_project(tmp_path)
         (schema_dir / "dup.yml").write_text("name: yml_version\nfields: []\n")
         schema = {"name": "json_version", "fields": []}
         (schema_dir / "dup.json").write_text(json.dumps(schema))
 
-        result = SchemaLoader.load_schema("dup", project_root=tmp_path)
-        # sorted() puts .json before .yml alphabetically, so json wins
-        assert result["name"] == "json_version"
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("dup", project_root=tmp_path)

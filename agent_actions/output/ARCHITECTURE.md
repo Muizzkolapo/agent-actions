@@ -414,7 +414,7 @@ ResponseBuilder (static methods):
 
 4. **Dispatch failures are non-fatal.** When `dispatch_task()` resolution fails inside a schema field, the unresolved string is passed through to the LLM vendor as-is (with a warning logged). This may cause vendor API errors downstream but does not crash the pipeline.
 
-5. **Schema name collision is a warning, not an error.** `SchemaLoader.discover_schema_files()` logs a warning when the same schema name appears in multiple directories. The first occurrence wins. Callers that need strict uniqueness must enforce it themselves.
+5. **Schema name collisions fail on reference, not on discovery.** `SchemaLoader.load_schema()` raises `SchemaValidationError` (naming every colliding path) when the requested name matches more than one file. `discover_schema_files()` stays lenient — first occurrence wins, warning logged once per process — because the LSP indexer and docs scanner call it directly and must not crash on a user project state.
 
 6. **write_target requires both storage_backend and action_name.** Calling `write_target()` without both raises `ValueError` at runtime. There is no compile-time check -- the constructor accepts `None` for both parameters because `write_staging()` and `write_source()` do not need them.
 
