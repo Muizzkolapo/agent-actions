@@ -22,7 +22,6 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,
-    BatchSubmittedEvent,
 )
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
@@ -484,7 +483,6 @@ class ActionExecutor:
                 ActionStatus.BATCH_SUBMITTED,
                 batch_submitted_at=datetime.now().isoformat(),
             )
-            fire_event(BatchSubmittedEvent(action_name=params.action_name))
             return ActionExecutionResult(
                 success=True,
                 status=ActionStatus.BATCH_SUBMITTED,
@@ -1280,6 +1278,30 @@ class ActionExecutor:
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         return str(agent_io_path / "target" / action_name)
 
+    def _batch_failure_totals(self, action_name: str) -> tuple[str, int]:
+        """``(batch_id, record_count)`` to report for a failed batch action.
+
+        action_config carries no batch_id — nothing in production writes one —
+        so the registry is the only place the real id and record count live.
+        It is keyed by input file and one action can own several jobs, so the
+        count is summed; a lone job lends its id, several have no single id.
+        """
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        try:
+            jobs = BatchRegistryManager(
+                self.deps.action_runner.storage_backend, action_name
+            ).get_all_jobs()
+        except Exception as read_err:
+            logger.warning("Could not read batch registry for %s: %s", action_name, read_err)
+            return "", 1
+
+        if not jobs:
+            return "", 1
+        entries = list(jobs.values())
+        batch_id = entries[0].batch_id if len(entries) == 1 else ""
+        return batch_id, sum(e.record_count or 0 for e in entries) or len(entries)
+
     def _resolve_batch_outcome(
         self,
         action_name: str,
@@ -1301,16 +1323,8 @@ class ActionExecutor:
             final_status = self._resolve_completion_status(action_name)
 
             if final_status == ActionStatus.FAILED:
-                fire_event(
-                    BatchCompleteEvent(
-                        batch_id=action_config.get("batch_id", ""),
-                        action_name=action_name,
-                        total=1,
-                        completed=0,
-                        failed=1,
-                        elapsed_time=wall_clock,
-                    )
-                )
+                # No BatchCompleteEvent here: finalize_batch_output already fired
+                # one with the real batch_id and counts, on this same condition.
                 return self._finalize_total_failure(
                     action_name, wall_clock, output_folder, execution_mode="batch"
                 )
@@ -1332,16 +1346,6 @@ class ActionExecutor:
                 execution_mode="batch",
                 **self._completion_metadata(action_config),
             )
-            fire_event(
-                BatchCompleteEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    total=1,
-                    completed=1,
-                    failed=0,
-                    elapsed_time=wall_clock,
-                )
-            )
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
@@ -1353,15 +1357,10 @@ class ActionExecutor:
             )
 
         if batch_status == "in_progress":
+            # No BatchSubmittedEvent: this poll found the job still running and
+            # submitted nothing. Reporting a submission here contradicts the
+            # no-resubmit-on-resume behaviour.
             self.deps.state_manager.update_status(action_name, ActionStatus.BATCH_SUBMITTED)
-            fire_event(
-                BatchSubmittedEvent(
-                    batch_id=action_config.get("batch_id", ""),
-                    action_name=action_name,
-                    request_count=0,
-                    provider=action_config.get("model_vendor", ""),
-                )
-            )
             return ActionExecutionResult(
                 success=True,
                 status=ActionStatus.BATCH_SUBMITTED,
@@ -1371,13 +1370,14 @@ class ActionExecutor:
         # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
+        batch_id, record_count = self._batch_failure_totals(action_name)
         fire_event(
             BatchCompleteEvent(
-                batch_id=action_config.get("batch_id", ""),
+                batch_id=batch_id,
                 action_name=action_name,
-                total=1,
+                total=record_count,
                 completed=0,
-                failed=1,
+                failed=record_count,
                 elapsed_time=duration,
             )
         )

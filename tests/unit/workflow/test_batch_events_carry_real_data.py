@@ -14,6 +14,7 @@ only signal on its path, so it keeps firing and gets a real source.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +34,13 @@ def state_manager(tmp_path):
     return ActionStateManager(tmp_path / ".agent_status.json", [ACTION])
 
 
-def _executor(state_manager, *, entry: BatchJobEntry | None = None) -> ActionExecutor:
+def _executor(state_manager, *, jobs: dict[str, BatchJobEntry] | None = None) -> ActionExecutor:
+    """Executor whose registry really answers, through the metadata it reads.
+
+    ``jobs`` is keyed by input file, the way the registry actually stores it.
+    Mocking a lookup *by action name* is what let the first version of this fix
+    pass its tests while doing nothing on a live run.
+    """
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = state_manager
     deps.action_runner = MagicMock()
@@ -43,9 +50,13 @@ def _executor(state_manager, *, entry: BatchJobEntry | None = None) -> ActionExe
     backend.list_target_files.return_value = ["data.json"]
     backend.get_failed_items.return_value = []
     backend.has_successful_items.return_value = True
+    backend.load_metadata.side_effect = lambda key: (
+        json.dumps({f: e.to_dict() for f, e in jobs.items()})
+        if jobs and key == f"batch_registry:{ACTION}"
+        else None
+    )
     deps.action_runner.storage_backend = backend
     deps.batch_manager = MagicMock()
-    deps.batch_manager.registry.get_batch_job.return_value = entry
     return ActionExecutor(deps)
 
 
@@ -89,7 +100,7 @@ class TestTheOneRealSignalCarriesRealData:
             provider="ollama_cloud",
             record_count=4,
         )
-        executor = _executor(state_manager, entry=entry)
+        executor = _executor(state_manager, jobs={"pages.json": entry})
 
         events = _batch_events(_fire(executor, "failed"))
 
@@ -98,9 +109,37 @@ class TestTheOneRealSignalCarriesRealData:
         assert events[0].total == 4, "a four-record batch must not report as one"
         assert events[0].failed == 4
 
+    def test_it_sums_the_records_across_an_action_s_jobs(self, state_manager):
+        """One action owns one job per input file, so the count is a sum."""
+        executor = _executor(
+            state_manager,
+            jobs={
+                "a.json": BatchJobEntry(
+                    batch_id="batch_a",
+                    status="failed",
+                    timestamp="2026-08-30T09:00:00",
+                    provider="ollama_cloud",
+                    record_count=4,
+                ),
+                "b.json": BatchJobEntry(
+                    batch_id="batch_b",
+                    status="failed",
+                    timestamp="2026-08-30T09:00:00",
+                    provider="ollama_cloud",
+                    record_count=3,
+                ),
+            },
+        )
+
+        events = _batch_events(_fire(executor, "failed"))
+
+        assert events[0].total == 7
+        assert events[0].failed == 7
+        assert events[0].batch_id == "", "two jobs have no single batch id to name"
+
     def test_it_still_fires_when_the_registry_has_no_entry(self, state_manager):
         """Losing the signal entirely would be worse than losing its detail."""
-        executor = _executor(state_manager, entry=None)
+        executor = _executor(state_manager, jobs=None)
 
         events = _batch_events(_fire(executor, "failed"))
 
@@ -120,7 +159,49 @@ class TestTheFreshSubmissionDuplicateIsGone:
 
         fired: list = []
         with patch("agent_actions.workflow.executor.fire_event", side_effect=fired.append):
-            executor._handle_run_success(params, "/out", 1.0, "submitted", pre_run_count=0)
+            executor._handle_run_success(params, "/out", 1.0, "batch_submitted", pre_run_count=0)
 
         assert [e for e in fired if isinstance(e, BatchSubmittedEvent)] == []
         assert state_manager.get_status(ACTION) == ActionStatus.BATCH_SUBMITTED
+
+
+class TestTheSurvivingEventsNameTheAction:
+    """Removing the duplicates must not lose the action name.
+
+    The duplicates carried the real action name and nothing else; the populated
+    events carried real batch data under the *file key* (``pages.json``). Both
+    call sites already have the action name in scope — ``submission.py`` uses it
+    two lines below as ``registry_name``, and ``finalize_batch_output`` resolves
+    it into ``effective_action_name``.
+    """
+
+    def test_submission_names_the_action_not_the_file_key(self):
+        from agent_actions.llm.batch.services.submission import BatchSubmissionService
+
+        service = object.__new__(BatchSubmissionService)
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("batch_xyz", "submitted")
+        service._client_resolver = MagicMock()
+        service._client_resolver.get_for_config.return_value = provider
+        service._registry_manager_factory = MagicMock()
+
+        fired: list = []
+        with (
+            patch(
+                "agent_actions.llm.batch.services.submission.fire_event", side_effect=fired.append
+            ),
+            patch("agent_actions.llm.batch.services.submission.get_manager"),
+        ):
+            service._submit_to_provider(
+                {"model_vendor": "ollama_cloud"},
+                "pages.json",
+                [{"a": 1}, {"b": 2}, {"c": 3}],
+                None,
+                ACTION,
+            )
+
+        submitted = [e for e in fired if isinstance(e, BatchSubmittedEvent)]
+        assert len(submitted) == 1
+        assert submitted[0].action_name == ACTION, "named the file key, not the action"
+        assert submitted[0].batch_id == "batch_xyz"
+        assert submitted[0].request_count == 3

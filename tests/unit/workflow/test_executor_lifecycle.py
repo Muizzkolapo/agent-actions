@@ -158,8 +158,12 @@ class TestExecuteAgentSync:
         mock_deps.state_manager.update_status.assert_any_call(
             "agent_a", ActionStatus.BATCH_SUBMITTED
         )
-        event = mock_fire.call_args[0][0]
-        assert isinstance(event, BatchSubmittedEvent)
+        # A poll that found the job still running has not submitted anything;
+        # submission.py fires the real BatchSubmittedEvent when it does.
+        submitted = [
+            c[0][0] for c in mock_fire.call_args_list if isinstance(c[0][0], BatchSubmittedEvent)
+        ]
+        assert submitted == []
 
     def test_batch_failed_returns_failed(self, executor, mock_deps):
         """Batch failure should mark failed and fire BatchCompleteEvent with failed=1."""
