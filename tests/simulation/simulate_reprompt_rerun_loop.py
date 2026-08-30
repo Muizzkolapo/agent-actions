@@ -79,11 +79,10 @@ def run_recovery_entry_consumed(work_dir):
         recovery_attempt=1,
     )
 
+    jobs = {"my_action": parent_entry, "my_action_reprompt_1": recovery_entry}
     manager = MagicMock()
-    manager.get_all_jobs.return_value = {
-        "my_action": parent_entry,
-        "my_action_reprompt_1": recovery_entry,
-    }
+    manager.get_all_jobs.return_value = jobs
+    manager.get_batch_job.side_effect = jobs.get
 
     svc = BatchProcessingService.__new__(BatchProcessingService)
     svc._registry_manager_factory = MagicMock(return_value=manager)
@@ -99,9 +98,9 @@ def run_recovery_entry_consumed(work_dir):
     svc.process_all_batch_results(str(work_dir), action_name="test_action")
 
     check(
-        "my_action" in calls_received,
-        "Parent entry was processed",
-        f"Parent entry missing from {calls_received}",
+        "my_action" not in calls_received,
+        "Parent entry was skipped (the reprompt holds its results)",
+        f"Parent re-processed, restarting recovery: {calls_received}",
     )
     check(
         "my_action_reprompt_1" in calls_received,
@@ -179,7 +178,7 @@ def run_max_attempts_enforced(work_dir):
         )
 
         check(not should_continue, "Run 1: reprompt submitted", "Run 1: expected submission")
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
         check(
             saved_state.reprompt_attempt == 1,
             f"Run 1: attempt=1 (got {saved_state.reprompt_attempt})",
@@ -220,7 +219,7 @@ def run_max_attempts_enforced(work_dir):
         )
 
         check(not should_continue, "Run 2: reprompt submitted", "Run 2: expected submission")
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
         check(
             saved_state.reprompt_attempt == 2,
             f"Run 2: attempt=2 (got {saved_state.reprompt_attempt})",
@@ -351,7 +350,7 @@ def run_graduated_pool_persists(work_dir):
             recovery_state=prior_state,
         )
 
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
 
         check(
             len(saved_state.graduated_results) > 0,

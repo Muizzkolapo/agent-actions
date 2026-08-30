@@ -82,9 +82,18 @@ def process_recovery_batch(
         parent_file_name,
     )
     if not state:
+        # Without state this entry can never be interpreted, and while it exists
+        # it supersedes its parent — so leaving it registered wedges the action
+        # on the same error every run. Dropping it hands the parent back to the
+        # from-scratch path, which is what a missing state means.
         logger.error(
-            "No recovery state found for parent=%s file_name=%s", parent_file_name, file_name
+            "No recovery state for parent=%s file_name=%s — dropping the entry so %s "
+            "can be processed from scratch",
+            parent_file_name,
+            file_name,
+            parent_file_name,
         )
+        manager.remove_batch_job(file_name)
         return None
 
     agent_config = service._apply_workflow_session_id(agent_config, entry)
@@ -608,7 +617,13 @@ def register_recovery_batch(
     recovery_type: RecoveryType,
     attempt: int,
 ) -> None:
-    """Register a new recovery batch entry in the manager."""
+    """Register a new recovery batch entry, replacing the attempt it supersedes.
+
+    One recovery state per parent means one live recovery batch per parent. Left
+    in place, a spent attempt is still COMPLETED, so the next run re-processes it
+    and finalizes on stale results — deleting the live attempt's entry, and with
+    it whatever that attempt recovered.
+    """
     batch_id, record_count = submission
     recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
     recovery_entry = BatchJobEntry(
@@ -623,6 +638,13 @@ def register_recovery_batch(
         recovery_attempt=attempt,
     )
     manager.save_batch_job(recovery_file_name, recovery_entry)
+
+    # After the save, never before: a crash in between must leave the successor
+    # registered, not leave the parent with no recovery at all.
+    for name, entry in manager.get_all_jobs().items():
+        if entry.parent_file_name == parent_file_name and name != recovery_file_name:
+            logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)
+            manager.remove_batch_job(name)
 
 
 def _remove_batch_placeholder(output_file: Path) -> None:

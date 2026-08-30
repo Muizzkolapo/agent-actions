@@ -68,6 +68,41 @@ from agent_actions.utils.path_utils import ensure_directory_exists
 logger = logging.getLogger(__name__)
 
 
+def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
+    """Registry keys that are no longer the live job for their parent.
+
+    A parent is superseded by a recovery that can still yield something — that
+    recovery now holds its results. "Can yield something" is asserted, not
+    assumed absent: only COMPLETED (readable now) and in-flight (readable later)
+    qualify, so FAILED, CANCELLED and any status this version does not recognise
+    supersede nothing. A parent skipped for a recovery that never produces
+    leaves the pass with no output, which raises, leaves the action retryable,
+    and resubmits — the loop this all exists to stop.
+
+    Among live recoveries the newest wins, ranked by registration time rather
+    than by attempt or phase: a store written before registration started
+    replacing its predecessor can hold a retry registered *after* a reprompt and
+    numbered below it, which either of those orderings gets backwards.
+    """
+    live: dict[str, tuple[str, int, str]] = {}
+    for name, entry in jobs.items():
+        parent = entry.parent_file_name
+        usable = entry.status == BatchStatus.COMPLETED or entry.is_in_flight
+        if not parent or not usable:
+            continue
+        rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
+        if parent not in live or rank > live[parent]:
+            live[parent] = rank
+
+    superseded = set(live)
+    superseded.update(
+        name
+        for name, entry in jobs.items()
+        if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
+    )
+    return superseded
+
+
 class BatchProcessingService:
     """Service for processing batch job results.
 
@@ -181,6 +216,12 @@ class BatchProcessingService:
                 )
             file_name = entry.file_name
 
+            if file_name in _superseded_entries(manager.get_all_jobs()):
+                raise ProcessingError(
+                    "A later recovery batch supersedes this one — process that instead",
+                    context={"batch_id": batch_id, "file_name": file_name},
+                )
+
             output_file = self._process_single_batch_file(
                 batch_id=batch_id,
                 file_name=file_name,
@@ -213,8 +254,9 @@ class BatchProcessingService:
     ) -> list[str]:
         """Process all completed batch jobs in the registry.
 
-        Skips recovery entries (processed via their parent). Tolerates empty
-        processed_files when recovery batches are pending (in_progress).
+        Recovery entries are processed in their own right; the parent they
+        superseded is skipped instead. Tolerates empty processed_files when
+        recovery batches are pending (in_progress).
 
         Args:
             output_directory: Output directory path
@@ -236,7 +278,27 @@ class BatchProcessingService:
             )
 
         processed_files = []
-        for file_name, entry in all_jobs.items():
+        # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
+        # one: that restarts recovery at attempt 1, or finalizes on stale results
+        # and deletes the live attempt. Stores written before this can hold them.
+        # Decided once, before the loop mutates anything: a parent whose recovery
+        # finalizes mid-pass has its child removed by the cleanup, and re-reading
+        # the registry would then call that parent live again and re-run the
+        # original batch. Superseded once, skipped for the whole pass.
+        superseded = _superseded_entries(all_jobs)
+        for file_name in all_jobs:
+            if file_name in superseded:
+                logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
+                continue
+
+            # The loop body replaces and deletes entries, so a snapshot batch_id
+            # can already be stale — and an unregistered id has no client, which
+            # ends the run rather than this batch.
+            entry = manager.get_batch_job(file_name)
+            if entry is None:
+                logger.info("Skipping %s: no longer in the registry", file_name)
+                continue
+
             batch_id = entry.batch_id
             if not batch_id:
                 continue
