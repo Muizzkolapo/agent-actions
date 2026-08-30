@@ -71,18 +71,23 @@ logger = logging.getLogger(__name__)
 def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
-    A parent is superseded the moment it spawns a recovery; the recovery holds
-    its results. Among recoveries the newest wins, ranked by registration time
-    rather than by attempt or phase: a store written before registration started
-    replacing its predecessor can hold a retry that was registered *after* a
-    reprompt, which either of those orderings gets backwards.
+    A parent is superseded by a recovery that can still yield something — that
+    recovery now holds its results. A recovery the provider FAILED or CANCELLED
+    yields nothing ever, so it supersedes nothing: the parent has to stay
+    processable, or the pass produces no output at all and the action is reset
+    and resubmitted, which is the loop this all exists to stop.
+
+    Among live recoveries the newest wins, ranked by registration time rather
+    than by attempt or phase: a store written before registration started
+    replacing its predecessor can hold a retry registered *after* a reprompt and
+    numbered below it, which either of those orderings gets backwards.
     """
-    live: dict[str, tuple[str, str]] = {}
+    live: dict[str, tuple[str, int, str]] = {}
     for name, entry in jobs.items():
         parent = entry.parent_file_name
-        if not parent:
+        if not parent or entry.status in (BatchStatus.FAILED, BatchStatus.CANCELLED):
             continue
-        rank = (entry.timestamp or "", name)
+        rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
         if parent not in live or rank > live[parent]:
             live[parent] = rank
 
@@ -90,7 +95,7 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     superseded.update(
         name
         for name, entry in jobs.items()
-        if entry.parent_file_name in live and name != live[entry.parent_file_name][1]
+        if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
     )
     return superseded
 
@@ -284,7 +289,7 @@ class BatchProcessingService:
             # ends the run rather than this batch.
             entry = manager.get_batch_job(file_name)
             if entry is None:
-                logger.info("Skipping %s: consumed earlier in this pass", file_name)
+                logger.info("Skipping %s: no longer in the registry", file_name)
                 continue
 
             batch_id = entry.batch_id
