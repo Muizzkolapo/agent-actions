@@ -507,8 +507,15 @@ class TestADeadRecoverySupersedesNothing:
     reports COMPLETED on output derived entirely from the old run.
     """
 
-    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED, "bogus_status"])
     def test_the_parent_stays_processable(self, dead):
+        """Including a status this version does not recognise.
+
+        ``BatchJobEntry`` warns on an unknown status but keeps it, and
+        ``get_registry_stats`` counts it as neither completed, failed nor
+        in-progress — so a parent skipped for one wedges the pass with no
+        in-flight job to wait on.
+        """
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
