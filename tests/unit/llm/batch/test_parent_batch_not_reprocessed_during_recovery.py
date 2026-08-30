@@ -45,7 +45,7 @@ def _entry(
     return BatchJobEntry(
         batch_id=batch_id,
         status=status,
-        timestamp=f"2026-08-30T{at}+00:00" if at else "",
+        timestamp=f"2026-08-30T{at}+00:00",
         provider="ollama_cloud",
         record_count=1,
         file_name=file_name,
@@ -475,17 +475,17 @@ class TestRegistryShapesThatCouldStrandWork:
 
         assert sorted(_run(_service(manager))) == ["batch_a_r1", "batch_b_r1"]
 
-    def test_entries_without_a_timestamp_still_pick_one_live_attempt(self):
-        """Pre-dating the timestamp field must not make every attempt live."""
+    def test_identical_timestamps_still_pick_one_live_attempt(self):
+        """Two registrations in the same instant must not both count as live."""
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
-                CHILD: _child("batch_r1", at="", attempt=1),
+                CHILD: _child("batch_r1", at="09:01:00", attempt=1),
                 f"{PARENT}_retry_2": _entry(
                     "batch_r2",
                     BatchStatus.COMPLETED,
                     f"{PARENT}_retry_2",
-                    at="",
+                    at="09:01:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.RETRY,
                     recovery_attempt=2,
@@ -564,3 +564,48 @@ class TestADeadRecoverySupersedesNothing:
         )
 
         assert _run(_service(manager)) == ["batch_usable"]
+
+
+class TestARecoveryEntryThatOutlivedItsStateIsDropped:
+    """Otherwise the action wedges on the same error every run.
+
+    The entry supersedes its parent, but nothing can read it without the state,
+    so the pass processes nothing and raises with the registry unchanged — the
+    next run repeats it verbatim, forever. Reachable when ``_finalize_and_cleanup``
+    deletes the state and the write that follows fails, and when a
+    ``RecoveryState`` field is renamed across versions so every load returns None.
+    """
+
+    def test_the_entry_is_removed_so_the_parent_can_run_from_scratch(self):
+        from agent_actions.llm.batch.services.processing_recovery import process_recovery_batch
+
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child"),
+            }
+        )
+        service = _service(manager)
+        service._storage_backend = MagicMock()
+        service._storage_backend.load_metadata.return_value = None
+
+        result = process_recovery_batch(
+            service,
+            batch_id="batch_child",
+            file_name=CHILD,
+            entry=manager.get_batch_job(CHILD),
+            output_directory="/out",
+            agent_config={"kind": "llm"},
+            manager=manager,
+            action_name=ACTION,
+        )
+
+        assert result is None
+        assert CHILD not in manager.get_all_jobs(), "a state-less entry blocks its parent forever"
+        assert PARENT in manager.get_all_jobs()
+
+    def test_the_parent_is_processable_once_the_entry_is_gone(self):
+        """The point of dropping it: the next pass makes progress."""
+        manager = _registry({PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT)})
+
+        assert _run(_service(manager)) == ["batch_parent"]

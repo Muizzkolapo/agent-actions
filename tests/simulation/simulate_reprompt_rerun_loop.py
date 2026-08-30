@@ -178,7 +178,7 @@ def run_max_attempts_enforced(work_dir):
         )
 
         check(not should_continue, "Run 1: reprompt submitted", "Run 1: expected submission")
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
         check(
             saved_state.reprompt_attempt == 1,
             f"Run 1: attempt=1 (got {saved_state.reprompt_attempt})",
@@ -219,7 +219,7 @@ def run_max_attempts_enforced(work_dir):
         )
 
         check(not should_continue, "Run 2: reprompt submitted", "Run 2: expected submission")
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
         check(
             saved_state.reprompt_attempt == 2,
             f"Run 2: attempt=2 (got {saved_state.reprompt_attempt})",
@@ -350,7 +350,7 @@ def run_graduated_pool_persists(work_dir):
             recovery_state=prior_state,
         )
 
-        saved_state = mgr.save.call_args[0][2]
+        saved_state = mgr.save.call_args[0][3]
 
         check(
             len(saved_state.graduated_results) > 0,
