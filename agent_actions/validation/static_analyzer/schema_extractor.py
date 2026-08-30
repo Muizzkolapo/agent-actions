@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.tooling.code_scanner import scan_tool_functions
@@ -122,6 +122,11 @@ class SchemaExtractor:
             loaded = self._load_schema_by_name(schema_id)
         except (FileNotFoundError, ConfigValidationError):
             loaded = None
+        except SchemaValidationError as e:
+            # Ambiguous name — the fallback loader cannot disambiguate either.
+            logger.warning("Schema loading failed for '%s': %s", schema_id, e)
+            self._mark_schema_load_failure(output, schema_id, e)
+            return False
         if loaded:
             output.json_schema = loaded
             output.schema_fields = self.extract_fields_from_json_schema(loaded)
@@ -355,6 +360,9 @@ class SchemaExtractor:
                 loaded = self._load_schema_by_name(schema_name)
             except FileNotFoundError:
                 loaded = None
+            except SchemaValidationError as e:
+                logger.warning("Skipping ambiguous schema name '%s': %s", schema_name, e)
+                loaded = None
             if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self.extract_fields_from_json_schema(loaded)
@@ -368,6 +376,9 @@ class SchemaExtractor:
             try:
                 loaded = self._load_schema_by_name(schema_def)
             except FileNotFoundError:
+                loaded = None
+            except SchemaValidationError as e:
+                logger.warning("Skipping ambiguous schema name '%s': %s", schema_def, e)
                 loaded = None
             if loaded:
                 output.json_schema = loaded
