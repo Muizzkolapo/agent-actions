@@ -45,7 +45,7 @@ def _entry(
     return BatchJobEntry(
         batch_id=batch_id,
         status=status,
-        timestamp=f"2026-08-30T{at}+00:00",
+        timestamp=f"2026-08-30T{at}+00:00" if at else "",
         provider="ollama_cloud",
         record_count=1,
         file_name=file_name,
@@ -422,3 +422,73 @@ class TestLiveIsDecidedByRegistrationTime:
         )
 
         assert _run(_service(manager)) == ["batch_retry_1_rerun"]
+
+
+class TestRegistryShapesThatCouldStrandWork:
+    """A skip that fires on the wrong key silently drops a completed batch."""
+
+    def test_a_recovery_whose_parent_is_gone_is_still_processed(self):
+        """Only the parent is skipped, and it is not there to skip."""
+        manager = _registry(
+            {
+                "orphan_retry_1": _entry(
+                    "batch_orphan",
+                    BatchStatus.COMPLETED,
+                    "orphan_retry_1",
+                    at="09:01:00",
+                    parent_file_name="gone.json",
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=1,
+                )
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_orphan"]
+
+    def test_each_parent_is_judged_against_its_own_recoveries(self):
+        manager = _registry(
+            {
+                "a.json": _entry("batch_a", BatchStatus.COMPLETED, "a.json"),
+                "a.json_retry_1": _entry(
+                    "batch_a_r1",
+                    BatchStatus.COMPLETED,
+                    "a.json_retry_1",
+                    at="09:01:00",
+                    parent_file_name="a.json",
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=1,
+                ),
+                "b.json": _entry("batch_b", BatchStatus.COMPLETED, "b.json"),
+                "b.json_retry_1": _entry(
+                    "batch_b_r1",
+                    BatchStatus.COMPLETED,
+                    "b.json_retry_1",
+                    at="09:01:00",
+                    parent_file_name="b.json",
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=1,
+                ),
+            }
+        )
+
+        assert sorted(_run(_service(manager))) == ["batch_a_r1", "batch_b_r1"]
+
+    def test_entries_without_a_timestamp_still_pick_one_live_attempt(self):
+        """Pre-dating the timestamp field must not make every attempt live."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_r1", at="", attempt=1),
+                f"{PARENT}_retry_2": _entry(
+                    "batch_r2",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_2",
+                    at="",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_r2"]
