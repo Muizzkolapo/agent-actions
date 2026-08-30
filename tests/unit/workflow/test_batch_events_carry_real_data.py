@@ -109,8 +109,14 @@ class TestTheOneRealSignalCarriesRealData:
         assert events[0].total == 4, "a four-record batch must not report as one"
         assert events[0].failed == 4
 
-    def test_it_sums_the_records_across_an_action_s_jobs(self, state_manager):
-        """One action owns one job per input file, so the count is a sum."""
+    def test_a_multi_file_action_reports_each_job_by_id(self, state_manager):
+        """One action owns one job per input file, and each is named.
+
+        Aggregating them into a single event leaves ``batch_id`` blank for
+        exactly these actions, which renders as the ``Batch  …`` line this
+        change exists to remove. The success path already fires per file —
+        ``finalize_batch_output`` runs once per input — so this matches it.
+        """
         executor = _executor(
             state_manager,
             jobs={
@@ -133,9 +139,37 @@ class TestTheOneRealSignalCarriesRealData:
 
         events = _batch_events(_fire(executor, "failed"))
 
-        assert events[0].total == 7
-        assert events[0].failed == 7
-        assert events[0].batch_id == "", "two jobs have no single batch id to name"
+        assert len(events) == 2
+        assert {e.batch_id for e in events} == {"batch_a", "batch_b"}
+        assert all(e.batch_id for e in events), "no event may carry a blank batch id"
+        assert sorted(e.total for e in events) == [3, 4]
+        assert all(e.failed == e.total and e.completed == 0 for e in events)
+
+    def test_a_completed_job_is_not_reported_as_failed(self, state_manager):
+        """A mixed registry reaches this branch on an unrecognized status."""
+        executor = _executor(
+            state_manager,
+            jobs={
+                "a.json": BatchJobEntry(
+                    batch_id="batch_done",
+                    status="completed",
+                    timestamp="2026-08-30T09:00:00",
+                    provider="ollama_cloud",
+                    record_count=4,
+                ),
+                "b.json": BatchJobEntry(
+                    batch_id="batch_bad",
+                    status="failed",
+                    timestamp="2026-08-30T09:00:00",
+                    provider="ollama_cloud",
+                    record_count=3,
+                ),
+            },
+        )
+
+        events = _batch_events(_fire(executor, "failed"))
+
+        assert [e.batch_id for e in events] == ["batch_bad"]
 
     def test_it_says_nothing_when_the_registry_cannot_give_a_count(self, state_manager):
         """An invented total is indistinguishable from a real one.
@@ -177,8 +211,9 @@ class TestTheOneRealSignalCarriesRealData:
 
         events = _batch_events(_fire(executor, "failed"))
 
-        assert events[0].total == 3, "the two retried records are not extra records"
-        assert events[0].batch_id == "batch_parent"
+        assert [(e.batch_id, e.total) for e in events] == [("batch_parent", 3)], (
+            "the two retried records are not extra records"
+        )
 
 
 class TestTheFreshSubmissionDuplicateIsGone:
