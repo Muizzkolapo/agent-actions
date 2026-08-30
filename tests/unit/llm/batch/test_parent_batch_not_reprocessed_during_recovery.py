@@ -38,11 +38,14 @@ class _Metadata:
         self.store[key] = value
 
 
-def _entry(batch_id: str, status: BatchStatus, file_name: str, **kw) -> BatchJobEntry:
+def _entry(
+    batch_id: str, status: BatchStatus, file_name: str, *, at: str = "09:00:00", **kw
+) -> BatchJobEntry:
+    """``at`` is registration time — what decides which entry is live."""
     return BatchJobEntry(
         batch_id=batch_id,
         status=status,
-        timestamp="2026-08-30T09:00:00+00:00",
+        timestamp=f"2026-08-30T{at}+00:00",
         provider="ollama_cloud",
         record_count=1,
         file_name=file_name,
@@ -50,11 +53,17 @@ def _entry(batch_id: str, status: BatchStatus, file_name: str, **kw) -> BatchJob
     )
 
 
-def _child(batch_id: str, status: BatchStatus = BatchStatus.COMPLETED, attempt: int = 1):
+def _child(
+    batch_id: str,
+    status: BatchStatus = BatchStatus.COMPLETED,
+    attempt: int = 1,
+    at: str = "09:01:00",
+):
     return _entry(
         batch_id,
         status,
         CHILD,
+        at=at,
         parent_file_name=PARENT,
         recovery_type=RecoveryType.RETRY,
         recovery_attempt=attempt,
@@ -238,6 +247,7 @@ class TestOnlyTheLiveAttemptIsProcessed:
                     "batch_retry_2",
                     BatchStatus.COMPLETED,
                     f"{PARENT}_retry_2",
+                    at="09:02:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.RETRY,
                     recovery_attempt=2,
@@ -257,6 +267,7 @@ class TestOnlyTheLiveAttemptIsProcessed:
                     "batch_reprompt_1",
                     BatchStatus.COMPLETED,
                     f"{PARENT}_reprompt_1",
+                    at="09:02:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.REPROMPT,
                     recovery_attempt=1,
@@ -295,6 +306,7 @@ class TestOnlyTheLiveAttemptIsProcessed:
                     "batch_other_1",
                     BatchStatus.COMPLETED,
                     f"{other}_retry_1",
+                    at="09:01:00",
                     parent_file_name=other,
                     recovery_type=RecoveryType.RETRY,
                     recovery_attempt=1,
@@ -361,3 +373,52 @@ class TestTheSingleBatchSiblingRefusesASupersededId:
             assert service.process_batch_results("batch_parent", "/out", action_name=ACTION) == (
                 "/out/done.json"
             )
+
+
+class TestLiveIsDecidedByRegistrationTime:
+    """Not by attempt number, and not by retry-then-reprompt phase order.
+
+    `_process_original_batch` writes `phase=RETRY` whenever it runs, so a store
+    written before a parent stopped being re-processed can hold a retry
+    registered *after* a reprompt. Ranking by phase picks the older reprompt;
+    ranking by attempt picks whichever happens to number higher.
+    """
+
+    def test_a_retry_registered_after_a_reprompt_wins(self):
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                f"{PARENT}_reprompt_1": _entry(
+                    "batch_reprompt_1",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_reprompt_1",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_attempt=1,
+                ),
+                CHILD: _child("batch_retry_1", at="09:02:00", attempt=1),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_retry_1"]
+
+    def test_a_lower_numbered_attempt_registered_later_wins(self):
+        """Attempt numbers restart at 1 whenever a fresh recovery begins."""
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                f"{PARENT}_retry_2": _entry(
+                    "batch_retry_2",
+                    BatchStatus.COMPLETED,
+                    f"{PARENT}_retry_2",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.RETRY,
+                    recovery_attempt=2,
+                ),
+                CHILD: _child("batch_retry_1_rerun", at="09:03:00", attempt=1),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_retry_1_rerun"]
