@@ -90,7 +90,7 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         usable = entry.status == BatchStatus.COMPLETED or entry.is_in_flight
         if not parent or not usable:
             continue
-        rank = (entry.timestamp, entry.recovery_attempt or 0, name)
+        rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
         if parent not in live or rank > live[parent]:
             live[parent] = rank
 
@@ -281,9 +281,11 @@ class BatchProcessingService:
         # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
         # one: that restarts recovery at attempt 1, or finalizes on stale results
         # and deletes the live attempt. Stores written before this can hold them.
-        superseded = _superseded_entries(all_jobs)
         for file_name in all_jobs:
-            if file_name in superseded:
+            # Recomputed per entry, not once: the loop body registers and removes
+            # entries, so a set derived from the snapshot drifts from the
+            # registry these reads come from.
+            if file_name in _superseded_entries(manager.get_all_jobs()):
                 logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
                 continue
 
