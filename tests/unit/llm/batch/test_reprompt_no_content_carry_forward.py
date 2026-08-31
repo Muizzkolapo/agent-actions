@@ -216,6 +216,44 @@ def test_no_content_record_reaches_finalization_when_reprompt_exhausts(tmp_path)
     assert finalized[DEAD_ID].error == PROVIDER_ERROR
 
 
+def test_withheld_record_is_not_also_submitted_to_the_reprompt(tmp_path):
+    """Carrying it forward is only correct while it stays out of the reprompt batch.
+
+    Doing both would return the record from the batch *and* from the carried pool,
+    duplicating it at finalization.
+    """
+    harness = _Harness(tmp_path)
+    assert harness.submit_pass(_initial_results()) is False
+
+    submitted = {
+        r.custom_id
+        for r in harness.service._retry_service.submit_reprompt_batch.call_args.kwargs[
+            "failed_results"
+        ]
+    }
+    assert submitted == {BAD_ID}
+
+
+def test_carry_forward_survives_more_than_one_reprompt_round(tmp_path):
+    """The pool is re-saved on each resubmission, so it has to outlast every round."""
+    harness = _Harness(tmp_path)
+    assert harness.submit_pass(_initial_results()) is False
+
+    # Round 1 still fails, so a second reprompt is submitted and state is re-saved.
+    harness.reprompt_pass([BatchResult(custom_id=BAD_ID, content={"topic": ""}, success=True)])
+    assert harness.finalized == [], "a second reprompt round should not have finalized yet"
+
+    carried = RecoveryStateManager.load(harness.backend, ACTION, PARENT).unrepromptable_results
+    assert [d["custom_id"] for d in carried] == [DEAD_ID]
+
+    # Round 2 exhausts the attempts and finalizes.
+    harness.reprompt_pass([BatchResult(custom_id=BAD_ID, content={"topic": ""}, success=True)])
+
+    finalized = {r.custom_id: r for r in harness.finalized}
+    assert set(finalized) == {OK_ID, BAD_ID, DEAD_ID}
+    assert finalized[DEAD_ID].error == PROVIDER_ERROR
+
+
 def test_withheld_failure_is_not_counted_as_a_graduated_record(tmp_path):
     """Carrying it in the graduated pool would reach finalization but claim it recovered.
 
