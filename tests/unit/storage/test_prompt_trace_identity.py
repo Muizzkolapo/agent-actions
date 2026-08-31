@@ -9,6 +9,7 @@ an earlier run left behind; an expansion's children reach their prompt through
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -137,6 +138,40 @@ class TestTraceRowsCarryDurableIdentity:
         assert rows[0]["source_guid"] is None
         assert rows[0]["run_id"] is None
 
+    def test_legacy_store_stays_readable_opened_read_only(self, tmp_path):
+        """A read-only open never runs the ALTER pass, so naming the new
+        columns unconditionally would turn every read of an old store into
+        an error — which is how the docs scanner reads them."""
+        db_path = tmp_path / "legacy_ro.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE prompt_trace ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  action_name TEXT NOT NULL, record_id TEXT NOT NULL,"
+            "  attempt INTEGER NOT NULL DEFAULT 0, compiled_prompt TEXT NOT NULL,"
+            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
+            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
+            "  context_length INTEGER, response_length INTEGER,"
+            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
+            "  UNIQUE(action_name, record_id, attempt))"
+        )
+        conn.execute(
+            "INSERT INTO prompt_trace (action_name, record_id, compiled_prompt)"
+            " VALUES ('act', 'tid-old', 'old prompt')"
+        )
+        conn.commit()
+        conn.close()
+
+        b = SQLiteBackend.create_readonly(db_path)
+        try:
+            rows = b.get_prompt_traces("act")
+            assert [r["compiled_prompt"] for r in rows] == ["old prompt"]
+            preview = b.preview_prompt_traces("act")
+            assert preview["total_count"] == 1
+            assert "source_guid" not in preview["records"][0]
+        finally:
+            b.close()
+
 
 class TestResponseUpdatesReachTheRecordsOwnPrompt:
     def test_response_lands_on_the_prepared_task(self, backend):
@@ -260,11 +295,18 @@ class TestResponseUpdatesReachTheRecordsOwnPrompt:
         assert rows[0]["source_guid"] == "g1"
         assert rows[0]["response_text"] == '{"answer": "online"}'
 
-    def test_missing_trace_row_is_a_noop(self, backend):
-        backend.update_prompt_trace_response(
-            ACTION, record_id="never-written", response_text="resp"
-        )
+    def test_a_response_with_no_trace_row_is_reported(self, backend, caplog):
+        """Silence here is how the expansion defect stayed hidden: the UPDATE
+        matched nothing and said nothing."""
+        with caplog.at_level(logging.WARNING):
+            backend.update_prompt_trace_response(
+                ACTION, record_id="never-written", response_text="resp"
+            )
+
         assert backend.get_prompt_traces(ACTION) == []
+        assert any("never-written" in r.getMessage() for r in caplog.records), (
+            "a response with no row to land on must be reported"
+        )
 
 
 class TestScanPreviewAttachesByIdentity:
@@ -530,3 +572,55 @@ class TestRunIdReachesTheWriter:
 
         ctx = mock_stage.call_args.args[0]
         assert ctx.workflow_metadata == {"name": "wf", "run_id": "run-123"}
+
+    def test_a_first_stage_trace_records_its_run(self, backend, tmp_path):
+        """End-to-end past the context hand-off: the run must survive all the
+        way onto the row. Asserting only that the context carries it leaves the
+        two lines that actually spend it unpinned."""
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
+            InitialStageContext,
+            process_initial_stage,
+        )
+        from agent_actions.processing.invocation.result import InvocationResult
+
+        src = tmp_path / "in.json"
+        src.write_text('[{"q": 1}]')
+        out = tmp_path / "out"
+        out.mkdir()
+
+        with (
+            patch(
+                "agent_actions.processing.invocation.factory.InvocationStrategyFactory.create",
+                return_value=SimpleNamespace(
+                    invoke=lambda prepared, context: InvocationResult(
+                        response={"a": 1}, executed=True
+                    )
+                ),
+            ),
+            patch(
+                "agent_actions.prompt.service.PromptPreparationService."
+                "prepare_prompt_with_field_context",
+                return_value=SimpleNamespace(
+                    formatted_prompt="p", llm_context={}, passthrough_fields={}, prompt_context={}
+                ),
+            ),
+        ):
+            process_initial_stage(
+                InitialStageContext(
+                    agent_config={
+                        "model_name": "m1",
+                        "file_type": "json",
+                        "context_scope": {"observe": ["*"]},
+                    },
+                    agent_name=ACTION,
+                    file_path=str(src),
+                    base_directory=str(tmp_path),
+                    output_directory=str(out),
+                    storage_backend=backend,
+                    workflow_metadata={"name": "wf", "run_id": "run-abc"},
+                )
+            )
+
+        rows = backend.get_prompt_traces(ACTION)
+        assert rows, "the first stage must write a trace"
+        assert all(r["run_id"] == "run-abc" for r in rows)

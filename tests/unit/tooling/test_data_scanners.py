@@ -417,7 +417,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         assert "_trace" not in records[0]
 
     def test_no_trace_when_record_has_no_identity(self, tmp_path):
-        """Records without source_guid/parent_source_guid should not get traces."""
+        """Records with neither target_id nor parent_target_id get no trace."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")

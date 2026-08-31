@@ -1323,6 +1323,37 @@ class SQLiteBackend(StorageBackend):
                     },
                 )
 
+    _TRACE_READ_COLUMNS = (
+        "action_name",
+        "record_id",
+        "source_guid",
+        "run_id",
+        "attempt",
+        "compiled_prompt",
+        "llm_context",
+        "response_text",
+        "model_name",
+        "model_vendor",
+        "run_mode",
+        "prompt_length",
+        "context_length",
+        "response_length",
+        "created_at",
+    )
+
+    def _trace_select_list(self) -> str:
+        """Trace columns this store actually has, as a SELECT list.
+
+        A store opened read-only never runs the ALTER pass, so one written
+        before the identity columns existed does not have them; naming them
+        unconditionally would turn every read of an old store into an error.
+        """
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute("PRAGMA table_info(prompt_trace)")
+            present = {row[1] for row in cursor.fetchall()}
+        return ", ".join(c for c in self._TRACE_READ_COLUMNS if c in present)
+
     def get_prompt_traces(
         self,
         action_name: str,
@@ -1331,13 +1362,7 @@ class SQLiteBackend(StorageBackend):
         """Retrieve prompt traces for an action, optionally filtered by record."""
         action_name = self._validate_identifier(action_name, "action_name")
 
-        query = (
-            "SELECT action_name, record_id, source_guid, run_id, attempt,"
-            " compiled_prompt, llm_context,"
-            " response_text, model_name, model_vendor, run_mode,"
-            " prompt_length, context_length, response_length, created_at"
-            " FROM prompt_trace WHERE action_name = ?"
-        )
+        query = f"SELECT {self._trace_select_list()} FROM prompt_trace WHERE action_name = ?"
         params: list[Any] = [action_name]
 
         if record_id is not None:
@@ -1400,6 +1425,7 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
         limit = min(max(1, limit), 1000)
         offset = max(0, offset)
+        select_list = self._trace_select_list()
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -1411,16 +1437,8 @@ class SQLiteBackend(StorageBackend):
             total_count = cursor.fetchone()["count"]
 
             cursor.execute(
-                """
-                SELECT action_name, record_id, source_guid, run_id, attempt,
-                       compiled_prompt, llm_context,
-                       response_text, model_name, model_vendor, run_mode,
-                       prompt_length, context_length, response_length, created_at
-                FROM prompt_trace
-                WHERE action_name = ?
-                ORDER BY id
-                LIMIT ? OFFSET ?
-                """,
+                f"SELECT {select_list} FROM prompt_trace"
+                " WHERE action_name = ? ORDER BY id LIMIT ? OFFSET ?",
                 (action_name, limit, offset),
             )
             records = [dict(row) for row in cursor.fetchall()]
