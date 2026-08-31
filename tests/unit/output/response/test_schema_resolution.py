@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from agent_actions.config.path_config import get_schema_path
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 
 
@@ -77,31 +77,31 @@ class TestMultiLevelResolution:
 
 
 class TestGlobalUniqueness:
-    """Tests for duplicate name detection (warns, first occurrence wins)."""
+    """Tests for duplicate name detection (ambiguous references hard-fail)."""
 
-    def test_same_name_in_two_locations_uses_first(self, tmp_path):
-        """Same schema name in project-level and workflow-level: first wins."""
+    def test_same_name_in_two_locations_raises(self, tmp_path):
+        """Same schema name in project-level and workflow-level is ambiguous."""
         _setup_project(tmp_path)
         _write_schema(tmp_path / "schema" / "dup.yml", "project_copy")
         _write_schema(tmp_path / "agent_workflow" / "wf" / "schema" / "dup.yml", "wf_copy")
-        result = SchemaLoader.load_schema("dup", project_root=tmp_path)
-        assert result["name"] == "project_copy"  # first occurrence wins
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("dup", project_root=tmp_path)
 
-    def test_same_name_in_two_workflows_uses_first(self, tmp_path):
-        """Same schema name in two different workflow dirs: first alphabetically wins."""
+    def test_same_name_in_two_workflows_raises(self, tmp_path):
+        """Same schema name in two different workflow dirs is ambiguous."""
         _setup_project(tmp_path)
         _write_schema(tmp_path / "agent_workflow" / "wf_a" / "schema" / "dup.yml", "wf_a_copy")
         _write_schema(tmp_path / "agent_workflow" / "wf_b" / "schema" / "dup.yml", "wf_b_copy")
-        result = SchemaLoader.load_schema("dup", project_root=tmp_path)
-        assert result["name"] == "wf_a_copy"  # first alphabetically
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("dup", project_root=tmp_path)
 
-    def test_yml_and_yaml_same_name_uses_first(self, tmp_path):
-        """Same schema name with .yml and .yaml extensions: first found wins."""
+    def test_yml_and_yaml_same_name_raises(self, tmp_path):
+        """Same schema name with .yml and .yaml extensions is ambiguous."""
         _setup_project(tmp_path)
         _write_schema(tmp_path / "schema" / "both.yml", "yml_version")
         _write_schema(tmp_path / "schema" / "both.yaml", "yaml_version")
-        result = SchemaLoader.load_schema("both", project_root=tmp_path)
-        assert result["name"] in ("yml_version", "yaml_version")
+        with pytest.raises(SchemaValidationError, match="ambiguous"):
+            SchemaLoader.load_schema("both", project_root=tmp_path)
 
     def test_not_found_raises(self, tmp_path):
         """Schema not found anywhere raises FileNotFoundError."""

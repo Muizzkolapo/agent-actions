@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
 
@@ -66,6 +66,10 @@ def scan_schemas(project_root: Path) -> dict[str, Any]:
     for schema_name, yml_file in all_schema_files.items():
         try:
             raw_schema = SchemaLoader.load_schema(schema_name, project_root=project_root)
+        except SchemaValidationError as e:
+            # Ambiguous name — docs cannot know which file the user means.
+            logger.warning("Skipping ambiguous schema name '%s': %s", schema_name, e)
+            continue
         except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             logger.warning("Skipping unreadable schema file %s: %s", yml_file, e)
             continue
