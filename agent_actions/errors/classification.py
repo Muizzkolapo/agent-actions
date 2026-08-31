@@ -18,11 +18,11 @@ def mark_action_fatal(error: Exception) -> Exception:
 def is_action_fatal(error: BaseException) -> bool:
     """True if some layer declared *error* fatal to the action.
 
-    Fatality is declared where it is known — the processing loops that
-    deliberately re-raise instead of tombstoning — and never inferred from the
-    type here: the layers above wrap on the way up, so an error's outermost
-    type says only who caught it last. The chain is searched for the same
-    reason ``raised_by_exhaustion_policy`` searches it.
+    Fatality is declared where it is known and never inferred from the type
+    here: the layers above wrap on the way up, so an error's outermost type
+    says only who caught it last. The chain is searched for the same reason
+    ``raised_by_exhaustion_policy`` searches it. A path that declares nothing
+    keeps its failures per-item.
     """
     from agent_actions.utils.safe_format import get_error_chain
 

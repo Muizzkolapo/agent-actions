@@ -203,11 +203,27 @@ class TestUndeclaredFailuresStayTolerated:
                 "Staging data field(s) 'source' collide with reserved namespace names."
             ),
             ConfigurationError("raised outside a record loop"),
+            AgentActionsError(
+                "Error generating target: expecting ',' delimiter",
+                context={"file_path": "bad.json"},
+                cause=ValueError("expecting ',' delimiter"),
+            ),
         ],
-        ids=["file_scoped", "record_context", "staging_data", "undeclared_configuration"],
+        ids=[
+            "file_scoped",
+            "record_context",
+            "staging_data",
+            "undeclared_configuration",
+            "wrapped_bad_input_file",
+        ],
     )
     def test_an_undeclared_error_still_returns_partial(self, tmp_path, error):
-        """Only a declared error stops the action; a bad input file does not."""
+        """Only a declared error stops the action; a bad input file does not.
+
+        The last case wears the pipeline's own wrapper, which every corrupt
+        input file also wears — so escalating on the wrapper rather than on
+        the declaration would fail the action for one unreadable file.
+        """
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "bad.json")

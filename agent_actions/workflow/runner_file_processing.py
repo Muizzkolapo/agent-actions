@@ -141,7 +141,13 @@ def _raise_all_files_failed(
     """
     from agent_actions.errors import DependencyError
 
-    detail = _format_error_sample(errors.messages) or "Check logs for details."
+    # The action-fatal cause leads when there is one: the sample is capped, so
+    # a halt that failed after the cap would otherwise appear only on the chain.
+    detail = (
+        errors.action_fatal_message
+        or _format_error_sample(errors.messages)
+        or "Check logs for details."
+    )
     raise DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={

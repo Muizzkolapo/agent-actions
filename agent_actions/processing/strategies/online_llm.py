@@ -274,8 +274,9 @@ class OnlineLLMStrategy:
                     )
                 )
                 if not e.missing_variables:
-                    # TemplateSyntaxError wrapped — broken template, action-fatal
-                    mark_action_fatal(e)
+                    # No variable to blame: a malformed template (already marked
+                    # action-fatal where it was parsed) or a render failure this
+                    # record's data provoked. Either way, not a tombstone.
                     raise
                 # Missing variables — per-record recoverable
                 record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError, TemplateVariableError
+from agent_actions.errors import ConfigurationError, TemplateVariableError, mark_action_fatal
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
@@ -318,14 +318,17 @@ class PromptPreparationService:
 
         except TemplateSyntaxError as e:
             logger.debug("Jinja2 template syntax error: %s", e)
-            raise TemplateVariableError(
+            # The template is malformed for every record, not just this one.
+            error = TemplateVariableError(
                 missing_variables=[],
                 available_variables=list(prompt_context.keys()),
                 template_line=e.lineno,
                 agent_name=agent_name or "",
                 mode=mode or "",
                 cause=e,
-            ) from e
+            )
+            mark_action_fatal(error)
+            raise error from e
         except Exception as e:
             logger.exception("Error rendering prompt template: %s", e)
 

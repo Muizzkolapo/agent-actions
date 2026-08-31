@@ -211,9 +211,10 @@ Raised when Jinja2 template rendering fails for a specific record because a refe
 - `null_namespace_hints` — when a namespace is null due to guard-filter at a fan-in point
 
 Both errors result in a FAILED disposition for the affected record and the pipeline
-continues — except a `TemplateVariableError` carrying no missing variables, which is a
-wrapped template syntax error: the template is broken for every record, so the record
-loop marks it action-fatal and re-raises.
+continues — except a `TemplateVariableError` wrapping a Jinja `TemplateSyntaxError`,
+which the renderer marks action-fatal because a malformed template fails every record.
+A render that fails on one record's data also arrives with no missing variables, so the
+mark, not the empty list, is what separates them.
 
 ---
 

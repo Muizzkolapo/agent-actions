@@ -115,16 +115,9 @@ class TestTheStrategyAndTheCollectorAgree:
             ConfigurationError("schema missing"),
             EmptyOutputError("no output with on_empty=error"),
             SchemaValidationError("output failed validation"),
-            TemplateVariableError(
-                missing_variables=[],
-                available_variables=["source"],
-                agent_name="label_page",
-                mode="online",
-                cause=Exception("jinja syntax"),
-            ),
             exhaustion_halt("Retry exhausted (on_exhausted=raise)"),
         ],
-        ids=["configuration", "empty_output", "schema_validation", "broken_template", "halt"],
+        ids=["configuration", "empty_output", "schema_validation", "halt"],
     )
     def test_what_the_record_loop_reraises_is_fatal(self, monkeypatch, error):
         strategy = self._strategy()
@@ -138,6 +131,50 @@ class TestTheStrategyAndTheCollectorAgree:
         assert is_action_fatal(exc_info.value) is True, (
             "the record loop re-raised this deliberately, so the collector "
             "above must not treat it as one file's accident"
+        )
+
+    def test_a_malformed_template_is_fatal_but_a_bad_record_is_not(self):
+        """Both arrive with no missing variables; only one indicts the template.
+
+        The render failure is provoked by one record's data, so treating
+        "no variable to blame" as a broken template would fail the action
+        for an input the next record does not share.
+        """
+        from agent_actions.prompt.service import PromptPreparationService
+
+        render = PromptPreparationService._render_prompt_template
+
+        with pytest.raises(TemplateVariableError) as malformed:
+            render("{% if x %}unclosed", {"source": {"title": "t"}}, agent_name="label_page")
+
+        with pytest.raises(TemplateVariableError) as bad_record:
+            render(
+                "{{ source.count | int + source.other }}",
+                {"source": {"count": "3", "other": {"a": 1}}},
+                agent_name="label_page",
+            )
+
+        assert malformed.value.missing_variables == bad_record.value.missing_variables == []
+        assert is_action_fatal(malformed.value) is True
+        assert is_action_fatal(bad_record.value) is False, (
+            "one record's data failed to render, which is not a broken template"
+        )
+
+    def test_the_file_granularity_loop_declares_the_same_knobs(self, monkeypatch):
+        """``on_empty: error`` means the same thing whether records or files."""
+        from agent_actions.processing.strategies import file_tool
+
+        strategy = file_tool.FileToolStrategy.__new__(file_tool.FileToolStrategy)
+        monkeypatch.setattr(file_tool, "run_dynamic_agent", lambda *_a, **_kw: ([], True))
+        context = self._context()
+        context.agent_config["on_empty"] = "error"
+
+        with pytest.raises(EmptyOutputError) as exc_info:
+            strategy.invoke([{"source_guid": "g1"}], context)
+
+        assert is_action_fatal(exc_info.value) is True, (
+            "a file-granularity action discards the on_empty policy that a "
+            "record-granularity action honours"
         )
 
     def test_what_the_record_loop_tombstones_is_not_fatal(self, monkeypatch):
