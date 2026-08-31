@@ -1184,14 +1184,13 @@ class SQLiteBackend(StorageBackend):
         """Persist the compiled prompt and LLM context for a single record.
 
         ``record_id`` is the prepare-time target_id; ``source_guid`` is the
-        durable identity that response updates and joins key on.
+        durable identity that joins key on. The latter is not identifier-
+        validated: a first-stage row may carry its own, so rejecting one would
+        drop a record from processing over a telemetry write. It is a bound
+        parameter, never interpolated, so nothing is gained by checking it.
         """
         action_name = self._validate_identifier(action_name, "action_name")
         record_id = self._validate_identifier(record_id, "record_id")
-        if source_guid is not None:
-            source_guid = self._validate_identifier(source_guid, "source_guid")
-        if run_id is not None:
-            run_id = self._validate_identifier(run_id, "run_id")
 
         # Compute lengths from original values before any truncation
         prompt_length = len(compiled_prompt) if compiled_prompt else 0

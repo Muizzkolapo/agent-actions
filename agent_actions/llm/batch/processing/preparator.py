@@ -367,6 +367,10 @@ class BatchTaskPreparator:
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
         )
+        # A rehearsal, not a run: these rows are never submitted and their ids
+        # never reappear, so persisting them would leave an unanswerable trace
+        # beside every real one.
+        prep_context.storage_backend = None
 
         for row in data[:sample_size]:
             prep_context.current_item = row

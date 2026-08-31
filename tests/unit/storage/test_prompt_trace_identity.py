@@ -172,6 +172,17 @@ class TestTraceRowsCarryDurableIdentity:
         finally:
             b.close()
 
+    def test_a_records_own_identifier_is_never_rejected(self, backend):
+        """A first-stage row may bring its own source_guid — an order number,
+        an email, anything. Refusing one here would fail the record out of
+        processing entirely over a telemetry write."""
+        for guid in ("ORD-2024:001", "user@example.com", "a+b", "café-1"):
+            prepared = _prepare(backend, source_guid=guid)
+            assert prepared.source_guid == guid
+
+        stored = {r["source_guid"] for r in backend.get_prompt_traces(ACTION)}
+        assert stored == {"ORD-2024:001", "user@example.com", "a+b", "café-1"}
+
 
 class TestResponseUpdatesReachTheRecordsOwnPrompt:
     def test_response_lands_on_the_prepared_task(self, backend):
@@ -503,6 +514,44 @@ class TestRepromptRoundsStampAttempt:
 
         assert prep.prepare_tasks.called, "the synchronous loop must reach task preparation"
         assert prep.prepare_tasks.call_args.kwargs.get("attempt") == 1
+
+    def test_preflight_leaves_no_trace_of_its_own(self, backend):
+        """Preflight re-renders a sample row to catch template errors early. It
+        mints an id nothing will ever submit, so a row from it would sit beside
+        every real trace with the same source_guid and no response — and on a
+        reprompt round it would carry that round's prompt stamped attempt 0."""
+        from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+
+        preparator = BatchTaskPreparator(storage_backend=backend)
+        provider = MagicMock()
+        provider.prepare_tasks.side_effect = lambda tasks, config: tasks
+
+        with (
+            patch.object(BatchTaskPreparator, "_validate_config", return_value=None),
+            patch(
+                "agent_actions.prompt.formatter.PromptFormatter.get_raw_prompt",
+                return_value="prompt",
+            ),
+            patch(
+                "agent_actions.prompt.service.PromptPreparationService."
+                "prepare_prompt_with_field_context",
+                return_value=SimpleNamespace(
+                    formatted_prompt="p", llm_context={}, passthrough_fields={}, prompt_context={}
+                ),
+            ),
+        ):
+            preparator.prepare_tasks(
+                agent_config={"name": ACTION},
+                data=[{"target_id": "tid-1", "source_guid": "g1", "content": {"q": 1}}],
+                provider=provider,
+                output_directory="/tmp/out",
+                batch_name="b1",
+                attempt=1,
+            )
+
+        rows = backend.get_prompt_traces(ACTION)
+        assert [r["record_id"] for r in rows] == ["tid-1"]
+        assert rows[0]["attempt"] == 1
 
     def test_submit_reprompt_batch_threads_its_round_number(self):
         """The round owner passes its attempt through to task preparation."""
