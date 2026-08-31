@@ -275,8 +275,9 @@ def handle_reprompt_recovery(
         on_exhausted=state.on_exhausted,
     )
     if setup is None:
-        # Merge prior graduated results with current cycle before finalizing.
+        # Merge prior carried-forward results with current cycle before finalizing.
         final_results = deserialize_results(state.graduated_results)
+        final_results.extend(deserialize_results(state.unrepromptable_results))
         final_results.extend(recovery_results)
         return _finalize_and_cleanup(
             context,
@@ -351,6 +352,7 @@ def handle_reprompt_recovery(
         )
 
     final_results = deserialize_results(state.graduated_results)
+    final_results.extend(deserialize_results(state.unrepromptable_results))
     if still_failing:
         final_results.extend(still_failing)
 
@@ -413,8 +415,11 @@ def check_and_submit_reprompt(
     graduated, still_failing, failure_types = loop.split(batch_results)
     loop.tag_graduated(graduated)
 
-    # Filter out records with None content (provider failures, not content quality issues)
+    # No content is a provider failure, not a content-quality issue — a reprompt
+    # has nothing to repair. The withheld records must still be carried to
+    # finalization, or they surface there as records the batch never returned.
     repromptable = [r for r in still_failing if r.content is not None]
+    unrepromptable = [r for r in still_failing if r.content is None]
 
     if not repromptable:
         return True
@@ -475,6 +480,10 @@ def check_and_submit_reprompt(
         evaluation_strategy_name=strategy.name,
         graduated_results=(list(recovery_state.graduated_results) if recovery_state else [])
         + serialize_results(graduated),
+        unrepromptable_results=(
+            list(recovery_state.unrepromptable_results) if recovery_state else []
+        )
+        + serialize_results(unrepromptable),
         reprompt_attempts_per_record=(
             dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
         ),

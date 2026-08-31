@@ -22,8 +22,12 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             "content": r.content,
             "success": r.success,
         }
+        if r.error:
+            d["error"] = r.error
         if r.metadata:
             d["metadata"] = r.metadata
+        if r.usage:
+            d["usage"] = r.usage
         if r.recovery_metadata:
             d["recovery_metadata"] = r.recovery_metadata.to_dict()
         serialized.append(d)
@@ -43,22 +47,27 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
     for d in data:
         recovery = None
         if d.get("recovery_metadata"):
-            from agent_actions.processing.types import RepromptMetadata
+            from agent_actions.processing.types import EvaluationMetadata, RepromptMetadata
 
             rm = d["recovery_metadata"]
             retry = None
             reprompt = None
+            evaluation = None
             if rm.get("retry"):
                 retry = RetryMetadata(**rm["retry"])
             if rm.get("reprompt"):
                 reprompt = RepromptMetadata(**rm["reprompt"])
-            recovery = RecoveryMetadata(retry=retry, reprompt=reprompt)
+            if rm.get("evaluation"):
+                evaluation = EvaluationMetadata(**rm["evaluation"])
+            recovery = RecoveryMetadata(retry=retry, reprompt=reprompt, evaluation=evaluation)
 
         result = BatchResult(
             custom_id=d["custom_id"],
             content=d["content"],
             success=d["success"],
+            error=d.get("error"),
             metadata=d.get("metadata"),
+            usage=d.get("usage"),
         )
         result.recovery_metadata = recovery
         results.append(result)

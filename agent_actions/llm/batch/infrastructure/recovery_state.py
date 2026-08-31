@@ -50,6 +50,9 @@ class RecoveryState:
     # Evaluation loop: graduated results (passed evaluation, never re-evaluated)
     graduated_results: list[dict[str, Any]] = field(default_factory=list)
 
+    # Still-failing results withheld from the reprompt batch, carried to finalization
+    unrepromptable_results: list[dict[str, Any]] = field(default_factory=list)
+
     # Which evaluation strategy is active (e.g., "validation", "critique")
     evaluation_strategy_name: str | None = None
 
@@ -71,6 +74,7 @@ class RecoveryState:
             "on_exhausted": self.on_exhausted,
             "accumulated_results": self.accumulated_results,
             "graduated_results": self.graduated_results,
+            "unrepromptable_results": self.unrepromptable_results,
             "evaluation_strategy_name": self.evaluation_strategy_name,
             "failure_type_counts": self.failure_type_counts,
         }

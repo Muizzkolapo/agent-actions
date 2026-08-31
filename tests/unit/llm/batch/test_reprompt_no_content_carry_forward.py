@@ -12,6 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import (
     BatchIdentity,
@@ -24,9 +26,20 @@ from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt,
     handle_reprompt_recovery,
 )
+from agent_actions.llm.batch.services.retry_serialization import (
+    deserialize_results,
+    serialize_results,
+)
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.processing.recovery.validation import reprompt_validation
-from agent_actions.processing.types import ProcessingStatus
+from agent_actions.processing.recovery.validation import (
+    _VALIDATION_REGISTRY,
+    reprompt_validation,
+)
+from agent_actions.processing.types import (
+    EvaluationMetadata,
+    ProcessingStatus,
+    RecoveryMetadata,
+)
 
 ACTION = "label_page"
 PARENT = "pages.json"
@@ -38,16 +51,26 @@ DEAD_ID = "rec-dead"
 PROVIDER_ERROR = "provider rejected the request"
 
 
-@reprompt_validation("Return a non-empty topic.")
+VALIDATION = "_topic_present"
+
+
 def _topic_present(response: dict) -> bool:
     return isinstance(response, dict) and bool(response.get("topic"))
+
+
+@pytest.fixture(autouse=True)
+def _registered_validation():
+    """The validation registry is process-global and other suites clear it."""
+    reprompt_validation("Return a non-empty topic.")(_topic_present)
+    yield
+    _VALIDATION_REGISTRY.pop(VALIDATION, None)
 
 
 AGENT_CONFIG = {
     "kind": "llm",
     "action_name": ACTION,
     "json_mode": True,
-    "reprompt": {"validation": "_topic_present", "max_attempts": 2},
+    "reprompt": {"validation": VALIDATION, "max_attempts": 2},
 }
 
 CONTEXT_MAP = {
@@ -94,7 +117,7 @@ class _Harness:
     the state round-trip, and the set handed to finalization are the real thing.
     """
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, agent_config: dict | None = None) -> None:
         self.backend = _MetadataBackend()
         self.finalized: list[BatchResult] = []
 
@@ -111,7 +134,7 @@ class _Harness:
             service=service,
             manager=MagicMock(),
             provider=MagicMock(),
-            agent_config=AGENT_CONFIG,
+            agent_config=agent_config or AGENT_CONFIG,
             output_directory=str(tmp_path),
             action_name=ACTION,
             start_time=0.0,
@@ -177,6 +200,69 @@ def test_no_content_record_reaches_finalization(tmp_path):
     assert finalized[DEAD_ID].error == PROVIDER_ERROR
     assert finalized[BAD_ID].content == {"topic": "repaired"}
     assert finalized[OK_ID].content == {"topic": "models"}
+    assert [r.custom_id for r in harness.finalized].count(DEAD_ID) == 1
+
+
+def test_no_content_record_reaches_finalization_when_reprompt_exhausts(tmp_path):
+    """The withheld record survives the exhaustion branch, not just the all-graduated one."""
+    config = {**AGENT_CONFIG, "reprompt": {"validation": VALIDATION, "max_attempts": 1}}
+    harness = _Harness(tmp_path, agent_config=config)
+
+    assert harness.submit_pass(_initial_results()) is False
+    harness.reprompt_pass([BatchResult(custom_id=BAD_ID, content={"topic": ""}, success=True)])
+
+    finalized = {r.custom_id: r for r in harness.finalized}
+    assert set(finalized) == {OK_ID, BAD_ID, DEAD_ID}
+    assert finalized[DEAD_ID].error == PROVIDER_ERROR
+
+
+def test_no_content_record_reaches_finalization_when_reprompt_is_deconfigured(tmp_path):
+    """Removing reprompt config between passes must not strand the withheld record."""
+    harness = _Harness(tmp_path)
+
+    assert harness.submit_pass(_initial_results()) is False
+    harness.context.agent_config = {"kind": "llm", "action_name": ACTION, "json_mode": True}
+    harness.reprompt_pass(
+        [BatchResult(custom_id=BAD_ID, content={"topic": "repaired"}, success=True)]
+    )
+
+    assert {r.custom_id for r in harness.finalized} == {OK_ID, BAD_ID, DEAD_ID}
+
+
+def test_carried_result_round_trip_preserves_error_usage_and_evaluation():
+    """The carry-forward pools go through JSON; a lossy round trip is what erased the error."""
+    original = BatchResult(
+        custom_id=DEAD_ID,
+        content=None,
+        success=False,
+        error=PROVIDER_ERROR,
+        metadata={"line_number": 3},
+        usage={"input_tokens": 11, "output_tokens": 0},
+        recovery_metadata=RecoveryMetadata(
+            evaluation=EvaluationMetadata(passed=True, strategy_name=VALIDATION)
+        ),
+    )
+
+    (restored,) = deserialize_results(serialize_results([original]))
+
+    assert restored.error == PROVIDER_ERROR
+    assert restored.usage == {"input_tokens": 11, "output_tokens": 0}
+    assert restored.metadata == {"line_number": 3}
+    assert restored.recovery_metadata is not None
+    assert restored.recovery_metadata.evaluation == EvaluationMetadata(
+        passed=True, strategy_name=VALIDATION
+    )
+
+
+def test_round_trip_of_a_bare_result_leaves_optional_fields_unset():
+    (restored,) = deserialize_results(
+        serialize_results([BatchResult(custom_id=OK_ID, content={"topic": "t"}, success=True)])
+    )
+
+    assert restored.error is None
+    assert restored.usage is None
+    assert restored.metadata is None
+    assert restored.recovery_metadata is None
 
 
 def test_no_content_record_is_failed_not_reported_as_never_returned(tmp_path):
