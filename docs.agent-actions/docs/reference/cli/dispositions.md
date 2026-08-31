@@ -58,11 +58,18 @@ The children an action creates are accounted at the actions that *consume*
 them, not at the one that produced them. This is also why [`retry`](./retry)
 targets inputs: retrying a record means re-running the input that failed.
 
-`Records` reads what is in the store now, which is not always this run's
-output. Re-running a workflow over differently named input files leaves the
-earlier run's records in place, and they are counted too; `agac run --fresh`
-clears them. A `?` means the count could not be read at all — that is not the
-same as zero.
+`Records` counts every record stored under the action, which is not the same as
+the records it successfully produced. A record that was guard-skipped, cascade-
+skipped or failed is kept in the action's output as a placeholder so downstream
+actions can still see it, and those placeholders are counted here. The `rewrite`
+row above shows this: 4 successes and 21 passthroughs, `Records 25`. So a high
+`Records` is not on its own evidence that the action worked — read it against
+the `Failed` and `Passthrough` columns, or use `--quarantined` for the detail.
+
+`Records` also reads what is in the store *now*, not only this run's output.
+Re-running a workflow over differently named input files leaves the earlier
+run's records in place and counts them too; `agac run --fresh` clears them. A
+`?` means the count could not be read at all — which is not the same as zero.
 
 ## Examples
 
