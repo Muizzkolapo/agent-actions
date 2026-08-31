@@ -666,15 +666,14 @@ class StorageBackend(ABC):
     def update_prompt_trace_response(  # noqa: B027
         self,
         action_name: str,
-        source_guid: str,
+        record_id: str,
         response_text: str,
-        parent_source_guid: str | None = None,
+        parent_record_id: str | None = None,
     ) -> None:
-        """Attach the LLM response to the most recent trace row for a record.
+        """Attach the LLM response to the newest trace row for a prepared task.
 
-        Pass ``parent_source_guid`` when the record may be an expansion child,
-        whose own guid was minted after its prompt ran; implementations match
-        whichever guid names a trace at this action.
+        Pass ``parent_record_id`` when the record may be an expansion child,
+        whose own id was minted after its prompt ran.
 
         No-op if the trace does not exist. This is telemetry — must not raise.
         """

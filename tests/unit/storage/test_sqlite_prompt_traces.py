@@ -64,7 +64,7 @@ class TestWriteAndRead:
 class TestResponseUpdate:
     def test_update_response(self, backend):
         backend.write_prompt_trace("act", "rec-1", "prompt text", source_guid="g-1")
-        backend.update_prompt_trace_response("act", "g-1", '{"result": "ok"}')
+        backend.update_prompt_trace_response("act", "rec-1", '{"result": "ok"}')
 
         traces = backend.get_prompt_traces("act", record_id="rec-1")
         assert traces[0]["response_text"] == '{"result": "ok"}'
@@ -72,7 +72,7 @@ class TestResponseUpdate:
 
     def test_update_nonexistent_trace_is_noop(self, backend):
         # Should not raise
-        backend.update_prompt_trace_response("act", "g-missing", '{"result": "ok"}')
+        backend.update_prompt_trace_response("act", "rec-missing", '{"result": "ok"}')
         assert backend.get_prompt_traces("act") == []
 
 
@@ -96,7 +96,7 @@ class TestAttemptColumn:
     def test_update_response_targets_newest_attempt(self, backend):
         backend.write_prompt_trace("act", "rec-1", "prompt v1", source_guid="g-1", attempt=0)
         backend.write_prompt_trace("act", "rec-1", "prompt v2", source_guid="g-1", attempt=1)
-        backend.update_prompt_trace_response("act", "g-1", "response v2")
+        backend.update_prompt_trace_response("act", "rec-1", "response v2")
 
         traces = backend.get_prompt_traces("act", record_id="rec-1")
         assert traces[0]["response_text"] is None  # attempt 0 unchanged

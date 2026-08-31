@@ -128,25 +128,30 @@ Indexes:
 
 **Identity contract.** The table is a bounded historical log; `target_data`
 holds the current view. Rows accumulate across runs (filter by `run_id` for
-"this run"; day-based retention prunes old ones). `record_id` holds the
-prepare-time `target_id`, which is re-minted on every prepare and therefore
-never joins anything durable — joins and response updates key on
-`source_guid`. Reprompt rounds re-prepare the same record at `attempt=N`, and
-a response lands on the most recently written row for the record, so this
-run's trace is never overwritten by a stale row a previous run left behind.
-Rows written before the identity columns existed keep `NULL` and never join.
+"this run"; day-based retention prunes old ones). Each row therefore carries
+two identifiers, answering two different questions:
 
-A 1→N expansion writes one trace for the parent prompt, and its children mint
-their own guids only after that prompt ran — so a child reaches the trace by
-its `parent_source_guid`. That field is *also* carried down to every later 1:1
-stage, where it names an ancestor this action never prepared; consumers
-therefore match either guid rather than preferring one, since scoped to a
-single action only one of them can name a trace. Two consequences worth
-knowing: a nested expansion's children reach no trace (the intermediate guid
-they were prompted under is not retained on the record), and an expansion's
-trace holds one child's output as its response, because the children of one
-prompt are not distinguishable from the children of an earlier expansion by
-stored fields alone.
+- `source_guid` — the **durable** identity of the record that was prompted,
+  the same value `record_disposition.record_id` holds. This is the key for
+  auditing across tables and across runs. Before this column existed the two
+  tables shared no key and the join returned nothing.
+- `record_id` — the **prepare-time** `target_id`, minted afresh each run.
+  This is the key for "which prompt produced this record on *this* run".
+  A durable key cannot answer that: it also matches rows earlier runs left
+  behind, which would show a stale prompt as if it were current, and would
+  attach a prompt to a record this run never prompted at all.
+
+A 1→N expansion writes one trace for the parent prompt and mints its children's
+ids only afterwards, so a child reaches that trace through its
+`parent_target_id`; a record prepared here in its own right always resolves to
+its own row first. Reprompt rounds re-prepare the same record at `attempt=N`,
+and the newest attempt wins. Rows written before the identity columns existed
+keep `NULL` in both and are excluded from durable-key joins.
+
+One known gap: an expansion's trace records the last child's output as its
+`response_text`, since the children of one prompt are written back
+individually. The prompt and its identity are exact; only that one field is a
+fragment of the whole response.
 
 Large fields (prompt, context, response) are capped at 1MB (`_MAX_TRACE_FIELD_SIZE`). Overflow is replaced with `{"__truncated__": true, "original_length": N}`.
 

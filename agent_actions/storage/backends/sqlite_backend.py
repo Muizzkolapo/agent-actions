@@ -1254,21 +1254,22 @@ class SQLiteBackend(StorageBackend):
     def update_prompt_trace_response(
         self,
         action_name: str,
-        source_guid: str,
+        record_id: str,
         response_text: str,
-        parent_source_guid: str | None = None,
+        parent_record_id: str | None = None,
     ) -> None:
-        """Attach the LLM response to the most recent trace row for a record.
+        """Attach the LLM response to the newest trace row for a prepared task.
 
-        Both guids are matched rather than ranked: scoped to one action only
-        one of them can name a trace, since a ``parent_source_guid`` carried
-        down from an earlier expansion names a record this action never
-        prepared. A miss is logged — a response with no row is trace loss.
+        Keyed on the prepare-time id, not the durable guid: only a per-run id
+        can answer "which prompt produced this on this run" without reaching a
+        previous run's rows. An expansion child's own id postdates its prompt,
+        so it falls back to ``parent_record_id``. A miss is logged — a response
+        with no row to land on is trace loss.
         """
         action_name = self._validate_identifier(action_name, "action_name")
-        source_guid = self._validate_identifier(source_guid, "source_guid")
-        if parent_source_guid:
-            parent_source_guid = self._validate_identifier(parent_source_guid, "parent_source_guid")
+        record_id = self._validate_identifier(record_id, "record_id")
+        if parent_record_id:
+            parent_record_id = self._validate_identifier(parent_record_id, "parent_record_id")
 
         response_length = len(response_text) if response_text else 0
         response_text = self._cap_trace_field(response_text) or ""
@@ -1282,31 +1283,32 @@ class SQLiteBackend(StorageBackend):
                     SET response_text = ?, response_length = ?
                     WHERE id = (
                         SELECT id FROM prompt_trace
-                        WHERE action_name = ? AND source_guid IN (?, ?)
-                        ORDER BY id DESC LIMIT 1
+                        WHERE action_name = ? AND record_id IN (?, ?)
+                        ORDER BY (record_id = ?) DESC, attempt DESC, id DESC LIMIT 1
                     )
                     """,
                     (
                         response_text,
                         response_length,
                         action_name,
-                        source_guid,
-                        parent_source_guid or source_guid,
+                        record_id,
+                        parent_record_id or record_id,
+                        record_id,
                     ),
                 )
                 self.connection.commit()
                 if cursor.rowcount > 0:
                     logger.debug(
-                        "Updated prompt trace response: action=%s source_guid=%s",
+                        "Updated prompt trace response: action=%s record=%s",
                         action_name,
-                        source_guid,
+                        record_id,
                         extra={"workflow_name": self.workflow_name},
                     )
                 else:
                     logger.warning(
-                        "No prompt trace row for action=%s source_guid=%s — response not recorded",
+                        "No prompt trace row for action=%s record=%s — response not recorded",
                         action_name,
-                        source_guid,
+                        record_id,
                         extra={"workflow_name": self.workflow_name},
                     )
             except sqlite3.Error as e:
@@ -1316,7 +1318,7 @@ class SQLiteBackend(StorageBackend):
                     e,
                     extra={
                         "action_name": action_name,
-                        "source_guid": source_guid,
+                        "record_id": record_id,
                         "workflow_name": self.workflow_name,
                     },
                 )
@@ -1759,30 +1761,30 @@ class SQLiteBackend(StorageBackend):
                     except (FileNotFoundError, json.JSONDecodeError) as e:
                         logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
 
-                # Attach prompt traces by durable identity. A record reaches its
-                # prompt by its own source_guid, or — when this action expanded
-                # it, minting a guid after the prompt ran — by its parent's.
+                # Keyed on the prepare-time id: a durable guid would also match
+                # rows from earlier runs and show a stale prompt as if current.
+                # An expansion child's own id postdates its prompt.
                 try:
                     candidates: set[str] = set()
                     for rec in records:
-                        for guid in (rec.get("source_guid"), rec.get("parent_source_guid")):
-                            if guid:
-                                candidates.add(guid)
+                        for tid in (rec.get("target_id"), rec.get("parent_target_id")):
+                            if tid:
+                                candidates.add(tid)
                     if candidates:
                         placeholders = ",".join("?" for _ in candidates)
                         cursor.execute(
-                            f"SELECT source_guid, compiled_prompt, llm_context, "
+                            f"SELECT record_id, compiled_prompt, llm_context, "
                             f"response_text, model_name, model_vendor, run_mode, "
                             f"prompt_length, response_length, attempt "
                             f"FROM prompt_trace "
-                            f"WHERE action_name = ? AND source_guid IN ({placeholders})"
-                            f" ORDER BY id DESC",
+                            f"WHERE action_name = ? AND record_id IN ({placeholders})"
+                            f" ORDER BY attempt DESC, id DESC",
                             [action_name, *candidates],
                         )
                         newest: dict[str, dict[str, Any]] = {}
                         for trace_row in cursor:
                             newest.setdefault(
-                                trace_row["source_guid"],
+                                trace_row["record_id"],
                                 {
                                     "compiled_prompt": trace_row["compiled_prompt"],
                                     "llm_context": trace_row["llm_context"],
@@ -1796,8 +1798,8 @@ class SQLiteBackend(StorageBackend):
                                 },
                             )
                         for rec in records:
-                            trace_data = newest.get(rec.get("source_guid") or "") or newest.get(
-                                rec.get("parent_source_guid") or ""
+                            trace_data = newest.get(rec.get("target_id") or "") or newest.get(
+                                rec.get("parent_target_id") or ""
                             )
                             if trace_data:
                                 rec["_trace"] = trace_data

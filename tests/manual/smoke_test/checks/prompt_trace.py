@@ -167,8 +167,9 @@ class PromptTraceCheck(Check):
                         )
                     )
 
-                # Check 4: 1:1 join — every target record with a source_guid has a trace
-                # Exclude records with NULL/empty source_guid (aggregation tool outputs)
+                # Check 4: 1:1 join on the durable guid. Traces predating that
+                # column carry NULL and are excluded, not reported as orphans;
+                # records with no source_guid are aggregation tool outputs.
                 cursor.execute(
                     """
                     SELECT td.action_name,
@@ -176,12 +177,13 @@ class PromptTraceCheck(Check):
                     FROM target_data td, json_each(td.data) j
                     LEFT JOIN prompt_trace pt
                         ON td.action_name = pt.action_name
-                        AND json_extract(j.value, '$.source_guid') = pt.record_id
-                    WHERE pt.record_id IS NULL
+                        AND json_extract(j.value, '$.source_guid') = pt.source_guid
+                    WHERE pt.source_guid IS NULL
                       AND json_extract(j.value, '$.source_guid') IS NOT NULL
                       AND json_extract(j.value, '$.source_guid') != ''
                       AND td.action_name IN (
                           SELECT DISTINCT action_name FROM prompt_trace
+                          WHERE source_guid IS NOT NULL
                       )
                     """
                 )

@@ -1,11 +1,10 @@
-"""prompt_trace rows carry the durable record identity.
+"""prompt_trace rows carry both identities a consumer can need.
 
-``record_id`` keeps holding the prepare-time ``target_id`` (per-run,
-re-minted on every prepare); joins and response updates key on the durable
-``source_guid`` — expansion children reach their parent's trace via
-``parent_source_guid``. ``run_id`` marks the writing run and reprompt rounds
-stamp ``attempt``, so the table works as the bounded historical log it is
-documented to be.
+``source_guid`` is durable and shared with ``record_disposition``, so the two
+tables finally join. ``record_id`` stays the prepare-time ``target_id``, which
+answers "which prompt produced this record on this run" without reaching rows
+an earlier run left behind; an expansion's children reach their prompt through
+``parent_target_id``.
 """
 
 from __future__ import annotations
@@ -28,6 +27,19 @@ def backend(tmp_path):
     b = SQLiteBackend(str(tmp_path / "test.db"), workflow_name="test_workflow")
     b.initialize()
     return b
+
+
+def _batch_update(backend, items: list[dict]) -> None:
+    """Drive the real batch trace-update over already-processed items."""
+    from agent_actions.llm.batch.services.processing import BatchProcessingService
+    from agent_actions.record.state import RecordState
+
+    service = SimpleNamespace(_storage_backend=backend)
+    BatchProcessingService._update_prompt_trace_responses(
+        service,
+        [{"_state": RecordState.PROCESSED.value, **item} for item in items],
+        ACTION,
+    )
 
 
 def _prepare(backend, *, source_guid="sg-1", run_id=None, attempt=None):
@@ -126,11 +138,11 @@ class TestTraceRowsCarryDurableIdentity:
         assert rows[0]["run_id"] is None
 
 
-class TestResponseUpdatesKeyOnIdentity:
-    def test_response_lands_by_source_guid_not_prepare_time_id(self, backend):
+class TestResponseUpdatesReachTheRecordsOwnPrompt:
+    def test_response_lands_on_the_prepared_task(self, backend):
         backend.write_prompt_trace(ACTION, "tid-1", "prompt", source_guid="g1", run_id="run-1")
 
-        backend.update_prompt_trace_response(ACTION, source_guid="g1", response_text="resp")
+        backend.update_prompt_trace_response(ACTION, record_id="tid-1", response_text="resp")
 
         rows = backend.get_prompt_traces(ACTION)
         assert rows[0]["response_text"] == "resp"
@@ -141,7 +153,7 @@ class TestResponseUpdatesKeyOnIdentity:
         backend.write_prompt_trace(ACTION, "tid-1", "prompt v1", source_guid="g1", attempt=0)
         backend.write_prompt_trace(ACTION, "tid-1", "prompt v2", source_guid="g1", attempt=1)
 
-        backend.update_prompt_trace_response(ACTION, source_guid="g1", response_text="final")
+        backend.update_prompt_trace_response(ACTION, record_id="tid-1", response_text="final")
 
         by_attempt = {r["attempt"]: r for r in backend.get_prompt_traces(ACTION)}
         assert by_attempt[1]["response_text"] == "final"
@@ -151,55 +163,53 @@ class TestResponseUpdatesKeyOnIdentity:
         """The measured defect: batch expansion children carry re-minted
         target_ids, so the shipped UPDATE matched zero rows and every
         expansion trace kept NULL response_text (4/4 measured)."""
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
-        from agent_actions.record.state import RecordState
-
         backend.write_prompt_trace(ACTION, "tid-parent", "prompt", source_guid="gp")
 
-        service = SimpleNamespace(_storage_backend=backend)
-        items = [
-            {
-                "_state": RecordState.PROCESSED.value,
-                "target_id": "tid-child-reminted",
-                "source_guid": "gc-child",
-                "parent_source_guid": "gp",
-                "content": {ACTION: {"answer": 42}},
-            }
-        ]
-        BatchProcessingService._update_prompt_trace_responses(service, items, ACTION)
+        _batch_update(
+            backend,
+            [
+                {
+                    "target_id": "tid-child-reminted",
+                    "parent_target_id": "tid-parent",
+                    "source_guid": "gc-child",
+                    "parent_source_guid": "gp",
+                    "content": {ACTION: {"answer": 42}},
+                }
+            ],
+        )
 
         rows = backend.get_prompt_traces(ACTION)
         assert rows[0]["response_text"] == '{"answer": 42}'
 
-    def test_a_stage_after_an_expansion_lands_on_its_own_trace(self, backend):
-        """``parent_source_guid`` is carried forward through every later 1:1
-        stage, where it names the original pool record rather than anything
-        this action prepared. Preferring it would lose the response for every
-        stage downstream of an expansion."""
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
-        from agent_actions.record.state import RecordState
+    def test_a_record_prepared_here_keeps_its_own_response(self, backend):
+        """A fan-in action can prepare both an expansion child and the
+        unexpanded sibling it descends from. The child was prompted here in its
+        own right, so its response belongs to its own trace — never to the
+        ancestor its parent pointer still names."""
+        # The ancestor's row is written last, so insertion order alone would
+        # hand this record's response to it.
+        backend.write_prompt_trace(ACTION, "tid-child", "CHILD prompt", source_guid="gc")
+        backend.write_prompt_trace(ACTION, "tid-ancestor", "ANCESTOR prompt", source_guid="gp")
 
-        backend.write_prompt_trace(ACTION, "tid-1", "prompt", source_guid="gc-1")
+        _batch_update(
+            backend,
+            [
+                {
+                    "target_id": "tid-child",
+                    "parent_target_id": "tid-ancestor",
+                    "source_guid": "gc",
+                    "content": {ACTION: {"who": "child"}},
+                }
+            ],
+        )
 
-        service = SimpleNamespace(_storage_backend=backend)
-        items = [
-            {
-                "_state": RecordState.PROCESSED.value,
-                "target_id": "tid-1",
-                "source_guid": "gc-1",
-                "parent_source_guid": "gp-from-an-earlier-expansion",
-                "content": {ACTION: {"answer": 7}},
-            }
-        ]
-        BatchProcessingService._update_prompt_trace_responses(service, items, ACTION)
-
-        rows = backend.get_prompt_traces(ACTION)
-        assert rows[0]["response_text"] == '{"answer": 7}'
+        rows = {r["record_id"]: r for r in backend.get_prompt_traces(ACTION)}
+        assert rows["tid-child"]["response_text"] == '{"who": "child"}'
+        assert rows["tid-ancestor"]["response_text"] is None
 
     def test_a_new_runs_response_never_lands_on_the_previous_runs_trace(self, backend):
-        """Traces accumulate across runs. A prior run's reprompt round leaves a
-        higher attempt number behind; ranking by attempt would hand this run's
-        response to that stale row and leave this run's own trace NULL."""
+        """Traces accumulate across runs under a durable guid; only the
+        per-run prepared id keeps this run's response off last run's row."""
         backend.write_prompt_trace(
             ACTION, "tid-run1", "run1 prompt", source_guid="g1", run_id="run-1", attempt=0
         )
@@ -210,7 +220,9 @@ class TestResponseUpdatesKeyOnIdentity:
             ACTION, "tid-run2", "run2 prompt", source_guid="g1", run_id="run-2", attempt=0
         )
 
-        backend.update_prompt_trace_response(ACTION, source_guid="g1", response_text="run2 resp")
+        backend.update_prompt_trace_response(
+            ACTION, record_id="tid-run2", response_text="run2 resp"
+        )
 
         by_run = {(r["run_id"], r["attempt"]): r for r in backend.get_prompt_traces(ACTION)}
         assert by_run[("run-2", 0)]["response_text"] == "run2 resp"
@@ -218,8 +230,8 @@ class TestResponseUpdatesKeyOnIdentity:
 
     def test_online_response_lands_on_the_records_trace(self, backend):
         """End-to-end on the everyday online path: prepare writes the trace and
-        the response must reach it. Passing the (re-minted) target_id here would
-        match nothing and leave every online trace NULL, silently."""
+        the response must reach it. This is asserted nowhere else, so a wrong
+        key here would leave every online trace NULL, silently."""
         from agent_actions.processing.invocation.result import InvocationResult
         from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
         from agent_actions.processing.types import ProcessingContext
@@ -250,7 +262,7 @@ class TestResponseUpdatesKeyOnIdentity:
 
     def test_missing_trace_row_is_a_noop(self, backend):
         backend.update_prompt_trace_response(
-            ACTION, source_guid="never-written", response_text="resp"
+            ACTION, record_id="never-written", response_text="resp"
         )
         assert backend.get_prompt_traces(ACTION) == []
 
@@ -260,14 +272,15 @@ class TestScanPreviewAttachesByIdentity:
         backend.write_target(ACTION, "out.json", records, force_full=True)
 
     def test_expansion_children_get_their_parents_trace(self, backend):
-        """The shipped reader joined preview target_ids against record_id —
-        measured: no expansion action ever got a _trace attached."""
+        """The shipped reader looked only at the child's own target_id, which
+        was minted after the prompt ran — measured: no expansion action ever
+        got a _trace attached."""
         backend.write_prompt_trace(ACTION, "tid-parent", "parent prompt", source_guid="gp")
         self._seed_target(
             backend,
             [
-                {"source_guid": "gc-1", "parent_source_guid": "gp", "target_id": "tid-c1"},
-                {"source_guid": "gc-2", "parent_source_guid": "gp", "target_id": "tid-c2"},
+                {"source_guid": "gc-1", "target_id": "tid-c1", "parent_target_id": "tid-parent"},
+                {"source_guid": "gc-2", "target_id": "tid-c2", "parent_target_id": "tid-parent"},
             ],
         )
 
@@ -295,27 +308,35 @@ class TestScanPreviewAttachesByIdentity:
         result = backend.scan_data()
         assert result["nodes"][ACTION]["preview"][0]["_trace"]["attempt"] == 1
 
-    def test_record_without_identity_gets_no_trace(self, backend):
-        backend.write_prompt_trace(ACTION, "tid-1", "prompt", source_guid="g1")
-        self._seed_target(backend, [{"target_id": "tid-1"}])
+    def test_record_that_was_never_prompted_gets_no_trace(self, backend):
+        """A guard-skipped record has no trace of its own; it must not inherit
+        one from a record that was prompted."""
+        backend.write_prompt_trace(ACTION, "tid-prompted", "prompt", source_guid="g1")
+        self._seed_target(backend, [{"source_guid": "g-skipped", "target_id": "tid-skipped"}])
 
         result = backend.scan_data()
         assert "_trace" not in result["nodes"][ACTION]["preview"][0]
 
-    def test_a_stage_after_an_expansion_shows_its_own_prompt(self, backend):
-        """A later 1:1 stage still carries parent_source_guid from the earlier
-        expansion; its preview must show the prompt this action ran, not miss
-        because a stale ancestor guid was preferred."""
+    def test_a_tombstone_does_not_inherit_a_previous_runs_prompt(self, backend):
+        """source_guid is durable across runs, so keying previews on it would
+        show last run's prompt for a record this run never prompted."""
+        backend.write_prompt_trace(
+            ACTION, "tid-run1", "run1 prompt", source_guid="g1", run_id="run-1"
+        )
+        self._seed_target(backend, [{"source_guid": "g1", "target_id": "tid-run2-skipped"}])
+
+        result = backend.scan_data()
+        assert "_trace" not in result["nodes"][ACTION]["preview"][0]
+
+    def test_a_record_prepared_here_shows_its_own_prompt(self, backend):
+        """A record carries a parent pointer from an earlier stage while also
+        having been prompted here in its own right; its preview must show the
+        prompt this action ran for it, not the one its parent pointer names."""
+        backend.write_prompt_trace(ACTION, "tid-ancestor", "ANCESTOR prompt", source_guid="gp")
         backend.write_prompt_trace(ACTION, "tid-1", "own prompt", source_guid="gc-1")
         self._seed_target(
             backend,
-            [
-                {
-                    "source_guid": "gc-1",
-                    "parent_source_guid": "gp-from-an-earlier-expansion",
-                    "target_id": "tid-1",
-                }
-            ],
+            [{"source_guid": "gc-1", "target_id": "tid-1", "parent_target_id": "tid-ancestor"}],
         )
 
         result = backend.scan_data()
@@ -384,6 +405,62 @@ class TestRepromptRoundsStampAttempt:
         assert len(rows) == 1
         assert rows[0]["attempt"] == 2
         assert rows[0]["source_guid"] == "g1"
+
+    def test_the_synchronous_reprompt_loop_threads_its_round_number(self):
+        """There are two reprompt submitters; the synchronous loop runs on every
+        batch run. Left at the default the round reuses its target_id at
+        attempt 0 and INSERT OR REPLACE overwrites the previous round."""
+        from agent_actions.llm.batch.services.reprompt_ops import validate_and_reprompt
+        from agent_actions.llm.providers.batch_base import BatchResult
+
+        with (
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
+            ) as MockPreparator,
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
+            ) as mock_setup,
+            patch(
+                "agent_actions.llm.batch.services.reprompt_ops._load_source_data_for_reprompt",
+                return_value=[],
+            ),
+        ):
+            loop = MagicMock()
+            loop.split.return_value = (
+                [],
+                [BatchResult(custom_id="t1", content="bad", success=True)],
+                {},
+            )
+            strategy = MagicMock(
+                max_attempts=2,
+                on_exhausted="return_last",
+                _feedback_message="fix it",
+                _strategies=[],
+            )
+            strategy.name = "check_it"
+            mock_setup.return_value = (loop, strategy)
+            prep = MockPreparator.return_value
+            prep.prepare_tasks.return_value = MagicMock(tasks=[{"target_id": "t1"}])
+            provider = MagicMock()
+            # Stop the round right after preparation — submission and polling
+            # are not what this pins.
+            provider.submit_batch.side_effect = RuntimeError("stop after prepare")
+
+            with pytest.raises(RuntimeError, match="stop after prepare"):
+                validate_and_reprompt(
+                    action_indices={},
+                    dependency_configs={},
+                    storage_backend=MagicMock(),
+                    results=[BatchResult(custom_id="t1", content="bad", success=True)],
+                    provider=provider,
+                    context_map={"t1": {"content": {"q": "a"}, "user_content": "u"}},
+                    output_directory="/tmp/out",
+                    file_name="batch_1",
+                    agent_config={"reprompt": {"validation": "check_it"}},
+                )
+
+        assert prep.prepare_tasks.called, "the synchronous loop must reach task preparation"
+        assert prep.prepare_tasks.call_args.kwargs.get("attempt") == 1
 
     def test_submit_reprompt_batch_threads_its_round_number(self):
         """The round owner passes its attempt through to task preparation."""
