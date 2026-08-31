@@ -44,9 +44,9 @@ One row per action, with a count per disposition:
 ### Why Total and Records can differ
 
 **A disposition is one row per input record per action.** `Total` counts the
-records an action *consumed*; `Records` counts the records now stored under it,
-which for an action that has run is what it produced. They match for an action
-that turns one record into one record, and they legitimately differ otherwise —
+records an action *consumed*; `Records` counts the records currently stored
+under it. They match for an action that turns one record into one record, and
+they legitimately differ otherwise —
 `split` above turned one input into five outputs, so its single disposition
 sits beside five records.
 
@@ -57,6 +57,12 @@ output carries them. Neither case is data loss.
 The children an action creates are accounted at the actions that *consume*
 them, not at the one that produced them. This is also why [`retry`](./retry)
 targets inputs: retrying a record means re-running the input that failed.
+
+`Records` reads what is in the store now, which is not always this run's
+output. Re-running a workflow over differently named input files leaves the
+earlier run's records in place, and they are counted too; `agac run --fresh`
+clears them. A `?` means the count could not be read at all — that is not the
+same as zero.
 
 ## Examples
 

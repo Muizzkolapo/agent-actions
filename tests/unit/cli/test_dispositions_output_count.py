@@ -48,11 +48,13 @@ def _row(output: str, action: str) -> dict[str, str]:
 
 
 def _output_column(row: dict[str, str]) -> str:
-    """The cell holding what the action produced, whatever it is headed."""
-    for name in ("Records", "Output records", "Records out"):
-        if name in row:
-            return row[name]
-    raise AssertionError(f"no column names the produced record count: {sorted(row)}")
+    """The cell holding the stored record count.
+
+    The header is pinned: the reference page's sample output and prose both
+    name it, so a rename here silently drifts the docs from the code.
+    """
+    assert "Records" in row, f"no Records column: {sorted(row)}"
+    return row["Records"]
 
 
 def _seed(backend, action: str, *, inputs: int, outputs: int) -> None:
@@ -106,3 +108,39 @@ class TestOutputCountIsShown:
 
         row = _row(_render(backend, ["flatten"]), "flatten")
         _output_column(row)  # raises with the header list if absent
+
+    def test_each_action_gets_its_own_count(self, backend):
+        """Rendering one action at a time cannot catch a lookup that returns
+        the same number for every row."""
+        _seed(backend, "flatten", inputs=1, outputs=5)
+        _seed(backend, "tag_concept", inputs=5, outputs=3)
+
+        output = _render(backend, ["flatten", "tag_concept"])
+        assert _output_column(_row(output, "flatten")) == "5"
+        assert _output_column(_row(output, "tag_concept")) == "3"
+
+    def test_an_unavailable_count_is_not_reported_as_zero(self, backend):
+        """A broken lookup rendered as 0 would show an action that fanned one
+        record into five as having produced nothing — the exact reading this
+        column exists to prevent, and worse than omitting it."""
+        _seed(backend, "flatten", inputs=1, outputs=5)
+
+        class Broken:
+            def __getattr__(self, name):
+                return getattr(backend, name)
+
+            def get_storage_stats(self):
+                raise RuntimeError("storage stats unavailable")
+
+        row = _row(_render(Broken(), ["flatten"]), "flatten")
+        assert _output_column(row) != "0", (
+            f"an unavailable count must not be indistinguishable from zero: {row}"
+        )
+
+    def test_the_reader_is_told_why_the_counts_differ(self, backend):
+        """The column is only half the fix — a bare second number invites the
+        same misreading it was added to stop."""
+        _seed(backend, "flatten", inputs=1, outputs=5)
+
+        output = _render(backend, ["flatten"])
+        assert "consumed" in output and "stored" in output, output

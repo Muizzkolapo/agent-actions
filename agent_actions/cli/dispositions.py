@@ -76,7 +76,7 @@ class DispositionsCommand:
         table.add_column("Total", justify="right", style="bold")
         table.add_column("Records", justify="right", style="bold")
 
-        produced = self._records_written(backend)
+        stored = self._records_stored(backend)
 
         for action in actions:
             rows = backend.get_disposition(action)
@@ -100,7 +100,7 @@ class DispositionsCommand:
                 str(counts.get("passthrough", 0)),
                 str(counts.get("filtered", 0)),
                 str(total),
-                str(produced.get(action, 0)),
+                "?" if stored is None else str(stored.get(action, 0)),
             )
 
         action_level = self._action_level_rows(backend, actions)
@@ -119,17 +119,18 @@ class DispositionsCommand:
         self._show_action_level(action_level)
 
     @staticmethod
-    def _records_written(backend) -> dict[str, int]:
-        """Records each action wrote, by action name.
+    def _records_stored(backend) -> dict[str, int] | None:
+        """Records stored per action, or None when the count is unavailable.
 
-        Absence is reported as zero rather than crashing the summary — this is
-        context beside the dispositions, not the thing being asked for.
+        None is not zero: reporting a failed lookup as zero would show an
+        action that fanned one record into five as having produced nothing,
+        which is the reading this column exists to prevent.
         """
         try:
             return dict(backend.get_storage_stats().get("nodes") or {})
         except Exception:
-            logger.debug("Could not read per-action record counts", exc_info=True)
-            return {}
+            logger.warning("Could not read per-action record counts — showing '?'", exc_info=True)
+            return None
 
     @staticmethod
     def _action_level_rows(backend, actions: list[str]) -> list[tuple[str, dict]]:

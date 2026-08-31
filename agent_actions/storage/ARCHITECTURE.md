@@ -114,12 +114,19 @@ is *smaller* than its output, and for one that folds records together it is
 *larger*. Neither is data loss. `agac dispositions` prints both counts side by
 side for this reason, reading the per-action totals from `target_data`.
 
-One case where that second number is not the action's own output: a version
-fan-in consumer has its merged input written to `target_data` under its *own*
-name before it runs (`LoopManager.prepare_correlated_input`), so an action that
-then failed or was skipped shows the merged input rather than nothing. The
-consumer's own write replaces it when it lands under the same
-`relative_path`, which is the normal case.
+Two cases where that second number is not the action's own output for this
+run, both because `target_data` is keyed `(action_name, relative_path)` and
+only replaced per path:
+
+- **Re-runs.** Rows a previous run wrote under a different `relative_path`
+  survive and are counted alongside the current ones. `_count_records_for_action`
+  in `workflow/executor.py` avoids this for its own purposes by taking a
+  before/after delta around the action; a command reading the store afterwards
+  has no such vantage point.
+- **Version fan-in.** The merged input is written under the *consumer's* name
+  before it runs (`LoopManager.prepare_correlated_input`), so a consumer that
+  then failed or was skipped shows that input. Its own write replaces the row
+  when it lands under the same `relative_path`, which is the normal case.
 
 ### 4. prompt_trace — LLM call telemetry
 
