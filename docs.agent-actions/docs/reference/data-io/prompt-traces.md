@@ -23,13 +23,25 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `context_length` | Character count of the LLM context sent to the model |
 | `response_length` | Character count of the LLM response |
 | `attempt` | Attempt number (0 = initial, 1+ = reprompt retries) |
+| `source_guid` | Durable identity of the record that was prompted |
+| `run_id` | The workflow run that wrote the row |
 
-Traces are linked to records by `action_name` and `record_id`. The value used for `record_id` depends on the run path:
+Traces carry two identifiers, and which one to join on depends on the question
+you are asking.
 
-- **Online actions** write `record_id = target_id` (the per-record identifier assigned during processing).
-- **Batch actions** write `record_id = source_guid` (the stable identifier of the originating source row).
+- `source_guid` is the **durable** identity of the record that was prompted. It
+  is the same value `record_disposition.record_id` holds, so it is the key for
+  auditing across tables — "was this record prompted, and what did it get?" —
+  and it is stable across runs.
+- `record_id` is the **prepare-time** `target_id`, which is minted afresh every
+  run (and, for a record an action expands into several, again per child). Join
+  on it to ask "which prompt produced this record on this run", since it cannot
+  reach a row an earlier run left behind. A record produced by an expansion
+  reaches its prompt through its `parent_target_id`, because its own id did not
+  exist yet when the prompt ran.
 
-Join `prompt_trace.record_id` against `target_id` for online actions and against `source_guid` for batch actions.
+Both apply to online and batch alike. Rows written before `source_guid` and
+`run_id` existed leave them `NULL`.
 
 ## Viewing Traces in the Data Explorer
 
@@ -88,21 +100,23 @@ SELECT DISTINCT action_name FROM prompt_trace;
 -- Count traces per action
 SELECT action_name, COUNT(*) FROM prompt_trace GROUP BY action_name;
 
--- View a specific record's trace (online action — record_id is target_id)
+-- View the prompt that produced a record on this run
 SELECT compiled_prompt, response_text, model_name
 FROM prompt_trace
 WHERE action_name = 'classify_issue'
-  AND record_id = '<target_id>'
+  AND record_id = '<target_id>'        -- or the record's parent_target_id, if it
+                                       -- was produced by an expansion
 ORDER BY attempt DESC
 LIMIT 1;
 
--- View a specific record's trace (batch action — record_id is source_guid)
-SELECT compiled_prompt, response_text, model_name
-FROM prompt_trace
-WHERE action_name = 'classify_issue'
-  AND record_id = '<source_guid>'
-ORDER BY attempt DESC
-LIMIT 1;
+-- Audit a record across runs, and against its disposition
+SELECT t.run_id, t.attempt, t.compiled_prompt, t.response_text, d.disposition
+FROM prompt_trace t
+LEFT JOIN record_disposition d
+  ON d.action_name = t.action_name AND d.record_id = t.source_guid
+WHERE t.action_name = 'classify_issue'
+  AND t.source_guid = '<source_guid>'
+ORDER BY t.id DESC;
 
 -- Find records with reprompt retries
 SELECT action_name, record_id, MAX(attempt) as max_attempts

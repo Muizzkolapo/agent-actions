@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import raised_by_exhaustion_policy
+from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
@@ -37,18 +37,38 @@ class CollectedErrors:
 
     messages: list[str] = field(default_factory=list)
     halt: Exception | None = None
+    halt_message: str | None = None
+    fatal: Exception | None = None
+    fatal_message: str | None = None
 
     def record(self, relative_path: object, exc: Exception) -> None:
         if len(self.messages) < _MAX_TRACKED_ERRORS:
             self.messages.append(f"{relative_path}: {exc}")
         # Deliberately outside the cap: the halt may be the fiftieth failure,
         # and it is the one signal the next run cannot reconstruct.
-        if self.halt is None and raised_by_exhaustion_policy(exc):
-            self.halt = exc
+        if raised_by_exhaustion_policy(exc):
+            if self.halt is None:
+                self.halt = exc
+                self.halt_message = f"{relative_path}: {exc}"
+        elif self.fatal is None and is_action_fatal(exc):
+            self.fatal = exc
+            self.fatal_message = f"{relative_path}: {exc}"
 
     def merge(self, other: CollectedErrors) -> None:
         self.messages.extend(other.messages)
-        self.halt = self.halt or other.halt
+        if self.halt is None:
+            self.halt, self.halt_message = other.halt, other.halt_message
+        if self.fatal is None:
+            self.fatal, self.fatal_message = other.fatal, other.fatal_message
+
+    @property
+    def action_fatal(self) -> Exception | None:
+        """The error the pass must raise, halt first: it carries the policy tag."""
+        return self.halt or self.fatal
+
+    @property
+    def action_fatal_message(self) -> str | None:
+        return self.halt_message if self.halt is not None else self.fatal_message
 
 
 # ---------------------------------------------------------------------------
@@ -115,12 +135,19 @@ def _raise_all_files_failed(
     Causes lead the message because the views that render it truncate (run
     summary at 80 chars, ``agac dispositions`` at 60).  The total is
     ``files_found``, never the capped error count.  The chain is the *halting*
-    cause, not the first: chaining the first loses the halt whenever another
+    cause where there is one, and otherwise the first action-fatal cause:
+    chaining the first failure of any kind loses the halt whenever another
     file failed before it.
     """
     from agent_actions.errors import DependencyError
 
-    detail = _format_error_sample(errors.messages) or "Check logs for details."
+    # The action-fatal cause leads when there is one: the sample is capped, so
+    # a halt that failed after the cap would otherwise appear only on the chain.
+    detail = (
+        errors.action_fatal_message
+        or _format_error_sample(errors.messages)
+        or "Check logs for details."
+    )
     raise DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
@@ -129,7 +156,39 @@ def _raise_all_files_failed(
             "upstream_dirs": upstream_dirs,
             "processing_errors": errors.messages,
         },
-        cause=errors.halt,
+        cause=errors.action_fatal,
+    )
+
+
+def _raise_action_fatal(
+    action_name: str,
+    files_found: int,
+    files_processed: int,
+    upstream_dirs: list[str],
+    errors: CollectedErrors,
+) -> None:
+    """Raise the collected action-fatal error despite other files succeeding.
+
+    The layer below re-raised it deliberately; tolerating it because another
+    file processed erases the policy it carries. The processed files keep the
+    output they wrote, but only a halt keeps its dispositions — the reset an
+    unmarked failure gets on the next run clears them, so those records are
+    processed again.
+    """
+    from agent_actions.errors import DependencyError
+
+    raise DependencyError(
+        f"Action '{action_name}': {errors.action_fatal_message} "
+        f"(Processed {files_processed} of {files_found} files, then stopped "
+        f"on the action-fatal error.)",
+        context={
+            "action": action_name,
+            "files_found": files_found,
+            "files_processed": files_processed,
+            "upstream_dirs": upstream_dirs,
+            "processing_errors": errors.messages,
+        },
+        cause=errors.action_fatal,
     )
 
 
@@ -563,6 +622,14 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
         if all_targets:
             files_found, files_processed, errors = process_from_storage_backend(runner, params)
             if files_processed > 0:
+                if errors.action_fatal is not None:
+                    _raise_action_fatal(
+                        params.action_name,
+                        files_found,
+                        files_processed,
+                        params.upstream_data_dirs,
+                        errors,
+                    )
                 return
             if files_found > 0:
                 # Data was found in DB but processing failed
@@ -593,6 +660,10 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                     params.action_name, files_found, params.upstream_data_dirs, errors
                 )
             warn_no_files_found(params)
+        elif errors.action_fatal is not None:
+            _raise_action_fatal(
+                params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
+            )
         return
 
     total_found = 0
@@ -620,3 +691,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                 params.action_name, total_found, params.upstream_data_dirs, all_errors
             )
         warn_no_files_found(params)
+    elif all_errors.action_fatal is not None:
+        _raise_action_fatal(
+            params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors
+        )

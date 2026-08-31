@@ -496,30 +496,62 @@ class TestRegistryShapesThatCouldStrandWork:
         assert _run(_service(manager)) == ["batch_r2"]
 
 
-class TestADeadRecoverySupersedesNothing:
-    """A recovery the provider FAILED or CANCELLED will never yield anything.
+class TestADeadRecoveryIsContinuedNotAbandoned:
+    """A retry recovery the provider FAILED or CANCELLED still holds the live state.
 
-    Skipping the parent for it means the pass processes nothing, raises, and
-    leaves the action in a retryable state — so the next run resets it and
-    submits a fresh batch. That is the reported bug, moved one entry over. The
-    pass after that is worse: the new parent batch is skipped while the stale
-    child is processed against the previous run's recovery state, so the action
-    reports COMPLETED on output derived entirely from the old run.
+    Re-reading its parent from scratch writes a fresh ``RecoveryState`` and
+    resets the attempt counter, so ``max_attempts`` is never reached and every
+    pass submits another paid batch. The dead entry is processed instead: the
+    failure path counts the spent attempt against the state it belongs to.
     """
 
-    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED, "bogus_status"])
-    def test_the_parent_stays_processable(self, dead):
-        """Including a status this version does not recognise.
-
-        ``BatchJobEntry`` warns on an unknown status but keeps it, and
-        ``get_registry_stats`` counts it as neither completed, failed nor
-        in-progress — so a parent skipped for one wedges the pass with no
-        in-flight job to wait on.
-        """
+    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+    def test_the_dead_retry_is_processed_and_its_parent_skipped(self, dead):
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
                 CHILD: _child("batch_child_dead", dead),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_child_dead"]
+
+    @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+    def test_a_dead_reprompt_leaves_the_parent_processable(self, dead):
+        """Only retry recoveries are continued from a dead batch.
+
+        A reprompt's still-failing records' last responses are not recoverable
+        from state — continuing one with no results would finalize on the
+        graduated records alone and silently drop the rest — so a dead
+        reprompt keeps the processed-from-scratch path.
+        """
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                f"{PARENT}_reprompt_1": _entry(
+                    "batch_reprompt_dead",
+                    dead,
+                    f"{PARENT}_reprompt_1",
+                    at="09:01:00",
+                    parent_file_name=PARENT,
+                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_attempt=1,
+                ),
+            }
+        )
+
+        assert _run(_service(manager)) == ["batch_parent"]
+
+    def test_an_unrecognised_status_leaves_the_parent_processable(self):
+        """``BatchJobEntry`` warns on an unknown status but keeps it.
+
+        Nothing would process such an entry, so letting it supersede wedges
+        the pass with no in-flight job to wait on; the parent runs instead.
+        """
+        manager = _registry(
+            {
+                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
+                CHILD: _child("batch_child_dead", "bogus_status"),
             }
         )
 

@@ -86,6 +86,7 @@ class InitialStrategy(ActionStrategy):
                     idx=params.idx,
                     storage_backend=params.storage_backend,
                     action_configs=params.action_configs,
+                    workflow_metadata=params.workflow_metadata,
                 )
             ),
         )

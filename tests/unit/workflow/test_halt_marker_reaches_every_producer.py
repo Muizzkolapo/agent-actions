@@ -123,6 +123,10 @@ class TestTheHaltNeedNotFailFirst:
         )
 
         assert _halt_marker(raised) == HALT_MARKER
+        assert HALT_TEXT in str(raised), (
+            "the message is built from the capped sample, so a halt failing "
+            "past the cap reaches the reader on the chain and nowhere else"
+        )
 
     def test_no_halt_among_the_failures_is_not_marked(self, tmp_path):
         raised = _run_files_until_it_raises(tmp_path, ordinary=2, then_halt=False)

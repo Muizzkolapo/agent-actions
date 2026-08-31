@@ -52,8 +52,12 @@ class BatchTaskPreparator:
         batch_name: str | None = None,
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
+        attempt: int = 0,
     ) -> PreparedBatchTasks:
         """Prepare batch tasks from raw data.
+
+        ``attempt`` is the recovery round; reprompt resubmissions pass their
+        round number so prompt traces stamp it.
 
         Raises:
             ConfigurationError: If configuration is invalid
@@ -115,6 +119,7 @@ class BatchTaskPreparator:
                     task_preparer=task_preparer,
                     context_map_builder=context_map_builder,
                     stats=stats,
+                    attempt=attempt,
                 )
 
                 if result:
@@ -152,6 +157,7 @@ class BatchTaskPreparator:
         task_preparer: TaskPreparer,
         context_map_builder: dict[str, Any],
         stats: BatchTaskPreparationStats,
+        attempt: int = 0,
     ) -> dict[str, Any] | None:
         """Process a single data item using TaskPreparer.
 
@@ -173,7 +179,9 @@ class BatchTaskPreparator:
 
         # 4. Use TaskPreparer for unified preparation
         # ONE guard check with full context (normalize → source → prompt → guard)
-        prepared = task_preparer.prepare(row, prep_context, existing_target_id=custom_id)
+        prepared = task_preparer.prepare(
+            row, prep_context, existing_target_id=custom_id, attempt=attempt
+        )
 
         # 5. Store passthrough_fields for later merging
         BatchContextMetadata.set_passthrough_fields(
@@ -359,6 +367,10 @@ class BatchTaskPreparator:
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
         )
+        # A rehearsal, not a run: these rows are never submitted and their ids
+        # never reappear, so persisting them would leave an unanswerable trace
+        # beside every real one.
+        prep_context.storage_backend = None
 
         for row in data[:sample_size]:
             prep_context.current_item = row

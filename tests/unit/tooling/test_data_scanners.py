@@ -337,6 +337,8 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
             "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "  action_name TEXT NOT NULL,"
             "  record_id TEXT NOT NULL,"
+            "  source_guid TEXT,"
+            "  run_id TEXT,"
             "  attempt INTEGER NOT NULL DEFAULT 0,"
             "  compiled_prompt TEXT NOT NULL,"
             "  llm_context TEXT,"
@@ -353,12 +355,13 @@ def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
         )
         conn.execute(
             "INSERT INTO prompt_trace "
-            "(action_name, record_id, attempt, compiled_prompt, response_text, "
+            "(action_name, record_id, source_guid, attempt, compiled_prompt, response_text, "
             " model_name, model_vendor, run_mode, prompt_length, response_length) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "classify",
                 "tid-001",
+                "guid-001",
                 0,
                 "You are a classifier...",
                 '[{"issue_type":"bug"}]',
@@ -413,8 +416,8 @@ class TestScanSqliteReadonlyTraceAttachment:
         assert len(records) == 1
         assert "_trace" not in records[0]
 
-    def test_no_trace_when_no_matching_target_id(self, tmp_path):
-        """Records without target_id should not get traces."""
+    def test_no_trace_when_record_has_no_identity(self, tmp_path):
+        """Records with neither target_id nor parent_target_id get no trace."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
@@ -432,6 +435,7 @@ class TestScanSqliteReadonlyTraceAttachment:
         conn.execute(
             "CREATE TABLE prompt_trace ("
             "  id INTEGER PRIMARY KEY, action_name TEXT, record_id TEXT,"
+            "  source_guid TEXT, run_id TEXT,"
             "  attempt INTEGER DEFAULT 0, compiled_prompt TEXT,"
             "  llm_context TEXT, response_text TEXT, model_name TEXT,"
             "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
@@ -456,12 +460,13 @@ class TestScanSqliteReadonlyTraceAttachment:
         conn = sqlite3.connect(str(db_path))
         conn.execute(
             "INSERT INTO prompt_trace "
-            "(action_name, record_id, attempt, compiled_prompt, response_text, "
+            "(action_name, record_id, source_guid, attempt, compiled_prompt, response_text, "
             " model_name, run_mode, prompt_length, response_length) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "classify",
                 "tid-001",
+                "guid-001",
                 1,
                 "You are a classifier (retry)...",
                 '[{"issue_type":"feature_request"}]',

@@ -22,6 +22,7 @@ class Cleaner:
 
     agent: str
     force: bool = False
+    remove_target: bool = False
     remove_all: bool = False
     project_root: Path | None = None
     agent_manager: type[AgentManager] = AgentManager
@@ -44,8 +45,9 @@ class Cleaner:
             self.agent, project_root=self.project_root
         )
         io_dir = Path(io_dir_str)
+        include_target = self.remove_target or self.remove_all
         directories: list[Path] = []
-        for sub in ("source", "target"):
+        for sub in ("source", "target") if include_target else ("source",):
             sub_path = io_dir / sub
             if sub_path.exists():
                 directories.append(sub_path)

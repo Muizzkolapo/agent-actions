@@ -130,7 +130,9 @@ MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED}
 
 ### Completion Classification
 
-`executor.py:_resolve_completion_status()` — called after every action run:
+`executor.py:_resolve_completion_status()` — called after every action run
+that returned. An action whose run raised is FAILED without reaching this
+classifier, so FAILED there does not imply zero successes:
 
 ```
 get_failed_items() returns failures?

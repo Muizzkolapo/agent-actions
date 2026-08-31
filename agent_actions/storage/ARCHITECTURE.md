@@ -103,7 +103,9 @@ Indexes:
 CREATE TABLE IF NOT EXISTS prompt_trace (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name TEXT NOT NULL,
-    record_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,      -- prepare-time target_id (re-minted per run)
+    source_guid TEXT,             -- durable input identity; joins record_disposition.record_id
+    run_id TEXT,                  -- workflow run that wrote this row
     attempt INTEGER NOT NULL DEFAULT 0,
     compiled_prompt TEXT NOT NULL,
     llm_context TEXT,
@@ -122,6 +124,34 @@ CREATE TABLE IF NOT EXISTS prompt_trace (
 Indexes:
 - `idx_trace_action ON prompt_trace(action_name)`
 - `idx_trace_action_record ON prompt_trace(action_name, record_id)`
+- `idx_trace_action_source ON prompt_trace(action_name, source_guid)`
+
+**Identity contract.** The table is a bounded historical log; `target_data`
+holds the current view. Rows accumulate across runs (filter by `run_id` for
+"this run"; day-based retention prunes old ones). Each row therefore carries
+two identifiers, answering two different questions:
+
+- `source_guid` — the **durable** identity of the record that was prompted,
+  the same value `record_disposition.record_id` holds. This is the key for
+  auditing across tables and across runs. Before this column existed the two
+  tables shared no key and the join returned nothing.
+- `record_id` — the **prepare-time** `target_id`, minted afresh each run.
+  This is the key for "which prompt produced this record on *this* run".
+  A durable key cannot answer that: it also matches rows earlier runs left
+  behind, which would show a stale prompt as if it were current, and would
+  attach a prompt to a record this run never prompted at all.
+
+A 1→N expansion writes one trace for the parent prompt and mints its children's
+ids only afterwards, so a child reaches that trace through its
+`parent_target_id`; a record prepared here in its own right always resolves to
+its own row first. Reprompt rounds re-prepare the same record at `attempt=N`,
+and the newest attempt wins. Rows written before the identity columns existed
+keep `NULL` in both and are excluded from durable-key joins.
+
+One known gap: an expansion's trace records the last child's output as its
+`response_text`, since the children of one prompt are written back
+individually. The prompt and its identity are exact; only that one field is a
+fragment of the whole response.
 
 Large fields (prompt, context, response) are capped at 1MB (`_MAX_TRACE_FIELD_SIZE`). Overflow is replaced with `{"__truncated__": true, "original_length": N}`.
 
@@ -296,7 +326,7 @@ The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
 | `source_data` | relative_path, source_guid, data, created_at |
 | `target_data` | action_name, relative_path, data, record_count, created_at |
 | `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
-| `prompt_trace` | action_name, record_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
+| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
 
 Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added after the migration system and has no legacy schemas to handle.
 
@@ -316,7 +346,7 @@ When a workflow re-runs, records that previously FAILED may now succeed. This op
 
 ### 3. Prompt trace retention (`_enforce_prompt_trace_retention`)
 
-Keeps traces from the N most recent calendar days (default: 10, from `StorageDefaults.PROMPT_TRACE_RETENTION_RUNS`). Uses `DATE(created_at)` as the boundary — multiple runs on the same day count as one retention unit. Deletes all traces older than the Nth distinct date.
+Keeps traces from the N most recent calendar days (default: 10, from `StorageDefaults.PROMPT_TRACE_RETENTION_RUNS`; user config key `storage.prompt_trace_retention_runs`). Despite the knob's name, the unit is **calendar days**, not runs: the boundary is `DATE(created_at)`, so multiple runs on the same day count as one retention unit and same-day re-runs are never pruned. Deletes all traces older than the Nth distinct date. Use the `run_id` column to distinguish runs within the retained window.
 
 ### 4. Source data TTL (`_enforce_source_data_ttl`)
 

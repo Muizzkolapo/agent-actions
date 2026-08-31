@@ -135,6 +135,8 @@ Here's what each command does - organized by what you're trying to accomplish:
 | [`inspect`](./inspect) | Preflight + introspection — graph + validation with `dependencies` / `action` / `context` drill-downs |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
+| [`dispositions`](./dispositions) | Inspect record-level processing dispositions per action |
+| [`retry`](./retry) | Retry failed/exhausted records from a specific action forward |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
 
@@ -143,7 +145,8 @@ Here's what each command does - organized by what you're trying to accomplish:
 | Command | Description |
 |---------|-------------|
 | [`init`](./utilities#init) | Initialize a new project |
-| [`clean`](./utilities#clean) | Clean up generated files |
+| [`example`](./utilities#example) | Browse and install example projects from GitHub |
+| [`clean`](./utilities#clean) | Remove regenerable working directories (output/staging opt-in) |
 | [`docs`](./utilities#docs) | Generate documentation |
 | [`status`](./utilities#status) | Check agentic workflow status |
 | [`skills`](./skills) | Install AI assistant skills (Claude Code / Codex) |
