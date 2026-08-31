@@ -131,10 +131,22 @@ holds the current view. Rows accumulate across runs (filter by `run_id` for
 "this run"; day-based retention prunes old ones). `record_id` holds the
 prepare-time `target_id`, which is re-minted on every prepare and therefore
 never joins anything durable — joins and response updates key on
-`source_guid`. A 1→N expansion writes one trace for the parent prompt;
-children reach it via their `parent_source_guid`. Reprompt rounds re-prepare
-the same record at `attempt=N`; the response lands on the newest attempt.
+`source_guid`. Reprompt rounds re-prepare the same record at `attempt=N`, and
+a response lands on the most recently written row for the record, so this
+run's trace is never overwritten by a stale row a previous run left behind.
 Rows written before the identity columns existed keep `NULL` and never join.
+
+A 1→N expansion writes one trace for the parent prompt, and its children mint
+their own guids only after that prompt ran — so a child reaches the trace by
+its `parent_source_guid`. That field is *also* carried down to every later 1:1
+stage, where it names an ancestor this action never prepared; consumers
+therefore match either guid rather than preferring one, since scoped to a
+single action only one of them can name a trace. Two consequences worth
+knowing: a nested expansion's children reach no trace (the intermediate guid
+they were prompted under is not retained on the record), and an expansion's
+trace holds one child's output as its response, because the children of one
+prompt are not distinguishable from the children of an earlier expansion by
+stored fields alone.
 
 Large fields (prompt, context, response) are capped at 1MB (`_MAX_TRACE_FIELD_SIZE`). Overflow is replaced with `{"__truncated__": true, "original_length": N}`.
 

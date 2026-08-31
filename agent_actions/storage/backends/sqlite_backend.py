@@ -1256,15 +1256,19 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         source_guid: str,
         response_text: str,
+        parent_source_guid: str | None = None,
     ) -> None:
-        """Attach the LLM response to the newest trace row for a record.
+        """Attach the LLM response to the most recent trace row for a record.
 
-        Keyed on the durable ``source_guid`` (expansion children pass their
-        parent's); the newest attempt wins. A response with no row to land
-        on is trace data loss, so a miss is logged rather than silent.
+        Both guids are matched rather than ranked: scoped to one action only
+        one of them can name a trace, since a ``parent_source_guid`` carried
+        down from an earlier expansion names a record this action never
+        prepared. A miss is logged — a response with no row is trace loss.
         """
         action_name = self._validate_identifier(action_name, "action_name")
         source_guid = self._validate_identifier(source_guid, "source_guid")
+        if parent_source_guid:
+            parent_source_guid = self._validate_identifier(parent_source_guid, "parent_source_guid")
 
         response_length = len(response_text) if response_text else 0
         response_text = self._cap_trace_field(response_text) or ""
@@ -1278,11 +1282,17 @@ class SQLiteBackend(StorageBackend):
                     SET response_text = ?, response_length = ?
                     WHERE id = (
                         SELECT id FROM prompt_trace
-                        WHERE action_name = ? AND source_guid = ?
-                        ORDER BY attempt DESC, id DESC LIMIT 1
+                        WHERE action_name = ? AND source_guid IN (?, ?)
+                        ORDER BY id DESC LIMIT 1
                     )
                     """,
-                    (response_text, response_length, action_name, source_guid),
+                    (
+                        response_text,
+                        response_length,
+                        action_name,
+                        source_guid,
+                        parent_source_guid or source_guid,
+                    ),
                 )
                 self.connection.commit()
                 if cursor.rowcount > 0:
@@ -1749,44 +1759,47 @@ class SQLiteBackend(StorageBackend):
                     except (FileNotFoundError, json.JSONDecodeError) as e:
                         logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
 
-                # Attach prompt traces, keyed on durable identity: an
-                # expansion child's parent_source_guid (N children share one
-                # prompt) or the record's own source_guid. Newest row wins.
+                # Attach prompt traces by durable identity. A record reaches its
+                # prompt by its own source_guid, or — when this action expanded
+                # it, minting a guid after the prompt ran — by its parent's.
                 try:
-                    guid_map: dict[str, list[dict[str, Any]]] = {}
+                    candidates: set[str] = set()
                     for rec in records:
-                        guid = rec.get("parent_source_guid") or rec.get("source_guid")
-                        if guid:
-                            guid_map.setdefault(guid, []).append(rec)
-                    if guid_map:
-                        placeholders = ",".join("?" for _ in guid_map)
+                        for guid in (rec.get("source_guid"), rec.get("parent_source_guid")):
+                            if guid:
+                                candidates.add(guid)
+                    if candidates:
+                        placeholders = ",".join("?" for _ in candidates)
                         cursor.execute(
                             f"SELECT source_guid, compiled_prompt, llm_context, "
                             f"response_text, model_name, model_vendor, run_mode, "
                             f"prompt_length, response_length, attempt "
                             f"FROM prompt_trace "
                             f"WHERE action_name = ? AND source_guid IN ({placeholders})"
-                            f" ORDER BY attempt DESC, id DESC",
-                            [action_name, *guid_map.keys()],
+                            f" ORDER BY id DESC",
+                            [action_name, *candidates],
                         )
-                        seen: set[str] = set()
+                        newest: dict[str, dict[str, Any]] = {}
                         for trace_row in cursor:
-                            guid = trace_row["source_guid"]
-                            if guid in seen:
-                                continue
-                            seen.add(guid)
-                            trace_data = {
-                                "compiled_prompt": trace_row["compiled_prompt"],
-                                "llm_context": trace_row["llm_context"],
-                                "response_text": trace_row["response_text"],
-                                "model_name": trace_row["model_name"],
-                                "model_vendor": trace_row["model_vendor"],
-                                "run_mode": trace_row["run_mode"],
-                                "prompt_length": trace_row["prompt_length"],
-                                "response_length": trace_row["response_length"],
-                                "attempt": trace_row["attempt"],
-                            }
-                            for rec in guid_map.get(guid, []):
+                            newest.setdefault(
+                                trace_row["source_guid"],
+                                {
+                                    "compiled_prompt": trace_row["compiled_prompt"],
+                                    "llm_context": trace_row["llm_context"],
+                                    "response_text": trace_row["response_text"],
+                                    "model_name": trace_row["model_name"],
+                                    "model_vendor": trace_row["model_vendor"],
+                                    "run_mode": trace_row["run_mode"],
+                                    "prompt_length": trace_row["prompt_length"],
+                                    "response_length": trace_row["response_length"],
+                                    "attempt": trace_row["attempt"],
+                                },
+                            )
+                        for rec in records:
+                            trace_data = newest.get(rec.get("source_guid") or "") or newest.get(
+                                rec.get("parent_source_guid") or ""
+                            )
+                            if trace_data:
                                 rec["_trace"] = trace_data
                 except sqlite3.OperationalError:
                     # Missing table, or a pre-migration store opened read-only

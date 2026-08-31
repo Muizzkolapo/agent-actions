@@ -836,11 +836,11 @@ class BatchProcessingService:
             for item in items:
                 if item.get("_state") != RecordState.PROCESSED.value:
                     continue
-                # Traces key on the durable identity; an expansion child's
-                # target_id was re-minted and matches no trace row — its
-                # parent's guid does.
-                trace_guid = item.get("parent_source_guid") or item.get("source_guid")
-                if not trace_guid:
+                # Both guids: an expansion child reaches its trace by the
+                # parent's, later stages by their own. The backend matches
+                # whichever names a trace at this action.
+                source_guid = item.get("source_guid")
+                if not source_guid:
                     continue
                 content = item.get("content")
                 if content is None:
@@ -852,8 +852,9 @@ class BatchProcessingService:
                 response_text = json.dumps(action_output, ensure_ascii=False, default=str)
                 self._storage_backend.update_prompt_trace_response(
                     action_name=action_name,
-                    source_guid=trace_guid,
+                    source_guid=source_guid,
                     response_text=response_text,
+                    parent_source_guid=item.get("parent_source_guid"),
                 )
         except Exception:
             logger.warning(

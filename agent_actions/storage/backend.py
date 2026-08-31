@@ -668,8 +668,13 @@ class StorageBackend(ABC):
         action_name: str,
         source_guid: str,
         response_text: str,
+        parent_source_guid: str | None = None,
     ) -> None:
-        """Attach the LLM response to the newest trace row for ``source_guid``.
+        """Attach the LLM response to the most recent trace row for a record.
+
+        Pass ``parent_source_guid`` when the record may be an expansion child,
+        whose own guid was minted after its prompt ran; implementations match
+        whichever guid names a trace at this action.
 
         No-op if the trace does not exist. This is telemetry — must not raise.
         """
