@@ -30,6 +30,30 @@ from agent_actions.workflow.pipeline_file_mode import (
 logger = logging.getLogger(__name__)
 
 
+def _collapse_contributor_guids(
+    structured_data: list[dict[str, Any]],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    records: list[dict[str, Any]],
+) -> list[str]:
+    """Guids a many-to-one output consumed but does not carry.
+
+    A collapsed output inherits only its first parent's guid; without these,
+    the remaining contributors leave no disposition row at the consuming
+    action.
+    """
+    carried = {item.get("source_guid") for item in structured_data}
+    contributors: set[str] = set()
+    for src in (source_mapping or {}).values():
+        if not isinstance(src, list):
+            continue
+        for idx in src:
+            if isinstance(idx, int) and 0 <= idx < len(records):
+                guid = records[idx].get("source_guid")
+                if guid and guid not in carried:
+                    contributors.add(guid)
+    return sorted(contributors)
+
+
 def _accounted_source_guids(
     structured_data: list[dict[str, Any]],
     source_mapping: dict[int, int | list[int] | None] | None,
@@ -225,6 +249,10 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
+            if not is_expansion:
+                result.collapse_contributor_guids = _collapse_contributor_guids(
+                    structured_data, source_mapping, records
+                )
 
             return [result] + missing_results
 

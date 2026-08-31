@@ -30,6 +30,9 @@ BATCH_NOT_RETURNED = "batch_not_returned"
 
 # -- Tool (FILE mode) -------------------------------------------------------
 TOOL_MISSING_RECORD = "tool_missing_record"
+# Success reason for a many-to-one contributor: consumed as intended, its
+# content lives in the collapsed output rather than an own output record.
+COLLAPSED_INTO_OUTPUT = "collapsed_into_output"
 
 # -- Empty output ------------------------------------------------------------
 EMPTY_OUTPUT = "empty_output"

@@ -18,6 +18,7 @@ from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
+    COLLAPSED_INTO_OUTPUT,
     GUARD_FILTER,
     GUARD_PREFILTER_SKIP,
     GUARD_SKIP,
@@ -504,6 +505,19 @@ def collect_results_from_processing_results(
                     data,
                     DISPOSITION_SUCCESS,
                 )
+            if storage_backend:
+                for guid in result.collapse_contributor_guids:
+                    pending_dispositions.append(
+                        (
+                            action_name,
+                            guid,
+                            DISPOSITION_SUCCESS,
+                            COLLAPSED_INTO_OUTPUT,
+                            None,
+                            None,
+                            None,
+                        )
+                    )
 
         elif status == ProcessingStatus.SKIPPED:
             data = result.data or []

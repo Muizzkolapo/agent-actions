@@ -160,6 +160,9 @@ class ProcessingResult:
     source_mapping: dict[int, int | list[int] | None] | None = None
     processing_context: Optional["ProcessingContext"] = None
     is_expansion: bool = False  # True when a single input produced multiple outputs (1→N)
+    # Inputs folded into a many-to-one output whose guid is not carried on any
+    # output item; each still gets a disposition row at the consuming action.
+    collapse_contributor_guids: list[str] = field(default_factory=list)
 
     @classmethod
     def success(
