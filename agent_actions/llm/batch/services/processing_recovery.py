@@ -122,14 +122,27 @@ def process_recovery_batch(
         parent_file_name,
     )
 
-    recovery_results = retrieve_and_reconcile(
-        provider,
-        batch_id,
-        output_directory,
-        context_map=context_map,
-        record_count=entry.record_count,
-        file_name=file_name,
-    )
+    # A terminally failed batch has nothing to retrieve; the empty result set
+    # is exactly what it delivered, and the handlers below count the spent
+    # attempt from it.
+    if entry.status in (BatchStatus.FAILED, BatchStatus.CANCELLED):
+        logger.info(
+            "Recovery batch %s for parent=%s is %s at the provider — "
+            "continuing recovery with no results",
+            batch_id,
+            parent_file_name,
+            entry.status,
+        )
+        recovery_results: list[BatchResult] = []
+    else:
+        recovery_results = retrieve_and_reconcile(
+            provider,
+            batch_id,
+            output_directory,
+            context_map=context_map,
+            record_count=entry.record_count,
+            file_name=file_name,
+        )
 
     accumulated = deserialize_results(state.accumulated_results)
 

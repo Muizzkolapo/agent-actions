@@ -8,6 +8,10 @@ rather than the rate-based random approach in the shared
 
 Environment variables:
     OLLAMA_FAIL_FIRST_N=2           Fail first N calls/records (online + batch)
+    OLLAMA_FAIL_BATCH_NAMES=_retry  Batches whose name contains any of these
+                                    comma-separated substrings fail terminally
+                                    at the provider: submission runs nothing
+                                    and status polls report "failed"
 
 Usage:
     # Online mode - fail first 2 calls, 3rd succeeds
@@ -15,6 +19,9 @@ Usage:
 
     # Batch mode - fail first 2 records in batch
     OLLAMA_FAIL_FIRST_N=2 python -m agent_actions run workflow.yml
+
+    # Batch mode - every recovery retry batch dies at the provider
+    OLLAMA_FAIL_BATCH_NAMES=_retry python -m agent_actions run workflow.yml
 
 To remove: Delete this file and remove imports from client.py and batch_client.py
 
@@ -74,6 +81,36 @@ def maybe_inject_online_failure(model: str, vendor_slug: str = "ollama_local") -
             f"Injected timeout (attempt {_online_call_count}/{fail_n})",
             context={"vendor": vendor_slug, "model": model, "injected": True},
         )
+
+
+_FAILED_BATCH_ID_MARKER = "injected_failure"
+
+
+def failed_batch_id_for(batch_name: str) -> str | None:
+    """Return a failure-marked batch id if this batch should die at the provider.
+
+    Matching is by substring against ``OLLAMA_FAIL_BATCH_NAMES`` (comma-
+    separated). The marker is encoded in the id itself so status polls in later
+    processes can recognise the batch without shared state.
+    """
+    import uuid
+
+    names = os.getenv("OLLAMA_FAIL_BATCH_NAMES", "")
+    patterns = [p.strip() for p in names.split(",") if p.strip()]
+    if not any(p in batch_name for p in patterns):
+        return None
+    batch_id = f"batch_{_FAILED_BATCH_ID_MARKER}_{uuid.uuid4().hex}"
+    logger.info(
+        "[INJECTION] Batch %r submitted as terminally failed at provider: %s",
+        batch_name,
+        batch_id,
+    )
+    return batch_id
+
+
+def is_injected_failed_batch(batch_id: str) -> bool:
+    """True if this batch id was minted by ``failed_batch_id_for``."""
+    return _FAILED_BATCH_ID_MARKER in batch_id
 
 
 def should_fail_batch_record(custom_id: str, record_index: int) -> bool:

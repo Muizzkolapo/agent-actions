@@ -68,31 +68,54 @@ from agent_actions.utils.path_utils import ensure_directory_exists
 logger = logging.getLogger(__name__)
 
 
+def _is_dead_retry(entry: BatchJobEntry) -> bool:
+    """A retry recovery the provider terminally failed.
+
+    It holds the live recovery state, and the failure path continues it: the
+    spent attempt is counted and the next one submitted, or exhaustion applies.
+    Reprompt recoveries are excluded — their in-flight records' last responses
+    are not recoverable from state, so their dead batches keep the
+    processed-from-scratch path.
+    """
+    return entry.recovery_type == RecoveryType.RETRY and entry.status in (
+        BatchStatus.FAILED,
+        BatchStatus.CANCELLED,
+    )
+
+
 def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
-    A parent is superseded by a recovery that can still yield something — that
-    recovery now holds its results. "Can yield something" is asserted, not
-    assumed absent: only COMPLETED (readable now) and in-flight (readable later)
-    qualify, so FAILED, CANCELLED and any status this version does not recognise
-    supersede nothing. A parent skipped for a recovery that never produces
-    leaves the pass with no output, which raises, leaves the action retryable,
-    and resubmits — the loop this all exists to stop.
+    COMPLETED (readable now) and in-flight (readable later) recoveries
+    supersede outright. A terminally failed retry recovery also supersedes —
+    its next step is counting the spent attempt, then resubmission or
+    exhaustion — but only when the parent has no readable recovery: a dead
+    attempt must not outrank a usable sibling's actual results. Anything else
+    (a dead reprompt, an unrecognised status) supersedes nothing, because
+    nothing would process it and a parent skipped for a recovery that never
+    produces wedges the action.
 
-    Among live recoveries the newest wins, ranked by registration time rather
-    than by attempt or phase: a store written before registration started
-    replacing its predecessor can hold a retry registered *after* a reprompt and
+    Among live recoveries the newest wins, ranked by registration time, not by
+    attempt or phase: a store written before registration started replacing
+    its predecessor can hold a retry registered *after* a reprompt and
     numbered below it, which either of those orderings gets backwards.
     """
     live: dict[str, tuple[str, int, str]] = {}
+    dead_retries: dict[str, tuple[str, int, str]] = {}
     for name, entry in jobs.items():
         parent = entry.parent_file_name
-        usable = entry.status == BatchStatus.COMPLETED or entry.is_in_flight
-        if not parent or not usable:
+        if not parent:
             continue
         rank = (entry.timestamp or "", entry.recovery_attempt or 0, name)
-        if parent not in live or rank > live[parent]:
-            live[parent] = rank
+        if entry.status == BatchStatus.COMPLETED or entry.is_in_flight:
+            if parent not in live or rank > live[parent]:
+                live[parent] = rank
+        elif _is_dead_retry(entry):
+            if parent not in dead_retries or rank > dead_retries[parent]:
+                dead_retries[parent] = rank
+
+    for parent, rank in dead_retries.items():
+        live.setdefault(parent, rank)
 
     superseded = set(live)
     superseded.update(
@@ -303,7 +326,9 @@ class BatchProcessingService:
             if not batch_id:
                 continue
 
-            if not self._is_batch_ready_for_processing(
+            # A dead retry recovery is processed without a readiness poll: its
+            # provider status is terminal, and the failure path needs no results.
+            if not _is_dead_retry(entry) and not self._is_batch_ready_for_processing(
                 batch_id, output_directory, agent_config, action_name=effective_action_name
             ):
                 continue

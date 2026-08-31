@@ -28,6 +28,8 @@ from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
 from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
 from agent_actions.llm.providers.ollama.failure_injection import (
+    failed_batch_id_for,
+    is_injected_failed_batch,
     should_fail_batch_record,
 )
 from agent_actions.prompt.message_builder import MessageBuilder
@@ -221,6 +223,10 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch with concurrent workers (default: 1 = sequential)."""
+        injected_failed_id = failed_batch_id_for(batch_name)
+        if injected_failed_id is not None:
+            return (injected_failed_id, "submitted")
+
         batch_id = f"batch_{uuid.uuid4().hex}"
 
         tasks: list[dict[str, Any]] = []
@@ -268,6 +274,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return (batch_id, "submitted")
 
     def _fetch_status(self, batch_id: str) -> str:
+        if is_injected_failed_batch(batch_id):
+            return "failed"
         return "completed"
 
     def _normalize_status(self, raw_status: str) -> str:
