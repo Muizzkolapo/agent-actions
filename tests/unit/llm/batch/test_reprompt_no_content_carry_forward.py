@@ -10,7 +10,7 @@ is reported at finalization as one the batch never returned.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -214,6 +214,38 @@ def test_no_content_record_reaches_finalization_when_reprompt_exhausts(tmp_path)
     finalized = {r.custom_id: r for r in harness.finalized}
     assert set(finalized) == {OK_ID, BAD_ID, DEAD_ID}
     assert finalized[DEAD_ID].error == PROVIDER_ERROR
+
+
+def test_withheld_failure_is_not_counted_as_a_graduated_record(tmp_path):
+    """Carrying it in the graduated pool would reach finalization but claim it recovered.
+
+    ``handle_reprompt_recovery`` fires RepromptRecoveredEvent on a non-empty graduated
+    pool, so a failure parked there reports a recovery that never happened.
+    """
+    config = {**AGENT_CONFIG, "reprompt": {"validation": VALIDATION, "max_attempts": 1}}
+    harness = _Harness(tmp_path, agent_config=config)
+
+    # Nothing graduates in either pass: one record is withheld, the other stays invalid.
+    assert (
+        harness.submit_pass(
+            [
+                BatchResult(custom_id=BAD_ID, content={"topic": ""}, success=True),
+                BatchResult(custom_id=DEAD_ID, content=None, success=False, error=PROVIDER_ERROR),
+            ]
+        )
+        is False
+    )
+
+    with patch(
+        "agent_actions.llm.batch.services.processing_recovery.fire_event"
+    ) as mock_fire_event:
+        harness.reprompt_pass([BatchResult(custom_id=BAD_ID, content={"topic": ""}, success=True)])
+
+    fired = [type(call.args[0]).__name__ for call in mock_fire_event.call_args_list]
+    assert "RepromptRecoveredEvent" not in fired, (
+        f"a withheld failure was treated as a graduated record; events fired: {fired}"
+    )
+    assert {r.custom_id for r in harness.finalized} == {BAD_ID, DEAD_ID}
 
 
 def test_no_content_record_reaches_finalization_when_reprompt_is_deconfigured(tmp_path):
