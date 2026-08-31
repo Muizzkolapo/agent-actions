@@ -85,6 +85,39 @@ agac init my_project -f
 Use `agac init list` to see available examples, then `agac init example <name>` to scaffold a fully working project you can run immediately. Examples are fetched from GitHub so the package stays lightweight.
 :::
 
+## example
+
+The `example` command browses and installs example projects from GitHub. It offers the same catalog as `agac init list` / `agac init example`, as a standalone command group.
+
+```bash
+agac example list
+agac example install <name> [project-name] [options]
+```
+
+**Subcommands:**
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List available example projects from GitHub |
+| `install <name> [project-name]` | Install an example project from GitHub |
+
+**Options for `install`:**
+| Option | Description |
+|--------|-------------|
+| `-o, --output-dir TEXT` | Directory to create the project in (default: current directory) |
+| `-f, --force` | Force project creation even if directory exists |
+
+**Examples:**
+```bash
+# See what's available
+agac example list
+
+# Install an example under its own name
+agac example install contract_reviewer
+
+# Install an example as a custom-named project
+agac example install contract_reviewer my_project
+```
+
 ## clean
 
 The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/` — the preprocessed input copies that are rebuilt from `agent_io/staging/` on the next run. Anything beyond that is opt-in.
