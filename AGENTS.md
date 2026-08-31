@@ -50,6 +50,7 @@ These are the **stable paths** that exist in every user's project:
 | `agent_config/{workflow}.yml` | Workflow definition |
 | `prompt_store/{workflow}.md` | Prompt templates |
 | `schema/{workflow}/{action}.yml` | Output schemas |
+| `expectations/{workflow}/{suite}.yml` | Named expectation suites |
 | `tools/{workflow}/*.py` | UDF tool scripts |
 | `seed_data/*.json` | Reference data |
 | `agent_io/staging/` | Input data |
