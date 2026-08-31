@@ -25,11 +25,11 @@ agac dispositions -a <workflow-name> [options]
 One row per action, with a count per disposition:
 
 ```
-                         Dispositions: my_workflow
-┃ Action  ┃ Success ┃ Failed ┃ Exhaust… ┃ Unproc… ┃ Passthr… ┃ Filter… ┃ Total ┃
-│ extract │      25 │      0 │        0 │       0 │        0 │       0 │    25 │
-│ rewrite │       4 │      0 │        0 │       0 │       21 │       0 │    25 │
-│ write_… │       1 │      0 │        0 │      21 │        0 │       0 │    22 │
+                              Dispositions: my_workflow
+┃ Action  ┃ Success ┃ Failed ┃ Exhaust… ┃ Unproc… ┃ Passthr… ┃ Filter… ┃ Total ┃ Records ┃
+│ extract │      25 │      0 │        0 │       0 │        0 │       0 │    25 │      25 │
+│ rewrite │       4 │      0 │        0 │       0 │       21 │       0 │    25 │      25 │
+│ split   │       1 │      0 │        0 │       0 │        0 │       0 │     1 │       5 │
 ```
 
 | Disposition | Meaning |
@@ -40,6 +40,22 @@ One row per action, with a count per disposition:
 | **Unprocessed** | An upstream failure cascaded — the action never saw the record |
 | **Passthrough** | A guard condition skipped the record; it flows on unchanged |
 | **Filtered** | The action removed the record from the stream |
+
+### Why Total and Records can differ
+
+**A disposition is one row per input record per action.** `Total` counts the
+records an action *consumed*; `Records` counts what it *wrote*. They match for
+an action that processes one record into one record, and they legitimately
+differ otherwise — `split` above turned one input into five outputs, so its
+single disposition sits beside five records.
+
+An action that folds records together shows the reverse: more dispositions than
+records, because every input it consumed is accounted for even though only one
+output carries them. Neither case is data loss.
+
+The children an action creates are accounted at the actions that *consume*
+them, not at the one that produced them. This is also why [`retry`](./retry)
+targets inputs: retrying a record means re-running the input that failed.
 
 ## Examples
 

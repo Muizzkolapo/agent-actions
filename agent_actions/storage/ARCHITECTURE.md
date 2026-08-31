@@ -97,6 +97,23 @@ Indexes:
 - `idx_disp_action_disp ON record_disposition(action_name, disposition)`
 - `idx_disp_action_record ON record_disposition(action_name, record_id)`
 
+**The unit is the input record.** One disposition row per input record per
+action: `record_id` holds the guid of the record the action *consumed*, and an
+action that expands or collapses therefore has a disposition count that differs
+from the number of records it wrote. The children of an expansion are accounted
+at the actions that consume them, not at the one that created them.
+
+This is what the table can express, not merely convention. The failure-path
+dispositions — guard filter, prep failure, exhaustion — are written when no
+output record exists yet, so they have nothing but the input to name; keying
+per output would leave a failed expansion with no writable row at all. It is
+also what `retry --record` targets, since retrying means re-running an input.
+
+The consequence to expect: for an action that fans out, the disposition total
+is *smaller* than its output, and for one that folds records together it is
+*larger*. Neither is data loss. `agac dispositions` prints both counts side by
+side for this reason.
+
 ### 4. prompt_trace — LLM call telemetry
 
 ```sql

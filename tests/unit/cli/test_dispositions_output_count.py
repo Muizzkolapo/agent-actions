@@ -33,11 +33,13 @@ def _render(backend, actions: list[str]) -> str:
 
 def _row(output: str, action: str) -> dict[str, str]:
     """The rendered row for one action, keyed by its column header."""
+    # Rich draws the header row with a heavy bar and the body with a light one.
     header: list[str] | None = None
     for line in output.splitlines():
-        if "│" not in line:
+        sep = "┃" if "┃" in line else "│" if "│" in line else None
+        if sep is None:
             continue
-        cells = [c.strip() for c in line.split("│")[1:-1]]
+        cells = [c.strip() for c in line.split(sep)[1:-1]]
         if header is None:
             header = cells
         elif cells and cells[0] == action:

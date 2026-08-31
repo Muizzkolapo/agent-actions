@@ -64,7 +64,7 @@ class DispositionsCommand:
             self._show_summary(backend, actions)
 
     def _show_summary(self, backend, actions: list[str]) -> None:
-        """Show per-action disposition counts."""
+        """Show per-action disposition counts beside the records produced."""
         table = Table(title=f"Dispositions: {self.agent_name}")
         table.add_column("Action", style="cyan")
         table.add_column("Success", justify="right", style="green")
@@ -74,6 +74,9 @@ class DispositionsCommand:
         table.add_column("Passthrough", justify="right", style="dim")
         table.add_column("Filtered", justify="right", style="dim")
         table.add_column("Total", justify="right", style="bold")
+        table.add_column("Records", justify="right", style="bold")
+
+        produced = self._records_written(backend)
 
         for action in actions:
             rows = backend.get_disposition(action)
@@ -97,16 +100,35 @@ class DispositionsCommand:
                 str(counts.get("passthrough", 0)),
                 str(counts.get("filtered", 0)),
                 str(total),
+                str(produced.get(action, 0)),
             )
 
         action_level = self._action_level_rows(backend, actions)
 
         if table.row_count:
             self.console.print(table)
+            self.console.print(
+                "[dim]Total counts input records (one disposition each); "
+                "Records counts what the action wrote. They differ when an "
+                "action expands or collapses records.[/dim]"
+            )
         elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
 
         self._show_action_level(action_level)
+
+    @staticmethod
+    def _records_written(backend) -> dict[str, int]:
+        """Records each action wrote, by action name.
+
+        Absence is reported as zero rather than crashing the summary — this is
+        context beside the dispositions, not the thing being asked for.
+        """
+        try:
+            return dict(backend.get_storage_stats().get("nodes") or {})
+        except Exception:
+            logger.debug("Could not read per-action record counts", exc_info=True)
+            return {}
 
     @staticmethod
     def _action_level_rows(backend, actions: list[str]) -> list[tuple[str, dict]]:
