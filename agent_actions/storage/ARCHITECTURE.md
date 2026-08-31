@@ -103,30 +103,42 @@ action that expands or collapses therefore has a disposition count that differs
 from the number of records it wrote. The children of an expansion are accounted
 at the actions that consume them, not at the one that created them.
 
-This is what the table can express, not merely convention. The failure-path
-dispositions — guard filter, prep failure, exhaustion — are written when no
-output record exists yet, so they have nothing but the input to name; keying
-per output would leave a failed expansion with no writable row at all. It is
-also what `retry --record` targets, since retrying means re-running an input.
+The constraint does not enforce this — `UNIQUE(action_name, record_id,
+disposition)` permits one record to hold rows for two dispositions at once, and
+`set_disposition` deletes before inserting precisely to prevent that. What
+makes input-keying structural is the failure paths: guard filter, prep failure
+and exhaustion are all written when no output record exists yet, so they have
+nothing but the input to name, and keying per output would leave a failed
+expansion with no writable row at all. It is also what `retry --record`
+targets, since retrying means re-running an input.
 
 The consequence to expect: for an action that fans out, the disposition total
 is *smaller* than its output, and for one that folds records together it is
 *larger*. Neither is data loss. `agac dispositions` prints both counts side by
 side for this reason, reading the per-action totals from `target_data`.
 
-Two cases where that second number is not the action's own output for this
-run, both because `target_data` is keyed `(action_name, relative_path)` and
-only replaced per path:
+That second number is what the store holds, which is not the same as what the
+action produced on this run. Known divergences, not an exhaustive list:
 
-- **Re-runs.** Rows a previous run wrote under a different `relative_path`
-  survive and are counted alongside the current ones. `_count_records_for_action`
-  in `workflow/executor.py` avoids this for its own purposes by taking a
-  before/after delta around the action; a command reading the store afterwards
-  has no such vantage point.
+- **Output not written yet.** `target_data` is written per input file once the
+  file completes, while dispositions are written per record as it is processed.
+  A batch still in flight has a disposition for every submitted record and no
+  target rows at all; an interrupted online run keeps its successes in
+  `checkpoint_output`, a separate table. Both read as zero here.
+- **Re-runs.** `target_data` is keyed `(action_name, relative_path)` and only
+  replaced per path, so rows a previous run wrote under a different path
+  survive and are counted alongside the current ones. Only `--fresh` clears
+  them. `executor.py` sidesteps this for its own count by capturing the total
+  before the action and taking a delta after (`_records_written_this_run`);
+  a command reading the store afterwards has no such vantage point.
+- **Carried-forward records.** Cascade- and guard-skipped records are kept in
+  an action's output for lineage, so they are counted even though the action
+  did not produce them.
 - **Version fan-in.** The merged input is written under the *consumer's* name
-  before it runs (`LoopManager.prepare_correlated_input`), so a consumer that
-  then failed or was skipped shows that input. Its own write replaces the row
-  when it lands under the same `relative_path`, which is the normal case.
+  before it runs (`VersionOutputCorrelator.prepare_correlated_input`), so a
+  consumer that then failed or was skipped shows that input. Its own write
+  replaces the row when it lands under the same `relative_path`, the normal
+  case.
 
 ### 4. prompt_trace — LLM call telemetry
 

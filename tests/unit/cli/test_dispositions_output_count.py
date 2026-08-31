@@ -144,3 +144,15 @@ class TestOutputCountIsShown:
 
         output = _render(backend, ["flatten"])
         assert "consumed" in output and "stored" in output, output
+
+    def test_the_note_does_not_blame_expansion_alone(self, backend):
+        """An action whose output is simply not written yet — a batch in
+        flight, an interrupted run — also shows a lower number. Naming
+        expansion as the only cause would explain that state wrongly, which is
+        worse than not explaining it."""
+        for i in range(500):
+            backend.set_disposition("classify", f"g{i}", "deferred")
+
+        output = _render(backend, ["classify"])
+        assert _output_column(_row(output, "classify")) == "0"
+        assert "flight" in output, f"the in-flight case is unexplained:\n{output}"
