@@ -16,6 +16,7 @@ from agent_actions.errors import (
     ConfigurationError,
     RecordContextError,
     SchemaValidationError,
+    mark_action_fatal,
     raised_by_exhaustion_policy,
 )
 from agent_actions.errors.operations import TemplateVariableError
@@ -206,14 +207,10 @@ class OnlineLLMStrategy:
     ) -> list[ProcessingResult]:
         """Process records through the online LLM pipeline.
 
-        Records are already cascade-filtered by UnifiedProcessor — only
-        processable records arrive here.
-
-        Iterates records, calling process_record() for each.
-        Record-specific errors (RecordContextError, TemplateVariableError
-        with missing vars) produce tombstones and continue. Action-fatal
-        errors (ConfigurationError, TemplateSyntaxError, EmptyOutputError,
-        SchemaValidationError, and any ``on_exhausted: raise`` halt) re-raise.
+        Records arrive already cascade-filtered by UnifiedProcessor.
+        Per-record errors (RecordContextError, missing template vars) become
+        tombstones and the pass continues; action-fatal errors re-raise marked,
+        so the layers above can tell a broken action from one bad input.
         """
         start_time = datetime.now(UTC)
 
@@ -277,7 +274,9 @@ class OnlineLLMStrategy:
                     )
                 )
                 if not e.missing_variables:
-                    # TemplateSyntaxError wrapped — broken template, action-fatal
+                    # No variable to blame: a malformed template (already marked
+                    # action-fatal where it was parsed) or a render failure this
+                    # record's data provoked. Either way, not a tombstone.
                     raise
                 # Missing variables — per-record recoverable
                 record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
@@ -290,11 +289,13 @@ class OnlineLLMStrategy:
                 result = _build_prep_failed_result(item, context, str(e))
                 results.append(result)
                 failures += 1
-            except ConfigurationError:
-                raise
-            except EmptyOutputError:
+            except (ConfigurationError, EmptyOutputError) as e:
+                mark_action_fatal(e)
                 raise
             except SchemaValidationError:
+                # UDF output validation runs per item and is ungated, so this
+                # can indict one value rather than the action. Re-raised, as
+                # the loop cannot tombstone it, but not declared fatal.
                 raise
             except Exception as e:
                 # An on_exhausted: raise halt is action-fatal by definition —
