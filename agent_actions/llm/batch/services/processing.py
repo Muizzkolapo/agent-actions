@@ -861,6 +861,8 @@ class BatchProcessingService:
             for item in items:
                 if item.get("_state") != RecordState.PROCESSED.value:
                     continue
+                # An expansion child's target_id was re-minted after its prompt
+                # ran, so it reaches the trace by parent_target_id.
                 target_id = item.get("target_id")
                 if not target_id:
                     continue
@@ -876,6 +878,7 @@ class BatchProcessingService:
                     action_name=action_name,
                     record_id=target_id,
                     response_text=response_text,
+                    parent_record_id=item.get("parent_target_id"),
                 )
         except Exception:
             logger.warning(

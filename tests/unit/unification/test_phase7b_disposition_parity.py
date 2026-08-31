@@ -313,9 +313,12 @@ class TestPromptTraceOnlyForSuccess:
 
         service._update_prompt_trace_responses(items, "test_action")
 
-        # Only the SUCCESS record should have prompt trace updated
+        # Only the SUCCESS record should have prompt trace updated.
         trace_calls = backend.update_prompt_trace_response.call_args_list
-        traced_ids = {c.kwargs.get("record_id") or c.args[1] for c in trace_calls}
+        traced_ids = {
+            c.kwargs.get("record_id") or (c.args[1] if len(c.args) > 1 else None)
+            for c in trace_calls
+        }
         assert "t-success" in traced_ids, "SUCCESS record must get prompt trace"
         assert "t-exhausted" not in traced_ids, "EXHAUSTED record must NOT get prompt trace update"
         assert "t-failed" not in traced_ids, "FAILED record must NOT get prompt trace update"

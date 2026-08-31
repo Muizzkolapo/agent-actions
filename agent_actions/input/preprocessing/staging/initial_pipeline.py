@@ -41,6 +41,7 @@ class InitialStageContext:
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
     action_configs: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -68,6 +69,7 @@ class BatchProcessingContext:
     idx: int = 0
     storage_backend: Any = None  # Optional StorageBackend for database persistence
     action_configs: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
 
 
 def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
@@ -229,6 +231,7 @@ def process_initial_stage(ctx: InitialStageContext):
             idx=ctx.idx,
             storage_backend=ctx.storage_backend,
             action_configs=ctx.action_configs,
+            workflow_metadata=ctx.workflow_metadata,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -672,7 +675,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         ctx.data_chunk,
         ctx.output_directory,
         source_data=ctx.data_chunk,
-        workflow_metadata={"source_file": ctx.file_path},
+        workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
     )
 
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
@@ -714,7 +717,7 @@ def _process_online_mode_with_record_processor(
         is_first_stage=True,
         file_path=str(file_path),
         output_directory=str(output_directory),
-        workflow_metadata={"source_file": str(file_path)},
+        workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": str(file_path)},
         storage_backend=ctx.storage_backend,
     )
 

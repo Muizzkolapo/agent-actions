@@ -653,10 +653,14 @@ class StorageBackend(ABC):
         model_vendor: str | None = None,
         run_mode: str | None = None,
         attempt: int = 0,
+        source_guid: str | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.
 
-        This is telemetry. Implementations should not raise on failure.
+        ``record_id`` holds the prepare-time target_id; ``source_guid`` is the
+        durable identity joins key on. This is telemetry. Implementations
+        should not raise on failure.
         """
 
     def update_prompt_trace_response(  # noqa: B027
@@ -664,9 +668,12 @@ class StorageBackend(ABC):
         action_name: str,
         record_id: str,
         response_text: str,
-        attempt: int = 0,
+        parent_record_id: str | None = None,
     ) -> None:
-        """Update an existing trace with the LLM response.
+        """Attach the LLM response to the newest trace row for a prepared task.
+
+        Pass ``parent_record_id`` when the record may be an expansion child,
+        whose own id was minted after its prompt ran.
 
         No-op if the trace does not exist. This is telemetry — must not raise.
         """

@@ -35,8 +35,14 @@ class TaskPreparer:
         context: PreparationContext,
         existing_target_id: str | None = None,
         skip_guard: bool = False,
+        attempt: int = 0,
     ) -> PreparedTask:
-        """Prepare a single task: normalize, load context, evaluate guard, render prompt."""
+        """Prepare a single task: normalize, load context, evaluate guard, render prompt.
+
+        ``attempt`` is the recovery round (reprompt rounds re-prepare the same
+        record); it stamps the prompt trace so rounds accumulate instead of
+        overwriting attempt 0.
+        """
         logger.debug(
             "Preparing task for %s (first_stage=%s, skip_guard=%s)",
             context.agent_name,
@@ -131,6 +137,9 @@ class TaskPreparer:
                 or context.agent_config.get("model"),
                 model_vendor=context.agent_config.get("model_vendor"),
                 run_mode=context.mode.value if context.mode else None,
+                attempt=attempt,
+                source_guid=prepared.source_guid,
+                run_id=(context.workflow_metadata or {}).get("run_id") or None,
             )
 
         return prepared

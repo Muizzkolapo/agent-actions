@@ -339,6 +339,7 @@ def validate_and_reprompt(
                 output_directory=output_directory,
                 batch_name=reprompt_batch_name,
                 source_data=source_data,
+                attempt=attempt + 1,
             )
 
             batch_id, status = provider.submit_batch(
@@ -603,6 +604,7 @@ def submit_reprompt_batch(
             output_directory=output_directory,
             batch_name=reprompt_batch_name,
             source_data=source_data,
+            attempt=attempt,
         )
 
         batch_id, _ = provider.submit_batch(

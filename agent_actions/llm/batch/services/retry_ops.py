@@ -72,6 +72,9 @@ def submit_retry_batch(
 
     try:
         batch_name = f"{file_name}_retry" if file_name else "retry"
+        # No attempt bump: a retry re-issues the identical prompt for a record
+        # the provider never returned, so it rewrites its own attempt-0 trace
+        # rather than opening a new round the way a reprompt does.
         preparator = BatchTaskPreparator(storage_backend=storage_backend)
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
@@ -125,6 +128,9 @@ def resubmit_missing_records(
 
     try:
         batch_name = f"{file_name}_retry" if file_name else "retry"
+        # No attempt bump: a retry re-issues the identical prompt for a record
+        # the provider never returned, so it rewrites its own attempt-0 trace
+        # rather than opening a new round the way a reprompt does.
         preparator = BatchTaskPreparator(storage_backend=storage_backend)
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
