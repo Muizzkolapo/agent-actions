@@ -177,6 +177,23 @@ class TestTheStrategyAndTheCollectorAgree:
             "record-granularity action honours"
         )
 
+    def test_the_hitl_loop_declares_a_rejected_schema_too(self, monkeypatch):
+        """``on_schema_mismatch: reject`` reaches HITL through the same helper."""
+        from agent_actions.processing.strategies import hitl
+
+        strategy = hitl.HITLStrategy.__new__(hitl.HITLStrategy)
+        rejected = SchemaValidationError("output rejected (on_schema_mismatch=reject)")
+
+        def reject(*_a, **_kw):
+            raise rejected
+
+        monkeypatch.setattr(hitl, "run_dynamic_agent", reject)
+
+        with pytest.raises(SchemaValidationError) as exc_info:
+            strategy.invoke([{"source_guid": "g1"}], self._context())
+
+        assert is_action_fatal(exc_info.value) is True
+
     def test_what_the_record_loop_tombstones_is_not_fatal(self, monkeypatch):
         strategy = self._strategy()
         recoverable = RecordContextError("record context incomplete")

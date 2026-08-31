@@ -8,7 +8,12 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import (
+    AgentActionsError,
+    ConfigurationError,
+    SchemaValidationError,
+    mark_action_fatal,
+)
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.record_helpers import carry_framework_fields
 from agent_actions.processing.types import (
@@ -215,6 +220,10 @@ class HITLStrategy:
             )
 
             return [result]
+        except (ConfigurationError, SchemaValidationError) as e:
+            # Same knobs, same meaning as under record granularity.
+            mark_action_fatal(e)
+            raise
         except AgentActionsError:
             raise
         except Exception:
