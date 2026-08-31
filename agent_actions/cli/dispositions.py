@@ -108,9 +108,10 @@ class DispositionsCommand:
         if table.row_count:
             self.console.print(table)
             self.console.print(
-                "[dim]Total counts input records (one disposition each); "
-                "Records counts what the action wrote. They differ when an "
-                "action expands or collapses records.[/dim]"
+                "[dim]Total counts the input records the action consumed, one "
+                "disposition each; Records counts the records now stored under "
+                "it. They differ when an action expands or collapses "
+                "records.[/dim]"
             )
         elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")

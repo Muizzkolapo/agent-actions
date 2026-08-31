@@ -112,7 +112,14 @@ also what `retry --record` targets, since retrying means re-running an input.
 The consequence to expect: for an action that fans out, the disposition total
 is *smaller* than its output, and for one that folds records together it is
 *larger*. Neither is data loss. `agac dispositions` prints both counts side by
-side for this reason.
+side for this reason, reading the per-action totals from `target_data`.
+
+One case where that second number is not the action's own output: a version
+fan-in consumer has its merged input written to `target_data` under its *own*
+name before it runs (`LoopManager.prepare_correlated_input`), so an action that
+then failed or was skipped shows the merged input rather than nothing. The
+consumer's own write replaces it when it lands under the same
+`relative_path`, which is the normal case.
 
 ### 4. prompt_trace — LLM call telemetry
 

@@ -44,10 +44,11 @@ One row per action, with a count per disposition:
 ### Why Total and Records can differ
 
 **A disposition is one row per input record per action.** `Total` counts the
-records an action *consumed*; `Records` counts what it *wrote*. They match for
-an action that processes one record into one record, and they legitimately
-differ otherwise — `split` above turned one input into five outputs, so its
-single disposition sits beside five records.
+records an action *consumed*; `Records` counts the records now stored under it,
+which for an action that has run is what it produced. They match for an action
+that turns one record into one record, and they legitimately differ otherwise —
+`split` above turned one input into five outputs, so its single disposition
+sits beside five records.
 
 An action that folds records together shows the reverse: more dispositions than
 records, because every input it consumed is accounted for even though only one
