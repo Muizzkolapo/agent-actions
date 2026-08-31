@@ -103,7 +103,9 @@ Indexes:
 CREATE TABLE IF NOT EXISTS prompt_trace (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name TEXT NOT NULL,
-    record_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,      -- prepare-time target_id (re-minted per run)
+    source_guid TEXT,             -- durable input identity; joins record_disposition.record_id
+    run_id TEXT,                  -- workflow run that wrote this row
     attempt INTEGER NOT NULL DEFAULT 0,
     compiled_prompt TEXT NOT NULL,
     llm_context TEXT,
@@ -122,6 +124,17 @@ CREATE TABLE IF NOT EXISTS prompt_trace (
 Indexes:
 - `idx_trace_action ON prompt_trace(action_name)`
 - `idx_trace_action_record ON prompt_trace(action_name, record_id)`
+- `idx_trace_action_source ON prompt_trace(action_name, source_guid)`
+
+**Identity contract.** The table is a bounded historical log; `target_data`
+holds the current view. Rows accumulate across runs (filter by `run_id` for
+"this run"; day-based retention prunes old ones). `record_id` holds the
+prepare-time `target_id`, which is re-minted on every prepare and therefore
+never joins anything durable — joins and response updates key on
+`source_guid`. A 1→N expansion writes one trace for the parent prompt;
+children reach it via their `parent_source_guid`. Reprompt rounds re-prepare
+the same record at `attempt=N`; the response lands on the newest attempt.
+Rows written before the identity columns existed keep `NULL` and never join.
 
 Large fields (prompt, context, response) are capped at 1MB (`_MAX_TRACE_FIELD_SIZE`). Overflow is replaced with `{"__truncated__": true, "original_length": N}`.
 
@@ -296,7 +309,7 @@ The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
 | `source_data` | relative_path, source_guid, data, created_at |
 | `target_data` | action_name, relative_path, data, record_count, created_at |
 | `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
-| `prompt_trace` | action_name, record_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
+| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
 
 Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added after the migration system and has no legacy schemas to handle.
 
@@ -316,7 +329,7 @@ When a workflow re-runs, records that previously FAILED may now succeed. This op
 
 ### 3. Prompt trace retention (`_enforce_prompt_trace_retention`)
 
-Keeps traces from the N most recent calendar days (default: 10, from `StorageDefaults.PROMPT_TRACE_RETENTION_RUNS`). Uses `DATE(created_at)` as the boundary — multiple runs on the same day count as one retention unit. Deletes all traces older than the Nth distinct date.
+Keeps traces from the N most recent calendar days (default: 10, from `StorageDefaults.PROMPT_TRACE_RETENTION_RUNS`; user config key `storage.prompt_trace_retention_runs`). Despite the knob's name, the unit is **calendar days**, not runs: the boundary is `DATE(created_at)`, so multiple runs on the same day count as one retention unit and same-day re-runs are never pruned. Deletes all traces older than the Nth distinct date. Use the `run_id` column to distinguish runs within the retained window.
 
 ### 4. Source data TTL (`_enforce_source_data_ttl`)
 

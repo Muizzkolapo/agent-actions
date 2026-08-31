@@ -128,9 +128,7 @@ class TestTraceRowsCarryDurableIdentity:
 
 class TestResponseUpdatesKeyOnIdentity:
     def test_response_lands_by_source_guid_not_prepare_time_id(self, backend):
-        backend.write_prompt_trace(
-            ACTION, "tid-1", "prompt", source_guid="g1", run_id="run-1"
-        )
+        backend.write_prompt_trace(ACTION, "tid-1", "prompt", source_guid="g1", run_id="run-1")
 
         backend.update_prompt_trace_response(ACTION, source_guid="g1", response_text="resp")
 
@@ -249,9 +247,7 @@ class TestRepromptRoundsStampAttempt:
             patch(
                 "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
             ) as MockPreparator,
-            patch(
-                "agent_actions.processing.recovery.reprompt.parse_reprompt_config"
-            ) as mock_parse,
+            patch("agent_actions.processing.recovery.reprompt.parse_reprompt_config") as mock_parse,
             patch(
                 "agent_actions.processing.recovery.validation.get_validation_function",
                 return_value=(lambda x: False, "fix it"),

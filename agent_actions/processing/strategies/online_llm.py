@@ -485,11 +485,18 @@ class OnlineLLMStrategy:
 
         # Update prompt trace in storage
         if context.storage_backend is not None and executed and response is not None:
-            context.storage_backend.update_prompt_trace_response(
-                action_name=context.agent_name,
-                record_id=prepared.target_id,
-                response_text=json.dumps(response, ensure_ascii=False, default=str),
-            )
+            if prepared.source_guid:
+                context.storage_backend.update_prompt_trace_response(
+                    action_name=context.agent_name,
+                    source_guid=prepared.source_guid,
+                    response_text=json.dumps(response, ensure_ascii=False, default=str),
+                )
+            else:
+                logger.debug(
+                    "[%s] prepared task %s has no source_guid — response not attached to trace",
+                    context.agent_name,
+                    prepared.target_id,
+                )
 
         # Deferred (batch mode)
         if invocation_result.deferred:

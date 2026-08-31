@@ -603,6 +603,7 @@ def submit_reprompt_batch(
             output_directory=output_directory,
             batch_name=reprompt_batch_name,
             source_data=source_data,
+            attempt=attempt,
         )
 
         batch_id, _ = provider.submit_batch(

@@ -83,7 +83,9 @@ class SQLiteBackend(StorageBackend):
         CREATE TABLE IF NOT EXISTS prompt_trace (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action_name TEXT NOT NULL,
-            record_id TEXT NOT NULL,
+            record_id TEXT NOT NULL,      -- prepare-time target_id (re-minted per run)
+            source_guid TEXT,             -- durable input identity; joins record_disposition.record_id
+            run_id TEXT,                  -- workflow run that wrote this row
             attempt INTEGER NOT NULL DEFAULT 0,
             compiled_prompt TEXT NOT NULL,
             llm_context TEXT,
@@ -104,6 +106,9 @@ class SQLiteBackend(StorageBackend):
     TRACE_INDEX_ACTION_RECORD_SQL = """
         CREATE INDEX IF NOT EXISTS idx_trace_action_record ON prompt_trace(action_name, record_id)
     """
+    TRACE_INDEX_ACTION_SOURCE_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_trace_action_source ON prompt_trace(action_name, source_guid)
+    """
 
     CHECKPOINT_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS checkpoint_output (
@@ -123,7 +128,8 @@ class SQLiteBackend(StorageBackend):
 
     _MAX_TRACE_FIELD_SIZE = 1_048_576  # 1MB
 
-    # Required columns per table — schema enforcement drops tables missing any.
+    # Required columns per table — missing ones are ALTER-added on open
+    # (see _enforce_schema; tables are never dropped or rebuilt).
     _REQUIRED_COLUMNS: dict[str, set[str]] = {
         "source_data": {"relative_path", "source_guid", "data", "created_at"},
         "target_data": {"action_name", "relative_path", "data", "record_count", "created_at"},
@@ -140,6 +146,8 @@ class SQLiteBackend(StorageBackend):
         "prompt_trace": {
             "action_name",
             "record_id",
+            "source_guid",
+            "run_id",
             "attempt",
             "compiled_prompt",
             "llm_context",
@@ -302,6 +310,7 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
+                cursor.execute(self.TRACE_INDEX_ACTION_SOURCE_SQL)
                 cursor.execute(self.CHECKPOINT_TABLE_SQL)
                 cursor.execute(self.CHECKPOINT_INDEX_SQL)
                 cursor.execute(self.METADATA_TABLE_SQL)
@@ -1169,10 +1178,20 @@ class SQLiteBackend(StorageBackend):
         model_vendor: str | None = None,
         run_mode: str | None = None,
         attempt: int = 0,
+        source_guid: str | None = None,
+        run_id: str | None = None,
     ) -> None:
-        """Persist the compiled prompt and LLM context for a single record."""
+        """Persist the compiled prompt and LLM context for a single record.
+
+        ``record_id`` is the prepare-time target_id; ``source_guid`` is the
+        durable identity that response updates and joins key on.
+        """
         action_name = self._validate_identifier(action_name, "action_name")
         record_id = self._validate_identifier(record_id, "record_id")
+        if source_guid is not None:
+            source_guid = self._validate_identifier(source_guid, "source_guid")
+        if run_id is not None:
+            run_id = self._validate_identifier(run_id, "run_id")
 
         # Compute lengths from original values before any truncation
         prompt_length = len(compiled_prompt) if compiled_prompt else 0
@@ -1189,14 +1208,17 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO prompt_trace
-                    (action_name, record_id, attempt, compiled_prompt, llm_context,
+                    (action_name, record_id, source_guid, run_id, attempt,
+                     compiled_prompt, llm_context,
                      response_text, model_name, model_vendor, run_mode,
                      prompt_length, context_length, response_length, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         action_name,
                         record_id,
+                        source_guid,
+                        run_id,
                         attempt,
                         compiled_prompt,
                         llm_context,
@@ -1232,13 +1254,17 @@ class SQLiteBackend(StorageBackend):
     def update_prompt_trace_response(
         self,
         action_name: str,
-        record_id: str,
+        source_guid: str,
         response_text: str,
-        attempt: int = 0,
     ) -> None:
-        """Update an existing trace with the LLM response."""
+        """Attach the LLM response to the newest trace row for a record.
+
+        Keyed on the durable ``source_guid`` (expansion children pass their
+        parent's); the newest attempt wins. A response with no row to land
+        on is trace data loss, so a miss is logged rather than silent.
+        """
         action_name = self._validate_identifier(action_name, "action_name")
-        record_id = self._validate_identifier(record_id, "record_id")
+        source_guid = self._validate_identifier(source_guid, "source_guid")
 
         response_length = len(response_text) if response_text else 0
         response_text = self._cap_trace_field(response_text) or ""
@@ -1250,16 +1276,27 @@ class SQLiteBackend(StorageBackend):
                     """
                     UPDATE prompt_trace
                     SET response_text = ?, response_length = ?
-                    WHERE action_name = ? AND record_id = ? AND attempt = ?
+                    WHERE id = (
+                        SELECT id FROM prompt_trace
+                        WHERE action_name = ? AND source_guid = ?
+                        ORDER BY attempt DESC, id DESC LIMIT 1
+                    )
                     """,
-                    (response_text, response_length, action_name, record_id, attempt),
+                    (response_text, response_length, action_name, source_guid),
                 )
                 self.connection.commit()
                 if cursor.rowcount > 0:
                     logger.debug(
-                        "Updated prompt trace response: action=%s record=%s",
+                        "Updated prompt trace response: action=%s source_guid=%s",
                         action_name,
-                        record_id,
+                        source_guid,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                else:
+                    logger.warning(
+                        "No prompt trace row for action=%s source_guid=%s — response not recorded",
+                        action_name,
+                        source_guid,
                         extra={"workflow_name": self.workflow_name},
                     )
             except sqlite3.Error as e:
@@ -1269,7 +1306,7 @@ class SQLiteBackend(StorageBackend):
                     e,
                     extra={
                         "action_name": action_name,
-                        "record_id": record_id,
+                        "source_guid": source_guid,
                         "workflow_name": self.workflow_name,
                     },
                 )
@@ -1283,7 +1320,8 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
 
         query = (
-            "SELECT action_name, record_id, attempt, compiled_prompt, llm_context,"
+            "SELECT action_name, record_id, source_guid, run_id, attempt,"
+            " compiled_prompt, llm_context,"
             " response_text, model_name, model_vendor, run_mode,"
             " prompt_length, context_length, response_length, created_at"
             " FROM prompt_trace WHERE action_name = ?"
@@ -1362,7 +1400,8 @@ class SQLiteBackend(StorageBackend):
 
             cursor.execute(
                 """
-                SELECT action_name, record_id, attempt, compiled_prompt, llm_context,
+                SELECT action_name, record_id, source_guid, run_id, attempt,
+                       compiled_prompt, llm_context,
                        response_text, model_name, model_vendor, run_mode,
                        prompt_length, context_length, response_length, created_at
                 FROM prompt_trace
@@ -1710,30 +1749,32 @@ class SQLiteBackend(StorageBackend):
                     except (FileNotFoundError, json.JSONDecodeError) as e:
                         logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
 
-                # Attach prompt traces
+                # Attach prompt traces, keyed on durable identity: an
+                # expansion child's parent_source_guid (N children share one
+                # prompt) or the record's own source_guid. Newest row wins.
                 try:
-                    tid_map: dict[str, list[dict[str, Any]]] = {}
+                    guid_map: dict[str, list[dict[str, Any]]] = {}
                     for rec in records:
-                        tid = rec.get("target_id")
-                        if tid:
-                            tid_map.setdefault(tid, []).append(rec)
-                    if tid_map:
-                        placeholders = ",".join("?" for _ in tid_map)
+                        guid = rec.get("parent_source_guid") or rec.get("source_guid")
+                        if guid:
+                            guid_map.setdefault(guid, []).append(rec)
+                    if guid_map:
+                        placeholders = ",".join("?" for _ in guid_map)
                         cursor.execute(
-                            f"SELECT record_id, compiled_prompt, llm_context, "
+                            f"SELECT source_guid, compiled_prompt, llm_context, "
                             f"response_text, model_name, model_vendor, run_mode, "
                             f"prompt_length, response_length, attempt "
                             f"FROM prompt_trace "
-                            f"WHERE action_name = ? AND record_id IN ({placeholders})"
-                            f" ORDER BY attempt DESC",
-                            [action_name, *tid_map.keys()],
+                            f"WHERE action_name = ? AND source_guid IN ({placeholders})"
+                            f" ORDER BY attempt DESC, id DESC",
+                            [action_name, *guid_map.keys()],
                         )
                         seen: set[str] = set()
                         for trace_row in cursor:
-                            rid = trace_row["record_id"]
-                            if rid in seen:
+                            guid = trace_row["source_guid"]
+                            if guid in seen:
                                 continue
-                            seen.add(rid)
+                            seen.add(guid)
                             trace_data = {
                                 "compiled_prompt": trace_row["compiled_prompt"],
                                 "llm_context": trace_row["llm_context"],
@@ -1745,11 +1786,13 @@ class SQLiteBackend(StorageBackend):
                                 "response_length": trace_row["response_length"],
                                 "attempt": trace_row["attempt"],
                             }
-                            for rec in tid_map.get(rid, []):
+                            for rec in guid_map.get(guid, []):
                                 rec["_trace"] = trace_data
                 except sqlite3.OperationalError:
+                    # Missing table, or a pre-migration store opened read-only
+                    # (no ALTER pass ran, so identity columns are absent).
                     logger.debug(
-                        "No prompt_trace table for %s — skipping trace attachment", action_name
+                        "No joinable prompt_trace for %s — skipping trace attachment", action_name
                     )
 
                 nodes[action_name] = {
