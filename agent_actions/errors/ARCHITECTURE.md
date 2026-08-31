@@ -243,7 +243,7 @@ This means callers cannot mutate the error's context after construction by holdi
 |------|----------------|
 | `__init__.py` | Centralized re-exports — every error class is importable from `agent_actions.errors` |
 | `base.py` | `AgentActionsError`, `enrich_exception_context`, `get_error_detail` |
-| `classification.py` | `mark_action_fatal`, `is_action_fatal` — declaring and detecting an error that indicts the action rather than one input |
+| `classification.py` | `mark_action_fatal`, `is_action_fatal` — declaring and detecting an error that indicts the action rather than one input. A type is never enough: `SchemaValidationError`, for one, is raised per item by UDF output validation |
 | `common.py` | `InvalidParameterError` — cross-cutting parameter validation |
 | `configuration.py` | `ConfigurationError` tree: config validation, UDF loading, agent/project lookup, record context |
 | `external_services.py` | `ExternalServiceError` tree: vendor API, rate limit, network, prompt size, parse errors |

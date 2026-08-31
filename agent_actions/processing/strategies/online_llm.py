@@ -289,8 +289,13 @@ class OnlineLLMStrategy:
                 result = _build_prep_failed_result(item, context, str(e))
                 results.append(result)
                 failures += 1
-            except (ConfigurationError, EmptyOutputError, SchemaValidationError) as e:
+            except (ConfigurationError, EmptyOutputError) as e:
                 mark_action_fatal(e)
+                raise
+            except SchemaValidationError:
+                # UDF output validation runs per item and is ungated, so this
+                # can indict one value rather than the action. Re-raised, as
+                # the loop cannot tombstone it, but not declared fatal.
                 raise
             except Exception as e:
                 # An on_exhausted: raise halt is action-fatal by definition —

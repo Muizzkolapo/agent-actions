@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import ProcessingError, is_action_fatal
+from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     OnExhaustedPolicy,
@@ -348,10 +348,6 @@ class BatchProcessingService:
             except RuntimeError:
                 raise
             except Exception as e:
-                # Tolerating one bad batch protects the rest; tolerating a halt
-                # drops the policy and the next run resubmits, and pays again.
-                if is_action_fatal(e):
-                    raise
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,

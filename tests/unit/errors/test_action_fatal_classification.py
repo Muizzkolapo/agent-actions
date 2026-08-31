@@ -114,10 +114,9 @@ class TestTheStrategyAndTheCollectorAgree:
         [
             ConfigurationError("schema missing"),
             EmptyOutputError("no output with on_empty=error"),
-            SchemaValidationError("output failed validation"),
             exhaustion_halt("Retry exhausted (on_exhausted=raise)"),
         ],
-        ids=["configuration", "empty_output", "schema_validation", "halt"],
+        ids=["configuration", "empty_output", "halt"],
     )
     def test_what_the_record_loop_reraises_is_fatal(self, monkeypatch, error):
         strategy = self._strategy()
@@ -177,22 +176,45 @@ class TestTheStrategyAndTheCollectorAgree:
             "record-granularity action honours"
         )
 
-    def test_the_hitl_loop_declares_a_rejected_schema_too(self, monkeypatch):
-        """``on_schema_mismatch: reject`` reaches HITL through the same helper."""
+    def test_the_hitl_loop_declares_a_broken_config(self, monkeypatch):
         from agent_actions.processing.strategies import hitl
 
         strategy = hitl.HITLStrategy.__new__(hitl.HITLStrategy)
-        rejected = SchemaValidationError("output rejected (on_schema_mismatch=reject)")
+
+        def broken(*_a, **_kw):
+            raise ConfigurationError("tools path does not exist")
+
+        monkeypatch.setattr(hitl, "run_dynamic_agent", broken)
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            strategy.invoke([{"source_guid": "g1"}], self._context())
+
+        assert is_action_fatal(exc_info.value) is True
+
+    def test_a_per_item_schema_failure_is_not_declared(self, monkeypatch):
+        """UDF output validation runs per item, ungated by any policy.
+
+        Declaring it would fail the whole action for one malformed value and
+        cost every sibling file a reprocess on the next run.
+        """
+        from agent_actions.processing.strategies import file_tool
+
+        strategy = file_tool.FileToolStrategy.__new__(file_tool.FileToolStrategy)
+        per_item = SchemaValidationError(
+            "Output schema validation failed for UDF 'label' (item 0) at count: "
+            "'not-an-int' is not of type 'integer'",
+            context={"item_index": 0, "failed_value": "not-an-int"},
+        )
 
         def reject(*_a, **_kw):
-            raise rejected
+            raise per_item
 
-        monkeypatch.setattr(hitl, "run_dynamic_agent", reject)
+        monkeypatch.setattr(file_tool, "run_dynamic_agent", reject)
 
         with pytest.raises(SchemaValidationError) as exc_info:
             strategy.invoke([{"source_guid": "g1"}], self._context())
 
-        assert is_action_fatal(exc_info.value) is True
+        assert is_action_fatal(exc_info.value) is False
 
     def test_what_the_record_loop_tombstones_is_not_fatal(self, monkeypatch):
         strategy = self._strategy()

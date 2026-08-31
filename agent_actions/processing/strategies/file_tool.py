@@ -7,12 +7,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, cast
 
-from agent_actions.errors import (
-    AgentActionsError,
-    ConfigurationError,
-    SchemaValidationError,
-    mark_action_fatal,
-)
+from agent_actions.errors import AgentActionsError, ConfigurationError, mark_action_fatal
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
@@ -233,10 +228,9 @@ class FileToolStrategy:
 
             return [result] + missing_results
 
-        except (ConfigurationError, EmptyOutputError, SchemaValidationError) as e:
-            # The same knobs the record loop treats as action-fatal
-            # (on_empty: error, on_schema_mismatch: reject, broken config)
-            # mean the same thing when the granularity is a file.
+        except (ConfigurationError, EmptyOutputError) as e:
+            # A broken tool config and an on_empty: error mean the same thing
+            # whether the granularity is a record or a file.
             mark_action_fatal(e)
             raise
         except AgentActionsError:
