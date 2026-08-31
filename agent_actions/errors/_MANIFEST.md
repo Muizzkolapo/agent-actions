@@ -11,6 +11,9 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detailed_str` | Method | Return message with full context dict — use at debug/event boundaries. | - |
 | `enrich_exception_context` | Function | Attach key-value context to any exception. For `AgentActionsError`, updates `.context` directly. For other exceptions, creates `.context` if missing or non-dict. | - |
 | `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
+| `classification.py` | Module | Declares and detects errors fatal to a whole action, as opposed to one input. | `errors` |
+| `mark_action_fatal` | Function | Tag an error as indicting the action's contract. Called where the failure is understood — the processing loops that re-raise instead of tombstoning. | - |
+| `is_action_fatal` | Function | True if any error in the chain was marked, or came from an `on_exhausted: raise` policy. Searches the chain because each layer wraps on the way up. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
 | `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |
 | `configuration.py` | Module | Configuration-related errors. `ConfigurationError.__init__` guards `config_key` with `config_key or message or "<no key>"` to ensure the interpolated key is never `None`. | `errors` |

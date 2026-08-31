@@ -1,12 +1,11 @@
 """An action-fatal error must escape ``process_files`` even when other files succeeded.
 
-The processing strategies deliberately re-raise action-fatal errors — an
-``on_exhausted: raise`` halt, ``ConfigurationError``, ``EmptyOutputError``,
-``SchemaValidationError`` — out of their per-record loops. The per-file
-collector must not flatten that escalation into a log line just because
-another file processed; it finishes the pass (successes are checkpointed)
-and then raises, so the executor records the failure and the resume paths
-work. File-scoped accidents stay per-file tolerated.
+The processing loops re-raise these deliberately — an ``on_exhausted: raise``
+halt, or an error they marked action-fatal — and the per-file collector must
+not flatten that escalation into a log line just because another file
+processed. It finishes the pass, then raises, so the executor records the
+failure and the resume paths work. Errors nobody declared fatal, including the
+same types raised from elsewhere, stay per-file tolerated.
 """
 
 from __future__ import annotations
@@ -19,10 +18,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import (
+    AgentActionsError,
     ConfigurationError,
+    ConfigValidationError,
     DependencyError,
     EmptyOutputError,
     exhaustion_halt,
+    mark_action_fatal,
     raised_by_exhaustion_policy,
 )
 from agent_actions.errors.configuration import RecordContextError
@@ -44,6 +46,11 @@ HALT_TEXT = "Retry exhausted for record r-2 after 2 attempts (on_exhausted=raise
 CONFIG_TEXT = "Schema 'rf_label' not found for action"
 
 
+def _declared(error: Exception) -> AgentActionsError:
+    """A marked strategy error, wrapped the way the pipeline delivers it."""
+    return AgentActionsError(f"Error generating target: {error}", cause=mark_action_fatal(error))
+
+
 def _params(strategy, upstream_dirs: list[str], output_dir: Path) -> FileProcessParams:
     return FileProcessParams(
         action_config={"agent_type": "test"},
@@ -61,15 +68,16 @@ def _write(path: Path, payload: object = None) -> Path:
     return path
 
 
-def _strategy_failing_on(filename: str, exc: Exception) -> tuple[MagicMock, list[str]]:
-    """A strategy that raises *exc* for the file whose path contains *filename*."""
+def _strategy_failing_on(failures: dict[str, Exception]) -> tuple[MagicMock, list[str]]:
+    """A strategy raising ``failures[name]`` for the file whose path contains *name*."""
     strategy = MagicMock()
     calls: list[str] = []
 
     def execute(exec_params):
         calls.append(Path(exec_params.file_path).name)
-        if filename in exec_params.file_path:
-            raise exc
+        for name, exc in failures.items():
+            if name in exec_params.file_path:
+                raise exc
 
     strategy.execute.side_effect = execute
     return strategy, calls
@@ -81,7 +89,7 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "exhausted.json")
-        strategy, calls = _strategy_failing_on("exhausted.json", exhaustion_halt(HALT_TEXT))
+        strategy, calls = _strategy_failing_on({"exhausted.json": exhaustion_halt(HALT_TEXT)})
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
@@ -93,23 +101,19 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
             "cannot write the halt marker"
         )
         assert "exhausted.json" in str(exc_info.value)
-        assert sorted(calls) == ["exhausted.json", "good.json"], (
-            "the pass must finish every file before raising"
-        )
+        assert sorted(calls) == ["exhausted.json", "good.json"]
 
     @pytest.mark.parametrize(
         "fatal",
-        [
-            ConfigurationError(CONFIG_TEXT),
-            EmptyOutputError("action produced no output with on_empty=error"),
-        ],
+        [ConfigurationError(CONFIG_TEXT), EmptyOutputError("no output with on_empty=error")],
         ids=["configuration_error", "empty_output_error"],
     )
-    def test_a_strategy_fatal_error_is_raised_not_swallowed(self, tmp_path, fatal):
+    def test_a_declared_error_is_raised_through_the_pipeline_wrapper(self, tmp_path, fatal):
+        """The collector sees the wrapper, so the declaration must be read from the chain."""
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "bad.json")
-        strategy, calls = _strategy_failing_on("bad.json", fatal)
+        strategy, calls = _strategy_failing_on({"bad.json": _declared(fatal)})
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
@@ -128,7 +132,7 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
         backend.read_target.return_value = [{"id": 1}]
         backend.get_disposition.return_value = []
         backend.load_metadata.return_value = None
-        strategy, calls = _strategy_failing_on("exhausted.json", exhaustion_halt(HALT_TEXT))
+        strategy, calls = _strategy_failing_on({"exhausted.json": exhaustion_halt(HALT_TEXT)})
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
@@ -144,7 +148,7 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
         second = tmp_path / "up2"
         _write(first / "good.json")
         _write(second / "exhausted.json")
-        strategy, calls = _strategy_failing_on("exhausted.json", exhaustion_halt(HALT_TEXT))
+        strategy, calls = _strategy_failing_on({"exhausted.json": exhaustion_halt(HALT_TEXT)})
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
@@ -156,26 +160,58 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
         assert sorted(calls) == ["exhausted.json", "good.json"]
 
 
-class TestFileScopedFailuresStayTolerated:
-    def test_an_ordinary_error_still_returns_partial(self, tmp_path):
-        """A file-scoped accident is a per-file failure, not an action failure."""
-        source = tmp_path / "input"
-        _write(source / "good.json")
-        _write(source / "bad.json")
-        strategy, calls = _strategy_failing_on("bad.json", ValueError("unreadable row"))
+class TestTheHaltIsTheCauseThatSurvives:
+    def test_a_halt_outranks_an_earlier_fatal_and_the_walk_completes(self, tmp_path):
+        """The halt carries the policy tag, so it must be the chained cause.
 
-        process_files(
-            ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+        The non-halt error is walked first, so a collector that kept the first
+        fatal it saw, or abandoned the walk at the first one, loses the halt.
+        """
+        source = tmp_path / "input"
+        _write(source / "a_config.json")
+        _write(source / "b_halt.json")
+        _write(source / "c_ok.json")
+        strategy, calls = _strategy_failing_on(
+            {
+                "a_config.json": _declared(ConfigurationError(CONFIG_TEXT)),
+                "b_halt.json": exhaustion_halt(HALT_TEXT),
+            }
         )
 
-        assert sorted(calls) == ["bad.json", "good.json"]
+        with pytest.raises(DependencyError) as exc_info:
+            process_files(
+                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+            )
 
-    def test_a_record_context_error_still_returns_partial(self, tmp_path):
-        """RecordContextError is per-record recoverable despite its ConfigurationError parent."""
+        assert raised_by_exhaustion_policy(exc_info.value), (
+            "the earlier ConfigurationError displaced the halt, so the halt "
+            "marker is lost and the action would be re-run at the same cost"
+        )
+        assert "b_halt.json" in str(exc_info.value)
+        assert sorted(calls) == ["a_config.json", "b_halt.json", "c_ok.json"], (
+            "the pass abandoned files after the first action-fatal error"
+        )
+
+
+class TestUndeclaredFailuresStayTolerated:
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ValueError("unreadable row"),
+            RecordContextError("record context incomplete"),
+            ConfigValidationError(
+                "Staging data field(s) 'source' collide with reserved namespace names."
+            ),
+            ConfigurationError("raised outside a record loop"),
+        ],
+        ids=["file_scoped", "record_context", "staging_data", "undeclared_configuration"],
+    )
+    def test_an_undeclared_error_still_returns_partial(self, tmp_path, error):
+        """Only a declared error stops the action; a bad input file does not."""
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "bad.json")
-        strategy, calls = _strategy_failing_on("bad.json", RecordContextError("context incomplete"))
+        strategy, calls = _strategy_failing_on({"bad.json": error})
 
         process_files(
             ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
@@ -192,7 +228,7 @@ class TestThePartialFailureIsRecorded:
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "exhausted.json")
-        strategy, _ = _strategy_failing_on("exhausted.json", exhaustion_halt(HALT_TEXT))
+        strategy, _ = _strategy_failing_on({"exhausted.json": exhaustion_halt(HALT_TEXT)})
         runner = ActionRunner(use_tools=True, storage_backend=backend)
 
         with pytest.raises(DependencyError) as exc_info:

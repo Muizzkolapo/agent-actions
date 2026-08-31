@@ -135,7 +135,8 @@ def _raise_all_files_failed(
     Causes lead the message because the views that render it truncate (run
     summary at 80 chars, ``agac dispositions`` at 60).  The total is
     ``files_found``, never the capped error count.  The chain is the *halting*
-    cause, not the first: chaining the first loses the halt whenever another
+    cause where there is one, and otherwise the first action-fatal cause:
+    chaining the first failure of any kind loses the halt whenever another
     file failed before it.
     """
     from agent_actions.errors import DependencyError
@@ -162,9 +163,11 @@ def _raise_action_fatal(
 ) -> None:
     """Raise the collected action-fatal error despite other files succeeding.
 
-    The strategies re-raise these deliberately; tolerating them because
-    another file processed would erase the policy they carry. Successes are
-    already checkpointed, so a resume keeps them.
+    The layer below re-raised it deliberately; tolerating it because another
+    file processed erases the policy it carries. The processed files keep the
+    output they wrote, but only a halt keeps its dispositions — the reset an
+    unmarked failure gets on the next run clears them, so those records are
+    processed again.
     """
     from agent_actions.errors import DependencyError
 

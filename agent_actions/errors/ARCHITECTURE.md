@@ -210,7 +210,10 @@ Raised when Jinja2 template rendering fails for a specific record because a refe
 - `storage_hints` — when a field exists in storage but was not loaded (missing schema declaration)
 - `null_namespace_hints` — when a namespace is null due to guard-filter at a fan-in point
 
-Both errors result in a FAILED disposition for the affected record. The pipeline does not abort.
+Both errors result in a FAILED disposition for the affected record and the pipeline
+continues — except a `TemplateVariableError` carrying no missing variables, which is a
+wrapped template syntax error: the template is broken for every record, so the record
+loop marks it action-fatal and re-raises.
 
 ---
 
@@ -239,6 +242,7 @@ This means callers cannot mutate the error's context after construction by holdi
 |------|----------------|
 | `__init__.py` | Centralized re-exports — every error class is importable from `agent_actions.errors` |
 | `base.py` | `AgentActionsError`, `enrich_exception_context`, `get_error_detail` |
+| `classification.py` | `mark_action_fatal`, `is_action_fatal` — declaring and detecting an error that indicts the action rather than one input |
 | `common.py` | `InvalidParameterError` — cross-cutting parameter validation |
 | `configuration.py` | `ConfigurationError` tree: config validation, UDF loading, agent/project lookup, record context |
 | `external_services.py` | `ExternalServiceError` tree: vendor API, rate limit, network, prompt size, parse errors |

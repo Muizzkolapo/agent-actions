@@ -521,8 +521,11 @@ Why the asymmetry:
   RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
   dispositions that should survive for carry-forward on resume.
 
-  FAILED = zero successes by definition (_resolve_completion_status only
-  returns FAILED when has_successful_items() is False). Nothing to preserve.
+  FAILED = zero successes whenever _resolve_completion_status classified it
+  (it returns FAILED only when has_successful_items() is False). An action
+  that raised instead of returning is also FAILED and may hold successes:
+  their output survives the clear, their dispositions do not, so those
+  records are processed again on the next run.
 
   SKIPPED = no records processed. Nothing to preserve.
 
