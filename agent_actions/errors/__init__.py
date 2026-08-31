@@ -9,6 +9,9 @@ from agent_actions.errors.base import (
     raised_by_exhaustion_policy,
 )
 
+# Classification
+from agent_actions.errors.classification import is_action_fatal
+
 # Common errors
 from agent_actions.errors.common import InvalidParameterError
 
@@ -90,6 +93,8 @@ __all__ = [
     "exhaustion_halt",
     "get_error_detail",
     "raised_by_exhaustion_policy",
+    # Classification
+    "is_action_fatal",
     # Common
     "InvalidParameterError",
     # Configuration

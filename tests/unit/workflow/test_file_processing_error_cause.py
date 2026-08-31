@@ -233,7 +233,7 @@ class TestOnlyFailingRunsAreAffected:
 
         assert strategy.execute.call_count == 1
 
-    def test_a_partial_failure_still_raises_nothing(self, tmp_path):
+    def test_a_partial_file_scoped_failure_still_raises_nothing(self, tmp_path):
         source = tmp_path / "input"
         _write(source / "good.json")
         _write(source / "bad.json")
@@ -243,7 +243,7 @@ class TestOnlyFailingRunsAreAffected:
         def execute(exec_params):
             calls.append(exec_params.file_path)
             if "bad.json" in exec_params.file_path:
-                raise FunctionNotFoundError(CAUSE)
+                raise ValueError("unreadable row")
 
         strategy.execute.side_effect = execute
         runner = ActionRunner(use_tools=True)
@@ -251,3 +251,23 @@ class TestOnlyFailingRunsAreAffected:
         process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
 
         assert sorted(Path(c).name for c in calls) == ["bad.json", "good.json"]
+
+    def test_a_partial_action_fatal_failure_raises(self, tmp_path):
+        """A ConfigurationError is not excused by another file's success."""
+        source = tmp_path / "input"
+        _write(source / "good.json")
+        _write(source / "bad.json")
+        strategy = MagicMock()
+
+        def execute(exec_params):
+            if "bad.json" in exec_params.file_path:
+                raise FunctionNotFoundError(CAUSE)
+
+        strategy.execute.side_effect = execute
+        runner = ActionRunner(use_tools=True)
+
+        with pytest.raises(DependencyError) as exc_info:
+            process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
+
+        assert CAUSE in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, FunctionNotFoundError)
