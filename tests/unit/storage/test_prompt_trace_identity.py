@@ -504,3 +504,29 @@ class TestRepromptRoundsStampAttempt:
             )
 
             assert prep.prepare_tasks.call_args.kwargs.get("attempt") == 2
+
+
+class TestRunIdReachesTheWriter:
+    def test_first_stage_carries_the_run_namespace(self):
+        """The first stage builds its own workflow metadata; dropping the
+        runner's leaves run_id NULL on every trace a first action writes —
+        measured on a live run before this was threaded."""
+        from agent_actions.workflow.strategies import InitialStrategy, StrategyExecutionParams
+
+        with patch(
+            "agent_actions.workflow.strategies.process_initial_stage", return_value="out.json"
+        ) as mock_stage:
+            InitialStrategy().execute(
+                StrategyExecutionParams(
+                    action_config={},
+                    action_name=ACTION,
+                    file_path="in.json",
+                    base_directory="/base",
+                    output_directory="/out",
+                    idx=0,
+                    workflow_metadata={"name": "wf", "run_id": "run-123"},
+                )
+            )
+
+        ctx = mock_stage.call_args.args[0]
+        assert ctx.workflow_metadata == {"name": "wf", "run_id": "run-123"}
