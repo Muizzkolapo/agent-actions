@@ -209,7 +209,7 @@ class TestSelectiveRepromptResubmission:
 
         assert result is not None
         _, submitted_ids = result
-        assert len(submitted_ids) == 3
+        assert set(submitted_ids) == FAIL_IDS
 
         data_arg = _extract_call_arg(mock_prep.prepare_tasks.call_args, "data")
         assert len(data_arg) == 3
