@@ -103,9 +103,20 @@ class BatchResultReconciler:
         context_map: dict[str, Any],
         batch_results: list[Any],
     ) -> set[str]:
-        """Find custom_ids expected but not received in batch results."""
+        """Find custom_ids expected but not answered in batch results.
+
+        A per-record provider failure comes back under the record's real
+        custom_id with no content, so presence alone does not mean the record
+        was answered. Only a successful result removes a record from the set
+        retry resubmits.
+        """
         expected = BatchResultReconciler.collect_expected_custom_ids(context_map)
-        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+        answered = [
+            batch_result
+            for batch_result in batch_results or []
+            if getattr(batch_result, "success", False)
+        ]
+        received = BatchResultReconciler.collect_result_custom_ids(answered)
         return expected - received
 
     @staticmethod

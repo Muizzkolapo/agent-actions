@@ -210,6 +210,11 @@ def process_retry_results(
                     )
                 )
 
+        # A resubmitted record may already have an entry — a provider error the
+        # retry was opened for. The newest answer is the authoritative one, and
+        # a second entry would reach finalization as a second output row.
+        resubmitted = {r.custom_id for r in results}
+        all_results = [r for r in all_results if r.custom_id not in resubmitted]
         all_results.extend(results)
 
         successful_retry = [r for r in results if r.success]
