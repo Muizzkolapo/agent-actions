@@ -313,8 +313,15 @@ def handle_reprompt_recovery(
             submitted = {str(custom_id) for custom_id in submitted_ids}
             unsubmitted = [fr for fr in still_failing if str(fr.custom_id) not in submitted]
             if unsubmitted:
+                logger.warning(
+                    "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
+                    identity.file_name,
+                    len(submitted),
+                    len(submitted) + len(unsubmitted),
+                    sorted(str(fr.custom_id) for fr in unsubmitted),
+                )
                 state.unrepromptable_results = list(state.unrepromptable_results) + (
-                    serialize_results(unsubmitted)
+                    serialize_results(_stamp_withheld(unsubmitted, validation_name, next_attempt))
                 )
 
             register_recovery_batch(
@@ -480,7 +487,7 @@ def check_and_submit_reprompt(
     submitted = {str(custom_id) for custom_id in submitted_ids}
     unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
     repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
-    unrepromptable = unrepromptable + unsubmitted
+    unrepromptable = unrepromptable + _stamp_withheld(unsubmitted, strategy.name, next_attempt)
     if unsubmitted:
         logger.warning(
             "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
@@ -657,6 +664,28 @@ def _finalize_and_cleanup(
     )
     cleanup_recovery(context, identity)
     return output_path
+
+
+def _stamp_withheld(
+    records: list[BatchResult], validation_name: str, attempt: int
+) -> list[BatchResult]:
+    """Mark records that never reached the reprompt batch as still failing.
+
+    They were repromptable, so they carry content — without a failure stamp they
+    collect as successes and the operator never sees that validation rejected them.
+    """
+    from agent_actions.processing.types import RepromptMetadata
+
+    for record in records:
+        if record.recovery_metadata is None:
+            record.recovery_metadata = RecoveryMetadata()
+        if record.recovery_metadata.reprompt is None:
+            record.recovery_metadata.reprompt = RepromptMetadata(
+                attempts=attempt,
+                passed=False,
+                validation=validation_name,
+            )
+    return records
 
 
 def register_recovery_batch(

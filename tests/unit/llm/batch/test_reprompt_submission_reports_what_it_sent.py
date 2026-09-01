@@ -462,3 +462,33 @@ def test_a_real_record_id_that_merely_resembles_one_is_not_exempt(real_id):
     from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 
     assert BatchResultReconciler.is_provider_placeholder(real_id) is False
+
+
+def test_a_withheld_record_still_carries_its_validation_failure(tmp_path):
+    """Carrying it forward must not launder a validation failure into a success.
+
+    These records have content (that is why they were repromptable), so without a
+    failure stamp they take the SUCCESS branch at collection — invisible to
+    ``agac retry`` and never re-attempted.
+    """
+    h = _Harness(tmp_path, included_ids=[BAD_ID])
+    h.submit_pass(_results())
+
+    state = h.state()
+    assert state is not None
+    withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
+    dropped = withheld[DROPPED_ID]
+
+    assert dropped["recovery_metadata"] is not None, (
+        "a record that failed validation was carried forward with no failure signal"
+    )
+    assert dropped["recovery_metadata"]["reprompt"]["passed"] is False
+
+
+def test_a_second_round_withheld_record_carries_its_failure_too(tmp_path):
+    backend, _ = _drive_round_two(tmp_path, included_ids=[BAD_ID])
+
+    state = RecoveryStateManager.load(backend, ACTION, PARENT)
+    assert state is not None
+    withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
+    assert withheld[DROPPED_ID]["recovery_metadata"]["reprompt"]["passed"] is False
