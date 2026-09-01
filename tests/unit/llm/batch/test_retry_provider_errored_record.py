@@ -390,7 +390,7 @@ def test_the_pipeline_agrees_a_result_with_no_content_is_not_an_answer():
 
 
 def test_an_unrelated_errored_result_survives_the_merge():
-    """Only the resubmitted record is superseded — not every unsuccessful row."""
+    """A record absent from the retry results keeps its row."""
     other = _errored("rec-other", "unrelated failure")
 
     merged, _still_missing, _counts, _ = retry_ops.process_retry_results(
@@ -598,3 +598,30 @@ def test_unparseable_provider_lines_are_still_reported(caplog):
         )
 
     assert any("error_line_7" in r.getMessage() for r in caplog.records)
+
+
+def test_an_exhausted_no_content_record_carries_its_retry_history():
+    """The row, not the dict handed to finalization — disposition writing reads data[0]."""
+    context_map = {
+        OK_ID: {"user_content": "one", "source_guid": OK_ID},
+        ERR_ID: {"user_content": "two", "source_guid": ERR_ID},
+        "rec-other": {"user_content": "three", "source_guid": "rec-other"},
+    }
+
+    results = BatchResultStrategy().process(
+        [_ok(OK_ID), _no_content(ERR_ID), _errored("rec-other", "unrelated failure")],
+        context_map=context_map,
+        agent_config=AGENT_CONFIG,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+    by_guid = {r.source_guid: r for r in results}
+
+    assert by_guid[ERR_ID].status is ProcessingStatus.FAILED
+    assert by_guid[ERR_ID].data[0]["_recovery"]["retry"] == {
+        "attempts": 2,
+        "failures": 2,
+        "succeeded": False,
+        "reason": "missing",
+    }
+    assert by_guid["rec-other"].status is ProcessingStatus.FAILED
+    assert "_recovery" not in by_guid["rec-other"].data[0]
