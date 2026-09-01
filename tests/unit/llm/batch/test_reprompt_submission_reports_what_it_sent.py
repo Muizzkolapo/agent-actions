@@ -38,6 +38,7 @@ OK_ID = "rec-ok"
 BAD_ID = "rec-bad"
 DROPPED_ID = "rec-dropped"
 STRANGER_ID = "rec-not-in-context-map"
+WITHHELD_ID = "rec-withheld-in-round-one"
 
 VALIDATION = "_topic_present"
 
@@ -302,6 +303,11 @@ def _round_two_state(backend):
         validation_name=VALIDATION,
         evaluation_strategy_name=VALIDATION,
         graduated_results=serialize_results([]),
+        # Round one always leaves its withheld records here; round two must add to
+        # that pool, not replace it.
+        unrepromptable_results=serialize_results(
+            [BatchResult(custom_id=WITHHELD_ID, content=None, success=False, error="no content")]
+        ),
         reprompt_attempts_per_record={BAD_ID: 1, DROPPED_ID: 1},
     )
     RecoveryStateManager.save(backend, ACTION, PARENT, state)
@@ -377,6 +383,7 @@ def test_a_second_round_drop_is_not_booked_as_attempted(tmp_path):
     )
     carried = {r["custom_id"] for r in state.unrepromptable_results}
     assert DROPPED_ID in carried, "the round-two drop is in no pool and no batch"
+    assert WITHHELD_ID in carried, "round two replaced round one's withheld pool"
 
 
 def test_an_unparseable_line_placeholder_is_not_treated_as_a_lost_record():
@@ -411,3 +418,47 @@ def test_an_unparseable_line_placeholder_is_not_treated_as_a_lost_record():
     assert result is not None
     _, submitted_ids = result
     assert set(submitted_ids) == {BAD_ID}
+
+
+@pytest.mark.parametrize("synthetic_id", ["error_line_3", "unknown"])
+def test_no_synthetic_id_is_treated_as_a_lost_record(synthetic_id):
+    """The parser mints both when it cannot attribute a result line to a record.
+
+    `error_line_N` for an unparseable line, `unknown` when the response carries no
+    custom_id at all. Neither has a context entry, so raising on them would abort a
+    run over one malformed line.
+    """
+    provider = MagicMock()
+    provider.submit_batch.return_value = ("batch_reprompt_1", BatchStatus.SUBMITTED)
+    synthetic = BatchResult(
+        custom_id=synthetic_id, content=None, success=False, error="unattributable line"
+    )
+
+    with patch(
+        "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+        _preparator_returning(_prepared([BAD_ID])),
+    ):
+        result = submit_reprompt_batch(
+            action_indices={},
+            dependency_configs={},
+            storage_backend=None,
+            provider=provider,
+            failed_results=[_failing(BAD_ID), synthetic],
+            context_map=CONTEXT_MAP,
+            output_directory="/tmp",
+            file_name=PARENT,
+            agent_config=AGENT_CONFIG,
+            attempt=1,
+        )
+
+    assert result is not None
+    _, submitted_ids = result
+    assert set(submitted_ids) == {BAD_ID}
+
+
+@pytest.mark.parametrize("real_id", ["error-budget-1", "unknown-region-4", "rec-error_line_2"])
+def test_a_real_record_id_that_merely_resembles_one_is_not_exempt(real_id):
+    """The exemption is for ids the parser mints, not any id containing those words."""
+    from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+
+    assert BatchResultReconciler.is_provider_placeholder(real_id) is False

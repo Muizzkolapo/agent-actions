@@ -9,6 +9,9 @@ from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMeta
 
 logger = logging.getLogger(__name__)
 
+# What the result parsers fall back to when a response carries no custom_id.
+UNATTRIBUTED_CUSTOM_ID = "unknown"
+
 
 @dataclass
 class BatchReconciliationResult:
@@ -100,12 +103,14 @@ class BatchResultReconciler:
 
     @staticmethod
     def is_provider_placeholder(custom_id: Any) -> bool:
-        """True for a synthetic id standing in for an unreadable result line.
+        """True for an id the result parser mints when it cannot attribute a line.
 
-        These are per-file diagnostics, not records: they have no context-map
-        entry and nothing downstream can rebuild or reprompt them.
+        ``error_line_N`` stands in for an unparseable line and ``unknown`` for a
+        response carrying no id of its own. Neither is a record: they have no
+        context-map entry, and nothing downstream can rebuild or reprompt them.
         """
-        return str(custom_id or "").startswith("error_line_")
+        custom_id_str = str(custom_id or "")
+        return custom_id_str.startswith("error_line_") or custom_id_str == UNATTRIBUTED_CUSTOM_ID
 
     @staticmethod
     def is_answered(batch_result: Any) -> bool:

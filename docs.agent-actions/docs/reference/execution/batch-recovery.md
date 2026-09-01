@@ -110,12 +110,16 @@ After Phase 1 ensures all recoverable records are present, Phase 2 checks whethe
    - Identify failures
    - If all pass, stop
    - For each failed result that still carries content:
-     - Look up the original record from the context map
+     - Look up the original record from the context map (a record missing from it is
+       corrupt state and fails the run, rather than being skipped silently)
      - Build validation feedback (what failed + the failed response)
      - Append feedback to the original `user_content`
      - Collect into a reprompt batch
    - A failed result with no content is withheld — there is nothing to repair — and
      carried to finalization with its provider error
+   - So is a record task preparation does not admit (a guard filter, or a preparation
+     error): the submitter reports which records it actually sent, and the rest are
+     carried the same way rather than counted as attempted
    - Submit the reprompt batch and poll for completion
    - Merge new results, replacing old ones by `custom_id`
 3. Apply exhaustion metadata to any records still failing
@@ -162,7 +166,7 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
 
-API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. When `retry:` is configured, Phase 1 claims such records first, so by Phase 2 they have already spent their attempts. With no `retry:` block there is no Phase 1, and the record reaches finalization with its provider error but no retry history.
+API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. Records preparation does not admit are carried the same way. When `retry:` is configured, Phase 1 claims such records first, so by Phase 2 they have already spent their attempts. With no `retry:` block there is no Phase 1, and the record reaches finalization with its provider error but no retry history.
 
 ## Recovery Metadata
 
