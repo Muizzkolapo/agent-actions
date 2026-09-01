@@ -88,10 +88,12 @@ When a record exhausts all retry attempts:
 - **`on_exhausted: raise`** — raises an error, stops the workflow
 
 Both policies apply to every record that spends its attempts, but the two exhausted shapes
-do not land in the same disposition. A record the provider never returned has nothing to
-report, so it becomes an `EXHAUSTED` tombstone dispositioned `exhausted_after_N_attempts`.
-A record the provider answered with an error keeps that error and is dispositioned
-`FAILED`, carrying the same exhausted retry metadata under `_recovery.retry`. The provider's
+do not land in the same disposition. The split is whether a result row came back at all. A record the provider never
+returned has nothing to report, so it becomes an `EXHAUSTED` tombstone dispositioned
+`exhausted_after_N_attempts`. A record that came back — with an error, or with null
+content and no message at all — is dispositioned `FAILED`, carrying whatever the
+provider said (or a generic failure when it said nothing) plus the same exhausted
+retry metadata under `_recovery.retry`. The provider's
 message is the more useful signal of the two, so it is preserved rather than replaced by an
 empty tombstone. Counting retry exhaustion means counting both — filter on
 `_recovery.retry.succeeded == false`, not on the disposition alone.
@@ -160,7 +162,7 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
 
-API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. Phase 1 claims such records first, so by Phase 2 they have already spent their retry attempts.
+API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. When `retry:` is configured, Phase 1 claims such records first, so by Phase 2 they have already spent their attempts. With no `retry:` block there is no Phase 1, and the record reaches finalization with its provider error but no retry history.
 
 ## Recovery Metadata
 

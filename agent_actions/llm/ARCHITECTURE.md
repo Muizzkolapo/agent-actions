@@ -206,8 +206,8 @@ Reconciliation (reconciler.py):
   For each result:
     ├── Answered    → parse content, merge passthrough fields
     └── Unanswered  → trigger retry (Phase 5); when the attempts run out,
-                      an error record if the provider said why, a tombstone
-                      if it returned nothing at all
+                      an error record if a row came back at all, a tombstone
+                      if the provider returned no row for it
 ```
 
 ### Phase 5-6: Recovery State Machine

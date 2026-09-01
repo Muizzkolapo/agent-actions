@@ -625,3 +625,23 @@ def test_an_exhausted_no_content_record_carries_its_retry_history():
     }
     assert by_guid["rec-other"].status is ProcessingStatus.FAILED
     assert "_recovery" not in by_guid["rec-other"].data[0]
+
+
+def test_the_completion_event_does_not_report_an_unanswered_record_as_completed():
+    """'Batch OK' must not appear on a pass that wrote a FAILED row."""
+    from agent_actions.logging.events.batch_events import BatchCompleteEvent
+
+    h = _Harness(recovery_results=[_no_content(ERR_ID)])
+    with patch("agent_actions.llm.batch.services.processing_recovery.fire_event") as fire:
+        h.run_pass()
+        h.mark_recovery("batch_retry_1", BatchStatus.COMPLETED)
+        h.run_pass()
+        h.mark_recovery("batch_retry_2", BatchStatus.COMPLETED)
+        h.run_pass()
+
+    completions = [
+        c.args[0] for c in fire.call_args_list if isinstance(c.args[0], BatchCompleteEvent)
+    ]
+    assert completions, "no completion event fired"
+    assert completions[-1].failed == 1
+    assert completions[-1].completed == 1

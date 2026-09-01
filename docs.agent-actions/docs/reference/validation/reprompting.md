@@ -21,7 +21,7 @@ The reprompting system provides:
 **Retry** handles transient errors (rate limits, network issues) — same request, wait, retry.
 **Reprompt** handles validation errors (bad JSON, schema violations) — modify prompt with feedback, retry.
 
-When both are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle, the `on_exhausted` policy is respected. An API-failed record that reaches validation is rejected rather than graduating. In batch mode it is not resubmitted — Phase 1 has already claimed it, and a reprompt has nothing to repair on a record with no content — so it reaches finalization with its provider error and its retry history.
+When both are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle, the `on_exhausted` policy is respected. An API-failed record that reaches validation is rejected rather than graduating. In batch mode it is not resubmitted — Phase 1 has already claimed it, and a reprompt has nothing to repair on a record with no content — so it reaches finalization with its provider error, and with its retry history when `retry:` is configured.
 
 See [Retry & Error Handling](../execution/retry.md) for transient error handling.
 :::
