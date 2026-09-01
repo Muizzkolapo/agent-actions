@@ -309,9 +309,17 @@ def handle_reprompt_recovery(
             attempt=next_attempt,
         )
         if submission:
+            reprompt_batch_id, submitted_ids = submission
+            submitted = {str(custom_id) for custom_id in submitted_ids}
+            unsubmitted = [fr for fr in still_failing if str(fr.custom_id) not in submitted]
+            if unsubmitted:
+                state.unrepromptable_results = list(state.unrepromptable_results) + (
+                    serialize_results(unsubmitted)
+                )
+
             register_recovery_batch(
                 context.manager,
-                submission,
+                (reprompt_batch_id, len(submitted)),
                 identity.file_name,
                 identity.entry.provider,
                 RecoveryType.REPROMPT,
@@ -322,11 +330,13 @@ def handle_reprompt_recovery(
                     action_name=identity.file_name,
                     attempt=next_attempt,
                     max_attempts=state.reprompt_max_attempts,
-                    error=f"{len(still_failing)} records failed validation",
-                    failed_count=len(still_failing),
+                    error=f"{len(submitted)} records failed validation",
+                    failed_count=len(submitted),
                 )
             )
             for fr in still_failing:
+                if str(fr.custom_id) not in submitted:
+                    continue
                 state.reprompt_attempts_per_record[fr.custom_id] = (
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
                 )
