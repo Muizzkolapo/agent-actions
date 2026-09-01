@@ -580,3 +580,21 @@ def test_reconciliation_logging_counts_answers_not_returned_rows(caplog):
     assert len(reconciliation) == 1
     assert reconciliation[0].levelno == logging.WARNING
     assert "answered 1" in reconciliation[0].getMessage()
+
+
+def test_unparseable_provider_lines_are_still_reported(caplog):
+    """The placeholder warning must survive filtering the results down to answers."""
+    from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
+
+    provider = MagicMock()
+    provider.retrieve_results.return_value = [
+        _ok(OK_ID),
+        BatchResult("error_line_7", None, False, "JSON parsing error"),
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        retrieve_and_reconcile(
+            provider, "batch-1", "/out", context_map={OK_ID: {}}, file_name=PARENT
+        )
+
+    assert any("error_line_7" in r.getMessage() for r in caplog.records)

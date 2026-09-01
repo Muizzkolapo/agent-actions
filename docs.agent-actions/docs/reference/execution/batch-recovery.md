@@ -13,9 +13,9 @@ Batch recovery runs after the initial batch completes. It addresses two distinct
 
 ```mermaid
 flowchart TD
-    A[Batch Completes] --> B[Compare Expected vs Received IDs]
-    B --> C{Missing Records?}
-    C -->|Yes| D[Phase 1: Retry Missing]
+    A[Batch Completes] --> B[Compare Expected vs Answered IDs]
+    B --> C{Unanswered Records?}
+    C -->|Yes| D[Phase 1: Retry Unanswered]
     C -->|No| G
     D --> E[Resubmit as New Batch]
     E --> F[Poll for Completion]
@@ -35,7 +35,7 @@ flowchart TD
 
 ## Phase 1: Retry Missing Records
 
-After retrieving batch results, the system compares expected record IDs against received IDs. Any gaps trigger the retry loop.
+After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. Any gap triggers the retry loop.
 
 ### How It Works
 
@@ -104,14 +104,16 @@ After Phase 1 ensures all recoverable records are present, Phase 2 checks whethe
 
 1. Load the validation UDF specified in `reprompt.validation`
 2. For each attempt (up to `max_attempts`):
-   - Validate all results that haven't already passed (API-failed records fail validation and are included)
+   - Validate every result that has not already passed — an API-failed record fails validation rather than graduating
    - Identify failures
    - If all pass, stop
-   - For each failed result:
+   - For each failed result that still carries content:
      - Look up the original record from the context map
      - Build validation feedback (what failed + the failed response)
      - Append feedback to the original `user_content`
      - Collect into a reprompt batch
+   - A failed result with no content is withheld — there is nothing to repair — and
+     carried to finalization with its provider error
    - Submit the reprompt batch and poll for completion
    - Merge new results, replacing old ones by `custom_id`
 3. Apply exhaustion metadata to any records still failing
