@@ -107,7 +107,7 @@ def test_a_record_absent_from_the_context_map_is_not_skipped_quietly():
             "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
             _preparator_returning(_prepared([BAD_ID])),
         ),
-        pytest.raises(Exception) as excinfo,
+        pytest.raises(RuntimeError) as excinfo,
     ):
         submit_reprompt_batch(
             action_indices={},
@@ -377,3 +377,37 @@ def test_a_second_round_drop_is_not_booked_as_attempted(tmp_path):
     )
     carried = {r["custom_id"] for r in state.unrepromptable_results}
     assert DROPPED_ID in carried, "the round-two drop is in no pool and no batch"
+
+
+def test_an_unparseable_line_placeholder_is_not_treated_as_a_lost_record():
+    """error_line_N is a per-file diagnostic, not a record — it has no context entry.
+
+    The round-two path hands still_failing to the submitter unfiltered, so these
+    reach it. Raising on them would abort a run over one unreadable line.
+    """
+    provider = MagicMock()
+    provider.submit_batch.return_value = ("batch_reprompt_1", BatchStatus.SUBMITTED)
+    placeholder = BatchResult(
+        custom_id="error_line_3", content=None, success=False, error="JSON parsing error"
+    )
+
+    with patch(
+        "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+        _preparator_returning(_prepared([BAD_ID])),
+    ):
+        result = submit_reprompt_batch(
+            action_indices={},
+            dependency_configs={},
+            storage_backend=None,
+            provider=provider,
+            failed_results=[_failing(BAD_ID), placeholder],
+            context_map=CONTEXT_MAP,
+            output_directory="/tmp",
+            file_name=PARENT,
+            agent_config=AGENT_CONFIG,
+            attempt=1,
+        )
+
+    assert result is not None
+    _, submitted_ids = result
+    assert set(submitted_ids) == {BAD_ID}

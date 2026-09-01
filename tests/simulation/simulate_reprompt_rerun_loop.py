@@ -132,7 +132,10 @@ def run_max_attempts_enforced(work_dir):
 
     service = MagicMock()
     service._retry_service = MagicMock()
-    service._retry_service.submit_reprompt_batch.return_value = ("batch-reprompt", 1)
+    service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "batch-reprompt",
+        {r.custom_id for r in kw["failed_results"]},
+    )
     service._retry_service.apply_exhausted_reprompt_metadata = MagicMock()
 
     entry = BatchJobEntry(
@@ -298,7 +301,10 @@ def run_graduated_pool_persists(work_dir):
 
     service = MagicMock()
     service._retry_service = MagicMock()
-    service._retry_service.submit_reprompt_batch.return_value = ("batch-reprompt", 1)
+    service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "batch-reprompt",
+        {r.custom_id for r in kw["failed_results"]},
+    )
 
     entry = BatchJobEntry(
         batch_id="batch-parent",

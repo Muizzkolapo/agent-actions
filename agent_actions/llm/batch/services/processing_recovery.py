@@ -481,6 +481,14 @@ def check_and_submit_reprompt(
     unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
     repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
     unrepromptable = unrepromptable + unsubmitted
+    if unsubmitted:
+        logger.warning(
+            "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
+            identity.file_name,
+            len(submitted),
+            len(submitted) + len(unsubmitted),
+            sorted(str(fr.custom_id) for fr in unsubmitted),
+        )
 
     register_recovery_batch(
         context.manager,
@@ -534,15 +542,15 @@ def check_and_submit_reprompt(
             action_name=identity.file_name,
             attempt=next_attempt,
             max_attempts=max_attempts,
-            error=f"{len(still_failing)} records failed validation",
-            failed_count=len(still_failing),
+            error=f"{len(repromptable)} records failed validation",
+            failed_count=len(repromptable),
         )
     )
     logger.info(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         identity.file_name,
         len(repromptable),
-        submission[0],
+        reprompt_batch_id,
     )
     return False
 

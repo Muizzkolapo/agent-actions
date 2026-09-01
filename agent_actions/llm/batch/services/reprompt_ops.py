@@ -555,6 +555,9 @@ def submit_reprompt_batch(
     reprompt_records = []
     for failed_result in failed_results:
         custom_id = failed_result.custom_id
+        if BatchResultReconciler.is_provider_placeholder(custom_id):
+            continue
+
         if custom_id not in context_map:
             raise RuntimeError(
                 f"Cannot reprompt {custom_id}: absent from the context map for "

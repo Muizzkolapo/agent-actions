@@ -126,7 +126,10 @@ def run_bug8_no_state_mutation():
 
     service = MagicMock()
     service._retry_service = MagicMock()
-    service._retry_service.submit_reprompt_batch.return_value = ("batch-reprompt", 1)
+    service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "batch-reprompt",
+        {r.custom_id for r in kw["failed_results"]},
+    )
 
     state = RecoveryState(
         phase="retry",
@@ -197,7 +200,10 @@ def run_bug10_none_content_filtered():
 
     service = MagicMock()
     service._retry_service = MagicMock()
-    service._retry_service.submit_reprompt_batch.return_value = ("batch-reprompt", 1)
+    service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "batch-reprompt",
+        {r.custom_id for r in kw["failed_results"]},
+    )
 
     results = [
         _make_result("id-real-fail", content="bad output", success=False),

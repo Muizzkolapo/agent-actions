@@ -99,6 +99,15 @@ class BatchResultReconciler:
         return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
+    def is_provider_placeholder(custom_id: Any) -> bool:
+        """True for a synthetic id standing in for an unreadable result line.
+
+        These are per-file diagnostics, not records: they have no context-map
+        entry and nothing downstream can rebuild or reprompt them.
+        """
+        return str(custom_id or "").startswith("error_line_")
+
+    @staticmethod
     def is_answered(batch_result: Any) -> bool:
         """True when a result carries an answer that can become a success row.
 
@@ -151,7 +160,7 @@ class BatchResultReconciler:
             if not custom_id:
                 continue
             custom_id_str = str(custom_id)
-            if custom_id_str.startswith("error_line_"):
+            if BatchResultReconciler.is_provider_placeholder(custom_id_str):
                 continue
             result_ids.add(custom_id_str)
         return result_ids
@@ -166,7 +175,7 @@ class BatchResultReconciler:
         placeholders = [
             str(getattr(batch_result, "custom_id", ""))
             for batch_result in batch_results or []
-            if str(getattr(batch_result, "custom_id", "")).startswith("error_line_")
+            if BatchResultReconciler.is_provider_placeholder(getattr(batch_result, "custom_id", ""))
         ]
         if placeholders:
             logger.warning(
