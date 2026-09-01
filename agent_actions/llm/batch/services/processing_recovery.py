@@ -321,7 +321,14 @@ def handle_reprompt_recovery(
                     sorted(str(fr.custom_id) for fr in unsubmitted),
                 )
                 state.unrepromptable_results = list(state.unrepromptable_results) + (
-                    serialize_results(_stamp_withheld(unsubmitted, validation_name, next_attempt))
+                    serialize_results(
+                        _stamp_withheld(
+                            unsubmitted,
+                            validation_name,
+                            state.reprompt_attempts_per_record,
+                            state.failure_type_counts,
+                        )
+                    )
                 )
 
             register_recovery_batch(
@@ -487,7 +494,12 @@ def check_and_submit_reprompt(
     submitted = {str(custom_id) for custom_id in submitted_ids}
     unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
     repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
-    unrepromptable = unrepromptable + _stamp_withheld(unsubmitted, strategy.name, next_attempt)
+    unrepromptable = unrepromptable + _stamp_withheld(
+        unsubmitted,
+        strategy.name,
+        dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {},
+        ftc,
+    )
     if unsubmitted:
         logger.warning(
             "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
@@ -667,12 +679,18 @@ def _finalize_and_cleanup(
 
 
 def _stamp_withheld(
-    records: list[BatchResult], validation_name: str, attempt: int
+    records: list[BatchResult],
+    validation_name: str,
+    attempts_made: dict[str, int],
+    failure_type_counts: dict[str, dict[str, int]],
 ) -> list[BatchResult]:
     """Mark records that never reached the reprompt batch as still failing.
 
     They were repromptable, so they carry content — without a failure stamp they
     collect as successes and the operator never sees that validation rejected them.
+    The count comes from the per-record ledger, which does not book an attempt for
+    a record that was not sent: stamping the round number instead would make one
+    that never left look like one that was tried and failed.
     """
     from agent_actions.processing.types import RepromptMetadata
 
@@ -680,10 +698,14 @@ def _stamp_withheld(
         if record.recovery_metadata is None:
             record.recovery_metadata = RecoveryMetadata()
         if record.recovery_metadata.reprompt is None:
+            counts = failure_type_counts.get(str(record.custom_id), {})
             record.recovery_metadata.reprompt = RepromptMetadata(
-                attempts=attempt,
+                attempts=attempts_made.get(str(record.custom_id), 0),
                 passed=False,
                 validation=validation_name,
+                parse_error_count=counts.get("parse_error", 0),
+                schema_fail_count=counts.get("schema_fail", 0),
+                udf_fail_count=counts.get("udf_fail", 0),
             )
     return records
 

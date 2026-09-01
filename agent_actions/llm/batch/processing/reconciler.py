@@ -158,7 +158,7 @@ class BatchResultReconciler:
 
     @staticmethod
     def collect_result_custom_ids(batch_results: list[Any]) -> set:
-        """Collect custom_ids from batch results, ignoring error_line_* placeholders."""
+        """Collect custom_ids from batch results, ignoring parser-minted placeholders."""
         result_ids: set = set()
         for batch_result in batch_results or []:
             custom_id = getattr(batch_result, "custom_id", None)

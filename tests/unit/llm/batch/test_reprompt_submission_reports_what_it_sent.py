@@ -509,3 +509,46 @@ def test_the_reprompt_event_counts_what_was_submitted(tmp_path):
 
     retries = [c.args[0] for c in fire.call_args_list if isinstance(c.args[0], RepromptRetryEvent)]
     assert retries and retries[-1].failed_count == 1
+
+
+def test_a_withheld_record_is_not_stamped_with_an_attempt_it_never_made(tmp_path):
+    """The stamp must agree with the ledger: never sent means no attempt."""
+    h = _Harness(tmp_path, included_ids=[BAD_ID])
+    h.submit_pass(_results())
+
+    state = h.state()
+    assert state is not None
+    withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
+    stamped = withheld[DROPPED_ID]["recovery_metadata"]["reprompt"]["attempts"]
+
+    assert stamped == state.reprompt_attempts_per_record.get(DROPPED_ID, 0)
+    assert stamped == 0
+
+
+def test_a_second_round_withheld_record_keeps_its_earlier_attempt_count(tmp_path):
+    """Round two must report the attempts actually made, not the round number."""
+    backend, _ = _drive_round_two(tmp_path, included_ids=[BAD_ID])
+
+    state = RecoveryStateManager.load(backend, ACTION, PARENT)
+    assert state is not None
+    withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
+    stamped = withheld[DROPPED_ID]["recovery_metadata"]["reprompt"]["attempts"]
+
+    assert stamped == state.reprompt_attempts_per_record.get(DROPPED_ID, 0)
+    assert stamped == 1
+
+
+def test_a_withheld_record_reports_why_it_failed_validation(tmp_path):
+    """Two rows sharing a reason must not disagree on the counters behind it."""
+    h = _Harness(tmp_path, included_ids=[BAD_ID])
+    h.submit_pass(_results())
+
+    state = h.state()
+    assert state is not None
+    withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
+    reprompt = withheld[DROPPED_ID]["recovery_metadata"]["reprompt"]
+    expected = state.failure_type_counts.get(DROPPED_ID, {})
+
+    assert reprompt["udf_fail_count"] == expected.get("udf_fail", 0)
+    assert sum(expected.values()) > 0, "fixture should record a real failure classification"
+    assert reprompt["udf_fail_count"] > 0

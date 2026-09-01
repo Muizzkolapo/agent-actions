@@ -119,7 +119,11 @@ After Phase 1 ensures all recoverable records are present, Phase 2 checks whethe
      carried to finalization with its provider error
    - So is a record task preparation does not admit (a guard filter, or a preparation
      error): the submitter reports which records it actually sent, and the rest are
-     carried the same way rather than counted as attempted
+     carried the same way rather than counted as attempted. They reach finalization
+     marked as still failing, so they disposition as `exhausted` rather than collecting
+     as successes. For a record whose reprompt *preparation* raised, that terminal
+     disposition replaces the `failed` row preparation wrote, which means the next run
+     leaves it alone instead of reprocessing it — recover it with `agac retry`.
    - Submit the reprompt batch and poll for completion
    - Merge new results, replacing old ones by `custom_id`
 3. Apply exhaustion metadata to any records still failing
