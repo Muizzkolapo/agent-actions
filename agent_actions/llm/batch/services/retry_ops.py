@@ -210,10 +210,10 @@ def process_retry_results(
                     )
                 )
 
-        # A resubmitted record may already have an entry — a provider error the
-        # retry was opened for. The newest answer is the authoritative one, and
-        # a second entry would reach finalization as a second output row.
-        resubmitted = {r.custom_id for r in results}
+        # Scoped to known records: the newest answer supersedes the entry the
+        # retry was opened for, but a per-file parse-error placeholder is not a
+        # record and one round's must not drop the previous round's.
+        resubmitted = {r.custom_id for r in results if r.custom_id in context_map}
         all_results = [r for r in all_results if r.custom_id not in resubmitted]
         all_results.extend(results)
 

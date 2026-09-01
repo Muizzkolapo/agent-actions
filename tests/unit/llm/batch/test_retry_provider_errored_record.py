@@ -349,3 +349,117 @@ def test_a_failed_record_with_no_retry_history_is_untouched():
     assert len(for_err) == 1
     assert for_err[0].status is ProcessingStatus.FAILED
     assert for_err[0].recovery_metadata is None
+
+
+# ---------------------------------------------------------------------------
+# A success flag is not an answer: the provider can return 200 with no content
+# ---------------------------------------------------------------------------
+
+
+def _no_content(custom_id: str) -> BatchResult:
+    """What an OpenAI-compatible refusal or a Gemini safety block parses to."""
+    return BatchResult(custom_id=custom_id, content=None, success=True, error=None)
+
+
+def test_find_missing_ids_counts_a_successful_result_with_no_content_as_missing():
+    context_map = {OK_ID: {"user_content": "one"}, ERR_ID: {"user_content": "two"}}
+
+    missing = BatchResultReconciler.find_missing_ids(context_map, [_ok(OK_ID), _no_content(ERR_ID)])
+
+    assert missing == {ERR_ID}
+
+
+def test_the_pipeline_agrees_a_result_with_no_content_is_not_an_answer():
+    """The retry predicate must match the one that decides the terminal row."""
+    results = BatchResultStrategy().process(
+        [_no_content(ERR_ID)],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=AGENT_CONFIG,
+    )
+
+    for_err = [r for r in results if r.source_guid == ERR_ID]
+    assert len(for_err) == 1
+    assert for_err[0].status is ProcessingStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# The merge replaces only what was resubmitted
+# ---------------------------------------------------------------------------
+
+
+def test_an_unrelated_errored_result_survives_the_merge():
+    """Only the resubmitted record is superseded — not every unsuccessful row."""
+    other = _errored("rec-other", "unrelated failure")
+
+    merged, _still_missing, _counts, _ = retry_ops.process_retry_results(
+        results=[_ok(ERR_ID)],
+        accumulated_results=[_ok(OK_ID), _errored(ERR_ID), other],
+        context_map={OK_ID: {}, ERR_ID: {}, "rec-other": {}},
+        record_failure_counts={ERR_ID: 1},
+        missing_ids={ERR_ID},
+    )
+
+    survivors = [r for r in merged if r.custom_id == "rec-other"]
+    assert len(survivors) == 1
+    assert survivors[0].error == "unrelated failure"
+
+
+def test_a_provider_parse_error_placeholder_survives_the_merge():
+    """error_line_N placeholders are per-file diagnostics, not records to supersede."""
+    placeholder = BatchResult(
+        custom_id="error_line_1", content=None, success=False, error="JSON parsing error"
+    )
+
+    merged, _still_missing, _counts, _ = retry_ops.process_retry_results(
+        results=[_ok(ERR_ID), BatchResult("error_line_1", None, False, "JSON parsing error")],
+        accumulated_results=[_ok(OK_ID), _errored(ERR_ID), placeholder],
+        context_map={OK_ID: {}, ERR_ID: {}},
+        record_failure_counts={ERR_ID: 1},
+        missing_ids={ERR_ID},
+    )
+
+    assert len([r for r in merged if r.custom_id == "error_line_1"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Exhaustion metadata joins what is already on the record
+# ---------------------------------------------------------------------------
+
+
+def test_exhaustion_metadata_does_not_erase_the_reprompt_half():
+    from agent_actions.processing.types import RepromptMetadata
+
+    errored = _errored(ERR_ID)
+    errored.recovery_metadata = RecoveryMetadata(
+        reprompt=RepromptMetadata(attempts=3, passed=False, validation="shape_check")
+    )
+
+    results = BatchResultStrategy().process(
+        [errored],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=AGENT_CONFIG,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+
+    meta = results[0].recovery_metadata
+    assert meta is not None
+    assert meta.retry is not None and meta.retry.attempts == 2
+    assert meta.reprompt is not None, "the reprompt half was overwritten by the retry half"
+    assert meta.reprompt.validation == "shape_check"
+
+
+def test_an_errored_result_that_still_carries_content_is_not_an_answer():
+    """Both halves of the consumer's predicate are load-bearing, not just content."""
+    salvaged = BatchResult(custom_id=ERR_ID, content={"partial": "x"}, success=False, error="boom")
+
+    missing = BatchResultReconciler.find_missing_ids(
+        {OK_ID: {}, ERR_ID: {}}, [_ok(OK_ID), salvaged]
+    )
+    results = BatchResultStrategy().process(
+        [salvaged],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=AGENT_CONFIG,
+    )
+
+    assert missing == {ERR_ID}
+    assert results[0].status is ProcessingStatus.FAILED

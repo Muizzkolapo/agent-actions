@@ -265,10 +265,16 @@ class BatchResultStrategy:
                     )
 
             else:
+                recovery_metadata = batch_result.recovery_metadata
                 exhausted = self._exhausted_recovery_for(ctx, custom_id)
-                recovery_metadata = (
-                    exhausted[0] if exhausted is not None else batch_result.recovery_metadata
-                )
+                if exhausted is not None:
+                    # Retry exhaustion is one half of the record's history; a
+                    # reprompt or evaluation half may already be on it.
+                    recovery_metadata = RecoveryMetadata(
+                        retry=exhausted[1],
+                        reprompt=recovery_metadata.reprompt if recovery_metadata else None,
+                        evaluation=recovery_metadata.evaluation if recovery_metadata else None,
+                    )
 
                 results.append(
                     self._build_error_result(

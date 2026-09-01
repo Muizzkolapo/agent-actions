@@ -105,16 +105,18 @@ class BatchResultReconciler:
     ) -> set[str]:
         """Find custom_ids expected but not answered in batch results.
 
-        A per-record provider failure comes back under the record's real
-        custom_id with no content, so presence alone does not mean the record
-        was answered. Only a successful result removes a record from the set
-        retry resubmits.
+        A record can come back under its real custom_id carrying no answer: a
+        per-record provider failure, or a 200 whose content is null (a refusal,
+        a safety block, an empty choices list). Presence does not mean answered.
+        The predicate here is the one that decides whether a result becomes a
+        success row, so a result that cannot become one stays retryable.
         """
         expected = BatchResultReconciler.collect_expected_custom_ids(context_map)
         answered = [
             batch_result
             for batch_result in batch_results or []
             if getattr(batch_result, "success", False)
+            and getattr(batch_result, "content", None) is not None
         ]
         received = BatchResultReconciler.collect_result_custom_ids(answered)
         return expected - received

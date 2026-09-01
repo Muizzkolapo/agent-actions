@@ -29,7 +29,7 @@ flowchart TD
     I -->|No| L
 ```
 
-**Phase 1 (Retry)** recovers records the provider dropped — network errors, timeouts, silent failures. The same request is resubmitted unchanged.
+**Phase 1 (Retry)** recovers records the provider did not answer — ones it dropped outright (network errors, timeouts, silent failures) and ones it returned with a per-record error and no content. The same request is resubmitted unchanged.
 
 **Phase 2 (Reprompt)** fixes records where the LLM responded but produced invalid output — schema violations, failed custom validation. The prompt is modified with error feedback before resubmitting.
 
@@ -40,13 +40,13 @@ After retrieving batch results, the system compares expected record IDs against 
 ### How It Works
 
 1. Collect all `custom_id` values from the context map (expected)
-2. Collect all `custom_id` values from batch results (received)
+2. Collect the `custom_id` values of results the provider answered successfully. A result returned with an error carries the record's real `custom_id` but no content, so it does not count as answered
 3. Compute the difference — these are the missing records
 4. For each retry attempt (up to `max_attempts`):
    - Build new records from the context map for missing IDs
    - Submit as a new batch
    - Poll until complete
-   - Merge successful results back
+   - Merge the results back, replacing any earlier answer for the same record
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 
@@ -149,7 +149,7 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
 
-API-failed records (`success=False`) are **not** skipped — they fail validation and are reprompted with guidance to retry. This prevents API failures from silently graduating as valid output.
+Records the provider did not answer are not Phase 2's problem: Phase 1 claims them first, and a reprompt has nothing to repair on a record with no content. Phase 2 evaluates only results that carry content, so an unanswered record cannot silently graduate as valid output — it reaches finalization with its provider error and its retry history.
 
 ## Recovery Metadata
 

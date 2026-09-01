@@ -200,8 +200,8 @@ Provider completes → retrieve results → reconcile
 
 Reconciliation (reconciler.py):
   expected_ids = {records we submitted}
-  received_ids = {records provider returned}
-  missing_ids  = expected - received
+  answered_ids = {records the provider answered: success AND content}
+  missing_ids  = expected - answered
 
   For each result:
     ├── Success     → parse content, merge passthrough fields
@@ -336,9 +336,11 @@ Provider processes 8 records, returns 6 results + 1 error:
 reconciler.py does set math:
 
   expected  = {A, B, C, D, E, F, G, H}    (8 INCLUDED records)
-  received  = {A, B, C, D, E, F}           (6 results with valid IDs)
+  answered  = {A, B, C, E, F}              (5 results carrying content)
   error_line = {error_line_7}              (logged as warning, filtered out)
-  missing   = expected - received = {G, H} (2 records unaccounted for)
+  missing   = expected - answered = {D, G, H}
+              D answered with an error and no content, so retry claims it
+              alongside the two the provider never returned
 ```
 
 ### Step 4: Process what we have
@@ -349,7 +351,8 @@ batch_result_strategy.py processes the 6 received results:
   A → SUCCESS  → parse JSON, merge passthrough fields → output record
   B → SUCCESS  → parse JSON, merge passthrough fields → output record
   C → SUCCESS  → parse JSON, merge passthrough fields → output record
-  D → FAILED   → build error record with provider error message
+  D → retried; if every attempt errors, FAILED with the provider error
+                and its retry history
   E → SUCCESS  → parse JSON, merge passthrough fields → output record
   F → SUCCESS  → parse JSON, merge passthrough fields → output record
 
@@ -408,7 +411,7 @@ retry.py kicks in for the 2 missing records:
 │ A        │ SUCCESS      │ LLM returned valid output       │
 │ B        │ SUCCESS      │ LLM returned valid output       │
 │ C        │ SUCCESS      │ LLM returned valid output       │
-│ D        │ FAILED       │ Provider error (content filter) │
+│ D        │ FAILED       │ Provider error, retry spent     │
 │ E        │ SUCCESS      │ LLM returned valid output       │
 │ F        │ SUCCESS      │ LLM returned valid output       │
 │ G        │ EXHAUSTED    │ Never returned after 3 retries  │
