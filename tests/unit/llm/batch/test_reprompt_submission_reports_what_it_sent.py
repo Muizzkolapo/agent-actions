@@ -188,12 +188,21 @@ def _entry() -> BatchJobEntry:
     )
 
 
+def _registry(backend: _MetadataBackend):
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    backend.store[f"{BatchRegistryManager.METADATA_KEY_PREFIX}{ACTION}"] = json.dumps(
+        {PARENT: _entry().to_dict()}
+    )
+    return BatchRegistryManager(backend, ACTION)
+
+
 class _Harness:
     """Real submitter, real state persistence; only the provider is a stand-in."""
 
     def __init__(self, tmp_path: Path, included_ids: list[str]) -> None:
         self.backend = _MetadataBackend()
-        self.finalized: list[BatchResult] = []
+        self.manager = _registry(self.backend)
         self.included_ids = included_ids
 
         from agent_actions.llm.batch.services import reprompt_ops
@@ -210,23 +219,18 @@ class _Harness:
                 action_indices={}, dependency_configs={}, storage_backend=None, **kw
             )
         )
-        service._convert_batch_results_to_workflow_format.side_effect = self._capture
         service._determine_output_path.return_value = tmp_path / "out.json"
         self.service = service
 
         self.context = RecoveryContext(
             service=service,
-            manager=MagicMock(),
+            manager=self.manager,
             provider=provider,
             agent_config=AGENT_CONFIG,
             output_directory=str(tmp_path),
             action_name=ACTION,
             start_time=0.0,
         )
-
-    def _capture(self, batch_results, **_kwargs):
-        self.finalized = list(batch_results)
-        return ([], MagicMock())
 
     def submit_pass(self, batch_results: list[BatchResult]) -> bool:
         with patch(
@@ -278,15 +282,6 @@ def test_a_record_preparation_dropped_is_carried_forward(tmp_path):
 # ---------------------------------------------------------------------------
 # Round two takes a different code path with the same defect
 # ---------------------------------------------------------------------------
-
-
-def _registry(backend: _MetadataBackend):
-    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-
-    backend.store[f"{BatchRegistryManager.METADATA_KEY_PREFIX}{ACTION}"] = json.dumps(
-        {PARENT: _entry().to_dict()}
-    )
-    return BatchRegistryManager(backend, ACTION)
 
 
 def _round_two_state(backend):
@@ -492,3 +487,25 @@ def test_a_second_round_withheld_record_carries_its_failure_too(tmp_path):
     assert state is not None
     withheld = {r["custom_id"]: r for r in state.unrepromptable_results}
     assert withheld[DROPPED_ID]["recovery_metadata"]["reprompt"]["passed"] is False
+
+
+def test_the_first_reprompt_round_persists_its_registry_entry(tmp_path):
+    """Round one writes the registry too, and a set would not survive JSON."""
+    h = _Harness(tmp_path, included_ids=[BAD_ID])
+    h.submit_pass(_results())
+
+    entry = h.manager.get_batch_job_by_id("batch_reprompt_1")
+    assert entry is not None, "the round-one recovery batch was never registered"
+    assert entry.record_count == 1
+
+
+def test_the_reprompt_event_counts_what_was_submitted(tmp_path):
+    """The event and the registry must not disagree about how many were sent."""
+    from agent_actions.logging.events.validation_events import RepromptRetryEvent
+
+    h = _Harness(tmp_path, included_ids=[BAD_ID])
+    with patch("agent_actions.llm.batch.services.processing_recovery.fire_event") as fire:
+        h.submit_pass(_results())
+
+    retries = [c.args[0] for c in fire.call_args_list if isinstance(c.args[0], RepromptRetryEvent)]
+    assert retries and retries[-1].failed_count == 1
