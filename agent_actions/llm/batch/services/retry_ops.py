@@ -197,7 +197,7 @@ def process_retry_results(
 
     if results:
         for res in results:
-            if res.success:
+            if BatchResultReconciler.is_answered(res):
                 custom_id = res.custom_id
                 failures = record_failure_counts.get(custom_id, 1)
                 res.recovery_metadata = RecoveryMetadata(
@@ -217,7 +217,7 @@ def process_retry_results(
         all_results = [r for r in all_results if r.custom_id not in resubmitted]
         all_results.extend(results)
 
-        successful_retry = [r for r in results if r.success]
+        successful_retry = [r for r in results if BatchResultReconciler.is_answered(r)]
         new_received = BatchResultReconciler.collect_result_custom_ids(successful_retry)
         missing_ids = missing_ids - new_received
 

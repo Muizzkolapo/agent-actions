@@ -225,7 +225,7 @@ class BatchResultStrategy:
         for batch_result in ctx.batch_results:
             custom_id = str(batch_result.custom_id)
 
-            if batch_result.success and batch_result.content is not None:
+            if BatchResultReconciler.is_answered(batch_result):
                 try:
                     result = self._process_successful_result(ctx, batch_result, custom_id)
                     results.append(result)

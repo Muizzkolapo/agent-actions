@@ -240,7 +240,7 @@ If retry exhausts during a reprompt attempt, the record is marked `exhausted=Tru
 
 In batch mode, recovery is two-phase. See [Batch Recovery](../execution/batch-recovery.md) for the complete flow.
 
-1. **Phase 1 (Retry):** Detect missing records by comparing expected vs received IDs, resubmit as a new batch
+1. **Phase 1 (Retry):** Detect unanswered records — expected ids minus the ids the provider actually answered, which excludes a result returned with an error or with null content — and resubmit them as a new batch
 2. **Phase 2 (Reprompt):** Validate all results against the configured UDF, resubmit failures with feedback
 
 Retry metadata from Phase 1 is preserved through Phase 2 — a record that was missing and then failed validation will carry both `_recovery.retry` and `_recovery.reprompt` in its output.

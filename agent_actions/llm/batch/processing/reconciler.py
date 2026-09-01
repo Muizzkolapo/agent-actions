@@ -99,24 +99,35 @@ class BatchResultReconciler:
         return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
+    def is_answered(batch_result: Any) -> bool:
+        """True when a result carries an answer that can become a success row.
+
+        A record can come back under its real custom_id carrying nothing: a
+        per-record provider failure, or a 200 whose content is null (a refusal,
+        a safety block, an empty choices list). Recovery and result processing
+        must decide this the same way, or a record counts as recovered in one
+        and failed in the other.
+        """
+        return (
+            getattr(batch_result, "success", False)
+            and getattr(batch_result, "content", None) is not None
+        )
+
+    @staticmethod
     def find_missing_ids(
         context_map: dict[str, Any],
         batch_results: list[Any],
     ) -> set[str]:
         """Find custom_ids expected but not answered in batch results.
 
-        A record can come back under its real custom_id carrying no answer: a
-        per-record provider failure, or a 200 whose content is null (a refusal,
-        a safety block, an empty choices list). Presence does not mean answered.
-        The predicate here is the one that decides whether a result becomes a
-        success row, so a result that cannot become one stays retryable.
+        Presence does not mean answered — see ``is_answered``. A result that
+        cannot become a success row stays in the set retry resubmits.
         """
         expected = BatchResultReconciler.collect_expected_custom_ids(context_map)
         answered = [
             batch_result
             for batch_result in batch_results or []
-            if getattr(batch_result, "success", False)
-            and getattr(batch_result, "content", None) is not None
+            if BatchResultReconciler.is_answered(batch_result)
         ]
         received = BatchResultReconciler.collect_result_custom_ids(answered)
         return expected - received

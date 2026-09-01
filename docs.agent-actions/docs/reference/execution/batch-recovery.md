@@ -149,7 +149,7 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
 
-Records the provider did not answer are not Phase 2's problem: Phase 1 claims them first, and a reprompt has nothing to repair on a record with no content. Phase 2 evaluates only results that carry content, so an unanswered record cannot silently graduate as valid output — it reaches finalization with its provider error and its retry history.
+API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. Phase 1 claims such records first, so by Phase 2 they have already spent their retry attempts.
 
 ## Recovery Metadata
 

@@ -346,13 +346,12 @@ reconciler.py does set math:
 ### Step 4: Process what we have
 
 ```
-batch_result_strategy.py processes the 6 received results:
+batch_result_strategy.py processes the 5 answered results:
 
   A → SUCCESS  → parse JSON, merge passthrough fields → output record
   B → SUCCESS  → parse JSON, merge passthrough fields → output record
   C → SUCCESS  → parse JSON, merge passthrough fields → output record
-  D → retried; if every attempt errors, FAILED with the provider error
-                and its retry history
+  (D carries no content, so it is not processed here — see Step 5)
   E → SUCCESS  → parse JSON, merge passthrough fields → output record
   F → SUCCESS  → parse JSON, merge passthrough fields → output record
 
@@ -361,42 +360,45 @@ For records that never went to the provider:
   J → FAILED   → error record from prep failure
 ```
 
-### Step 5: Retry — try to recover G and H
+### Step 5: Retry — try to recover D, G and H
 
 ```
-retry.py kicks in for the 2 missing records:
+retry.py kicks in for the 3 unanswered records:
 
   ┌─────────────────────────────────────────────────────┐
   │ Retry attempt 1/3                                    │
   │                                                      │
-  │   Resubmit {G, H} to provider                       │
-  │   Provider returns: result for H (success)           │
+  │   Resubmit {D, G, H} to provider                    │
+  │   Provider returns: result for H (success);          │
+  │     D errors again, G omitted again                  │
   │                                                      │
-  │   G still missing                                    │
+  │   D and G still unanswered                           │
   │   H recovered! ✓  Tagged with recovery metadata:     │
   │     retry_attempts: 2, failures: 1, succeeded: true  │
   │                                                      │
-  │   missing = {G}                                      │
+  │   missing = {D, G}                                   │
   └─────────────────────────────────────────────────────┘
                          │
                          ▼
   ┌─────────────────────────────────────────────────────┐
   │ Retry attempt 2/3                                    │
   │                                                      │
-  │   Resubmit {G} to provider                           │
+  │   Resubmit {D, G} to provider                        │
   │   Provider returns: nothing                          │
   │                                                      │
-  │   G still missing                                    │
+  │   D and G still unanswered                           │
   └─────────────────────────────────────────────────────┘
                          │
                          ▼
   ┌─────────────────────────────────────────────────────┐
   │ Retry attempt 3/3                                    │
   │                                                      │
-  │   Resubmit {G} to provider                           │
-  │   Provider returns: nothing                          │
+  │   Resubmit {D, G} to provider                        │
+  │   Provider returns: D errors again, G nothing        │
   │                                                      │
-  │   G still missing → EXHAUSTED                        │
+  │   G → EXHAUSTED (never returned)                     │
+  │   D → FAILED, keeping the provider error, with the   │
+  │       same exhausted retry history attached          │
   │   build_exhausted_recovery() creates metadata:       │
   │     retry_attempts: 4, failures: 4, succeeded: false │
   └─────────────────────────────────────────────────────┘

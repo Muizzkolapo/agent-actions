@@ -463,3 +463,97 @@ def test_an_errored_result_that_still_carries_content_is_not_an_answer():
 
     assert missing == {ERR_ID}
     assert results[0].status is ProcessingStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# Recovery and result processing must agree on what counts as an answer
+# ---------------------------------------------------------------------------
+
+
+def test_a_retry_answered_with_no_content_is_not_a_recovery():
+    """A 200 carrying null content must not clear the record from the missing set."""
+    merged, still_missing, _counts, _ = retry_ops.process_retry_results(
+        results=[_no_content(ERR_ID)],
+        accumulated_results=[_ok(OK_ID), _no_content(ERR_ID)],
+        context_map={OK_ID: {}, ERR_ID: {}},
+        record_failure_counts={ERR_ID: 1},
+        missing_ids={ERR_ID},
+    )
+
+    assert still_missing == {ERR_ID}, "an empty answer was counted as a recovery"
+    r = [x for x in merged if x.custom_id == ERR_ID][0]
+    assert r.recovery_metadata is None or r.recovery_metadata.retry is None, (
+        "the record was stamped as a successful retry while it still has no answer"
+    )
+
+
+class TestTheNoContentCaseExhaustsLikeAnErroredOne:
+    def test_it_spends_every_attempt_before_terminating(self):
+        h = _Harness(recovery_results=[_no_content(ERR_ID)])
+        h.run_pass()
+        h.mark_recovery("batch_retry_1", BatchStatus.COMPLETED)
+        h.run_pass()
+        h.mark_recovery("batch_retry_2", BatchStatus.COMPLETED)
+        h.run_pass()
+
+        assert h.submitted == ["batch_retry_1", "batch_retry_2"], (
+            "the run stopped retrying before max_attempts was spent"
+        )
+        exhausted = h.finalized[-1]["exhausted_recovery"]
+        assert exhausted is not None and ERR_ID in exhausted
+        assert exhausted[ERR_ID].retry.succeeded is False
+
+
+@pytest.mark.parametrize("content", [{"topic": "m"}, {}, "", 0, []])
+def test_only_a_missing_answer_is_retried(content):
+    """Retry claims a record with no answer; a present-but-unusable one is reprompt's job.
+
+    Pins the predicate to ``is not None``. A truthiness test would hand the empty
+    shapes to retry, which resubmits the identical prompt and cannot repair them.
+    """
+    context_map = {ERR_ID: {"user_content": "x", "source_guid": ERR_ID}}
+    answer = BatchResult(custom_id=ERR_ID, content=content, success=True)
+
+    assert BatchResultReconciler.find_missing_ids(context_map, [answer]) == set()
+    assert BatchResultReconciler.is_answered(answer) is True
+
+
+def test_a_null_answer_is_retried_and_cannot_become_a_success_row():
+    context_map = {ERR_ID: {"user_content": "x", "source_guid": ERR_ID}}
+    answer = _no_content(ERR_ID)
+
+    missing = BatchResultReconciler.find_missing_ids(context_map, [answer])
+    row = BatchResultStrategy().process(
+        [answer], context_map=dict(context_map), agent_config=AGENT_CONFIG
+    )[0]
+
+    assert missing == {ERR_ID}
+    assert BatchResultReconciler.is_answered(answer) is False
+    assert row.status is ProcessingStatus.FAILED
+
+
+def test_the_two_exhausted_shapes_keep_their_distinct_terminal_status():
+    """An exhausted record with a provider error keeps it; one never returned gets a tombstone.
+
+    Deliberate: converting the errored one to a tombstone would discard the
+    provider error, which is the more useful of the two signals.
+    """
+    config = {**AGENT_CONFIG, "action_name": "label_page"}
+    context_map = {
+        ERR_ID: {"user_content": "two", "source_guid": ERR_ID},
+        "rec-omitted": {"user_content": "three", "source_guid": "rec-omitted"},
+    }
+    exhausted = _exhausted(ERR_ID)
+    exhausted.update(_exhausted("rec-omitted"))
+
+    results = BatchResultStrategy().process(
+        [_errored(ERR_ID)],
+        context_map=context_map,
+        agent_config=config,
+        exhausted_recovery=exhausted,
+    )
+    by_guid = {r.source_guid: r for r in results}
+
+    assert by_guid[ERR_ID].status is ProcessingStatus.FAILED
+    assert PROVIDER_ERROR in (by_guid[ERR_ID].error or "")
+    assert by_guid["rec-omitted"].status is ProcessingStatus.EXHAUSTED
