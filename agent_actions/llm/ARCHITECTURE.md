@@ -204,9 +204,10 @@ Reconciliation (reconciler.py):
   missing_ids  = expected - answered
 
   For each result:
-    ├── Success     → parse content, merge passthrough fields
-    ├── Failed      → build error record
-    └── Missing     → trigger retry (Phase 5)
+    ├── Answered    → parse content, merge passthrough fields
+    └── Unanswered  → trigger retry (Phase 5); when the attempts run out,
+                      an error record if the provider said why, a tombstone
+                      if it returned nothing at all
 ```
 
 ### Phase 5-6: Recovery State Machine
@@ -625,7 +626,7 @@ Both paths share:
 | `batch/services/submission.py` | Batch submit: prepare → save → submit → register |
 | `batch/services/processing.py` | Batch process: retrieve → reconcile → retry → reprompt → finalize |
 | `batch/processing/preparator.py` | Per-record task preparation + context_map building |
-| `batch/processing/reconciler.py` | Expected vs received ID math, missing detection |
+| `batch/processing/reconciler.py` | Expected vs answered ID math, missing detection |
 | `batch/processing/batch_result_strategy.py` | Convert BatchResult → ProcessingResult |
 
 ### Recovery

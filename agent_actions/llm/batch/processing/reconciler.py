@@ -166,24 +166,29 @@ class BatchResultReconciler:
 
     @staticmethod
     def log_batch_reconciliation(
-        *, batch_id: str, expected_count: int, received_count: int, file_name: str | None = None
+        *, batch_id: str, expected_count: int, answered_count: int, file_name: str | None = None
     ) -> None:
-        """Log batch reconciliation status (expected vs received counts)."""
+        """Log batch reconciliation status (expected vs answered counts).
+
+        Counts answers, not returned rows: a record the provider returned without
+        an answer is about to be retried, so reporting it as received would tell
+        the operator nothing is wrong on the line above the retry.
+        """
         if expected_count == 0:
             return
 
         label = file_name or batch_id
-        if expected_count == received_count:
+        if expected_count == answered_count:
             logger.info(
-                "Batch reconciliation for %s: expected %d result(s), received %d",
+                "Batch reconciliation for %s: expected %d result(s), answered %d",
                 label,
                 expected_count,
-                received_count,
+                answered_count,
             )
         else:
             logger.warning(
-                "Batch reconciliation for %s: expected %d result(s), received %d",
+                "Batch reconciliation for %s: expected %d result(s), answered %d",
                 label,
                 expected_count,
-                received_count,
+                answered_count,
             )

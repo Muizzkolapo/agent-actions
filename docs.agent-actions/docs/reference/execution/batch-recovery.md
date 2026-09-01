@@ -87,6 +87,15 @@ When a record exhausts all retry attempts:
 - **`on_exhausted: return_last`** — record is marked with exhaustion metadata, workflow continues without it
 - **`on_exhausted: raise`** — raises an error, stops the workflow
 
+Both policies apply to every record that spends its attempts, but the two exhausted shapes
+do not land in the same disposition. A record the provider never returned has nothing to
+report, so it becomes an `EXHAUSTED` tombstone dispositioned `exhausted_after_N_attempts`.
+A record the provider answered with an error keeps that error and is dispositioned
+`FAILED`, carrying the same exhausted retry metadata under `_recovery.retry`. The provider's
+message is the more useful signal of the two, so it is preserved rather than replaced by an
+empty tombstone. Counting retry exhaustion means counting both — filter on
+`_recovery.retry.succeeded == false`, not on the disposition alone.
+
 ## Phase 2: Validate and Reprompt
 
 After Phase 1 ensures all recoverable records are present, Phase 2 checks whether the outputs are actually valid. This only runs if reprompt is configured with a validation function.

@@ -10,6 +10,7 @@ the persisted recovery state, the registry, and the set handed to finalization.
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,6 +39,7 @@ PROVIDER_ERROR = "rate_limit_exceeded: slow down"
 
 AGENT_CONFIG = {
     "kind": "llm",
+    "action_name": ACTION,
     "retry": {"enabled": True, "max_attempts": 2},
 }
 
@@ -324,7 +326,7 @@ def test_an_exhausted_errored_record_carries_its_retry_history():
 
 
 def test_on_exhausted_raise_halts_on_a_provider_errored_record():
-    config = {"kind": "llm", "retry": {"enabled": True, "max_attempts": 2, "on_exhausted": "raise"}}
+    config = {**AGENT_CONFIG, "retry": {**AGENT_CONFIG["retry"], "on_exhausted": "raise"}}
 
     with pytest.raises(RuntimeError) as excinfo:
         BatchResultStrategy().process(
@@ -538,7 +540,6 @@ def test_the_two_exhausted_shapes_keep_their_distinct_terminal_status():
     Deliberate: converting the errored one to a tombstone would discard the
     provider error, which is the more useful of the two signals.
     """
-    config = {**AGENT_CONFIG, "action_name": "label_page"}
     context_map = {
         ERR_ID: {"user_content": "two", "source_guid": ERR_ID},
         "rec-omitted": {"user_content": "three", "source_guid": "rec-omitted"},
@@ -549,7 +550,7 @@ def test_the_two_exhausted_shapes_keep_their_distinct_terminal_status():
     results = BatchResultStrategy().process(
         [_errored(ERR_ID)],
         context_map=context_map,
-        agent_config=config,
+        agent_config=AGENT_CONFIG,
         exhausted_recovery=exhausted,
     )
     by_guid = {r.source_guid: r for r in results}
@@ -557,3 +558,25 @@ def test_the_two_exhausted_shapes_keep_their_distinct_terminal_status():
     assert by_guid[ERR_ID].status is ProcessingStatus.FAILED
     assert PROVIDER_ERROR in (by_guid[ERR_ID].error or "")
     assert by_guid["rec-omitted"].status is ProcessingStatus.EXHAUSTED
+
+
+def test_reconciliation_logging_counts_answers_not_returned_rows(caplog):
+    """The line above 'retry submitted' must not report a clean reconciliation."""
+    from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
+
+    provider = MagicMock()
+    provider.retrieve_results.return_value = [_ok(OK_ID), _errored(ERR_ID)]
+
+    with caplog.at_level(logging.INFO):
+        retrieve_and_reconcile(
+            provider,
+            "batch-1",
+            "/out",
+            context_map={OK_ID: {}, ERR_ID: {}},
+            file_name=PARENT,
+        )
+
+    reconciliation = [r for r in caplog.records if "reconciliation" in r.getMessage()]
+    assert len(reconciliation) == 1
+    assert reconciliation[0].levelno == logging.WARNING
+    assert "answered 1" in reconciliation[0].getMessage()
