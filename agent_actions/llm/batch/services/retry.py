@@ -267,8 +267,8 @@ class BatchRetryService:
         file_name: str,
         agent_config: dict[str, Any] | None,
         attempt: int,
-    ) -> tuple[str, int] | None:
-        """Submit a reprompt batch for failed validation records without blocking."""
+    ) -> tuple[str, set[str]] | None:
+        """Submit a reprompt batch, returning the ids it actually submitted."""
         return _reprompt.submit_reprompt_batch(
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,

@@ -463,9 +463,18 @@ def check_and_submit_reprompt(
     if not submission:
         return True
 
+    reprompt_batch_id, submitted_ids = submission
+    # Preparation can admit fewer records than were handed to it. Whatever it left
+    # behind is not in flight, so it belongs with the withheld pool rather than
+    # being booked as an attempt nobody made.
+    submitted = {str(custom_id) for custom_id in submitted_ids}
+    unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
+    repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
+    unrepromptable = unrepromptable + unsubmitted
+
     register_recovery_batch(
         context.manager,
-        submission,
+        (reprompt_batch_id, len(submitted)),
         identity.file_name,
         identity.entry.provider,
         RecoveryType.REPROMPT,

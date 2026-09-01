@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_polling import (
     import_validation_module,
@@ -520,23 +521,12 @@ def submit_reprompt_batch(
     file_name: str,
     agent_config: dict[str, Any] | None,
     attempt: int,
-) -> tuple[str, int] | None:
+) -> tuple[str, set[str]] | None:
     """Submit a reprompt batch for failed validation records without blocking.
 
-    Args:
-        action_indices: Agent name to node index mapping
-        dependency_configs: Dependency configurations
-        storage_backend: Optional storage backend
-        provider: Batch API client
-        failed_results: Results that failed validation
-        context_map: Context map for record lookup
-        output_directory: Output directory path
-        file_name: Original file name
-        agent_config: Agent configuration
-        attempt: Current reprompt attempt number
-
-    Returns:
-        Tuple of (batch_id, record_count) if submitted, None if nothing to submit
+    Returns the ids preparation actually admitted, which can be fewer than
+    *failed_results*: the caller must carry the remainder forward itself rather
+    than booking them as in flight. Returns None when there is nothing to submit.
     """
     from agent_actions.llm.batch.processing.preparator import (
         BatchTaskPreparator,
@@ -566,8 +556,12 @@ def submit_reprompt_batch(
     for failed_result in failed_results:
         custom_id = failed_result.custom_id
         if custom_id not in context_map:
-            logger.warning("Cannot reprompt %s: not found in context_map", custom_id)
-            continue
+            raise RuntimeError(
+                f"Cannot reprompt {custom_id}: absent from the context map for "
+                f"{file_name}. The record failed validation, so it was built from that "
+                "map — its absence means the map and the results have diverged, and "
+                "reprompting the rest would leave this record with no output row."
+            )
 
         original_record = context_map[custom_id].copy()
 
@@ -613,13 +607,18 @@ def submit_reprompt_batch(
             output_directory=output_directory,
         )
 
+        submitted_ids = {
+            str(custom_id)
+            for custom_id, row in (prepared.context_map or {}).items()
+            if BatchContextMetadata.is_included(row)
+        }
         logger.info(
             "Async reprompt batch submitted: %s with %d records (attempt %d)",
             batch_id,
-            len(prepared.tasks),
+            len(submitted_ids),
             attempt,
         )
-        return (batch_id, len(prepared.tasks))
+        return (batch_id, submitted_ids)
 
     except Exception as e:
         logger.exception("Error submitting reprompt batch: %s", e)

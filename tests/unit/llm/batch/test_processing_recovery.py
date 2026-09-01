@@ -489,7 +489,10 @@ class TestHandleRepromptRecovery:
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
         manager = MagicMock()
 
-        service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "reprompt-batch-2",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         ctx, ident = _make_context_and_identity(
             service=service,
@@ -555,7 +558,10 @@ class TestHandleRepromptRecovery:
         # Pre-existing graduated from previous cycle
         state.graduated_results = [{"custom_id": "id-0", "content": "old", "success": True}]
 
-        service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "reprompt-batch",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         ctx, ident = _make_context_and_identity(
             service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
@@ -736,7 +742,10 @@ class TestRecoveryStatePersistence:
 
         service = _mock_service()
         state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
-        service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "reprompt-batch",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         ctx, ident = _make_context_and_identity(
             service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
@@ -1049,7 +1058,10 @@ class TestRecoveryLoopRootCauses:
             loop, strategy = _make_eval_loop_mocks(max_attempts=2)
             loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy)
-            service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch-2", 1)
+            service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+                "reprompt-batch-2",
+                {r.custom_id for r in kw["failed_results"]},
+            )
 
             ctx, ident = _make_context_and_identity(
                 service=service,
@@ -1140,7 +1152,10 @@ class TestDownstreamBugs:
         mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
-        service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "reprompt-batch",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         state = _make_state(
             phase="retry",
@@ -1181,7 +1196,10 @@ class TestDownstreamBugs:
             loop, strategy = _make_eval_loop_mocks(max_attempts=3)
             loop.split.return_value = ([], results, {})
             mock_build_loop.return_value = (loop, strategy)
-            service._retry_service.submit_reprompt_batch.return_value = ("reprompt-batch", 1)
+            service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+                "reprompt-batch",
+                {r.custom_id for r in kw["failed_results"]},
+            )
 
             ctx, ident = _make_context_and_identity(
                 service=service,
