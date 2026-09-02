@@ -212,13 +212,46 @@ def test_defaulted_expect_on_a_schema_without_expectations_block_is_reported(tmp
     assert "no expectations" in defects["write_q"][0]
 
 
-def test_defaulted_expect_on_an_inline_schema_is_reported(tmp_path):
+def test_defaulted_expect_reads_the_inlined_schema_dicts_expectations(tmp_path):
+    defects = find_expectation_defects(
+        default_config(
+            schema={
+                "fields": [{"id": "options", "type": "string"}],
+                "expectations": [{"type": "not_null", "field": "nonexistent"}],
+            }
+        ),
+        FIELDS,
+        project_root=tmp_path,
+    )
+    assert "nonexistent" in defects["write_q"][0]
+
+
+def test_defaulted_expect_with_a_clean_inlined_schema_reports_no_defects(tmp_path):
+    defects = find_expectation_defects(
+        default_config(
+            schema={
+                "fields": [{"id": "options", "type": "string"}],
+                "expectations": [{"type": "not_null", "field": "options"}],
+            }
+        ),
+        FIELDS,
+        project_root=tmp_path,
+    )
+    assert defects == {}
+
+
+def test_defaulted_expect_on_a_schema_dict_without_expectations_is_reported(tmp_path):
     defects = find_expectation_defects(
         default_config(schema={"fields": [{"id": "options", "type": "string"}]}),
         FIELDS,
         project_root=tmp_path,
     )
-    assert "inline" in defects["write_q"][0]
+    assert "no expectations" in defects["write_q"][0]
+
+
+def test_an_explicitly_empty_inline_list_is_a_defect():
+    defects = find_expectation_defects(config([]), FIELDS)
+    assert "empty" in defects["write_q"][0]
 
 
 def test_defaulted_expect_with_no_schema_at_all_is_reported(tmp_path):

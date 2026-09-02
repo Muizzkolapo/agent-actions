@@ -19,5 +19,6 @@ _UNIFIED = {
 @pytest.mark.parametrize("target", sorted(SUPPORTED_VENDORS))
 def test_compiled_schema_never_contains_expectations(target):
     compiled = compile_unified_schema(_UNIFIED, target)
+    assert "options" in json.dumps(compiled)
     assert "expectations" not in json.dumps(compiled)
     assert "option_count" not in json.dumps(compiled)
