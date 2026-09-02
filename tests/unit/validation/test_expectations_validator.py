@@ -15,12 +15,19 @@ def suite_config(suite_name, name="write_q"):
     return {name: {"name": name, "expect": {"suite": suite_name}}}
 
 
-def write_suite(tmp_path, workflow, suite_name, expectations):
-    suite_dir = tmp_path / "expectations" / workflow
-    suite_dir.mkdir(parents=True)
-    (suite_dir / f"{suite_name}.yml").write_text(
-        yaml.safe_dump({"name": suite_name, "expectations": expectations})
-    )
+def default_config(name="write_q", **action_keys):
+    return {name: {"name": name, "expect": {}, **action_keys}}
+
+
+def write_schema_file(tmp_path, name, data):
+    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir(exist_ok=True)
+    (schema_dir / f"{name}.yml").write_text(yaml.safe_dump(data))
+
+
+def write_suite(tmp_path, suite_name, expectations):
+    write_schema_file(tmp_path, suite_name, {"expectations": expectations})
 
 
 def test_clean_suite_reports_no_defects():
@@ -122,35 +129,39 @@ def test_malformed_field_value_is_reported_not_crashed():
 
 
 def test_named_suite_with_an_unregistered_type_is_reported(tmp_path):
-    write_suite(tmp_path, "write_q", "scenario", [{"type": "vibe_check", "field": "options"}])
-    defects = find_expectation_defects(
-        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    write_suite(tmp_path, "scenario", [{"type": "vibe_check", "field": "options"}])
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert "vibe_check" in defects["write_q"][0]
 
 
 def test_named_suite_with_a_missing_field_is_reported(tmp_path):
-    write_suite(tmp_path, "write_q", "scenario", [{"type": "not_null", "field": "nonexistent"}])
-    defects = find_expectation_defects(
-        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "nonexistent"}])
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert "nonexistent" in defects["write_q"][0]
 
 
 def test_named_suite_that_does_not_exist_is_reported(tmp_path):
-    defects = find_expectation_defects(
-        suite_config("missing_suite"), FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "options"}])
+    defects = find_expectation_defects(suite_config("missing_suite"), FIELDS, project_root=tmp_path)
     assert "missing_suite" in defects["write_q"][0]
 
 
 def test_clean_named_suite_reports_no_defects(tmp_path):
-    write_suite(
-        tmp_path, "write_q", "scenario", [{"type": "item_count", "field": "options", "equals": 4}]
+    write_suite(tmp_path, "scenario", [{"type": "item_count", "field": "options", "equals": 4}])
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
+    assert defects == {}
+
+
+def test_suite_rules_ride_beside_schema_fields_in_one_file(tmp_path):
+    write_schema_file(
+        tmp_path,
+        "scenario",
+        {
+            "fields": [{"id": "options", "type": "array", "items": {"type": "string"}}],
+            "expectations": [{"type": "item_count", "field": "options", "equals": 4}],
+        },
     )
-    defects = find_expectation_defects(
-        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert defects == {}
 
 
@@ -159,14 +170,62 @@ def test_named_suite_is_skipped_without_project_context():
     assert defects == {}
 
 
+def test_named_suite_without_an_expectations_block_is_reported(tmp_path):
+    write_schema_file(tmp_path, "scenario", {"fields": [{"id": "options", "type": "string"}]})
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
+    assert "no expectations" in defects["write_q"][0]
+
+
 def test_named_suite_with_invalid_yaml_syntax_is_reported_not_crashed(tmp_path):
-    suite_dir = tmp_path / "expectations" / "write_q"
-    suite_dir.mkdir(parents=True)
-    (suite_dir / "scenario.yml").write_text(
+    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir()
+    (schema_dir / "scenario.yml").write_text(
         "name: scenario\nexpectations:\n  - type: not_null\n    field: [unterminated\n"
     )
-    defects = find_expectation_defects(
-        suite_config("scenario"), FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert "write_q" in defects
     assert "scenario" in defects["write_q"][0]
+
+
+def test_defaulted_expect_reads_the_actions_own_schema(tmp_path):
+    write_suite(tmp_path, "write_q_schema", [{"type": "not_null", "field": "nonexistent"}])
+    defects = find_expectation_defects(
+        default_config(schema_name="write_q_schema"), FIELDS, project_root=tmp_path
+    )
+    assert "nonexistent" in defects["write_q"][0]
+
+
+def test_defaulted_expect_with_a_clean_schema_suite_reports_no_defects(tmp_path):
+    write_suite(tmp_path, "write_q_schema", [{"type": "not_null", "field": "options"}])
+    defects = find_expectation_defects(
+        default_config(schema_name="write_q_schema"), FIELDS, project_root=tmp_path
+    )
+    assert defects == {}
+
+
+def test_defaulted_expect_on_a_schema_without_expectations_block_is_reported(tmp_path):
+    write_schema_file(tmp_path, "write_q_schema", {"fields": [{"id": "options", "type": "string"}]})
+    defects = find_expectation_defects(
+        default_config(schema_name="write_q_schema"), FIELDS, project_root=tmp_path
+    )
+    assert "no expectations" in defects["write_q"][0]
+
+
+def test_defaulted_expect_on_an_inline_schema_is_reported(tmp_path):
+    defects = find_expectation_defects(
+        default_config(schema={"fields": [{"id": "options", "type": "string"}]}),
+        FIELDS,
+        project_root=tmp_path,
+    )
+    assert "inline" in defects["write_q"][0]
+
+
+def test_defaulted_expect_with_no_schema_at_all_is_reported(tmp_path):
+    defects = find_expectation_defects(default_config(), FIELDS, project_root=tmp_path)
+    assert "no schema" in defects["write_q"][0]
+
+
+def test_defaulted_expect_is_skipped_without_project_context():
+    defects = find_expectation_defects(default_config(schema_name="write_q_schema"), FIELDS)
+    assert defects == {}
