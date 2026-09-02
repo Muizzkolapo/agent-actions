@@ -52,6 +52,11 @@ def find_expectation_defects(
         entries = expect.get("expectations")
         suite_name = expect.get("suite")
         if isinstance(entries, list):
+            if not entries:
+                messages.append(
+                    "expectations: is an empty list; add entries, or omit the "
+                    "key to read the action's own schema"
+                )
             for entry in entries:
                 if not isinstance(entry, dict):
                     continue
@@ -70,20 +75,33 @@ def find_expectation_defects(
 def _default_suite_defects(
     action: dict[str, Any], project_root: Path, fields: set[str] | None
 ) -> list[str]:
-    """Defects for a bare expect: block, which reads the action's own schema file."""
+    """Defects for a bare expect: block, which reads the action's own schema.
+
+    A named schema is inlined into the action config at load time (its name
+    dropped), so the resolved dict is the authority; the name survives only
+    when loading could not inline it.
+    """
+    schema_data = action.get("schema")
+    if isinstance(schema_data, dict):
+        entries = schema_data.get("expectations")
+        if not isinstance(entries, list) or not entries:
+            return [
+                "a bare expect: reads the expectations: block of the action's "
+                "schema, which has no expectations; add the block to the schema "
+                "file, or use suite: or an inline expectations: list"
+            ]
+        messages: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                messages.extend(_entry_defects(entry, fields))
+        return messages
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
         return _suite_defects(schema_name, project_root, fields)
-    if action.get("schema") is not None:
-        return [
-            "a bare expect: reads the expectations: block of the action's schema: "
-            "file, but this action's schema is inline; name a schema-path file "
-            "with suite: or move the schema into one"
-        ]
     return [
-        "a bare expect: reads the expectations: block of the action's schema: "
-        "file, but this action declares no schema; add one, or use suite: or "
-        "an inline expectations: list"
+        "a bare expect: reads the expectations: block of the action's schema, "
+        "but this action declares no schema; add one, or use suite: or an "
+        "inline expectations: list"
     ]
 
 
