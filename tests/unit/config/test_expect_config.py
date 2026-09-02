@@ -24,10 +24,20 @@ def test_both_suite_and_inline_expectations_is_rejected():
         ExpectConfig(suite="s", expectations=INLINE)
 
 
-def test_a_bare_expect_block_reads_the_actions_own_schema():
+def test_a_bare_expect_block_is_legal():
     cfg = ExpectConfig(repair="none")
     assert cfg.suite is None
     assert cfg.expectations is None
+
+
+def test_an_explicitly_empty_expectations_list_is_rejected():
+    with pytest.raises(ValidationError, match="empty"):
+        ExpectConfig(expectations=[])
+
+
+def test_an_empty_suite_name_is_rejected():
+    with pytest.raises(ValidationError, match="empty"):
+        ExpectConfig(suite="")
 
 
 @pytest.mark.parametrize("mode", ["none", "retry", "auto"])
