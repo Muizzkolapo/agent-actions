@@ -1,14 +1,13 @@
 """A named `suite:` must resolve when the action actually runs, not just in preflight.
 
 `expect: {suite: <name>}` is documented, and preflight validates the reference —
-it is handed the project root and the workflow. No runtime caller was, so every
-run of such an action raised instead: online surfaced it as a failed action, and
-batch logged it per file and finished reporting success with each of them
-missing from the output.
+it is handed the project root. No runtime caller was, so every run of such an
+action raised instead: online surfaced it as a failed action, and batch logged
+it per file and finished reporting success with each of them missing from the
+output.
 
 The action config already carries the project root, so the resolution reads what
-is on the config rather than threading two more arguments through four call
-sites.
+is on the config rather than threading another argument through four call sites.
 """
 
 from pathlib import Path
@@ -21,19 +20,17 @@ from agent_actions.expectations.service import (
     create_expectation_service_from_config,
 )
 
-WORKFLOW = "my_workflow"
 SUITE = "grounded_summary"
 
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    (tmp_path / "agent_actions.yml").write_text("name: test\n")
-    suite_dir = tmp_path / "expectations" / WORKFLOW
-    suite_dir.mkdir(parents=True)
-    (suite_dir / f"{SUITE}.yml").write_text(
+    (tmp_path / "agent_actions.yml").write_text("name: test\nschema_path: schema\n")
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir()
+    (schema_dir / f"{SUITE}.yml").write_text(
         yaml.safe_dump(
             {
-                "name": SUITE,
                 "expectations": [
                     {"id": "enough_options", "type": "item_count", "field": "options", "min": 2}
                 ],
@@ -52,7 +49,7 @@ class TestTheSuiteResolvesFromTheActionConfig:
         service = create_expectation_service_from_config(
             _expect(),
             action_name="summarize",
-            agent_config={"_project_root": str(project), "_workflow": WORKFLOW},
+            agent_config={"_project_root": str(project)},
         )
         assert service is not None, (
             "the action config carried everything needed and the suite still would not resolve"
@@ -62,7 +59,7 @@ class TestTheSuiteResolvesFromTheActionConfig:
         service = create_expectation_service_from_config(
             _expect(),
             action_name="summarize",
-            agent_config={"_project_root": str(project), "_workflow": WORKFLOW},
+            agent_config={"_project_root": str(project)},
         )
         assert service.suite.name == SUITE
         assert [e.id for e in service.suite.expectations] == ["enough_options"]
@@ -71,7 +68,7 @@ class TestTheSuiteResolvesFromTheActionConfig:
         service = create_expectation_service_from_config(
             _expect(),
             action_name="summarize",
-            agent_config={"_project_root": str(project), "_workflow": WORKFLOW},
+            agent_config={"_project_root": str(project)},
         )
         verdict, _per_record = service.verdict_for_response(
             {"options": ["only-one"]}, check_schema=False
@@ -79,30 +76,38 @@ class TestTheSuiteResolvesFromTheActionConfig:
         assert verdict.overall_pass is False
         assert [o.id for o in verdict.failed] == ["enough_options"]
 
+    def test_a_bare_expect_resolves_the_actions_own_schema(self, project: Path):
+        service = create_expectation_service_from_config(
+            {"repair": "none"},
+            action_name="summarize",
+            agent_config={"_project_root": str(project), "schema_name": SUITE},
+        )
+        assert service.suite.name == SUITE
+        assert [e.id for e in service.suite.expectations] == ["enough_options"]
+
 
 class TestExplicitArgumentsStillWin:
     def test_they_override_the_config(self, project: Path):
         service = create_expectation_service_from_config(
             _expect(),
             action_name="summarize",
-            agent_config={"_project_root": "/nonexistent", "_workflow": "wrong"},
+            agent_config={"_project_root": "/nonexistent"},
             project_root=project,
-            workflow=WORKFLOW,
         )
         assert service.suite.name == SUITE
 
 
 class TestWhatCannotBeResolvedStillSaysSo:
     def test_no_root_anywhere_is_an_error(self):
-        with pytest.raises(ExpectationConfigurationError, match="no project root or workflow"):
+        with pytest.raises(ExpectationConfigurationError, match="no project root"):
             create_expectation_service_from_config(
-                _expect(), action_name="summarize", agent_config={"_workflow": WORKFLOW}
+                _expect(), action_name="summarize", agent_config={}
             )
 
-    def test_no_workflow_anywhere_is_an_error(self, project: Path):
-        with pytest.raises(ExpectationConfigurationError, match="no project root or workflow"):
+    def test_a_bare_expect_without_a_named_schema_is_an_error(self, project: Path):
+        with pytest.raises(ExpectationConfigurationError, match="bare expect"):
             create_expectation_service_from_config(
-                _expect(),
+                {"repair": "none"},
                 action_name="summarize",
                 agent_config={"_project_root": str(project)},
             )
@@ -112,7 +117,7 @@ class TestWhatCannotBeResolvedStillSaysSo:
             create_expectation_service_from_config(
                 {"suite": "missing_suite", "repair": "none"},
                 action_name="summarize",
-                agent_config={"_project_root": str(project), "_workflow": WORKFLOW},
+                agent_config={"_project_root": str(project)},
             )
 
     def test_an_inline_block_never_needed_either(self):
@@ -135,7 +140,6 @@ class TestTheBatchRepairPathResolvesItToo:
                 "name": "summarize",
                 "action_name": "summarize",
                 "_project_root": str(project),
-                "_workflow": WORKFLOW,
                 "expect": {"suite": SUITE, "repair": "auto", "max_iterations": 2},
             }
         )
@@ -153,7 +157,6 @@ class TestTheBatchRepairPathResolvesItToo:
                     "name": "summarize",
                     "action_name": "summarize",
                     "_project_root": str(project),
-                    "_workflow": WORKFLOW,
                     "expect": {"suite": SUITE, "repair": "none"},
                 }
             )
@@ -168,7 +171,6 @@ class TestTheBatchRepairPathResolvesItToo:
                 "name": "summarize",
                 "action_name": "summarize",
                 "_project_root": str(project),
-                "_workflow": WORKFLOW,
                 "expect": {"suite": SUITE, "repair": "none"},
             }
         )
@@ -176,14 +178,14 @@ class TestTheBatchRepairPathResolvesItToo:
         assert strategy._expectation_service.suite.name == SUITE
 
 
-class TestTheWorkflowNameIsStampedOnEveryAction:
-    def test_the_loader_stamps_it_next_to_the_project_root(self):
-        """Without this the config carries a root but no workflow, and the
-        resolution still cannot find the file."""
+class TestTheProjectRootIsStampedOnEveryAction:
+    def test_the_loader_stamps_the_root_and_nothing_stale(self):
+        """Suite resolution needs only the project root; a workflow stamp would
+        be dead weight the moment something started reading it again."""
         import inspect
 
         from agent_actions.workflow import config_pipeline
 
         source = inspect.getsource(config_pipeline.load_workflow_configs)
-        assert '"_workflow"' in source
         assert '"_project_root"' in source
+        assert '"_workflow"' not in source
