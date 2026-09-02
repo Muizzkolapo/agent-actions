@@ -25,13 +25,13 @@ def find_expectation_defects(
     available_fields: dict[str, set[str]],
     *,
     project_root: Path | None = None,
-    workflow: str | None = None,
 ) -> dict[str, list[str]]:
     """Per action, defects in its expect block, as ``{action: [messages]}``.
 
-    Validates both forms of ``expect:``: an inline ``expectations:`` list, and
-    a named ``suite:`` reference. The latter is only checked when *project_root*
-    and *workflow* are given, since resolving a suite file requires both.
+    Validates every form of ``expect:``: an inline ``expectations:`` list, a
+    named ``suite:`` reference, and a bare block that defaults to the action's
+    own schema file. The file-backed forms are only checked when *project_root*
+    is given, since resolving a schema-path file requires it.
     """
     defects: dict[str, list[str]] = {}
 
@@ -56,8 +56,10 @@ def find_expectation_defects(
                 if not isinstance(entry, dict):
                     continue
                 messages.extend(_entry_defects(entry, fields))
-        elif isinstance(suite_name, str) and project_root is not None and workflow is not None:
-            messages.extend(_suite_defects(suite_name, project_root, workflow, fields))
+        elif isinstance(suite_name, str) and project_root is not None:
+            messages.extend(_suite_defects(suite_name, project_root, fields))
+        elif entries is None and suite_name is None and project_root is not None:
+            messages.extend(_default_suite_defects(action, project_root, fields))
 
         if messages:
             defects[action_name] = sorted(messages)
@@ -65,16 +67,35 @@ def find_expectation_defects(
     return defects
 
 
-def _suite_defects(
-    suite_name: str, project_root: Path, workflow: str, fields: set[str] | None
+def _default_suite_defects(
+    action: dict[str, Any], project_root: Path, fields: set[str] | None
 ) -> list[str]:
-    from agent_actions.expectations.loader import SuiteNotFoundError, load_named_suite
+    """Defects for a bare expect: block, which reads the action's own schema file."""
+    schema_name = action.get("schema_name")
+    if isinstance(schema_name, str) and schema_name:
+        return _suite_defects(schema_name, project_root, fields)
+    if action.get("schema") is not None:
+        return [
+            "a bare expect: reads the expectations: block of the action's schema: "
+            "file, but this action's schema is inline; name a schema-path file "
+            "with suite: or move the schema into one"
+        ]
+    return [
+        "a bare expect: reads the expectations: block of the action's schema: "
+        "file, but this action declares no schema; add one, or use suite: or "
+        "an inline expectations: list"
+    ]
+
+
+def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None) -> list[str]:
+    from agent_actions.errors import AgentActionsError
+    from agent_actions.expectations.loader import load_named_suite
 
     try:
-        suite = load_named_suite(project_root, workflow, suite_name)
-    except SuiteNotFoundError as exc:
+        suite = load_named_suite(suite_name, project_root)
+    except FileNotFoundError as exc:
         return [f"suite '{suite_name}': {exc}"]
-    except (ValueError, TypeError, OSError, yaml.YAMLError) as exc:
+    except (ValueError, TypeError, OSError, yaml.YAMLError, AgentActionsError) as exc:
         return [f"suite '{suite_name}' could not be loaded: {exc}"]
 
     messages: list[str] = []

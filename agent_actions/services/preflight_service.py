@@ -302,7 +302,6 @@ class PreflightService:
             self.action_configs,
             self._collect_action_output_fields(),
             project_root=self.project_root,
-            workflow=self.agent_name,
         )
         if defects:
             raise PreFlightValidationError(
