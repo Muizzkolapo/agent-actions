@@ -10,6 +10,8 @@ that actually failed validation.
 import contextlib
 from unittest.mock import MagicMock, patch
 
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
 from agent_actions.llm.batch.services.retry_serialization import (
     serialize_results,
@@ -104,6 +106,13 @@ def _reprompt_patches():
 # ---------------------------------------------------------------------------
 
 
+def _included_row() -> dict:
+    """A preparation context_map entry for a record that was admitted."""
+    row: dict = {}
+    BatchContextMetadata.set_filter_status(row, FilterStatus.INCLUDED)
+    return row
+
+
 class TestSelectiveRepromptResubmission:
     """Prove that only failed records are resubmitted, not the full batch."""
 
@@ -172,6 +181,7 @@ class TestSelectiveRepromptResubmission:
         mock_prep = MockPreparator.return_value
         mock_prepared = MagicMock()
         mock_prepared.tasks = [MagicMock() for _ in range(3)]
+        mock_prepared.context_map = {cid: _included_row() for cid in FAIL_IDS}
         mock_prep.prepare_tasks.return_value = mock_prepared
 
         provider = MagicMock()
@@ -198,8 +208,8 @@ class TestSelectiveRepromptResubmission:
             )
 
         assert result is not None
-        _, count = result
-        assert count == 3
+        _, submitted_ids = result
+        assert set(submitted_ids) == FAIL_IDS
 
         data_arg = _extract_call_arg(mock_prep.prepare_tasks.call_args, "data")
         assert len(data_arg) == 3
@@ -301,7 +311,10 @@ class TestSelectiveRepromptResubmission:
         mock_build_loop.return_value = (mock_loop, mock_strategy)
 
         service = MagicMock()
-        service._retry_service.submit_reprompt_batch.return_value = ("batch_rp_2", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch_rp_2",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         entry = MagicMock()
         entry.provider = "openai"
@@ -700,7 +713,10 @@ class TestCheckAndSubmitRepromptSelectivity:
         mock_build_loop.return_value = (mock_loop, mock_strategy)
 
         service = MagicMock()
-        service._retry_service.submit_reprompt_batch.return_value = ("batch_rp", 2)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch_rp",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         entry = MagicMock()
         entry.provider = "openai"

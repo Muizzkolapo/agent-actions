@@ -11,6 +11,16 @@ from unittest.mock import MagicMock, patch
 # ---------------------------------------------------------------------------
 
 
+def _included_row() -> dict:
+    """A preparation context_map entry for a record that was admitted."""
+    from agent_actions.llm.batch.core.batch_constants import FilterStatus
+    from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+
+    row: dict = {}
+    BatchContextMetadata.set_filter_status(row, FilterStatus.INCLUDED)
+    return row
+
+
 class TestLoadSourceDataForReprompt:
     """_load_source_data_for_reprompt loads source records from the storage backend."""
 
@@ -116,6 +126,7 @@ class TestRepromptPassesSourceData:
         mock_prep_instance = MockPreparator.return_value
         mock_prepared = MagicMock()
         mock_prepared.tasks = [{"target_id": "t1", "prompt": "p"}]
+        mock_prepared.context_map = {"t1": _included_row()}
         mock_prep_instance.prepare_tasks.return_value = mock_prepared
 
         provider = MagicMock()
@@ -163,6 +174,8 @@ class TestRepromptPassesSourceData:
             )
 
         assert result is not None
+        _, submitted_ids = result
+        assert set(submitted_ids) == {"t1"}, "the submitter reported sending nothing"
         # Verify source_data was passed to prepare_tasks
         prep_call = mock_prep_instance.prepare_tasks.call_args
         assert prep_call.kwargs.get("source_data") is fake_source
@@ -180,6 +193,7 @@ class TestRepromptPassesSourceData:
         mock_prep_instance = MockPreparator.return_value
         mock_prepared = MagicMock()
         mock_prepared.tasks = [{"target_id": "t1", "prompt": "p"}]
+        mock_prepared.context_map = {"t1": _included_row()}
         mock_prep_instance.prepare_tasks.return_value = mock_prepared
 
         provider = MagicMock()

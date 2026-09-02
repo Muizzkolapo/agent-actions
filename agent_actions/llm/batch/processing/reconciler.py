@@ -9,6 +9,9 @@ from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMeta
 
 logger = logging.getLogger(__name__)
 
+# What the result parsers fall back to when a response carries no custom_id.
+UNATTRIBUTED_CUSTOM_ID = "unknown"
+
 
 @dataclass
 class BatchReconciliationResult:
@@ -99,6 +102,17 @@ class BatchResultReconciler:
         return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
+    def is_provider_placeholder(custom_id: Any) -> bool:
+        """True for an id the result parser mints when it cannot attribute a line.
+
+        ``error_line_N`` stands in for an unparseable line and ``unknown`` for a
+        response carrying no id of its own. Neither is a record: they have no
+        context-map entry, and nothing downstream can rebuild or reprompt them.
+        """
+        custom_id_str = str(custom_id or "")
+        return custom_id_str.startswith("error_line_") or custom_id_str == UNATTRIBUTED_CUSTOM_ID
+
+    @staticmethod
     def is_answered(batch_result: Any) -> bool:
         """True when a result carries an answer that can become a success row.
 
@@ -144,14 +158,14 @@ class BatchResultReconciler:
 
     @staticmethod
     def collect_result_custom_ids(batch_results: list[Any]) -> set:
-        """Collect custom_ids from batch results, ignoring error_line_* placeholders."""
+        """Collect custom_ids from batch results, ignoring parser-minted placeholders."""
         result_ids: set = set()
         for batch_result in batch_results or []:
             custom_id = getattr(batch_result, "custom_id", None)
             if not custom_id:
                 continue
             custom_id_str = str(custom_id)
-            if custom_id_str.startswith("error_line_"):
+            if BatchResultReconciler.is_provider_placeholder(custom_id_str):
                 continue
             result_ids.add(custom_id_str)
         return result_ids
@@ -166,7 +180,7 @@ class BatchResultReconciler:
         placeholders = [
             str(getattr(batch_result, "custom_id", ""))
             for batch_result in batch_results or []
-            if str(getattr(batch_result, "custom_id", "")).startswith("error_line_")
+            if BatchResultReconciler.is_provider_placeholder(getattr(batch_result, "custom_id", ""))
         ]
         if placeholders:
             logger.warning(

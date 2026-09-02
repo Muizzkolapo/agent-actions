@@ -125,7 +125,10 @@ class _Harness:
         service._storage_backend = self.backend
         service._workflow_name = ACTION
         service._resolve_action_name = lambda override=None: override or ACTION
-        service._retry_service.submit_reprompt_batch.return_value = ("batch_reprompt_1", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch_reprompt_1",
+            {r.custom_id for r in kw["failed_results"]},
+        )
         service._convert_batch_results_to_workflow_format.side_effect = self._capture
         service._determine_output_path.return_value = tmp_path / "out.json"
         self.service = service

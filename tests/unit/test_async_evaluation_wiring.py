@@ -63,7 +63,10 @@ def _make_service():
     """Create a mock BatchProcessingService."""
     service = MagicMock()
     service._retry_service = MagicMock(spec=BatchRetryService)
-    service._retry_service.submit_reprompt_batch.return_value = ("batch-123", 2)
+    service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "batch-123",
+        {r.custom_id for r in kw["failed_results"]},
+    )
     service._retry_service.apply_exhausted_reprompt_metadata.side_effect = (
         lambda results, **kw: results
     )
@@ -295,7 +298,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
 
         state = _make_state(reprompt_attempt=0, reprompt_max_attempts=2, graduated_results=[])
         service = _make_service()
-        service._retry_service.submit_reprompt_batch.return_value = None
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: None
 
         with (
             patch.object(RecoveryStateManager, "save"),

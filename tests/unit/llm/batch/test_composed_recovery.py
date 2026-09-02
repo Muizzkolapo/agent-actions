@@ -409,7 +409,10 @@ class TestGraduatedPoolMonotonicity:
             # Prior graduated results — these must NOT be passed to split()
             graduated_results=[{"custom_id": "id-prior-grad", "content": "old", "success": True}],
         )
-        service._retry_service.submit_reprompt_batch.return_value = ("batch-2", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch-2",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         recovery_results = [_make_result("id-new"), _make_result("id-still-bad")]
 
@@ -446,7 +449,10 @@ class TestGraduatedPoolMonotonicity:
         mock_build_loop.return_value = (loop, strategy)
 
         service = _mock_service()
-        service._retry_service.submit_reprompt_batch.return_value = ("batch-next", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch-next",
+            {r.custom_id for r in kw["failed_results"]},
+        )
 
         # State: cycle 1 already graduated id-1
         state = _make_state(

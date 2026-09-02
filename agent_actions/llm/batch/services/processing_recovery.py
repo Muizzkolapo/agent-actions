@@ -309,9 +309,31 @@ def handle_reprompt_recovery(
             attempt=next_attempt,
         )
         if submission:
+            reprompt_batch_id, submitted_ids = submission
+            submitted = {str(custom_id) for custom_id in submitted_ids}
+            unsubmitted = [fr for fr in still_failing if str(fr.custom_id) not in submitted]
+            if unsubmitted:
+                logger.warning(
+                    "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
+                    identity.file_name,
+                    len(submitted),
+                    len(submitted) + len(unsubmitted),
+                    sorted(str(fr.custom_id) for fr in unsubmitted),
+                )
+                state.unrepromptable_results = list(state.unrepromptable_results) + (
+                    serialize_results(
+                        _stamp_withheld(
+                            unsubmitted,
+                            validation_name,
+                            state.reprompt_attempts_per_record,
+                            state.failure_type_counts,
+                        )
+                    )
+                )
+
             register_recovery_batch(
                 context.manager,
-                submission,
+                (reprompt_batch_id, len(submitted)),
                 identity.file_name,
                 identity.entry.provider,
                 RecoveryType.REPROMPT,
@@ -322,11 +344,13 @@ def handle_reprompt_recovery(
                     action_name=identity.file_name,
                     attempt=next_attempt,
                     max_attempts=state.reprompt_max_attempts,
-                    error=f"{len(still_failing)} records failed validation",
-                    failed_count=len(still_failing),
+                    error=f"{len(submitted)} records failed validation",
+                    failed_count=len(submitted),
                 )
             )
             for fr in still_failing:
+                if str(fr.custom_id) not in submitted:
+                    continue
                 state.reprompt_attempts_per_record[fr.custom_id] = (
                     state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
                 )
@@ -463,9 +487,31 @@ def check_and_submit_reprompt(
     if not submission:
         return True
 
+    reprompt_batch_id, submitted_ids = submission
+    # Preparation can admit fewer records than were handed to it. Whatever it left
+    # behind is not in flight, so it belongs with the withheld pool rather than
+    # being booked as an attempt nobody made.
+    submitted = {str(custom_id) for custom_id in submitted_ids}
+    unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
+    repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
+    unrepromptable = unrepromptable + _stamp_withheld(
+        unsubmitted,
+        strategy.name,
+        dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {},
+        ftc,
+    )
+    if unsubmitted:
+        logger.warning(
+            "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
+            identity.file_name,
+            len(submitted),
+            len(submitted) + len(unsubmitted),
+            sorted(str(fr.custom_id) for fr in unsubmitted),
+        )
+
     register_recovery_batch(
         context.manager,
-        submission,
+        (reprompt_batch_id, len(submitted)),
         identity.file_name,
         identity.entry.provider,
         RecoveryType.REPROMPT,
@@ -515,15 +561,15 @@ def check_and_submit_reprompt(
             action_name=identity.file_name,
             attempt=next_attempt,
             max_attempts=max_attempts,
-            error=f"{len(still_failing)} records failed validation",
-            failed_count=len(still_failing),
+            error=f"{len(repromptable)} records failed validation",
+            failed_count=len(repromptable),
         )
     )
     logger.info(
         "Async reprompt submitted for %s: %d failed records, batch %s",
         identity.file_name,
         len(repromptable),
-        submission[0],
+        reprompt_batch_id,
     )
     return False
 
@@ -630,6 +676,38 @@ def _finalize_and_cleanup(
     )
     cleanup_recovery(context, identity)
     return output_path
+
+
+def _stamp_withheld(
+    records: list[BatchResult],
+    validation_name: str,
+    attempts_made: dict[str, int],
+    failure_type_counts: dict[str, dict[str, int]],
+) -> list[BatchResult]:
+    """Mark records that never reached the reprompt batch as still failing.
+
+    They were repromptable, so they carry content — without a failure stamp they
+    collect as successes and the operator never sees that validation rejected them.
+    The count comes from the per-record ledger, which does not book an attempt for
+    a record that was not sent: stamping the round number instead would make one
+    that never left look like one that was tried and failed.
+    """
+    from agent_actions.processing.types import RepromptMetadata
+
+    for record in records:
+        if record.recovery_metadata is None:
+            record.recovery_metadata = RecoveryMetadata()
+        if record.recovery_metadata.reprompt is None:
+            counts = failure_type_counts.get(str(record.custom_id), {})
+            record.recovery_metadata.reprompt = RepromptMetadata(
+                attempts=attempts_made.get(str(record.custom_id), 0),
+                passed=False,
+                validation=validation_name,
+                parse_error_count=counts.get("parse_error", 0),
+                schema_fail_count=counts.get("schema_fail", 0),
+                udf_fail_count=counts.get("udf_fail", 0),
+            )
+    return records
 
 
 def register_recovery_batch(
