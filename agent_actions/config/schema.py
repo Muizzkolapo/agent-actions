@@ -243,12 +243,22 @@ class ExpectConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_suite_source(self):
-        if self.suite and self.expectations:
+        if self.suite is not None and self.expectations is not None:
             raise ValueError(
                 "expect takes at most one of:\n"
                 "  suite: my_rules        # a schema-path file with an expectations: block\n"
                 "  expectations: [...]    # an inline list\n"
                 "Omit both to read the expectations: block of the action's own schema."
+            )
+        if self.suite == "":
+            raise ValueError(
+                "suite: must not be empty; name a schema-path file, or omit the "
+                "key to read the action's own schema"
+            )
+        if self.expectations == []:
+            raise ValueError(
+                "expectations: must not be an empty list; add entries, or omit "
+                "the key to read the action's own schema"
             )
         return self
 
