@@ -204,7 +204,9 @@ class ExpectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     suite: str | None = Field(
-        default=None, description="Named suite in the project's expectations folder"
+        default=None,
+        description="Schema-path file whose expectations: block supplies the rules; "
+        "omitted with no inline list, the action's own schema: file is read",
     )
     expectations: list[dict[str, Any]] | None = Field(
         default=None, description="Inline expectation list, in place of a named suite"
@@ -241,11 +243,12 @@ class ExpectConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_suite_source(self):
-        if bool(self.suite) == bool(self.expectations):
+        if self.suite and self.expectations:
             raise ValueError(
-                "expect requires exactly one of:\n"
-                "  suite: my_suite        # a named file in the expectations folder\n"
-                "  expectations: [...]    # an inline list"
+                "expect takes at most one of:\n"
+                "  suite: my_rules        # a schema-path file with an expectations: block\n"
+                "  expectations: [...]    # an inline list\n"
+                "Omit both to read the expectations: block of the action's own schema."
             )
         return self
 
