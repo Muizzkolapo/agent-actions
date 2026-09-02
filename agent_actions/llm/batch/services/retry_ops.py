@@ -197,7 +197,7 @@ def process_retry_results(
 
     if results:
         for res in results:
-            if res.success:
+            if BatchResultReconciler.is_answered(res):
                 custom_id = res.custom_id
                 failures = record_failure_counts.get(custom_id, 1)
                 res.recovery_metadata = RecoveryMetadata(
@@ -210,9 +210,14 @@ def process_retry_results(
                     )
                 )
 
+        # Scoped to known records: the newest answer supersedes the entry the
+        # retry was opened for, but a per-file parse-error placeholder is not a
+        # record and one round's must not drop the previous round's.
+        resubmitted = {r.custom_id for r in results if r.custom_id in context_map}
+        all_results = [r for r in all_results if r.custom_id not in resubmitted]
         all_results.extend(results)
 
-        successful_retry = [r for r in results if r.success]
+        successful_retry = [r for r in results if BatchResultReconciler.is_answered(r)]
         new_received = BatchResultReconciler.collect_result_custom_ids(successful_retry)
         missing_ids = missing_ids - new_received
 

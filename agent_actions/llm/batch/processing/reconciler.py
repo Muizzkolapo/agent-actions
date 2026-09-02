@@ -99,13 +99,37 @@ class BatchResultReconciler:
         return self._key_index.get(str(custom_id), -1)
 
     @staticmethod
+    def is_answered(batch_result: Any) -> bool:
+        """True when a result carries an answer that can become a success row.
+
+        A record can come back under its real custom_id carrying nothing: a
+        per-record provider failure, or a 200 whose content is null (a refusal,
+        a safety block, an empty choices list). Recovery and result processing
+        must decide this the same way, or a record counts as recovered in one
+        and failed in the other.
+        """
+        return (
+            getattr(batch_result, "success", False)
+            and getattr(batch_result, "content", None) is not None
+        )
+
+    @staticmethod
     def find_missing_ids(
         context_map: dict[str, Any],
         batch_results: list[Any],
     ) -> set[str]:
-        """Find custom_ids expected but not received in batch results."""
+        """Find custom_ids expected but not answered in batch results.
+
+        Presence does not mean answered — see ``is_answered``. A result that
+        cannot become a success row stays in the set retry resubmits.
+        """
         expected = BatchResultReconciler.collect_expected_custom_ids(context_map)
-        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+        answered = [
+            batch_result
+            for batch_result in batch_results or []
+            if BatchResultReconciler.is_answered(batch_result)
+        ]
+        received = BatchResultReconciler.collect_result_custom_ids(answered)
         return expected - received
 
     @staticmethod
@@ -122,44 +146,60 @@ class BatchResultReconciler:
     def collect_result_custom_ids(batch_results: list[Any]) -> set:
         """Collect custom_ids from batch results, ignoring error_line_* placeholders."""
         result_ids: set = set()
-        provider_error_ids: list[str] = []
         for batch_result in batch_results or []:
             custom_id = getattr(batch_result, "custom_id", None)
             if not custom_id:
                 continue
             custom_id_str = str(custom_id)
             if custom_id_str.startswith("error_line_"):
-                provider_error_ids.append(custom_id_str)
                 continue
             result_ids.add(custom_id_str)
-        if provider_error_ids:
-            logger.warning(
-                "Provider returned %d error record(s) filtered from reconciliation: %s",
-                len(provider_error_ids),
-                provider_error_ids,
-            )
         return result_ids
 
     @staticmethod
+    def report_unparseable_lines(batch_results: list[Any]) -> None:
+        """Warn about synthetic placeholders standing in for unreadable result lines.
+
+        Reported from the raw result set: callers that narrow the results first
+        would otherwise filter the anomaly out before anyone saw it.
+        """
+        placeholders = [
+            str(getattr(batch_result, "custom_id", ""))
+            for batch_result in batch_results or []
+            if str(getattr(batch_result, "custom_id", "")).startswith("error_line_")
+        ]
+        if placeholders:
+            logger.warning(
+                "Provider returned %d unreadable line(s), filtered from reconciliation: %s",
+                len(placeholders),
+                placeholders,
+            )
+
+    @staticmethod
     def log_batch_reconciliation(
-        *, batch_id: str, expected_count: int, received_count: int, file_name: str | None = None
+        *, batch_id: str, expected_count: int, answered_count: int, file_name: str | None = None
     ) -> None:
-        """Log batch reconciliation status (expected vs received counts)."""
+        """Log batch reconciliation status (expected vs answered counts).
+
+        Counts answers, not returned rows: a record the provider returned without
+        an answer is about to be retried, so reporting it as received would tell
+        the operator nothing is wrong on the line above the retry.
+        """
         if expected_count == 0:
             return
 
         label = file_name or batch_id
-        if expected_count == received_count:
+        if expected_count == answered_count:
             logger.info(
-                "Batch reconciliation for %s: expected %d result(s), received %d",
+                "Batch reconciliation for %s: expected %d result(s), answered %d",
                 label,
                 expected_count,
-                received_count,
+                answered_count,
             )
         else:
             logger.warning(
-                "Batch reconciliation for %s: expected %d result(s), received %d",
+                "Batch reconciliation for %s: expected %d result(s), answered %d",
                 label,
                 expected_count,
-                received_count,
+                answered_count,
             )

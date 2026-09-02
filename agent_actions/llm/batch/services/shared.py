@@ -25,12 +25,16 @@ def retrieve_and_reconcile(
     batch_results = provider.retrieve_results(batch_id, output_directory)
 
     # Log reconciliation
+    BatchResultReconciler.report_unparseable_lines(batch_results)
+
     expected = BatchResultReconciler.collect_expected_custom_ids(context_map or {})
-    received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+    answered = BatchResultReconciler.collect_result_custom_ids(
+        [r for r in batch_results if BatchResultReconciler.is_answered(r)]
+    )
     BatchResultReconciler.log_batch_reconciliation(
         batch_id=batch_id,
         expected_count=len(expected) or record_count or 0,
-        received_count=len(received),
+        answered_count=len(answered),
         file_name=file_name,
     )
 

@@ -87,8 +87,6 @@ class BatchRetryService:
             missing_ids = BatchResultReconciler.find_missing_ids(context_map, all_results)
 
             if missing_ids:
-                from datetime import UTC, datetime
-
                 record_failure_counts: dict[str, int] = {rid: 1 for rid in missing_ids}
                 retry_attempts = 0
 
@@ -122,33 +120,18 @@ class BatchRetryService:
                         agent_config=agent_config,
                     )
 
-                    if retry_results:
-                        from agent_actions.processing.types import RetryMetadata
-
-                        for res in retry_results:
-                            if res.success:
-                                custom_id = res.custom_id
-                                failures = record_failure_counts.get(custom_id, 1)
-                                res.recovery_metadata = RecoveryMetadata(
-                                    retry=RetryMetadata(
-                                        attempts=failures + 1,
-                                        failures=failures,
-                                        succeeded=True,
-                                        reason="missing",
-                                        timestamp=datetime.now(UTC).isoformat(),
-                                    )
-                                )
-
-                        all_results.extend(retry_results)
-
-                        successful_retry = [r for r in retry_results if r.success]
-                        new_received = BatchResultReconciler.collect_result_custom_ids(
-                            successful_retry
-                        )
-                        missing_ids = missing_ids - new_received
-
-                    for rid in missing_ids:
-                        record_failure_counts[rid] = record_failure_counts.get(rid, 0) + 1
+                    (
+                        all_results,
+                        missing_ids,
+                        record_failure_counts,
+                        _,
+                    ) = _retry.process_retry_results(
+                        results=retry_results,
+                        accumulated_results=all_results,
+                        context_map=context_map,
+                        record_failure_counts=record_failure_counts,
+                        missing_ids=missing_ids,
+                    )
 
                 if retry_attempts > 0 and missing_ids:
                     exhausted_recovery = self.build_exhausted_recovery(

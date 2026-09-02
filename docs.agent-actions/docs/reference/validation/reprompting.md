@@ -21,7 +21,7 @@ The reprompting system provides:
 **Retry** handles transient errors (rate limits, network issues) — same request, wait, retry.
 **Reprompt** handles validation errors (bad JSON, schema violations) — modify prompt with feedback, retry.
 
-When both are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle, the `on_exhausted` policy is respected. API-failed records that reach validation are rejected and reprompted, not silently graduated.
+When both are configured, retry runs inside each reprompt attempt. If retry exhausts during a reprompt cycle, the `on_exhausted` policy is respected. An API-failed record that reaches validation is rejected rather than graduating. In batch mode it is not resubmitted — Phase 1 has already claimed it, and a reprompt has nothing to repair on a record with no content — so it reaches finalization with its provider error, and with its retry history when `retry:` is configured.
 
 See [Retry & Error Handling](../execution/retry.md) for transient error handling.
 :::
@@ -240,7 +240,7 @@ If retry exhausts during a reprompt attempt, the record is marked `exhausted=Tru
 
 In batch mode, recovery is two-phase. See [Batch Recovery](../execution/batch-recovery.md) for the complete flow.
 
-1. **Phase 1 (Retry):** Detect missing records by comparing expected vs received IDs, resubmit as a new batch
+1. **Phase 1 (Retry):** Detect unanswered records — expected ids minus the ids the provider actually answered, which excludes a result returned with an error or with null content — and resubmit them as a new batch
 2. **Phase 2 (Reprompt):** Validate all results against the configured UDF, resubmit failures with feedback
 
 Retry metadata from Phase 1 is preserved through Phase 2 — a record that was missing and then failed validation will carry both `_recovery.retry` and `_recovery.reprompt` in its output.

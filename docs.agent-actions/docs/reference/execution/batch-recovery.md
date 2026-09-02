@@ -13,9 +13,9 @@ Batch recovery runs after the initial batch completes. It addresses two distinct
 
 ```mermaid
 flowchart TD
-    A[Batch Completes] --> B[Compare Expected vs Received IDs]
-    B --> C{Missing Records?}
-    C -->|Yes| D[Phase 1: Retry Missing]
+    A[Batch Completes] --> B[Compare Expected vs Answered IDs]
+    B --> C{Unanswered Records?}
+    C -->|Yes| D[Phase 1: Retry Unanswered]
     C -->|No| G
     D --> E[Resubmit as New Batch]
     E --> F[Poll for Completion]
@@ -29,24 +29,24 @@ flowchart TD
     I -->|No| L
 ```
 
-**Phase 1 (Retry)** recovers records the provider dropped — network errors, timeouts, silent failures. The same request is resubmitted unchanged.
+**Phase 1 (Retry)** recovers records the provider did not answer — ones it dropped outright (network errors, timeouts, silent failures) and ones it returned with a per-record error and no content. The same request is resubmitted unchanged.
 
 **Phase 2 (Reprompt)** fixes records where the LLM responded but produced invalid output — schema violations, failed custom validation. The prompt is modified with error feedback before resubmitting.
 
 ## Phase 1: Retry Missing Records
 
-After retrieving batch results, the system compares expected record IDs against received IDs. Any gaps trigger the retry loop.
+After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. Any gap triggers the retry loop.
 
 ### How It Works
 
 1. Collect all `custom_id` values from the context map (expected)
-2. Collect all `custom_id` values from batch results (received)
+2. Collect the `custom_id` values of results the provider answered successfully. A result returned with an error carries the record's real `custom_id` but no content, so it does not count as answered
 3. Compute the difference — these are the missing records
 4. For each retry attempt (up to `max_attempts`):
    - Build new records from the context map for missing IDs
    - Submit as a new batch
    - Poll until complete
-   - Merge successful results back
+   - Merge the results back, replacing any earlier answer for the same record
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 
@@ -87,6 +87,17 @@ When a record exhausts all retry attempts:
 - **`on_exhausted: return_last`** — record is marked with exhaustion metadata, workflow continues without it
 - **`on_exhausted: raise`** — raises an error, stops the workflow
 
+Both policies apply to every record that spends its attempts, but the two exhausted shapes
+do not land in the same disposition. The split is whether a result row came back at all. A record the provider never
+returned has nothing to report, so it becomes an `EXHAUSTED` tombstone dispositioned
+`exhausted_after_N_attempts`. A record that came back — with an error, or with null
+content and no message at all — is dispositioned `FAILED`, carrying whatever the
+provider said (or a generic failure when it said nothing) plus the same exhausted
+retry metadata under `_recovery.retry`. The provider's
+message is the more useful signal of the two, so it is preserved rather than replaced by an
+empty tombstone. Counting retry exhaustion means counting both — filter on
+`_recovery.retry.succeeded == false`, not on the disposition alone.
+
 ## Phase 2: Validate and Reprompt
 
 After Phase 1 ensures all recoverable records are present, Phase 2 checks whether the outputs are actually valid. This only runs if reprompt is configured with a validation function.
@@ -95,14 +106,16 @@ After Phase 1 ensures all recoverable records are present, Phase 2 checks whethe
 
 1. Load the validation UDF specified in `reprompt.validation`
 2. For each attempt (up to `max_attempts`):
-   - Validate all results that haven't already passed (API-failed records fail validation and are included)
+   - Validate every result that has not already passed — an API-failed record fails validation rather than graduating
    - Identify failures
    - If all pass, stop
-   - For each failed result:
+   - For each failed result that still carries content:
      - Look up the original record from the context map
      - Build validation feedback (what failed + the failed response)
      - Append feedback to the original `user_content`
      - Collect into a reprompt batch
+   - A failed result with no content is withheld — there is nothing to repair — and
+     carried to finalization with its provider error
    - Submit the reprompt batch and poll for completion
    - Merge new results, replacing old ones by `custom_id`
 3. Apply exhaustion metadata to any records still failing
@@ -149,7 +162,7 @@ When a record goes through both phases, retry metadata from Phase 1 is preserved
 
 Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
 
-API-failed records (`success=False`) are **not** skipped — they fail validation and are reprompted with guidance to retry. This prevents API failures from silently graduating as valid output.
+API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. When `retry:` is configured, Phase 1 claims such records first, so by Phase 2 they have already spent their attempts. With no `retry:` block there is no Phase 1, and the record reaches finalization with its provider error but no retry history.
 
 ## Recovery Metadata
 

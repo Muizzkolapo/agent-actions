@@ -30,6 +30,7 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
     RecoveryMetadata,
+    RetryMetadata,
 )
 from agent_actions.record.envelope import (
     _PERSISTENT_FIELDS,
@@ -224,7 +225,7 @@ class BatchResultStrategy:
         for batch_result in ctx.batch_results:
             custom_id = str(batch_result.custom_id)
 
-            if batch_result.success and batch_result.content is not None:
+            if BatchResultReconciler.is_answered(batch_result):
                 try:
                     result = self._process_successful_result(ctx, batch_result, custom_id)
                     results.append(result)
@@ -264,13 +265,24 @@ class BatchResultStrategy:
                     )
 
             else:
+                recovery_metadata = batch_result.recovery_metadata
+                exhausted = self._exhausted_recovery_for(ctx, custom_id)
+                if exhausted is not None:
+                    # Retry exhaustion is one half of the record's history; a
+                    # reprompt or evaluation half may already be on it.
+                    recovery_metadata = RecoveryMetadata(
+                        retry=exhausted[1],
+                        reprompt=recovery_metadata.reprompt if recovery_metadata else None,
+                        evaluation=recovery_metadata.evaluation if recovery_metadata else None,
+                    )
+
                 results.append(
                     self._build_error_result(
                         ctx,
                         custom_id,
                         batch_result.error or "Batch processing failed",
                         batch_result.metadata,
-                        recovery_metadata=batch_result.recovery_metadata,
+                        recovery_metadata=recovery_metadata,
                     )
                 )
                 ctx.reconciler.mark_processed(custom_id)
@@ -452,6 +464,39 @@ class BatchResultStrategy:
         result.recovery_metadata = recovery_metadata
         return result
 
+    def _exhausted_recovery_for(
+        self, ctx: BatchProcessingContext, custom_id: str
+    ) -> tuple[RecoveryMetadata, RetryMetadata] | None:
+        """Retry-exhaustion metadata for *custom_id*, or None if it still has attempts.
+
+        Applies ``on_exhausted`` here so the policy reaches every record that
+        spent its attempts, including one the provider answered with an error
+        and therefore left a result behind for.
+        """
+        if not ctx.exhausted_recovery or custom_id not in ctx.exhausted_recovery:
+            return None
+
+        recovery_meta = ctx.exhausted_recovery[custom_id]
+        retry_meta = recovery_meta.retry
+        if retry_meta is None:
+            raise RuntimeError(
+                "RecoveryMetadata.retry is None for exhausted record "
+                f"custom_id={custom_id}; expected retry metadata with attempt count"
+            )
+
+        on_exhausted = OnExhaustedPolicy.RETURN_LAST
+        if ctx.agent_config:
+            retry_config = ctx.agent_config.get("retry") or {}
+            on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted") or "return_last")
+
+        if on_exhausted == OnExhaustedPolicy.RAISE:
+            raise exhaustion_halt(
+                f"Retry exhausted for record {custom_id} after "
+                f"{retry_meta.attempts} attempts (on_exhausted=raise)"
+            )
+
+        return recovery_meta, retry_meta
+
     # -- Passthrough reconciliation --------------------------------------------
 
     def _reconcile_passthroughs(self, ctx: BatchProcessingContext) -> list[ProcessingResult]:
@@ -531,29 +576,15 @@ class BatchResultStrategy:
         record_index: int,
     ) -> ProcessingResult:
         """Build an EXHAUSTED result for a retry-exhausted record."""
-        if ctx.exhausted_recovery is None:
+        exhausted = self._exhausted_recovery_for(ctx, custom_id)
+        if exhausted is None:
             raise RuntimeError(
                 "BatchProcessingContext.exhausted_recovery is None "
                 "but record was identified as exhausted; "
                 f"expected exhausted_recovery dict for custom_id={custom_id}"
             )
-        on_exhausted = OnExhaustedPolicy.RETURN_LAST
-        if ctx.agent_config:
-            retry_config = ctx.agent_config.get("retry") or {}
-            on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted") or "return_last")
+        recovery_meta, retry_meta = exhausted
 
-        recovery_meta = ctx.exhausted_recovery[custom_id]
-        if recovery_meta.retry is None:
-            raise RuntimeError(
-                "RecoveryMetadata.retry is None for exhausted record "
-                f"custom_id={custom_id}; expected retry metadata with attempt count"
-            )
-
-        if on_exhausted == OnExhaustedPolicy.RAISE:
-            raise exhaustion_halt(
-                f"Retry exhausted for record {custom_id} after "
-                f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
-            )
         empty_content = ExhaustedRecordBuilder.build_empty_content(ctx.agent_config or {})
         exhausted_item = build_exhausted_tombstone(
             action_name,
@@ -563,7 +594,7 @@ class BatchResultStrategy:
         )
 
         processing_result = ProcessingResult.exhausted(
-            error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
+            error=f"Retry exhausted after {retry_meta.attempts} attempts",
             data=[exhausted_item],
             source_guid=source_guid,
             recovery_metadata=recovery_meta,

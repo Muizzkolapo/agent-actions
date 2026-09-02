@@ -26,6 +26,7 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
@@ -577,7 +578,7 @@ def finalize_batch_output(
 
     elapsed_time = time.time() - context.start_time
     total_count = len(batch_results)
-    successful_count = sum(1 for r in batch_results if r.success)
+    successful_count = sum(1 for r in batch_results if BatchResultReconciler.is_answered(r))
 
     fire_event(
         BatchCompleteEvent(
