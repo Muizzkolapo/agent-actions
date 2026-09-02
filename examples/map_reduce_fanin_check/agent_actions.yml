@@ -1,0 +1,8 @@
+default_agent_config:
+  api_key: GEMINI_API_KEY
+  prompt_debug: False
+schema_path: schema
+tool_path: ["tools"]
+output_storage:
+  backend: sqlite
+  db_path: ./agent_io/outputs.db

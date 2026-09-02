@@ -1,0 +1,126 @@
+name: map_reduce_fanin_check
+description: "Deterministic map/version-merge/fan-in/file-reduce shape check (no LLM calls)"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  is_operational: true
+  run_mode: online
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+  - name: stage_items
+    kind: tool
+    impl: stage_items
+    intent: "Stage source items as base records"
+    schema: { item_id: string, text: string }
+    context_scope:
+      observe: [source.item_id, source.text]
+
+  - name: split_words
+    kind: tool
+    impl: split_words
+    dependencies: [stage_items]
+    intent: "Map: expand each item into one record per word"
+    schema: { item_id: string, word: string, word_index: integer }
+    context_scope:
+      observe: [stage_items.*]
+
+  - name: vote
+    kind: tool
+    impl: cast_vote
+    dependencies: [split_words]
+    intent: "Cast one vote per version on each word record"
+    versions: { param: voter_id, range: [1, 2], mode: parallel }
+    schema: { vote: string, voted_word: string }
+    context_scope:
+      observe: [split_words.*]
+
+  - name: merge_votes
+    kind: tool
+    impl: merge_votes
+    dependencies: [vote]
+    intent: "Version reduce: aggregate votes (outputs carry correlation ids)"
+    version_consumption: { source: vote, pattern: merge }
+    schema: { decision: string, n_votes: integer }
+    context_scope:
+      observe: [vote.*]
+
+  - name: plain_note
+    kind: tool
+    impl: plain_note
+    dependencies: [split_words]
+    intent: "Plain branch that never crosses a version merge"
+    schema: { note: string }
+    context_scope:
+      observe: [split_words.*]
+
+  - name: fanin_consumer
+    kind: tool
+    impl: fanin_consumer
+    dependencies: [merge_votes, plain_note]
+    intent: "Asymmetric fan-in: correlation-id branch + plain branch"
+    schema: { decision_seen: boolean, note_seen: boolean, both_branches: boolean }
+    context_scope:
+      observe: [merge_votes.*, plain_note.*]
+
+  - name: unequal_diamond
+    kind: tool
+    impl: unequal_diamond
+    dependencies: [split_words, plain_note]
+    intent: "Unequal-depth diamond: an action fanned in with its own descendant"
+    schema: { word_seen: boolean, diamond_note_seen: boolean, diamond_ok: boolean }
+    context_scope:
+      observe: [split_words.*, plain_note.*]
+
+  - name: reduce_summary
+    kind: tool
+    impl: reduce_summary
+    dependencies: [fanin_consumer]
+    granularity: File
+    intent: "Reduce: aggregate all fan-in records into one summary"
+    schema: { total_records: integer, fully_merged_records: integer, all_merged: boolean }
+    context_scope:
+      observe: [fanin_consumer.*]
+
+  - name: vote_direct
+    kind: tool
+    impl: cast_vote_direct
+    dependencies: [stage_items]
+    intent: "Vote directly on pre-expansion records (vc born at the merge below)"
+    versions: { param: voter_id, range: [1, 2], mode: parallel }
+    schema: { vote: string, voted_item: string }
+    context_scope:
+      observe: [stage_items.*]
+
+  - name: merge_direct
+    kind: tool
+    impl: merge_votes
+    dependencies: [vote_direct]
+    intent: "Version reduce on pre-expansion records — only this branch carries correlation ids"
+    version_consumption: { source: vote_direct, pattern: merge }
+    schema: { decision: string, n_votes: integer }
+    context_scope:
+      observe: [vote_direct.*]
+
+  - name: note_direct
+    kind: tool
+    impl: note_direct
+    dependencies: [stage_items]
+    intent: "Plain pre-expansion branch with no correlation ids"
+    schema: { note: string }
+    context_scope:
+      observe: [stage_items.*]
+
+  - name: fanin_asymmetric
+    kind: tool
+    impl: fanin_asymmetric
+    dependencies: [merge_direct, note_direct]
+    intent: "Asymmetric fan-in: correlation-id branch + plain branch of the same records"
+    schema: { decision_seen: boolean, note_seen: boolean, both_branches: boolean }
+    context_scope:
+      observe: [merge_direct.*, note_direct.*]
