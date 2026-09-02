@@ -497,13 +497,10 @@ def test_empty_list_field_is_a_defect():
 def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
     write_suite(
         tmp_path,
-        "write_q",
         "scenario",
         [{"id": "floor", "type": "expression", "condition": "points >= 80"}],
     )
-    defects = find_expectation_defects(
-        suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path, workflow="write_q"
-    )
+    defects = find_expectation_defects(suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path)
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
 
 
