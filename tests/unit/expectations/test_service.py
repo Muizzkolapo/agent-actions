@@ -93,3 +93,41 @@ def test_factory_refuses_a_repair_prompt_mapping():
         create_expectation_service_from_config(
             {"expectations": INLINE, "repair": {"prompt": "$wf.Fix"}}, action_name="a"
         )
+
+
+def _schema_project(tmp_path, name="quality"):
+    import yaml
+
+    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir()
+    (schema_dir / f"{name}.yml").write_text(yaml.safe_dump({"expectations": INLINE}))
+    return tmp_path
+
+
+def test_factory_resolves_a_named_suite_through_the_schema_path(tmp_path):
+    root = _schema_project(tmp_path)
+    service = create_expectation_service_from_config(
+        {"suite": "quality", "repair": "none"}, action_name="a", project_root=root
+    )
+    assert service.suite.name == "quality"
+
+
+def test_factory_defaults_a_bare_expect_to_the_actions_schema(tmp_path):
+    root = _schema_project(tmp_path)
+    service = create_expectation_service_from_config(
+        {"repair": "none"}, action_name="a", schema_name="quality", project_root=root
+    )
+    assert service.suite.name == "quality"
+
+
+def test_factory_refuses_a_bare_expect_without_a_named_schema():
+    with pytest.raises(ConfigurationError, match="bare expect"):
+        create_expectation_service_from_config({"repair": "none"}, action_name="a")
+
+
+def test_factory_refuses_a_named_suite_without_a_project_root():
+    with pytest.raises(ConfigurationError, match="project root"):
+        create_expectation_service_from_config(
+            {"suite": "quality", "repair": "none"}, action_name="a"
+        )
