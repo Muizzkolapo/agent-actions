@@ -85,12 +85,10 @@ def load_workflow_configs(
             action_config["idx"] = action_indices[action_name]
         # Add workflow config path for static data loading
         action_config["workflow_config_path"] = config.paths.constructor_path
+        # Named suites resolve through the schema route at execution time,
+        # which needs the project root.
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
-        # Named suites live at {expectations_path}/{workflow}/{suite}.yml, so the
-        # action has to know which workflow it belongs to at execution time.
-        if manager.agent_name:
-            action_config["_workflow"] = manager.agent_name
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,
