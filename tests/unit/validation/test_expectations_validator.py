@@ -16,7 +16,7 @@ def suite_config(suite_name, name="write_q"):
 
 
 def default_config(name="write_q", **action_keys):
-    return {name: {"name": name, "expect": {}, **action_keys}}
+    return {name: {"name": name, "expect": {"repair": "none"}, **action_keys}}
 
 
 def write_schema_file(tmp_path, name, data):
