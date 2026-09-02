@@ -358,15 +358,13 @@ def test_expression_runs_alongside_deterministic_checks_in_one_suite():
     assert [o.passed for o in result.outcomes] == [True, True]
 
 
-def test_expression_entry_loads_from_a_suite_file(tmp_path):
-    from agent_actions.expectations.loader import load_suite_file
+def test_expression_entry_loads_from_a_schema_files_expectations_block():
+    from agent_actions.expectations.loader import build_suite_from_schema_data
 
-    suite_yaml = tmp_path / "quality.yml"
-    suite_yaml.write_text(
-        "expectations:\n  - id: score_floor\n    type: expression\n    condition: score >= 80\n",
-        encoding="utf-8",
+    suite = build_suite_from_schema_data(
+        "quality",
+        {"expectations": [{"id": "score_floor", "type": "expression", "condition": "score >= 80"}]},
     )
-    suite = load_suite_file(suite_yaml)
     result = run_suite(suite, {"score": 85})
     assert result.overall_pass is True
 
