@@ -60,8 +60,8 @@ The current build only implements `repair: none` (observe: run the checks, attac
 
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
-| `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`) |
-| `suite` | string | — | Name of a reusable suite file (see [Named suites](#named-suites)) instead of an inline list |
+| `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`; omit both to read the action's own schema file) |
+| `suite` | string | — | Name of a schema-path file with an `expectations:` block (see [Named suites](#named-suites)) instead of an inline list |
 | `repair` | string | `auto` | Must be set to `none` in this build |
 | `judge_budget` | integer ≥ 1 | uncapped | Max real `llm_judge` LLM calls this action's suite may make across the whole run |
 
@@ -201,7 +201,7 @@ To act on the verdict, read it from a downstream [guard](../execution/guards.md)
 
 ## Named suites
 
-An inline `expectations:` list is scoped to one action. To reuse the same rules across actions or workflows, extract them into a suite file and reference it by name:
+An inline `expectations:` list is scoped to one action. To reuse the same rules across actions, put them in an `expectations:` block of a schema-path file and reference it by name:
 
 ```yaml
 - name: summarize_article
@@ -210,11 +210,10 @@ An inline `expectations:` list is scoped to one action. To reuse the same rules 
     suite: grounded_summary
 ```
 
-The suite lives at `{expectations_path}/{workflow}/{suite_name}.yml` relative to the project root (`expectations_path` defaults to `expectations/`, and is configurable via that key in `agent_actions.yml`):
+`suite:` resolves through the schema path exactly as `schema:` does — by file name, across the project-level and workflow-level schema directories named by `schema_path` in `agent_actions.yml`. The file may carry `fields:`, `expectations:`, or both, so an action's shape contract and its quality rules can live in one file:
 
 ```yaml
-# expectations/my_workflow/grounded_summary.yml
-name: grounded_summary
+# schema/my_workflow/grounded_summary.yml
 expectations:
   - id: summary_present
     type: not_null
@@ -225,6 +224,8 @@ expectations:
     votes: 3
     rule: "The summary is fully supported by the grounding context."
 ```
+
+An `expectations:` block on a schema attaches nothing by itself — rules run only where an action declares `expect:`. An `expect:` block with neither `suite:` nor `expectations:` reads the `expectations:` block of the file the action's own `schema:` names, so the co-located drop-in is just `expect: {repair: none}`. The compiled schema sent to a provider never contains the `expectations:` block.
 
 A suite file has no `repair`, `judge_budget`, or `context_scope` of its own — those stay on the action's `expect:` block; the suite only supplies the `expectations:` list.
 
