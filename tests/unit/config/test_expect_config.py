@@ -20,13 +20,14 @@ def test_named_suite_is_accepted():
 
 
 def test_both_suite_and_inline_expectations_is_rejected():
-    with pytest.raises(ValidationError, match="exactly one"):
+    with pytest.raises(ValidationError, match="at most one"):
         ExpectConfig(suite="s", expectations=INLINE)
 
 
-def test_neither_suite_nor_inline_expectations_is_rejected():
-    with pytest.raises(ValidationError, match="exactly one"):
-        ExpectConfig()
+def test_a_bare_expect_block_reads_the_actions_own_schema():
+    cfg = ExpectConfig(repair="none")
+    assert cfg.suite is None
+    assert cfg.expectations is None
 
 
 @pytest.mark.parametrize("mode", ["none", "retry", "auto"])
