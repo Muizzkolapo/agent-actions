@@ -67,10 +67,11 @@ resolved field value, so a repair that leaves a judged field untouched is still 
 an expansion multiplies judge spend by its record count. `reprompt:` nests inside each repair
 iteration, costing `max_iterations x reprompt.max_attempts` in the worst case.
 
-**Limits worth knowing before changing this package.** A named `suite:` (or the bare-block
-default, which reads the action's own schema file) needs a project root to resolve;
-`InvocationStrategyFactory` does not thread one, so only the inline `expectations:` form works
-end to end. A judged expectation's `context:` refs are auto-injected
+**Limits worth knowing before changing this package.** A named `suite:` resolves at runtime
+through the project root stamped on the action config (`_project_root`); the bare-block default
+reads the `expectations:` block of the action's resolved schema — the load pipeline inlines a
+named schema into the config and drops its name, so the inlined dict is the authority and the
+name route is only a fallback. A judged expectation's `context:` refs are auto-injected
 into the producing action's `context_scope.observe` for the inline form only, so a named suite's
 refs are inert. The prompt trace stores the original prompt against the final response, so a
 record repaired on a later iteration has a trace whose prompt did not produce it. `_structural`

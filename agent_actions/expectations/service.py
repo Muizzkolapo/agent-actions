@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
+from agent_actions.expectations.loader import (
+    SuiteLoadError,
+    build_inline_suite,
+    build_suite_from_schema_data,
+    load_named_suite,
+)
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
@@ -467,20 +472,38 @@ def create_expectation_service_from_config(
     suite_name = expect_config.get("suite")
     entries = expect_config.get("expectations")
     config = agent_config or {}
+    schema_data: dict[str, Any] | None = None
     if suite_name is None and entries is None:
-        # A bare block reads the expectations: block of the action's own schema
-        # file, whose name the expanded config carries as schema_name.
+        # A bare block reads the expectations: block of the action's own
+        # schema. A named schema is inlined into the config at load time and
+        # its name dropped, so the resolved dict is the authority; the name
+        # survives only when loading could not inline it.
         if schema_name is None:
             schema_name = config.get("schema_name") or None
-        if not schema_name:
+        raw_schema = config.get("schema")
+        if isinstance(raw_schema, dict):
+            schema_data = raw_schema
+        elif schema_name:
+            suite_name = schema_name
+        else:
             raise ExpectationConfigurationError(
-                f"Action '{action_name}' has a bare expect: block but no named "
-                "schema: file to read expectations from. Name one with suite: "
-                "or declare expectations: inline.",
+                f"Action '{action_name}' has a bare expect: block but no schema "
+                "to read expectations from. Add a schema:, or use suite: or an "
+                "inline expectations: list.",
                 context={"action": action_name},
             )
-        suite_name = schema_name
-    if suite_name:
+    if schema_data is not None:
+        try:
+            suite = build_suite_from_schema_data(
+                schema_name or f"{action_name}:schema", schema_data
+            )
+        except ValueError as exc:
+            raise ExpectationConfigurationError(
+                f"Action '{action_name}' has a bare expect: block, but its "
+                f"schema has no expectations to run: {exc}",
+                context={"action": action_name},
+            ) from exc
+    elif suite_name:
         # The action config carries the project root, stamped when the workflow
         # was loaded. Preflight passes it explicitly and keeps precedence; every
         # runtime caller has only the config, so reading it here resolves the
@@ -496,7 +519,7 @@ def create_expectation_service_from_config(
         try:
             suite = load_named_suite(suite_name, Path(project_root))
         except SuiteLoadError as exc:
-            raise ConfigurationError(
+            raise ExpectationConfigurationError(
                 f"Action '{action_name}': {exc}",
                 context={"action": action_name, "suite": suite_name},
             ) from exc
