@@ -74,7 +74,9 @@ class InvocationStrategyFactory:
                 retry_service=retry_service,
                 reprompt_service=None,
                 expectation_service=create_expectation_service_from_config(
-                    expect_config, action_name=action_name
+                    expect_config,
+                    action_name=action_name,
+                    schema_name=agent_config.get("schema_name") or None,
                 ),
             )
 
@@ -93,7 +95,9 @@ class InvocationStrategyFactory:
             retry_service=retry_service,
             reprompt_service=reprompt_service,
             expectation_service=create_expectation_service_from_config(
-                expect_config, action_name=action_name
+                expect_config,
+                action_name=action_name,
+                schema_name=agent_config.get("schema_name") or None,
             ),
         )
 

@@ -71,8 +71,8 @@ def create_expectation_service_from_config(
     expect_config: dict[str, Any] | None,
     *,
     action_name: str,
+    schema_name: str | None = None,
     project_root: Path | None = None,
-    workflow: str | None = None,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent."""
     from agent_actions.errors import ConfigurationError
@@ -90,15 +90,26 @@ def create_expectation_service_from_config(
         )
 
     suite_name = expect_config.get("suite")
-    if suite_name:
-        if project_root is None or workflow is None:
+    entries = expect_config.get("expectations")
+    if suite_name is None and entries is None:
+        # A bare block reads the expectations: block of the action's own schema file.
+        if not schema_name:
             raise ConfigurationError(
-                f"Action '{action_name}' names suite '{suite_name}' but no project "
-                "root or workflow was available to resolve it.",
+                f"Action '{action_name}' has a bare expect: block but no named "
+                "schema: file to read expectations from. Name one with suite: "
+                "or declare expectations: inline.",
+                context={"action": action_name},
+            )
+        suite_name = schema_name
+    if suite_name:
+        if project_root is None:
+            raise ConfigurationError(
+                f"Action '{action_name}' resolves suite '{suite_name}' but no "
+                "project root was available to resolve it.",
                 context={"action": action_name, "suite": suite_name},
             )
-        suite = load_named_suite(Path(project_root), workflow, suite_name)
+        suite = load_named_suite(suite_name, Path(project_root))
     else:
-        suite = build_inline_suite(expect_config.get("expectations") or [], action_name)
+        suite = build_inline_suite(entries or [], action_name)
 
     return ExpectationService(suite, repair=repair)
