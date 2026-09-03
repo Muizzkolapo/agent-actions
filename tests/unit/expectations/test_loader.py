@@ -54,15 +54,15 @@ def test_load_named_suite_resolves_workflow_level_schema_dirs(tmp_path):
     assert suite.name == "scenario_question"
 
 
-def test_load_named_suite_missing_schema_raises_file_not_found(tmp_path):
+def test_load_named_suite_missing_schema_is_one_named_error(tmp_path):
     root = project(tmp_path, {"expectations": EXPECTATIONS})
-    with pytest.raises(FileNotFoundError, match="nothing_here"):
+    with pytest.raises(loader.SuiteLoadError, match="nothing_here"):
         load_named_suite("nothing_here", project_root=root)
 
 
 def test_load_named_suite_without_expectations_block_is_an_error(tmp_path):
     root = project(tmp_path, {"fields": SCHEMA_FIELDS})
-    with pytest.raises(ValueError, match="no expectations"):
+    with pytest.raises(loader.SuiteLoadError, match="no expectations"):
         load_named_suite("scenario_question", project_root=root)
 
 
