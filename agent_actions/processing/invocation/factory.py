@@ -62,7 +62,7 @@ class InvocationStrategyFactory:
 
         # Reprompt is meaningless for deterministic tools — re-running the same UDF yields the same output.
         if _is_tool_action(agent_config):
-            if expect_config and expect_config.get("repair", "auto") != "none":
+            if expect_config is not None and expect_config.get("repair", "auto") != "none":
                 from agent_actions.errors import ConfigurationError
 
                 raise ConfigurationError(
