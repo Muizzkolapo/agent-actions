@@ -100,6 +100,23 @@ class TestTheSuiteResolvesFromTheActionConfig:
         )
         assert [e.id for e in service.suite.expectations] == ["enough_options"]
 
+    def test_the_inlined_dict_wins_over_a_surviving_schema_name(self, project: Path):
+        service = create_expectation_service_from_config(
+            {"repair": "none"},
+            action_name="summarize",
+            agent_config={
+                "_project_root": str(project),
+                "schema_name": SUITE,
+                "schema": {
+                    "fields": [{"id": "options", "type": "array"}],
+                    "expectations": [
+                        {"id": "from_the_dict", "type": "not_null", "field": "options"}
+                    ],
+                },
+            },
+        )
+        assert [e.id for e in service.suite.expectations] == ["from_the_dict"]
+
     def test_an_inlined_schema_dict_without_rules_is_an_error(self):
         with pytest.raises(ExpectationConfigurationError, match="no expectations"):
             create_expectation_service_from_config(
@@ -263,6 +280,58 @@ class TestTheBareBlockResolvesThroughTheRealPipeline:
             "the pipeline inlined the schema and the factory still refused the bare block"
         )
         assert [e.id for e in service.suite.expectations] == ["has_summary"]
+
+    def test_an_action_without_an_expect_block_builds_no_service(self, tmp_path, monkeypatch):
+        from agent_actions.processing.invocation.factory import InvocationStrategyFactory
+        from agent_actions.services.workflow_inspector import WorkflowInspector
+        from agent_actions.utils.path_utils import reset_path_manager
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
+        root = tmp_path / "proj"
+        (root / "wf" / "agent_config").mkdir(parents=True)
+        (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
+        (root / "templates").mkdir()
+        (root / "schema").mkdir()
+        (root / "agent_actions.yml").write_text(
+            "default_agent_config:\n"
+            "  api_key: OPENAI_API_KEY\n"
+            "  model_name: gpt-4o-mini\n"
+            "  model_vendor: openai\n"
+            "  ephemeral: false\n"
+            "schema_path: schema\n"
+        )
+        (root / "schema" / "quality.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "fields": [{"id": "summary", "type": "string", "required": True}],
+                    "expectations": [{"id": "has_summary", "type": "not_null", "field": "summary"}],
+                }
+            )
+        )
+        (root / "wf" / "agent_config" / "wf.yml").write_text(
+            "name: wf\n"
+            "description: rules on the schema bind nothing by themselves\n"
+            "defaults:\n"
+            "  json_mode: true\n"
+            "  granularity: Record\n"
+            "  run_mode: online\n"
+            "  model_name: gpt-4o-mini\n"
+            "  model_vendor: openai\n"
+            "  api_key: OPENAI_API_KEY\n"
+            "actions:\n"
+            "  - name: summarize\n"
+            "    intent: summarize the input\n"
+            "    kind: llm\n"
+            '    prompt: "Summarize."\n'
+            "    schema: quality\n"
+        )
+        reset_path_manager()
+        try:
+            configs = WorkflowInspector("wf", project_root=root).load()
+            strategy = InvocationStrategyFactory._create_online_strategy(configs["summarize"])
+        finally:
+            reset_path_manager()
+        assert strategy._expectation_service is None
 
 
 class TestAToolActionCannotRepairEvenWithAnEmptyBlock:
