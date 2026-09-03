@@ -171,13 +171,7 @@ class SchemaValidator(BaseValidator):
                 file_path.name,
             )
             return
-        # A schema-path file may hold only an expectations: block (a named
-        # suite); it declares no shape to meta-validate.
-        if (
-            isinstance(schema_data, dict)
-            and isinstance(schema_data.get("expectations"), list)
-            and not any(key in schema_data for key in ("fields", "type", "properties"))
-        ):
+        if self._is_rules_only_suite(schema_data):
             logger.debug(
                 "Schema '%s' holds only an expectations: block; skipping JSON Schema checks.",
                 file_path.name,
@@ -251,6 +245,18 @@ class SchemaValidator(BaseValidator):
             "oneOf",
         }
         return bool(set(schema_data.keys()) & schema_keywords)
+
+    @staticmethod
+    def _is_rules_only_suite(schema_data: Any) -> bool:
+        """A schema-path file holding only an ``expectations:`` block (a named suite).
+
+        It declares no shape, so there is nothing to meta-validate.
+        """
+        return (
+            isinstance(schema_data, dict)
+            and isinstance(schema_data.get("expectations"), list)
+            and not any(key in schema_data for key in ("fields", "type", "properties"))
+        )
 
     @staticmethod
     def _is_fields_format(schema_data: Any) -> bool:
