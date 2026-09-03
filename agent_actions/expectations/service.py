@@ -8,9 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from agent_actions.expectations.loader import build_inline_suite, load_named_suite
+from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
 from agent_actions.expectations.runner import run_suite
 from agent_actions.expectations.types import Suite, SuiteResult
 
@@ -77,7 +75,7 @@ def create_expectation_service_from_config(
     project_root: Path | None = None,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent."""
-    from agent_actions.errors import AgentActionsError, ConfigurationError
+    from agent_actions.errors import ConfigurationError
 
     if expect_config is None:
         return None
@@ -112,9 +110,9 @@ def create_expectation_service_from_config(
             )
         try:
             suite = load_named_suite(suite_name, Path(project_root))
-        except (OSError, ValueError, TypeError, yaml.YAMLError, AgentActionsError) as exc:
+        except SuiteLoadError as exc:
             raise ConfigurationError(
-                f"Action '{action_name}' could not load suite '{suite_name}': {exc}",
+                f"Action '{action_name}': {exc}",
                 context={"action": action_name, "suite": suite_name},
             ) from exc
     else:
