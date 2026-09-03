@@ -263,3 +263,23 @@ class TestTheBareBlockResolvesThroughTheRealPipeline:
             "the pipeline inlined the schema and the factory still refused the bare block"
         )
         assert [e.id for e in service.suite.expectations] == ["has_summary"]
+
+
+class TestAToolActionCannotRepairEvenWithAnEmptyBlock:
+    def test_an_empty_expect_dict_on_a_tool_action_is_refused(self):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.processing.invocation.factory import InvocationStrategyFactory
+
+        with pytest.raises(ConfigurationError, match="cannot repair"):
+            InvocationStrategyFactory._create_online_strategy(
+                {
+                    "name": "collect",
+                    "kind": "tool",
+                    "model_vendor": "tool",
+                    "expect": {},
+                    "schema": {
+                        "fields": [{"id": "options", "type": "array"}],
+                        "expectations": [{"type": "not_null", "field": "options"}],
+                    },
+                }
+            )
