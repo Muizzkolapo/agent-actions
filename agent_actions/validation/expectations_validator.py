@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from agent_actions.expectations import registry
 from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import _DECLARED_FIELDS as _DECLARED_KEYS
@@ -30,8 +28,8 @@ def find_expectation_defects(
 
     Validates every form of ``expect:``: an inline ``expectations:`` list, a
     named ``suite:`` reference, and a bare block that defaults to the action's
-    own schema file. The file-backed forms are only checked when *project_root*
-    is given, since resolving a schema-path file requires it.
+    own schema. The named and bare forms are only checked when *project_root*
+    is given.
     """
     defects: dict[str, list[str]] = {}
 
@@ -106,15 +104,12 @@ def _default_suite_defects(
 
 
 def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None) -> list[str]:
-    from agent_actions.errors import AgentActionsError
-    from agent_actions.expectations.loader import load_named_suite
+    from agent_actions.expectations.loader import SuiteLoadError, load_named_suite
 
     try:
         suite = load_named_suite(suite_name, project_root)
-    except FileNotFoundError as exc:
-        return [f"suite '{suite_name}': {exc}"]
-    except (ValueError, TypeError, OSError, yaml.YAMLError, AgentActionsError) as exc:
-        return [f"suite '{suite_name}' could not be loaded: {exc}"]
+    except SuiteLoadError as exc:
+        return [str(exc)]
 
     messages: list[str] = []
     for expectation in suite.expectations:
