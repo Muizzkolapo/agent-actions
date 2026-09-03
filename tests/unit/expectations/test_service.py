@@ -169,7 +169,10 @@ def test_factory_resolves_a_named_suite_through_the_schema_path(tmp_path):
 def test_factory_defaults_a_bare_expect_to_the_actions_schema(tmp_path):
     root = _schema_project(tmp_path)
     service = create_expectation_service_from_config(
-        {"repair": "none"}, action_name="a", schema_name="quality", project_root=root
+        {"repair": "none"},
+        action_name="a",
+        agent_config={"schema_name": "quality"},
+        project_root=root,
     )
     assert service.suite.name == "quality"
 

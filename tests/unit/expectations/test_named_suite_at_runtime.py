@@ -1,14 +1,4 @@
-"""A named `suite:` must resolve when the action actually runs, not just in preflight.
-
-`expect: {suite: <name>}` is documented, and preflight validates the reference —
-it is handed the project root. No runtime caller was, so every run of such an
-action raised instead: online surfaced it as a failed action, and batch logged
-it per file and finished reporting success with each of them missing from the
-output.
-
-The action config already carries the project root, so the resolution reads what
-is on the config rather than threading another argument through four call sites.
-"""
+"""Named suites and the bare expect: default must resolve at runtime, not just preflight."""
 
 from pathlib import Path
 
@@ -218,63 +208,75 @@ class TestTheBatchRepairPathResolvesItToo:
         assert strategy._expectation_service.suite.name == SUITE
 
 
+def _pipeline_project(tmp_path, *, expect_block: bool):
+    """A real on-disk project whose action names a schema file carrying rules."""
+    root = tmp_path / "proj"
+    (root / "wf" / "agent_config").mkdir(parents=True)
+    (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
+    (root / "templates").mkdir()
+    (root / "schema").mkdir()
+    (root / "agent_actions.yml").write_text(
+        "default_agent_config:\n"
+        "  api_key: OPENAI_API_KEY\n"
+        "  model_name: gpt-4o-mini\n"
+        "  model_vendor: openai\n"
+        "  ephemeral: false\n"
+        "schema_path: schema\n"
+    )
+    (root / "schema" / "quality.yml").write_text(
+        yaml.safe_dump(
+            {
+                "fields": [{"id": "summary", "type": "string", "required": True}],
+                "expectations": [{"id": "has_summary", "type": "not_null", "field": "summary"}],
+            }
+        )
+    )
+    action = (
+        "  - name: summarize\n"
+        "    intent: summarize the input\n"
+        "    kind: llm\n"
+        '    prompt: "Summarize."\n'
+        "    schema: quality\n"
+    )
+    if expect_block:
+        action += "    expect:\n      repair: none\n"
+    (root / "wf" / "agent_config" / "wf.yml").write_text(
+        "name: wf\n"
+        "description: bare expect end to end\n"
+        "defaults:\n"
+        "  json_mode: true\n"
+        "  granularity: Record\n"
+        "  run_mode: online\n"
+        "  model_name: gpt-4o-mini\n"
+        "  model_vendor: openai\n"
+        "  api_key: OPENAI_API_KEY\n"
+        "actions:\n" + action
+    )
+    return root
+
+
+def _load_strategy(root):
+    """Load the project through the real pipeline and build the online strategy."""
+    from agent_actions.processing.invocation.factory import InvocationStrategyFactory
+    from agent_actions.services.workflow_inspector import WorkflowInspector
+    from agent_actions.utils.path_utils import reset_path_manager
+
+    reset_path_manager()
+    try:
+        configs = WorkflowInspector("wf", project_root=root).load()
+        return InvocationStrategyFactory._create_online_strategy(configs["summarize"])
+    finally:
+        reset_path_manager()
+
+
 class TestTheBareBlockResolvesThroughTheRealPipeline:
     """The load pipeline inlines a named schema and drops its name, so the
     bare default must work from what the pipeline actually produces — not
     from a hand-assembled config."""
 
     def test_a_real_load_carries_the_schema_rules_to_the_factory(self, tmp_path, monkeypatch):
-        from agent_actions.processing.invocation.factory import InvocationStrategyFactory
-        from agent_actions.services.workflow_inspector import WorkflowInspector
-        from agent_actions.utils.path_utils import reset_path_manager
-
         monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
-        root = tmp_path / "proj"
-        (root / "wf" / "agent_config").mkdir(parents=True)
-        (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
-        (root / "templates").mkdir()
-        (root / "schema").mkdir()
-        (root / "agent_actions.yml").write_text(
-            "default_agent_config:\n"
-            "  api_key: OPENAI_API_KEY\n"
-            "  model_name: gpt-4o-mini\n"
-            "  model_vendor: openai\n"
-            "  ephemeral: false\n"
-            "schema_path: schema\n"
-        )
-        (root / "schema" / "quality.yml").write_text(
-            yaml.safe_dump(
-                {
-                    "fields": [{"id": "summary", "type": "string", "required": True}],
-                    "expectations": [{"id": "has_summary", "type": "not_null", "field": "summary"}],
-                }
-            )
-        )
-        (root / "wf" / "agent_config" / "wf.yml").write_text(
-            "name: wf\n"
-            "description: bare expect end to end\n"
-            "defaults:\n"
-            "  json_mode: true\n"
-            "  granularity: Record\n"
-            "  run_mode: online\n"
-            "  model_name: gpt-4o-mini\n"
-            "  model_vendor: openai\n"
-            "  api_key: OPENAI_API_KEY\n"
-            "actions:\n"
-            "  - name: summarize\n"
-            "    intent: summarize the input\n"
-            "    kind: llm\n"
-            '    prompt: "Summarize."\n'
-            "    schema: quality\n"
-            "    expect:\n"
-            "      repair: none\n"
-        )
-        reset_path_manager()
-        try:
-            configs = WorkflowInspector("wf", project_root=root).load()
-            strategy = InvocationStrategyFactory._create_online_strategy(configs["summarize"])
-        finally:
-            reset_path_manager()
+        strategy = _load_strategy(_pipeline_project(tmp_path, expect_block=True))
         service = strategy._expectation_service
         assert service is not None, (
             "the pipeline inlined the schema and the factory still refused the bare block"
@@ -282,55 +284,8 @@ class TestTheBareBlockResolvesThroughTheRealPipeline:
         assert [e.id for e in service.suite.expectations] == ["has_summary"]
 
     def test_an_action_without_an_expect_block_builds_no_service(self, tmp_path, monkeypatch):
-        from agent_actions.processing.invocation.factory import InvocationStrategyFactory
-        from agent_actions.services.workflow_inspector import WorkflowInspector
-        from agent_actions.utils.path_utils import reset_path_manager
-
         monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
-        root = tmp_path / "proj"
-        (root / "wf" / "agent_config").mkdir(parents=True)
-        (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
-        (root / "templates").mkdir()
-        (root / "schema").mkdir()
-        (root / "agent_actions.yml").write_text(
-            "default_agent_config:\n"
-            "  api_key: OPENAI_API_KEY\n"
-            "  model_name: gpt-4o-mini\n"
-            "  model_vendor: openai\n"
-            "  ephemeral: false\n"
-            "schema_path: schema\n"
-        )
-        (root / "schema" / "quality.yml").write_text(
-            yaml.safe_dump(
-                {
-                    "fields": [{"id": "summary", "type": "string", "required": True}],
-                    "expectations": [{"id": "has_summary", "type": "not_null", "field": "summary"}],
-                }
-            )
-        )
-        (root / "wf" / "agent_config" / "wf.yml").write_text(
-            "name: wf\n"
-            "description: rules on the schema bind nothing by themselves\n"
-            "defaults:\n"
-            "  json_mode: true\n"
-            "  granularity: Record\n"
-            "  run_mode: online\n"
-            "  model_name: gpt-4o-mini\n"
-            "  model_vendor: openai\n"
-            "  api_key: OPENAI_API_KEY\n"
-            "actions:\n"
-            "  - name: summarize\n"
-            "    intent: summarize the input\n"
-            "    kind: llm\n"
-            '    prompt: "Summarize."\n'
-            "    schema: quality\n"
-        )
-        reset_path_manager()
-        try:
-            configs = WorkflowInspector("wf", project_root=root).load()
-            strategy = InvocationStrategyFactory._create_online_strategy(configs["summarize"])
-        finally:
-            reset_path_manager()
+        strategy = _load_strategy(_pipeline_project(tmp_path, expect_block=False))
         assert strategy._expectation_service is None
 
 

@@ -20,7 +20,7 @@ from agent_actions.expectations.loader import (
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
-from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -445,7 +445,6 @@ def create_expectation_service_from_config(
     expect_config: dict[str, Any] | None,
     *,
     action_name: str,
-    schema_name: str | None = None,
     agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
     judge_budget_remaining: int | None = None,
@@ -456,8 +455,6 @@ def create_expectation_service_from_config(
     construction. A deferred batch rebuilds the service each pass, so the caller
     carries the balance rather than letting every round start from full.
     """
-    from agent_actions.errors import ConfigurationError
-
     if expect_config is None:
         return None
 
@@ -478,9 +475,8 @@ def create_expectation_service_from_config(
         # schema. A named schema is inlined into the config at load time and
         # its name dropped, so the resolved dict is the authority; the name
         # survives only when loading could not inline it.
-        if schema_name is None:
-            schema_name = config.get("schema_name") or None
-        raw_schema = config.get("schema")
+        schema_name = config.get(SCHEMA_NAME_KEY) or None
+        raw_schema = config.get(SCHEMA_KEY)
         if isinstance(raw_schema, dict):
             schema_data = raw_schema
         elif schema_name:
@@ -530,7 +526,7 @@ def create_expectation_service_from_config(
     if any(expectation.type == "llm_judge" for expectation in suite.expectations):
         from agent_actions.expectations.judge import CachedJudge, JudgeBudget
 
-        cached_judge = CachedJudge(agent_config or {}, action_name=action_name)
+        cached_judge = CachedJudge(config, action_name=action_name)
         # judge_budget bounds the whole run, not one construction of the
         # service. A deferred batch rebuilds the service on each pass, so the
         # caller carries what is left and hands it back here.
@@ -565,7 +561,7 @@ def create_expectation_service_from_config(
         repair=repair,
         judge=judge_dispatch,
         max_iterations=expect_config.get("max_iterations", 3),
-        schema=(agent_config or {}).get(SCHEMA_KEY),
+        schema=config.get(SCHEMA_KEY),
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
     )
     service._judge_budget = budget if judge_dispatch is not None else None
