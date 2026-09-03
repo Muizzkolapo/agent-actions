@@ -171,6 +171,18 @@ class SchemaValidator(BaseValidator):
                 file_path.name,
             )
             return
+        # A schema-path file may hold only an expectations: block (a named
+        # suite); it declares no shape to meta-validate.
+        if (
+            isinstance(schema_data, dict)
+            and isinstance(schema_data.get("expectations"), list)
+            and not any(key in schema_data for key in ("fields", "type", "properties"))
+        ):
+            logger.debug(
+                "Schema '%s' holds only an expectations: block; skipping JSON Schema checks.",
+                file_path.name,
+            )
+            return
         if not self._is_valid_json_schema_structure(schema_data):
             self.add_error(
                 f"{display_name} (file: {file_path.name}) does not appear to be "
