@@ -318,3 +318,78 @@ class TestOutputSchemaContract:
         """LLM actions without YAML schema: have no json_output_schema."""
         result = self._expand_single(self._make_llm_action(schema=None))
         assert result.get("json_output_schema") is None
+
+
+class TestJudgeContextFromASchemaField:
+    """A judged rule declared on the action's schema needs its refs observed too."""
+
+    @staticmethod
+    def _agent_for(schema, expect):
+        action = {"name": "judge_it", "intent": "Test", "schema": schema, "expect": expect}
+        agent = {"agent_type": "judge_it", "name": "judge_it"}
+        defaults = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "KEY"}
+        return ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
+
+    def test_a_ref_on_a_field_declared_rule_reaches_observe(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {
+                            "id": "grounded",
+                            "type": "llm_judge",
+                            "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                        }
+                    ],
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {"repair": "none"})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+
+    def test_a_ref_in_the_files_own_block_reaches_observe(self):
+        schema = {
+            "name": "grounded",
+            "fields": [{"id": "summary", "type": "string"}],
+            "expectations": [
+                {
+                    "id": "grounded",
+                    "type": "llm_judge",
+                    "field": "summary",
+                    "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {"repair": "none"})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+
+    def test_an_inline_list_still_wins_over_the_schema(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {"type": "llm_judge", "params": {"rule": "r", "context": ["a.b"]}}
+                    ],
+                }
+            ],
+        }
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "type": "llm_judge",
+                    "field": "summary",
+                    "params": {"rule": "r", "context": ["c.d"]},
+                }
+            ],
+        }
+        agent = self._agent_for(schema, expect)
+        observe = agent["context_scope"]["observe"]
+        assert "c.d" in observe
+        assert "a.b" not in observe
