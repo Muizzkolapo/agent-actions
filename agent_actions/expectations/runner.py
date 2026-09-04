@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agent_actions.expectations import registry
-from agent_actions.expectations.expression import ExpressionParseError, evaluate_condition
+from agent_actions.expectations.expression import condition_holds, evaluate_condition
 from agent_actions.expectations.fields import FieldResolutionError, resolve, resolve_context
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 
@@ -67,9 +67,18 @@ def _run_one(
     row_condition = expectation.params.get("row_condition")
     if row_condition is not None:
         try:
-            applies, _ = evaluate_condition(str(row_condition), record)
-        except ExpressionParseError as exc:
-            return outcome(False, f"row_condition {str(row_condition)!r} does not parse: {exc}")
+            applies = condition_holds(str(row_condition), record)
+        except Exception as exc:
+            logger.warning(
+                "Expectation '%s' row_condition could not be evaluated, failing the rule",
+                expectation.resolved_id,
+                exc_info=True,
+            )
+            return outcome(
+                False,
+                f"row_condition {str(row_condition)!r} could not be evaluated, so whether "
+                f"this rule applies is unknown: {exc}",
+            )
         if not applies:
             return outcome(
                 True,

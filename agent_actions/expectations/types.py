@@ -144,7 +144,11 @@ class SuiteResult(BaseModel):
         return {
             "overall_pass": self.overall_pass,
             "failed": [o.id for o in self.failed if o.severity == "error"],
-            "skipped": [o.id for o in self.outcomes if o.skipped and o.severity == "error"],
+            # Only rules that could not be checked; a rule waived by its
+            # row_condition passed and is not unchecked.
+            "skipped": [
+                o.id for o in self.outcomes if o.skipped and not o.passed and o.severity == "error"
+            ],
             "outcomes": [o.model_dump() for o in self.outcomes],
         }
 

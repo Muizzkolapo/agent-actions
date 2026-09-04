@@ -72,6 +72,16 @@ def referenced_field_paths(node: ASTNode | None) -> list[str]:
     return found
 
 
+def condition_holds(condition: str, record: dict[str, Any]) -> bool:
+    """Whether *condition* is true of *record*, raising when it cannot be evaluated.
+
+    Unlike :func:`evaluate_condition`, an unevaluatable condition is not a false
+    one — a caller deciding whether a rule applies must not read "we could not
+    tell" as "it does not apply".
+    """
+    return bool(parse_condition(condition).evaluate(record))
+
+
 def evaluate_condition(condition: str, record: dict[str, Any]) -> tuple[bool, str]:
     """Evaluate a condition against one record; a missing field is a failure, not an error."""
     ast = parse_condition(condition)
