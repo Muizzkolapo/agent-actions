@@ -7,10 +7,10 @@ their results, and the service that runs them around generation.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `types.py` | Module | Defines `Expectation`, `Suite`, `Outcome`, `SuiteResult`. `Expectation` accepts type-specific params as extra keys; `definition_hash()` digests what a rule tests, ignoring its id. | `validation`, `typing` |
+| `types.py` | Module | Defines `Expectation`, `Suite`, `Outcome`, `SuiteResult`. `Expectation` reads type-specific arguments from its `params:` block and forbids unknown rule keys; `definition_hash()` digests what a rule tests, ignoring its id. | `validation`, `typing` |
 | `fields.py` | Module | Turns a `field:` selector into check inputs via `resolve()` — bare name yields the whole value, `name[*]` one per element, a list of names one combined input. `referenced_names()` backs the preflight check. | `validation` |
 | `registry.py` | Module | Deterministic expectation types and `register`/`get`/`known_types`. A check returns `(passed, detail)`; `detail` names the observed value, since the repair composer reads it. | `validation` |
-| `loader.py` | Module | Builds a `Suite` from a schema-path file's `expectations:` block (`load_named_suite` via `SchemaLoader`, `build_suite_from_schema_data`) or from an action's inline list (`build_inline_suite`). | `output` |
+| `loader.py` | Module | Builds a `Suite` from a schema-path file's rules — those declared under a `fields:` entry, which carry that field as their selector, and those in the file's own `expectations:` block (`load_named_suite` via `SchemaLoader`, `build_suite_from_schema_data`) — or from an action's inline list (`build_inline_suite`). | `output` |
 | `runner.py` | Module | Evaluates every expectation against one record via `run_suite()`. Every rule runs even after an earlier failure — the repair composer needs both what broke and what to preserve. A missing field is a failed outcome; an unregistered type raises. | `validation` |
 | `service.py` | Module | Runs one generation through `ExpectationService.execute()`, taking the same `llm_operation` callable contract as `RepromptService` and composing as the outermost recovery layer. `attach_verdict()` writes the verdict under the record's `expect` key. | `processing` |
 
