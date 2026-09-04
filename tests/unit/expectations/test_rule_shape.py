@@ -76,3 +76,13 @@ def test_a_stray_key_and_a_superseded_severity_are_reported_together():
     message = str(excinfo.value)
     assert "params" in message
     assert "is now 'error'" in message
+
+
+@pytest.mark.parametrize(
+    "typo,meant",
+    [("feild", "field"), ("hnit", "hint"), ("sevrity", "severity"), ("parms", "params")],
+)
+def test_a_near_miss_on_a_rule_key_names_the_key_it_resembles(typo, meant):
+    with pytest.raises(ValidationError) as excinfo:
+        Expectation(**{"type": "not_null", "field": "answer", typo: "x"})
+    assert f"did you mean '{meant}'" in str(excinfo.value)
