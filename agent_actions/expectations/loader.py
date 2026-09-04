@@ -63,6 +63,11 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[A
             continue
         rules = field.get("expectations")
         field_id = field.get("id") or field.get("name")
+        if rules is not None and not isinstance(rules, list):
+            raise ValueError(
+                f"Schema file '{suite_name}': field '{field_id}' has an expectations: "
+                f"value that is not a list, found {type(rules).__name__}"
+            )
 
         # A selector only reaches a top-level field, so rules on anything below one
         # would never run; refusing them beats dropping them silently. Checked for
@@ -104,7 +109,27 @@ def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
     scoped, defects = _field_scoped_entries(suite_name, data)
     if defects:
         raise ValueError(f"Schema file '{suite_name}': " + "; ".join(defects))
-    entries = scoped + list(data.get("expectations") or [])
+
+    # Every part of the file a selector cannot reach, not just the fields: list —
+    # a JSON-Schema-format file has no fields: at all, and its rules would
+    # otherwise be dropped without a word.
+    unreachable = _nested_rule_owner(
+        {k: v for k, v in data.items() if k not in ("expectations", "fields")}
+    )
+    if unreachable is not None:
+        raise ValueError(
+            f"Schema file '{suite_name}' has expectations on '{unreachable}', which a "
+            f"selector cannot reach; a rule belongs on a top-level field or in the "
+            f"file's own expectations: block"
+        )
+
+    own = data.get("expectations")
+    if own is not None and not isinstance(own, list):
+        raise ValueError(
+            f"Schema file '{suite_name}' has an expectations: value that is not a list, "
+            f"found {type(own).__name__}"
+        )
+    entries = scoped + list(own or [])
     if not entries:
         raise ValueError(
             f"Schema file '{suite_name}' declares no expectations: no rules on its "
