@@ -272,7 +272,12 @@ def test_llm_judge_negative_votes_is_a_defect():
         "write_q": {
             "expect": {
                 "expectations": [
-                    {"id": "r", "type": "llm_judge", "field": "options", "rule": "x", "votes": -1}
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "votes": -1},
+                    }
                 ]
             }
         }
@@ -290,8 +295,7 @@ def test_llm_judge_non_integer_votes_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "rule": "x",
-                        "votes": "three",
+                        "params": {"rule": "x", "votes": "three"},
                     }
                 ]
             }
@@ -306,7 +310,12 @@ def test_llm_judge_positive_votes_is_accepted():
         "write_q": {
             "expect": {
                 "expectations": [
-                    {"id": "r", "type": "llm_judge", "field": "options", "rule": "x", "votes": 3}
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "votes": 3},
+                    }
                 ]
             }
         }
