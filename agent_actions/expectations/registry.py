@@ -17,6 +17,10 @@ Check = Callable[[Any, dict[str, Any]], tuple[bool, str]]
 
 _REGISTRY: dict[str, ExpectationType] = {}
 
+# Accepted by every type: it gates whether the rule runs at all, so it is the
+# framework's argument rather than any one check's.
+_UNIVERSAL_PARAMS = frozenset({"row_condition"})
+
 
 @dataclass(frozen=True)
 class ExpectationType:
@@ -26,6 +30,11 @@ class ExpectationType:
     params: frozenset[str]
     required: frozenset[str]
     check: Check
+
+    def __post_init__(self) -> None:
+        # Unioned here rather than at each registration site so no path can
+        # register a type that silently rejects the universal arguments.
+        object.__setattr__(self, "params", self.params | _UNIVERSAL_PARAMS)
 
 
 def register(
@@ -117,6 +126,26 @@ def _matches_regex(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
         return True, ""
     if not matched:
         return False, f"value {str(value)!r} did not match pattern {pattern!r}"
+    return True, ""
+
+
+def _like_to_regex(like_pattern: str) -> str:
+    """Translate SQL LIKE wildcards; every other character is literal text."""
+    return "".join(
+        ".*" if ch == "%" else "." if ch == "_" else re.escape(ch) for ch in like_pattern
+    )
+
+
+@register("match_like_pattern", params=("like_pattern", "negate"), required=("like_pattern",))
+def _match_like_pattern(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
+    like_pattern = params["like_pattern"]
+    matched = re.fullmatch(_like_to_regex(str(like_pattern)), str(value), re.DOTALL) is not None
+    if params.get("negate", False):
+        if matched:
+            return False, f"value {str(value)!r} matched forbidden pattern {like_pattern!r}"
+        return True, ""
+    if not matched:
+        return False, f"value {str(value)!r} did not match pattern {like_pattern!r}"
     return True, ""
 
 
