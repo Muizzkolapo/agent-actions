@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.expectations import registry
 from agent_actions.expectations.runner import UnknownExpectationTypeError, run_suite
 from agent_actions.expectations.types import Suite
 
@@ -414,3 +415,93 @@ def test_hint_on_an_expression_entry_stays_out_of_condition_params():
     )
     result = run_suite(suite, {"score": 50})
     assert result.outcomes[0].passed is True
+
+
+def test_a_rule_whose_row_condition_is_false_is_skipped_not_failed():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+    assert result.overall_pass is True
+
+
+def test_a_skipped_row_condition_names_the_condition_that_gated_it():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'other'"},
+            }
+        ),
+        RECORD,
+    )
+    assert "row_condition" in result.outcomes[0].detail
+
+
+def test_a_rule_whose_row_condition_holds_still_runs_and_can_fail():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'alpha one'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is False
+    assert result.overall_pass is False
+
+
+def test_the_row_condition_is_not_handed_to_the_check_as_an_argument():
+    seen = {}
+
+    def spy(value, params):
+        seen.update(params)
+        return True, ""
+
+    registry._REGISTRY["row_condition_spy"] = registry.ExpectationType(
+        "row_condition_spy", frozenset(), frozenset(), spy
+    )
+    try:
+        run_suite(
+            suite_of(
+                {
+                    "type": "row_condition_spy",
+                    "field": "answer",
+                    "params": {"row_condition": "answer == 'alpha one'"},
+                }
+            ),
+            RECORD,
+        )
+    finally:
+        del registry._REGISTRY["row_condition_spy"]
+    assert "row_condition" not in seen
+
+
+def test_an_unparseable_row_condition_is_a_failed_outcome_not_a_crash():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "this is not a condition"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].passed is False
+    assert result.outcomes[0].skipped is False
