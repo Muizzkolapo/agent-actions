@@ -333,8 +333,10 @@ def test_llm_judge_context_ref_to_a_real_field_is_accepted():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "rule": "x",
-                        "context": ["extract_quote_context.source_context"],
+                        "params": {
+                            "rule": "x",
+                            "context": ["extract_quote_context.source_context"],
+                        },
                     }
                 ]
             }
@@ -353,8 +355,7 @@ def test_llm_judge_context_ref_to_unknown_action_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "rule": "x",
-                        "context": ["nonexistent.field"],
+                        "params": {"rule": "x", "context": ["nonexistent.field"]},
                     }
                 ]
             }
@@ -373,8 +374,7 @@ def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "rule": "x",
-                        "context": ["extract_quote_context.missing_field"],
+                        "params": {"rule": "x", "context": ["extract_quote_context.missing_field"]},
                     }
                 ]
             }
@@ -394,8 +394,7 @@ def test_llm_judge_malformed_context_ref_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "rule": "x",
-                        "context": ["no_dot"],
+                        "params": {"rule": "x", "context": ["no_dot"]},
                     }
                 ]
             }
@@ -410,7 +409,12 @@ def test_llm_judge_non_list_context_value_is_a_defect_not_a_crash():
         "write_q": {
             "expect": {
                 "expectations": [
-                    {"id": "r", "type": "llm_judge", "field": "options", "rule": "x", "context": 5}
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "context": 5},
+                    }
                 ]
             }
         }
