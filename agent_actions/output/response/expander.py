@@ -294,9 +294,9 @@ class ActionExpander:
         agent["expect"] = action.get("expect")
 
         # Union context: refs into observe so infer_dependencies picks up the
-        # source action automatically; inline expectations: only, suite: isn't
-        # loadable here without project_root/workflow.
-        context_refs = collect_judge_context_refs(agent["expect"])
+        # source action automatically. The action's inline list, or its resolved
+        # schema's rules; a named suite: isn't loadable here without project_root.
+        context_refs = collect_judge_context_refs(agent["expect"], agent.get("schema"))
         if context_refs:
             agent["context_scope"] = agent.get("context_scope") or {}
             agent["context_scope"]["observe"] = merge_directive_value(

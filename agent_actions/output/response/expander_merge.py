@@ -66,13 +66,31 @@ def initialize_optional_fields(agent: dict[str, Any]) -> None:
     agent.setdefault("guard", None)
 
 
-def collect_judge_context_refs(expect: dict[str, Any] | None) -> list[str]:
-    """The context: refs named by every inline llm_judge expectation on an action."""
+def _schema_rule_entries(expect: dict[str, Any], schema: Any) -> list[Any]:
+    """The rules of the action's own schema, when the expect block defaults to them."""
+    if expect.get("suite") is not None or not isinstance(schema, dict):
+        return []
+    from agent_actions.expectations.loader import schema_rule_entries
+
+    try:
+        entries, _ = schema_rule_entries(str(schema.get("name") or "schema"), schema)
+    except ValueError:
+        return []
+    return entries
+
+
+def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None) -> list[str]:
+    """The context: refs named by every llm_judge rule this action will run.
+
+    Reads the action's inline list, or — when it has none — the rules of its
+    resolved schema, which is where the co-located form declares them. A named
+    ``suite:`` is still out of reach here: it needs a project root this layer
+    does not have.
+    """
     if not expect:
         return []
-    entries = expect.get("expectations")
-    if not isinstance(entries, list):
-        return []
+    declared = expect.get("expectations")
+    entries = declared if isinstance(declared, list) else _schema_rule_entries(expect, schema)
     refs: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict) or entry.get("type") != "llm_judge":
