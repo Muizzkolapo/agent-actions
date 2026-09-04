@@ -714,8 +714,7 @@ JUDGE_WITH_CONTEXT = [
         "id": "grounded",
         "type": "llm_judge",
         "field": "options",
-        "rule": "grounded in the source",
-        "context": ["research.findings"],
+        "params": {"rule": "grounded in the source", "context": ["research.findings"]},
     }
 ]
 
@@ -734,7 +733,7 @@ def test_a_judged_context_ref_on_a_batch_action_is_a_defect():
 
 
 def test_a_judged_rule_without_context_is_allowed_in_batch():
-    judged = [{"id": "ok", "type": "llm_judge", "field": "options", "rule": "is good"}]
+    judged = [{"id": "ok", "type": "llm_judge", "field": "options", "params": {"rule": "is good"}}]
     defects = find_expectation_defects(
         action_config(run_mode="batch", expect={"repair": "none", "expectations": judged}),
         {"a": {"options"}},

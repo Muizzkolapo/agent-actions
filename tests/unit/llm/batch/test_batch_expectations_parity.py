@@ -29,7 +29,7 @@ EXPECT_BLOCK: dict[str, Any] = {
             "id": "density_known",
             "type": "accepted_values",
             "field": "density",
-            "values": ["high", "low"],
+            "params": {"values": ["high", "low"]},
         },
         {"id": "reason_present", "type": "not_null", "field": "reason"},
     ],

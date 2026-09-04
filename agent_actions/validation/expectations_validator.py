@@ -96,7 +96,8 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
             if (
                 isinstance(entry, dict)
                 and entry.get("type") == "llm_judge"
-                and entry.get("context")
+                and isinstance(entry.get("params"), dict)
+                and entry["params"].get("context")
             ):
                 label = entry.get("id") or entry.get("type")
                 messages.append(
