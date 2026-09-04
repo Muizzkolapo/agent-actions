@@ -16,9 +16,15 @@ _RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
 _RENAMED_SEVERITIES = {"fail": "error"}
 
 
+# Measured against every argument name the registered types accept: the closest
+# any of them comes to a rule key is 0.615, while the common typos — a
+# transposition, a dropped letter — sit at 0.75 and above.
+_NEAR_MISS_CUTOFF = 0.70
+
+
 def _nearest_rule_key(key: str) -> str | None:
     """The rule key *key* was probably meant to be, or None if it reads as an argument."""
-    matches = difflib.get_close_matches(key, _RULE_KEYS, n=1, cutoff=0.85)
+    matches = difflib.get_close_matches(key, _RULE_KEYS, n=1, cutoff=_NEAR_MISS_CUTOFF)
     return matches[0] if matches else None
 
 
