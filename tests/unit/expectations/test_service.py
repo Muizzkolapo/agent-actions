@@ -11,9 +11,9 @@ from agent_actions.expectations.types import Suite
 
 SUITE = Suite(
     name="s",
-    expectations=[{"id": "count", "type": "item_count", "field": "ideas", "min": 2}],
+    expectations=[{"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}}],
 )
-INLINE = [{"type": "item_count", "field": "ideas", "min": 2}]
+INLINE = [{"type": "item_count", "field": "ideas", "params": {"min": 2}}]
 
 
 def passing_llm(prompt):

@@ -7,7 +7,8 @@ from agent_actions.expectations.types import Suite
 from agent_actions.processing.invocation.online import OnlineStrategy
 
 SUITE = Suite(
-    name="s", expectations=[{"id": "count", "type": "item_count", "field": "ideas", "min": 2}]
+    name="s",
+    expectations=[{"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}}],
 )
 
 
