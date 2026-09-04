@@ -141,7 +141,7 @@ def test_outcome_accepts_skipped_true():
     outcome = Outcome(
         id="a",
         type="llm_judge",
-        severity="fail",
+        severity="error",
         passed=False,
         skipped=True,
         detail="judge budget exhausted: 10/10 calls used this run",
@@ -151,11 +151,11 @@ def test_outcome_accepts_skipped_true():
     assert outcome.passed is False
 
 
-def test_skipped_fail_severity_outcome_still_blocks_overall_pass():
+def test_skipped_error_severity_outcome_still_blocks_overall_pass():
     skipped = Outcome(
         id="a",
         type="llm_judge",
-        severity="fail",
+        severity="error",
         passed=False,
         skipped=True,
         detail="judge budget exhausted",
@@ -169,7 +169,7 @@ def test_to_record_dict_lists_skipped_ids_separately_from_failed():
     skipped = Outcome(
         id="a",
         type="llm_judge",
-        severity="fail",
+        severity="error",
         passed=False,
         skipped=True,
         detail="judge budget exhausted",
