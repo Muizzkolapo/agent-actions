@@ -39,11 +39,17 @@ def _nested_rule_owner(node: Any) -> str | None:
     return None
 
 
-def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> list[Any]:
-    """Rules declared under a ``fields:`` entry, each carrying that field as its selector."""
+def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[Any], list[str]]:
+    """Rules declared under a ``fields:`` entry, each carrying that field as its selector.
+
+    Returns the rules and the defects of individual rules. A defective rule is
+    left out rather than raised on, so a caller reporting defects can report all
+    of them; the file's own structure still raises, since there is nothing to
+    report rule by rule when the shape itself is wrong.
+    """
     fields = data.get("fields")
     if fields is None:
-        return []
+        return [], []
     if not isinstance(fields, list):
         raise ValueError(
             f"Schema file '{suite_name}' has a fields: value that is not a list, "
@@ -51,6 +57,7 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> list[Any]:
         )
 
     entries: list[Any] = []
+    defects: list[str] = []
     for field in fields:
         if not isinstance(field, dict):
             continue
@@ -78,12 +85,14 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> list[Any]:
                 entries.append(entry)
                 continue
             if "field" in entry:
-                raise ValueError(
-                    f"Schema file '{suite_name}': the rule on field '{field_id}' must not "
-                    f"declare field: — position already names what it tests"
+                label = entry.get("id") or entry.get("type") or "<unnamed>"
+                defects.append(
+                    f"{label}: a rule on field '{field_id}' must not declare field: — "
+                    f"position already names what it tests"
                 )
+                continue
             entries.append({**entry, "field": field_id})
-    return entries
+    return entries, defects
 
 
 def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
@@ -92,7 +101,10 @@ def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
         raise ValueError(
             f"Schema file '{suite_name}' must be a mapping, found {type(data).__name__}"
         )
-    entries = _field_scoped_entries(suite_name, data) + list(data.get("expectations") or [])
+    scoped, defects = _field_scoped_entries(suite_name, data)
+    if defects:
+        raise ValueError(f"Schema file '{suite_name}': " + "; ".join(defects))
+    entries = scoped + list(data.get("expectations") or [])
     if not entries:
         raise ValueError(
             f"Schema file '{suite_name}' declares no expectations: no rules on its "
