@@ -570,7 +570,7 @@ def test_a_structural_outcome_carries_a_schema_digest():
     result = service.execute(lambda p: ("text", True), "P")
     outcome = result.suite_result.outcomes[0]
     assert outcome.type == "schema"
-    assert outcome.severity == "fail"
+    assert outcome.severity == "error"
     assert len(outcome.definition_hash) == 12
 
 

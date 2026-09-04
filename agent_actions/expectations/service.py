@@ -200,7 +200,7 @@ class ExpectationService:
         outcome = Outcome(
             id="_structural",
             type="schema",
-            severity="fail",
+            severity="error",
             passed=False,
             detail=detail,
             definition_hash=self._schema_digest,
