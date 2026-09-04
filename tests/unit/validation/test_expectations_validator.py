@@ -32,7 +32,7 @@ def write_suite(tmp_path, suite_name, expectations):
 
 def test_clean_suite_reports_no_defects():
     defects = find_expectation_defects(
-        config([{"type": "item_count", "field": "options", "equals": 4}]), FIELDS
+        config([{"type": "item_count", "field": "options", "params": {"equals": 4}}]), FIELDS
     )
     assert defects == {}
 
@@ -65,7 +65,8 @@ def test_field_absent_from_the_action_output_is_reported():
 
 def test_wildcard_selector_is_checked_against_its_base_name():
     defects = find_expectation_defects(
-        config([{"type": "word_count_between", "field": "nonexistent[*]", "max": 5}]), FIELDS
+        config([{"type": "word_count_between", "field": "nonexistent[*]", "params": {"max": 5}}]),
+        FIELDS,
     )
     assert "nonexistent" in defects["write_q"][0]
 
@@ -124,8 +125,7 @@ def test_field_check_still_fires_when_the_action_produces_zero_fields():
 def test_malformed_field_value_is_reported_not_crashed():
     defects = find_expectation_defects(config([{"type": "not_null", "field": 42}]), FIELDS)
     assert "write_q" in defects
-    assert "must be a string or list" in defects["write_q"][0]
-    assert "int" in defects["write_q"][0]
+    assert any("valid string" in message for message in defects["write_q"])
 
 
 def test_named_suite_with_an_unregistered_type_is_reported(tmp_path):
@@ -147,7 +147,9 @@ def test_named_suite_that_does_not_exist_is_reported(tmp_path):
 
 
 def test_clean_named_suite_reports_no_defects(tmp_path):
-    write_suite(tmp_path, "scenario", [{"type": "item_count", "field": "options", "equals": 4}])
+    write_suite(
+        tmp_path, "scenario", [{"type": "item_count", "field": "options", "params": {"equals": 4}}]
+    )
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert defects == {}
 
@@ -158,7 +160,7 @@ def test_suite_rules_ride_beside_schema_fields_in_one_file(tmp_path):
         "scenario",
         {
             "fields": [{"id": "options", "type": "array", "items": {"type": "string"}}],
-            "expectations": [{"type": "item_count", "field": "options", "equals": 4}],
+            "expectations": [{"type": "item_count", "field": "options", "params": {"equals": 4}}],
         },
     )
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)

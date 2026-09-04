@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from agent_actions.expectations import registry
 from agent_actions.expectations.fields import referenced_names
-from agent_actions.expectations.types import _DECLARED_FIELDS as _DECLARED_KEYS
+from agent_actions.expectations.types import Expectation
 
 EXPECTATIONS_REMEDY = (
     "Fix the expectation declaration: use a registered type "
@@ -55,10 +58,7 @@ def find_expectation_defects(
                     "expectations: is an empty list; add entries, or omit the "
                     "key to read the action's own schema"
                 )
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                messages.extend(_entry_defects(entry, fields))
+            messages.extend(_inline_defects(entries, fields))
         elif isinstance(suite_name, str) and project_root is not None:
             messages.extend(_suite_defects(suite_name, project_root, fields))
         elif entries is None and suite_name is None and project_root is not None:
@@ -79,25 +79,25 @@ def _default_suite_defects(
     dropped), so the resolved dict is the authority; the name survives only
     when loading could not inline it.
     """
+    from agent_actions.expectations.loader import build_suite_from_schema_data
+
     schema_data = action.get("schema")
     if isinstance(schema_data, dict):
-        entries = schema_data.get("expectations")
-        if not isinstance(entries, list) or not entries:
+        label = schema_data.get("name") or action.get("name") or "the action's schema"
+        try:
+            suite = build_suite_from_schema_data(str(label), schema_data)
+        except ValueError as exc:
             return [
-                "a bare expect: reads the expectations: block of the action's "
-                "schema, which has no expectations; add the block to the schema "
-                "file, or use suite: or an inline expectations: list"
+                f"a bare expect: reads the rules of the action's own schema — {exc}; "
+                f"declare them under a field or in the file's expectations: block, "
+                f"or use suite: or an inline expectations: list"
             ]
-        messages: list[str] = []
-        for entry in entries:
-            if isinstance(entry, dict):
-                messages.extend(_entry_defects(entry, fields))
-        return messages
+        return [m for e in suite.expectations for m in _rule_defects(e, fields)]
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
         return _suite_defects(schema_name, project_root, fields)
     return [
-        "a bare expect: reads the expectations: block of the action's schema, "
+        "a bare expect: reads the rules of the action's own schema, "
         "but this action declares no schema; add one, or use suite: or an "
         "inline expectations: list"
     ]
@@ -111,39 +111,52 @@ def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None)
     except SuiteLoadError as exc:
         return [str(exc)]
 
+    return [m for e in suite.expectations for m in _rule_defects(e, fields)]
+
+
+def _inline_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
+    """Defects for an action's inline list, which has not been through the model yet."""
     messages: list[str] = []
-    for expectation in suite.expectations:
-        messages.extend(_entry_defects(expectation.model_dump(exclude_none=True), fields))
+    for entry in entries:
+        if not isinstance(entry, dict):
+            messages.append(f"expectations: entry must be a mapping, got {type(entry).__name__}")
+            continue
+        label = entry.get("id") or entry.get("type") or "<unnamed>"
+        try:
+            expectation = Expectation(**entry)
+        except ValidationError as exc:
+            messages.extend(f"{label}: {_reason(err)}" for err in exc.errors())
+            continue
+        messages.extend(_rule_defects(expectation, fields))
     return messages
 
 
-def _entry_defects(entry: dict[str, Any], fields: set[str] | None) -> list[str]:
-    label = entry.get("id") or entry.get("type") or "<unnamed>"
-    type_name = entry.get("type")
+def _reason(error: Mapping[str, Any]) -> str:
+    """One pydantic error as prose, without its wrapper prefix."""
+    return str(error.get("msg", "")).removeprefix("Value error, ")
 
-    etype = registry.get(type_name) if isinstance(type_name, str) else None
+
+def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str]:
+    label = expectation.id or expectation.type
+    etype = registry.get(expectation.type)
     if etype is None:
         return [
-            f"{label}: unknown type '{type_name}'. Known types: {', '.join(registry.known_types())}"
+            f"{label}: unknown type '{expectation.type}'. "
+            f"Known types: {', '.join(registry.known_types())}"
         ]
 
     messages: list[str] = []
 
-    supplied = {k for k in entry if k not in _DECLARED_KEYS}
+    supplied = set(expectation.params)
     for unknown in sorted(supplied - etype.params):
-        messages.append(f"{label}: type '{type_name}' takes no parameter '{unknown}'")
+        messages.append(f"{label}: type '{expectation.type}' takes no parameter '{unknown}'")
     for missing in sorted(etype.required - supplied):
-        messages.append(f"{label}: type '{type_name}' requires parameter '{missing}'")
+        messages.append(f"{label}: type '{expectation.type}' requires parameter '{missing}'")
 
-    selector = entry.get("field")
+    selector = expectation.field
     if fields is not None and selector is not None:
-        if not isinstance(selector, (str, list)):
-            messages.append(
-                f"{label}: field must be a string or list of strings, got {type(selector).__name__}"
-            )
-        else:
-            for name in referenced_names(selector):
-                if name not in fields:
-                    messages.append(f"{label}: field '{name}' is not produced by this action")
+        for name in referenced_names(selector):
+            if name not in fields:
+                messages.append(f"{label}: field '{name}' is not produced by this action")
 
     return messages
