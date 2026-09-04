@@ -132,10 +132,25 @@ def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
             continue
         raw_id = entry.get("id")
         label = raw_id if isinstance(raw_id, str) and raw_id else entry.get("type") or "<unnamed>"
+
+        # The type first: the model's own rules are about a rule's shape, and a
+        # shape complaint about a type that does not exist sends the author the
+        # wrong way.
+        type_name = entry.get("type")
+        etype = registry.get(type_name) if isinstance(type_name, str) else None
+        if etype is None:
+            messages.append(
+                f"{label}: unknown type '{type_name}'. "
+                f"Known types: {', '.join(registry.known_types())}"
+            )
+            continue
         try:
             expectation = Expectation.model_validate(entry)
         except ValidationError as exc:
             messages.extend(f"{label}: {_reason(err)}" for err in exc.errors())
+            # The shape is wrong, but the arguments are a separate question and
+            # the author should not have to fix one to see the other.
+            messages.extend(_argument_defects(label, etype, entry.get("params")))
             continue
         messages.extend(_rule_defects(expectation, fields))
     return messages
@@ -152,6 +167,18 @@ def _reason(error: Mapping[str, Any]) -> str:
     return f"{location}: {text}" if location else text
 
 
+def _argument_defects(label: str, etype: Any, params: Any) -> list[str]:
+    """Defects in a rule's arguments, independent of anything else about the rule."""
+    supplied = set(params) if isinstance(params, dict) else set()
+    return [
+        f"{label}: type '{etype.name}' takes no parameter '{unknown}'"
+        for unknown in sorted(supplied - etype.params)
+    ] + [
+        f"{label}: type '{etype.name}' requires parameter '{missing}'"
+        for missing in sorted(etype.required - supplied)
+    ]
+
+
 def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str]:
     label = expectation.id or expectation.type
     etype = registry.get(expectation.type)
@@ -161,13 +188,7 @@ def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str
             f"Known types: {', '.join(registry.known_types())}"
         ]
 
-    messages: list[str] = []
-
-    supplied = set(expectation.params)
-    for unknown in sorted(supplied - etype.params):
-        messages.append(f"{label}: type '{expectation.type}' takes no parameter '{unknown}'")
-    for missing in sorted(etype.required - supplied):
-        messages.append(f"{label}: type '{expectation.type}' requires parameter '{missing}'")
+    messages = _argument_defects(label, etype, expectation.params)
 
     selector = expectation.field
     if fields is not None and selector is not None:
