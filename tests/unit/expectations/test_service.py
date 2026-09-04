@@ -279,7 +279,9 @@ def test_a_judge_reply_in_another_dialect_still_scores_the_record():
     This one patches the provider call instead and hands back the Python-literal
     verdict real judge models produce.
     """
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none"},
         action_name="brainstorm",
