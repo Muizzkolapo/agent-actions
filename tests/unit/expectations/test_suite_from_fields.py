@@ -144,3 +144,36 @@ def test_rules_nested_below_a_top_level_field_are_refused_not_dropped():
 def test_a_non_list_fields_value_is_a_named_error_not_a_crash():
     with pytest.raises(ValueError, match="fields"):
         build_suite_from_schema_data("bad_shape", {"fields": 3, "expectations": []})
+
+
+def test_nested_rules_are_refused_even_when_the_field_has_rules_of_its_own():
+    data = {
+        "fields": [
+            {
+                "id": "options",
+                "type": "array",
+                "expectations": [{"type": "item_count", "params": {"min": 2}}],
+                "items": {
+                    "type": "object",
+                    "properties": {"text": {"expectations": [{"type": "not_null"}]}},
+                },
+            }
+        ]
+    }
+    with pytest.raises(ValueError, match="text"):
+        build_suite_from_schema_data("page_shape", data)
+
+
+def test_a_nested_property_merely_named_expectations_is_not_mistaken_for_rules():
+    data = {
+        "fields": [
+            {
+                "id": "survey",
+                "type": "object",
+                "expectations": [{"type": "not_null"}],
+                "properties": {"expectations": {"type": "string"}},
+            }
+        ]
+    }
+    suite = build_suite_from_schema_data("page_shape", data)
+    assert [e.field for e in suite.expectations] == ["survey"]
