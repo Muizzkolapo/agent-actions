@@ -117,7 +117,9 @@ def test_factory_threads_the_schema_into_the_structural_gate(monkeypatch):
         },
         "expect": {
             "repair": "retry",
-            "expectations": [{"id": "count", "type": "item_count", "field": "ideas", "min": 1}],
+            "expectations": [
+                {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 1}}
+            ],
         },
     }
     calls = []
