@@ -49,7 +49,6 @@ def find_expectation_defects(
 
         fields = available_fields.get(action_name)
         messages: list[str] = []
-        messages.extend(_repair_mode_defects(action, expect))
 
         if fields is not None and _VERDICT_KEY in fields:
             messages.append(
@@ -59,17 +58,27 @@ def find_expectation_defects(
 
         entries = expect.get("expectations")
         suite_name = expect.get("suite")
+        resolved: list[Any] = []
         if isinstance(entries, list):
             if not entries:
                 messages.append(
                     "expectations: is an empty list; add entries, or omit the "
                     "key to read the action's own schema"
                 )
+            resolved = entries
             messages.extend(_entry_defects(entries, fields, available_fields))
         elif isinstance(suite_name, str) and project_root is not None:
-            messages.extend(_suite_defects(suite_name, project_root, fields, available_fields))
+            resolved, suite_messages = _named_suite_entries(suite_name, project_root)
+            messages.extend(suite_messages)
+            messages.extend(_entry_defects(resolved, fields, available_fields))
         elif entries is None and suite_name is None and project_root is not None:
-            messages.extend(_default_suite_defects(action, project_root, fields, available_fields))
+            resolved, schema_messages = _own_schema_entries(action, project_root)
+            messages.extend(schema_messages)
+            messages.extend(_entry_defects(resolved, fields, available_fields))
+
+        # Runs against the resolved rules, so the execution-shape checks see the
+        # same rules the runner will, wherever they were declared.
+        messages.extend(_repair_mode_defects(action, expect, resolved))
 
         if messages:
             defects[action_name] = sorted(messages)
@@ -83,7 +92,9 @@ def _config_token(value: Any) -> str:
     return str(raw).lower() if raw is not None else ""
 
 
-def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+def _repair_mode_defects(
+    action: dict[str, Any], expect: dict[str, Any], entries: list[Any]
+) -> list[str]:
     """Defects for the repair-loop keys against the action's execution shape."""
     messages: list[str] = []
     is_batch = _config_token(action.get("run_mode")) == "batch"
@@ -91,8 +102,7 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
         # Batch validates from the stored result and has no llm_context, so a
         # judged rule with context: refs would fail every record on a missing
         # context source rather than on its own rule.
-        entries = expect.get("expectations")
-        for entry in entries if isinstance(entries, list) else []:
+        for entry in entries:
             if (
                 isinstance(entry, dict)
                 and entry.get("type") == "llm_judge"
@@ -146,13 +156,10 @@ def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list
     return messages
 
 
-def _default_suite_defects(
-    action: dict[str, Any],
-    project_root: Path,
-    fields: set[str] | None,
-    all_fields: dict[str, set[str]],
-) -> list[str]:
-    """Defects for a bare expect: block, which reads the action's own schema.
+def _own_schema_entries(
+    action: dict[str, Any], project_root: Path | None
+) -> tuple[list[Any], list[str]]:
+    """The rules a bare expect: reads, which are the action's own schema's.
 
     A named schema is inlined into the action config at load time (its name
     dropped), so the resolved dict is the authority; the name survives only
@@ -170,7 +177,7 @@ def _default_suite_defects(
         try:
             entries, defects = schema_rule_entries(str(label), schema_data)
         except NoRulesDeclared as exc:
-            return [
+            return [], [
                 f"a bare expect: reads the rules of the action's own schema — {exc}; "
                 f"declare them under a field or in the file's expectations: block, "
                 f"or use suite: or an inline expectations: list"
@@ -178,32 +185,26 @@ def _default_suite_defects(
         except ValueError as exc:
             # The file has rules; they are in the wrong place or the wrong shape,
             # so the advice for a file with none would contradict the message.
-            return [f"a bare expect: reads the rules of the action's own schema — {exc}"]
-        return defects + _entry_defects(entries, fields, all_fields)
+            return [], [f"a bare expect: reads the rules of the action's own schema — {exc}"]
+        return entries, defects
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
-        return _suite_defects(schema_name, project_root, fields, all_fields)
-    return [
+        return _named_suite_entries(schema_name, project_root)
+    return [], [
         "a bare expect: reads the rules of the action's own schema, "
         "but this action declares no schema; add one, or use suite: or an "
         "inline expectations: list"
     ]
 
 
-def _suite_defects(
-    suite_name: str,
-    project_root: Path,
-    fields: set[str] | None,
-    all_fields: dict[str, set[str]],
-) -> list[str]:
+def _named_suite_entries(suite_name: str, project_root: Path | None) -> tuple[list[Any], list[str]]:
+    """The rules of a named suite, or the one error that stopped it loading."""
     from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
 
     try:
-        entries, defects = load_schema_rules(suite_name, project_root)
+        return load_schema_rules(suite_name, project_root)
     except SuiteLoadError as exc:
-        return [str(exc)]
-
-    return defects + _entry_defects(entries, fields, all_fields)
+        return [], [str(exc)]
 
 
 def _entry_defects(
