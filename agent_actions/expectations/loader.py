@@ -15,11 +15,18 @@ class SuiteLoadError(ValueError):
     """A named suite could not be loaded from the schema path."""
 
 
+def _looks_like_rules(value: Any) -> bool:
+    """Whether a value is a list of rules, rather than a member that shares the name."""
+    return isinstance(value, list) and any(
+        isinstance(entry, dict) and "type" in entry for entry in value
+    )
+
+
 def _nested_rule_owner(node: Any) -> str | None:
     """The name of the first nested member carrying rules the loader cannot reach."""
     if isinstance(node, dict):
         for key, value in node.items():
-            if isinstance(value, dict) and value.get("expectations"):
+            if isinstance(value, dict) and _looks_like_rules(value.get("expectations")):
                 return str(key)
             found = _nested_rule_owner(value)
             if found is not None:
@@ -49,16 +56,18 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> list[Any]:
             continue
         rules = field.get("expectations")
         field_id = field.get("id") or field.get("name")
+
+        # A selector only reaches a top-level field, so rules on anything below one
+        # would never run; refusing them beats dropping them silently. Checked for
+        # every field, including one that carries rules of its own.
+        nested = _nested_rule_owner({k: v for k, v in field.items() if k != "expectations"})
+        if nested is not None:
+            raise ValueError(
+                f"Schema file '{suite_name}': field '{field_id}' has expectations on its "
+                f"nested member '{nested}'; a selector reaches top-level fields only, so "
+                f"move the rule to the field itself or write a custom check"
+            )
         if not rules:
-            # A selector only reaches a top-level field, so rules on anything below
-            # one would never run; refusing them beats dropping them silently.
-            nested = _nested_rule_owner({k: v for k, v in field.items() if k != "expectations"})
-            if nested is not None:
-                raise ValueError(
-                    f"Schema file '{suite_name}': field '{field_id}' has expectations on its "
-                    f"nested member '{nested}'; a selector reaches top-level fields only, so "
-                    f"move the rule to the field itself or write a custom check"
-                )
             continue
         if not field_id:
             raise ValueError(
