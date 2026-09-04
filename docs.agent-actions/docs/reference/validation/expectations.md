@@ -202,7 +202,7 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 
 ### `context:` auto-injection
 
-Every ref in `context:` is automatically added to the action's own `context_scope.observe` at load time — you don't need to also list it there by hand (and if you do, it's deduplicated, not doubled). This is what makes `retrieve_passage.passage_text` available to the judge in the example above even though `answer_is_grounded` lives on a different action than `retrieve_passage`.
+Every ref in `context:` is automatically added to the action's own `context_scope.observe` at load time — you don't need to also list it there by hand (and if you do, it's deduplicated, not doubled). This covers an action's inline `expectations:` list and the rules of its own schema; a named `suite:` is the exception, because a suite is not loadable at the layer that does the injection, so list its refs in `observe:` yourself. This is what makes `retrieve_passage.passage_text` available to the judge in the example above even though `answer_is_grounded` lives on a different action than `retrieve_passage`.
 
 ### Caching and budget
 
@@ -290,7 +290,7 @@ Results attach to the record under an `expect` key, alongside the action's own s
 }
 ```
 
-The `skipped` list holds only rules that could **not** be checked — a budget-exhausted judge, for instance. A rule waived by its `row_condition` passed and is not listed there; its outcome carries `skipped: true` in `outcomes[]` with the condition in its detail, so "did not apply" stays distinguishable from "could not tell".
+The `skipped` list holds `error`-severity rules that could **not** be checked — a budget-exhausted judge, for instance. A rule waived by its `row_condition` passed and is not listed there, and neither are `warn`/`info` skips, since neither can change `overall_pass`. Every skip is still in `outcomes[]` with `skipped: true` and its reason in the detail, so "did not apply" stays distinguishable from "could not tell".
 
 `overall_pass` reflects only `error`-severity outcomes — `summary_length` failing above doesn't flip it because that rule is `severity: warn`.
 
@@ -395,6 +395,14 @@ A record the condition does not hold for records a passing outcome marked `skipp
 A condition that *cannot be evaluated* — it names a field the record does not carry, or compares against an unquoted literal — is a different answer from one that is false, and it **fails the rule**. Waiving a rule on a condition that never ran would silence it exactly when the model omitted the field, which is the case the rule exists to catch.
 
 The condition is preflight-checked like any other: it must parse, and every field it names must be one the action produces. Preflight can only check that the schema *declares* the field, not that a given record carries it — which is why the runtime treats an unevaluatable condition as a failure rather than an exemption.
+
+To gate on a field a record may legitimately lack, say so with `IS NULL` / `IS NOT NULL`, which read an absent field as absent rather than failing to evaluate:
+
+```yaml
+    row_condition: "question_type IS NOT NULL and question_type == 'multiple_choice'"
+```
+
+A record without `question_type` waives the rule; one that has it is checked. Writing `question_type == 'multiple_choice'` alone would fail the rule on records that lack the field, which is the safe default but not what you meant.
 
 ## Preflight validation
 
