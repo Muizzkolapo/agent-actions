@@ -300,7 +300,9 @@ def test_llm_judge_without_context_declared_never_calls_resolve_context():
 def test_expression_true_produces_a_passing_outcome():
     suite = Suite(
         name="s",
-        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
     )
     result = run_suite(suite, {"score": 91})
     assert result.overall_pass is True
@@ -311,7 +313,9 @@ def test_expression_true_produces_a_passing_outcome():
 def test_expression_false_outcome_detail_names_values():
     suite = Suite(
         name="s",
-        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
     )
     result = run_suite(suite, {"score": 64})
     assert result.overall_pass is False
@@ -322,7 +326,9 @@ def test_expression_false_outcome_detail_names_values():
 def test_expression_missing_field_is_a_failed_outcome_not_a_crash():
     suite = Suite(
         name="s",
-        expectations=[{"id": "score_floor", "type": "expression", "condition": "score >= 80"}],
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
     )
     result = run_suite(suite, {"points": 90})
     assert result.outcomes[0].passed is False
@@ -336,7 +342,7 @@ def test_expression_warn_severity_does_not_block_overall_pass():
             {
                 "id": "score_floor",
                 "type": "expression",
-                "condition": "score >= 80",
+                "params": {"condition": "score >= 80"},
                 "severity": "warn",
             }
         ],
@@ -350,8 +356,8 @@ def test_expression_runs_alongside_deterministic_checks_in_one_suite():
     suite = Suite(
         name="s",
         expectations=[
-            {"id": "has_ideas", "type": "item_count", "field": "ideas", "min": 1},
-            {"id": "score_floor", "type": "expression", "condition": "score >= 80"},
+            {"id": "has_ideas", "type": "item_count", "field": "ideas", "params": {"min": 1}},
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}},
         ],
     )
     result = run_suite(suite, {"ideas": ["a"], "score": 95})
@@ -363,7 +369,11 @@ def test_expression_entry_loads_from_a_schema_files_expectations_block():
 
     suite = build_suite_from_schema_data(
         "quality",
-        {"expectations": [{"id": "score_floor", "type": "expression", "condition": "score >= 80"}]},
+        {
+            "expectations": [
+                {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+            ]
+        },
     )
     result = run_suite(suite, {"score": 85})
     assert result.overall_pass is True
@@ -373,9 +383,14 @@ def test_two_expressions_and_a_judged_rule_coexist_in_one_suite():
     suite = Suite(
         name="s",
         expectations=[
-            {"id": "floor", "type": "expression", "condition": "score >= 10"},
-            {"id": "cap", "type": "expression", "condition": "score <= 90"},
-            {"id": "on_topic", "type": "llm_judge", "field": "title", "rule": "on topic"},
+            {"id": "floor", "type": "expression", "params": {"condition": "score >= 10"}},
+            {"id": "cap", "type": "expression", "params": {"condition": "score <= 90"}},
+            {
+                "id": "on_topic",
+                "type": "llm_judge",
+                "field": "title",
+                "params": {"rule": "on topic"},
+            },
         ],
     )
     result = run_suite(
@@ -392,7 +407,7 @@ def test_hint_on_an_expression_entry_stays_out_of_condition_params():
             {
                 "id": "floor",
                 "type": "expression",
-                "condition": "score >= 10",
+                "params": {"condition": "score >= 10"},
                 "hint": "raise the score",
             }
         ],

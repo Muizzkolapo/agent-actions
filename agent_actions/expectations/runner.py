@@ -65,7 +65,7 @@ def _run_one(
         )
 
     if expectation.type == "expression":
-        passed, detail = evaluate_condition(str(expectation.params()["condition"]), record)
+        passed, detail = evaluate_condition(str(expectation.params["condition"]), record)
         return outcome(passed, detail)
 
     if expectation.field is None:
