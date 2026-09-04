@@ -167,7 +167,7 @@ class ExpectationService:
         """Apply the on_exhausted policy to a loop that ended without a pass."""
         if self._on_exhausted == "raise":
             failed = (
-                [o.id for o in suite_result.failed if o.severity == "fail"] if suite_result else []
+                [o.id for o in suite_result.failed if o.severity == "error"] if suite_result else []
             )
             raise ExpectationsExhaustedError(self.suite.name, failed, iterations)
         if self._on_exhausted == "fail":

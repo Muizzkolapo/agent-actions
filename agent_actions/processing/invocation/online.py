@@ -89,7 +89,7 @@ class OnlineStrategy(InvocationStrategy):
                 recovery_metadata.expectations = ExpectationsMetadata(
                     attempts=run.iterations,
                     failed=(
-                        [o.id for o in run.suite_result.failed if o.severity == "fail"]
+                        [o.id for o in run.suite_result.failed if o.severity == "error"]
                         if run.suite_result
                         else []
                     ),
