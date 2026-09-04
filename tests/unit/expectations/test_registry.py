@@ -19,6 +19,7 @@ def test_known_types_contains_every_builtin():
         "word_count_ratio",
         "accepted_values",
         "matches_regex",
+        "match_like_pattern",
         "no_forbidden_phrases",
         "contains_terms_from",
     }
@@ -183,3 +184,46 @@ def test_no_forbidden_phrases_handles_a_non_string_phrase_under_case_sensitive()
     passed, detail = run("no_forbidden_phrases", "the value is 5", phrases=[5], case_sensitive=True)
     assert passed is False
     assert "5" in detail
+
+
+def test_match_like_pattern_treats_percent_as_any_run():
+    passed, _ = run("match_like_pattern", "intro <b>bold</b> outro", like_pattern="%<%>%")
+    assert passed is True
+
+
+def test_match_like_pattern_fails_a_value_without_the_pattern():
+    passed, detail = run("match_like_pattern", "plain prose with no markup", like_pattern="%<%>%")
+    assert passed is False
+    assert "%<%>%" in detail
+
+
+def test_match_like_pattern_treats_underscore_as_exactly_one_character():
+    assert run("match_like_pattern", "ab", like_pattern="a_")[0] is True
+    assert run("match_like_pattern", "abc", like_pattern="a_")[0] is False
+
+
+def test_match_like_pattern_is_anchored_across_the_whole_value():
+    assert run("match_like_pattern", "prefix ab", like_pattern="a_")[0] is False
+
+
+def test_match_like_pattern_treats_regex_metacharacters_as_literal_text():
+    assert run("match_like_pattern", "axb", like_pattern="a.b")[0] is False
+    assert run("match_like_pattern", "a.b", like_pattern="a.b")[0] is True
+
+
+def test_match_like_pattern_negate_forbids_the_pattern():
+    assert run("match_like_pattern", "plain prose", like_pattern="%<%>%", negate=True)[0] is True
+    passed, detail = run(
+        "match_like_pattern", "has <b>markup</b>", like_pattern="%<%>%", negate=True
+    )
+    assert passed is False
+    assert "%<%>%" in detail
+
+
+def test_match_like_pattern_requires_its_pattern():
+    assert "like_pattern" in get("match_like_pattern").required
+
+
+def test_every_registered_type_accepts_row_condition():
+    missing = [name for name in known_types() if "row_condition" not in get(name).params]
+    assert missing == []
