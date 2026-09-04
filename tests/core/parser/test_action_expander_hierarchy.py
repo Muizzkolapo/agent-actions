@@ -114,8 +114,7 @@ class TestJudgeContextAutoInjection:
                     "id": "on_topic",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "on topic",
-                    "context": ["extract_context.source_context"],
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
                 }
             ],
         }
@@ -131,8 +130,7 @@ class TestJudgeContextAutoInjection:
                     "id": "on_topic",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "on topic",
-                    "context": ["extract_context.source_context"],
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
                 }
             ],
         }
@@ -147,8 +145,7 @@ class TestJudgeContextAutoInjection:
                     "id": "on_topic",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "on topic",
-                    "context": ["extract_context.source_context"],
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
                 }
             ],
         }
@@ -177,15 +174,13 @@ class TestJudgeContextAutoInjection:
                     "id": "a",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "r1",
-                    "context": ["extract_context.source_context"],
+                    "params": {"rule": "r1", "context": ["extract_context.source_context"]},
                 },
                 {
                     "id": "b",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "r2",
-                    "context": ["another_action.other_field"],
+                    "params": {"rule": "r2", "context": ["another_action.other_field"]},
                 },
             ],
         }
@@ -199,7 +194,12 @@ class TestJudgeContextAutoInjection:
         expect = {
             "repair": "none",
             "expectations": [
-                {"id": "a", "type": "llm_judge", "field": "ideas", "rule": "r1", "context": 5}
+                {
+                    "id": "a",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "r1", "context": 5},
+                }
             ],
         }
         agent = self._agent_for(expect, context_scope={"observe": ["source.*"]})
@@ -213,8 +213,7 @@ class TestJudgeContextAutoInjection:
                     "id": "a",
                     "type": "llm_judge",
                     "field": "ideas",
-                    "rule": "r1",
-                    "context": ["action_one.text", "action_two.text"],
+                    "params": {"rule": "r1", "context": ["action_one.text", "action_two.text"]},
                 }
             ],
         }
