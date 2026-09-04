@@ -290,6 +290,8 @@ Results attach to the record under an `expect` key, alongside the action's own s
 }
 ```
 
+The `skipped` list holds only rules that could **not** be checked — a budget-exhausted judge, for instance. A rule waived by its `row_condition` passed and is not listed there; its outcome carries `skipped: true` in `outcomes[]` with the condition in its detail, so "did not apply" stays distinguishable from "could not tell".
+
 `overall_pass` reflects only `error`-severity outcomes — `summary_length` failing above doesn't flip it because that rule is `severity: warn`.
 
 To act on the verdict, read it from a downstream [guard](../execution/guards.md):
@@ -388,9 +390,11 @@ Every type accepts a `row_condition` argument: a guard-syntax condition deciding
     row_condition: "exam_density != 'low'"
 ```
 
-A record the condition does not hold for records a **skipped**, passing outcome naming the condition — so an exemption is visible in the verdict rather than being indistinguishable from a rule that never fired. The gate runs before the check, and the argument is never handed to the check itself.
+A record the condition does not hold for records a passing outcome marked `skipped`, naming the condition — so an exemption is visible in the verdict rather than being indistinguishable from a rule that never fired. The gate runs before the check, applies to record-scoped rules too, and the argument is never handed to the check itself.
 
-The condition is preflight-checked like any other: it must parse, and every field it names must be one the action produces. A typo would otherwise gate every record out silently and the rule would never run.
+A condition that *cannot be evaluated* — it names a field the record does not carry, or compares against an unquoted literal — is a different answer from one that is false, and it **fails the rule**. Waiving a rule on a condition that never ran would silence it exactly when the model omitted the field, which is the case the rule exists to catch.
+
+The condition is preflight-checked like any other: it must parse, and every field it names must be one the action produces. Preflight can only check that the schema *declares* the field, not that a given record carries it — which is why the runtime treats an unevaluatable condition as a failure rather than an exemption.
 
 ## Preflight validation
 
@@ -401,7 +405,8 @@ The condition is preflight-checked like any other: it must parse, and every fiel
 - Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
 - Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not, and rules declared on a field, which already have one.
 - `expression` conditions and `row_condition` arguments are parsed and checked in full (syntax, blocklist, field references, constant conditions) — see [Expressions](#expressions).
-- Superseded spellings are named, not merely rejected: arguments written flat instead of under `params:`, and `severity: fail` for `severity: error`.
+- Superseded spellings are named, not merely rejected: arguments written flat instead of under `params:`, and `severity: fail` for `severity: error`. A key that merely *resembles* a rule key (`sevrity:`) is reported as that key rather than sent to `params:`.
+- Rules a selector could never reach — declared on a nested member of a field rather than on the field itself — are refused rather than ignored, as is a record-scoped `expression` rule declared under a field.
 - Preflight builds each suite the way the runner does, so rules declared on a schema's fields are checked too.
 
 ```bash
