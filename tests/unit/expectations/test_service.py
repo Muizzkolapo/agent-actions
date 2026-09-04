@@ -506,7 +506,7 @@ def test_auto_repair_hint_reaches_the_composed_prompt():
                 "id": "count",
                 "type": "item_count",
                 "field": "ideas",
-                "min": 2,
+                "params": {"min": 2},
                 "hint": "brainstorm additional distinct ideas",
             }
         ],

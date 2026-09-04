@@ -42,7 +42,7 @@ def compose_repair_prompt(
     """
     failed_lines = "\n".join(
         f"- {o.id}"
-        + (f" [{o.severity}]" if o.severity != "fail" else "")
+        + (f" [{o.severity}]" if o.severity != "error" else "")
         + (f": {_one_line(o.detail)}" if o.detail else "")
         + (f" (hint: {_one_line(hints[o.id])})" if o.id in hints else "")
         for o in suite_result.outcomes

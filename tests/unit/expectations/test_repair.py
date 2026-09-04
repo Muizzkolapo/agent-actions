@@ -4,7 +4,7 @@ from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.types import Outcome, SuiteResult
 
 
-def _outcome(oid, passed, severity="fail", detail="", skipped=False):
+def _outcome(oid, passed, severity="error", detail="", skipped=False):
     return Outcome(
         id=oid,
         type="item_count",
