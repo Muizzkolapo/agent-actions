@@ -233,3 +233,15 @@ def test_match_like_pattern_spans_newlines_the_way_sql_like_does():
     multiline = "line one\n<b>bold</b>\nline three"
     assert run("match_like_pattern", multiline, like_pattern="%<%>%")[0] is True
     assert run("match_like_pattern", "a\nb", like_pattern="a_b")[0] is True
+
+
+def test_no_registered_argument_name_is_mistaken_for_a_rule_key():
+    from agent_actions.expectations.types import _nearest_rule_key
+
+    confused = {
+        name: _nearest_rule_key(name)
+        for etype in (get(t) for t in known_types())
+        for name in etype.params
+        if _nearest_rule_key(name) is not None
+    }
+    assert confused == {}
