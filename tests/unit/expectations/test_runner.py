@@ -19,12 +19,12 @@ def suite_of(*entries):
 def test_all_passing_gives_overall_pass_and_no_failures():
     result = run_suite(
         suite_of(
-            {"id": "count", "type": "item_count", "field": "options", "equals": 4},
+            {"id": "count", "type": "item_count", "field": "options", "params": {"equals": 4}},
             {
                 "id": "phrasing",
                 "type": "no_forbidden_phrases",
                 "field": "answer_explanation",
-                "phrases": ["the source"],
+                "params": {"phrases": ["the source"]},
             },
         ),
         RECORD,
@@ -34,9 +34,12 @@ def test_all_passing_gives_overall_pass_and_no_failures():
     assert len(result.outcomes) == 2
 
 
-def test_a_failing_fail_severity_rule_blocks_and_carries_detail():
+def test_a_failing_error_severity_rule_blocks_and_carries_detail():
     result = run_suite(
-        suite_of({"id": "count", "type": "item_count", "field": "options", "equals": 5}), RECORD
+        suite_of(
+            {"id": "count", "type": "item_count", "field": "options", "params": {"equals": 5}}
+        ),
+        RECORD,
     )
     assert result.overall_pass is False
     assert result.failed[0].id == "count"
@@ -50,7 +53,7 @@ def test_a_failing_warn_severity_rule_is_recorded_but_does_not_block():
                 "id": "count",
                 "type": "item_count",
                 "field": "options",
-                "equals": 5,
+                "params": {"equals": 5},
                 "severity": "warn",
             }
         ),
@@ -62,7 +65,9 @@ def test_a_failing_warn_severity_rule_is_recorded_but_does_not_block():
 
 def test_wildcard_selector_fails_when_any_element_fails_and_reports_each():
     result = run_suite(
-        suite_of({"id": "len", "type": "word_count_between", "field": "options[*]", "max": 1}),
+        suite_of(
+            {"id": "len", "type": "word_count_between", "field": "options[*]", "params": {"max": 1}}
+        ),
         RECORD,
     )
     assert result.overall_pass is False
@@ -71,7 +76,9 @@ def test_wildcard_selector_fails_when_any_element_fails_and_reports_each():
 
 def test_wildcard_selector_passes_when_every_element_passes():
     result = run_suite(
-        suite_of({"id": "len", "type": "word_count_between", "field": "options[*]", "max": 5}),
+        suite_of(
+            {"id": "len", "type": "word_count_between", "field": "options[*]", "params": {"max": 5}}
+        ),
         RECORD,
     )
     assert result.overall_pass is True
@@ -89,13 +96,17 @@ def test_unknown_type_raises_because_preflight_should_have_refused_it():
 
 
 def test_outcome_carries_the_definition_hash_of_the_rule_that_produced_it():
-    suite = suite_of({"id": "count", "type": "item_count", "field": "options", "equals": 4})
+    suite = suite_of(
+        {"id": "count", "type": "item_count", "field": "options", "params": {"equals": 4}}
+    )
     result = run_suite(suite, RECORD)
     assert result.outcomes[0].definition_hash == suite.expectations[0].definition_hash()
 
 
 def test_derived_ids_appear_in_outcomes_when_id_is_omitted():
-    result = run_suite(suite_of({"type": "item_count", "field": "options", "equals": 4}), RECORD)
+    result = run_suite(
+        suite_of({"type": "item_count", "field": "options", "params": {"equals": 4}}), RECORD
+    )
     assert result.outcomes[0].id.startswith("item_count_")
 
 
@@ -106,7 +117,7 @@ def test_suite_name_is_carried_onto_the_result():
 def test_every_expectation_runs_even_after_an_earlier_one_fails():
     result = run_suite(
         suite_of(
-            {"id": "a", "type": "item_count", "field": "options", "equals": 99},
+            {"id": "a", "type": "item_count", "field": "options", "params": {"equals": 99}},
             {"id": "b", "type": "not_null", "field": "answer"},
         ),
         RECORD,

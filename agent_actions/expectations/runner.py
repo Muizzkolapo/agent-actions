@@ -49,7 +49,7 @@ def _run_one(expectation: Expectation, record: dict[str, Any]) -> Outcome:
     except FieldResolutionError as exc:
         return outcome(False, str(exc))
 
-    params = expectation.params()
+    params = expectation.params
     details = [
         detail for value in inputs for passed, detail in [etype.check(value, params)] if not passed
     ]
