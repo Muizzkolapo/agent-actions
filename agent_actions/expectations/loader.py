@@ -15,16 +15,51 @@ class SuiteLoadError(ValueError):
     """A named suite could not be loaded from the schema path."""
 
 
+def _nested_rule_owner(node: Any) -> str | None:
+    """The name of the first nested member carrying rules the loader cannot reach."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(value, dict) and value.get("expectations"):
+                return str(key)
+            found = _nested_rule_owner(value)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for item in node:
+            found = _nested_rule_owner(item)
+            if found is not None:
+                return found
+    return None
+
+
 def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> list[Any]:
     """Rules declared under a ``fields:`` entry, each carrying that field as its selector."""
+    fields = data.get("fields")
+    if fields is None:
+        return []
+    if not isinstance(fields, list):
+        raise ValueError(
+            f"Schema file '{suite_name}' has a fields: value that is not a list, "
+            f"found {type(fields).__name__}"
+        )
+
     entries: list[Any] = []
-    for field in data.get("fields") or []:
+    for field in fields:
         if not isinstance(field, dict):
             continue
         rules = field.get("expectations")
-        if not rules:
-            continue
         field_id = field.get("id") or field.get("name")
+        if not rules:
+            # A selector only reaches a top-level field, so rules on anything below
+            # one would never run; refusing them beats dropping them silently.
+            nested = _nested_rule_owner({k: v for k, v in field.items() if k != "expectations"})
+            if nested is not None:
+                raise ValueError(
+                    f"Schema file '{suite_name}': field '{field_id}' has expectations on its "
+                    f"nested member '{nested}'; a selector reaches top-level fields only, so "
+                    f"move the rule to the field itself or write a custom check"
+                )
+            continue
         if not field_id:
             raise ValueError(
                 f"Schema file '{suite_name}' declares expectations on a field with no id"
