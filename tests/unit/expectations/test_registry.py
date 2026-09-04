@@ -227,3 +227,9 @@ def test_match_like_pattern_requires_its_pattern():
 def test_every_registered_type_accepts_row_condition():
     missing = [name for name in known_types() if "row_condition" not in get(name).params]
     assert missing == []
+
+
+def test_match_like_pattern_spans_newlines_the_way_sql_like_does():
+    multiline = "line one\n<b>bold</b>\nline three"
+    assert run("match_like_pattern", multiline, like_pattern="%<%>%")[0] is True
+    assert run("match_like_pattern", "a\nb", like_pattern="a_b")[0] is True
