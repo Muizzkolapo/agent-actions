@@ -85,14 +85,14 @@ def _default_suite_defects(
     if isinstance(schema_data, dict):
         label = schema_data.get("name") or action.get("name") or "the action's schema"
         try:
-            entries = schema_rule_entries(str(label), schema_data)
+            entries, defects = schema_rule_entries(str(label), schema_data)
         except ValueError as exc:
             return [
                 f"a bare expect: reads the rules of the action's own schema — {exc}; "
                 f"declare them under a field or in the file's expectations: block, "
                 f"or use suite: or an inline expectations: list"
             ]
-        return _entry_defects(entries, fields)
+        return defects + _entry_defects(entries, fields)
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
         return _suite_defects(schema_name, project_root, fields)
@@ -107,11 +107,11 @@ def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None)
     from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
 
     try:
-        entries = load_schema_rules(suite_name, project_root)
+        entries, defects = load_schema_rules(suite_name, project_root)
     except SuiteLoadError as exc:
         return [str(exc)]
 
-    return _entry_defects(entries, fields)
+    return defects + _entry_defects(entries, fields)
 
 
 def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
@@ -126,7 +126,8 @@ def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
         if not isinstance(entry, dict):
             messages.append(f"expectations: entry must be a mapping, got {type(entry).__name__}")
             continue
-        label = entry.get("id") or entry.get("type") or "<unnamed>"
+        raw_id = entry.get("id")
+        label = raw_id if isinstance(raw_id, str) and raw_id else entry.get("type") or "<unnamed>"
         try:
             expectation = Expectation.model_validate(entry)
         except ValidationError as exc:
@@ -137,9 +138,13 @@ def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
 
 
 def _reason(error: Mapping[str, Any]) -> str:
-    """One pydantic error as prose, naming the key it is about."""
+    """One pydantic error as prose, naming the rule key it is about.
+
+    Only the first location segment: a rule key is flat, and the rest are a
+    union's branch tags, which name nothing an author wrote.
+    """
     text = str(error.get("msg", "")).removeprefix("Value error, ")
-    location = ".".join(str(part) for part in error.get("loc", ()) if not isinstance(part, int))
+    location = next((str(part) for part in error.get("loc", ()) if isinstance(part, str)), "")
     return f"{location}: {text}" if location else text
 
 

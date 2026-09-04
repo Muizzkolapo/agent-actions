@@ -108,7 +108,7 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[A
     return entries, defects
 
 
-def schema_rule_entries(suite_name: str, data: Any) -> list[Any]:
+def schema_rule_entries(suite_name: str, data: Any) -> tuple[list[Any], list[str]]:
     """Every rule a schema file declares, as raw entries with selectors stamped.
 
     Raises only for problems with the file's own structure, so a caller can
@@ -120,9 +120,6 @@ def schema_rule_entries(suite_name: str, data: Any) -> list[Any]:
             f"Schema file '{suite_name}' must be a mapping, found {type(data).__name__}"
         )
     scoped, defects = _field_scoped_entries(suite_name, data)
-    if defects:
-        raise ValueError(f"Schema file '{suite_name}': " + "; ".join(defects))
-
     # Every part of the file a selector cannot reach, not just the fields: list —
     # a JSON-Schema-format file has no fields: at all, and its rules would
     # otherwise be dropped without a word.
@@ -143,17 +140,20 @@ def schema_rule_entries(suite_name: str, data: Any) -> list[Any]:
             f"found {type(own).__name__}"
         )
     entries = scoped + list(own or [])
-    if not entries:
+    if not entries and not defects:
         raise NoRulesDeclared(
             f"Schema file '{suite_name}' declares no expectations: no rules on its "
             f"fields and no expectations: block"
         )
-    return entries
+    return entries, defects
 
 
 def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
     """Build a Suite from a schema file's rules, on its fields or in its own block."""
-    return Suite(name=suite_name, expectations=schema_rule_entries(suite_name, data))
+    entries, defects = schema_rule_entries(suite_name, data)
+    if defects:
+        raise ValueError(f"Schema file '{suite_name}': " + "; ".join(defects))
+    return Suite(name=suite_name, expectations=entries)
 
 
 def _load_schema_data(suite_name: str, project_root: Path | None) -> Any:
@@ -182,7 +182,9 @@ def load_named_suite(suite_name: str, project_root: Path | None = None) -> Suite
         raise SuiteLoadError(f"suite '{suite_name}' could not be loaded: {exc}") from exc
 
 
-def load_schema_rules(suite_name: str, project_root: Path | None = None) -> list[Any]:
+def load_schema_rules(
+    suite_name: str, project_root: Path | None = None
+) -> tuple[list[Any], list[str]]:
     """The raw rule entries of a named suite, for callers that report per rule."""
     data = _load_schema_data(suite_name, project_root)
     try:
