@@ -617,7 +617,7 @@ def test_a_raising_check_does_not_stop_later_expectations(preserve_registry):
         name="s",
         expectations=[
             {"id": "e", "type": "explodes_first", "field": "title"},
-            {"id": "count", "type": "item_count", "field": "ideas", "min": 1},
+            {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 1}},
         ],
     )
     result = run_suite(suite, {"title": "hello", "ideas": ["a"]})
@@ -629,7 +629,9 @@ def test_an_unvalidated_condition_parse_error_is_a_failed_outcome():
     # must not crash the record; the parse rejection lands in the detail.
     suite = Suite(
         name="s",
-        expectations=[{"id": "f", "type": "expression", "condition": "NO_SUCH_FN(score) > 0"}],
+        expectations=[
+            {"id": "f", "type": "expression", "params": {"condition": "NO_SUCH_FN(score) > 0"}}
+        ],
     )
     result = run_suite(suite, {"score": 5})
     assert result.outcomes[0].passed is False
@@ -638,7 +640,8 @@ def test_an_unvalidated_condition_parse_error_is_a_failed_outcome():
 
 def test_missing_judge_dispatcher_still_raises():
     suite = Suite(
-        name="s", expectations=[{"id": "j", "type": "llm_judge", "field": "title", "rule": "r"}]
+        name="s",
+        expectations=[{"id": "j", "type": "llm_judge", "field": "title", "params": {"rule": "r"}}],
     )
     with pytest.raises(ValueError, match="no judge"):
         run_suite(suite, {"title": "hello"})
