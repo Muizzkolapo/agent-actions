@@ -70,7 +70,7 @@ def test_an_inline_rule_using_the_old_severity_word_names_its_replacement():
             },
         }
     }
-    assert "error" in defects_for(configs)
+    assert "is now 'error'" in defects_for(configs)
 
 
 def defects_for(configs):
@@ -142,3 +142,51 @@ def test_a_non_string_rule_key_is_a_defect_not_a_crash():
         }
     }
     assert find_expectation_defects(configs, FIELDS)["summarize"]
+
+
+def test_a_rule_declaring_its_own_selector_does_not_cost_the_others_their_checks(tmp_path):
+    schema = {
+        "name": "fb_page_summary",
+        "fields": [
+            {
+                "id": "summary",
+                "type": "string",
+                "expectations": [
+                    {"id": "stray", "type": "not_null", "field": "exam_density"},
+                    {"id": "bogus", "type": "vibe_check"},
+                ],
+            }
+        ],
+    }
+    message = " ".join(
+        find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))[
+            "summarize"
+        ]
+    )
+    assert "stray" in message
+    assert "vibe_check" in message
+    assert "declare them under a field" not in message
+
+
+def test_a_defect_names_the_rule_key_without_pydantic_internals():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {"expectations": [{"type": "not_null", "field": 42}]},
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "field:" in message
+    assert "list[str]" not in message
+
+
+def test_a_non_string_id_is_not_used_as_the_defect_label():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {"expectations": [{"id": {"x": 1}, "type": "not_null", "field": "summary"}]},
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "not_null" in message
+    assert "{'x': 1}" not in message
