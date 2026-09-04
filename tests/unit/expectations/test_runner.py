@@ -505,3 +505,88 @@ def test_an_unparseable_row_condition_is_a_failed_outcome_not_a_crash():
     )
     assert result.outcomes[0].passed is False
     assert result.outcomes[0].skipped is False
+
+
+def test_a_row_condition_on_a_field_the_record_lacks_fails_rather_than_waives():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "has_citation == true"},
+            }
+        ),
+        RECORD,
+    )
+    outcome = result.outcomes[0]
+    assert outcome.passed is False
+    assert outcome.skipped is False
+    assert result.overall_pass is False
+    assert "has_citation" in outcome.detail
+
+
+def test_an_unquoted_literal_in_a_row_condition_fails_rather_than_waives():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "answer == pending"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].passed is False
+    assert result.outcomes[0].skipped is False
+
+
+def test_a_row_condition_gates_a_record_scoped_rule_too():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "expression",
+                "params": {
+                    "condition": "answer == 'never true'",
+                    "row_condition": "answer == 'not this record'",
+                },
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+
+
+def test_a_gated_rule_whose_field_is_absent_is_skipped_not_a_resolution_failure():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "absent_field",
+                "params": {"row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+
+
+def test_a_rule_waived_by_its_row_condition_is_not_listed_as_unchecked():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.to_record_dict()["skipped"] == []
+    assert result.to_record_dict()["overall_pass"] is True
