@@ -87,7 +87,9 @@ def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None
     ``suite:`` is still out of reach here: it needs a project root this layer
     does not have.
     """
-    if not expect:
+    # An empty dict is the bare block, not the absence of one — the runtime reads
+    # the action's own schema for it, so its refs have to be observed as well.
+    if expect is None:
         return []
     declared = expect.get("expectations")
     entries = declared if isinstance(declared, list) else _schema_rule_entries(expect, schema)
