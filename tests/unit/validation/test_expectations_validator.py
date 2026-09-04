@@ -529,3 +529,51 @@ def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields
         config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]), {}
     ).get("write_q", [])
     assert defects == []
+
+
+def test_unparseable_row_condition_is_a_defect():
+    defects = find_expectation_defects(
+        config(
+            [
+                {
+                    "type": "not_null",
+                    "field": "options",
+                    "params": {"row_condition": "not a condition"},
+                }
+            ]
+        ),
+        FIELDS,
+    )
+    assert "row_condition" in defects["write_q"][0]
+
+
+def test_row_condition_naming_an_absent_field_is_a_defect():
+    defects = find_expectation_defects(
+        config(
+            [
+                {
+                    "type": "not_null",
+                    "field": "options",
+                    "params": {"row_condition": "ghost == 'x'"},
+                }
+            ]
+        ),
+        FIELDS,
+    )
+    assert "ghost" in defects["write_q"][0]
+
+
+def test_a_row_condition_over_a_produced_field_is_accepted():
+    defects = find_expectation_defects(
+        config(
+            [
+                {
+                    "type": "not_null",
+                    "field": "options",
+                    "params": {"row_condition": "answer == 'x'"},
+                }
+            ]
+        ),
+        FIELDS,
+    )
+    assert defects == {}
