@@ -93,3 +93,52 @@ def test_row_condition_is_accepted_as_an_argument_on_any_type():
         }
     }
     assert find_expectation_defects(configs, FIELDS) == {}
+
+
+def test_an_old_shape_rule_in_a_schema_file_is_reported_like_an_inline_one(tmp_path):
+    schema = field_scoped([{"id": "sized", "type": "word_count_between", "min": 10}])
+    defects = find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))
+    message = " ".join(defects["summarize"])
+    assert "arguments belong under params" in message
+    assert "validation error for Suite" not in message
+    assert "errors.pydantic.dev" not in message
+
+
+def test_every_defective_rule_in_a_schema_file_is_reported_not_just_the_first(tmp_path):
+    schema = field_scoped(
+        [
+            {"id": "first", "type": "word_count_between", "min": 10},
+            {"id": "second", "type": "vibe_check"},
+        ]
+    )
+    defects = find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))
+    message = " ".join(defects["summarize"])
+    assert "first" in message
+    assert "vibe_check" in message
+
+
+def test_a_schema_file_defect_is_not_dressed_as_a_missing_expectations_block(tmp_path):
+    schema = field_scoped([{"id": "sized", "type": "word_count_between", "min": 10}])
+    defects = find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))
+    assert "declare them under a field" not in " ".join(defects["summarize"])
+
+
+def test_a_defect_names_the_rule_key_it_is_about():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {"expectations": [{"type": "not_null", "field": 42}]},
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "field" in message
+
+
+def test_a_non_string_rule_key_is_a_defect_not_a_crash():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {"expectations": [{"type": "not_null", "field": "summary", True: 1}]},
+        }
+    }
+    assert find_expectation_defects(configs, FIELDS)["summarize"]
