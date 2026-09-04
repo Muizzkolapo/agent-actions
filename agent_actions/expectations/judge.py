@@ -147,7 +147,7 @@ def cache_key(expectation: Expectation, value: Any) -> tuple[str, str, str, str 
         expectation.resolved_id,
         expectation.definition_hash(),
         _content_hash(value),
-        expectation.params().get("model"),
+        expectation.params.get("model"),
     )
 
 
@@ -169,7 +169,7 @@ class CachedJudge:
     def call_and_cache(
         self, expectation: Expectation, value: Any, context: dict[str, Any] | None = None
     ) -> tuple[bool, str]:
-        params = expectation.params()
+        params = expectation.params
         verdict = invoke_judge_with_votes(
             self._agent_config,
             params["rule"],

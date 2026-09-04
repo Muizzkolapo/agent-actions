@@ -197,13 +197,10 @@ from agent_actions.expectations.types import Expectation
 
 
 def _judged_expectation(**overrides):
-    defaults = {
-        "id": "generic_options",
-        "type": "llm_judge",
-        "field": "options",
-        "rule": "be specific",
-    }
-    return Expectation(**{**defaults, **overrides})
+    """Build a judged rule; overrides other than id/field are its params."""
+    fields = {"id": "generic_options", "type": "llm_judge", "field": "options"}
+    fields.update({k: overrides.pop(k) for k in ("id", "field") if k in overrides})
+    return Expectation(params={"rule": "be specific", **overrides}, **fields)
 
 
 class TestCacheKey:
