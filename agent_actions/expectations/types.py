@@ -6,32 +6,52 @@ import hashlib
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Severity = Literal["fail", "warn", "info"]
+Severity = Literal["error", "warn", "info"]
 
-_DECLARED_FIELDS = frozenset({"id", "type", "field", "severity", "hint"})
+_RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
+
+_RENAMED_SEVERITIES = {"fail": "error"}
 
 
 class Expectation(BaseModel):
     """One rule in a suite.
 
-    Type-specific parameters (``equals``, ``phrases``, ``max_ratio``, ...) are
-    accepted as extra keys so suites read as flat YAML; the registry declares
-    which parameters each type takes and preflight rejects the rest.
+    Type-specific arguments live under ``params:``. Every other key belongs to
+    the framework, so a mistyped rule key is refused by name here rather than
+    travelling on as an argument for the registry to reject later.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     id: str | None = Field(default=None, description="Stable identifier; derived when omitted")
     type: str = Field(..., description="Registered expectation type name")
     field: str | list[str] = Field(..., description="Field selector this rule is tested against")
-    severity: Severity = Field(default="fail", description="fail, warn, or info")
+    params: dict[str, Any] = Field(
+        default_factory=dict, description="Type-specific arguments for the registered check"
+    )
+    severity: Severity = Field(default="error", description="error, warn, or info")
     hint: str | None = Field(default=None, description="Remedy text; used only by repair")
 
-    def params(self) -> dict[str, Any]:
-        """Type-specific parameters, i.e. everything that is not a declared field."""
-        return {k: v for k, v in self.model_dump().items() if k not in _DECLARED_FIELDS}
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_superseded_spellings(cls, data: Any) -> Any:
+        """Name the replacement for a shape that used to be legal."""
+        if not isinstance(data, dict):
+            return data
+        stray = sorted(str(key) for key in data if key not in _RULE_KEYS)
+        if stray:
+            raise ValueError(
+                f"type-specific arguments belong under params:; move {', '.join(stray)} there"
+            )
+        severity = data.get("severity")
+        if isinstance(severity, str) and severity in _RENAMED_SEVERITIES:
+            raise ValueError(
+                f"severity '{severity}' is now '{_RENAMED_SEVERITIES[severity]}'; "
+                f"the levels are error, warn and info"
+            )
+        return data
 
     def definition_hash(self) -> str:
         """Stable digest of what this rule tests, ignoring its name."""
@@ -72,14 +92,14 @@ class SuiteResult(BaseModel):
 
     @property
     def overall_pass(self) -> bool:
-        """True unless a fail-severity expectation failed; warn and info never block."""
-        return not any(o.severity == "fail" and not o.passed for o in self.outcomes)
+        """True unless an error-severity expectation failed; warn and info never block."""
+        return not any(o.severity == "error" and not o.passed for o in self.outcomes)
 
     def to_record_dict(self) -> dict[str, Any]:
         """The verdict as attached to a record under the ``expect`` key."""
         return {
             "overall_pass": self.overall_pass,
-            "failed": [o.id for o in self.failed if o.severity == "fail"],
+            "failed": [o.id for o in self.failed if o.severity == "error"],
             "outcomes": [o.model_dump() for o in self.outcomes],
         }
 
