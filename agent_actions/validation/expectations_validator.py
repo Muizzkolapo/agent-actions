@@ -79,19 +79,23 @@ def _default_suite_defects(
     dropped), so the resolved dict is the authority; the name survives only
     when loading could not inline it.
     """
-    from agent_actions.expectations.loader import schema_rule_entries
+    from agent_actions.expectations.loader import NoRulesDeclared, schema_rule_entries
 
     schema_data = action.get("schema")
     if isinstance(schema_data, dict):
         label = schema_data.get("name") or action.get("name") or "the action's schema"
         try:
             entries, defects = schema_rule_entries(str(label), schema_data)
-        except ValueError as exc:
+        except NoRulesDeclared as exc:
             return [
                 f"a bare expect: reads the rules of the action's own schema — {exc}; "
                 f"declare them under a field or in the file's expectations: block, "
                 f"or use suite: or an inline expectations: list"
             ]
+        except ValueError as exc:
+            # The file has rules; they are in the wrong place or the wrong shape,
+            # so the advice for a file with none would contradict the message.
+            return [f"a bare expect: reads the rules of the action's own schema — {exc}"]
         return defects + _entry_defects(entries, fields)
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
