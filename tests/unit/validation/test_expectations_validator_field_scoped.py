@@ -224,3 +224,32 @@ def test_a_schema_with_no_rules_still_gets_the_advice(tmp_path):
         ]
     )
     assert "declare them under a field" in message
+
+
+def test_a_mistyped_record_scoped_type_is_reported_as_the_type_not_a_missing_field():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {
+                "expectations": [{"type": "expresion", "params": {"condition": "summary != ''"}}]
+            },
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "unknown type 'expresion'" in message
+    assert "requires field:" not in message
+
+
+def test_a_rule_missing_its_selector_still_gets_its_argument_defects():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {
+                "expectations": [{"id": "r", "type": "accepted_values", "params": {"valuez": [1]}}]
+            },
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "field" in message
+    assert "requires parameter 'values'" in message
+    assert "takes no parameter 'valuez'" in message
