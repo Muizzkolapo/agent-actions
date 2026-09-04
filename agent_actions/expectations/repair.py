@@ -48,7 +48,10 @@ def compose_repair_prompt(
         for o in suite_result.outcomes
         if not o.passed and not o.skipped
     )
-    passing = [o.id for o in suite_result.outcomes if o.passed]
+    # Skipped outcomes say nothing either way: one that failed was never
+    # evaluated, one that passed was waived, and neither is something the
+    # regenerated output can be asked to preserve.
+    passing = [o.id for o in suite_result.outcomes if o.passed and not o.skipped]
     passing_lines = "\n".join(f"- {oid}" for oid in passing) if passing else "(none yet)"
     return REPAIR_TEMPLATE.format(
         original_prompt=original_prompt,
