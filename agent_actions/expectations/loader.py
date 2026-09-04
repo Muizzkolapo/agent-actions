@@ -108,8 +108,13 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[A
     return entries, defects
 
 
-def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
-    """Build a Suite from a schema file's rules, on its fields or in its own block."""
+def schema_rule_entries(suite_name: str, data: Any) -> list[Any]:
+    """Every rule a schema file declares, as raw entries with selectors stamped.
+
+    Raises only for problems with the file's own structure, so a caller can
+    report each rule's own defects one at a time instead of losing the rest to
+    the first bad one.
+    """
     if not isinstance(data, dict):
         raise ValueError(
             f"Schema file '{suite_name}' must be a mapping, found {type(data).__name__}"
@@ -143,7 +148,24 @@ def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
             f"Schema file '{suite_name}' declares no expectations: no rules on its "
             f"fields and no expectations: block"
         )
-    return Suite(name=suite_name, expectations=entries)
+    return entries
+
+
+def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
+    """Build a Suite from a schema file's rules, on its fields or in its own block."""
+    return Suite(name=suite_name, expectations=schema_rule_entries(suite_name, data))
+
+
+def _load_schema_data(suite_name: str, project_root: Path | None) -> Any:
+    """Read a suite's file through the schema route, as one named error on failure."""
+    from agent_actions.output.response.loader import SchemaLoader
+
+    try:
+        return SchemaLoader.load_schema(suite_name, project_root=project_root)
+    except FileNotFoundError as exc:
+        raise SuiteLoadError(f"suite '{suite_name}': {exc}") from exc
+    except (OSError, ValueError, TypeError, yaml.YAMLError, AgentActionsError) as exc:
+        raise SuiteLoadError(f"suite '{suite_name}' could not be loaded: {exc}") from exc
 
 
 def load_named_suite(suite_name: str, project_root: Path | None = None) -> Suite:
@@ -153,16 +175,18 @@ def load_named_suite(suite_name: str, project_root: Path | None = None) -> Suite
     ``expectations:`` block — raises :class:`SuiteLoadError` naming the suite,
     so callers classify one error instead of the schema route's surface.
     """
-    from agent_actions.output.response.loader import SchemaLoader
-
-    try:
-        data = SchemaLoader.load_schema(suite_name, project_root=project_root)
-    except FileNotFoundError as exc:
-        raise SuiteLoadError(f"suite '{suite_name}': {exc}") from exc
-    except (OSError, ValueError, TypeError, yaml.YAMLError, AgentActionsError) as exc:
-        raise SuiteLoadError(f"suite '{suite_name}' could not be loaded: {exc}") from exc
+    data = _load_schema_data(suite_name, project_root)
     try:
         return build_suite_from_schema_data(suite_name, data)
+    except ValueError as exc:
+        raise SuiteLoadError(f"suite '{suite_name}' could not be loaded: {exc}") from exc
+
+
+def load_schema_rules(suite_name: str, project_root: Path | None = None) -> list[Any]:
+    """The raw rule entries of a named suite, for callers that report per rule."""
+    data = _load_schema_data(suite_name, project_root)
+    try:
+        return schema_rule_entries(suite_name, data)
     except ValueError as exc:
         raise SuiteLoadError(f"suite '{suite_name}' could not be loaded: {exc}") from exc
 

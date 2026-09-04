@@ -58,7 +58,7 @@ def find_expectation_defects(
                     "expectations: is an empty list; add entries, or omit the "
                     "key to read the action's own schema"
                 )
-            messages.extend(_inline_defects(entries, fields))
+            messages.extend(_entry_defects(entries, fields))
         elif isinstance(suite_name, str) and project_root is not None:
             messages.extend(_suite_defects(suite_name, project_root, fields))
         elif entries is None and suite_name is None and project_root is not None:
@@ -79,20 +79,20 @@ def _default_suite_defects(
     dropped), so the resolved dict is the authority; the name survives only
     when loading could not inline it.
     """
-    from agent_actions.expectations.loader import build_suite_from_schema_data
+    from agent_actions.expectations.loader import schema_rule_entries
 
     schema_data = action.get("schema")
     if isinstance(schema_data, dict):
         label = schema_data.get("name") or action.get("name") or "the action's schema"
         try:
-            suite = build_suite_from_schema_data(str(label), schema_data)
+            entries = schema_rule_entries(str(label), schema_data)
         except ValueError as exc:
             return [
                 f"a bare expect: reads the rules of the action's own schema — {exc}; "
                 f"declare them under a field or in the file's expectations: block, "
                 f"or use suite: or an inline expectations: list"
             ]
-        return [m for e in suite.expectations for m in _rule_defects(e, fields)]
+        return _entry_defects(entries, fields)
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
         return _suite_defects(schema_name, project_root, fields)
@@ -104,18 +104,23 @@ def _default_suite_defects(
 
 
 def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None) -> list[str]:
-    from agent_actions.expectations.loader import SuiteLoadError, load_named_suite
+    from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
 
     try:
-        suite = load_named_suite(suite_name, project_root)
+        entries = load_schema_rules(suite_name, project_root)
     except SuiteLoadError as exc:
         return [str(exc)]
 
-    return [m for e in suite.expectations for m in _rule_defects(e, fields)]
+    return _entry_defects(entries, fields)
 
 
-def _inline_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
-    """Defects for an action's inline list, which has not been through the model yet."""
+def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
+    """Defects for raw rule entries, reported one rule at a time.
+
+    Every source of rules — an inline list, a named suite, a schema's own
+    fields — comes through here, so one bad rule never costs the rest their
+    checks and every route words the same defect the same way.
+    """
     messages: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict):
@@ -123,7 +128,7 @@ def _inline_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
             continue
         label = entry.get("id") or entry.get("type") or "<unnamed>"
         try:
-            expectation = Expectation(**entry)
+            expectation = Expectation.model_validate(entry)
         except ValidationError as exc:
             messages.extend(f"{label}: {_reason(err)}" for err in exc.errors())
             continue
@@ -132,8 +137,10 @@ def _inline_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
 
 
 def _reason(error: Mapping[str, Any]) -> str:
-    """One pydantic error as prose, without its wrapper prefix."""
-    return str(error.get("msg", "")).removeprefix("Value error, ")
+    """One pydantic error as prose, naming the key it is about."""
+    text = str(error.get("msg", "")).removeprefix("Value error, ")
+    location = ".".join(str(part) for part in error.get("loc", ()) if not isinstance(part, int))
+    return f"{location}: {text}" if location else text
 
 
 def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str]:
