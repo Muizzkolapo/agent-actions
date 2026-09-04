@@ -7,12 +7,12 @@ from agent_actions.expectations import loader
 from agent_actions.expectations.loader import build_inline_suite, load_named_suite
 
 EXPECTATIONS = [
-    {"id": "option_count", "type": "item_count", "field": "options", "equals": 4},
+    {"id": "option_count", "type": "item_count", "field": "options", "params": {"equals": 4}},
     {
         "id": "says_the_source",
         "type": "no_forbidden_phrases",
         "field": "answer_explanation",
-        "phrases": ["the source"],
+        "params": {"phrases": ["the source"]},
         "hint": "Use 'the documentation' or state facts directly",
     },
 ]
@@ -33,7 +33,7 @@ def test_load_named_suite_reads_the_expectations_block_of_a_schema_file(tmp_path
     suite = load_named_suite("scenario_question", project_root=root)
     assert suite.name == "scenario_question"
     assert [e.resolved_id for e in suite.expectations] == ["option_count", "says_the_source"]
-    assert suite.expectations[0].params() == {"equals": 4}
+    assert suite.expectations[0].params == {"equals": 4}
     assert suite.expectations[1].hint.startswith("Use 'the documentation'")
 
 
@@ -89,7 +89,8 @@ def test_build_suite_from_schema_data_rejects_non_mapping_data():
 
 def test_build_inline_suite_names_itself_after_the_action():
     suite = build_inline_suite(
-        [{"type": "item_count", "field": "ideas", "min": 5}], action_name="brainstorm"
+        [{"type": "item_count", "field": "ideas", "params": {"min": 5}}],
+        action_name="brainstorm",
     )
     assert suite.name == "brainstorm:inline"
     assert suite.expectations[0].resolved_id.startswith("item_count_")
