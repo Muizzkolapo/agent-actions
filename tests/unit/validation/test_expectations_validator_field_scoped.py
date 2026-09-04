@@ -190,3 +190,37 @@ def test_a_non_string_id_is_not_used_as_the_defect_label():
     message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
     assert "not_null" in message
     assert "{'x': 1}" not in message
+
+
+def test_a_misplaced_rule_is_not_answered_with_advice_to_place_it_there(tmp_path):
+    schema = {
+        "name": "fb_page_summary",
+        "fields": [
+            {
+                "id": "options",
+                "type": "array",
+                "expectations": [{"type": "item_count", "params": {"min": 2}}],
+                "items": {
+                    "type": "object",
+                    "properties": {"text": {"expectations": [{"type": "not_null"}]}},
+                },
+            }
+        ],
+    }
+    message = " ".join(
+        find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))[
+            "summarize"
+        ]
+    )
+    assert "nested member 'text'" in message
+    assert "declare them under a field" not in message
+
+
+def test_a_schema_with_no_rules_still_gets_the_advice(tmp_path):
+    schema = {"name": "shape_only", "fields": [{"id": "summary", "type": "string"}]}
+    message = " ".join(
+        find_expectation_defects(action(schema), FIELDS, project_root=project(tmp_path))[
+            "summarize"
+        ]
+    )
+    assert "declare them under a field" in message
