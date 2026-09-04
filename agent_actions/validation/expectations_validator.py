@@ -220,6 +220,13 @@ def _rule_defects(
 
     messages = _argument_defects(label, etype, expectation.params)
 
+    if "row_condition" in expectation.params:
+        messages.extend(
+            _expression_defects(
+                f"{label}: row_condition", expectation.params["row_condition"], fields
+            )
+        )
+
     selector = expectation.field
     if expectation.type == "expression":
         # Only when supplied: an absent condition is already the missing-parameter defect.
