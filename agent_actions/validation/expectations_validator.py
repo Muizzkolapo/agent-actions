@@ -13,9 +13,9 @@ from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 
 EXPECTATIONS_REMEDY = (
-    "Fix the expectation declaration: use a registered type "
-    "(agac expect list shows them), pass only that type's parameters, and target "
-    "a field the action's schema produces."
+    "Fix the expectation declaration: use a registered type (each defect below "
+    "lists the registered ones), put the type's arguments under params:, and "
+    "target a field the action's schema produces."
 )
 
 _VERDICT_KEY = "expect"
