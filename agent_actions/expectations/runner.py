@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agent_actions.expectations import registry
-from agent_actions.expectations.expression import evaluate_condition
+from agent_actions.expectations.expression import ExpressionParseError, evaluate_condition
 from agent_actions.expectations.fields import FieldResolutionError, resolve, resolve_context
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 
@@ -64,6 +64,19 @@ def _run_one(
             skipped=skipped,
         )
 
+    row_condition = expectation.params.get("row_condition")
+    if row_condition is not None:
+        try:
+            applies, _ = evaluate_condition(str(row_condition), record)
+        except ExpressionParseError as exc:
+            return outcome(False, f"row_condition {str(row_condition)!r} does not parse: {exc}")
+        if not applies:
+            return outcome(
+                True,
+                f"not checked: row_condition {str(row_condition)!r} does not hold",
+                skipped=True,
+            )
+
     if expectation.type == "expression":
         passed, detail = evaluate_condition(str(expectation.params["condition"]), record)
         return outcome(passed, detail)
@@ -79,7 +92,7 @@ def _run_one(
     except FieldResolutionError as exc:
         return outcome(False, str(exc))
 
-    params = expectation.params
+    params = {k: v for k, v in expectation.params.items() if k != "row_condition"}
 
     if expectation.type == "llm_judge":
         if judge is None:
