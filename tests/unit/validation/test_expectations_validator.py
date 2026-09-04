@@ -44,7 +44,7 @@ def test_unregistered_type_is_reported_with_the_type_name():
 
 def test_unknown_parameter_is_reported():
     defects = find_expectation_defects(
-        config([{"type": "item_count", "field": "options", "equalz": 4}]), FIELDS
+        config([{"type": "item_count", "field": "options", "params": {"equalz": 4}}]), FIELDS
     )
     assert "equalz" in defects["write_q"][0]
 
@@ -431,46 +431,61 @@ def _expr_defects(entry, fields=EXPR_FIELDS):
 
 
 def test_valid_expression_entry_has_no_defects():
-    assert _expr_defects({"id": "floor", "type": "expression", "condition": "score >= 80"}) == []
+    assert (
+        _expr_defects({"id": "floor", "type": "expression", "params": {"condition": "score >= 80"}})
+        == []
+    )
 
 
 def test_expression_with_field_is_a_defect():
     defects = _expr_defects(
-        {"id": "floor", "type": "expression", "field": "score", "condition": "score >= 80"}
+        {
+            "id": "floor",
+            "type": "expression",
+            "field": "score",
+            "params": {"condition": "score >= 80"},
+        }
     )
     assert any("does not take field" in d for d in defects)
 
 
 def test_expression_udf_condition_defect_names_the_decorator():
     defects = _expr_defects(
-        {"id": "floor", "type": "expression", "condition": "udf:tools.checks.my_check"}
+        {"id": "floor", "type": "expression", "params": {"condition": "udf:tools.checks.my_check"}}
     )
     assert any("expectation_check" in d for d in defects)
 
 
 def test_expression_unparseable_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "score >="})
+    defects = _expr_defects(
+        {"id": "floor", "type": "expression", "params": {"condition": "score >="}}
+    )
     assert any("does not parse" in d for d in defects)
 
 
 def test_expression_non_string_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "condition": 5})
+    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": 5}})
     assert any("condition must be a non-empty string" in d for d in defects)
 
 
 def test_expression_constant_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "condition": '"80"'})
+    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": '"80"'}})
     assert any("references no record fields" in d for d in defects)
 
 
 def test_expression_unknown_field_reference_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "points >= 80"})
+    defects = _expr_defects(
+        {"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}
+    )
     assert any("does not produce field 'points'" in d for d in defects)
 
 
 def test_expression_dotted_reference_checks_the_top_segment():
     assert (
-        _expr_defects({"id": "m", "type": "expression", "condition": 'meta.status == "ok"'}) == []
+        _expr_defects(
+            {"id": "m", "type": "expression", "params": {"condition": 'meta.status == "ok"'}}
+        )
+        == []
     )
 
 
@@ -498,19 +513,19 @@ def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
     write_suite(
         tmp_path,
         "scenario",
-        [{"id": "floor", "type": "expression", "condition": "points >= 80"}],
+        [{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}],
     )
     defects = find_expectation_defects(suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path)
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
 
 
 def test_whitespace_only_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "condition": "   "})
+    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": "   "}})
     assert any("condition must be a non-empty string" in d for d in defects)
 
 
 def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields():
     defects = find_expectation_defects(
-        config([{"id": "floor", "type": "expression", "condition": "points >= 80"}]), {}
+        config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]), {}
     ).get("write_q", [])
     assert defects == []

@@ -222,7 +222,9 @@ def _rule_defects(
 
     selector = expectation.field
     if expectation.type == "expression":
-        messages.extend(_expression_defects(label, expectation.params.get("condition"), fields))
+        # Only when supplied: an absent condition is already the missing-parameter defect.
+        if "condition" in expectation.params:
+            messages.extend(_expression_defects(label, expectation.params["condition"], fields))
     elif selector is not None and len(selector) == 0:
         messages.append(f"{label}: field must not be empty")
     elif fields is not None and selector is not None:
