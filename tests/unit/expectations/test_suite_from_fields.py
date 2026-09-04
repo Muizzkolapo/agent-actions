@@ -177,3 +177,24 @@ def test_a_nested_property_merely_named_expectations_is_not_mistaken_for_rules()
     }
     suite = build_suite_from_schema_data("page_shape", data)
     assert [e.field for e in suite.expectations] == ["survey"]
+
+
+def test_a_scalar_where_rules_belong_is_a_named_error_not_a_crash():
+    with pytest.raises(ValueError, match="expectations"):
+        build_suite_from_schema_data("page_shape", {"expectations": 5})
+    with pytest.raises(ValueError, match="expectations"):
+        build_suite_from_schema_data("page_shape", {"fields": [{"id": "a", "expectations": 5}]})
+
+
+def test_unreachable_rules_are_refused_in_a_file_with_no_top_level_fields():
+    data = {
+        "name": "candidate_facts",
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"fact": {"type": "string", "expectations": [{"type": "not_null"}]}},
+        },
+        "expectations": [{"id": "has_quote", "type": "not_null", "field": "quote"}],
+    }
+    with pytest.raises(ValueError, match="fact"):
+        build_suite_from_schema_data("candidate_facts", data)
