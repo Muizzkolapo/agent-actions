@@ -29,7 +29,7 @@ EXPECTATIONS = [
         "id": "enough_options",
         "type": "item_count",
         "field": "options",
-        "min": 2,
+        "params": {"min": 2},
         "hint": "list at least two options",
     }
 ]

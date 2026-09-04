@@ -12,7 +12,7 @@ SUITE = Suite(
             "id": "enough_options",
             "type": "item_count",
             "field": "options",
-            "min": 2,
+            "params": {"min": 2},
             "hint": "list at least two options",
         }
     ],
@@ -140,7 +140,12 @@ class TestTheVerdictMapNeedsAnIdentityToo:
                     "repair": "auto",
                     "max_iterations": 2,
                     "expectations": [
-                        {"id": "enough", "type": "item_count", "field": "options", "min": 2}
+                        {
+                            "id": "enough",
+                            "type": "item_count",
+                            "field": "options",
+                            "params": {"min": 2},
+                        }
                     ],
                 },
             }

@@ -29,7 +29,9 @@ def _agent_config(on_exhausted: str = "return_last") -> dict[str, Any]:
             "repair": "auto",
             "max_iterations": 2,
             "on_exhausted": on_exhausted,
-            "expectations": [{"id": "enough", "type": "item_count", "field": "options", "min": 2}],
+            "expectations": [
+                {"id": "enough", "type": "item_count", "field": "options", "params": {"min": 2}}
+            ],
         },
     }
 

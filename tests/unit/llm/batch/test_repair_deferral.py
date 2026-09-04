@@ -30,7 +30,7 @@ ACTION = "author"
 FILE = "f.json"
 PROMPT = "Write the options."
 
-EXPECTATIONS = [{"id": "enough", "type": "item_count", "field": "options", "min": 2}]
+EXPECTATIONS = [{"id": "enough", "type": "item_count", "field": "options", "params": {"min": 2}}]
 FAILING = {"options": ["one"]}
 PASSING = {"options": ["a", "b"]}
 
@@ -309,8 +309,8 @@ class TestTheBudgetBoundsTheRunNotTheRound:
     """
 
     JUDGED = [
-        {"id": "enough", "type": "item_count", "field": "options", "min": 2},
-        {"id": "on_topic", "type": "llm_judge", "field": "options", "rule": "on topic"},
+        {"id": "enough", "type": "item_count", "field": "options", "params": {"min": 2}},
+        {"id": "on_topic", "type": "llm_judge", "field": "options", "params": {"rule": "on topic"}},
     ]
 
     def _judged_config(self, **expect):
@@ -440,7 +440,7 @@ class TestTheLoadedStateIsTrustedWhole:
     throws away the retry and reprompt bookkeeping the reprompt handoff needs.
     """
 
-    JUDGED = [{"id": "j", "type": "llm_judge", "field": "options", "rule": "on topic"}]
+    JUDGED = [{"id": "j", "type": "llm_judge", "field": "options", "params": {"rule": "on topic"}}]
 
     def _judged_config(self):
         config = _agent_config(judge_budget=5)

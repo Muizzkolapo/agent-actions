@@ -42,7 +42,9 @@ def _agent_config(**expect: Any) -> dict[str, Any]:
             "repair": "auto",
             "max_iterations": 4,
             "on_exhausted": "return_last",
-            "expectations": [{"id": "enough", "type": "item_count", "field": "options", "min": 2}],
+            "expectations": [
+                {"id": "enough", "type": "item_count", "field": "options", "params": {"min": 2}}
+            ],
             **expect,
         },
     }

@@ -22,7 +22,12 @@ def project(tmp_path: Path) -> Path:
         yaml.safe_dump(
             {
                 "expectations": [
-                    {"id": "enough_options", "type": "item_count", "field": "options", "min": 2}
+                    {
+                        "id": "enough_options",
+                        "type": "item_count",
+                        "field": "options",
+                        "params": {"min": 2},
+                    }
                 ],
             }
         )
@@ -83,7 +88,12 @@ class TestTheSuiteResolvesFromTheActionConfig:
                 "schema": {
                     "fields": [{"id": "options", "type": "array"}],
                     "expectations": [
-                        {"id": "enough_options", "type": "item_count", "field": "options", "min": 2}
+                        {
+                            "id": "enough_options",
+                            "type": "item_count",
+                            "field": "options",
+                            "params": {"min": 2},
+                        }
                     ],
                 }
             },

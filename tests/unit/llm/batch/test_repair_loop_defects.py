@@ -18,7 +18,7 @@ from agent_actions.processing.evaluation.strategies import ExpectationStrategy, 
 
 SUITE = Suite(
     name="s",
-    expectations=[{"id": "positive", "type": "expression", "condition": "score > 0"}],
+    expectations=[{"id": "positive", "type": "expression", "params": {"condition": "score > 0"}}],
 )
 
 
