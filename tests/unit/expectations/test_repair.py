@@ -89,3 +89,17 @@ def test_multiline_detail_and_hint_render_on_one_bullet_line():
     line = next(li for li in prompt.splitlines() if li.startswith("- raiser"))
     assert "check raised ValueError: line two" in line
     assert "keep it short" in line
+
+
+def test_a_waived_rule_is_not_offered_as_something_the_output_already_satisfies():
+    result = SuiteResult(
+        suite_name="s",
+        outcomes=[
+            _outcome("genuinely_passing", True),
+            _outcome("waived", True, skipped=True),
+            _outcome("broken", False, detail="2 words, expected at least 6"),
+        ],
+    )
+    prompt = compose_repair_prompt("P", {"summary": "x"}, result, hints={})
+    assert "genuinely_passing" in prompt
+    assert "waived" not in prompt
