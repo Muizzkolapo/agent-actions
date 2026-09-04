@@ -158,8 +158,7 @@ def test_execute_threads_llm_context_to_a_judged_expectations_context_ref():
                 "id": "grounded",
                 "type": "llm_judge",
                 "field": "ideas",
-                "rule": "r",
-                "context": ["extract_context.source_context"],
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
             }
         ],
     )
@@ -193,7 +192,9 @@ def test_factory_does_not_build_a_judge_for_a_purely_deterministic_suite():
 
 
 def test_factory_builds_a_judge_dispatcher_for_a_suite_with_llm_judge():
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none"},
         action_name="brainstorm",
@@ -203,7 +204,9 @@ def test_factory_builds_a_judge_dispatcher_for_a_suite_with_llm_judge():
 
 
 def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none"},
         action_name="brainstorm",
@@ -218,7 +221,9 @@ def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
 
 
 def test_factory_judge_budget_is_shared_across_every_record_the_service_processes():
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none", "judge_budget": 1},
         action_name="brainstorm",
@@ -235,7 +240,9 @@ def test_factory_judge_budget_is_shared_across_every_record_the_service_processe
 
 
 def test_a_cache_hit_bypasses_an_already_exhausted_budget():
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none", "judge_budget": 1},
         action_name="brainstorm",
@@ -254,7 +261,9 @@ def test_a_cache_hit_bypasses_an_already_exhausted_budget():
 
 
 def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_record():
-    judge_inline = [{"id": "on_topic", "type": "llm_judge", "field": "ideas", "rule": "on topic"}]
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judge_inline, "repair": "none"},
         action_name="brainstorm",

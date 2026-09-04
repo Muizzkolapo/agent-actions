@@ -150,7 +150,9 @@ def recording_judge(results):
 
 def test_llm_judge_dispatches_through_the_injected_judge():
     result = run_suite(
-        suite_of({"id": "on_topic", "type": "llm_judge", "field": "answer", "rule": "r"}),
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=fake_judge_always(True, "meets the rule"),
     )
@@ -160,7 +162,9 @@ def test_llm_judge_dispatches_through_the_injected_judge():
 
 def test_llm_judge_failing_verdict_blocks_the_suite():
     result = run_suite(
-        suite_of({"id": "on_topic", "type": "llm_judge", "field": "answer", "rule": "r"}),
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=fake_judge_always(False, "too vague"),
     )
@@ -171,7 +175,9 @@ def test_llm_judge_failing_verdict_blocks_the_suite():
 
 def test_llm_judge_skipped_verdict_is_marked_skipped_and_still_blocks():
     result = run_suite(
-        suite_of({"id": "on_topic", "type": "llm_judge", "field": "answer", "rule": "r"}),
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=fake_judge_always(False, "judge budget exhausted", skipped=True),
     )
@@ -182,7 +188,9 @@ def test_llm_judge_skipped_verdict_is_marked_skipped_and_still_blocks():
 def test_llm_judge_without_a_judge_dispatcher_raises():
     with pytest.raises(ValueError, match="llm_judge"):
         run_suite(
-            suite_of({"id": "on_topic", "type": "llm_judge", "field": "answer", "rule": "r"}),
+            suite_of(
+                {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+            ),
             RECORD,
         )
 
@@ -190,7 +198,9 @@ def test_llm_judge_without_a_judge_dispatcher_raises():
 def test_llm_judge_wildcard_selector_calls_judge_once_per_element():
     judge = recording_judge([(True, "ok", False)] * 4)
     result = run_suite(
-        suite_of({"id": "each", "type": "llm_judge", "field": "options[*]", "rule": "r"}),
+        suite_of(
+            {"id": "each", "type": "llm_judge", "field": "options[*]", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=judge,
     )
@@ -208,7 +218,9 @@ def test_llm_judge_wildcard_skipped_if_any_element_was_skipped():
         ]
     )
     result = run_suite(
-        suite_of({"id": "each", "type": "llm_judge", "field": "options[*]", "rule": "r"}),
+        suite_of(
+            {"id": "each", "type": "llm_judge", "field": "options[*]", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=judge,
     )
@@ -225,8 +237,7 @@ def test_llm_judge_context_ref_is_resolved_and_passed_to_the_judge():
                 "id": "grounded",
                 "type": "llm_judge",
                 "field": "answer",
-                "rule": "r",
-                "context": ["extract_context.source_context"],
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
             }
         ),
         RECORD,
@@ -243,8 +254,7 @@ def test_llm_judge_context_ref_with_no_context_source_is_a_failed_outcome_not_a_
                 "id": "grounded",
                 "type": "llm_judge",
                 "field": "answer",
-                "rule": "r",
-                "context": ["extract_context.source_context"],
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
             }
         ),
         RECORD,
@@ -261,8 +271,7 @@ def test_llm_judge_unresolvable_context_ref_is_a_failed_outcome_not_a_crash():
                 "id": "grounded",
                 "type": "llm_judge",
                 "field": "answer",
-                "rule": "r",
-                "context": ["missing_action.missing_field"],
+                "params": {"rule": "r", "context": ["missing_action.missing_field"]},
             }
         ),
         RECORD,
@@ -277,7 +286,9 @@ def test_llm_judge_without_context_declared_never_calls_resolve_context():
     judge = recording_judge([(True, "ok", False)])
     with patch("agent_actions.expectations.runner.resolve_context") as mock_resolve:
         run_suite(
-            suite_of({"id": "plain", "type": "llm_judge", "field": "answer", "rule": "r"}),
+            suite_of(
+                {"id": "plain", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+            ),
             RECORD,
             judge=judge,
             context_source={"some_action": {"some_field": "present but unrelated"}},

@@ -73,8 +73,7 @@ def test_llm_context_reaches_a_judged_expectations_context_ref(monkeypatch):
                 "id": "on_topic",
                 "type": "llm_judge",
                 "field": "ideas",
-                "rule": "on topic",
-                "context": ["extract_context.source_context"],
+                "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
             }
         ],
     )
