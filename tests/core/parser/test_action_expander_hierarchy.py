@@ -393,3 +393,23 @@ class TestJudgeContextFromASchemaField:
         observe = agent["context_scope"]["observe"]
         assert "c.d" in observe
         assert "a.b" not in observe
+
+    def test_an_empty_expect_block_still_observes_the_schemas_refs(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {
+                            "id": "grounded",
+                            "type": "llm_judge",
+                            "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                        }
+                    ],
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
