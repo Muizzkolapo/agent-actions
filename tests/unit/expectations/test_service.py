@@ -357,7 +357,13 @@ def test_warn_severity_failures_never_trigger_repair():
     warn_suite = Suite(
         name="s",
         expectations=[
-            {"id": "count", "type": "item_count", "field": "ideas", "min": 2, "severity": "warn"}
+            {
+                "id": "count",
+                "type": "item_count",
+                "field": "ideas",
+                "params": {"min": 2},
+                "severity": "warn",
+            }
         ],
     )
     calls = []
