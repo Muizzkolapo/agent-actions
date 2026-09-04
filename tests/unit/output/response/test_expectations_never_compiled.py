@@ -44,3 +44,32 @@ def test_a_rule_declared_on_a_field_never_reaches_the_provider(target):
     assert "options" in compiled
     assert "expectations" not in compiled
     assert "option_count" not in compiled
+
+
+_NESTED = {
+    "name": "scenario_question",
+    "fields": [
+        {
+            "id": "options",
+            "type": "array",
+            "expectations": [{"id": "option_count", "type": "item_count", "params": {"equals": 4}}],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "expectations": [{"id": "text_present", "type": "not_null"}],
+                    }
+                },
+            },
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize("target", sorted(SUPPORTED_VENDORS))
+def test_a_rule_below_a_field_never_reaches_the_provider(target):
+    compiled = json.dumps(compile_unified_schema(_NESTED, target))
+    assert "text" in compiled
+    assert "expectations" not in compiled
+    assert "text_present" not in compiled
