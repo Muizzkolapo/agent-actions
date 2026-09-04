@@ -297,3 +297,61 @@ def test_a_list_schema_with_a_defective_rule_reports_the_rule(tmp_path):
     )
     assert "vibe_check" in message
     assert "declares no schema" not in message
+
+
+def test_a_judged_context_ref_declared_on_a_field_is_refused_under_batch(tmp_path):
+    schema = {
+        "name": "grounded",
+        "fields": [
+            {
+                "id": "summary",
+                "type": "string",
+                "expectations": [
+                    {
+                        "id": "grounded",
+                        "type": "llm_judge",
+                        "params": {"rule": "x", "context": ["research.findings"]},
+                    }
+                ],
+            }
+        ],
+    }
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "schema": schema,
+            "run_mode": "batch",
+            "expect": {"repair": "none"},
+        }
+    }
+    fields = {"summarize": {"summary"}, "research": {"findings"}}
+    defects = find_expectation_defects(configs, fields, project_root=project(tmp_path))
+    assert any("batch" in m for m in defects["summarize"])
+
+
+def test_a_judged_context_ref_in_a_named_suite_is_refused_under_batch(tmp_path):
+    root = project(tmp_path)
+    (root / "schema" / "grounded_rules.yml").write_text(
+        yaml.safe_dump(
+            {
+                "expectations": [
+                    {
+                        "id": "grounded",
+                        "type": "llm_judge",
+                        "field": "summary",
+                        "params": {"rule": "x", "context": ["research.findings"]},
+                    }
+                ]
+            }
+        )
+    )
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "run_mode": "batch",
+            "expect": {"repair": "none", "suite": "grounded_rules"},
+        }
+    }
+    fields = {"summarize": {"summary"}, "research": {"findings"}}
+    defects = find_expectation_defects(configs, fields, project_root=root)
+    assert any("batch" in m for m in defects["summarize"])
