@@ -81,7 +81,8 @@ expectations:
   - id: enough_ideas
     type: item_count
     field: ideas
-    min: 3
+    params:
+      min: 3
     hint: list at least three distinct ideas
 """
 
@@ -665,7 +666,8 @@ class TestExtensionPointsDriveRepair:
             expectations:
               - id: has_ideas
                 type: expression
-                condition: 'ideas != null'
+                params:
+                  condition: 'ideas != null'
             """)
             )
         )
