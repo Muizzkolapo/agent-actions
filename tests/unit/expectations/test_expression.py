@@ -14,7 +14,7 @@ from agent_actions.expectations.expression import (
 def test_expression_is_a_registered_type_taking_only_condition():
     etype = registry.get("expression")
     assert etype is not None
-    assert etype.params == frozenset({"condition"})
+    assert etype.params == frozenset({"condition", "row_condition"})
     assert etype.required == frozenset({"condition"})
 
 
