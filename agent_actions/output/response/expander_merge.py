@@ -75,8 +75,10 @@ def collect_judge_context_refs(expect: dict[str, Any] | None) -> list[str]:
         return []
     refs: list[str] = []
     for entry in entries:
-        if isinstance(entry, dict) and entry.get("type") == "llm_judge":
-            context = entry.get("context")
-            if isinstance(context, list):
-                refs.extend(context)
+        if not isinstance(entry, dict) or entry.get("type") != "llm_judge":
+            continue
+        params = entry.get("params")
+        context = params.get("context") if isinstance(params, dict) else None
+        if isinstance(context, list):
+            refs.extend(context)
     return refs
