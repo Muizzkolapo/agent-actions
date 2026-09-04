@@ -122,3 +122,25 @@ def test_a_field_scoped_rule_that_declares_a_selector_fails_the_named_route(tmp_
     root = project(tmp_path, data, name="bad_suite")
     with pytest.raises(loader.SuiteLoadError, match="summary"):
         load_named_suite("bad_suite", root)
+
+
+def test_rules_nested_below_a_top_level_field_are_refused_not_dropped():
+    data = {
+        "fields": [
+            {"id": "summary", "type": "string", "expectations": [{"type": "not_null"}]},
+            {
+                "id": "scores",
+                "type": "object",
+                "properties": {
+                    "accuracy": {"type": "number", "expectations": [{"type": "not_null"}]}
+                },
+            },
+        ]
+    }
+    with pytest.raises(ValueError, match="accuracy"):
+        build_suite_from_schema_data("page_shape", data)
+
+
+def test_a_non_list_fields_value_is_a_named_error_not_a_crash():
+    with pytest.raises(ValueError, match="fields"):
+        build_suite_from_schema_data("bad_shape", {"fields": 3, "expectations": []})
