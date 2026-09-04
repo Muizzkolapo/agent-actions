@@ -732,8 +732,8 @@ def test_auto_repair_hint_reaches_the_composed_prompt():
 
 
 JUDGED_TWO_FIELD = [
-    {"id": "count", "type": "item_count", "field": "ideas", "min": 2},
-    {"id": "on_topic", "type": "llm_judge", "field": "title", "rule": "on topic"},
+    {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}},
+    {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}},
 ]
 JUDGE_AGENT = {"model_vendor": "anthropic", "model_name": "claude-sonnet-5"}
 
@@ -757,7 +757,9 @@ def test_a_repair_that_keeps_a_judged_field_identical_reuses_the_cached_verdict(
 def test_a_budget_exhausted_mid_loop_never_produces_a_false_green():
     # The judged rule is the ONLY rule, so a budget skip is the only thing that
     # can hold the verdict false -- no deterministic failure props it up.
-    judged_only = [{"id": "on_topic", "type": "llm_judge", "field": "title", "rule": "on topic"}]
+    judged_only = [
+        {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}}
+    ]
     service = create_expectation_service_from_config(
         {"expectations": judged_only, "repair": "retry", "max_iterations": 3, "judge_budget": 1},
         action_name="a",
@@ -772,7 +774,7 @@ def test_a_budget_exhausted_mid_loop_never_produces_a_false_green():
     assert first.suite_result.overall_pass is True
     assert second.suite_result.overall_pass is False
     assert second.exhausted is True
-    assert all(o.skipped and o.severity == "fail" for o in second.suite_result.failed)
+    assert all(o.skipped and o.severity == "error" for o in second.suite_result.failed)
 
 
 def test_a_deterministic_failure_does_not_short_circuit_judged_rules():
@@ -825,8 +827,13 @@ def test_a_budget_skipped_rule_can_still_pass_from_cache_on_a_later_iteration():
     # A skipped rule is not permanently unsatisfiable: a regeneration whose
     # judged content is already cached passes it at zero judge cost.
     rules = [
-        {"id": "count", "type": "item_count", "field": "ideas", "max": 2},
-        {"id": "on_topic", "type": "llm_judge", "field": "ideas[*]", "rule": "on topic"},
+        {"id": "count", "type": "item_count", "field": "ideas", "params": {"max": 2}},
+        {
+            "id": "on_topic",
+            "type": "llm_judge",
+            "field": "ideas[*]",
+            "params": {"rule": "on topic"},
+        },
     ]
     service = create_expectation_service_from_config(
         {"expectations": rules, "repair": "retry", "max_iterations": 3, "judge_budget": 2},

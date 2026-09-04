@@ -241,7 +241,9 @@ def test_llm_judge_wildcard_is_not_skipped_when_an_element_genuinely_failed():
         ]
     )
     result = run_suite(
-        suite_of({"id": "each", "type": "llm_judge", "field": "options[*]", "rule": "r"}),
+        suite_of(
+            {"id": "each", "type": "llm_judge", "field": "options[*]", "params": {"rule": "r"}}
+        ),
         RECORD,
         judge=judge,
     )
