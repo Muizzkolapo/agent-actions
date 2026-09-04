@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 from typing import Any, Literal
@@ -13,6 +14,12 @@ Severity = Literal["error", "warn", "info"]
 _RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
 
 _RENAMED_SEVERITIES = {"fail": "error"}
+
+
+def _nearest_rule_key(key: str) -> str | None:
+    """The rule key *key* was probably meant to be, or None if it reads as an argument."""
+    matches = difflib.get_close_matches(key, _RULE_KEYS, n=1, cutoff=0.85)
+    return matches[0] if matches else None
 
 
 class Expectation(BaseModel):
@@ -37,20 +44,33 @@ class Expectation(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _refuse_superseded_spellings(cls, data: Any) -> Any:
-        """Name the replacement for a shape that used to be legal."""
+        """Name the replacement for every shape in this rule that used to be legal."""
         if not isinstance(data, dict):
             return data
+        problems: list[str] = []
+
         stray = sorted(str(key) for key in data if key not in _RULE_KEYS)
-        if stray:
-            raise ValueError(
-                f"type-specific arguments belong under params:; move {', '.join(stray)} there"
+        misspelled = [(key, _nearest_rule_key(key)) for key in stray]
+        arguments = [key for key, near in misspelled if near is None]
+        problems += [
+            f"unknown rule key '{key}' — did you mean '{near}'?"
+            for key, near in misspelled
+            if near is not None
+        ]
+        if arguments:
+            problems.append(
+                f"type-specific arguments belong under params:; move {', '.join(arguments)} there"
             )
+
         severity = data.get("severity")
         if isinstance(severity, str) and severity in _RENAMED_SEVERITIES:
-            raise ValueError(
+            problems.append(
                 f"severity '{severity}' is now '{_RENAMED_SEVERITIES[severity]}'; "
                 f"the levels are error, warn and info"
             )
+
+        if problems:
+            raise ValueError("; ".join(problems))
         return data
 
     def definition_hash(self) -> str:
