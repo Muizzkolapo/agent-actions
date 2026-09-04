@@ -15,6 +15,10 @@ class SuiteLoadError(ValueError):
     """A named suite could not be loaded from the schema path."""
 
 
+class NoRulesDeclared(ValueError):
+    """A schema file carries no rules at all, which is distinct from carrying bad ones."""
+
+
 def _looks_like_rules(value: Any) -> bool:
     """Whether a value is a list of rules, rather than a member that shares the name."""
     return isinstance(value, list) and any(
@@ -131,7 +135,7 @@ def build_suite_from_schema_data(suite_name: str, data: Any) -> Suite:
         )
     entries = scoped + list(own or [])
     if not entries:
-        raise ValueError(
+        raise NoRulesDeclared(
             f"Schema file '{suite_name}' declares no expectations: no rules on its "
             f"fields and no expectations: block"
         )
