@@ -166,6 +166,7 @@ const sidebars: SidebarsConfig = {
           items: [
             'reference/validation/reprompting',
             'reference/validation/output-validation',
+            'reference/validation/expectations',
           ],
         },
         'reference/tools/index',

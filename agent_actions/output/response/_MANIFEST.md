@@ -12,11 +12,11 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | `config_fields.py` | Module | Field helpers used by schema configuration objects. `SIMPLE_CONFIG_FIELDS` includes runtime fields for standard 3-level inheritance. | `output.response.schema`, `validation` |
 | `config_schema.py` | Module | Schema definitions for response metadata configuration. | `validation` |
 | `consolidated_guard.py` | Shim | Re-export shim → `guards.consolidated_guard`. | `guards` |
-| `expander.py` | Module | Facade: `ActionExpander` class orchestrates action-to-agent expansion, delegates to submodules. | `tooling.docs`, `schema` |
+| `expander.py` | Module | Facade: `ActionExpander` class orchestrates action-to-agent expansion, delegates to submodules. Forwards `expect:` unchanged; a judged expectation's `params.context:` refs are unioned into the action's own `context_scope.observe` so the framework's existing dependency inference picks up the referenced action automatically — from the action's inline `expectations:` list and from its resolved schema's rules, but not from a named `suite:`, which isn't loadable at this layer. | `tooling.docs`, `schema` |
 | `expander_validation.py` | Module | Validation functions: vendor, action name, required fields. | `validation` |
 | `expander_schema.py` | Module | Schema processing: template replacement, output schema compilation. | `schema`, `validation` |
 | `expander_action_types.py` | Module | Action-type processors: guard config, tool actions, HITL actions. | `validation`, `guards` |
-| `expander_merge.py` | Module | Config merge/init: directive merging, context_scope, chunk config, optional fields. | `config` |
+| `expander_merge.py` | Module | Config merge/init: directive merging, context_scope, chunk config, optional fields. `collect_judge_context_refs()` extracts an action's `llm_judge` `context:` refs — read from each rule's `params:` block, from the inline list or, when the block declares none, from the action's resolved schema — for `expander.py` to union into `context_scope.observe`. An empty `expect: {}` is the bare block, not an absent one, so it reads the schema too. | `config` |
 | `expander_guard_validation.py` | Module | Guard reference validation: schema registry, upstream reference checks. | `validation`, `guards` |
 | `guard_parser.py` | Shim | Re-export shim → `guards.guard_parser`. | `guards` |
 | `loader.py` | Module | `SchemaLoader` that reads and constructs schemas from YAML files or inline definitions. `load_schema` accepts `project_root: Path \| None`. | `file_io`, `validation` |

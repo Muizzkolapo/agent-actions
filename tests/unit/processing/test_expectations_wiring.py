@@ -38,6 +38,20 @@ def test_verdict_is_attached_under_the_expect_key(monkeypatch):
     assert result.response["expect"]["failed"] == ["count"]
 
 
+def test_verdict_is_attached_for_the_real_single_item_list_shape_call_llm_produces(monkeypatch):
+    # _call_llm's real return is run_dynamic_agent's raw list (create_dynamic_agent
+    # always returns list[Any]) -- a bare dict, as every other test in this file
+    # mocks, is not the shape a real record-granularity online call produces.
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.response["expect"]["overall_pass"] is False
+    assert result.response["expect"]["failed"] == ["count"]
+    assert result.response["ideas"] == ["a"]
+
+
 def test_original_fields_survive_the_attachment(monkeypatch):
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
     monkeypatch.setattr(
