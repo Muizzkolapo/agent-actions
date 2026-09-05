@@ -102,6 +102,7 @@ class Outcome(BaseModel):
     passed: bool
     detail: str = ""
     definition_hash: str
+    skipped: bool = False
 
 
 class SuiteResult(BaseModel):
@@ -126,6 +127,7 @@ class SuiteResult(BaseModel):
         return {
             "overall_pass": self.overall_pass,
             "failed": [o.id for o in self.failed if o.severity == "error"],
+            "skipped": [o.id for o in self.outcomes if o.skipped and o.severity == "error"],
             "outcomes": [o.model_dump() for o in self.outcomes],
         }
 
