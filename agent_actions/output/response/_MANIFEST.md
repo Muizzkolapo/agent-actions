@@ -20,7 +20,7 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | `expander_guard_validation.py` | Module | Guard reference validation: schema registry, upstream reference checks. | `validation`, `guards` |
 | `guard_parser.py` | Shim | Re-export shim → `guards.guard_parser`. | `guards` |
 | `loader.py` | Module | `SchemaLoader` that reads and constructs schemas from YAML files or inline definitions. `load_schema` accepts `project_root: Path \| None`. | `file_io`, `validation` |
-| `schema_conversion.py` | Module | Schema format conversion: `_convert_json_schema_to_unified`, `compile_field`. | `validation` |
+| `schema_conversion.py` | Module | Schema format conversion: `_convert_json_schema_to_unified`, `compile_field`. `_without_rules` strips any `expectations:` block at every depth, so a rule an author wrote on a field — or below one — never rides into a compiled provider payload. | `validation` |
 | `vendor_compilation.py` | Module | Vendor-specific schema compilation: `compile_unified_schema` for OpenAI, Anthropic, Gemini, Ollama, etc. | `validation`, `schema_conversion` |
 | `dispatch_injection.py` | Module | Dispatch/injection logic: `_inject_functions_into_schema`, `_resolve_dispatch_in_schema`. | `prompt` |
 | `context_data.py` | Module | Context data handling and schema loading helpers: `_prepare_context_data_str`, `_load_inline_schema`, `_load_named_schema`, `_unwrap_nested_schema`, `_compile_schema_for_vendor`. | `schema_loader`, `vendor_compilation`, `dispatch_injection` |

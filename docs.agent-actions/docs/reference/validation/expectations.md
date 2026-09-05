@@ -66,7 +66,7 @@ The example above uses observe mode: run the checks, attach the verdict, keep go
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
 | `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`; omit both to read the action's own schema file) |
-| `suite` | string | — | Name of a schema-path file with an `expectations:` block (see [Rules in the schema file](#rules-in-the-schema-file)) instead of an inline list |
+| `suite` | string | — | Name of a schema-path file carrying rules — on its fields, in its own `expectations:` block, or both (see [Rules in the schema file](#rules-in-the-schema-file)) — instead of an inline list |
 | `repair` | string | `auto` | `none` (observe), `retry` (re-send the original prompt), or `auto` (re-send with composed feedback) |
 | `max_iterations` | integer 1–10 | `3` | Total generations per record, counting the first. Setting it explicitly alongside `repair: none` is a config error, not a no-op |
 | `on_exhausted` | string | `return_last` | What to do when the iterations run out: `return_last`, `fail`, or `raise`. Same rule — do not set it under `repair: none` |
