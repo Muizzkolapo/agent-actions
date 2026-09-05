@@ -848,3 +848,26 @@ def test_a_budget_skipped_rule_can_still_pass_from_cache_on_a_later_iteration():
     assert result.suite_result.overall_pass is True
     assert result.iterations == 2
     assert mock_invoke.call_count == 2
+
+
+def test_a_suite_failing_only_on_skipped_rules_stops_generating():
+    """A skipped rule was never evaluated, so regenerating cannot change it."""
+    judged_only = [
+        {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judged_only, "repair": "auto", "max_iterations": 3, "judge_budget": 1},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    titles = iter(["T1", "T2", "T3", "T4", "T5"])
+    calls = []
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        service.execute(lambda p: ({"title": next(titles)}, True), "P")
+        after = service.execute(lambda p: (calls.append(p) or {"title": next(titles)}, True), "P")
+    assert len(calls) == 1
+    assert after.exhausted is True
+    assert after.suite_result.overall_pass is False
+    assert all(o.skipped for o in after.suite_result.failed)
