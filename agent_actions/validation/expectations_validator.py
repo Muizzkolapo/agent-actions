@@ -82,8 +82,12 @@ def _default_suite_defects(
     from agent_actions.expectations.loader import NoRulesDeclared, schema_rule_entries
 
     schema_data = action.get("schema")
-    if isinstance(schema_data, dict):
-        label = schema_data.get("name") or action.get("name") or "the action's schema"
+    if isinstance(schema_data, (dict, list)):
+        label = (
+            (schema_data.get("name") if isinstance(schema_data, dict) else None)
+            or action.get("name")
+            or "the action's schema"
+        )
         try:
             entries, defects = schema_rule_entries(str(label), schema_data)
         except NoRulesDeclared as exc:

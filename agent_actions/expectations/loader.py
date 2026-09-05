@@ -115,9 +115,14 @@ def schema_rule_entries(suite_name: str, data: Any) -> tuple[list[Any], list[str
     report each rule's own defects one at a time instead of losing the rest to
     the first bad one.
     """
+    # schema: accepts a bare list of field dicts as well as a mapping; the rules
+    # hang off the fields either way.
+    if isinstance(data, list):
+        data = {"fields": data}
     if not isinstance(data, dict):
         raise ValueError(
-            f"Schema file '{suite_name}' must be a mapping, found {type(data).__name__}"
+            f"Schema file '{suite_name}' must be a mapping or a list of fields, "
+            f"found {type(data).__name__}"
         )
     scoped, defects = _field_scoped_entries(suite_name, data)
     # Every part of the file a selector cannot reach, not just the fields: list —
