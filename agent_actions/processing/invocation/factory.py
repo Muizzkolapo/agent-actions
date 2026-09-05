@@ -39,6 +39,9 @@ class InvocationStrategyFactory:
     @staticmethod
     def _create_online_strategy(agent_config: dict[str, Any]) -> OnlineStrategy:
         """Create OnlineStrategy with configured recovery services."""
+        from agent_actions.expectations.service import (
+            create_expectation_service_from_config,
+        )
         from agent_actions.processing.helpers import _is_tool_action
         from agent_actions.processing.recovery.reprompt import (
             create_reprompt_service_from_config,
@@ -54,11 +57,27 @@ class InvocationStrategyFactory:
 
         retry_service = create_retry_service_from_config(retry_config)
 
+        expect_config = agent_config.get("expect")
+        action_name = agent_config.get("name", "unknown")
+
         # Reprompt is meaningless for deterministic tools — re-running the same UDF yields the same output.
         if _is_tool_action(agent_config):
+            if expect_config and expect_config.get("repair", "auto") != "none":
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Tool action '{action_name}' cannot repair: re-running a "
+                    "deterministic UDF yields the same output. Use repair: none.",
+                    context={"action": action_name},
+                )
             return OnlineStrategy(
                 retry_service=retry_service,
                 reprompt_service=None,
+                expectation_service=create_expectation_service_from_config(
+                    expect_config,
+                    action_name=action_name,
+                    schema_name=agent_config.get("schema_name") or None,
+                ),
             )
 
         critique_fn = None
@@ -75,6 +94,11 @@ class InvocationStrategyFactory:
         return OnlineStrategy(
             retry_service=retry_service,
             reprompt_service=reprompt_service,
+            expectation_service=create_expectation_service_from_config(
+                expect_config,
+                action_name=action_name,
+                schema_name=agent_config.get("schema_name") or None,
+            ),
         )
 
     @staticmethod
