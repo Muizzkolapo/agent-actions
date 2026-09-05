@@ -20,6 +20,7 @@ from agent_actions.llm.providers.batch_base import BatchResult
 ACTION = "label_page"
 PARENT = "pages.json"
 FAILING = "rec-failing"
+GRADUATED = [{"target_id": "graduated-earlier", "content": "paid for"}]
 
 
 def _entry() -> BatchJobEntry:
@@ -62,7 +63,7 @@ def context():
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = MagicMock()
     context.service._convert_batch_results_to_workflow_format.return_value = (
-        [{"target_id": "graduated-earlier"}],
+        list(GRADUATED),
         MagicMock(),
         None,
     )
@@ -131,11 +132,13 @@ def test_the_records_the_rounds_graduated_reach_the_file(context):
     _run(context)
 
     assert context.written, "nothing was written; the halt fired before the output existed"
-    assert context.written[0], (
-        f"the file was written empty ({context.written[0]}); every record the "
-        "reprompt rounds graduated is lost"
-    )
     assert len(context.written) == 1, f"the output was written {len(context.written)} times"
+    # The records the conversion produced, not merely a non-empty list: asserting
+    # truthiness is satisfied by writing anything at all before raising.
+    assert context.written[0] == GRADUATED, (
+        f"the file did not receive what the conversion produced ({context.written[0]}); "
+        "every record the reprompt rounds graduated is lost"
+    )
 
 
 def test_the_configured_policy_is_what_decides(context):
@@ -189,5 +192,54 @@ def test_the_halt_is_not_dropped_when_repair_defers(context):
     assert raised is not None, (
         "the reprompt halt was parked and then discarded when repair deferred; "
         "on_exhausted: raise finished the run reporting success"
+    )
+    assert raised_by_exhaustion_policy(raised)
+
+
+def test_the_retry_handler_also_surfaces_a_halt_before_deferring(context):
+    """The sibling deferral, on the path that runs while retry is still active.
+
+    handle_retry_recovery reaches check_and_submit_repair after
+    check_and_submit_reprompt may already have parked a halt. Deferring there
+    skips the finaliser exactly as it does on the resume path.
+    """
+    from agent_actions.llm.batch.services.processing_recovery import handle_retry_recovery
+
+    context.pending_exhaustion = exhaustion_halt("Reprompt validation exhausted for rec-a")
+    context.service._retry_service.process_retry_results.return_value = ([], set(), {}, None)
+
+    state = MagicMock()
+    state.retry_attempt = 2
+    state.retry_max_attempts = 2
+    state.missing_ids = []
+    state.record_failure_counts = {}
+    state.accumulated_results = []
+
+    raised = None
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=False,
+        ),
+    ):
+        try:
+            handle_retry_recovery(
+                context,
+                BatchIdentity(batch_id="b-1", file_name=PARENT, entry=_entry()),
+                state,
+                [],
+                [],
+                {},
+            )
+        except BaseException as exc:  # noqa: BLE001 - the test is about which one
+            raised = exc
+
+    assert raised is not None, (
+        "the halt parked before the repair deferral was discarded; on_exhausted: "
+        "raise finished the run reporting success"
     )
     assert raised_by_exhaustion_policy(raised)
