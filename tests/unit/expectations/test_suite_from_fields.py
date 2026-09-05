@@ -198,3 +198,38 @@ def test_unreachable_rules_are_refused_in_a_file_with_no_top_level_fields():
     }
     with pytest.raises(ValueError, match="fact"):
         build_suite_from_schema_data("candidate_facts", data)
+
+
+def test_rules_on_a_dict_inside_a_list_are_refused_not_dropped():
+    data = {
+        "fields": [
+            {"id": "a", "expectations": [{"id": "a_ok", "type": "not_null"}]},
+            {
+                "id": "b",
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "fields": [
+                        {"id": "inner", "expectations": [{"id": "inner_ok", "type": "not_null"}]}
+                    ],
+                },
+            },
+        ]
+    }
+    with pytest.raises(ValueError, match="inner"):
+        build_suite_from_schema_data("page_shape", data)
+
+
+def test_a_nested_list_that_is_not_rules_is_not_mistaken_for_them():
+    data = {
+        "fields": [
+            {
+                "id": "survey",
+                "type": "object",
+                "expectations": [{"type": "not_null"}],
+                "properties": {"stats": {"expectations": ["free text", "not a rule"]}},
+            }
+        ]
+    }
+    suite = build_suite_from_schema_data("page_shape", data)
+    assert [e.field for e in suite.expectations] == ["survey"]
