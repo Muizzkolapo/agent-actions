@@ -177,5 +177,8 @@ def _contains_terms_from(value: Any, params: dict[str, Any]) -> tuple[bool, str]
 
 
 _REGISTRY["llm_judge"] = ExpectationType(
-    "llm_judge", frozenset({"rule", "model", "votes"}), frozenset({"rule"}), _llm_judge_unreachable
+    "llm_judge",
+    frozenset({"rule", "model", "votes", "context"}),
+    frozenset({"rule"}),
+    _llm_judge_unreachable,
 )

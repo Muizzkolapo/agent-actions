@@ -58,11 +58,11 @@ def find_expectation_defects(
                     "expectations: is an empty list; add entries, or omit the "
                     "key to read the action's own schema"
                 )
-            messages.extend(_entry_defects(entries, fields))
+            messages.extend(_entry_defects(entries, fields, available_fields))
         elif isinstance(suite_name, str) and project_root is not None:
-            messages.extend(_suite_defects(suite_name, project_root, fields))
+            messages.extend(_suite_defects(suite_name, project_root, fields, available_fields))
         elif entries is None and suite_name is None and project_root is not None:
-            messages.extend(_default_suite_defects(action, project_root, fields))
+            messages.extend(_default_suite_defects(action, project_root, fields, available_fields))
 
         if messages:
             defects[action_name] = sorted(messages)
@@ -71,7 +71,10 @@ def find_expectation_defects(
 
 
 def _default_suite_defects(
-    action: dict[str, Any], project_root: Path, fields: set[str] | None
+    action: dict[str, Any],
+    project_root: Path,
+    fields: set[str] | None,
+    all_fields: dict[str, set[str]],
 ) -> list[str]:
     """Defects for a bare expect: block, which reads the action's own schema.
 
@@ -100,10 +103,10 @@ def _default_suite_defects(
             # The file has rules; they are in the wrong place or the wrong shape,
             # so the advice for a file with none would contradict the message.
             return [f"a bare expect: reads the rules of the action's own schema — {exc}"]
-        return defects + _entry_defects(entries, fields)
+        return defects + _entry_defects(entries, fields, all_fields)
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
-        return _suite_defects(schema_name, project_root, fields)
+        return _suite_defects(schema_name, project_root, fields, all_fields)
     return [
         "a bare expect: reads the rules of the action's own schema, "
         "but this action declares no schema; add one, or use suite: or an "
@@ -111,7 +114,12 @@ def _default_suite_defects(
     ]
 
 
-def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None) -> list[str]:
+def _suite_defects(
+    suite_name: str,
+    project_root: Path,
+    fields: set[str] | None,
+    all_fields: dict[str, set[str]],
+) -> list[str]:
     from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
 
     try:
@@ -119,10 +127,12 @@ def _suite_defects(suite_name: str, project_root: Path, fields: set[str] | None)
     except SuiteLoadError as exc:
         return [str(exc)]
 
-    return defects + _entry_defects(entries, fields)
+    return defects + _entry_defects(entries, fields, all_fields)
 
 
-def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
+def _entry_defects(
+    entries: list[Any], fields: set[str] | None, all_fields: dict[str, set[str]]
+) -> list[str]:
     """Defects for raw rule entries, reported one rule at a time.
 
     Every source of rules — an inline list, a named suite, a schema's own
@@ -165,7 +175,7 @@ def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
             # the author should not have to fix one to see the other.
             messages.extend(_argument_defects(label, etype, entry.get("params")))
             continue
-        messages.extend(_rule_defects(expectation, fields))
+        messages.extend(_rule_defects(expectation, fields, all_fields))
     return messages
 
 
@@ -192,7 +202,9 @@ def _argument_defects(label: str, etype: Any, params: Any) -> list[str]:
     ]
 
 
-def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str]:
+def _rule_defects(
+    expectation: Expectation, fields: set[str] | None, all_fields: dict[str, set[str]]
+) -> list[str]:
     label = expectation.id or expectation.type
     etype = registry.get(expectation.type)
     if etype is None:
@@ -213,5 +225,29 @@ def _rule_defects(expectation: Expectation, fields: set[str] | None) -> list[str
         votes = expectation.params["votes"]
         if not isinstance(votes, int) or isinstance(votes, bool) or votes < 1:
             messages.append(f"{label}: votes must be a positive integer, got {votes!r}")
+
+    if expectation.type == "llm_judge" and "context" in expectation.params:
+        context_refs = expectation.params["context"]
+        if not isinstance(context_refs, list):
+            messages.append(
+                f"{label}: context must be a list of 'action.field' strings, "
+                f"got {type(context_refs).__name__}"
+            )
+        else:
+            for ref in context_refs:
+                if not isinstance(ref, str) or "." not in ref:
+                    messages.append(f"{label}: context reference '{ref}' must be 'action.field'")
+                    continue
+                ref_action, _, ref_field = ref.partition(".")
+                ref_fields = all_fields.get(ref_action)
+                if ref_fields is None:
+                    messages.append(
+                        f"{label}: context reference '{ref}' names unknown action '{ref_action}'"
+                    )
+                elif ref_field not in ref_fields:
+                    messages.append(
+                        f"{label}: context reference '{ref}' — action '{ref_action}' "
+                        f"does not produce field '{ref_field}'"
+                    )
 
     return messages

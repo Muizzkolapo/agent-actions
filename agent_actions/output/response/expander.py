@@ -25,8 +25,10 @@ from .expander_action_types import (
     process_tool_action,
 )
 from .expander_merge import (
+    collect_judge_context_refs,
     deep_merge_context_scope,
     initialize_optional_fields,
+    merge_directive_value,
     process_chunk_config,
 )
 from .expander_schema import (
@@ -290,6 +292,16 @@ class ActionExpander:
         # Pass through the expect block unchanged; ExpectConfig validated its
         # shape already, and AgentConfig (extra="allow") preserves it as-is.
         agent["expect"] = action.get("expect")
+
+        # Union context: refs into observe so infer_dependencies picks up the
+        # source action automatically. The action's inline list, or its resolved
+        # schema's rules; a named suite: isn't loadable here without project_root.
+        context_refs = collect_judge_context_refs(agent["expect"], agent.get("schema"))
+        if context_refs:
+            agent["context_scope"] = agent.get("context_scope") or {}
+            agent["context_scope"]["observe"] = merge_directive_value(
+                agent["context_scope"].get("observe", []), context_refs
+            )
 
         return agent
 

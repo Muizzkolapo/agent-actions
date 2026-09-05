@@ -92,6 +92,135 @@ class TestActionExpanderHierarchy:
         assert result.get("granularity") == "Record"
 
 
+class TestJudgeContextAutoInjection:
+    """A judged expectation's context: refs must reach the action's own
+    context_scope.observe, or the framework's dependency inference never
+    picks up the referenced action and the data never reaches llm_context."""
+
+    @staticmethod
+    def _agent_for(expect, context_scope=None):
+        action = {"name": "brainstorm", "intent": "Test", "expect": expect}
+        if context_scope is not None:
+            action["context_scope"] = context_scope
+        agent = {"agent_type": "brainstorm", "name": "brainstorm"}
+        defaults = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "KEY"}
+        return ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
+
+    def test_context_ref_is_unioned_into_existing_observe(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "on_topic",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
+                }
+            ],
+        }
+        agent = self._agent_for(expect, context_scope={"observe": ["source.*"]})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+        assert "source.*" in agent["context_scope"]["observe"]
+
+    def test_no_context_scope_declared_still_gets_one_from_context_refs(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "on_topic",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
+                }
+            ],
+        }
+        agent = self._agent_for(expect)
+        assert agent["context_scope"]["observe"] == ["extract_context.source_context"]
+
+    def test_duplicate_ref_is_not_added_twice(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "on_topic",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
+                }
+            ],
+        }
+        agent = self._agent_for(
+            expect, context_scope={"observe": ["extract_context.source_context"]}
+        )
+        assert agent["context_scope"]["observe"].count("extract_context.source_context") == 1
+
+    def test_non_judge_expectations_do_not_affect_observe(self):
+        expect = {
+            "repair": "none",
+            "expectations": [{"id": "nn", "type": "not_null", "field": "ideas"}],
+        }
+        agent = self._agent_for(expect, context_scope={"observe": ["source.*"]})
+        assert agent["context_scope"]["observe"] == ["source.*"]
+
+    def test_no_expect_block_leaves_context_scope_untouched(self):
+        agent = self._agent_for(expect=None, context_scope={"observe": ["source.*"]})
+        assert agent["context_scope"]["observe"] == ["source.*"]
+
+    def test_multiple_judge_expectations_union_all_refs(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "a",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "r1", "context": ["extract_context.source_context"]},
+                },
+                {
+                    "id": "b",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "r2", "context": ["another_action.other_field"]},
+                },
+            ],
+        }
+        agent = self._agent_for(expect)
+        assert set(agent["context_scope"]["observe"]) == {
+            "extract_context.source_context",
+            "another_action.other_field",
+        }
+
+    def test_non_list_context_value_does_not_crash_expansion(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "a",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "r1", "context": 5},
+                }
+            ],
+        }
+        agent = self._agent_for(expect, context_scope={"observe": ["source.*"]})
+        assert agent["context_scope"]["observe"] == ["source.*"]
+
+    def test_two_refs_with_the_same_field_name_on_different_actions_stay_distinct(self):
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "id": "a",
+                    "type": "llm_judge",
+                    "field": "ideas",
+                    "params": {"rule": "r1", "context": ["action_one.text", "action_two.text"]},
+                }
+            ],
+        }
+        agent = self._agent_for(expect)
+        assert set(agent["context_scope"]["observe"]) == {"action_one.text", "action_two.text"}
+
+
 class TestOutputSchemaContract:
     """Test uniform output schema across all action types."""
 
@@ -189,3 +318,120 @@ class TestOutputSchemaContract:
         """LLM actions without YAML schema: have no json_output_schema."""
         result = self._expand_single(self._make_llm_action(schema=None))
         assert result.get("json_output_schema") is None
+
+
+class TestJudgeContextFromASchemaField:
+    """A judged rule declared on the action's schema needs its refs observed too."""
+
+    @staticmethod
+    def _agent_for(schema, expect):
+        action = {"name": "judge_it", "intent": "Test", "schema": schema, "expect": expect}
+        agent = {"agent_type": "judge_it", "name": "judge_it"}
+        defaults = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "KEY"}
+        return ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
+
+    def test_a_ref_on_a_field_declared_rule_reaches_observe(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {
+                            "id": "grounded",
+                            "type": "llm_judge",
+                            "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                        }
+                    ],
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {"repair": "none"})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+
+    def test_a_ref_in_the_files_own_block_reaches_observe(self):
+        schema = {
+            "name": "grounded",
+            "fields": [{"id": "summary", "type": "string"}],
+            "expectations": [
+                {
+                    "id": "grounded",
+                    "type": "llm_judge",
+                    "field": "summary",
+                    "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {"repair": "none"})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+
+    def test_an_inline_list_still_wins_over_the_schema(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {"type": "llm_judge", "params": {"rule": "r", "context": ["a.b"]}}
+                    ],
+                }
+            ],
+        }
+        expect = {
+            "repair": "none",
+            "expectations": [
+                {
+                    "type": "llm_judge",
+                    "field": "summary",
+                    "params": {"rule": "r", "context": ["c.d"]},
+                }
+            ],
+        }
+        agent = self._agent_for(schema, expect)
+        observe = agent["context_scope"]["observe"]
+        assert "c.d" in observe
+        assert "a.b" not in observe
+
+    def test_an_empty_expect_block_still_observes_the_schemas_refs(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {
+                            "id": "grounded",
+                            "type": "llm_judge",
+                            "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                        }
+                    ],
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {})
+        assert "extract_context.source_context" in agent["context_scope"]["observe"]
+
+    def test_a_named_suite_does_not_pull_in_the_schemas_own_refs(self):
+        schema = {
+            "name": "grounded",
+            "fields": [
+                {
+                    "id": "summary",
+                    "type": "string",
+                    "expectations": [
+                        {
+                            "id": "grounded",
+                            "type": "llm_judge",
+                            "params": {"rule": "r", "context": ["extract_context.source_context"]},
+                        }
+                    ],
+                }
+            ],
+        }
+        agent = self._agent_for(schema, {"repair": "none", "suite": "other_rules"})
+        assert "extract_context.source_context" not in (
+            agent.get("context_scope", {}).get("observe") or []
+        )

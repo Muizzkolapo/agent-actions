@@ -322,3 +322,102 @@ def test_llm_judge_positive_votes_is_accepted():
     }
     defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
     assert defects == {}
+
+
+def test_llm_judge_context_ref_to_a_real_field_is_accepted():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {
+                            "rule": "x",
+                            "context": ["extract_quote_context.source_context"],
+                        },
+                    }
+                ]
+            }
+        }
+    }
+    available_fields = {"write_q": {"options"}, "extract_quote_context": {"source_context"}}
+    assert find_expectation_defects(action_configs, available_fields) == {}
+
+
+def test_llm_judge_context_ref_to_unknown_action_is_a_defect():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "context": ["nonexistent.field"]},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "unknown action 'nonexistent'" in defects["write_q"][0]
+
+
+def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "context": ["extract_quote_context.missing_field"]},
+                    }
+                ]
+            }
+        }
+    }
+    available_fields = {"write_q": {"options"}, "extract_quote_context": {"source_context"}}
+    defects = find_expectation_defects(action_configs, available_fields)
+    assert defects and "does not produce field 'missing_field'" in defects["write_q"][0]
+
+
+def test_llm_judge_malformed_context_ref_is_a_defect():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "context": ["no_dot"]},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "must be 'action.field'" in defects["write_q"][0]
+
+
+def test_llm_judge_non_list_context_value_is_a_defect_not_a_crash():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "context": 5},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "context must be a list" in defects["write_q"][0]
