@@ -265,3 +265,60 @@ def test_defaulted_expect_with_no_schema_at_all_is_reported(tmp_path):
 def test_defaulted_expect_is_skipped_without_project_context():
     defects = find_expectation_defects(default_config(schema_name="write_q_schema"), FIELDS)
     assert defects == {}
+
+
+def test_llm_judge_negative_votes_is_a_defect():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "votes": -1},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "votes" in defects["write_q"][0]
+
+
+def test_llm_judge_non_integer_votes_is_a_defect():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "votes": "three"},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects and "votes" in defects["write_q"][0]
+
+
+def test_llm_judge_positive_votes_is_accepted():
+    action_configs = {
+        "write_q": {
+            "expect": {
+                "expectations": [
+                    {
+                        "id": "r",
+                        "type": "llm_judge",
+                        "field": "options",
+                        "params": {"rule": "x", "votes": 3},
+                    }
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
+    assert defects == {}

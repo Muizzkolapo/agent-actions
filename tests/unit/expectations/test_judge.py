@@ -115,3 +115,79 @@ class TestRegistration:
         etype = registry.get("llm_judge")
         with pytest.raises(NotImplementedError):
             etype.check("value", {"rule": "x"})
+
+
+class TestInvokeJudgeWithVotes:
+    def test_votes_one_delegates_directly(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.return_value = (True, "fine")
+            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=1)
+        assert passed is True
+        assert detail == "fine"
+        mock_judge.assert_called_once()
+
+    def test_votes_defaults_to_one(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.return_value = (True, "fine")
+            invoke_judge_with_votes(_agent_config(), "rule", "value")
+        mock_judge.assert_called_once()
+
+    def test_majority_pass_wins(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.side_effect = [(True, "ok"), (True, "ok"), (False, "too vague")]
+            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+        assert passed is True
+        assert "2/3" in detail
+
+    def test_majority_fail_wins_and_reports_dissenting_reasons(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.side_effect = [
+                (True, "ok"),
+                (False, "too vague"),
+                (False, "not falsifiable"),
+            ]
+            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+        assert passed is False
+        assert "too vague" in detail
+        assert "not falsifiable" in detail
+
+    def test_exact_tie_fails_closed(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.side_effect = [(True, "ok"), (False, "no")]
+            passed, _ = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=2)
+        assert passed is False
+
+    def test_every_vote_receives_identical_arguments(self):
+        from agent_actions.expectations.judge import invoke_judge_with_votes
+
+        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
+            mock_judge.return_value = (True, "ok")
+            invoke_judge_with_votes(
+                _agent_config(),
+                "rule text",
+                "value",
+                votes=3,
+                context={"a": "b"},
+                model="claude-opus-5",
+            )
+        assert mock_judge.call_count == 3
+        for call in mock_judge.call_args_list:
+            assert call.args == (_agent_config(), "rule text", "value")
+            assert call.kwargs["context"] == {"a": "b"}
+            assert call.kwargs["model"] == "claude-opus-5"
+
+
+class TestVotesRegistration:
+    def test_llm_judge_accepts_votes_param(self):
+        etype = registry.get("llm_judge")
+        assert "votes" in etype.params
