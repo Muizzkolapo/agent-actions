@@ -49,6 +49,11 @@ from agent_actions.utils.transformation.passthrough import merge_passthrough_nam
 logger = logging.getLogger(__name__)
 
 
+# Sentinel: None is a real answer here (the action has no expect: block), so
+# "not yet built" needs its own value.
+_UNSET = object()
+
+
 @dataclass
 class BatchProcessingContext:
     """Internal context for batch result parsing."""
@@ -68,6 +73,10 @@ class BatchProcessingContext:
 
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None
+
+    # The action's expectation service, built lazily on first use. None is a
+    # real answer (no expect: block), so _UNSET marks "not yet built".
+    expectation_service: Any = _UNSET
 
 
 class BatchResultStrategy:
@@ -160,6 +169,9 @@ class BatchResultStrategy:
             exhausted_recovery,
         )
         ctx.reconciler = BatchResultReconciler(ctx.context_map)
+        # Built here, outside the per-record try: a bad expect: block is a
+        # config error for the whole action, not a failure of one record.
+        self._expectation_service(ctx)
 
         results = self._process_batch_results(ctx)
         results.extend(self._reconcile_passthroughs(ctx))
@@ -299,6 +311,40 @@ class BatchResultStrategy:
 
         return results
 
+    @staticmethod
+    def _expectation_service(ctx: BatchProcessingContext):
+        """The action's expectation service, built once per batch.
+
+        Cached on the context, not on the strategy: one strategy instance is
+        built per workflow and reused for every batch action, so caching it
+        here would hand the first action's suite and judge budget to the rest.
+        The context is per-action, and reusing it across that action's records
+        is what the judge cache and the per-run budget need.
+        """
+        if ctx.expectation_service is _UNSET:
+            from agent_actions.expectations.service import (
+                create_expectation_service_from_config,
+            )
+
+            agent_config = ctx.agent_config or {}
+            service = create_expectation_service_from_config(
+                agent_config.get("expect"),
+                action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
+                agent_config=agent_config,
+            )
+            if service is not None and service.repair != "none":
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{agent_config.get('action_name')}' reached the batch "
+                    f"path with repair: {service.repair!r}. The batch path validates "
+                    "and reports but does not regenerate, so this would silently "
+                    "behave as repair: none. Use repair: none, or run it online.",
+                    context={"action": agent_config.get("action_name")},
+                )
+            ctx.expectation_service = service
+        return ctx.expectation_service
+
     def _process_successful_result(
         self,
         ctx: BatchProcessingContext,
@@ -371,9 +417,17 @@ class BatchResultStrategy:
             else:
                 envelope_input = original_row
 
+        expectation_service = self._expectation_service(ctx)
+
         structured_items = []
         for item in generated_list:
             item_dict = item if isinstance(item, dict) else {}
+            if expectation_service is not None:
+                from agent_actions.expectations.service import attach_verdict
+
+                verdict = expectation_service.validate(item_dict)
+                if verdict is not None:
+                    item_dict = attach_verdict(item_dict, verdict)
             if is_tool_version_merge:
                 content = {**(existing_content or {}), **item_dict}
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}

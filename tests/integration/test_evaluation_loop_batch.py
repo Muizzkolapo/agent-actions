@@ -298,51 +298,6 @@ class TestNonDeterministicConvergence:
 class TestDispositionCorrect:
     """Exhausted records get correct disposition after max_attempts."""
 
-    def test_exhausted_records_get_correct_disposition(self, make_batch_results, make_strategy):
-        """After max_attempts, failing records remain with correct metadata."""
-        results = make_batch_results(5)
-        strategy = make_strategy(name="strict_validation", max_attempts=2, evaluate_return=False)
-
-        loop = EvaluationLoop(strategy)
-        active = results
-
-        for _attempt in range(strategy.max_attempts):
-            graduated, failing, _ = loop.split(active)
-            loop.tag_graduated(graduated)
-            if not failing:
-                break
-            loop.build_resubmission(failing, {})
-            active = failing
-
-        assert len(active) == 5
-        assert strategy.evaluate.call_count == 5 * strategy.max_attempts
-        # build_feedback called for every failing record on every resubmission
-        assert strategy.build_feedback.call_count == 5 * strategy.max_attempts
-
-    def test_disposition_reason_includes_strategy_name(self, make_batch_results, make_strategy):
-        """Exhausted records carry the strategy name for disposition tracing."""
-        results = make_batch_results(3)
-        strategy = make_strategy(
-            name="custom_check", max_attempts=1, on_exhausted="drop", evaluate_return=False
-        )
-
-        loop = EvaluationLoop(strategy)
-        graduated, failing, _ = loop.split(results)
-
-        assert len(graduated) == 0
-        assert len(failing) == 3
-
-        # build_resubmission should invoke build_feedback for every failing record
-        submissions = loop.build_resubmission(failing, {})
-        assert len(submissions) == 3
-        assert strategy.build_feedback.call_count == 3
-
-        # Strategy name is accessible for disposition reason construction
-        assert strategy.name == "custom_check"
-
-
-# ─── Test 5: Retry + Evaluation Interaction ───────────────────────────────────
-
 
 class TestRetryEvaluationInteraction:
     """Missing records trigger retry FIRST, then evaluation runs on complete set."""

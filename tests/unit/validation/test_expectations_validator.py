@@ -594,9 +594,19 @@ def test_repair_prompt_mapping_is_a_defect():
     assert any("not implemented" in m for m in defects["a"])
 
 
-def test_expect_on_a_batch_action_is_a_defect():
+def test_observe_on_a_batch_action_is_allowed():
+    # The batch path validates and attaches the verdict, so the same expect:
+    # block works in either run_mode.
     defects = find_expectation_defects(
         action_config(run_mode="batch", expect={"repair": "none", "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_repair_on_a_batch_action_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(run_mode="batch", expect={"repair": "auto", "expectations": NOT_NULL}),
         {"a": {"options"}},
     )
     assert any("batch" in m for m in defects["a"])
@@ -695,5 +705,47 @@ def test_repair_with_an_inlined_schema_and_residual_name_is_allowed():
             expect={"repair": "auto", "expectations": NOT_NULL},
         ),
         {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+JUDGE_WITH_CONTEXT = [
+    {
+        "id": "grounded",
+        "type": "llm_judge",
+        "field": "options",
+        "params": {"rule": "grounded in the source", "context": ["research.findings"]},
+    }
+]
+
+
+def test_a_judged_context_ref_on_a_batch_action_is_a_defect():
+    # Batch has no llm_context to resolve the ref against, so every record
+    # would fail on "no context source was provided" and a downstream guard
+    # would drop the whole action's output.
+    defects = find_expectation_defects(
+        action_config(
+            run_mode="batch", expect={"repair": "none", "expectations": JUDGE_WITH_CONTEXT}
+        ),
+        {"a": {"options"}, "research": {"findings"}},
+    )
+    assert any("context" in m and "batch" in m for m in defects["a"])
+
+
+def test_a_judged_rule_without_context_is_allowed_in_batch():
+    judged = [{"id": "ok", "type": "llm_judge", "field": "options", "params": {"rule": "is good"}}]
+    defects = find_expectation_defects(
+        action_config(run_mode="batch", expect={"repair": "none", "expectations": judged}),
+        {"a": {"options"}},
+    )
+    assert defects == {}
+
+
+def test_a_judged_context_ref_is_allowed_online():
+    defects = find_expectation_defects(
+        action_config(
+            run_mode="online", expect={"repair": "none", "expectations": JUDGE_WITH_CONTEXT}
+        ),
+        {"a": {"options"}, "research": {"findings"}},
     )
     assert defects == {}
