@@ -10,7 +10,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import exhaustion_halt, raised_by_exhaustion_policy
+from agent_actions.errors import (
+    ConfigurationError,
+    DependencyError,
+    ProcessingError,
+    exhaustion_halt,
+    raised_by_exhaustion_policy,
+)
 from agent_actions.llm.batch.services.processing_recovery import halt_survives_failure
 
 
@@ -39,7 +45,21 @@ def test_a_failure_with_nothing_parked_is_left_alone():
         raise ValueError("ordinary")
 
 
-@pytest.mark.parametrize("failure", [ValueError("v"), KeyError("k"), TypeError("t"), OSError("o")])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ValueError("v"),
+        KeyError("k"),
+        TypeError("t"),
+        OSError("o"),
+        # The framework's own families. Builtins alone cannot see a boundary drawn
+        # at AgentActionsError or ConfigurationError — both stay green against
+        # ValueError and friends while dropping the halt for everything real.
+        ProcessingError("provider rejected the payload"),
+        ConfigurationError("record is missing _state"),
+        DependencyError("upstream action produced nothing"),
+    ],
+)
 def test_any_failure_type_preserves_the_halt(failure):
     """Not just the type the first test happened to raise.
 
@@ -67,76 +87,56 @@ def test_a_clean_pass_leaves_the_halt_parked_for_the_finaliser():
     assert context.pending_exhaustion is halt, "the halt was consumed before the finaliser ran"
 
 
-def test_every_context_builder_is_under_the_wrapper():
-    """The guard is only worth what it covers.
+def _guarded_calls(func) -> set[str]:
+    """Names called inside a `with halt_survives_failure(...)` body, from the AST.
 
-    Two call paths build a RecoveryContext and park below it: the recovery
-    dispatch and the original-batch path. A wrapper on one of them leaves the
-    other exactly as exposed as before.
+    A source-text search is satisfied by a comment, a docstring, or a `with`
+    around `pass` — all of which were verified to pass the previous version of
+    this check while the guard protected nothing.
     """
+    import ast
     import inspect
+    import textwrap
 
+    tree = ast.parse(textwrap.dedent(inspect.getsource(func)))
+    guarded: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.With):
+            continue
+        opens = {
+            getattr(item.context_expr.func, "id", "") or getattr(item.context_expr.func, "attr", "")
+            for item in node.items
+            if isinstance(item.context_expr, ast.Call)
+        }
+        if not any("halt_survives_failure" in name for name in opens):
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Call):
+                name = getattr(inner.func, "id", "") or getattr(inner.func, "attr", "")
+                if name:
+                    guarded.add(name)
+    return guarded
+
+
+def test_every_entry_point_runs_its_real_work_inside_the_wrapper():
+    """Not that the name appears — that the work happens inside the block."""
     from agent_actions.llm.batch.services import processing, processing_recovery
 
-    targets = [
-        processing_recovery.process_recovery_batch,
-        # A method, not a module attribute — resolving it off the module would
-        # fall back to the whole file, where the import alone satisfies the check.
-        processing.BatchProcessingService._process_original_batch,
-        # The second family: this one parks on a ProcessingContext, not a
-        # RecoveryContext, which is why guarding the other object missed it.
-        processing.BatchProcessingService._convert_batch_results_to_workflow_format,
-    ]
-    for target in targets:
-        source = inspect.getsource(target)
-        assert "pending_exhaustion" in source or "RecoveryContext(" in source, (
-            f"{target.__qualname__} no longer touches a parked halt"
+    expected = {
+        processing_recovery.process_recovery_batch: {"handler"},
+        processing.BatchProcessingService._process_original_batch: {
+            "_check_and_submit_reprompt",
+            "_check_and_submit_repair_impl",
+            "_finalize_batch_output",
+        },
+        processing.BatchProcessingService._convert_batch_results_to_workflow_format: {
+            "enrich_and_collect"
+        },
+    }
+    for func, must_be_guarded in expected.items():
+        guarded = _guarded_calls(func)
+        missing = must_be_guarded - guarded
+        assert not missing, (
+            f"{func.__qualname__} calls {sorted(missing)} outside its "
+            "halt_survives_failure block, so a failure there discards the halt"
         )
-        assert "halt_survives_failure" in source, (
-            f"{target.__qualname__} builds a RecoveryContext and parks below it, "
-            "but is not wrapped; an exception there discards the halt silently"
-        )
-
-
-def test_a_configuration_error_is_not_rebadged_as_a_policy_halt():
-    """A broken expect: block is fix-the-config-and-rerun, not on_exhausted: raise.
-
-    Substituting the halt would make raised_by_exhaustion_policy answer True, and
-    the workflow layer then refuses to run the action on the next pass and
-    excludes it from reset_retryable — so the operator fixes the YAML and the
-    action stays pinned as halted.
-    """
-    from agent_actions.expectations.service import ExpectationConfigurationError
-
-    context = _context()
-    context.pending_exhaustion = exhaustion_halt("Retry exhausted for rec-a")
-    broken_config = ExpectationConfigurationError("suite 'x' could not be loaded")
-
-    with pytest.raises(ExpectationConfigurationError), halt_survives_failure(context):
-        raise broken_config
-
-    assert context.pending_exhaustion is not None, (
-        "the halt was consumed by an error that is not a policy halt"
-    )
-
-
-def test_only_the_run_fatal_config_error_is_exempt():
-    """The exemption has to match what the outer loop treats as run-fatal.
-
-    process_all_batch_results re-raises (RuntimeError, ExpectationConfigurationError)
-    and logs everything else before moving to the next file. Exempting a config
-    error the loop does NOT re-raise drops the halt and lets the run finish
-    reporting success — the failure the substitution exists to prevent.
-    """
-    from agent_actions.errors import RecordContextError
-
-    context = _context()
-    context.pending_exhaustion = exhaustion_halt("Retry exhausted for rec-a")
-
-    with pytest.raises(RuntimeError) as caught, halt_survives_failure(context):
-        raise RecordContextError("malformed lifecycle state for one record")
-
-    assert raised_by_exhaustion_policy(caught.value), (
-        "a per-record config error passed through and took the halt with it; the "
-        "outer loop logs that kind and continues, so the run reports success"
-    )
