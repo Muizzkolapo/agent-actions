@@ -112,6 +112,26 @@ fields:
     description: "Explanation of alignment"
 ```
 
+A field may also carry an `expectations:` block — quality rules about that field,
+checked at run time by any action that opts in with `expect:`. Rules ride in the
+schema file for the author's benefit and never reach the provider:
+
+```yaml
+fields:
+  - id: syllabus_alignment_score
+    type: number
+    description: "How well the question tests objectives (0-100)"
+    expectations:
+      - id: score_is_a_known_band
+        type: accepted_values
+        params:
+          values: [0, 25, 50, 75, 100]
+```
+
+See [AI Expectations](../validation/expectations.md) for the rule vocabulary and
+for the file's own top-level `expectations:` block, which holds rules that are
+about no single field.
+
 ### Reference in Workflow
 
 ```yaml

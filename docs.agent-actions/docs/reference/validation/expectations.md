@@ -30,26 +30,29 @@ How much authority those results carry is up to you. Under `repair: none` they a
       - id: summary_length
         type: word_count_between
         field: summary
-        min: 20
-        max: 200
+        params:
+          min: 20
+          max: 200
         severity: warn
 
       - id: no_hedging_language
         type: no_forbidden_phrases
         field: summary
-        phrases: ["it seems", "possibly", "may or may not"]
+        params:
+          phrases: ["it seems", "possibly", "may or may not"]
         severity: warn
 
       - id: summary_grounded
         type: llm_judge
         field: summary
-        votes: 3
         severity: info
-        context:
-          - extract_article.body
-        rule: >
-          The summary only states facts present in the grounding text and
-          does not introduce claims the source does not support.
+        params:
+          votes: 3
+          context:
+            - extract_article.body
+          rule: >
+            The summary only states facts present in the grounding text and
+            does not introduce claims the source does not support.
 ```
 
 Every `expect:` entry runs after schema validation succeeds, against the same record schema validation just accepted. Nothing here changes what the LLM was asked to produce — it only judges what came back.
@@ -63,7 +66,7 @@ The example above uses observe mode: run the checks, attach the verdict, keep go
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
 | `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`; omit both to read the action's own schema file) |
-| `suite` | string | — | Name of a schema-path file with an `expectations:` block (see [Named suites](#named-suites)) instead of an inline list |
+| `suite` | string | — | Name of a schema-path file carrying rules — on its fields, in its own `expectations:` block, or both (see [Rules in the schema file](#rules-in-the-schema-file)) — instead of an inline list |
 | `repair` | string | `auto` | `none` (observe), `retry` (re-send the original prompt), or `auto` (re-send with composed feedback) |
 | `max_iterations` | integer 1–10 | `3` | Total generations per record, counting the first. Setting it explicitly alongside `repair: none` is a config error, not a no-op |
 | `on_exhausted` | string | `return_last` | What to do when the iterations run out: `return_last`, `fail`, or `raise`. Same rule — do not set it under `repair: none` |
@@ -75,10 +78,12 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 |-----|----------|---------|
 | `id` | no | Stable identifier; derived from type + rule content when omitted |
 | `type` | yes | A registered deterministic type, or `llm_judge` |
-| `field` | yes | [Field selector](#field-selectors) this rule reads |
-| `severity` | no | `fail` (default), `warn`, or `info` — see [Severity](#severity) |
+| `field` | yes* | [Field selector](#field-selectors) this rule reads. Omitted — and refused — when the rule is [declared on a field](#rules-in-the-schema-file), which already names what it tests; `expression` never takes one |
+| `params` | no | The arguments for this `type` — `min`/`max`, `phrases`, `rule`, `votes`, and the universal [`row_condition`](#row-conditions) |
+| `severity` | no | `error` (default), `warn`, or `info` — see [Severity](#severity) |
 | `hint` | no | Remedy text handed to the model when `repair: auto` regenerates |
-| *(type-specific)* | varies | e.g. `min`/`max`, `phrases`, `rule`, `votes` — see below |
+
+Those six keys are the whole vocabulary: anything else at the top level of a rule is refused by name, so a mistyped `sevrity:` is an error at load rather than an argument the type does not recognise. Type-specific arguments always go under `params:`.
 
 ## Deterministic expectation types
 
@@ -90,6 +95,7 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 | `word_count_ratio` | `max_ratio` *(required)* | Longest/shortest word count across a list of items doesn't exceed a ratio — catches one option in a list being wildly longer than its siblings |
 | `accepted_values` | `values` *(required)* | Value is one of an explicit allow-list |
 | `matches_regex` | `pattern` *(required)*, `negate` | Value matches (or, with `negate: true`, must not match) a regex |
+| `match_like_pattern` | `like_pattern` *(required)*, `negate` | Value matches a SQL `LIKE` pattern across its whole length — `%` is any run, `_` exactly one character, everything else literal |
 | `no_forbidden_phrases` | `phrases` *(required)*, `case_sensitive` | Value doesn't contain any of a list of substrings |
 | `contains_terms_from` | `terms` *(required)*, `min_matches` | Value contains at least `min_matches` (default 1) terms from a list |
 | `expression` | `condition` *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
@@ -98,18 +104,27 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 - id: category_is_valid
   type: accepted_values
   field: category
-  values: [billing, technical, account, other]
+  params:
+    values: [billing, technical, account, other]
 
 - id: no_placeholder_text
   type: matches_regex
   field: body
-  pattern: '\bTODO\b|\bplaceholder\b'
-  negate: true
+  params:
+    pattern: '\bTODO\b|\bplaceholder\b'
+    negate: true
+
+- id: no_stray_markup
+  type: match_like_pattern
+  field: summary
+  params:
+    like_pattern: "%<%>%"
+    negate: true
 ```
 
 ## Field selectors
 
-The `field:` a rule reads follows three shapes:
+A rule [declared on a field](#rules-in-the-schema-file) has no `field:` key — its position names what it tests. Everywhere else, the `field:` a rule reads follows three shapes:
 
 | Selector | Resolves to |
 |----------|-------------|
@@ -123,8 +138,9 @@ A wildcard selector works on arrays of objects too — each element is passed th
 - id: each_step_is_actionable
   type: llm_judge
   field: steps[*]
-  votes: 3
-  rule: "The step is a concrete, executable instruction, not a vague restatement of the goal."
+  params:
+    votes: 3
+    rule: "The step is a concrete, executable instruction, not a vague restatement of the goal."
 ```
 
 Nested paths inside a wildcard element (`options[*].text`) aren't supported — select the whole element and let the rule (or check) read the field it needs.
@@ -136,11 +152,13 @@ Nested paths inside a wildcard element (`options[*].text`) aren't supported — 
 ```yaml
 - id: score_consistent_with_verdict
   type: expression
-  condition: 'score >= 80 or verdict != "approved"'
+  params:
+    condition: 'score >= 80 or verdict != "approved"'
 
 - id: summary_present_when_flagged
   type: expression
-  condition: 'needs_summary == false or summary IS NOT NULL'
+  params:
+    condition: 'needs_summary == false or summary IS NOT NULL'
   severity: warn
 ```
 
@@ -164,14 +182,15 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 - id: answer_is_grounded
   type: llm_judge
   field: answer
-  rule: >
-    The answer is fully supported by the grounding context and does not
-    state anything the context contradicts or omits.
-  votes: 3
   severity: warn
-  model: gpt-4o-mini
-  context:
-    - retrieve_passage.passage_text
+  params:
+    rule: >
+      The answer is fully supported by the grounding context and does not
+      state anything the context contradicts or omits.
+    votes: 3
+    model: gpt-4o-mini
+    context:
+      - retrieve_passage.passage_text
 ```
 
 | Param | Default | Purpose |
@@ -183,19 +202,19 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 
 ### `context:` auto-injection
 
-Every ref in `context:` is automatically added to the action's own `context_scope.observe` at load time — you don't need to also list it there by hand (and if you do, it's deduplicated, not doubled). This is what makes `retrieve_passage.passage_text` available to the judge in the example above even though `answer_is_grounded` lives on a different action than `retrieve_passage`.
+Every ref in `context:` is automatically added to the action's own `context_scope.observe` at load time — you don't need to also list it there by hand (and if you do, it's deduplicated, not doubled). This covers an action's inline `expectations:` list and the rules of its own schema; a named `suite:` is the exception, because a suite is not loadable at the layer that does the injection, so list its refs in `observe:` yourself. This is what makes `retrieve_passage.passage_text` available to the judge in the example above even though `answer_is_grounded` lives on a different action than `retrieve_passage`.
 
 ### Caching and budget
 
 - **Cache:** a judge call is keyed on `(expectation, resolved value)`. If two records (or two rules) produce byte-identical content for the same rule, the second call is served from cache instead of spending another real LLM call.
-- **Budget:** `judge_budget` on the `expect:` block caps real judge calls across every record the action processes in one run — cache hits don't count against it. Once exhausted, further judge outcomes are marked `skipped` (not `failed`) with a message naming the exhaustion.
+- **Budget:** `judge_budget` on the `expect:` block caps real judge calls across every record the action processes in one run — cache hits don't count against it. Once exhausted, further judge outcomes are marked `skipped` with a message naming the exhaustion. A skipped outcome did not pass, so an `error`-severity one appears in **both** the verdict's `failed` and `skipped` lists — it could not be checked, and a rule that could not be checked has not been satisfied.
 - **Failure isolation:** if the judge LLM call itself errors (network, auth, rate limit), that single outcome fails with the error in its `detail` — it does not crash the record's processing.
 
 ## Severity
 
 | Severity | Effect on `overall_pass` | Use for |
 |----------|---------------------------|---------|
-| `fail` (default) | A failing `fail`-severity outcome makes `overall_pass: false` | Hard requirements you intend to guard on downstream |
+| `error` (default) | A failing `error`-severity outcome makes `overall_pass: false` | Hard requirements you intend to guard on downstream |
 | `warn` | Never blocks `overall_pass` | Notable but non-blocking quality signals |
 | `info` | Never blocks `overall_pass` | Diagnostics you want recorded, not enforced — the natural default for `llm_judge`, since a single model's opinion is evidence, not ground truth |
 
@@ -213,7 +232,8 @@ Under a repair policy the action stops merely reporting quality and starts enfor
       - id: option_count
         type: item_count
         field: options
-        equals: 4
+        params:
+          equals: 4
         hint: write exactly four options, one correct and three plausible distractors
 ```
 
@@ -248,7 +268,7 @@ The verdict cache is keyed on the **field value** a rule reads, not on the whole
 
 `judge_budget` counts *budget units*, and one unit is acquired per rule per value — not per provider call. With `votes: 3`, one unit spends three real calls, so a budget of `200` permits up to 600 provider calls. Divide by `votes` when sizing it.
 
-Once the budget is spent, later records carry a `skipped` judged outcome, which can never satisfy a `fail`-severity rule. Those records still have their other rules repaired and ship with an honest failing verdict.
+Once the budget is spent, later records carry a `skipped` judged outcome, which can never satisfy an `error`-severity rule. Those records still have their other rules repaired and ship with an honest failing verdict.
 
 ## Where results land
 
@@ -258,11 +278,11 @@ Results attach to the record under an `expect` key, alongside the action's own s
 {
   "summary": "...",
   "expect": {
-    "overall_pass": false,
-    "failed": ["summary_length"],
+    "overall_pass": true,
+    "failed": [],
     "skipped": [],
     "outcomes": [
-      {"id": "summary_present", "type": "not_null", "severity": "fail", "passed": true, "detail": "", "skipped": false},
+      {"id": "summary_present", "type": "not_null", "severity": "error", "passed": true, "detail": "", "skipped": false},
       {"id": "summary_length", "type": "word_count_between", "severity": "warn", "passed": false, "detail": "212 words, expected at most 200", "skipped": false},
       {"id": "summary_grounded", "type": "llm_judge", "severity": "info", "passed": true, "detail": "3/3 judge votes passed", "skipped": false}
     ]
@@ -270,7 +290,9 @@ Results attach to the record under an `expect` key, alongside the action's own s
 }
 ```
 
-`overall_pass` reflects only `fail`-severity outcomes — `summary_length` failing above doesn't flip it because that rule is `severity: warn`.
+The `skipped` list holds `error`-severity rules that could **not** be checked — a budget-exhausted judge, for instance. A rule waived by its `row_condition` passed and is not listed there, and neither are `warn`/`info` skips, since neither can change `overall_pass`. Every skip is still in `outcomes[]` with `skipped: true` and its reason in the detail, so "did not apply" stays distinguishable from "could not tell".
+
+`summary_length` failed and is still recorded in `outcomes`, but it appears in neither `failed` nor `overall_pass`: both count `error`-severity outcomes only, and that rule is `severity: warn`. That is the whole point of `warn` — the finding is on the record without gating anything.
 
 To act on the verdict, read it from a downstream [guard](../execution/guards.md):
 
@@ -282,35 +304,105 @@ To act on the verdict, read it from a downstream [guard](../execution/guards.md)
     on_false: filter
 ```
 
-## Named suites
+## Rules in the schema file
 
-An inline `expectations:` list is scoped to one action. To reuse the same rules across actions, put them in an `expectations:` block of a schema-path file and reference it by name:
-
-```yaml
-- name: summarize_article
-  expect:
-    repair: none
-    suite: grounded_summary
-```
-
-`suite:` resolves through the schema path exactly as `schema:` does — by file name, across the project-level and workflow-level schema directories named by `schema_path` in `agent_actions.yml`. The file may carry `fields:`, `expectations:`, or both, so an action's shape contract and its quality rules can live in one file:
+An inline `expectations:` list is scoped to one action. To reuse the same rules — or simply to keep a field's shape and its quality rules together — declare them in the schema file, on the fields they test:
 
 ```yaml
 # schema/my_workflow/grounded_summary.yml
-expectations:
-  - id: summary_present
-    type: not_null
-    field: summary
-  - id: summary_grounded
-    type: llm_judge
-    field: summary
-    votes: 3
-    rule: "The summary is fully supported by the grounding context."
+name: grounded_summary
+fields:
+  - id: summary
+    type: string
+    description: "Concise summary of the source."
+    expectations:
+      - id: summary_present
+        type: not_null
+
+      - id: summary_length
+        type: word_count_between
+        params:
+          min: 20
+          max: 200
+        severity: warn
+
+  - id: exam_density
+    type: string
+    expectations:
+      - id: density_is_a_known_level
+        type: accepted_values
+        params:
+          values: [high, medium, low]
 ```
 
-An `expectations:` block on a schema attaches nothing by itself — rules run only where an action declares `expect:`. An `expect:` block with neither `suite:` nor `expectations:` reads the `expectations:` block of the file the action's own `schema:` names, so the co-located drop-in is just `expect: {repair: none}`. The compiled schema sent to a provider never contains the `expectations:` block.
+A rule under a field takes no `field:` — its position is the selector, and declaring one is an error rather than a redundancy. That also removes a whole class of mistake: a rule cannot name a field the schema does not declare.
 
-A suite file has no `repair`, `judge_budget`, or `context_scope` of its own — those stay on the action's `expect:` block; the suite only supplies the `expectations:` list.
+Rules that are about no single field keep the file's own top-level `expectations:` block, where they carry `field:` as usual:
+
+```yaml
+expectations:
+  - id: front_and_back_are_balanced
+    type: word_count_ratio
+    field: [term, definition]
+    params:
+      max_ratio: 4
+
+  - id: score_matches_verdict
+    type: expression
+    params:
+      condition: 'score >= 80 or verdict != "approved"'
+```
+
+A file may carry either form or both. A file with only rules and no `fields:` is still a valid suite — that is the portable form an external stack consumes.
+
+### Binding a suite to an action
+
+```yaml
+- name: summarize_article
+  schema: grounded_summary
+  expect:
+    repair: none
+```
+
+`suite:` names a different file, resolved through the schema path exactly as `schema:` does — by file name, across the project-level and workflow-level schema directories named by `schema_path` in `agent_actions.yml`:
+
+```yaml
+  expect:
+    repair: none
+    suite: shared_summary_rules
+```
+
+Rules in a schema file attach nothing by themselves — they run only where an action declares `expect:`. An `expect:` block with neither `suite:` nor `expectations:` reads the rules of the file the action's own `schema:` names, so the co-located drop-in is just `expect: {repair: none}`. The compiled schema sent to a provider never contains any of it.
+
+A suite file has no `repair`, `judge_budget`, or `context_scope` of its own — those stay on the action's `expect:` block; the file only supplies the rules.
+
+## Row conditions
+
+Every type accepts a `row_condition` argument: a guard-syntax condition deciding whether the rule applies to a record at all.
+
+```yaml
+- id: reason_is_substantive
+  type: word_count_between
+  field: density_reason
+  params:
+    min: 6
+    max: 120
+    row_condition: "exam_density != 'low'"
+```
+
+A record the condition does not hold for records a passing outcome marked `skipped`, naming the condition — so an exemption is visible in the verdict rather than being indistinguishable from a rule that never fired. The gate runs before the check, applies to record-scoped rules too, and the argument is never handed to the check itself.
+
+A condition that *cannot be evaluated* — it names a field the record does not carry, or compares against an unquoted literal — is a different answer from one that is false, and it **fails the rule**. Waiving a rule on a condition that never ran would silence it exactly when the model omitted the field, which is the case the rule exists to catch.
+
+The condition is preflight-checked like any other: it must parse, and every field it names must be one the action produces. Preflight can only check that the schema *declares* the field, not that a given record carries it — which is why the runtime treats an unevaluatable condition as a failure rather than an exemption.
+
+To gate on a field a record may legitimately lack, say so with `IS NULL` / `IS NOT NULL`, which read an absent field as absent rather than failing to evaluate:
+
+```yaml
+    row_condition: "question_type IS NOT NULL and question_type == 'multiple_choice'"
+```
+
+A record without `question_type` waives the rule; one that has it is checked. Writing `question_type == 'multiple_choice'` alone would fail the rule on records that lack the field, which is the safe default but not what you meant.
 
 ## Preflight validation
 
@@ -319,8 +411,11 @@ A suite file has no `repair`, `judge_budget`, or `context_scope` of its own — 
 - `votes` must be a positive integer.
 - `context` must be a list of `action.field` strings; each referenced action must exist upstream and each field must appear in that action's declared output.
 - Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
-- Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not.
-- `expression` conditions are parsed and checked in full (syntax, blocklist, field references, constant conditions) — see [Expressions](#expressions).
+- Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not, and rules declared on a field, which already have one.
+- `expression` conditions and `row_condition` arguments are parsed and checked in full (syntax, blocklist, field references, constant conditions) — see [Expressions](#expressions).
+- Superseded spellings are named, not merely rejected: arguments written flat instead of under `params:`, and `severity: fail` for `severity: error`. A key that merely *resembles* a rule key (`sevrity:`) is reported as that key rather than sent to `params:`.
+- Rules a selector could never reach — declared on a nested member of a field rather than on the field itself — are refused rather than ignored, as is a record-scoped `expression` rule declared under a field.
+- Preflight builds each suite the way the runner does, so rules declared on a schema's fields are checked too.
 
 ```bash
 agac inspect -a my_workflow
@@ -348,7 +443,8 @@ def valid_isbn(value, params):
 - id: isbn_is_real
   type: valid_isbn
   field: isbn
-  allow_isbn10: true
+  params:
+    allow_isbn10: true
 ```
 
 How it works:
@@ -363,7 +459,7 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 
 ## Current limitations
 
-- **Repair runs in both modes, but it counts iterations differently.** Online, each record loops on its own: one record can take three generations while its neighbour passes first time. Batch loops the whole set — every round re-submits the records still failing, so `max_iterations` bounds the number of *batches*, not the number of tries any single record gets. A record that fails in round one and passes in round two has had two generations either way; what differs is that a batch round waits for the slowest record in it. Expectation recovery metadata is still not carried across a batch reload.
+- **Repair runs in both modes, but it counts iterations differently.** Online, each record loops on its own: one record can take three generations while its neighbour passes first time. Batch loops the whole set — every round re-submits the records still failing, so `max_iterations` bounds the number of *batches*, not the number of tries any single record gets. A record that fails in round one and passes in round two has had two generations either way; what differs is that a batch round waits for the slowest record in it.
 - **A judged `context:` ref is online only.** Batch validates from the stored result and has no `llm_context`, so a judged rule with `context:` refs is refused at preflight rather than failing every record on a missing context source.
 - **Record granularity only for repair.** One file-granularity call produces the whole file, so a single failing record would regenerate all of them; preflight refuses `repair` on a `granularity: file` action. Observe mode works there — a response holding many records has each one validated and annotated independently, the same as an action whose LLM returns a JSON array.
 - **No custom repair prompt.** The `repair: {prompt: $wf.X}` mapping form is reserved in the schema but not implemented; it is refused with a message saying so. Use `retry` or `auto`.
