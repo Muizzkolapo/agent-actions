@@ -296,9 +296,14 @@ def reset_global_guard_filter() -> None:
     thread (e.g. a serial test fixture), not concurrently with
     ``get_global_guard_filter()``.
     """
+    from agent_actions.input.preprocessing.filtering.evaluator import reset_guard_evaluator
+
     global _GLOBAL_GUARD_FILTER
     with _GUARD_FILTER_LOCK:
         if _GLOBAL_GUARD_FILTER is not None:
             atexit.unregister(_GLOBAL_GUARD_FILTER.shutdown)
             _GLOBAL_GUARD_FILTER.shutdown()
             _GLOBAL_GUARD_FILTER = None
+    # The evaluator singleton caches the filter it was built with; leaving it
+    # in place would hand out a reference to the pool just shut down.
+    reset_guard_evaluator()
