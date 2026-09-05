@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.expectations import registry
 from agent_actions.expectations.runner import UnknownExpectationTypeError, run_suite
 from agent_actions.expectations.types import Suite
 
@@ -295,3 +296,297 @@ def test_llm_judge_without_context_declared_never_calls_resolve_context():
         )
     mock_resolve.assert_not_called()
     assert judge.calls[0][1] is None
+
+
+def test_expression_true_produces_a_passing_outcome():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
+    )
+    result = run_suite(suite, {"score": 91})
+    assert result.overall_pass is True
+    assert result.outcomes[0].passed is True
+    assert result.outcomes[0].detail == ""
+
+
+def test_expression_false_outcome_detail_names_values():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
+    )
+    result = run_suite(suite, {"score": 64})
+    assert result.overall_pass is False
+    assert result.outcomes[0].passed is False
+    assert "score=64" in result.outcomes[0].detail
+
+
+def test_expression_missing_field_is_a_failed_outcome_not_a_crash():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        ],
+    )
+    result = run_suite(suite, {"points": 90})
+    assert result.outcomes[0].passed is False
+    assert "does not exist" in result.outcomes[0].detail
+
+
+def test_expression_warn_severity_does_not_block_overall_pass():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "score_floor",
+                "type": "expression",
+                "params": {"condition": "score >= 80"},
+                "severity": "warn",
+            }
+        ],
+    )
+    result = run_suite(suite, {"score": 10})
+    assert result.outcomes[0].passed is False
+    assert result.overall_pass is True
+
+
+def test_expression_runs_alongside_deterministic_checks_in_one_suite():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "has_ideas", "type": "item_count", "field": "ideas", "params": {"min": 1}},
+            {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}},
+        ],
+    )
+    result = run_suite(suite, {"ideas": ["a"], "score": 95})
+    assert [o.passed for o in result.outcomes] == [True, True]
+
+
+def test_expression_entry_loads_from_a_schema_files_expectations_block():
+    from agent_actions.expectations.loader import build_suite_from_schema_data
+
+    suite = build_suite_from_schema_data(
+        "quality",
+        {
+            "expectations": [
+                {"id": "score_floor", "type": "expression", "params": {"condition": "score >= 80"}}
+            ]
+        },
+    )
+    result = run_suite(suite, {"score": 85})
+    assert result.overall_pass is True
+
+
+def test_two_expressions_and_a_judged_rule_coexist_in_one_suite():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "floor", "type": "expression", "params": {"condition": "score >= 10"}},
+            {"id": "cap", "type": "expression", "params": {"condition": "score <= 90"}},
+            {
+                "id": "on_topic",
+                "type": "llm_judge",
+                "field": "title",
+                "params": {"rule": "on topic"},
+            },
+        ],
+    )
+    result = run_suite(
+        suite, {"score": 120, "title": "t"}, judge=lambda e, v, c: (True, "ok", False)
+    )
+    assert [o.passed for o in result.outcomes] == [True, False, True]
+    assert "score=120" in result.outcomes[1].detail
+
+
+def test_hint_on_an_expression_entry_stays_out_of_condition_params():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "floor",
+                "type": "expression",
+                "params": {"condition": "score >= 10"},
+                "hint": "raise the score",
+            }
+        ],
+    )
+    result = run_suite(suite, {"score": 50})
+    assert result.outcomes[0].passed is True
+
+
+def test_a_rule_whose_row_condition_is_false_is_skipped_not_failed():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+    assert result.overall_pass is True
+
+
+def test_a_skipped_row_condition_names_the_condition_that_gated_it():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'other'"},
+            }
+        ),
+        RECORD,
+    )
+    assert "row_condition" in result.outcomes[0].detail
+
+
+def test_a_rule_whose_row_condition_holds_still_runs_and_can_fail():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "item_count",
+                "field": "options",
+                "params": {"equals": 99, "row_condition": "answer == 'alpha one'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is False
+    assert result.overall_pass is False
+
+
+def test_the_row_condition_is_not_handed_to_the_check_as_an_argument():
+    seen = {}
+
+    def spy(value, params):
+        seen.update(params)
+        return True, ""
+
+    registry._REGISTRY["row_condition_spy"] = registry.ExpectationType(
+        "row_condition_spy", frozenset(), frozenset(), spy
+    )
+    try:
+        run_suite(
+            suite_of(
+                {
+                    "type": "row_condition_spy",
+                    "field": "answer",
+                    "params": {"row_condition": "answer == 'alpha one'"},
+                }
+            ),
+            RECORD,
+        )
+    finally:
+        del registry._REGISTRY["row_condition_spy"]
+    assert "row_condition" not in seen
+
+
+def test_an_unparseable_row_condition_is_a_failed_outcome_not_a_crash():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "this is not a condition"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].passed is False
+    assert result.outcomes[0].skipped is False
+
+
+def test_a_row_condition_on_a_field_the_record_lacks_fails_rather_than_waives():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "has_citation == true"},
+            }
+        ),
+        RECORD,
+    )
+    outcome = result.outcomes[0]
+    assert outcome.passed is False
+    assert outcome.skipped is False
+    assert result.overall_pass is False
+    assert "has_citation" in outcome.detail
+
+
+def test_an_unquoted_literal_in_a_row_condition_fails_rather_than_waives():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "answer == pending"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].passed is False
+    assert result.outcomes[0].skipped is False
+
+
+def test_a_row_condition_gates_a_record_scoped_rule_too():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "expression",
+                "params": {
+                    "condition": "answer == 'never true'",
+                    "row_condition": "answer == 'not this record'",
+                },
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+
+
+def test_a_gated_rule_whose_field_is_absent_is_skipped_not_a_resolution_failure():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "absent_field",
+                "params": {"row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.outcomes[0].skipped is True
+    assert result.outcomes[0].passed is True
+
+
+def test_a_rule_waived_by_its_row_condition_is_not_listed_as_unchecked():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "gated",
+                "type": "not_null",
+                "field": "answer",
+                "params": {"row_condition": "answer == 'not this record'"},
+            }
+        ),
+        RECORD,
+    )
+    assert result.to_record_dict()["skipped"] == []
+    assert result.to_record_dict()["overall_pass"] is True
