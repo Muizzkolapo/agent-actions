@@ -590,3 +590,79 @@ def test_a_rule_waived_by_its_row_condition_is_not_listed_as_unchecked():
     )
     assert result.to_record_dict()["skipped"] == []
     assert result.to_record_dict()["overall_pass"] is True
+
+
+def test_a_raising_user_check_is_a_failed_outcome_not_a_crash(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("explodes")
+    def explodes(value, params):
+        raise RuntimeError("boom")
+
+    suite = Suite(name="s", expectations=[{"id": "e", "type": "explodes", "field": "title"}])
+    result = run_suite(suite, {"title": "hello"})
+    assert result.outcomes[0].passed is False
+    assert result.outcomes[0].skipped is False
+    assert "check raised RuntimeError: boom" in result.outcomes[0].detail
+
+
+def test_a_raising_check_does_not_stop_later_expectations(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("explodes_first")
+    def explodes_first(value, params):
+        raise RuntimeError("boom")
+
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "e", "type": "explodes_first", "field": "title"},
+            {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 1}},
+        ],
+    )
+    result = run_suite(suite, {"title": "hello", "ideas": ["a"]})
+    assert [o.passed for o in result.outcomes] == [False, True]
+
+
+def test_an_unvalidated_condition_parse_error_is_a_failed_outcome():
+    # A condition preflight never validated (suite built programmatically)
+    # must not crash the record; the parse rejection lands in the detail.
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"id": "f", "type": "expression", "params": {"condition": "NO_SUCH_FN(score) > 0"}}
+        ],
+    )
+    result = run_suite(suite, {"score": 5})
+    assert result.outcomes[0].passed is False
+    assert "check raised ExpressionParseError" in result.outcomes[0].detail
+
+
+def test_missing_judge_dispatcher_still_raises():
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "j", "type": "llm_judge", "field": "title", "params": {"rule": "r"}}],
+    )
+    with pytest.raises(ValueError, match="no judge"):
+        run_suite(suite, {"title": "hello"})
+
+
+def test_a_mid_list_raise_still_checks_the_remaining_wildcard_inputs(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("explodes_on_marker")
+    def explodes_on_marker(value, params):
+        if value == "BOOM":
+            raise RuntimeError("marker")
+        if value == "bad":
+            return False, f"value {value!r} rejected"
+        return True, ""
+
+    suite = Suite(
+        name="s",
+        expectations=[{"id": "e", "type": "explodes_on_marker", "field": "options[*]"}],
+    )
+    result = run_suite(suite, {"options": ["ok", "BOOM", "bad"]})
+    assert result.outcomes[0].passed is False
+    detail = result.outcomes[0].detail
+    assert detail.index("check raised RuntimeError: marker") < detail.index("'bad' rejected")
