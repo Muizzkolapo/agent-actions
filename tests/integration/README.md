@@ -127,3 +127,41 @@ The repair-mode **preflight guards** live in `tests/unit/validation/test_expecta
 A real run touches three process-global singletons. The fixture restores all of them — the path manager, the guard filter's thread pool, and the expectation type registry (`tools/` discovery registers user checks into it) — and scopes `OPENAI_API_KEY` to the test. Leak-checked: running the suite in a fresh interpreter leaves the registry and environment unchanged.
 
 Adding this suite is what surfaced a latent bug in `reset_global_guard_filter()`: it shut down the filter's pool without clearing the guard *evaluator* singleton that caches it, so nine unrelated tests failed depending on ordering. Fixed in the same branch.
+
+## test_expectation_authors.py
+
+Seventeen ways to write an `expect:` block, each a working project under
+`fixtures/expectation_authors/` and each driven through the real preflight
+(`WorkflowInspector.validate()`, the same read-only path `agac inspect` uses).
+
+What is pinned is the verdict, and for a refusal the phrase that names the
+correction. A refusal that does not say what to change is worth no more than
+silence, and one of these fixtures exists because a refusal once told the author
+to do the thing they had already done.
+
+| Author | What they write | Verdict |
+|---|---|---|
+| `field_scoped_rules` | Rules on the fields they test, severity error and warn, a bare expect block | accepted |
+| `inline_rules` | Rules in the action's own expect block, each naming its field | accepted |
+| `repair_auto` | `repair: auto` with a bounded iteration count | accepted |
+| `shared_suite` | One rules-only file, two actions bound to it by name | accepted |
+| `row_condition_on_optional_field` | A rule gated on a field the record may not carry | accepted |
+| `custom_check` | An `@expectation_check` of their own, discovered from `tools/` | accepted |
+| `verdict_guard` | A downstream action guarded on the verdict | accepted |
+| `judge_votes_and_budget` | A judged rule with votes, a run budget, and `severity: info` | accepted |
+| `pair_and_pattern_rules` | A rule over two fields, and a pattern rule that negates | accepted |
+| `record_expression` | A cross-field condition that belongs to no single field | accepted |
+| `batch_field_rules` | Field-declared rules under `run_mode: batch`, nothing judged | accepted |
+| `tool_action` | An expect block on a `kind: tool` action | accepted |
+| `array_member_rule` | A whole-list rule on the field and a per-item rule under `items` | refused — a selector reaches top-level fields only |
+| `many_mistakes` | Five different mistakes in one block | refused — all five, each naming its own correction |
+| `judged_context_under_batch` | A judged rule reading another action, under `run_mode: batch` | refused — no context source exists in batch |
+| `old_flat_shape` | A whole file still written with flat arguments and `severity: fail` | refused — arguments under `params:`, `fail` is now `error` |
+| `repair_auto_at_file_granularity` | `repair: auto` where one call produces the whole file | refused — one failing record would regenerate all of them |
+
+No provider is called: preflight is the deterministic half, and it is the half
+that decides whether an author's config is ever allowed to run. The suite takes
+about a second.
+
+Adding an author means adding the project directory and its verdict; a fixture
+with no verdict fails `test_every_author_has_a_verdict`.

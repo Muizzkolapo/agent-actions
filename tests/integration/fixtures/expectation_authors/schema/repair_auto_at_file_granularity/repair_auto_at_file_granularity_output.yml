@@ -1,0 +1,8 @@
+name: repair_auto_at_file_granularity_output
+fields:
+  - id: summary
+    type: string
+    expectations:
+      - id: summary_present
+        type: not_null
+additionalProperties: true

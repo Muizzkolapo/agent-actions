@@ -1,0 +1,10 @@
+name: tool_action_output
+fields:
+  - id: summary
+    type: string
+    expectations:
+      - id: summary_present
+        type: not_null
+  - id: exam_density
+    type: string
+additionalProperties: true

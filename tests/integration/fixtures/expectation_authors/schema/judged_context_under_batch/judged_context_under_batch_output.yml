@@ -1,0 +1,11 @@
+name: judged_context_under_batch_output
+fields:
+  - id: summary
+    type: string
+    expectations:
+      - id: grounded
+        type: llm_judge
+        params:
+          rule: "The summary is supported by the extracted body."
+          context: [extract.body]
+additionalProperties: true

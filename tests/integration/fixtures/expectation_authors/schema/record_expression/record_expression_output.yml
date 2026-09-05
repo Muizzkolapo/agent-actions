@@ -1,0 +1,14 @@
+name: record_expression_output
+fields:
+  - id: summary
+    type: string
+  - id: exam_density
+    type: string
+  - id: density_reason
+    type: string
+expectations:
+  - id: a_reason_when_it_matters
+    type: expression
+    params:
+      condition: "exam_density != 'high' or density_reason IS NOT NULL"
+additionalProperties: true

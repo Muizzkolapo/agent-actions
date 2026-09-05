@@ -1,0 +1,13 @@
+name: array_member_rule_output
+fields:
+  - id: options
+    type: array
+    items:
+      type: object
+      properties:
+        text: {type: string, expectations: [{type: not_null}]}
+    expectations:
+      - id: enough_options
+        type: item_count
+        params: {min: 2}
+additionalProperties: true

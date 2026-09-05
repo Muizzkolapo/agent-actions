@@ -1,0 +1,7 @@
+name: many_mistakes_output
+fields:
+  - id: summary
+    type: string
+  - id: exam_density
+    type: string
+additionalProperties: true

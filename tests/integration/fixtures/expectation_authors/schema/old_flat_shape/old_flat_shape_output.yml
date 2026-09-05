@@ -1,0 +1,19 @@
+name: old_flat_shape_output
+fields:
+  - id: summary
+    type: string
+  - id: exam_density
+    type: string
+additionalProperties: true
+
+expectations:
+  - id: density_is_known
+    type: accepted_values
+    field: exam_density
+    values: [high, medium, low]
+    severity: fail
+  - id: summary_sized
+    type: word_count_between
+    field: summary
+    min: 5
+    max: 60
