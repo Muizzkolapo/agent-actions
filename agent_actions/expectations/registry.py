@@ -41,7 +41,9 @@ def register(
     name: str, params: Iterable[str] = (), required: Iterable[str] = ()
 ) -> Callable[[Check], Check]:
     def decorate(fn: Check) -> Check:
-        _REGISTRY[name] = ExpectationType(name, frozenset(params), frozenset(required), fn)
+        _REGISTRY[name] = ExpectationType(
+            name, frozenset(params) | _UNIVERSAL_PARAMS, frozenset(required), fn
+        )
         return fn
 
     return decorate

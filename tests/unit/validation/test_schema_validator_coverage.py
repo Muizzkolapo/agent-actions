@@ -468,6 +468,20 @@ class TestValidateMethod:
         assert result is True
         assert not validator.has_errors()
 
+    def test_rules_only_suite_file_skips_json_schema_checks(self, validator, tmp_path):
+        """A schema-path file may hold only an expectations: block (a named suite)."""
+        schema_content = (
+            "expectations:\n"
+            "  - id: enough_options\n"
+            "    type: item_count\n"
+            "    field: options\n"
+            "    min: 2\n"
+        )
+        (tmp_path / "quality.yml").write_text(schema_content)
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
+        assert result is True
+        assert not validator.has_errors()
+
     def test_json_schema_format_still_validated(self, validator, tmp_path):
         """JSON Schema format schemas still go through meta-validation."""
         bad_schema = {"type": "object", "properties": "not_a_dict"}
