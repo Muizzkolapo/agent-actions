@@ -144,6 +144,15 @@ def _entry_defects(entries: list[Any], fields: set[str] | None) -> list[str]:
                 f"Known types: {', '.join(registry.known_types())}"
             )
             continue
+        selector = entry.get("field")
+        if selector is not None and not isinstance(selector, (str, list)):
+            # Pydantic reports this as one message per union branch, naming
+            # neither the shape wanted nor the type found.
+            messages.append(
+                f"{label}: field must be a string or list of strings, got {type(selector).__name__}"
+            )
+            messages.extend(_argument_defects(label, etype, entry.get("params")))
+            continue
         try:
             expectation = Expectation.model_validate(entry)
         except ValidationError as exc:
