@@ -271,6 +271,7 @@ def handle_retry_recovery(
         exhausted_recovery=exhausted_recovery,
     )
     if not should_continue:
+        raise_pending_exhaustion(context)
         return None
 
     if not check_and_submit_repair(

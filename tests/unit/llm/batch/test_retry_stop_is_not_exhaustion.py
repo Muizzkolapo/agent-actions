@@ -32,6 +32,9 @@ def _state(attempt: int = 1, max_attempts: int = 3):
 def _context():
     context = MagicMock()
     context.action_name = ACTION
+    # A real RecoveryContext starts with nothing parked. Left as a MagicMock this
+    # is truthy, so any guard that reads it tries to raise a mock.
+    context.pending_exhaustion = None
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = None
     # The transient failure: preparation or submission fell over and answered None.
