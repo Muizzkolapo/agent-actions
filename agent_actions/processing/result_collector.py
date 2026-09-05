@@ -64,6 +64,8 @@ def _get_retry_attempts(result: ProcessingResult) -> str | int:
     """
     if result.recovery_metadata and result.recovery_metadata.retry:
         return result.recovery_metadata.retry.attempts
+    if result.recovery_metadata and result.recovery_metadata.expectations:
+        return result.recovery_metadata.expectations.attempts
     return "unknown"
 
 
@@ -309,12 +311,14 @@ def write_record_dispositions(
                 input_snapshot=_serialize_snapshot(item),
             )
         elif metadata.get("retry_exhausted"):
+            # The marker flag is set on every exhausted tombstone; the actual
+            # cause lives in the tombstone's own reason field.
             _safe_set_disposition(
                 storage_backend,
                 action_name,
                 source_guid,
                 DISPOSITION_EXHAUSTED,
-                reason=RETRY_EXHAUSTED,
+                reason=metadata.get("reason", RETRY_EXHAUSTED),
                 input_snapshot=_serialize_snapshot(item),
             )
         elif item.get("_state") in (
@@ -567,7 +571,12 @@ def collect_results_from_processing_results(
             data = result.data or []
             if data:
                 for d in data:
-                    _stamp(d, RecordState.EXHAUSTED, action_name, RETRY_EXHAUSTED)
+                    _stamp(
+                        d,
+                        RecordState.EXHAUSTED,
+                        action_name,
+                        d.get("_tombstone_reason") or RETRY_EXHAUSTED,
+                    )
                 output.extend(data)
             attempts = _get_retry_attempts(result)
             logger.debug(
@@ -913,7 +922,14 @@ class ResultCollector:
         For return_last (default): logs at INFO and returns.
         For raise: writes EXHAUSTED dispositions and raises AgentActionsError.
         """
-        exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
+        exhausted_results = [
+            r
+            for r in results
+            if r.status == ProcessingStatus.EXHAUSTED
+            # Expectations exhaustion resolved its own on_exhausted policy in
+            # the service; the retry config's policy does not apply to it.
+            and not (r.recovery_metadata and r.recovery_metadata.expectations)
+        ]
         if not exhausted_results:
             return
 

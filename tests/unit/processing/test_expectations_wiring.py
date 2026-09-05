@@ -137,3 +137,59 @@ def test_factory_threads_the_schema_into_the_structural_gate(monkeypatch):
     assert len(calls) == 2
     assert result.response["expect"]["overall_pass"] is True
     assert result.response["ideas"] == ["a"]
+
+
+def test_exhausted_fail_mode_converts_to_the_tombstone_channel(monkeypatch):
+    service = ExpectationService(SUITE, repair="retry", max_iterations=2, on_exhausted="fail")
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.response is None
+    meta = result.recovery_metadata
+    assert meta is not None
+    assert meta.expectations is not None
+    assert meta.expectations.attempts == 2
+    assert meta.expectations.failed == ["count"]
+
+
+def test_exhausted_non_record_under_return_last_also_converts(monkeypatch):
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=2, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ("not a record", True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.response is None
+    assert result.recovery_metadata is not None
+    assert result.recovery_metadata.expectations is not None
+    assert result.recovery_metadata.expectations.failed == ["_structural"]
+
+
+def test_exhausted_return_last_record_still_ships_annotated(monkeypatch):
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=2, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is True
+    assert result.response["expect"]["overall_pass"] is False
+    assert result.response["expect"]["failed"] == ["count"]
+    assert result.recovery_metadata is None or result.recovery_metadata.expectations is None
+
+
+def test_a_guard_skip_is_not_misrouted_to_the_exhaustion_channel(monkeypatch):
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3, on_exhausted="fail")
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (None, False))
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.recovery_metadata is None or result.recovery_metadata.expectations is None

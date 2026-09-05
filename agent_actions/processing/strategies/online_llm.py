@@ -21,6 +21,7 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
+from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
@@ -52,6 +53,7 @@ from agent_actions.processing.types import (
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     EMPTY_OUTPUT,
+    EXPECTATIONS_EXHAUSTED,
     GUARD_FILTER,
     GUARD_SKIP,
     LLM_LAYER_GUARD_FILTER,
@@ -297,6 +299,9 @@ class OnlineLLMStrategy:
                 # can indict one value rather than the action. Re-raised, as
                 # the loop cannot tombstone it, but not declared fatal.
                 raise
+            except ExpectationsExhaustedError:
+                # on_exhausted: raise means halt the run, not fail the record.
+                raise
             except Exception as e:
                 # An on_exhausted: raise halt is action-fatal by definition —
                 # the config asked the run to stop. Flattening it into a record
@@ -505,11 +510,30 @@ class OnlineLLMStrategy:
         # Not executed — exhausted, filtered, or guard skip
         if not executed:
             if response is None:
-                if recovery_metadata and (recovery_metadata.retry or recovery_metadata.reprompt):
+                if recovery_metadata and (
+                    recovery_metadata.retry
+                    or recovery_metadata.reprompt
+                    or recovery_metadata.expectations
+                ):
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         cast(dict[str, Any], context.agent_config)
                     )
-                    if recovery_metadata.retry:
+                    extra_metadata: dict[str, Any] | None = None
+                    if recovery_metadata.expectations:
+                        # Expectations wrap the inner recovery layers, so their
+                        # exhaustion is the terminal cause even when inner retry
+                        # metadata is also present.
+                        expectations = recovery_metadata.expectations
+                        tombstone_reason = EXPECTATIONS_EXHAUSTED
+                        error_msg = (
+                            f"Expectations exhausted after {expectations.attempts} iteration(s) "
+                            f"(failed: {', '.join(expectations.failed) or 'none recorded'})"
+                        )
+                        extra_metadata = {
+                            "expectations_failed": expectations.failed,
+                            "expectations_iterations": expectations.attempts,
+                        }
+                    elif recovery_metadata.retry:
                         tombstone_reason = RETRY_EXHAUSTED
                         error_msg = (
                             f"Retry exhausted after {recovery_metadata.retry.attempts} attempts"
@@ -527,6 +551,7 @@ class OnlineLLMStrategy:
                         input_record,
                         empty_content,
                         source_guid=source_guid,
+                        extra_metadata=extra_metadata,
                         reason=tombstone_reason,
                     )
                     return ProcessingResult.exhausted(
