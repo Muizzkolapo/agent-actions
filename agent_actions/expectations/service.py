@@ -137,6 +137,22 @@ class ExpectationService:
                     iterations=iteration,
                 )
             last_response, last_suite_result = response, suite_result
+
+            # A rule that was skipped was never evaluated, so regenerating cannot
+            # change its outcome — and the repair composer leaves it out of both
+            # lists, naming nothing to fix. Stop generating, but still leave
+            # through the exhaustion door: the record failed, and on_exhausted is
+            # the author's decision about that whatever the rule's outcome was.
+            if self.repair != "none" and all(o.skipped for o in suite_result.failed):
+                logger.info(
+                    "[%s] Expectations failed on rules that were never evaluated, "
+                    "so there is nothing to regenerate: %s",
+                    context or "expectations",
+                    ", ".join(o.id for o in suite_result.failed),
+                )
+                iterations = iteration
+                break
+
             if self.repair == "none":
                 logger.info(
                     "[%s] Expectations failed: %s",
