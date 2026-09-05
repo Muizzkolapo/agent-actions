@@ -1140,7 +1140,7 @@ def handle_repair_recovery(
 
 
 @contextmanager
-def halt_survives_failure(context: RecoveryContext) -> Iterator[None]:
+def halt_survives_failure(context: Any) -> Iterator[None]:
     """Keep a parked halt from being lost when something else fails first.
 
     Every early return past a park is guarded, but the exception exit is not a
@@ -1151,6 +1151,10 @@ def halt_survives_failure(context: RecoveryContext) -> Iterator[None]:
 
     The deliberate halt wins over the incidental failure, which is chained onto
     it rather than dropped. A clean pass leaves the halt parked for the finaliser.
+
+    Typed loosely on purpose: two different objects carry a parked halt — the
+    RecoveryContext the handlers pass around, and the ProcessingContext that
+    collection parks on — and both need the same protection.
     """
     try:
         yield

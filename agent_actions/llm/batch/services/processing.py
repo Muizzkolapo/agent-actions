@@ -1050,7 +1050,11 @@ class BatchProcessingService:
         )
 
         ctx.defer_exhaustion = True
-        output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
+        # Collection parks the halt partway through and keeps working. A failure
+        # after that point would return no third element at all, so the halt has
+        # to survive the failure here as it does on the recovery contexts.
+        with _halt_survives_failure_impl(ctx):
+            output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
         return output_records, stats, ctx.pending_exhaustion
 
     @staticmethod
