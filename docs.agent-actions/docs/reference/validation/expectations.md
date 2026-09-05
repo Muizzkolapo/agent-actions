@@ -61,6 +61,10 @@ Every `expect:` entry runs after schema validation succeeds, against the same re
 The example above uses observe mode: run the checks, attach the verdict, keep going. It costs nothing beyond the checks themselves and changes no behaviour, which makes it the right way to learn what your rules actually catch before letting them regenerate anything. When you're ready to enforce, see [Repairing instead of observing](#repairing-instead-of-observing).
 :::
 
+:::tip Every form of `expect:`, run through the real preflight
+`tests/integration/fixtures/expectation_authors` is seventeen small projects, one per way of writing this block: twelve that are accepted — inline rules, a named `suite:`, rules on a schema field, `llm_judge` with `votes:`, a `row_condition`, a custom check, and more — and five that are refused, covering an unreachable nested selector, a judged `context:` under batch, a flat-shape argument, `severity: fail`, and `repair` at file granularity. `tests/integration/test_expectation_authors.py` drives every one through `WorkflowInspector` — the same preflight `agac inspect` runs — and pins the exact refusal phrase for each rejected form. It's the fastest way to see whether a shape you're unsure about is accepted, and what the framework says when it isn't.
+:::
+
 ## The `expect:` block
 
 | Key | Type | Default | Purpose |
@@ -222,6 +226,11 @@ Every ref in `context:` is automatically added to the action's own `context_scop
 
 Under a repair policy the action stops merely reporting quality and starts enforcing it: a record whose suite fails is regenerated and re-validated, up to `max_iterations` total generations.
 
+**What "regenerated" actually does differs by run mode — neither one restarts the action.** Nothing here re-enters the DAG: dependencies, guards, and `context_scope` all ran once, upstream, and are not evaluated again.
+
+- **Online**, a failing record loops **in place**, inside the single call that produced it. The same per-record invocation runs again — including any `retry:`/`reprompt:` wrapping around it, which is why the two nest rather than replace each other (see [Repair and `reprompt:`](#repair-and-reprompt) below) — with `original_prompt` for `retry`, or the composed-feedback prompt for `auto`. Every other record the action is processing is untouched; a slow record does not hold up its neighbours, and a fast one does not skip the check.
+- **Batch** has no call to loop around — a round *is* a whole batch submission, so there is nothing to re-enter synchronously. Instead each round submits a **new, smaller batch** containing only the records still failing, with feedback composed per record exactly as online does; records that already passed are carried forward and never resubmitted. `max_iterations` here bounds the number of these rounds, not the number of tries any one record gets — see [Current limitations](#current-limitations) for what that means for a record that happens to fail in round one.
+
 ```yaml
 - name: write_question
   expect:
@@ -249,6 +258,10 @@ Each iteration runs the **whole** suite again, not just the rules that failed la
 | `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
 | `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count |
 | `raise` | Nothing — the run halts with an error naming the action and the still-failing rules |
+
+:::tip See exhaustion happen
+`tests/integration/fixtures/runtime_probes/repair_exhaustion` is a rule the mock provider can never satisfy, `on_exhausted: return_last`, run through the real CLI in `tests/integration/test_runtime_probes.py`. It asserts the record survives with its final failing verdict attached — the concrete shape of the `return_last` row above. The same fixture project's `partial_file_rejection` workflow is also worth reading if you're relying on a run's exit code to mean "every record succeeded": it currently doesn't, for a reason unrelated to `expect:` — see the test file's docstring.
+:::
 
 ### Repair and `reprompt:`
 
