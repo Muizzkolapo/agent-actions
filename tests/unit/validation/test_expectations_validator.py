@@ -125,7 +125,8 @@ def test_field_check_still_fires_when_the_action_produces_zero_fields():
 def test_malformed_field_value_is_reported_not_crashed():
     defects = find_expectation_defects(config([{"type": "not_null", "field": 42}]), FIELDS)
     assert "write_q" in defects
-    assert any("valid string" in message for message in defects["write_q"])
+    assert "must be a string or list" in defects["write_q"][0]
+    assert "int" in defects["write_q"][0]
 
 
 def test_named_suite_with_an_unregistered_type_is_reported(tmp_path):
