@@ -278,8 +278,8 @@ Results attach to the record under an `expect` key, alongside the action's own s
 {
   "summary": "...",
   "expect": {
-    "overall_pass": false,
-    "failed": ["summary_length"],
+    "overall_pass": true,
+    "failed": [],
     "skipped": [],
     "outcomes": [
       {"id": "summary_present", "type": "not_null", "severity": "error", "passed": true, "detail": "", "skipped": false},
@@ -292,7 +292,7 @@ Results attach to the record under an `expect` key, alongside the action's own s
 
 The `skipped` list holds `error`-severity rules that could **not** be checked — a budget-exhausted judge, for instance. A rule waived by its `row_condition` passed and is not listed there, and neither are `warn`/`info` skips, since neither can change `overall_pass`. Every skip is still in `outcomes[]` with `skipped: true` and its reason in the detail, so "did not apply" stays distinguishable from "could not tell".
 
-`overall_pass` reflects only `error`-severity outcomes — `summary_length` failing above doesn't flip it because that rule is `severity: warn`.
+`summary_length` failed and is still recorded in `outcomes`, but it appears in neither `failed` nor `overall_pass`: both count `error`-severity outcomes only, and that rule is `severity: warn`. That is the whole point of `warn` — the finding is on the record without gating anything.
 
 To act on the verdict, read it from a downstream [guard](../execution/guards.md):
 
