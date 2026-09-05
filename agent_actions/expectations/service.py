@@ -12,6 +12,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.expectations.loader import (
+    NoRulesDeclared,
     SuiteLoadError,
     build_inline_suite,
     build_suite_from_schema_data,
@@ -493,10 +494,17 @@ def create_expectation_service_from_config(
             suite = build_suite_from_schema_data(
                 schema_name or f"{action_name}:schema", schema_data
             )
-        except ValueError as exc:
+        except NoRulesDeclared as exc:
             raise ExpectationConfigurationError(
                 f"Action '{action_name}' has a bare expect: block, but its "
                 f"schema has no expectations to run: {exc}",
+                context={"action": action_name},
+            ) from exc
+        except ValueError as exc:
+            # The schema has rules; they are in the wrong place or the wrong
+            # shape, which is a different thing from having none.
+            raise ExpectationConfigurationError(
+                f"Action '{action_name}': {exc}",
                 context={"action": action_name},
             ) from exc
     elif suite_name:
