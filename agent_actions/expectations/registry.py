@@ -8,11 +8,13 @@ than restating the rule.
 
 from __future__ import annotations
 
+import inspect
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.errors import DuplicateFunctionError
 from agent_actions.expectations.expression import _expression_unreachable
 from agent_actions.expectations.judge import _llm_judge_unreachable
 
@@ -47,6 +49,52 @@ def register(
         _REGISTRY[name] = ExpectationType(
             name, frozenset(params) | _UNIVERSAL_PARAMS, frozenset(required), fn
         )
+        return fn
+
+    return decorate
+
+
+_USER_CHECK_SOURCES: dict[str, tuple[str, str]] = {}
+
+
+def expectation_check(
+    name: str, params: Iterable[str] = (), required: Iterable[str] = ()
+) -> Callable[[Check], Check]:
+    """Register a project-defined expectation type under the built-in check contract.
+
+    Shadowing a built-in raises; the same name from two files raises
+    DuplicateFunctionError; re-decorating from the same file is idempotent so
+    module re-import during discovery cannot fail.
+    """
+
+    def decorate(fn: Check) -> Check:
+        location = f"{fn.__module__}.{fn.__name__}"
+        try:
+            source_file = inspect.getfile(fn)
+        except TypeError:
+            source_file = f"<builtin:{fn.__module__}>"
+
+        existing = _USER_CHECK_SOURCES.get(name)
+        if existing is not None:
+            existing_location, existing_file = existing
+            # Idempotency requires the same function, not just the same file:
+            # a second function claiming the name in one file is a collision.
+            if existing_file == source_file and existing_location == location:
+                return _REGISTRY[name].check
+            raise DuplicateFunctionError(
+                function_name=name,
+                existing_location=existing_location,
+                existing_file=existing_file,
+                new_location=location,
+                new_file=source_file,
+            )
+        if name in _REGISTRY:
+            raise ValueError(
+                f"expectation type '{name}' is a built-in and cannot be redefined; "
+                f"choose a different name"
+            )
+        _REGISTRY[name] = ExpectationType(name, frozenset(params), frozenset(required), fn)
+        _USER_CHECK_SOURCES[name] = (location, source_file)
         return fn
 
     return decorate

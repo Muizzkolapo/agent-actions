@@ -245,3 +245,110 @@ def test_no_registered_argument_name_is_mistaken_for_a_rule_key():
         if _nearest_rule_key(name) is not None
     }
     assert confused == {}
+
+
+def test_expectation_check_registers_a_usable_type(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("ends_with_period")
+    def ends_with_period(value, params):
+        text = str(value)
+        if text.endswith("."):
+            return True, ""
+        return False, f"value {text!r} does not end with a period"
+
+    etype = get("ends_with_period")
+    assert etype is not None
+    assert etype.check("Done.", {}) == (True, "")
+    assert etype.check("Done", {})[0] is False
+    assert "ends_with_period" in known_types()
+
+
+def test_expectation_check_declares_params_for_preflight(preserve_registry):
+    from agent_actions import expectation_check
+
+    @expectation_check("min_sentences", params=("min",), required=("min",))
+    def min_sentences(value, params):
+        count = str(value).count(".")
+        if count >= params["min"]:
+            return True, ""
+        return False, f"{count} sentences, expected at least {params['min']}"
+
+    etype = get("min_sentences")
+    assert etype.params == frozenset({"min", "row_condition"})
+    assert etype.required == frozenset({"min"})
+
+
+def test_shadowing_a_builtin_raises(preserve_registry):
+    from agent_actions import expectation_check
+
+    with pytest.raises(ValueError, match="built-in"):
+
+        @expectation_check("not_null")
+        def not_null(value, params):
+            return True, ""
+
+
+def test_same_file_reregistration_is_idempotent(preserve_registry):
+    from agent_actions import expectation_check
+
+    def original(value, params):
+        return True, "original"
+
+    registered_first = expectation_check("idempotent_check")(original)
+    registered_second = expectation_check("idempotent_check")(original)
+    assert registered_second is registered_first
+    assert get("idempotent_check").check(None, {}) == (True, "original")
+
+
+def test_same_name_from_a_different_file_raises(preserve_registry, monkeypatch):
+    from agent_actions import expectation_check
+    from agent_actions.errors import DuplicateFunctionError
+    from agent_actions.expectations import registry as registry_module
+
+    @expectation_check("collision_check")
+    def first(value, params):
+        return True, ""
+
+    monkeypatch.setattr(registry_module.inspect, "getfile", lambda fn: "/somewhere/else/checks.py")
+    with pytest.raises(DuplicateFunctionError):
+
+        @expectation_check("collision_check")
+        def second(value, params):
+            return True, ""
+
+
+def test_user_check_flows_through_the_preflight_validator(preserve_registry):
+    from agent_actions import expectation_check
+    from agent_actions.validation.expectations_validator import find_expectation_defects
+
+    @expectation_check("has_emoji", params=("at_least",))
+    def has_emoji(value, params):
+        return True, ""
+
+    configs = {
+        "a": {
+            "expect": {
+                "expectations": [
+                    {"id": "e", "type": "has_emoji", "field": "title", "params": {"at_most": 3}}
+                ]
+            }
+        }
+    }
+    defects = find_expectation_defects(configs, {"a": {"title"}})["a"]
+    assert any("takes no parameter 'at_most'" in d for d in defects)
+
+
+def test_two_different_functions_same_name_same_file_raises(preserve_registry):
+    from agent_actions import expectation_check
+    from agent_actions.errors import DuplicateFunctionError
+
+    @expectation_check("ambiguous_check")
+    def first(value, params):
+        return True, "first"
+
+    with pytest.raises(DuplicateFunctionError):
+
+        @expectation_check("ambiguous_check")
+        def second(value, params):
+            return True, "second"

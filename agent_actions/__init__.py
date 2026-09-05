@@ -1,6 +1,7 @@
 """Agent Actions framework entry point."""
 
 from agent_actions.__version__ import __version__
+from agent_actions.expectations.registry import expectation_check
 from agent_actions.processing.recovery.validation import (
     get_validation_function,
     list_validation_functions,
@@ -12,6 +13,7 @@ __all__ = [
     "__version__",
     "udf_tool",
     "FileUDFResult",
+    "expectation_check",
     "reprompt_validation",
     "get_validation_function",
     "list_validation_functions",
