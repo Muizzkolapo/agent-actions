@@ -31,6 +31,15 @@ def _collect_missing_records(
     return records
 
 
+class RetrySubmissionImpossible(RuntimeError):
+    """A retry batch cannot be built for these records, this pass or any later one.
+
+    Distinct from a transient submission failure, which answers None: the caller
+    keeps those records unexhausted because the next pass can resend them, and
+    must not do the same for these.
+    """
+
+
 def submit_retry_batch(
     storage_backend: "StorageBackend | None",
     provider: BaseBatchClient,
@@ -68,7 +77,9 @@ def submit_retry_batch(
             len(missing_ids),
             file_name,
         )
-        return None
+        raise RetrySubmissionImpossible(
+            f"no records in context_map for {len(missing_ids)} missing id(s)"
+        )
 
     try:
         batch_name = f"{file_name}_retry" if file_name else "retry"
@@ -86,7 +97,7 @@ def submit_retry_batch(
 
         if not prepared.tasks:
             logger.warning("No tasks prepared for retry batch (file_name=%s)", file_name)
-            return None
+            raise RetrySubmissionImpossible(f"preparation admitted no tasks for {file_name}")
 
         retry_batch_id, _ = provider.submit_batch(
             tasks=prepared.tasks,
@@ -100,7 +111,10 @@ def submit_retry_batch(
         )
         return (retry_batch_id, len(prepared.tasks))
 
+    except RetrySubmissionImpossible:
+        raise
     except Exception as e:
+        # Transient: the next pass re-enters and can send the same records again.
         logger.warning("Failed to submit retry batch: %s", e, exc_info=True)
         return None
 

@@ -73,3 +73,76 @@ def test_a_transient_submit_failure_does_not_stamp_exhaustion():
     # The value the rest of the run reads. Marking the record exhausted here tells
     # the on_exhausted policy the budget is gone while two attempts remain.
     assert seen["exhausted_recovery"] is None
+
+
+def test_the_records_are_not_carried_forward_as_exhausted():
+    """Gating the local call is not enough — the id set travels too.
+
+    The reprompt and repair finalisers rebuild exhaustion metadata from
+    ``state.missing_ids``. Leaving the pre-round set on the state hands them the
+    very records the guard just refused to exhaust.
+    """
+    entry = BatchJobEntry(
+        batch_id="b-1",
+        status="submitted",
+        timestamp="2026-04-20T00:00:00Z",
+        provider="openai",
+        record_count=1,
+        file_name=PARENT,
+        parent_file_name=None,
+        recovery_type="retry",
+        recovery_attempt=1,
+    )
+    identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
+    state = _state()
+
+    with patch(
+        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+        return_value=False,
+    ):
+        handle_retry_recovery(_context(), identity, state, [], [], {MISSING: {}})
+
+    assert state.missing_ids == [], (
+        "the retry state still names records the guard declined to exhaust; the "
+        "reprompt and repair finalisers will rebuild the stamp from this set"
+    )
+
+
+def test_a_permanent_submission_failure_does_stamp_exhaustion():
+    """The mirror: when no later pass can resend them, the loop has given up.
+
+    A transient failure and an unrebuildable batch both used to answer None, so
+    the caller could not tell "try again next pass" from "never".
+    """
+    from agent_actions.llm.batch.services.retry_ops import RetrySubmissionImpossible
+
+    entry = BatchJobEntry(
+        batch_id="b-1",
+        status="submitted",
+        timestamp="2026-04-20T00:00:00Z",
+        provider="openai",
+        record_count=1,
+        file_name=PARENT,
+        parent_file_name=None,
+        recovery_type="retry",
+        recovery_attempt=1,
+    )
+    identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
+    context = _context()
+    context.service._retry_service.submit_retry_batch.side_effect = RetrySubmissionImpossible(
+        "no records in context_map for 1 missing id(s)"
+    )
+    seen = {}
+
+    def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
+        seen["exhausted_recovery"] = exhausted_recovery
+        return False
+
+    with patch(
+        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+        side_effect=_capture,
+    ):
+        handle_retry_recovery(context, identity, _state(), [], [], {MISSING: {}})
+
+    context.service._retry_service.build_exhausted_recovery.assert_called_once()
+    assert seen["exhausted_recovery"] is not None

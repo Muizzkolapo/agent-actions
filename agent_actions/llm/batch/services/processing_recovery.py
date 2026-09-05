@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
 
 from agent_actions.llm.batch.services.repair_ops import RepairSubmission, pool_records
+from agent_actions.llm.batch.services.retry_ops import RetrySubmissionImpossible
 
 logger = logging.getLogger(__name__)
 
@@ -203,16 +204,23 @@ def handle_retry_recovery(
         missing_ids=set(state.missing_ids),
     )
 
+    submission_impossible = False
     if still_missing and state.retry_attempt < state.retry_max_attempts:
         next_attempt = state.retry_attempt + 1
-        submission = context.service._retry_service.submit_retry_batch(
-            provider=context.provider,
-            missing_ids=still_missing,
-            context_map=context_map,
-            output_directory=context.output_directory,
-            file_name=identity.file_name,
-            agent_config=context.agent_config,
-        )
+        try:
+            submission = context.service._retry_service.submit_retry_batch(
+                provider=context.provider,
+                missing_ids=still_missing,
+                context_map=context_map,
+                output_directory=context.output_directory,
+                file_name=identity.file_name,
+                agent_config=context.agent_config,
+            )
+        except RetrySubmissionImpossible as exc:
+            # No later pass changes this: the records cannot be rebuilt into a
+            # batch at all, so the loop has genuinely given up on them.
+            logger.warning("Retry for %s cannot be resubmitted: %s", identity.file_name, exc)
+            submission, submission_impossible = None, True
         if submission:
             register_recovery_batch(
                 context.manager,
@@ -235,14 +243,16 @@ def handle_retry_recovery(
             return None
 
     exhausted_recovery = None
-    if still_missing and state.retry_attempt >= state.retry_max_attempts:
+    if still_missing and (state.retry_attempt >= state.retry_max_attempts or submission_impossible):
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             still_missing, updated_counts
         )
     elif still_missing:
-        # Reached here with attempts left, so submission failed rather than the
-        # budget running out. Stamping exhaustion would tell the on_exhausted
-        # policy the run is over when the next pass can still resubmit.
+        # A transient submission failure with attempts left. These records are not
+        # exhausted, and the id set must be cleared as well as the stamp withheld:
+        # the reprompt and repair finalisers rebuild exhaustion from missing_ids,
+        # so leaving it populated reinstates exactly what was just declined.
+        state.missing_ids = []
         logger.warning(
             "Retry submission for %s did not go out with %d of %d attempts left; "
             "%d record(s) carried forward unexhausted",
