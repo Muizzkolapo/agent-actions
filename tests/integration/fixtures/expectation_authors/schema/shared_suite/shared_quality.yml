@@ -1,0 +1,9 @@
+name: shared_quality
+expectations:
+  - id: density_is_known
+    type: accepted_values
+    field: exam_density
+    params: {values: [high, medium, low]}
+  - id: summary_present
+    type: not_null
+    field: summary

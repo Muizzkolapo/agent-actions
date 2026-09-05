@@ -1,0 +1,21 @@
+name: repair_auto
+description: "repair: auto with a bounded iteration count"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: summarize
+    intent: "Summarise"
+    schema: repair_auto_output
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect:
+      repair: auto
+      max_iterations: 2
+      on_exhausted: return_last

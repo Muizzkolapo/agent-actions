@@ -1,0 +1,17 @@
+name: pair_and_pattern_rules_output
+fields:
+  - id: summary
+    type: string
+  - id: density_reason
+    type: string
+expectations:
+  - id: halves_are_balanced
+    type: word_count_ratio
+    field: [summary, density_reason]
+    params: {max_ratio: 5}
+    severity: warn
+  - id: no_stray_markup
+    type: match_like_pattern
+    field: summary
+    params: {like_pattern: "%<%>%", negate: true}
+additionalProperties: true

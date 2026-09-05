@@ -1,0 +1,20 @@
+name: row_condition_on_optional_field_output
+fields:
+  - id: summary
+    type: string
+  - id: exam_density
+    type: string
+    required: false
+  - id: page_kind
+    type: string
+    required: false
+  - id: density_reason
+    type: string
+    expectations:
+      - id: reason_is_substantive
+        type: word_count_between
+        params:
+          min: 6
+          max: 120
+          row_condition: "page_kind IS NOT NULL and page_kind == 'reference'"
+additionalProperties: true

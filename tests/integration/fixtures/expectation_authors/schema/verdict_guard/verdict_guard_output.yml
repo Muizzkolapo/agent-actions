@@ -1,0 +1,11 @@
+name: verdict_guard_output
+fields:
+  - id: summary
+    type: string
+  - id: exam_density
+    type: string
+    expectations:
+      - id: density_is_known
+        type: accepted_values
+        params: {values: [NEVER_PRODUCED]}
+additionalProperties: true

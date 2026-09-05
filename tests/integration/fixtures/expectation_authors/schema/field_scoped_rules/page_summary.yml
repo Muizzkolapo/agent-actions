@@ -1,0 +1,20 @@
+name: page_summary
+fields:
+  - id: summary
+    type: string
+    description: "One-sentence summary."
+    expectations:
+      - id: summary_not_null
+        type: not_null
+      - id: summary_is_short
+        type: word_count_between
+        params: {min: 5, max: 60}
+        severity: warn
+  - id: exam_density
+    type: string
+    expectations:
+      - id: density_accepted_values
+        type: accepted_values
+        params: {values: [high, medium, low]}
+        severity: error
+additionalProperties: true

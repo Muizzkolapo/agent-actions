@@ -1,0 +1,1 @@
+[{"page_id": "p1", "page_content": "dbt models are SELECT statements stored as .sql files. Materializations control how each is built: view, table, incremental, ephemeral."}]

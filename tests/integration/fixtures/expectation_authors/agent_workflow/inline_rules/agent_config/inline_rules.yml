@@ -1,0 +1,29 @@
+name: inline_rules
+description: "Rules in the action's own expect block, each naming its field"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: summarize
+    intent: "Summarise"
+    schema: inline_rules_output
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect:
+      repair: none
+      expectations:
+        - id: density_is_known
+          type: accepted_values
+          field: exam_density
+          params: {values: [high, medium, low]}
+        - id: summary_sized
+          type: word_count_between
+          field: summary
+          params: {min: 5, max: 60}
+          severity: warn

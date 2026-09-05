@@ -1,0 +1,12 @@
+name: judge_votes_and_budget_output
+fields:
+  - id: summary
+    type: string
+    expectations:
+      - id: summary_is_grounded
+        type: llm_judge
+        params:
+          rule: "The summary only states things the page says."
+          votes: 1
+        severity: info
+additionalProperties: true

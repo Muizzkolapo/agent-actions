@@ -1,0 +1,5 @@
+name: judged_context_under_batch_extract
+fields:
+  - id: body
+    type: string
+additionalProperties: true

@@ -1,0 +1,18 @@
+name: pair_and_pattern_rules
+description: "A rule over two fields, and a pattern rule that negates"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: summarize
+    intent: "Summarise"
+    schema: pair_and_pattern_rules_output
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect: { repair: none }

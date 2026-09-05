@@ -1,0 +1,18 @@
+name: repair_auto_at_file_granularity
+description: "repair: auto where one call produces the whole file"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: File
+  run_mode: online
+  model_vendor: ollama_cloud
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: summarize
+    intent: "Summarise"
+    schema: repair_auto_at_file_granularity_output
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect: { repair: auto }

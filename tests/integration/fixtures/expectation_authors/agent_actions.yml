@@ -1,0 +1,8 @@
+default_agent_config:
+  api_key: OLLAMA_API_KEY
+  model_name: gpt-oss:120b-cloud
+  ephemeral: false
+tool_path: ["tools"]
+schema_path: schema
+seed_data_path: seed_data
+required_by_default: true

@@ -1,0 +1,9 @@
+name: custom_check_output
+fields:
+  - id: summary
+    type: string
+    expectations:
+      - id: summary_is_a_sentence
+        type: ends_with_full_stop
+        params: {allow_question: true}
+additionalProperties: true
