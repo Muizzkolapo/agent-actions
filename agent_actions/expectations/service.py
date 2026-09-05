@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,7 +13,8 @@ from typing import Any
 from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
-from agent_actions.expectations.types import Expectation, Suite, SuiteResult
+from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
+from agent_actions.utils.constants import SCHEMA_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,7 @@ class ExpectationService:
         *,
         judge: JudgeDispatch | None = None,
         max_iterations: int = 3,
+        schema: dict[str, Any] | None = None,
     ) -> None:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
@@ -55,6 +59,8 @@ class ExpectationService:
         self.repair = repair
         self._judge = judge
         self._max_iterations = max_iterations
+        self._schema = schema if isinstance(schema, dict) else None
+        self._schema_digest: str | None = None
         self._hints = {e.resolved_id: e.hint for e in suite.expectations if e.hint}
 
     def execute(
@@ -69,7 +75,7 @@ class ExpectationService:
         suite_result: SuiteResult | None = None
         response: Any = None
         executed = False
-        last_response: dict[str, Any] | None = None
+        last_response: Any = None
         last_suite_result: SuiteResult | None = None
 
         for iteration in range(1, iterations + 1):
@@ -82,10 +88,10 @@ class ExpectationService:
             if isinstance(response, list) and len(response) == 1 and isinstance(response[0], dict):
                 response = response[0]
 
-            if not executed or not isinstance(response, dict):
-                if last_response is not None and last_suite_result is not None:
+            if not executed:
+                if last_suite_result is not None:
                     # A regeneration that collapsed (inner recovery exhausted)
-                    # must not downgrade a record that already had data.
+                    # must not downgrade a record that already had a verdict.
                     return ExpectationRunResult(
                         response=last_response,
                         executed=True,
@@ -95,9 +101,21 @@ class ExpectationService:
                     )
                 return ExpectationRunResult(response=response, executed=executed)
 
-            suite_result = run_suite(
-                self.suite, response, judge=self._judge, context_source=llm_context
-            )
+            if self.repair == "none":
+                if not isinstance(response, dict):
+                    return ExpectationRunResult(response=response, executed=executed)
+                suite_result = run_suite(
+                    self.suite, response, judge=self._judge, context_source=llm_context
+                )
+            else:
+                structural = self._structural_result(response)
+                suite_result = (
+                    structural
+                    if structural is not None
+                    else run_suite(
+                        self.suite, response, judge=self._judge, context_source=llm_context
+                    )
+                )
             if suite_result.overall_pass:
                 return ExpectationRunResult(
                     response=response,
@@ -133,20 +151,74 @@ class ExpectationService:
         self,
         iteration: int,
         original_prompt: str,
-        last_response: dict[str, Any] | None,
+        last_response: Any,
         last_suite_result: SuiteResult | None,
     ) -> str:
         """The prompt for one generation; retry re-samples the original, auto composes feedback."""
-        if (
-            self.repair == "auto"
-            and iteration > 1
-            and last_response is not None
-            and last_suite_result is not None
-        ):
+        if self.repair == "auto" and iteration > 1 and last_suite_result is not None:
             return compose_repair_prompt(
                 original_prompt, last_response, last_suite_result, self._hints
             )
         return original_prompt
+
+    def _structural_result(self, response: Any) -> SuiteResult | None:
+        """A failing verdict when the response is not a schema-conforming record, else None."""
+        if not isinstance(response, dict):
+            detail = f"response was {type(response).__name__}, expected a JSON object"
+            if self._schema:
+                try:
+                    from agent_actions.processing.recovery.reprompt import _extract_field_names
+
+                    fields = _extract_field_names(self._schema)
+                except Exception:
+                    # A schema the extractor cannot walk degrades to feedback
+                    # without field names; it must never crash the record.
+                    logger.debug(
+                        "Could not extract field names from the schema for '%s'",
+                        self.suite.name,
+                        exc_info=True,
+                    )
+                    fields = []
+                if fields:
+                    detail += " with the fields: " + ", ".join(str(f) for f in fields)
+            return self._failing_structural(detail)
+        if self._schema:
+            from agent_actions.processing.recovery.response_validator import SchemaValidator
+
+            # The validator keeps per-call feedback state and records validate
+            # concurrently, so it is constructed per call, never held on self.
+            validator = SchemaValidator(self._schema, self.suite.name)
+            if not validator.validate(response):
+                return self._failing_structural(validator.feedback_message)
+        return None
+
+    def _failing_structural(self, detail: str) -> SuiteResult:
+        if self._schema_digest is None:
+            # Lazy: observe-mode services never digest, and an idempotent
+            # concurrent double-compute is harmless.
+            self._schema_digest = self._digest_schema()
+        outcome = Outcome(
+            id="_structural",
+            type="schema",
+            severity="error",
+            passed=False,
+            detail=detail,
+            definition_hash=self._schema_digest,
+        )
+        return SuiteResult(suite_name=self.suite.name, outcomes=[outcome])
+
+    def _digest_schema(self) -> str:
+        try:
+            canonical = json.dumps(
+                self._schema or {}, sort_keys=True, separators=(",", ":"), default=str
+            )
+        except (TypeError, ValueError):
+            logger.debug(
+                "Schema for '%s' is not JSON-canonicalizable; digesting its repr",
+                self.suite.name,
+            )
+            canonical = repr(self._schema)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
 def attach_verdict(response: dict[str, Any], suite_result: SuiteResult) -> dict[str, Any]:
@@ -233,4 +305,9 @@ def create_expectation_service_from_config(
                 return False, f"judge call failed: {exc}", False
             return passed, detail, False
 
-    return ExpectationService(suite, repair=repair, judge=judge_dispatch)
+    return ExpectationService(
+        suite,
+        repair=repair,
+        judge=judge_dispatch,
+        schema=(agent_config or {}).get(SCHEMA_KEY),
+    )

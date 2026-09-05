@@ -31,7 +31,7 @@ def _one_line(text: str) -> str:
 
 def compose_repair_prompt(
     original_prompt: str,
-    response: dict[str, Any],
+    response: Any,
     suite_result: SuiteResult,
     hints: dict[str, str],
 ) -> str:
