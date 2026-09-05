@@ -198,6 +198,82 @@ class _RetryRepromptValidators(BaseModel):
         )
 
 
+class ExpectConfig(BaseModel):
+    """Binds an expectation suite to an action, with its enforcement policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    suite: str | None = Field(
+        default=None,
+        description="Schema-path file whose rules — on its fields, in its own expectations: block, or both — supply this action's; "
+        "omitted with no inline list, the action's own schema: file is read",
+    )
+    expectations: list[dict[str, Any]] | None = Field(
+        default=None, description="Inline expectation list, in place of a named suite"
+    )
+    max_iterations: int = Field(
+        default=3, ge=1, le=10, description="Maximum generate-validate-repair iterations (1-10)"
+    )
+    repair: str | dict[str, Any] = Field(
+        default="auto",
+        description="none (observe), retry (re-run prompt), auto (mechanical), or {prompt: $wf.X}",
+    )
+    on_exhausted: Literal["return_last", "fail", "raise"] = Field(
+        default="return_last",
+        description="Behavior when iterations exhaust: return_last, fail (tombstone), or raise",
+    )
+
+    @field_validator("repair")
+    @classmethod
+    def validate_repair(cls, v):
+        if isinstance(v, str):
+            if v not in ("none", "retry", "auto"):
+                raise ValueError(
+                    f"repair must be one of: none, retry, auto — or a mapping "
+                    f"{{prompt: $wf.Name}}. Got: {v!r}"
+                )
+            return v
+        if isinstance(v, dict):
+            if set(v) != {"prompt"}:
+                raise ValueError(
+                    f"repair mapping takes exactly one key, 'prompt'. Got: {sorted(v)}"
+                )
+            return v
+        raise ValueError(f"repair must be a string or a mapping, got {type(v).__name__}")
+
+    @model_validator(mode="after")
+    def validate_suite_source(self):
+        if self.suite is not None and self.expectations is not None:
+            raise ValueError(
+                "expect takes at most one of:\n"
+                "  suite: my_rules        # a schema-path file with an expectations: block\n"
+                "  expectations: [...]    # an inline list\n"
+                "Omit both to read the rules of the action's own schema."
+            )
+        if self.suite == "":
+            raise ValueError(
+                "suite: must not be empty; name a schema-path file, or omit the "
+                "key to read the action's own schema"
+            )
+        if self.expectations == []:
+            raise ValueError(
+                "expectations: must not be an empty list; add entries, or omit "
+                "the key to read the action's own schema"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_observe_mode_has_no_loop_keys(self):
+        if self.repair == "none":
+            offenders = sorted({"max_iterations", "on_exhausted"} & self.model_fields_set)
+            if offenders:
+                raise ValueError(
+                    f"repair: none never loops, so {offenders} have no meaning. "
+                    "Remove them, or choose repair: retry or repair: auto."
+                )
+        return self
+
+
 class ActionConfig(_RetryRepromptValidators):
     """Configuration for a workflow action."""
 
@@ -232,6 +308,9 @@ class ActionConfig(_RetryRepromptValidators):
     versions: VersionConfig | None = Field(default=None, description="Version configuration")
     version_consumption: VersionConsumptionConfig | None = Field(
         default=None, description="Version output consumption configuration"
+    )
+    expect: ExpectConfig | None = Field(
+        default=None, description="Output expectations and their enforcement policy"
     )
     retry: RetryConfig | None = Field(
         default=None, description="Retry configuration for transport-layer failures"
