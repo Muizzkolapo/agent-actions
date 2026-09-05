@@ -26,18 +26,22 @@ def _looks_like_rules(value: Any) -> bool:
     )
 
 
-def _nested_rule_owner(node: Any) -> str | None:
-    """The name of the first nested member carrying rules the loader cannot reach."""
+def _nested_rule_owner(node: Any, name: str | None = None) -> str | None:
+    """The name of the first nested member carrying rules the loader cannot reach.
+
+    Each node is tested on the way in rather than through its parent, so a dict
+    reached as an element of a list is checked like any other.
+    """
     if isinstance(node, dict):
+        if name is not None and _looks_like_rules(node.get("expectations")):
+            return str(node.get("id") or node.get("name") or name)
         for key, value in node.items():
-            if isinstance(value, dict) and _looks_like_rules(value.get("expectations")):
-                return str(key)
-            found = _nested_rule_owner(value)
+            found = _nested_rule_owner(value, str(key))
             if found is not None:
                 return found
     elif isinstance(node, list):
         for item in node:
-            found = _nested_rule_owner(item)
+            found = _nested_rule_owner(item, name)
             if found is not None:
                 return found
     return None
