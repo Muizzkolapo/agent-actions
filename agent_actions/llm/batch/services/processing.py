@@ -50,6 +50,9 @@ from agent_actions.llm.batch.services.processing_recovery import (
     finalize_batch_output as _finalize_batch_output_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
+    halt_survives_failure as _halt_survives_failure_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -686,33 +689,36 @@ class BatchProcessingService:
         # crashed run). Passing it would poison the reprompt check with a stale
         # reprompt_attempt counter, causing it to think attempts are exhausted.
         # Stale files are cleaned up in _finalize_batch_output.
-        should_continue = self._check_and_submit_reprompt(
-            context=context,
-            identity=identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            recovery_state=None,
-        )
-        if not should_continue:
-            _raise_pending_exhaustion_impl(context)
-            return None  # Reprompt submitted, processing paused
+        # Same wrapper the recovery handlers get: a halt parked below must not be
+        # lost to an unrelated failure on the way to the finaliser.
+        with _halt_survives_failure_impl(context):
+            should_continue = self._check_and_submit_reprompt(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+                recovery_state=None,
+            )
+            if not should_continue:
+                _raise_pending_exhaustion_impl(context)
+                return None  # Reprompt submitted, processing paused
 
-        if not _check_and_submit_repair_impl(
-            context=context,
-            identity=identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            recovery_state=None,
-        ):
-            _raise_pending_exhaustion_impl(context)
-            return None  # Repair round submitted, processing paused
+            if not _check_and_submit_repair_impl(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+                recovery_state=None,
+            ):
+                _raise_pending_exhaustion_impl(context)
+                return None  # Repair round submitted, processing paused
 
-        return self._finalize_batch_output(
-            context=context,
-            identity=identity,
-            batch_results=batch_results,
-            context_map=context_map,
-        )
+            return self._finalize_batch_output(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+            )
 
     # =========================================================================
     # DELEGATORS — bodies live in processing_recovery.py

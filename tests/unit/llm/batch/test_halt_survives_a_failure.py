@@ -39,6 +39,23 @@ def test_a_failure_with_nothing_parked_is_left_alone():
         raise ValueError("ordinary")
 
 
+@pytest.mark.parametrize("failure", [ValueError("v"), KeyError("k"), TypeError("t"), OSError("o")])
+def test_any_failure_type_preserves_the_halt(failure):
+    """Not just the type the first test happened to raise.
+
+    Narrowing the except clause to one exception type passes a suite whose
+    failures are all that type, and leaves every other kind discarding the halt.
+    """
+    context = _context()
+    context.pending_exhaustion = exhaustion_halt("Reprompt validation exhausted for rec-a")
+
+    with pytest.raises(RuntimeError) as caught, halt_survives_failure(context):
+        raise failure
+
+    assert raised_by_exhaustion_policy(caught.value)
+    assert caught.value.__cause__ is failure
+
+
 def test_a_clean_pass_leaves_the_halt_parked_for_the_finaliser():
     context = _context()
     halt = exhaustion_halt("Reprompt validation exhausted for rec-a")
@@ -48,3 +65,29 @@ def test_a_clean_pass_leaves_the_halt_parked_for_the_finaliser():
         pass
 
     assert context.pending_exhaustion is halt, "the halt was consumed before the finaliser ran"
+
+
+def test_every_context_builder_is_under_the_wrapper():
+    """The guard is only worth what it covers.
+
+    Two call paths build a RecoveryContext and park below it: the recovery
+    dispatch and the original-batch path. A wrapper on one of them leaves the
+    other exactly as exposed as before.
+    """
+    import inspect
+
+    from agent_actions.llm.batch.services import processing, processing_recovery
+
+    targets = [
+        processing_recovery.process_recovery_batch,
+        # A method, not a module attribute — resolving it off the module would
+        # fall back to the whole file, where the import alone satisfies the check.
+        processing.BatchProcessingService._process_original_batch,
+    ]
+    for target in targets:
+        source = inspect.getsource(target)
+        assert "RecoveryContext(" in source, f"{target.__qualname__} no longer builds a context"
+        assert "halt_survives_failure" in source, (
+            f"{target.__qualname__} builds a RecoveryContext and parks below it, "
+            "but is not wrapped; an exception there discards the halt silently"
+        )
