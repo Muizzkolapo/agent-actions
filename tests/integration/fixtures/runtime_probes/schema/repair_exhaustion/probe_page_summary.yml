@@ -1,0 +1,12 @@
+name: probe_page_summary
+fields:
+  - id: summary
+    type: string
+    description: "One-sentence summary."
+  - id: exam_density
+    type: string
+    description: "How densely the page carries exam-worthy material."
+  - id: density_reason
+    type: string
+    description: "Why that rating."
+additionalProperties: true

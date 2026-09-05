@@ -1,0 +1,18 @@
+name: staging_namespace_collision
+description: "Every staging record carries a field named 'source', which the framework reserves"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: label_page
+    intent: "Label one page with a topic and a difficulty"
+    schema: collision_label
+    prompt: $p.Label_Page
+    context_scope:
+      observe: [source.title, source.page_content]

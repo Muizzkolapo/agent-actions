@@ -1,0 +1,6 @@
+[
+  {
+    "id": "p1",
+    "page_content": "Materializations control how each model is built: view, table, incremental, ephemeral."
+  }
+]
