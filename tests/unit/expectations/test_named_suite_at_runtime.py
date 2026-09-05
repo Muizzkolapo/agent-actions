@@ -317,3 +317,32 @@ class TestAToolActionCannotRepairEvenWithAnEmptyBlock:
                     },
                 }
             )
+
+
+def test_a_misplaced_rule_is_not_reported_at_runtime_as_no_rules():
+    from agent_actions.expectations.service import (
+        ExpectationConfigurationError,
+        create_expectation_service_from_config,
+    )
+
+    schema = {
+        "name": "p_shape",
+        "fields": [
+            {
+                "id": "options",
+                "type": "array",
+                "expectations": [{"type": "item_count", "params": {"min": 2}}],
+                "items": {
+                    "type": "object",
+                    "properties": {"text": {"expectations": [{"type": "not_null"}]}},
+                },
+            }
+        ],
+    }
+    with pytest.raises(ExpectationConfigurationError) as excinfo:
+        create_expectation_service_from_config(
+            {"repair": "none"}, action_name="a", agent_config={"schema": schema}
+        )
+    message = str(excinfo.value)
+    assert "nested member 'text'" in message
+    assert "has no expectations to run" not in message
