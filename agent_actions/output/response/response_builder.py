@@ -116,6 +116,27 @@ class ResponseBuilder:
         return [{output_field: content}]
 
     @staticmethod
+    def unwrap(result: list[Any], agent_config: dict[str, Any]) -> Any:
+        """The payload behind a provider's return value, or None if there is none.
+
+        The counterpart to :meth:`wrap_non_json`: a JSON-mode call returns the
+        parsed object itself, a plain-text call returns it under the configured
+        output field, and callers should not have to know which happened. The
+        output field cannot collide with a model's own key, because
+        `granularity_output_field_validator` rejects `output_field` alongside
+        `json_mode: true`.
+        """
+        if not isinstance(result, list) or not result:
+            return None
+        first = result[0]
+        if not isinstance(first, dict):
+            return first
+        output_field: str = agent_config.get("output_field", get_default("output_field"))
+        if output_field in first:
+            return first[output_field]
+        return first
+
+    @staticmethod
     def extract_usage(response: Any, provider: str) -> UsageResult:
         """Extract token usage from a provider response.
 

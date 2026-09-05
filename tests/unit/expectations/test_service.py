@@ -271,6 +271,32 @@ def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
     mock_invoke.assert_called_once()
 
 
+def test_a_judge_reply_in_another_dialect_still_scores_the_record():
+    """End of the chain: service -> runner -> CachedJudge -> invoke_judge -> parse.
+
+    Every other judge test here patches `invoke_judge_with_votes`, which is the
+    function that reads the reply — so a parsing regression is invisible to them.
+    This one patches the provider call instead and hands back the Python-literal
+    verdict real judge models produce.
+    """
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none"},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    reply = [{"raw_response": "{'passed': True, 'reason': 'stays on topic'}"}]
+    with patch(
+        "agent_actions.llm.realtime.services.invocation.ClientInvocationService.invoke_client",
+        return_value=reply,
+    ):
+        result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert result.suite_result.overall_pass is True
+    assert result.suite_result.outcomes[0].detail == "stays on topic"
+
+
 def test_factory_judge_budget_is_shared_across_every_record_the_service_processes():
     judge_inline = [
         {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}

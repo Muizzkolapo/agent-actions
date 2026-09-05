@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent_actions.output.response.response_builder import ResponseBuilder
+
 logger = logging.getLogger(__name__)
 
 CRITIQUE_PROMPT_TEMPLATE = """The following LLM response failed validation.
@@ -85,9 +87,14 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
 
     logger.debug("[%s] Invoking critique LLM via %s", action_name, model_vendor)
 
+    # A critique is prose. Inheriting the action's json_mode makes the provider
+    # try to parse it, which on some vendors yields an empty _parse_error
+    # envelope and loses the criticism entirely.
+    text_config = {**agent_config, "json_mode": False}
+
     result = ClientInvocationService.invoke_client(
         model_vendor=model_vendor,
-        agent_config=agent_config,
+        agent_config=text_config,
         prompt_config=prompt,
         context_data="",
         schema=None,
@@ -98,8 +105,4 @@ def invoke_critique(agent_config: dict[str, Any], response: Any, validation_erro
     if not result:
         raise ValueError("Critique LLM returned empty response")
 
-    # Extract text from the response — providers return list[dict] or list[str]
-    first = result[0]
-    if isinstance(first, dict):
-        return str(first.get("content", first.get("text", str(first))))
-    return str(first)
+    return str(ResponseBuilder.unwrap(result, text_config))

@@ -1,13 +1,14 @@
 """LLM-judged expectations: prompt, invocation, and verdict parsing.
 
-Mirrors `processing/recovery/critique.py`'s auxiliary-LLM-call pattern —
-same ad-hoc invocation entry point, same default of reusing the generating
-action's own model, same plain-text-JSON verdict instead of a vendor-native
+Mirrors `processing/recovery/critique.py`'s auxiliary-LLM-call pattern — same
+ad-hoc invocation entry point, same default of reusing the generating action's
+own model, same plain-text-JSON verdict instead of a vendor-native
 structured-output schema.
 """
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import logging
@@ -15,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from agent_actions.expectations.types import Expectation
+from agent_actions.output.response.response_builder import ResponseBuilder
+from agent_actions.utils.json_parsing import strip_code_fences
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,24 @@ def build_judge_prompt(rule: str, value: Any, context: dict[str, Any] | None) ->
     )
 
 
+def _read_verdict(text: str) -> dict[str, Any] | None:
+    """The reply as a verdict object, or None when it is not one.
+
+    Both readers consume the whole reply or refuse, which is the point: the
+    judge prompt shows the model the exact object to emit, so a reply that
+    merely quotes that example while arguing the opposite must not be mistaken
+    for a verdict.
+    """
+    candidate = strip_code_fences(text).strip()
+    for reader in (json.loads, ast.literal_eval):
+        try:
+            parsed = reader(candidate)
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            continue
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
 def invoke_judge(
     agent_config: dict[str, Any],
     rule: str,
@@ -56,8 +77,8 @@ def invoke_judge(
 
     Raises whatever `ClientInvocationService.invoke_client` raises — network,
     auth, and provider errors are the caller's to handle, exactly like
-    `invoke_critique`. A malformed judge response (not JSON, no boolean
-    `passed` key) is this function's own call to make: it is always a
+    `invoke_critique`. A reply that cannot be read as a verdict (no object, no
+    boolean `passed` key) is this function's own call to make: it is always a
     failure, never a silent pass.
     """
     from agent_actions.llm.realtime.services.invocation import ClientInvocationService
@@ -66,7 +87,12 @@ def invoke_judge(
     if not model_vendor:
         raise ValueError("agent_config missing required 'model_vendor' for judge LLM call")
 
-    effective_config = agent_config if model is None else {**agent_config, "model_name": model}
+    # json_mode: False so the provider hands back the model's text rather than
+    # parsing it through the best-effort reader, which would scavenge a verdict
+    # out of prose before `_read_verdict` ever saw the reply.
+    effective_config = {**agent_config, "json_mode": False}
+    if model is not None:
+        effective_config["model_name"] = model
     prompt = build_judge_prompt(rule, value, context)
 
     result = ClientInvocationService.invoke_client(
@@ -81,20 +107,13 @@ def invoke_judge(
     if not result:
         return False, "judge call returned an empty response"
 
-    first = result[0]
-    text = (
-        str(first.get("content", first.get("text", str(first))))
-        if isinstance(first, dict)
-        else str(first)
-    )
+    payload = ResponseBuilder.unwrap(result, effective_config)
+    parsed = payload if isinstance(payload, dict) else _read_verdict(str(payload))
+    if parsed is None:
+        return False, f"judge response was not a verdict object: {str(payload)[:200]!r}"
 
-    try:
-        parsed = json.loads(text.strip())
-    except json.JSONDecodeError:
-        return False, f"judge response was not valid JSON: {text[:200]!r}"
-
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("passed"), bool):
-        return False, f"judge response missing a boolean 'passed' key: {text[:200]!r}"
+    if not isinstance(parsed.get("passed"), bool):
+        return False, f"judge response missing a boolean 'passed' key: {str(payload)[:200]!r}"
 
     return parsed["passed"], str(parsed.get("reason", ""))
 
