@@ -7,7 +7,9 @@ sidebar_position: 3
 
 Schema validation catches structural problems — missing fields, wrong types. It can't catch semantic ones. A summary can be a perfectly well-typed string and still misstate what the source said. A generated question can match its schema and still be unanswerable from the material it was supposed to be grounded in.
 
-`expect:` adds a validation layer on top of schema and guards: deterministic checks (length, forbidden phrases, allowed values, regex) plus LLM-judged checks (`llm_judge`) that ask a model whether a value satisfies an arbitrary natural-language rule, optionally grounded against other actions' output. Results are attached to the record and reported — they never block the pipeline or trigger a retry on their own. If you need pipeline-blocking behavior, pair `expect:` with a [guard](../execution/guards.md) that reads the verdict.
+`expect:` adds a validation layer on top of schema and guards: deterministic checks (length, forbidden phrases, allowed values, regex) plus LLM-judged checks (`llm_judge`) that ask a model whether a value satisfies an arbitrary natural-language rule, optionally grounded against other actions' output.
+
+How much authority those results carry is up to you. Under `repair: none` they are pure reporting — the verdict rides along on the record and blocks nothing, so pair it with a [guard](../execution/guards.md) if you want it to gate anything. Under a repair policy the same rules drive [regeneration](#repairing-instead-of-observing), and can tombstone a record or halt the run outright.
 
 ## Quick example
 
@@ -52,8 +54,8 @@ Schema validation catches structural problems — missing fields, wrong types. I
 
 Every `expect:` entry runs after schema validation succeeds, against the same record schema validation just accepted. Nothing here changes what the LLM was asked to produce — it only judges what came back.
 
-:::note Observe mode only
-The current build only implements `repair: none` (observe: run the checks, attach the verdict, keep going). `repair: retry` and `repair: auto` are accepted by the schema for forward compatibility but raise a `ConfigurationError` at startup — they're reserved for a future repair/regeneration loop, not silently ignored.
+:::note Start with `repair: none`
+The example above uses observe mode: run the checks, attach the verdict, keep going. It costs nothing beyond the checks themselves and changes no behaviour, which makes it the right way to learn what your rules actually catch before letting them regenerate anything. When you're ready to enforce, see [Repairing instead of observing](#repairing-instead-of-observing).
 :::
 
 ## The `expect:` block
@@ -62,7 +64,9 @@ The current build only implements `repair: none` (observe: run the checks, attac
 |-----|------|---------|---------|
 | `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`; omit both to read the action's own schema file) |
 | `suite` | string | — | Name of a schema-path file with an `expectations:` block (see [Named suites](#named-suites)) instead of an inline list |
-| `repair` | string | `auto` | Must be set to `none` in this build |
+| `repair` | string | `auto` | `none` (observe), `retry` (re-send the original prompt), or `auto` (re-send with composed feedback) |
+| `max_iterations` | integer 1–10 | `3` | Total generations per record, counting the first. Setting it explicitly alongside `repair: none` is a config error, not a no-op |
+| `on_exhausted` | string | `return_last` | What to do when the iterations run out: `return_last`, `fail`, or `raise`. Same rule — do not set it under `repair: none` |
 | `judge_budget` | integer ≥ 1 | uncapped | Max real `llm_judge` LLM calls this action's suite may make across the whole run |
 
 Every entry in `expectations:` (or in a suite file) shares this shape:
@@ -73,7 +77,7 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 | `type` | yes | A registered deterministic type, or `llm_judge` |
 | `field` | yes | [Field selector](#field-selectors) this rule reads |
 | `severity` | no | `fail` (default), `warn`, or `info` — see [Severity](#severity) |
-| `hint` | no | Remedy text, reserved for the future repair loop |
+| `hint` | no | Remedy text handed to the model when `repair: auto` regenerates |
 | *(type-specific)* | varies | e.g. `min`/`max`, `phrases`, `rule`, `votes` — see below |
 
 ## Deterministic expectation types
@@ -195,6 +199,57 @@ Every ref in `context:` is automatically added to the action's own `context_scop
 | `warn` | Never blocks `overall_pass` | Notable but non-blocking quality signals |
 | `info` | Never blocks `overall_pass` | Diagnostics you want recorded, not enforced — the natural default for `llm_judge`, since a single model's opinion is evidence, not ground truth |
 
+## Repairing instead of observing
+
+Under a repair policy the action stops merely reporting quality and starts enforcing it: a record whose suite fails is regenerated and re-validated, up to `max_iterations` total generations.
+
+```yaml
+- name: write_question
+  expect:
+    repair: auto
+    max_iterations: 3
+    on_exhausted: fail
+    expectations:
+      - id: option_count
+        type: item_count
+        field: options
+        equals: 4
+        hint: write exactly four options, one correct and three plausible distractors
+```
+
+Each iteration runs the **whole** suite again, not just the rules that failed last time — a repair that fixes one rule by breaking another does not pass. The two policies differ only in what the regeneration is told:
+
+- **`retry`** re-sends the original prompt unchanged. Use it when failures look like sampling noise.
+- **`auto`** re-sends the original prompt plus composed feedback: the previous output, every failed expectation with its detail and `hint`, and the list of rules that already passed and must stay passing. Use it when the model needs to know what was wrong.
+
+`max_iterations` counts *total* generations, so `3` means the first attempt plus at most two repairs. When they run out, `on_exhausted` decides:
+
+| `on_exhausted` | What ships |
+|---|---|
+| `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
+| `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count |
+| `raise` | Nothing — the run halts with an error naming the action and the still-failing rules |
+
+### Repair and `reprompt:`
+
+Under a repair policy the loop also owns **structural** quality. A response that isn't a JSON object, or one that doesn't conform to the action's schema, becomes a failing iteration carrying the schema feedback — the same ground `reprompt:` covers with its default schema checking.
+
+Keeping both on one action multiplies cost, because the reprompt loop runs *inside* every repair iteration: `max_iterations × reprompt.max_attempts` provider calls in the worst case, `3 × 2` at their defaults, and more again if the action also configures `retry:`.
+
+So a `reprompt:` block that only does schema checking is redundant under `repair: auto`, and deleting it is the migration. Check what yours actually does first — `reprompt:` also runs a `validation:` UDF and supports `use_llm_critique` / `use_self_reflection`, none of which the structural gate replaces. If your block uses those, either keep it and accept the nesting cost, or port the UDF to an [`@expectation_check`](#extending-with-your-own-checks) so the suite owns it.
+
+One more caveat: `repair: retry` records structural failures in the verdict but re-sends the original prompt unchanged, so it does not carry schema feedback back to the model the way `reprompt:` does. Use `repair: auto` if you are replacing a reprompt block.
+
+### Budgeting the judge under repair
+
+Two things change once the loop can regenerate.
+
+The verdict cache is keyed on the **field value** a rule reads, not on the whole response. A repair that leaves a judged field untouched — which is what the `auto` prompt asks for, since it names the passing rules as things to preserve — is served from cache and costs nothing. A repair that rewrites the judged field is genuinely new content and costs a real call. So iterations multiply judge spend only for the rules whose fields actually change; `records × iterations` is the safe upper bound, not the expected cost.
+
+`judge_budget` counts *budget units*, and one unit is acquired per rule per value — not per provider call. With `votes: 3`, one unit spends three real calls, so a budget of `200` permits up to 600 provider calls. Divide by `votes` when sizing it.
+
+Once the budget is spent, later records carry a `skipped` judged outcome, which can never satisfy a `fail`-severity rule. Those records still have their other rules repaired and ship with an honest failing verdict.
+
 ## Where results land
 
 Results attach to the record under an `expect` key, alongside the action's own schema fields:
@@ -308,6 +363,10 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 
 ## Current limitations
 
-- **Observe-only.** `repair: none` is the only supported mode; there is no automatic regenerate-and-recheck loop yet.
+- **Online mode only.** Expectations run on the online path. An `expect:` block on a `run_mode: batch` action is refused at preflight rather than silently ignored, and expectation recovery metadata is not carried across a batch reload.
+- **Record granularity only.** A repair policy needs one record per response to validate; preflight refuses `repair` on a `granularity: file` action. Observe mode on such an action attaches a verdict only when the response happens to hold exactly one record; a multi-record response is passed through unvalidated.
+- **No custom repair prompt.** The `repair: {prompt: $wf.X}` mapping form is reserved in the schema but not implemented; it is refused with a message saying so. Use `retry` or `auto`.
+- **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight; observe mode works normally.
+- **The prompt trace shows the original prompt.** A record repaired on iteration 2 or later has a stored trace pairing the *first* prompt with the *final* response, and that response carries the attached verdict.
 - **`context:` refs are single-level.** `action.field` only — no nested paths into a wildcard element (`action.items[*].text` is not valid inside a `context:` ref).
 - **Budget is per run, not persisted.** `judge_budget` resets each time the workflow runs; it does not track spend across separate `agac run` invocations.
