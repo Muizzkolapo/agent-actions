@@ -98,3 +98,30 @@ def test_action_config_accepts_an_expect_block():
 
 def test_action_config_without_expect_defaults_to_none():
     assert ActionConfig(name="a", intent="i").expect is None
+
+
+def test_judge_budget_defaults_to_none():
+    config = ExpectConfig(repair="none", expectations=[{"type": "not_null", "field": "x"}])
+    assert config.judge_budget is None
+
+
+def test_judge_budget_accepts_a_positive_int():
+    config = ExpectConfig(
+        repair="none", expectations=[{"type": "not_null", "field": "x"}], judge_budget=20
+    )
+    assert config.judge_budget == 20
+
+
+def test_judge_budget_rejects_zero_and_negative():
+    for bad in (0, -5):
+        with pytest.raises(ValidationError):
+            ExpectConfig(
+                repair="none", expectations=[{"type": "not_null", "field": "x"}], judge_budget=bad
+            )
+
+
+def test_judge_budget_is_allowed_under_repair_none():
+    config = ExpectConfig(
+        repair="none", expectations=[{"type": "not_null", "field": "x"}], judge_budget=5
+    )
+    assert config.judge_budget == 5

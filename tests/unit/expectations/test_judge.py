@@ -308,3 +308,43 @@ class TestCachedJudge:
             judge.call_and_cache(exp, "value b")
         assert judge.lookup(exp, "value a") == (True, "a passes")
         assert judge.lookup(exp, "value b") == (False, "b fails")
+
+
+class TestJudgeBudget:
+    def test_try_acquire_succeeds_while_calls_remain(self):
+        from agent_actions.expectations.judge import JudgeBudget
+
+        budget = JudgeBudget(max_calls=2)
+        assert budget.try_acquire() is True
+        assert budget.try_acquire() is True
+
+    def test_try_acquire_fails_once_exhausted(self):
+        from agent_actions.expectations.judge import JudgeBudget
+
+        budget = JudgeBudget(max_calls=1)
+        assert budget.try_acquire() is True
+        assert budget.try_acquire() is False
+
+    def test_try_acquire_never_goes_negative(self):
+        from agent_actions.expectations.judge import JudgeBudget
+
+        budget = JudgeBudget(max_calls=1)
+        budget.try_acquire()
+        budget.try_acquire()
+        budget.try_acquire()
+        assert budget.remaining == 0
+
+    def test_remaining_decrements_on_each_acquire(self):
+        from agent_actions.expectations.judge import JudgeBudget
+
+        budget = JudgeBudget(max_calls=3)
+        budget.try_acquire()
+        assert budget.remaining == 2
+
+    def test_none_max_calls_is_always_uncapped(self):
+        from agent_actions.expectations.judge import JudgeBudget
+
+        budget = JudgeBudget(max_calls=None)
+        for _ in range(1000):
+            assert budget.try_acquire() is True
+        assert budget.remaining is None
