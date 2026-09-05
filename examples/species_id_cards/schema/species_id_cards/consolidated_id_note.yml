@@ -1,0 +1,13 @@
+name: consolidated_id_note
+description: The two drafts reconciled into one note and one quote
+fields:
+  - id: note_text
+    type: string
+    description: "The agreed note"
+  - id: supporting_quote
+    type: string
+    description: "The quote both drafts can stand behind, verbatim from the entry"
+  - id: drafts_agreed
+    type: boolean
+    description: "Whether the two drafts said the same thing"
+required: [note_text, supporting_quote]

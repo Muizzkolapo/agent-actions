@@ -1,0 +1,20 @@
+name: flattened_mark
+description: |
+  One canonical mark on its own record. No required: block — the tool synthesises
+  these fields from an array, so no upstream action can guarantee them by name.
+fields:
+  - id: mark_text
+    type: string
+    required: true
+    description: "The mark as a reader would use it in the field"
+  - id: mark_kind
+    type: string
+    required: true
+    description: "plumage, structure, voice, behaviour or habitat"
+  - id: species
+    type: string
+    required: true
+    description: "The species the mark belongs to"
+  - id: merged_count
+    type: integer
+    description: "How many extraction passes contributed this mark"

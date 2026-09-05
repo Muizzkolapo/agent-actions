@@ -1,0 +1,13 @@
+{
+  "rules": [
+    "A mark is diagnostic only if it separates the species from its likely confusion species, not merely from unrelated birds.",
+    "Prefer marks visible at typical viewing distance over marks that need the bird in the hand.",
+    "Voice counts as a field mark when the description is specific enough to act on.",
+    "A note must rest on a quote that appears in the entry verbatim."
+  ],
+  "confusion_pairs": [
+    ["Willow Warbler", "Chiffchaff"],
+    ["Marsh Tit", "Willow Tit"],
+    ["Common Crossbill", "Scottish Crossbill"]
+  ]
+}

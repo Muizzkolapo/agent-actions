@@ -1,0 +1,21 @@
+name: deduped_mark
+description: |
+  A mark that survived deduplication across every entry in the file. No required:
+  block, for the same reason as flattened_mark — the fields are synthesised by a
+  tool from an array, so the DAG cannot guarantee them by name.
+fields:
+  - id: mark_text
+    type: string
+    required: true
+    description: "The mark as a reader would use it in the field"
+  - id: mark_kind
+    type: string
+    required: true
+    description: "plumage, structure, voice, behaviour or habitat"
+  - id: species
+    type: string
+    required: true
+    description: "The species the mark belongs to"
+  - id: merged_count
+    type: integer
+    description: "How many entries described this mark in the same terms"
