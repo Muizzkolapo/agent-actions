@@ -63,18 +63,21 @@ def context():
     context.service._storage_backend = MagicMock()
     context.service._convert_batch_results_to_workflow_format.return_value = ([], MagicMock(), None)
     context.service._determine_output_path.return_value = "/tmp/out.json"
+    context.order = []
+    context.service._write_batch_output.side_effect = lambda *a, **k: context.order.append("write")
     context.service._retry_service.apply_exhausted_reprompt_metadata.return_value = exhaustion_halt(
         "Reprompt validation exhausted for rec-failing after 2 attempts"
     )
     return context
 
 
-def test_the_resume_path_parks_the_halt_it_was_handed(context):
+def _run(context):
     failing = BatchResult(custom_id=FAILING, content=None, success=False, error="bad shape")
     loop, strategy = MagicMock(), MagicMock()
     strategy.name = "schema_check"
     loop.split.return_value = ([], [failing], {})
 
+    raised = None
     with (
         patch(
             "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
@@ -84,18 +87,48 @@ def test_the_resume_path_parks_the_halt_it_was_handed(context):
             "agent_actions.llm.batch.services.processing_recovery.cleanup_recovery",
             return_value=None,
         ),
-        pytest.raises(RuntimeError) as halt,
+        patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
+        patch("agent_actions.llm.batch.services.processing_recovery._remove_batch_placeholder"),
     ):
-        handle_reprompt_recovery(
-            context,
-            BatchIdentity(batch_id="b-rp", file_name=PARENT, entry=_entry()),
-            _state(),
-            [failing],
-            [],
-            {FAILING: {}},
-        )
+        try:
+            handle_reprompt_recovery(
+                context,
+                BatchIdentity(batch_id="b-rp", file_name=PARENT, entry=_entry()),
+                _state(),
+                [failing],
+                [],
+                {FAILING: {}},
+            )
+        except BaseException as exc:  # noqa: BLE001 - the test is about which one
+            raised = exc
+    return raised
 
-    # Parked during finalisation and raised after the write, still carrying the
-    # policy tag. Drop the park and the halt disappears with no other symptom.
-    assert raised_by_exhaustion_policy(halt.value)
-    assert "exhausted" in str(halt.value).lower()
+
+def test_the_resume_path_hands_its_halt_back(context):
+    raised = _run(context)
+
+    assert isinstance(raised, RuntimeError)
+    assert raised_by_exhaustion_policy(raised)
+    assert "exhausted" in str(raised).lower()
+
+
+def test_the_file_is_written_before_the_resume_path_halts(context):
+    """Parked, not thrown. Raising in place satisfies the assertion above too,
+    and it is the ordering that decides whether the round's work survives."""
+    _run(context)
+
+    assert context.order[:1] == ["write"], (
+        f"the run halted before writing the file ({context.order}); every record "
+        "the reprompt rounds graduated is lost"
+    )
+
+
+def test_the_configured_policy_is_what_decides(context):
+    """The halt exists only because on_exhausted says so — pass the real value."""
+    _run(context)
+
+    kwargs = context.service._retry_service.apply_exhausted_reprompt_metadata.call_args.kwargs
+    assert kwargs["on_exhausted"] == "raise", (
+        "the resume path did not forward the configured policy; a hardcoded "
+        "return_last here makes on_exhausted: raise silently do nothing"
+    )

@@ -19,10 +19,10 @@ PARENT = "pages.json"
 MISSING = "rec-missing"
 
 
-def _state():
+def _state(attempt: int = 1, max_attempts: int = 3):
     state = MagicMock()
-    state.retry_attempt = 1
-    state.retry_max_attempts = 3
+    state.retry_attempt = attempt
+    state.retry_max_attempts = max_attempts
     state.missing_ids = [MISSING]
     state.record_failure_counts = {MISSING: 1}
     state.accumulated_results = []
@@ -146,3 +146,41 @@ def test_a_permanent_submission_failure_does_stamp_exhaustion():
 
     context.service._retry_service.build_exhausted_recovery.assert_called_once()
     assert seen["exhausted_recovery"] is not None
+
+
+def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
+    """The boundary the other cases miss.
+
+    At attempt max-1 the submit gate still fires, so a transient failure lands in
+    the same branch with one attempt left. A guard written `>= max - 1` passes
+    every other test here and re-introduces the bug one round later.
+    """
+    entry = BatchJobEntry(
+        batch_id="b-1",
+        status="submitted",
+        timestamp="2026-04-20T00:00:00Z",
+        provider="openai",
+        record_count=1,
+        file_name=PARENT,
+        parent_file_name=None,
+        recovery_type="retry",
+        recovery_attempt=2,
+    )
+    identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
+    context = _context()
+    seen = {}
+
+    def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
+        seen["exhausted_recovery"] = exhausted_recovery
+        return False
+
+    with patch(
+        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+        side_effect=_capture,
+    ):
+        handle_retry_recovery(
+            context, identity, _state(attempt=2, max_attempts=3), [], [], {MISSING: {}}
+        )
+
+    context.service._retry_service.build_exhausted_recovery.assert_not_called()
+    assert seen["exhausted_recovery"] is None
