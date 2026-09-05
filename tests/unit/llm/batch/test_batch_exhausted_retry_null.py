@@ -80,8 +80,13 @@ def test_build_exhausted_passthrough_coalesces_null_yaml_values(agent_config):
 
 
 def test_build_exhausted_passthrough_raise_still_honored():
-    """``on_exhausted=raise`` must still raise — the coalesce must not
-    mask the explicit raise policy."""
+    """``on_exhausted=raise`` must still halt, and this step must not decide it.
+
+    Two owners for one policy meant whichever fired first won and the other was
+    unreachable. This step builds the EXHAUSTED tombstone; the collector reads
+    that status and applies the policy, deferring the halt until batch has
+    written its file.
+    """
     custom_id = "rec_uat_0031_raise"
     ctx = BatchProcessingContext(
         batch_results=[],
@@ -92,12 +97,15 @@ def test_build_exhausted_passthrough_raise_still_honored():
     )
     strategy = BatchResultStrategy()
 
-    with pytest.raises(RuntimeError, match="Retry exhausted"):
-        strategy._build_exhausted_passthrough(
-            ctx,
-            custom_id=custom_id,
-            original_row={"value": "x"},
-            action_name="always_fail",
-            source_guid="sg-uat-0031",
-            record_index=0,
-        )
+    result = strategy._build_exhausted_passthrough(
+        ctx,
+        custom_id=custom_id,
+        original_row={"value": "x"},
+        action_name="always_fail",
+        source_guid="sg-uat-0031",
+        record_index=0,
+    )
+
+    # The tombstone is what carries the policy forward: the collector reads this
+    # status and owns `on_exhausted` for both run modes.
+    assert result.status is ProcessingStatus.EXHAUSTED

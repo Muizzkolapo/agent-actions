@@ -3,12 +3,10 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_polling import (
     import_validation_module,
-    wait_for_batch_completion,
 )
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.logging.core.manager import fire_event
@@ -235,7 +233,10 @@ def validate_and_reprompt(
             )
 
             failed_ids = {r.custom_id for r in still_failing}
-            apply_exhausted_reprompt(
+            # Raised in place: this loop writes nothing, so there is no
+            # deferred output for a halt to protect. The deferred batch paths
+            # park it on their context instead.
+            pending = apply_exhausted_reprompt(
                 results=still_failing,
                 failed_ids=failed_ids,
                 validation_name=validation_name,
@@ -244,6 +245,8 @@ def validate_and_reprompt(
                 per_record_attempts=reprompted_ids,
                 failure_type_counts=failure_type_counts or None,
             )
+            if pending is not None:
+                raise pending
             all_graduated.extend(still_failing)
             break
 
@@ -325,66 +328,32 @@ def validate_and_reprompt(
             break
 
         try:
-            from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+            from agent_actions.llm.batch.services.resubmission import resubmit_round
 
-            reprompt_batch_name = f"{file_name}_reprompt_{attempt + 1}"
-            preparator = BatchTaskPreparator(
+            round_outcome = resubmit_round(
+                records=reprompt_records,
+                feedback_by_id=feedback_by_id,
+                batch_name=f"{file_name}_reprompt_{attempt + 1}",
+                submitted_ids={r.custom_id for r in still_failing},
+                provider=provider,
+                output_directory=output_directory,
+                agent_config=agent_config or {},
                 action_indices=action_indices,
                 dependency_configs=dependency_configs,
                 storage_backend=storage_backend,
-            )
-            prepared = preparator.prepare_tasks(
-                agent_config=agent_config or {},
-                data=reprompt_records,
-                provider=provider,
-                output_directory=output_directory,
-                batch_name=reprompt_batch_name,
                 source_data=source_data,
                 attempt=attempt + 1,
-                feedback_by_id=feedback_by_id,
             )
 
-            batch_id, status = provider.submit_batch(
-                tasks=prepared.tasks,
-                batch_name=reprompt_batch_name,
-                output_directory=output_directory,
-            )
-
-            logger.info(
-                "Submitted reprompt batch %s with %d records",
-                batch_id,
-                len(prepared.tasks),
-            )
-
-            final_status = wait_for_batch_completion(
-                provider, batch_id, total_items=len(prepared.tasks)
-            )
-
-            if final_status != BatchStatus.COMPLETED:
-                logger.error(
-                    "Reprompt batch %s did not complete: %s",
-                    batch_id,
-                    final_status,
-                )
+            if round_outcome.results is None:
                 _stamp_reprompt_failed(still_failing, reprompted_ids, validation_name)
                 all_graduated.extend(still_failing)
                 break
 
-            reprompt_results = provider.retrieve_results(batch_id, output_directory)
+            reprompt_results = round_outcome.results
 
-            submitted_ids = {r.custom_id for r in still_failing}
-            received_ids = BatchResultReconciler.collect_result_custom_ids(reprompt_results)
-            dropped_ids = submitted_ids - received_ids
-
-            if dropped_ids:
-                logger.warning(
-                    "Reprompt batch %s: provider dropped %d of %d records: %s",
-                    batch_id,
-                    len(dropped_ids),
-                    len(submitted_ids),
-                    sorted(dropped_ids),
-                )
-                dropped = [r for r in still_failing if r.custom_id in dropped_ids]
+            if round_outcome.dropped_ids:
+                dropped = [r for r in still_failing if r.custom_id in round_outcome.dropped_ids]
                 _stamp_reprompt_failed(dropped, reprompted_ids, validation_name)
                 all_graduated.extend(dropped)
 

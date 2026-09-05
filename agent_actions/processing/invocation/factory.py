@@ -62,7 +62,7 @@ class InvocationStrategyFactory:
 
         # Reprompt is meaningless for deterministic tools — re-running the same UDF yields the same output.
         if _is_tool_action(agent_config):
-            if expect_config and expect_config.get("repair", "auto") != "none":
+            if expect_config is not None and expect_config.get("repair", "auto") != "none":
                 from agent_actions.errors import ConfigurationError
 
                 raise ConfigurationError(
@@ -74,10 +74,7 @@ class InvocationStrategyFactory:
                 retry_service=retry_service,
                 reprompt_service=None,
                 expectation_service=create_expectation_service_from_config(
-                    expect_config,
-                    action_name=action_name,
-                    schema_name=agent_config.get("schema_name") or None,
-                    agent_config=agent_config,
+                    expect_config, action_name=action_name, agent_config=agent_config
                 ),
             )
 
@@ -96,10 +93,7 @@ class InvocationStrategyFactory:
             retry_service=retry_service,
             reprompt_service=reprompt_service,
             expectation_service=create_expectation_service_from_config(
-                expect_config,
-                action_name=action_name,
-                schema_name=agent_config.get("schema_name") or None,
-                agent_config=agent_config,
+                expect_config, action_name=action_name, agent_config=agent_config
             ),
         )
 

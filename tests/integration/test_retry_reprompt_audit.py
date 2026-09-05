@@ -1140,21 +1140,26 @@ class TestRepromptObservability:
         assert "check_fn" in event.error
 
     def test_batch_exhaustion_fires_r002_before_raise(self):
-        """R002 fires even when on_exhausted='raise' — audit before exception."""
+        """R002 fires even when on_exhausted='raise' — audit before the halt.
+
+        The halt is handed back for the caller to throw after the output file is
+        written, so the audit event must still have fired by then.
+        """
         from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
 
         results = [BatchResult(custom_id="rec_1", content={"x": 1}, success=True)]
 
         with patch("agent_actions.processing.evaluation.exhaustion.fire_event") as mock_fire:
-            with pytest.raises(RuntimeError, match="exhausted"):
-                apply_exhausted_reprompt(
-                    results=results,
-                    failed_ids={"rec_1"},
-                    validation_name="check_fn",
-                    attempt=3,
-                    on_exhausted="raise",
-                )
+            pending = apply_exhausted_reprompt(
+                results=results,
+                failed_ids={"rec_1"},
+                validation_name="check_fn",
+                attempt=3,
+                on_exhausted="raise",
+            )
 
+        assert isinstance(pending, RuntimeError)
+        assert "exhausted" in str(pending)
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
         assert isinstance(event, RepromptValidationFailedEvent)

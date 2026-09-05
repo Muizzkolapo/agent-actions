@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
+from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     OnExhaustedPolicy,
@@ -37,6 +38,9 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.processing_recovery import (
+    check_and_submit_repair as _check_and_submit_repair_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
@@ -46,7 +50,13 @@ from agent_actions.llm.batch.services.processing_recovery import (
     finalize_batch_output as _finalize_batch_output_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
+    halt_survives_failure as _halt_survives_failure_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
+    raise_pending_exhaustion as _raise_pending_exhaustion_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     register_recovery_batch,
@@ -345,7 +355,13 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except RuntimeError:
+            except (RuntimeError, ExpectationConfigurationError):
+                # An unresolvable `expect:` block is not this file's problem:
+                # every remaining file carries the same action config and fails
+                # the same way, so continuing would finish the run reporting
+                # success with each of them missing from the output. A plain
+                # ConfigurationError is per record — a malformed lifecycle state
+                # — and stays below, costing only its own file.
                 raise
             except Exception as e:
                 logger.exception(
@@ -673,22 +689,36 @@ class BatchProcessingService:
         # crashed run). Passing it would poison the reprompt check with a stale
         # reprompt_attempt counter, causing it to think attempts are exhausted.
         # Stale files are cleaned up in _finalize_batch_output.
-        should_continue = self._check_and_submit_reprompt(
-            context=context,
-            identity=identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            recovery_state=None,
-        )
-        if not should_continue:
-            return None  # Reprompt submitted, processing paused
+        # Same wrapper the recovery handlers get: a halt parked below must not be
+        # lost to an unrelated failure on the way to the finaliser.
+        with _halt_survives_failure_impl(context):
+            should_continue = self._check_and_submit_reprompt(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+                recovery_state=None,
+            )
+            if not should_continue:
+                _raise_pending_exhaustion_impl(context)
+                return None  # Reprompt submitted, processing paused
 
-        return self._finalize_batch_output(
-            context=context,
-            identity=identity,
-            batch_results=batch_results,
-            context_map=context_map,
-        )
+            if not _check_and_submit_repair_impl(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+                recovery_state=None,
+            ):
+                _raise_pending_exhaustion_impl(context)
+                return None  # Repair round submitted, processing paused
+
+            return self._finalize_batch_output(
+                context=context,
+                identity=identity,
+                batch_results=batch_results,
+                context_map=context_map,
+            )
 
     # =========================================================================
     # DELEGATORS — bodies live in processing_recovery.py
@@ -770,6 +800,7 @@ class BatchProcessingService:
             exhausted_recovery=exhausted_recovery,
         )
         _cleanup_recovery_impl(context, identity)
+        _raise_pending_exhaustion_impl(context)
         return output_path
 
     def _clear_deferred_dispositions(
@@ -984,7 +1015,7 @@ class BatchProcessingService:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> tuple[list[dict[str, Any]], CollectionStats]:
+    ) -> tuple[list[dict[str, Any]], CollectionStats, Exception | None]:
         """Convert batch results to workflow format via UnifiedProcessor.
 
         Routes batch results through the shared enrich → collect pipeline
@@ -998,7 +1029,9 @@ class BatchProcessingService:
             exhausted_recovery: Per-record recovery metadata for exhausted records
 
         Returns:
-            Tuple of (output_records, CollectionStats).
+            Tuple of (output_records, CollectionStats, pending halt). The halt is
+            what `retry: on_exhausted: raise` decided; it is returned rather than
+            thrown because the caller has not written the output file yet.
         """
         results = self._result_processor.process(
             batch_results=batch_results,
@@ -1016,7 +1049,13 @@ class BatchProcessingService:
             storage_backend=self._storage_backend,
         )
 
-        return self._unified_processor.enrich_and_collect(results, ctx)
+        ctx.defer_exhaustion = True
+        # Collection parks the halt partway through and keeps working. A failure
+        # after that point would return no third element at all, so the halt has
+        # to survive the failure here as it does on the recovery contexts.
+        with _halt_survives_failure_impl(ctx):
+            output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
+        return output_records, stats, ctx.pending_exhaustion
 
     @staticmethod
     def _apply_workflow_session_id(

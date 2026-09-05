@@ -72,12 +72,30 @@ def test_handle_exhausted_policy_coalesces_null_yaml_values(agent_config, expect
 
 
 def test_handle_exhausted_policy_raise_still_honored():
-    """A real ``on_exhausted=raise`` must still raise — the ``or`` coalesce
-    must not mask the raise policy."""
-    with pytest.raises(AgentActionsError):
+    """A real ``on_exhausted=raise`` must still halt — the ``or`` coalesce
+    must not mask the raise policy.
+
+    The policy hands its error back rather than throwing it, so the caller can
+    decide when: batch has not written its output file yet, and throwing here
+    would discard every record in it that converted cleanly.
+    """
+    error = ResultCollector._handle_exhausted_policy(
+        results=[_exhausted_result()],
+        agent_config={"retry": {"on_exhausted": "raise"}},
+        agent_name="always_fail",
+        storage_backend=None,
+    )
+    assert isinstance(error, AgentActionsError)
+    assert "Retry exhausted" in str(error)
+
+
+def test_return_last_hands_back_nothing():
+    assert (
         ResultCollector._handle_exhausted_policy(
             results=[_exhausted_result()],
-            agent_config={"retry": {"on_exhausted": "raise"}},
+            agent_config={"retry": {"on_exhausted": "return_last"}},
             agent_name="always_fail",
             storage_backend=None,
         )
+        is None
+    )

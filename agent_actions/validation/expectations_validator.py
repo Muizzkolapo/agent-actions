@@ -118,13 +118,6 @@ def _repair_mode_defects(
     repair = expect.get("repair", "auto")
     if repair == "none":
         return messages
-    if is_batch:
-        messages.append(
-            f"repair: {repair} is not supported under batch run_mode — the batch "
-            "path validates and reports but does not regenerate; use repair: none "
-            "or run the action online"
-        )
-        return messages
     if isinstance(repair, dict):
         messages.append("repair: {prompt:} is not implemented; use retry or auto")
         return messages

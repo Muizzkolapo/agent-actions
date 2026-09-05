@@ -12,9 +12,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
 
-from agent_actions.errors import exhaustion_halt
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.llm.batch.core.batch_constants import FilterStatus, OnExhaustedPolicy
+from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -280,12 +279,18 @@ class BatchResultStrategy:
                 recovery_metadata = batch_result.recovery_metadata
                 exhausted = self._exhausted_recovery_for(ctx, custom_id)
                 if exhausted is not None:
-                    # Retry exhaustion is one half of the record's history; a
-                    # reprompt or evaluation half may already be on it.
+                    # Retry exhaustion is one part of the record's history; a
+                    # reprompt, evaluation or expectations part may already be on
+                    # it. Dropping the expectations part loses which rules failed
+                    # and defeats the collector's guard against applying the retry
+                    # policy to a record the expectations policy already settled.
                     recovery_metadata = RecoveryMetadata(
                         retry=exhausted[1],
                         reprompt=recovery_metadata.reprompt if recovery_metadata else None,
                         evaluation=recovery_metadata.evaluation if recovery_metadata else None,
+                        expectations=(
+                            recovery_metadata.expectations if recovery_metadata else None
+                        ),
                     )
 
                 results.append(
@@ -332,17 +337,13 @@ class BatchResultStrategy:
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
             )
-            if service is not None and service.repair != "none":
-                from agent_actions.errors import ConfigurationError
-
-                raise ConfigurationError(
-                    f"Action '{agent_config.get('action_name')}' reached the batch "
-                    f"path with repair: {service.repair!r}. The batch path validates "
-                    "and reports but does not regenerate, so this would silently "
-                    "behave as repair: none. Use repair: none, or run it online.",
-                    context={"action": agent_config.get("action_name")},
-                )
-            ctx.expectation_service = service
+            # Under a repair policy the verdict is already on the record: the
+            # repair loop wrote the one it regenerated against. Re-validating
+            # here would spend the judge budget a second time on the same
+            # content and could disagree with the verdict the loop acted on.
+            ctx.expectation_service = (
+                None if service is not None and service.repair != "none" else service
+            )
         return ctx.expectation_service
 
     def _process_successful_result(
@@ -523,9 +524,11 @@ class BatchResultStrategy:
     ) -> tuple[RecoveryMetadata, RetryMetadata] | None:
         """Retry-exhaustion metadata for *custom_id*, or None if it still has attempts.
 
-        Applies ``on_exhausted`` here so the policy reaches every record that
-        spent its attempts, including one the provider answered with an error
-        and therefore left a result behind for.
+        The ``on_exhausted`` policy is not applied here. This reports the
+        exhaustion so the caller can build the EXHAUSTED tombstone; the
+        collector reads that status and owns the policy for both run modes, so
+        deciding it twice meant whichever fired first won and the other was
+        unreachable.
         """
         if not ctx.exhausted_recovery or custom_id not in ctx.exhausted_recovery:
             return None
@@ -536,17 +539,6 @@ class BatchResultStrategy:
             raise RuntimeError(
                 "RecoveryMetadata.retry is None for exhausted record "
                 f"custom_id={custom_id}; expected retry metadata with attempt count"
-            )
-
-        on_exhausted = OnExhaustedPolicy.RETURN_LAST
-        if ctx.agent_config:
-            retry_config = ctx.agent_config.get("retry") or {}
-            on_exhausted = OnExhaustedPolicy(retry_config.get("on_exhausted") or "return_last")
-
-        if on_exhausted == OnExhaustedPolicy.RAISE:
-            raise exhaustion_halt(
-                f"Retry exhausted for record {custom_id} after "
-                f"{retry_meta.attempts} attempts (on_exhausted=raise)"
             )
 
         return recovery_meta, retry_meta

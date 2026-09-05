@@ -1,15 +1,20 @@
 """Tests for submit_retry_batch when the submission itself fails.
 
-Verifies that when provider.submit_batch raises an exception,
-the function catches it, logs a warning, and returns None —
-rather than propagating the exception or leaving records dangling.
+Two outcomes, and the caller has to tell them apart. A provider that throws is
+transient: the function swallows it and answers None, because the next pass can
+send the same records again. Records that cannot be rebuilt into a batch at all
+raise RetrySubmissionImpossible, because no later pass changes that and the
+caller must stop treating them as retryable.
 """
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.llm.batch.services.retry_ops import submit_retry_batch
+from agent_actions.llm.batch.services.retry_ops import (
+    RetrySubmissionImpossible,
+    submit_retry_batch,
+)
 
 
 @pytest.fixture
@@ -83,29 +88,31 @@ class TestRetrySubmissionFailure:
 
         assert result is None
 
-    def test_no_matching_records_returns_none(self, mock_provider):
-        """When missing_ids don't match context_map, returns None."""
+    def test_no_matching_records_is_permanent_not_transient(self, mock_provider):
+        """Ids absent from the context map cannot be rebuilt on any later pass."""
         context_map = {"other_id": {"target_id": "other_id"}}
 
-        result = submit_retry_batch(
-            storage_backend=MagicMock(),
-            provider=mock_provider,
-            missing_ids={"nonexistent_1", "nonexistent_2"},
-            context_map=context_map,
-            output_directory="/tmp/output",
-            file_name="batch_003",
-            agent_config=None,
-        )
+        with pytest.raises(RetrySubmissionImpossible, match="context_map"):
+            submit_retry_batch(
+                storage_backend=MagicMock(),
+                provider=mock_provider,
+                missing_ids={"nonexistent_1", "nonexistent_2"},
+                context_map=context_map,
+                output_directory="/tmp/output",
+                file_name="batch_003",
+                agent_config=None,
+            )
 
-        assert result is None
-
-    def test_empty_prepared_tasks_returns_none(self, mock_provider, context_map):
-        """When prepare_tasks returns empty task list, returns None."""
-        with patch(
-            "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
-            _mock_preparator([]),
+    def test_empty_prepared_tasks_is_permanent_not_transient(self, mock_provider, context_map):
+        """Preparation admitting nothing will admit nothing next pass either."""
+        with (
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+                _mock_preparator([]),
+            ),
+            pytest.raises(RetrySubmissionImpossible, match="no tasks"),
         ):
-            result = submit_retry_batch(
+            submit_retry_batch(
                 storage_backend=MagicMock(),
                 provider=mock_provider,
                 missing_ids={"rec_1"},
@@ -114,8 +121,6 @@ class TestRetrySubmissionFailure:
                 file_name="batch_004",
                 agent_config=None,
             )
-
-        assert result is None
         mock_provider.submit_batch.assert_not_called()
 
     def test_successful_submission_returns_tuple(self, mock_provider, context_map):

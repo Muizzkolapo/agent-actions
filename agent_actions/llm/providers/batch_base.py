@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# What a provider stamps on a result carrying no correlation id. It is not an
+# identity: two of them are two records, so nothing may deduplicate on it.
+# Namespaced so a real target_id cannot collide with it and inherit that rule.
+UNIDENTIFIED_RECORD = "__agac_unidentified__"
+
 
 def retry(
     max_attempts: int = 3,
@@ -235,8 +240,10 @@ class BaseBatchClient(ABC):
         )
 
     def _extract_custom_id(self, raw_response: Any) -> str:
-        """Extract custom_id from response, defaulting to 'unknown'."""
-        return self._get_attribute_or_key(raw_response, "custom_id", "unknown")  # type: ignore[no-any-return]
+        """Extract custom_id from response, or the sentinel if it carries none."""
+        return self._get_attribute_or_key(  # type: ignore[no-any-return]
+            raw_response, "custom_id", UNIDENTIFIED_RECORD
+        )
 
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:

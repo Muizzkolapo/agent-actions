@@ -42,6 +42,8 @@ class RecordingProvider(BaseBatchClient):
 
     def __init__(self):
         self.submitted: list[dict[str, Any]] = []
+        # What this provider reports for any batch id; tests that care set it.
+        self.status: str = BatchStatus.COMPLETED
 
     def _get_default_model(self) -> str:
         return "test-model"
@@ -69,8 +71,8 @@ class RecordingProvider(BaseBatchClient):
         self.submitted = tasks
         return "batch-1", BatchStatus.SUBMITTED
 
-    def check_status(self, batch_id):  # pragma: no cover - unused here
-        return BatchStatus.COMPLETED
+    def check_status(self, batch_id):
+        return self.status
 
     def retrieve_results(self, batch_id, output_directory):  # pragma: no cover - unused here
         return []
@@ -194,7 +196,7 @@ class TestBothResubmissionSitesDeliver:
     needs its own coverage — dropping the kwarg there left every test green."""
 
     def test_validate_and_reprompt_also_delivers_the_feedback(self):
-        from agent_actions.llm.batch.services import reprompt_ops
+        from agent_actions.llm.batch.services import reprompt_ops, resubmission
 
         provider = RecordingProvider()
         failing = BatchResult(
@@ -222,7 +224,7 @@ class TestBothResubmissionSitesDeliver:
                 return_value=prepared,
             ),
             patch.object(
-                reprompt_ops, "wait_for_batch_completion", return_value=BatchStatus.COMPLETED
+                resubmission, "wait_for_batch_completion", return_value=BatchStatus.COMPLETED
             ),
         ):
             reprompt_ops.validate_and_reprompt(

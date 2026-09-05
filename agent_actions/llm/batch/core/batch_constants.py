@@ -53,6 +53,7 @@ class RecoveryType(str, Enum):
 
     RETRY = "retry"
     REPROMPT = "reprompt"
+    REPAIR = "repair"
 
     def __str__(self) -> str:
         return self.value
@@ -63,6 +64,7 @@ class RecoveryPhase(str, Enum):
 
     RETRY = "retry"
     REPROMPT = "reprompt"
+    REPAIR = "repair"
     DONE = "done"
 
     def __str__(self) -> str:

@@ -15,7 +15,7 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
-from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     COLLAPSED_INTO_OUTPUT,
@@ -55,6 +55,20 @@ def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason:
     is legal (cascade propagation). Same → same is a no-op.
     """
     RecordEnvelope.transition(record, state, action_name, reason)
+
+
+def _spent_its_retries(result: ProcessingResult) -> bool:
+    """Whether the retry loop gave up on *result*.
+
+    A record the provider answered with a per-record error keeps its FAILED
+    status so that error survives into the output, so status alone would miss
+    exactly the case the policy exists for. Both run modes set ``succeeded``
+    False only once the attempts are spent.
+    """
+    if result.status == ProcessingStatus.EXHAUSTED:
+        return True
+    retry = result.recovery_metadata.retry if result.recovery_metadata else None
+    return result.status == ProcessingStatus.FAILED and retry is not None and not retry.succeeded
 
 
 def _get_retry_attempts(result: ProcessingResult) -> str | int:
@@ -373,6 +387,7 @@ def collect_results_from_processing_results(
     *,
     storage_backend: Optional["StorageBackend"] = None,
     agent_config: dict[str, Any] | None = None,
+    context: ProcessingContext | None = None,
 ) -> tuple[list[dict[str, Any]], CollectionStats]:
     """Shared collect logic for both online and batch retrieve paths.
 
@@ -392,7 +407,9 @@ def collect_results_from_processing_results(
         Tuple of (output_records, stats). Stats contain counts by status.
 
     Raises:
-        AgentActionsError: If on_exhausted=raise and records exhausted retries.
+        AgentActionsError: If on_exhausted=raise and records exhausted retries,
+            unless *context* asks for it to be deferred — batch writes its output
+            once at the end, so it parks the error and raises after the write.
     """
     effective_config: dict[str, Any] = agent_config if agent_config is not None else {}
 
@@ -404,9 +421,14 @@ def collect_results_from_processing_results(
     )
 
     if agent_config is not None:
-        ResultCollector._handle_exhausted_policy(
+        exhaustion = ResultCollector._handle_exhausted_policy(
             results, effective_config, action_name, storage_backend
         )
+        if exhaustion is not None:
+            if context is not None and context.defer_exhaustion:
+                context.pending_exhaustion = exhaustion
+            else:
+                raise exhaustion
 
     output: list[dict[str, Any]] = []
     stats: collections.Counter[str] = collections.Counter()
@@ -891,6 +913,7 @@ class ResultCollector:
         *,
         is_first_stage: bool,
         storage_backend: Optional["StorageBackend"] = None,
+        context: ProcessingContext | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Flatten ProcessingResult entries into output records.
 
@@ -901,13 +924,15 @@ class ResultCollector:
             Tuple of (output_records, stats). Stats contain counts by status.
 
         Raises:
-            AgentActionsError: If on_exhausted=raise and records exhausted retries.
+            AgentActionsError: If on_exhausted=raise and records exhausted retries,
+            unless the caller asked for it to be deferred.
         """
         return collect_results_from_processing_results(
             results,
             agent_name,
             storage_backend=storage_backend,
             agent_config=agent_config,
+            context=context,
         )
 
     @staticmethod
@@ -916,22 +941,23 @@ class ResultCollector:
         agent_config: dict[str, Any],
         agent_name: str,
         storage_backend: Optional["StorageBackend"],
-    ) -> None:
+    ) -> Exception | None:
         """Handle exhausted retries according to on_exhausted policy.
 
-        For return_last (default): logs at INFO and returns.
-        For raise: writes EXHAUSTED dispositions and raises AgentActionsError.
+        For return_last (default): logs at INFO. For raise: writes EXHAUSTED
+        dispositions and hands back the error, leaving the caller to decide when
+        to throw it — batch has not written its output file yet.
         """
         exhausted_results = [
             r
             for r in results
-            if r.status == ProcessingStatus.EXHAUSTED
+            if _spent_its_retries(r)
             # Expectations exhaustion resolved its own on_exhausted policy in
             # the service; the retry config's policy does not apply to it.
             and not (r.recovery_metadata and r.recovery_metadata.expectations)
         ]
         if not exhausted_results:
-            return
+            return None
 
         retry_config = agent_config.get("retry") or {}
         on_exhausted = retry_config.get("on_exhausted") or "return_last"
@@ -943,7 +969,7 @@ class ResultCollector:
                 len(exhausted_results),
                 on_exhausted,
             )
-            return
+            return None
 
         logger.warning(
             "[%s] %d records exhausted retries — raising (on_exhausted=raise)",
@@ -1000,7 +1026,7 @@ class ResultCollector:
                         )
 
         first = exhausted_results[0]
-        raise AgentActionsError(
+        return AgentActionsError(
             f"Retry exhausted for record {first.source_guid} after "
             f"{_get_retry_attempts(first)} attempts (on_exhausted=raise)",
             context={

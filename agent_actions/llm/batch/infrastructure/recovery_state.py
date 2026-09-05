@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy, RecoveryPhase
@@ -44,6 +44,12 @@ class RecoveryState:
     validation_status: dict[str, bool] = field(default_factory=dict)
     on_exhausted: OnExhaustedPolicy = OnExhaustedPolicy.RETURN_LAST
 
+    # Repair state (expect: regeneration rounds)
+    repair_attempt: int = 0
+    repair_submitted_ids: list[str] = field(default_factory=list)
+    repair_judge_budget_remaining: int | None = None
+    repair_max_attempts: int = 1
+
     # Accumulated results (serialized BatchResult dicts)
     accumulated_results: list[dict[str, Any]] = field(default_factory=list)
 
@@ -60,24 +66,15 @@ class RecoveryState:
     failure_type_counts: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "phase": self.phase,
-            "retry_attempt": self.retry_attempt,
-            "retry_max_attempts": self.retry_max_attempts,
-            "missing_ids": self.missing_ids,
-            "record_failure_counts": self.record_failure_counts,
-            "reprompt_attempt": self.reprompt_attempt,
-            "reprompt_max_attempts": self.reprompt_max_attempts,
-            "validation_name": self.validation_name,
-            "reprompt_attempts_per_record": self.reprompt_attempts_per_record,
-            "validation_status": self.validation_status,
-            "on_exhausted": self.on_exhausted,
-            "accumulated_results": self.accumulated_results,
-            "graduated_results": self.graduated_results,
-            "unrepromptable_results": self.unrepromptable_results,
-            "evaluation_strategy_name": self.evaluation_strategy_name,
-            "failure_type_counts": self.failure_type_counts,
-        }
+        """Every declared field, so adding one cannot silently stop persisting it.
+
+        A dropped field does not fail loudly: the deferred loop reads it back as
+        the dataclass default on the next pass and never advances. Only
+        init fields, since load() reconstructs via ``RecoveryState(**data)`` and
+        an unexpected keyword there raises a TypeError that load swallows —
+        wiping the whole state rather than reporting it.
+        """
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.init}
 
 
 class RecoveryStateManager:

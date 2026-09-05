@@ -10,11 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite, load_named_suite
+from agent_actions.errors import ConfigurationError
+from agent_actions.expectations.loader import (
+    NoRulesDeclared,
+    SuiteLoadError,
+    build_inline_suite,
+    build_suite_from_schema_data,
+    load_named_suite,
+)
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
-from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +74,13 @@ def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
     return SuiteResult(suite_name=suite_name, outcomes=outcomes)
 
 
-class ExpectationsExhaustedError(Exception):
-    """The repair loop ended without a pass and ``on_exhausted`` is ``raise``."""
+class ExpectationsExhaustedError(RuntimeError):
+    """The repair loop ended without a pass and ``on_exhausted`` is ``raise``.
+
+    A RuntimeError so it halts the run: the batch result loop re-raises those
+    and logs-and-continues past anything else, and ``raise`` is the policy that
+    is supposed to stop everything.
+    """
 
     def __init__(self, action_name: str, failed_ids: list[str], iterations: int) -> None:
         self.action_name = action_name
@@ -116,6 +128,9 @@ class ExpectationService:
         self._schema = schema if isinstance(schema, dict) else None
         self._schema_digest: str | None = None
         self._hints = {e.resolved_id: e.hint for e in suite.expectations if e.hint}
+        # Set by the factory when the suite judges; the deferred batch path
+        # reads what is left so the budget bounds the run, not one round.
+        self._judge_budget: Any = None
 
     def execute(
         self,
@@ -152,27 +167,11 @@ class ExpectationService:
                     )
                 return ExpectationRunResult(response=response, executed=executed)
 
-            records = _records_of(response)
-
-            if self.repair == "none":
-                if records is None:
-                    return ExpectationRunResult(response=response, executed=executed)
-                suite_results = [
-                    self._record_verdict(record, llm_context, check_schema=False)
-                    for record in records
-                ]
-            else:
-                if records is None:
-                    suite_results = [self._non_record_verdict(response)]
-                else:
-                    # Per record: a malformed one reports its own structural
-                    # failure, a conforming one is judged on its own rules —
-                    # a bad sibling must not buy it a pass it did not earn.
-                    suite_results = [
-                        self._record_verdict(record, llm_context, check_schema=True)
-                        for record in records
-                    ]
-            suite_result = _combine(suite_results, self.suite.name)
+            suite_result, suite_results = self.verdict_for_response(
+                response, llm_context, check_schema=self.repair != "none"
+            )
+            if suite_result is None:
+                return ExpectationRunResult(response=response, executed=executed)
             if suite_result.overall_pass:
                 return ExpectationRunResult(
                     response=response,
@@ -223,6 +222,57 @@ class ExpectationService:
                 suite_results=suite_results,
             )
         return self._exhausted_result(response, suite_result, iterations, suite_results)
+
+    @property
+    def judge_budget_remaining(self) -> int | None:
+        """Judge calls still available, or None when the budget is uncapped.
+
+        A deferred batch rebuilds this service on every pass, so the caller
+        persists this between rounds to keep the budget bounding the run rather
+        than each round.
+        """
+        return self._judge_budget.remaining if self._judge_budget is not None else None
+
+    @property
+    def max_iterations(self) -> int:
+        """Total generations per record under a repair policy, counting the first."""
+        return self._max_iterations
+
+    @property
+    def on_exhausted(self) -> str:
+        return self._on_exhausted
+
+    @property
+    def hints(self) -> dict[str, str]:
+        """Each rule's author-supplied remedy text, keyed by resolved id."""
+        return self._hints
+
+    def verdict_for_response(
+        self,
+        response: Any,
+        llm_context: dict[str, Any] | None = None,
+        *,
+        check_schema: bool,
+    ) -> tuple[SuiteResult | None, list[SuiteResult]]:
+        """One verdict for a whole response, plus the per-record verdicts behind it.
+
+        A response carries one record or many; each is judged on its own so a
+        malformed sibling neither fails a conforming record nor buys it a pass.
+        Returns ``(None, [])`` when the response is not record-shaped and the
+        caller does not want the structural gate — observe mode has nothing to
+        say about a response it cannot read.
+        """
+        records = _records_of(response)
+        if records is None:
+            if not check_schema:
+                return None, []
+            suite_results = [self._non_record_verdict(response)]
+        else:
+            suite_results = [
+                self._record_verdict(record, llm_context, check_schema=check_schema)
+                for record in records
+            ]
+        return _combine(suite_results, self.suite.name), suite_results
 
     def validate(
         self, response: Any, llm_context: dict[str, Any] | None = None
@@ -366,17 +416,46 @@ def attach_verdict(response: dict[str, Any], suite_result: SuiteResult) -> dict[
     return {**response, VERDICT_KEY: suite_result.to_record_dict()}
 
 
+def attach_verdicts(response: Any, suite_results: list[SuiteResult]) -> Any:
+    """Return *response* with each record carrying its own verdict.
+
+    Pairs one verdict per record in order, which is the order
+    `verdict_for_response` produced them in. A response whose record count no
+    longer matches its verdicts is returned untouched rather than mis-paired.
+    """
+    records = _records_of(response)
+    if records is None or len(records) != len(suite_results):
+        return response
+    annotated = [
+        attach_verdict(record, verdict) if isinstance(record, dict) else record
+        for record, verdict in zip(records, suite_results, strict=True)
+    ]
+    return annotated[0] if isinstance(response, dict) else annotated
+
+
+class ExpectationConfigurationError(ConfigurationError):
+    """An `expect:` block that cannot be resolved for the action at all.
+
+    Distinct from a per-record configuration problem: this one fails identically
+    for every input file, so a batch run must stop rather than log it per file
+    and finish reporting success with each of them missing from the output.
+    """
+
+
 def create_expectation_service_from_config(
     expect_config: dict[str, Any] | None,
     *,
     action_name: str,
-    schema_name: str | None = None,
     agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
+    judge_budget_remaining: int | None = None,
 ) -> ExpectationService | None:
-    """Build a service from an action's ``expect:`` block, or None if absent."""
-    from agent_actions.errors import ConfigurationError
+    """Build a service from an action's ``expect:`` block, or None if absent.
 
+    ``judge_budget_remaining`` replaces the configured budget for this
+    construction. A deferred batch rebuilds the service each pass, so the caller
+    carries the balance rather than letting every round start from full.
+    """
     if expect_config is None:
         return None
 
@@ -390,19 +469,53 @@ def create_expectation_service_from_config(
 
     suite_name = expect_config.get("suite")
     entries = expect_config.get("expectations")
+    config = agent_config or {}
+    schema_data: dict[str, Any] | None = None
     if suite_name is None and entries is None:
-        # A bare block reads the expectations: block of the action's own schema file.
-        if not schema_name:
-            raise ConfigurationError(
-                f"Action '{action_name}' has a bare expect: block but no named "
-                "schema: file to read expectations from. Name one with suite: "
-                "or declare expectations: inline.",
+        # A bare block reads the expectations: block of the action's own
+        # schema. A named schema is inlined into the config at load time and
+        # its name dropped, so the resolved dict is the authority; the name
+        # survives only when loading could not inline it.
+        schema_name = config.get(SCHEMA_NAME_KEY) or None
+        raw_schema = config.get(SCHEMA_KEY)
+        if isinstance(raw_schema, dict):
+            schema_data = raw_schema
+        elif schema_name:
+            suite_name = schema_name
+        else:
+            raise ExpectationConfigurationError(
+                f"Action '{action_name}' has a bare expect: block but no schema "
+                "to read expectations from. Add a schema:, or use suite: or an "
+                "inline expectations: list.",
                 context={"action": action_name},
             )
-        suite_name = schema_name
-    if suite_name:
+    if schema_data is not None:
+        try:
+            suite = build_suite_from_schema_data(
+                schema_name or f"{action_name}:schema", schema_data
+            )
+        except NoRulesDeclared as exc:
+            raise ExpectationConfigurationError(
+                f"Action '{action_name}' has a bare expect: block, but its "
+                f"schema has no expectations to run: {exc}",
+                context={"action": action_name},
+            ) from exc
+        except ValueError as exc:
+            # The schema has rules; they are in the wrong place or the wrong
+            # shape, which is a different thing from having none.
+            raise ExpectationConfigurationError(
+                f"Action '{action_name}': {exc}",
+                context={"action": action_name},
+            ) from exc
+    elif suite_name:
+        # The action config carries the project root, stamped when the workflow
+        # was loaded. Preflight passes it explicitly and keeps precedence; every
+        # runtime caller has only the config, so reading it here resolves the
+        # suite for all of them.
         if project_root is None:
-            raise ConfigurationError(
+            project_root = Path(config["_project_root"]) if config.get("_project_root") else None
+        if project_root is None:
+            raise ExpectationConfigurationError(
                 f"Action '{action_name}' resolves suite '{suite_name}' but no "
                 "project root was available to resolve it.",
                 context={"action": action_name, "suite": suite_name},
@@ -410,7 +523,7 @@ def create_expectation_service_from_config(
         try:
             suite = load_named_suite(suite_name, Path(project_root))
         except SuiteLoadError as exc:
-            raise ConfigurationError(
+            raise ExpectationConfigurationError(
                 f"Action '{action_name}': {exc}",
                 context={"action": action_name, "suite": suite_name},
             ) from exc
@@ -421,8 +534,15 @@ def create_expectation_service_from_config(
     if any(expectation.type == "llm_judge" for expectation in suite.expectations):
         from agent_actions.expectations.judge import CachedJudge, JudgeBudget
 
-        cached_judge = CachedJudge(agent_config or {}, action_name=action_name)
-        budget = JudgeBudget(expect_config.get("judge_budget"))
+        cached_judge = CachedJudge(config, action_name=action_name)
+        # judge_budget bounds the whole run, not one construction of the
+        # service. A deferred batch rebuilds the service on each pass, so the
+        # caller carries what is left and hands it back here.
+        budget = JudgeBudget(
+            judge_budget_remaining
+            if judge_budget_remaining is not None
+            else expect_config.get("judge_budget")
+        )
 
         def judge_dispatch(
             expectation: Expectation, value: Any, context: dict[str, Any] | None
@@ -444,11 +564,13 @@ def create_expectation_service_from_config(
                 return False, f"judge call failed: {exc}", False
             return passed, detail, False
 
-    return ExpectationService(
+    service = ExpectationService(
         suite,
         repair=repair,
         judge=judge_dispatch,
         max_iterations=expect_config.get("max_iterations", 3),
-        schema=(agent_config or {}).get(SCHEMA_KEY),
+        schema=config.get(SCHEMA_KEY),
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
     )
+    service._judge_budget = budget if judge_dispatch is not None else None
+    return service

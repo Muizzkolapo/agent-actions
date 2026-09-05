@@ -67,8 +67,9 @@ def _make_service():
         "batch-123",
         {r.custom_id for r in kw["failed_results"]},
     )
+    # hands back the halt to raise after the write, or None
     service._retry_service.apply_exhausted_reprompt_metadata.side_effect = (
-        lambda results, **kw: results
+        lambda results, **kw: None
     )
     service._storage_backend = MagicMock()
     return service
@@ -248,7 +249,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),
@@ -275,7 +276,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),
@@ -304,7 +305,7 @@ class TestHandleRepromptRecoveryGraduatedPool:
             patch.object(RecoveryStateManager, "save"),
             patch.object(RecoveryStateManager, "delete"),
             patch.object(
-                service, "_convert_batch_results_to_workflow_format", return_value=([], None)
+                service, "_convert_batch_results_to_workflow_format", return_value=([], None, None)
             ),
             patch.object(service, "_determine_output_path", return_value="/tmp/out.json"),
             patch.object(service, "_write_batch_output"),

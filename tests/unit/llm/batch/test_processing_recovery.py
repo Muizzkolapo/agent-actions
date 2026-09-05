@@ -88,13 +88,15 @@ def _mock_service():
     """Create a mock BatchProcessingService with required attributes."""
     service = MagicMock()
     service._retry_service = MagicMock()
+    # returns the halt to raise after the write, or None
+    service._retry_service.apply_exhausted_reprompt_metadata.return_value = None
     service._context_manager = MagicMock()
     service._client_resolver = MagicMock()
     service._storage_backend = MagicMock()
     service._workflow_name = "test_action"
     service._resolve_action_name = lambda override=None: override or service._workflow_name
     service._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
-    service._convert_batch_results_to_workflow_format = MagicMock(return_value=([], None))
+    service._convert_batch_results_to_workflow_format = MagicMock(return_value=([], None, None))
     service._determine_output_path = MagicMock(return_value=Path("/tmp/output.json"))
     service._write_batch_output = MagicMock()
     service._cleanup_recovery_entries = MagicMock()
@@ -809,20 +811,25 @@ class TestApplyExhaustedReprompt:
         assert r1.recovery_metadata.reprompt.attempts == 7
 
     def test_raise_with_per_record_attempts(self):
-        """on_exhausted='raise' raises even when per_record_attempts provided."""
-        import pytest
+        """on_exhausted='raise' still halts when per_record_attempts is provided.
 
+        The halt is handed back rather than thrown — this runs before batch
+        writes its output file, so throwing here would discard every record in
+        it the reprompt rounds had already graduated.
+        """
         from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
 
-        with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
-            apply_exhausted_reprompt(
-                results=[_make_result("id-x")],
-                failed_ids={"id-x"},
-                validation_name="strict",
-                attempt=3,
-                on_exhausted="raise",
-                per_record_attempts={"id-x": 3},
-            )
+        pending = apply_exhausted_reprompt(
+            results=[_make_result("id-x")],
+            failed_ids={"id-x"},
+            validation_name="strict",
+            attempt=3,
+            on_exhausted="raise",
+            per_record_attempts={"id-x": 3},
+        )
+        assert isinstance(pending, RuntimeError)
+        assert "Reprompt validation exhausted" in str(pending)
+        assert "id-x" in str(pending)
 
     def test_preserves_existing_retry_metadata(self):
         """Pre-existing retry metadata is not clobbered when adding reprompt metadata."""

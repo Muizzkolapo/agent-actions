@@ -129,7 +129,7 @@ class _Harness:
                     "exhausted_recovery": kw.get("exhausted_recovery"),
                 }
             )
-            return ([], MagicMock())
+            return ([], MagicMock(), None)
 
         with (
             patch.object(

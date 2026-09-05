@@ -45,8 +45,8 @@ successes.
 This intentionally overrides `on_exhausted="return_last"` when ALL records exhaust.
 `return_last` is designed for partial failures where some records succeed alongside exhausted
 tombstones. When zero records succeed, tombstone-only output is not useful and downstream
-actions would produce garbage. `_check_exhausted_raise` in `ResultCollector` handles
-`on_exhausted="raise"` independently (runs before collection).
+actions would produce garbage. `_handle_exhausted_policy` in `ResultCollector` handles
+`on_exhausted="raise"` independently (inside collection, handing the halt back).
 
 ## Project Surface
 

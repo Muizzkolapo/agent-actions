@@ -25,7 +25,9 @@ from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services import retry_ops
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
+    ExpectationsMetadata,
     ProcessingStatus,
     RecoveryMetadata,
     RetryMetadata,
@@ -206,7 +208,7 @@ class _Harness:
                     "exhausted_recovery": kw.get("exhausted_recovery"),
                 }
             )
-            return ([], MagicMock())
+            return ([], MagicMock(), None)
 
         with (
             patch.object(
@@ -328,15 +330,29 @@ def test_an_exhausted_errored_record_carries_its_retry_history():
 def test_on_exhausted_raise_halts_on_a_provider_errored_record():
     config = {**AGENT_CONFIG, "retry": {**AGENT_CONFIG["retry"], "on_exhausted": "raise"}}
 
-    with pytest.raises(RuntimeError) as excinfo:
-        BatchResultStrategy().process(
-            [_errored(ERR_ID)],
-            context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
-            agent_config=config,
-            exhausted_recovery=_exhausted(ERR_ID),
-        )
+    results = BatchResultStrategy().process(
+        [_errored(ERR_ID)],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=config,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
 
-    assert raised_by_exhaustion_policy(excinfo.value)
+    # The record keeps FAILED so the provider's own error reaches the output;
+    # its spent retry history is what the policy reads.
+    assert [r.status for r in results] == [ProcessingStatus.FAILED]
+    assert results[0].recovery_metadata.retry.succeeded is False
+
+    # The collector owns the policy for both run modes and hands the halt back
+    # so the caller raises it once the output file is written.
+    halt = ResultCollector._handle_exhausted_policy(
+        results=results,
+        agent_config=config,
+        agent_name=ACTION,
+        storage_backend=None,
+    )
+
+    assert halt is not None
+    assert raised_by_exhaustion_policy(halt)
 
 
 def test_a_failed_record_with_no_retry_history_is_untouched():
@@ -645,3 +661,44 @@ def test_the_completion_event_does_not_report_an_unanswered_record_as_completed(
     assert completions, "no completion event fired"
     assert completions[-1].failed == 1
     assert completions[-1].completed == 1
+
+
+def test_the_expectations_half_of_the_history_survives_retry_exhaustion():
+    errored = _errored(ERR_ID)
+    errored.recovery_metadata = RecoveryMetadata(
+        expectations=ExpectationsMetadata(attempts=2, failed=["enough_options"])
+    )
+
+    results = BatchResultStrategy().process(
+        [errored],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=AGENT_CONFIG,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+
+    expectations = results[0].recovery_metadata.expectations
+    assert expectations is not None, "the record's expectations history was dropped"
+    assert expectations.failed == ["enough_options"]
+
+
+def test_a_record_expectations_already_settled_does_not_also_raise_the_retry_halt():
+    config = {**AGENT_CONFIG, "retry": {**AGENT_CONFIG["retry"], "on_exhausted": "raise"}}
+    errored = _errored(ERR_ID)
+    errored.recovery_metadata = RecoveryMetadata(
+        expectations=ExpectationsMetadata(attempts=2, failed=["enough_options"])
+    )
+
+    results = BatchResultStrategy().process(
+        [errored],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=config,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+    halt = ResultCollector._handle_exhausted_policy(
+        results=results,
+        agent_config=config,
+        agent_name=ACTION,
+        storage_backend=None,
+    )
+
+    assert halt is None, "the expectations policy already decided this record's fate"

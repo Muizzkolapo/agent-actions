@@ -372,6 +372,13 @@ class ProcessingContext:
     # which holds records used for prompt context and scope inference.
     parent_records: list[dict[str, Any]] = field(default_factory=list)
 
+    # Batch writes its output file once, at the end. When set, an exhaustion
+    # policy of `raise` parks its error here instead of throwing mid-conversion,
+    # and the caller raises it after the write. Online leaves this alone: it
+    # persists per record, so there is nothing to defer for.
+    defer_exhaustion: bool = False
+    pending_exhaustion: Exception | None = None
+
     @property
     def action_name(self) -> str:
         """Get action name from config or agent_name."""

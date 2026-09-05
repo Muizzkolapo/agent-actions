@@ -533,9 +533,9 @@ def check_BATCH_reprompt_merge_preserves_retry_metadata():
 
 
 def check_BATCH_apply_exhausted_reprompt_return_last():
-    updated = apply_exhausted_reprompt_metadata(
-        [br("a", {}), br("b", {})], {"a"}, "my_check", 3, "return_last"
-    )
+    # Mutates in place and returns the halt to raise later, or None.
+    updated = [br("a", {}), br("b", {})]
+    assert apply_exhausted_reprompt_metadata(updated, {"a"}, "my_check", 3, "return_last") is None
     a = [r for r in updated if r.custom_id == "a"][0]
     assert a.recovery_metadata.reprompt.passed is False
     assert a.recovery_metadata.reprompt.attempts == 3
@@ -545,12 +545,12 @@ def check_BATCH_apply_exhausted_reprompt_return_last():
 
 
 def check_BATCH_apply_exhausted_reprompt_raise():
-    try:
-        apply_exhausted_reprompt_metadata([br("x", {})], {"x"}, "strict", 2, "raise")
-        raise AssertionError("should raise")
-    except RuntimeError as e:
-        assert "exhausted" in str(e).lower()
-        assert "strict" in str(e)
+    # Handed back, not thrown: batch writes its file once at the end, so the
+    # caller raises after the write rather than losing the whole file.
+    pending = apply_exhausted_reprompt_metadata([br("x", {})], {"x"}, "strict", 2, "raise")
+    assert isinstance(pending, RuntimeError)
+    assert "exhausted" in str(pending).lower()
+    assert "strict" in str(pending)
 
 
 # =========================================================================
@@ -718,7 +718,7 @@ def run_audit() -> DocAudit:
         check_BATCH_apply_exhausted_reprompt_return_last,
     )
     audit.run_test(
-        "apply_exhausted raise throws RuntimeError", check_BATCH_apply_exhausted_reprompt_raise
+        "apply_exhausted raise hands back RuntimeError", check_BATCH_apply_exhausted_reprompt_raise
     )
 
     audit.section("VALIDATORS")

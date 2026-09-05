@@ -223,11 +223,11 @@ class TestRepromptPassesSourceData:
                 return_value=(validation_func, "fix it"),
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.resubmission.wait_for_batch_completion",
                 return_value="completed",
             ),
             patch(
-                "agent_actions.llm.batch.services.reprompt_ops.BatchStatus",
+                "agent_actions.llm.batch.services.resubmission.BatchStatus",
             ) as MockBatchStatus,
         ):
             MockBatchStatus.COMPLETED = "completed"

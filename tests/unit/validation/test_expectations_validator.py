@@ -604,12 +604,14 @@ def test_observe_on_a_batch_action_is_allowed():
     assert defects == {}
 
 
-def test_repair_on_a_batch_action_is_a_defect():
+def test_repair_on_a_batch_action_is_allowed():
+    # Batch runs the repair loop as a resubmission round, so the same expect:
+    # block works in either run_mode.
     defects = find_expectation_defects(
         action_config(run_mode="batch", expect={"repair": "auto", "expectations": NOT_NULL}),
         {"a": {"options"}},
     )
-    assert any("batch" in m for m in defects["a"])
+    assert defects == {}
 
 
 def test_repair_on_a_file_granularity_action_is_a_defect():
