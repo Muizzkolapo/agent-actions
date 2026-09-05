@@ -38,6 +38,8 @@ def cleanup_registry():
         "func1",
         "func2",
         "func3",
+        "quality_checks",
+        "bad_checks",
     ]
     for mod_name in test_module_names:
         sys.modules.pop(mod_name, None)
@@ -237,3 +239,80 @@ class TestValidateUDFReferences:
             validate_udf_references(config)
         error = exc_info.value
         assert error.context["function_name"] == "nonexistent_func"
+
+
+@pytest.fixture
+def preserve_expectation_registry():
+    from agent_actions.expectations import registry as expectation_registry
+
+    saved_registry = dict(expectation_registry._REGISTRY)
+    saved_sources = dict(expectation_registry._USER_CHECK_SOURCES)
+    yield
+    expectation_registry._REGISTRY.clear()
+    expectation_registry._REGISTRY.update(saved_registry)
+    expectation_registry._USER_CHECK_SOURCES.clear()
+    expectation_registry._USER_CHECK_SOURCES.update(saved_sources)
+
+
+class TestExpectationCheckDiscovery:
+    def test_a_tools_file_with_only_expectation_check_is_imported(
+        self, temp_user_code_dir, preserve_expectation_registry
+    ):
+        (temp_user_code_dir / "quality_checks.py").write_text(
+            "from agent_actions import expectation_check\n"
+            "\n"
+            '@expectation_check("discovered_check", params=("min",), required=("min",))\n'
+            "def discovered_check(value, params):\n"
+            "    if len(str(value)) >= params['min']:\n"
+            "        return True, ''\n"
+            "    return False, 'too short'\n",
+            encoding="utf-8",
+        )
+        discover_udfs(temp_user_code_dir)
+
+        from agent_actions.expectations import registry as expectation_registry
+
+        etype = expectation_registry.get("discovered_check")
+        assert etype is not None
+        assert etype.required == frozenset({"min"})
+        assert etype.check("hello", {"min": 3}) == (True, "")
+
+    def test_a_discovered_check_satisfies_preflight(
+        self, temp_user_code_dir, preserve_expectation_registry
+    ):
+        (temp_user_code_dir / "quality_checks.py").write_text(
+            "from agent_actions import expectation_check\n"
+            "\n"
+            '@expectation_check("preflightable_check")\n'
+            "def preflightable_check(value, params):\n"
+            "    return True, ''\n",
+            encoding="utf-8",
+        )
+        discover_udfs(temp_user_code_dir)
+
+        from agent_actions.validation.expectations_validator import find_expectation_defects
+
+        configs = {
+            "a": {
+                "expect": {
+                    "expectations": [{"id": "q", "type": "preflightable_check", "field": "title"}]
+                }
+            }
+        }
+        assert find_expectation_defects(configs, {"a": {"title"}}) == {}
+
+    def test_a_shadowing_check_fails_discovery_with_attribution(
+        self, temp_user_code_dir, preserve_expectation_registry
+    ):
+        (temp_user_code_dir / "bad_checks.py").write_text(
+            "from agent_actions import expectation_check\n"
+            "\n"
+            '@expectation_check("not_null")\n'
+            "def not_null(value, params):\n"
+            "    return True, ''\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(UDFLoadError) as exc_info:
+            discover_udfs(temp_user_code_dir)
+        assert "bad_checks" in str(exc_info.value)
+        assert "built-in" in str(exc_info.value)
