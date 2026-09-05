@@ -83,10 +83,15 @@ def test_every_context_builder_is_under_the_wrapper():
         # A method, not a module attribute — resolving it off the module would
         # fall back to the whole file, where the import alone satisfies the check.
         processing.BatchProcessingService._process_original_batch,
+        # The second family: this one parks on a ProcessingContext, not a
+        # RecoveryContext, which is why guarding the other object missed it.
+        processing.BatchProcessingService._convert_batch_results_to_workflow_format,
     ]
     for target in targets:
         source = inspect.getsource(target)
-        assert "RecoveryContext(" in source, f"{target.__qualname__} no longer builds a context"
+        assert "pending_exhaustion" in source or "RecoveryContext(" in source, (
+            f"{target.__qualname__} no longer touches a parked halt"
+        )
         assert "halt_survives_failure" in source, (
             f"{target.__qualname__} builds a RecoveryContext and parks below it, "
             "but is not wrapped; an exception there discards the halt silently"
