@@ -13,6 +13,8 @@ Entry points:
 import json
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -150,33 +152,24 @@ def process_recovery_batch(
 
     accumulated = deserialize_results(state.accumulated_results)
 
-    if entry.recovery_type == RecoveryType.RETRY:
-        return handle_retry_recovery(
-            context,
-            identity,
-            state=state,
-            recovery_results=recovery_results,
-            accumulated=accumulated,
-            context_map=context_map,
-        )
-    elif entry.recovery_type == RecoveryType.REPROMPT:
-        return handle_reprompt_recovery(
-            context,
-            identity,
-            state=state,
-            recovery_results=recovery_results,
-            accumulated=accumulated,
-            context_map=context_map,
-        )
-    elif entry.recovery_type == RecoveryType.REPAIR:
-        return handle_repair_recovery(
-            context,
-            identity,
-            state=state,
-            recovery_results=recovery_results,
-            accumulated=accumulated,
-            context_map=context_map,
-        )
+    # One wrapper for all three: a halt parked inside any handler must not be
+    # lost to an unrelated failure on the way to the finaliser.
+    handlers = {
+        RecoveryType.RETRY: handle_retry_recovery,
+        RecoveryType.REPROMPT: handle_reprompt_recovery,
+        RecoveryType.REPAIR: handle_repair_recovery,
+    }
+    handler = handlers.get(entry.recovery_type) if entry.recovery_type else None
+    if handler is not None:
+        with halt_survives_failure(context):
+            return handler(
+                context,
+                identity,
+                state=state,
+                recovery_results=recovery_results,
+                accumulated=accumulated,
+                context_map=context_map,
+            )
 
     logger.error("Unknown recovery_type: %s", entry.recovery_type)
     return None
@@ -1143,6 +1136,29 @@ def handle_repair_recovery(
         context_map=context_map,
         exhausted_recovery=exhausted_recovery,
     )
+
+
+@contextmanager
+def halt_survives_failure(context: RecoveryContext) -> Iterator[None]:
+    """Keep a parked halt from being lost when something else fails first.
+
+    Every early return past a park is guarded, but the exception exit is not a
+    return: anything raised between the park and the finaliser unwinds past all
+    of them. The outer loop answers a non-RuntimeError by logging it, failing
+    that file's records and moving to the next file, so `on_exhausted: raise`
+    would finish the run reporting success.
+
+    The deliberate halt wins over the incidental failure, which is chained onto
+    it rather than dropped. A clean pass leaves the halt parked for the finaliser.
+    """
+    try:
+        yield
+    except Exception as exc:
+        pending = context.pending_exhaustion
+        if pending is None:
+            raise
+        context.pending_exhaustion = None
+        raise pending from exc
 
 
 def raise_pending_exhaustion(context: RecoveryContext) -> None:

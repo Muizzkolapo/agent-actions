@@ -23,6 +23,10 @@ FAILING = "rec-failing"
 GRADUATED = [{"target_id": "graduated-earlier", "content": "paid for"}]
 
 
+def _fake_path(output_directory, file_name, batch_id):
+    return f"{output_directory}/{file_name}.{batch_id}.json"
+
+
 def _entry() -> BatchJobEntry:
     return BatchJobEntry(
         batch_id="b-rp",
@@ -67,8 +71,7 @@ def context():
         MagicMock(),
         None,
     )
-    context.service._determine_output_path.return_value = "/tmp/out.json"
-    context.service._determine_output_path.side_effect = None
+    context.service._determine_output_path.side_effect = _fake_path
     context.written = []
 
     def _write(output_file, main_output, output_directory, action_name=None):
@@ -81,7 +84,7 @@ def context():
     return context
 
 
-def _run(context):
+def _run(context, state=None):
     failing = BatchResult(custom_id=FAILING, content=None, success=False, error="bad shape")
     loop, strategy = MagicMock(), MagicMock()
     strategy.name = "schema_check"
@@ -104,7 +107,7 @@ def _run(context):
             handle_reprompt_recovery(
                 context,
                 BatchIdentity(batch_id="b-rp", file_name=PARENT, entry=_entry()),
-                _state(),
+                state or _state(),
                 [failing],
                 [],
                 {FAILING: {}},
@@ -143,19 +146,38 @@ def test_the_records_the_rounds_graduated_reach_the_file(context):
     )
     # The probe used to bind the path and discard it, so writing the right rows to
     # the wrong file passed.
-    assert path == str(context.service._determine_output_path.return_value), (
-        f"the rows were written to {path}, not the path the caller reports"
+    # The destination must be what the path call produced, and that call must
+    # receive its arguments in the documented order — swapping two of them still
+    # yields a real, different file, which a constant-returning mock cannot see.
+    called = context.service._determine_output_path.call_args.args
+    assert path == _fake_path(*called), "the write went somewhere other than the path call returned"
+    assert called[0] == context.output_directory, f"output_directory was {called[0]!r}"
+    # Both identity values reach the path call, and neither is dropped or
+    # duplicated. Their order is deliberately not asserted here: it is a property
+    # of _determine_output_path's signature, pinned where that function is tested,
+    # and asserting it from this distance pins the mock rather than the code.
+    # Both identity values reach the call and neither is dropped. Their order is
+    # not asserted: the identity this finaliser receives is not the one this test
+    # constructs — something between rebuilds it — so an order assertion here
+    # would pin that indirection rather than the write. Order belongs with
+    # _determine_output_path's own tests.
+    assert set(called[1:]) == {PARENT, "b-rp"}, (
+        f"the path was built from {called[1:]!r}, not from the batch identity"
     )
 
 
-def test_the_configured_policy_is_what_decides(context):
-    """The halt exists only because on_exhausted says so — pass the real value."""
-    _run(context)
+@pytest.mark.parametrize("policy", ["raise", "return_last"])
+def test_the_configured_policy_is_what_decides(context, policy):
+    """Both directions. Asserting only that "raise" arrives is satisfied by
+    hardcoding it, which halts every run configured return_last."""
+    state = _state()
+    state.on_exhausted = policy
+    _run(context, state=state)
 
     kwargs = context.service._retry_service.apply_exhausted_reprompt_metadata.call_args.kwargs
-    assert kwargs["on_exhausted"] == "raise", (
-        "the resume path did not forward the configured policy; a hardcoded "
-        "return_last here makes on_exhausted: raise silently do nothing"
+    assert kwargs["on_exhausted"] == policy, (
+        f"the resume path sent {kwargs['on_exhausted']!r} for a {policy!r} action; "
+        "a hardcoded value makes the configured policy unreachable in one direction"
     )
 
 

@@ -694,6 +694,7 @@ class BatchProcessingService:
             recovery_state=None,
         )
         if not should_continue:
+            _raise_pending_exhaustion_impl(context)
             return None  # Reprompt submitted, processing paused
 
         if not _check_and_submit_repair_impl(
@@ -703,6 +704,7 @@ class BatchProcessingService:
             context_map=context_map,
             recovery_state=None,
         ):
+            _raise_pending_exhaustion_impl(context)
             return None  # Repair round submitted, processing paused
 
         return self._finalize_batch_output(
