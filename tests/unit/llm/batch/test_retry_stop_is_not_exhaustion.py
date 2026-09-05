@@ -42,9 +42,6 @@ def _context():
         None,
     )
     context.service._retry_service.submit_retry_batch.return_value = None
-    context.service._retry_service.build_exhausted_recovery.side_effect = AssertionError(
-        "retry attempt 1 of 3 was stamped as exhausted after a transient submit failure"
-    )
     return context
 
 
@@ -61,9 +58,18 @@ def test_a_transient_submit_failure_does_not_stamp_exhaustion():
         recovery_attempt=1,
     )
     identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
+    seen = {}
+
+    def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
+        seen["exhausted_recovery"] = exhausted_recovery
+        return False
 
     with patch(
         "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        return_value=False,
+        side_effect=_capture,
     ):
         handle_retry_recovery(_context(), identity, _state(), [], [], {MISSING: {}})
+
+    # The value the rest of the run reads. Marking the record exhausted here tells
+    # the on_exhausted policy the budget is gone while two attempts remain.
+    assert seen["exhausted_recovery"] is None

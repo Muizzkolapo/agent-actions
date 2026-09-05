@@ -9,7 +9,6 @@ before the exhaustion predicate is ever consulted.
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
     ProcessingResult,
-    ProcessingStatus,
     RecoveryMetadata,
     RetryMetadata,
 )
@@ -71,7 +70,13 @@ def test_an_expectations_settled_record_is_left_to_its_own_policy():
     assert _policy([result]) is None
 
 
-def test_status_alone_does_not_decide_it():
-    """A wholesale 'everything is exhausted' predicate must not pass."""
-    assert _policy([_succeeded("a"), _succeeded("b")]) is None
-    assert ProcessingStatus.SUCCESS is _succeeded().status
+def test_one_spent_record_among_healthy_ones_still_halts():
+    """Decided per record: a single spent record is enough, and enough is not all."""
+    halt = _policy([_succeeded("a"), _failed_with_retry(succeeded=False), _succeeded("b")])
+    assert halt is not None
+
+
+def test_a_set_where_nothing_spent_its_retries_stays_silent():
+    """The mirror — a failure that never retried is not an exhausted one."""
+    healthy = [_succeeded("a"), ProcessingResult.failed(error="boom", source_guid="b")]
+    assert _policy(healthy) is None
