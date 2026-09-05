@@ -1,5 +1,7 @@
 """Observe-mode execution and service construction."""
 
+from unittest.mock import patch
+
 import pytest
 
 from agent_actions.errors import ConfigurationError
@@ -144,3 +146,134 @@ def test_factory_wraps_a_missing_suite_in_a_configuration_error(tmp_path):
         create_expectation_service_from_config(
             {"suite": "nothing_here", "repair": "none"}, action_name="a", project_root=root
         )
+
+
+def test_execute_threads_llm_context_to_a_judged_expectations_context_ref():
+    from agent_actions.expectations.types import Suite as SuiteType
+
+    grounded_suite = SuiteType(
+        name="s",
+        expectations=[
+            {
+                "id": "grounded",
+                "type": "llm_judge",
+                "field": "ideas",
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
+            }
+        ],
+    )
+
+    captured = {}
+
+    def fake_judge(expectation, value, context):
+        captured["context"] = context
+        return True, "ok", False
+
+    service = ExpectationService(grounded_suite, repair="none", judge=fake_judge)
+    result = service.execute(
+        passing_llm,
+        "PROMPT",
+        llm_context={"extract_context": {"source_context": "docs say X"}},
+    )
+    assert result.suite_result.overall_pass is True
+    assert captured["context"] == {"extract_context.source_context": "docs say X"}
+
+
+def test_execute_without_llm_context_still_works_for_non_judged_suites():
+    result = ExpectationService(SUITE, repair="none").execute(passing_llm, "PROMPT")
+    assert result.suite_result.overall_pass is True
+
+
+def test_factory_does_not_build_a_judge_for_a_purely_deterministic_suite():
+    service = create_expectation_service_from_config(
+        {"expectations": INLINE, "repair": "none"}, action_name="brainstorm"
+    )
+    assert service._judge is None
+
+
+def test_factory_builds_a_judge_dispatcher_for_a_suite_with_llm_judge():
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none"},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    assert service._judge is not None
+
+
+def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none"},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert result.suite_result.overall_pass is True
+    mock_invoke.assert_called_once()
+
+
+def test_factory_judge_budget_is_shared_across_every_record_the_service_processes():
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none", "judge_budget": 1},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        first = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+        second = service.execute(lambda p: ({"ideas": ["b"]}, True), "PROMPT")
+    assert first.suite_result.overall_pass is True
+    assert second.suite_result.outcomes[0].skipped is True
+    assert second.suite_result.overall_pass is False
+
+
+def test_a_cache_hit_bypasses_an_already_exhausted_budget():
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none", "judge_budget": 1},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        first = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+        # Same record content as the first call -- same cache key, budget already spent.
+        second = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert first.suite_result.overall_pass is True
+    assert second.suite_result.overall_pass is True
+    assert second.suite_result.outcomes[0].skipped is False
+    mock_invoke.assert_called_once()
+
+
+def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_record():
+    judge_inline = [
+        {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judge_inline, "repair": "none"},
+        action_name="brainstorm",
+        agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes",
+        side_effect=ConnectionError("provider unreachable"),
+    ):
+        result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
+    assert result.suite_result.overall_pass is False
+    assert result.suite_result.outcomes[0].skipped is False
+    assert "provider unreachable" in result.suite_result.outcomes[0].detail

@@ -1,5 +1,7 @@
 """Running a suite over a record."""
 
+from unittest.mock import patch
+
 import pytest
 
 from agent_actions.expectations.runner import UnknownExpectationTypeError, run_suite
@@ -124,3 +126,172 @@ def test_every_expectation_runs_even_after_an_earlier_one_fails():
     )
     assert [o.id for o in result.outcomes] == ["a", "b"]
     assert result.outcomes[1].passed is True
+
+
+def fake_judge_always(passed, detail="from judge", skipped=False):
+    def dispatch(expectation, value, context):
+        return passed, detail, skipped
+
+    return dispatch
+
+
+def recording_judge(results):
+    """Returns each result in *results* in order, recording (value, context) calls."""
+    calls = []
+    it = iter(results)
+
+    def dispatch(expectation, value, context):
+        calls.append((value, context))
+        return next(it)
+
+    dispatch.calls = calls
+    return dispatch
+
+
+def test_llm_judge_dispatches_through_the_injected_judge():
+    result = run_suite(
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
+        RECORD,
+        judge=fake_judge_always(True, "meets the rule"),
+    )
+    assert result.overall_pass is True
+    assert result.outcomes[0].detail == "meets the rule"
+
+
+def test_llm_judge_failing_verdict_blocks_the_suite():
+    result = run_suite(
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
+        RECORD,
+        judge=fake_judge_always(False, "too vague"),
+    )
+    assert result.overall_pass is False
+    assert result.outcomes[0].detail == "too vague"
+    assert result.outcomes[0].skipped is False
+
+
+def test_llm_judge_skipped_verdict_is_marked_skipped_and_still_blocks():
+    result = run_suite(
+        suite_of(
+            {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+        ),
+        RECORD,
+        judge=fake_judge_always(False, "judge budget exhausted", skipped=True),
+    )
+    assert result.overall_pass is False
+    assert result.outcomes[0].skipped is True
+
+
+def test_llm_judge_without_a_judge_dispatcher_raises():
+    with pytest.raises(ValueError, match="llm_judge"):
+        run_suite(
+            suite_of(
+                {"id": "on_topic", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+            ),
+            RECORD,
+        )
+
+
+def test_llm_judge_wildcard_selector_calls_judge_once_per_element():
+    judge = recording_judge([(True, "ok", False)] * 4)
+    result = run_suite(
+        suite_of(
+            {"id": "each", "type": "llm_judge", "field": "options[*]", "params": {"rule": "r"}}
+        ),
+        RECORD,
+        judge=judge,
+    )
+    assert result.overall_pass is True
+    assert len(judge.calls) == 4
+
+
+def test_llm_judge_wildcard_skipped_if_any_element_was_skipped():
+    judge = recording_judge(
+        [
+            (True, "ok", False),
+            (False, "budget exhausted", True),
+            (True, "ok", False),
+            (True, "ok", False),
+        ]
+    )
+    result = run_suite(
+        suite_of(
+            {"id": "each", "type": "llm_judge", "field": "options[*]", "params": {"rule": "r"}}
+        ),
+        RECORD,
+        judge=judge,
+    )
+    assert result.overall_pass is False
+    assert result.outcomes[0].skipped is True
+
+
+def test_llm_judge_context_ref_is_resolved_and_passed_to_the_judge():
+    judge = recording_judge([(True, "ok", False)])
+    context_source = {"extract_context": {"source_context": "the docs say X"}}
+    run_suite(
+        suite_of(
+            {
+                "id": "grounded",
+                "type": "llm_judge",
+                "field": "answer",
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
+            }
+        ),
+        RECORD,
+        judge=judge,
+        context_source=context_source,
+    )
+    assert judge.calls[0][1] == {"extract_context.source_context": "the docs say X"}
+
+
+def test_llm_judge_context_ref_with_no_context_source_is_a_failed_outcome_not_a_crash():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "grounded",
+                "type": "llm_judge",
+                "field": "answer",
+                "params": {"rule": "r", "context": ["extract_context.source_context"]},
+            }
+        ),
+        RECORD,
+        judge=fake_judge_always(True),
+    )
+    assert result.overall_pass is False
+    assert "context source" in result.outcomes[0].detail
+
+
+def test_llm_judge_unresolvable_context_ref_is_a_failed_outcome_not_a_crash():
+    result = run_suite(
+        suite_of(
+            {
+                "id": "grounded",
+                "type": "llm_judge",
+                "field": "answer",
+                "params": {"rule": "r", "context": ["missing_action.missing_field"]},
+            }
+        ),
+        RECORD,
+        judge=fake_judge_always(True),
+        context_source={"extract_context": {"source_context": "x"}},
+    )
+    assert result.overall_pass is False
+    assert "missing_action" in result.outcomes[0].detail
+
+
+def test_llm_judge_without_context_declared_never_calls_resolve_context():
+    judge = recording_judge([(True, "ok", False)])
+    with patch("agent_actions.expectations.runner.resolve_context") as mock_resolve:
+        run_suite(
+            suite_of(
+                {"id": "plain", "type": "llm_judge", "field": "answer", "params": {"rule": "r"}}
+            ),
+            RECORD,
+            judge=judge,
+            context_source={"some_action": {"some_field": "present but unrelated"}},
+        )
+    mock_resolve.assert_not_called()
+    assert judge.calls[0][1] is None

@@ -55,3 +55,36 @@ def test_no_expect_key_is_added_when_no_service_is_configured(monkeypatch):
     )
     result = strategy.invoke(make_task(), make_context())
     assert "expect" not in result.response
+
+
+def test_llm_context_reaches_a_judged_expectations_context_ref(monkeypatch):
+    from agent_actions.expectations.types import Suite as SuiteType
+
+    captured = {}
+
+    def fake_judge(expectation, value, context):
+        captured["context"] = context
+        return True, "ok", False
+
+    suite = SuiteType(
+        name="s",
+        expectations=[
+            {
+                "id": "on_topic",
+                "type": "llm_judge",
+                "field": "ideas",
+                "params": {"rule": "on topic", "context": ["extract_context.source_context"]},
+            }
+        ],
+    )
+    strategy = OnlineStrategy(
+        expectation_service=ExpectationService(suite, repair="none", judge=fake_judge)
+    )
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({"ideas": ["a"]}, True)
+    )
+    task = make_task()
+    task.llm_context = {"extract_context": {"source_context": "the docs say X"}}
+    result = strategy.invoke(task, make_context())
+    assert captured["context"] == {"extract_context.source_context": "the docs say X"}
+    assert result.response["expect"]["overall_pass"] is True

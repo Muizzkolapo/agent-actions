@@ -75,7 +75,10 @@ class OnlineStrategy(InvocationStrategy):
 
         if self._expectation_service:
             run = self._expectation_service.execute(
-                generate, task.formatted_prompt, context=f"action={context.agent_name}"
+                generate,
+                task.formatted_prompt,
+                context=f"action={context.agent_name}",
+                llm_context=task.llm_context,
             )
             response, executed = run.response, run.executed
             if run.suite_result is not None and isinstance(response, dict):
