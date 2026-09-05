@@ -279,12 +279,18 @@ class BatchResultStrategy:
                 recovery_metadata = batch_result.recovery_metadata
                 exhausted = self._exhausted_recovery_for(ctx, custom_id)
                 if exhausted is not None:
-                    # Retry exhaustion is one half of the record's history; a
-                    # reprompt or evaluation half may already be on it.
+                    # Retry exhaustion is one part of the record's history; a
+                    # reprompt, evaluation or expectations part may already be on
+                    # it. Dropping the expectations part loses which rules failed
+                    # and defeats the collector's guard against applying the retry
+                    # policy to a record the expectations policy already settled.
                     recovery_metadata = RecoveryMetadata(
                         retry=exhausted[1],
                         reprompt=recovery_metadata.reprompt if recovery_metadata else None,
                         evaluation=recovery_metadata.evaluation if recovery_metadata else None,
+                        expectations=(
+                            recovery_metadata.expectations if recovery_metadata else None
+                        ),
                     )
 
                 results.append(

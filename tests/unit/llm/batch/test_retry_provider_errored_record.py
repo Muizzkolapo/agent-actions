@@ -27,6 +27,7 @@ from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
+    ExpectationsMetadata,
     ProcessingStatus,
     RecoveryMetadata,
     RetryMetadata,
@@ -660,3 +661,44 @@ def test_the_completion_event_does_not_report_an_unanswered_record_as_completed(
     assert completions, "no completion event fired"
     assert completions[-1].failed == 1
     assert completions[-1].completed == 1
+
+
+def test_the_expectations_half_of_the_history_survives_retry_exhaustion():
+    errored = _errored(ERR_ID)
+    errored.recovery_metadata = RecoveryMetadata(
+        expectations=ExpectationsMetadata(attempts=2, failed=["enough_options"])
+    )
+
+    results = BatchResultStrategy().process(
+        [errored],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=AGENT_CONFIG,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+
+    expectations = results[0].recovery_metadata.expectations
+    assert expectations is not None, "the record's expectations history was dropped"
+    assert expectations.failed == ["enough_options"]
+
+
+def test_a_record_expectations_already_settled_does_not_also_raise_the_retry_halt():
+    config = {**AGENT_CONFIG, "retry": {**AGENT_CONFIG["retry"], "on_exhausted": "raise"}}
+    errored = _errored(ERR_ID)
+    errored.recovery_metadata = RecoveryMetadata(
+        expectations=ExpectationsMetadata(attempts=2, failed=["enough_options"])
+    )
+
+    results = BatchResultStrategy().process(
+        [errored],
+        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
+        agent_config=config,
+        exhausted_recovery=_exhausted(ERR_ID),
+    )
+    halt = ResultCollector._handle_exhausted_policy(
+        results=results,
+        agent_config=config,
+        agent_name=ACTION,
+        storage_backend=None,
+    )
+
+    assert halt is None, "the expectations policy already decided this record's fate"
