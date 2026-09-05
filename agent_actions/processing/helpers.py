@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -151,16 +151,29 @@ def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
     return result
 
 
+def _content_keys(record: Any) -> int:
+    """How many real content keys a record has, ignoring the attached verdict.
+
+    An expectations verdict is framework metadata, not output — a record that
+    carries nothing else is still empty.
+    """
+    if not isinstance(record, dict):
+        return 1
+    verdict = record.get(VERDICT_KEY)
+    is_verdict = isinstance(verdict, dict) and "overall_pass" in verdict
+    return len(record) - (1 if is_verdict else 0)
+
+
 def _is_empty_output(response: Any) -> bool:
     """Check if a tool/LLM response is effectively empty."""
     if response is None:
         return True
-    if isinstance(response, dict) and len(response) == 0:
+    if isinstance(response, dict) and _content_keys(response) == 0:
         return True
     if isinstance(response, list):
         if len(response) == 0:
             return True
-        if all(isinstance(item, dict) and len(item) == 0 for item in response):
+        if all(isinstance(item, dict) and _content_keys(item) == 0 for item in response):
             return True
     return False
 

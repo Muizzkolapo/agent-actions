@@ -14,11 +14,9 @@ from agent_actions.expectations.loader import SuiteLoadError, build_inline_suite
 from agent_actions.expectations.repair import compose_repair_prompt
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
-from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
 
 logger = logging.getLogger(__name__)
-
-VERDICT_KEY = "expect"
 
 
 @dataclass
@@ -30,6 +28,43 @@ class ExpectationRunResult:
     suite_result: SuiteResult | None = None
     iterations: int = 0
     exhausted: bool = False
+    # One verdict per record the response carries. A response is usually a
+    # single record, but an action whose LLM returns a JSON array produces one
+    # record per element and each is validated on its own.
+    suite_results: list[SuiteResult] | None = None
+
+
+def _records_of(response: Any) -> list[dict[str, Any]] | None:
+    """The record(s) a response carries, or None if it is not record-shaped.
+
+    A single-record call arrives as a bare dict or a length-1 list; an action
+    whose LLM returns a JSON array carries one record per element.
+    """
+    if isinstance(response, dict):
+        return [response]
+    if isinstance(response, list) and any(isinstance(r, dict) for r in response):
+        return list(response)
+    return None
+
+
+def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
+    """One verdict for the whole response: it passes only if every record does.
+
+    With several records the same authored id appears once per record, so each
+    outcome is tagged with its record index — otherwise a rule that failed on
+    one record and passed on another is reported as both, and the repair prompt
+    asks the model to fix and preserve the same thing.
+    """
+    if not results:
+        raise ValueError("a response with no records has nothing to combine")
+    if len(results) == 1:
+        return results[0]
+    outcomes = [
+        outcome.model_copy(update={"id": f"{outcome.id}[{index}]"})
+        for index, result in enumerate(results)
+        for outcome in result.outcomes
+    ]
+    return SuiteResult(suite_name=suite_name, outcomes=outcomes)
 
 
 class ExpectationsExhaustedError(Exception):
@@ -96,6 +131,7 @@ class ExpectationService:
         executed = False
         last_response: Any = None
         last_suite_result: SuiteResult | None = None
+        last_suite_results: list[SuiteResult] | None = None
 
         for iteration in range(1, iterations + 1):
             response, executed = llm_operation(
@@ -111,32 +147,42 @@ class ExpectationService:
                 if last_suite_result is not None:
                     # A regeneration that collapsed (inner recovery exhausted)
                     # must not downgrade a record that already had a verdict.
-                    return self._exhausted_result(last_response, last_suite_result, iteration)
+                    return self._exhausted_result(
+                        last_response, last_suite_result, iteration, last_suite_results
+                    )
                 return ExpectationRunResult(response=response, executed=executed)
 
+            records = _records_of(response)
+
             if self.repair == "none":
-                if not isinstance(response, dict):
+                if records is None:
                     return ExpectationRunResult(response=response, executed=executed)
-                suite_result = run_suite(
-                    self.suite, response, judge=self._judge, context_source=llm_context
-                )
+                suite_results = [
+                    self._record_verdict(record, llm_context, check_schema=False)
+                    for record in records
+                ]
             else:
-                structural = self._structural_result(response)
-                suite_result = (
-                    structural
-                    if structural is not None
-                    else run_suite(
-                        self.suite, response, judge=self._judge, context_source=llm_context
-                    )
-                )
+                if records is None:
+                    suite_results = [self._non_record_verdict(response)]
+                else:
+                    # Per record: a malformed one reports its own structural
+                    # failure, a conforming one is judged on its own rules —
+                    # a bad sibling must not buy it a pass it did not earn.
+                    suite_results = [
+                        self._record_verdict(record, llm_context, check_schema=True)
+                        for record in records
+                    ]
+            suite_result = _combine(suite_results, self.suite.name)
             if suite_result.overall_pass:
                 return ExpectationRunResult(
                     response=response,
                     executed=True,
                     suite_result=suite_result,
                     iterations=iteration,
+                    suite_results=suite_results,
                 )
             last_response, last_suite_result = response, suite_result
+            last_suite_results = suite_results
 
             # A rule that was skipped was never evaluated, so regenerating cannot
             # change its outcome — and the repair composer leaves it out of both
@@ -174,8 +220,9 @@ class ExpectationService:
                 executed=True,
                 suite_result=suite_result,
                 iterations=iterations,
+                suite_results=suite_results,
             )
-        return self._exhausted_result(response, suite_result, iterations)
+        return self._exhausted_result(response, suite_result, iterations, suite_results)
 
     def validate(
         self, response: Any, llm_context: dict[str, Any] | None = None
@@ -191,7 +238,11 @@ class ExpectationService:
         return run_suite(self.suite, response, judge=self._judge, context_source=llm_context)
 
     def _exhausted_result(
-        self, response: Any, suite_result: SuiteResult | None, iterations: int
+        self,
+        response: Any,
+        suite_result: SuiteResult | None,
+        iterations: int,
+        suite_results: list[SuiteResult] | None,
     ) -> ExpectationRunResult:
         """Apply the on_exhausted policy to a loop that ended without a pass."""
         if self._on_exhausted == "raise":
@@ -206,6 +257,7 @@ class ExpectationService:
                 suite_result=suite_result,
                 iterations=iterations,
                 exhausted=True,
+                suite_results=suite_results,
             )
         return ExpectationRunResult(
             response=response,
@@ -213,6 +265,7 @@ class ExpectationService:
             suite_result=suite_result,
             iterations=iterations,
             exhausted=True,
+            suite_results=suite_results,
         )
 
     def _prompt_for(
@@ -229,36 +282,55 @@ class ExpectationService:
             )
         return original_prompt
 
-    def _structural_result(self, response: Any) -> SuiteResult | None:
-        """A failing verdict when the response is not a schema-conforming record, else None."""
-        if not isinstance(response, dict):
-            detail = f"response was {type(response).__name__}, expected a JSON object"
-            if self._schema:
-                try:
-                    from agent_actions.processing.recovery.reprompt import _extract_field_names
+    def _record_verdict(
+        self, record: Any, llm_context: dict[str, Any] | None, *, check_schema: bool
+    ) -> SuiteResult:
+        """One record's verdict: structural failure if malformed, else its own rules.
 
-                    fields = _extract_field_names(self._schema)
-                except Exception:
-                    # A schema the extractor cannot walk degrades to feedback
-                    # without field names; it must never crash the record.
-                    logger.debug(
-                        "Could not extract field names from the schema for '%s'",
-                        self.suite.name,
-                        exc_info=True,
-                    )
-                    fields = []
-                if fields:
-                    detail += " with the fields: " + ", ".join(str(f) for f in fields)
-            return self._failing_structural(detail)
+        Observe mode marks a malformed element but never applies the schema
+        gate, which belongs to the repair loop.
+        """
+        if not isinstance(record, dict):
+            return self._non_record_verdict(record)
+        if check_schema:
+            schema_failure = self._schema_verdict(record)
+            if schema_failure is not None:
+                return schema_failure
+        return run_suite(self.suite, record, judge=self._judge, context_source=llm_context)
+
+    def _non_record_verdict(self, response: Any) -> SuiteResult:
+        """The verdict for a response that carries no records at all."""
+        detail = f"response was {type(response).__name__}, expected a JSON object"
         if self._schema:
-            from agent_actions.processing.recovery.response_validator import SchemaValidator
+            try:
+                from agent_actions.processing.recovery.reprompt import _extract_field_names
 
-            # The validator keeps per-call feedback state and records validate
-            # concurrently, so it is constructed per call, never held on self.
-            validator = SchemaValidator(self._schema, self.suite.name)
-            if not validator.validate(response):
-                return self._failing_structural(validator.feedback_message)
-        return None
+                fields = _extract_field_names(self._schema)
+            except Exception:
+                # A schema the extractor cannot walk degrades to feedback
+                # without field names; it must never crash the record.
+                logger.debug(
+                    "Could not extract field names from the schema for '%s'",
+                    self.suite.name,
+                    exc_info=True,
+                )
+                fields = []
+            if fields:
+                detail += " with the fields: " + ", ".join(str(f) for f in fields)
+        return self._failing_structural(detail)
+
+    def _schema_verdict(self, record: dict[str, Any]) -> SuiteResult | None:
+        """A failing verdict when *record* does not conform to the schema, else None."""
+        if not self._schema:
+            return None
+        from agent_actions.processing.recovery.response_validator import SchemaValidator
+
+        # The validator keeps per-call feedback state and records validate
+        # concurrently, so it is constructed per call, never held on self.
+        validator = SchemaValidator(self._schema, self.suite.name)
+        if validator.validate(record):
+            return None
+        return self._failing_structural(validator.feedback_message)
 
     def _failing_structural(self, detail: str) -> SuiteResult:
         if self._schema_digest is None:

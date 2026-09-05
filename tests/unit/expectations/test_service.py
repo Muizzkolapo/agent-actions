@@ -15,6 +15,7 @@ SUITE = Suite(
     name="s",
     expectations=[{"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}}],
 )
+
 INLINE = [{"type": "item_count", "field": "ideas", "params": {"min": 2}}]
 
 
@@ -81,13 +82,13 @@ def test_a_single_item_list_response_is_unwrapped_and_validated():
     assert result.response == {"ideas": ["a", "b", "c"]}
 
 
-def test_a_multi_item_list_response_is_not_validated():
-    # File-granularity (multiple records per call) has no expect: semantics
-    # defined -- left alone, matching the existing not-a-dict skip behavior.
+def test_a_multi_item_list_response_is_validated_per_record():
+    # An LLM returning an array produces one record per element, and each one
+    # is validated on its own -- see TestExpansionResponses for the contract.
     result = ExpectationService(SUITE, repair="none").execute(
         lambda p: ([{"ideas": ["a"]}, {"ideas": ["b"]}], True), "P"
     )
-    assert result.suite_result is None
+    assert [s.overall_pass for s in result.suite_results] == [False, False]
 
 
 def test_an_empty_list_response_is_not_validated():
@@ -735,6 +736,7 @@ JUDGED_TWO_FIELD = [
     {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}},
     {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}},
 ]
+
 JUDGE_AGENT = {"model_vendor": "anthropic", "model_name": "claude-sonnet-5"}
 
 
@@ -871,3 +873,168 @@ def test_a_suite_failing_only_on_skipped_rules_stops_generating():
     assert after.exhausted is True
     assert after.suite_result.overall_pass is False
     assert all(o.skipped for o in after.suite_result.failed)
+
+
+# ---------------------------------------------------------------------------
+# A response can carry more than one record (1 -> N expansion)
+# ---------------------------------------------------------------------------
+
+PASS_RECORD = {"ideas": ["a", "b", "c"]}
+
+FAIL_RECORD = {"ideas": ["only one"]}
+
+
+class TestExpansionResponses:
+    """An action whose LLM returns a JSON array produces one record per element,
+    and every one of them has to be validated — batch already does this."""
+
+    def test_observe_validates_every_record_of_an_expansion(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        assert result.suite_results is not None, "an expansion was left unvalidated"
+        assert [s.overall_pass for s in result.suite_results] == [True, False]
+
+    def test_the_combined_verdict_fails_when_any_record_fails(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        assert result.suite_result.overall_pass is False
+
+    def test_the_combined_verdict_passes_when_every_record_passes(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, PASS_RECORD], True), "P"
+        )
+        assert result.suite_result.overall_pass is True
+
+    def test_a_single_record_still_reports_one_verdict(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD], True), "P"
+        )
+        assert result.response == PASS_RECORD
+        assert len(result.suite_results) == 1
+        assert result.suite_result.overall_pass is True
+
+    def test_a_valid_expansion_does_not_trip_the_structural_gate(self):
+        # The whole response is well-formed; nothing here should be repaired.
+        calls = []
+
+        def generate(prompt):
+            calls.append(prompt)
+            return [PASS_RECORD, PASS_RECORD], True
+
+        result = ExpectationService(SUITE, repair="retry", max_iterations=3, schema=SCHEMA).execute(
+            generate, "P"
+        )
+        assert len(calls) == 1, "a valid expansion was regenerated"
+        assert result.exhausted is False
+        assert result.suite_result.overall_pass is True
+
+    def test_repair_regenerates_until_every_record_passes(self):
+        responses = iter([[PASS_RECORD, FAIL_RECORD], [PASS_RECORD, PASS_RECORD]])
+        result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(
+            lambda p: (next(responses), True), "P"
+        )
+        assert result.iterations == 2
+        assert result.suite_result.overall_pass is True
+
+    def test_a_list_holding_a_non_record_validates_the_records_beside_it(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "not a record"], True), "P"
+        )
+        assert [s.overall_pass for s in result.suite_results] == [True, False]
+        assert result.suite_result.overall_pass is False
+
+
+def test_a_structural_failure_yields_one_verdict_per_record():
+    # Every record must be annotatable; a single shared verdict would leave
+    # all but the first record of an expansion without one.
+    bad_shape = [{"wrong": 1}, {"wrong": 2}, {"wrong": 3}]
+    result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
+        lambda p: (bad_shape, True), "P"
+    )
+    assert len(result.suite_results) == len(bad_shape)
+    assert all(s.outcomes[0].id == "_structural" for s in result.suite_results)
+
+
+def test_a_non_record_response_still_yields_a_single_verdict():
+    result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
+        lambda p: ("not a record", True), "P"
+    )
+    assert len(result.suite_results) == 1
+    assert result.suite_results[0].overall_pass is False
+    assert result.suite_results[0].outcomes[0].id == "_structural"
+
+
+class TestCombinedVerdictNamesTheRecord:
+    """With many records the same rule id appears once per record, so the
+    combined verdict has to say which record each outcome came from."""
+
+    def test_failed_ids_are_distinct_per_record(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([FAIL_RECORD, FAIL_RECORD], True), "P"
+        )
+        failed = result.suite_result.to_record_dict()["failed"]
+        assert len(set(failed)) == len(failed), f"duplicate ids in the verdict: {failed}"
+
+    def test_a_rule_is_not_both_failed_and_passing(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        verdict = result.suite_result.to_record_dict()
+        passing = {o["id"] for o in verdict["outcomes"] if o["passed"]}
+        assert not (set(verdict["failed"]) & passing), (
+            "the same id is reported as both failed and passing, so repair "
+            "feedback tells the model to fix and preserve the same thing"
+        )
+
+    def test_the_records_own_verdict_keeps_the_authored_id(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, FAIL_RECORD], True), "P"
+        )
+        assert [o.id for o in result.suite_results[1].outcomes] == ["count"]
+
+    def test_a_single_record_verdict_is_not_renamed(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: (FAIL_RECORD, True), "P"
+        )
+        assert result.suite_result.to_record_dict()["failed"] == ["count"]
+
+    def test_a_conforming_record_is_judged_on_its_own_rules(self):
+        # The malformed sibling must not buy this record a free pass: its own
+        # expectations have to actually run.
+        mixed = [{"ideas": ["a", "b"]}, {"wrong": 1}]
+        result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
+            lambda p: (mixed, True), "P"
+        )
+        conforming = result.suite_results[0]
+        assert conforming.outcomes, (
+            "the conforming record claims a pass from an empty verdict — its expectations never ran"
+        )
+        assert [o.id for o in conforming.outcomes] == ["count"]
+
+    def test_the_malformed_record_reports_the_structural_failure(self):
+        mixed = [{"ideas": ["a", "b"]}, {"wrong": 1}]
+        result = ExpectationService(SUITE, repair="retry", max_iterations=1, schema=SCHEMA).execute(
+            lambda p: (mixed, True), "P"
+        )
+        assert [o.id for o in result.suite_results[1].outcomes] == ["_structural"]
+        assert result.suite_results[1].overall_pass is False
+
+
+class TestHeterogeneousExpansion:
+    """A list holding one bad element must not change how the good ones are
+    treated — the same principle the schema-malformed sibling already follows."""
+
+    def test_the_well_formed_records_are_still_validated(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "junk", FAIL_RECORD], True), "P"
+        )
+        assert result.suite_results is not None, "one bad element voided the whole response"
+        assert [s.overall_pass for s in result.suite_results] == [True, False, False]
+
+    def test_the_bad_element_reports_a_structural_failure(self):
+        result = ExpectationService(SUITE, repair="none").execute(
+            lambda p: ([PASS_RECORD, "junk"], True), "P"
+        )
+        assert [o.id for o in result.suite_results[1].outcomes] == ["_structural"]

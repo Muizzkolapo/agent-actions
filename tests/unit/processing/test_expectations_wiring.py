@@ -231,3 +231,94 @@ def test_recovery_metadata_describes_the_shipped_generation_only():
     result = strategy.invoke(make_task(), make_context())
     assert result.response["ideas"] == ["a", "b", "c"]
     assert result.recovery_metadata is None or result.recovery_metadata.reprompt is None
+
+
+def test_every_record_of_an_expansion_carries_its_own_verdict(monkeypatch):
+    """An LLM returning an array produces one record per element; each needs
+    its verdict so a downstream guard can filter them independently."""
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert isinstance(result.response, list), "the expansion shape must survive"
+    assert len(result.response) == 2
+    verdicts = [r["expect"]["overall_pass"] for r in result.response]
+    assert verdicts == [True, False]
+
+
+def test_an_expansion_keeps_its_own_fields_after_annotation(monkeypatch):
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert [r["ideas"] for r in result.response] == [["a", "b"], ["c"]]
+
+
+def test_return_last_ships_the_annotated_records_of_an_expansion(monkeypatch):
+    """return_last means "ship the last attempt"; an expansion is no exception."""
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=2, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is True, "a repairable expansion must not be tombstoned"
+    assert isinstance(result.response, list) and len(result.response) == 2
+    assert [r["expect"]["overall_pass"] for r in result.response] == [True, False]
+
+
+def test_an_all_empty_expansion_still_counts_as_empty_output(monkeypatch):
+    """Annotating each record must not disguise an empty response."""
+    from agent_actions.processing.helpers import _is_empty_output
+
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{}, {}], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert _is_empty_output(result.response) is True, (
+        "the verdict made a content-free response look non-empty, so on_empty never fires"
+    )
+
+
+def test_an_empty_single_record_still_counts_as_empty_output(monkeypatch):
+    from agent_actions.processing.helpers import _is_empty_output
+
+    strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({}, True))
+    result = strategy.invoke(make_task(), make_context())
+    assert _is_empty_output(result.response) is True
+
+
+def test_a_single_item_list_of_a_non_record_is_tombstoned_not_crashed(monkeypatch):
+    """A one-element list holding a string is not a record; annotating it
+    would hand attach_verdict a non-mapping."""
+    service = ExpectationService(
+        SUITE, repair="retry", max_iterations=1, on_exhausted="return_last"
+    )
+    strategy = OnlineStrategy(expectation_service=service)
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (["just a string"], True)
+    )
+    result = strategy.invoke(make_task(), make_context())
+    assert result.executed is False
+    assert result.response is None
+    assert result.recovery_metadata.expectations is not None
+
+
+def test_a_lone_field_named_expect_is_not_mistaken_for_a_verdict(monkeypatch):
+    """Emptiness discounts the attached verdict, not any field sharing its name."""
+    from agent_actions.processing.helpers import _is_empty_output
+
+    assert _is_empty_output({"expect": "renewal"}) is False
+    assert _is_empty_output([{"expect": "renewal"}]) is False

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-from agent_actions.expectations.types import SuiteResult
+from agent_actions.expectations.types import Outcome, SuiteResult
 
 REPAIR_TEMPLATE = """{original_prompt}
 
@@ -29,6 +30,32 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
+_RECORD_INDEX = re.compile(r"\[\d+\]$")
+
+
+def _hint_for(outcome_id: str, hints: dict[str, str]) -> str | None:
+    """The author's hint for an outcome, whose id may carry a record index.
+
+    Only a trailing ``[n]`` is stripped, so a rule genuinely named
+    ``latency[p99]`` keeps its own hint instead of borrowing ``latency``'s.
+    """
+    if outcome_id in hints:
+        return hints[outcome_id]
+    return hints.get(_RECORD_INDEX.sub("", outcome_id))
+
+
+def _failed_line(outcome: Outcome, hint: str | None) -> str:
+    """One bullet naming a failed rule, why it failed, and how to fix it."""
+    line = f"- {outcome.id}"
+    if outcome.severity != "error":
+        line += f" [{outcome.severity}]"
+    if outcome.detail:
+        line += f": {_one_line(outcome.detail)}"
+    if hint:
+        line += f" (hint: {_one_line(hint)})"
+    return line
+
+
 def compose_repair_prompt(
     original_prompt: str,
     response: Any,
@@ -41,10 +68,7 @@ def compose_repair_prompt(
     nothing the regeneration can act on.
     """
     failed_lines = "\n".join(
-        f"- {o.id}"
-        + (f" [{o.severity}]" if o.severity != "error" else "")
-        + (f": {_one_line(o.detail)}" if o.detail else "")
-        + (f" (hint: {_one_line(hints[o.id])})" if o.id in hints else "")
+        _failed_line(o, _hint_for(o.id, hints))
         for o in suite_result.outcomes
         if not o.passed and not o.skipped
     )

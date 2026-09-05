@@ -87,7 +87,21 @@ class OnlineStrategy(InvocationStrategy):
                 llm_context=task.llm_context,
             )
             response, executed = run.response, run.executed
-            if run.exhausted and (not executed or not isinstance(response, dict)):
+            # Annotatable on the same terms the service validated on: the
+            # response has to hold records, one per verdict.
+            verdicts = run.suite_results or []
+            # Annotatable only where a verdict can actually be attached: every
+            # element must be a mapping, one per verdict. A malformed element
+            # still gets a verdict from the service, but nothing to hold it.
+            annotatable = bool(verdicts) and (
+                (isinstance(response, dict) and len(verdicts) == 1)
+                or (
+                    isinstance(response, list)
+                    and len(response) == len(verdicts)
+                    and all(isinstance(record, dict) for record in response)
+                )
+            )
+            if run.exhausted and (not executed or not annotatable):
                 # Exhaustion with nothing annotatable (fail mode, or return_last
                 # ending on a non-record) routes to the tombstone channel.
                 response, executed = None, False
@@ -99,10 +113,18 @@ class OnlineStrategy(InvocationStrategy):
                         else []
                     ),
                 )
-            elif run.suite_result is not None and isinstance(response, dict):
+            elif run.suite_results:
                 from agent_actions.expectations.service import attach_verdict
 
-                response = attach_verdict(response, run.suite_result)
+                if isinstance(response, dict):
+                    response = attach_verdict(response, verdicts[0])
+                elif annotatable and isinstance(response, list):
+                    # An expansion carries one record per element; each gets the
+                    # verdict for its own content, not the combined one.
+                    response = [
+                        attach_verdict(record, verdict)
+                        for record, verdict in zip(response, verdicts, strict=True)
+                    ]
         else:
             response, executed = generate(task.formatted_prompt)
 
