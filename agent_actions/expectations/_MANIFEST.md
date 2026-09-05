@@ -7,12 +7,13 @@ their results, and the service that runs them around generation.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `types.py` | Module | Defines `Expectation`, `Suite`, `Outcome`, `SuiteResult`. `Expectation` reads type-specific arguments from its `params:` block and forbids unknown rule keys; `definition_hash()` digests what a rule tests, ignoring its id. | `validation`, `typing` |
+| `types.py` | Module | Defines `Expectation`, `Suite`, `Outcome`, `SuiteResult`. `Expectation` reads type-specific arguments from its `params:` block and forbids unknown rule keys; `definition_hash()` digests what a rule tests, ignoring its id. `field:` is required for every type except the record-scoped ones (`expression`), which must omit it — enforced by a model validator so every construction path gets the same rule. | `validation`, `typing` |
 | `fields.py` | Module | Turns a `field:` selector into check inputs via `resolve()` — bare name yields the whole value, `name[*]` one per element, a list of names one combined input. `referenced_names()` backs the preflight check. | `validation` |
-| `registry.py` | Module | Deterministic expectation types and `register`/`get`/`known_types`. A check returns `(passed, detail)`; `detail` names the observed value, since the repair composer reads it. | `validation` |
+| `registry.py` | Module | Deterministic expectation types and `register`/`get`/`known_types`, plus the public `expectation_check` decorator for project-defined types (exported from `agent_actions`). Every registered type also accepts the universal `row_condition` argument, unioned in `ExpectationType` itself so no registration path can omit it. A check returns `(passed, detail)`; `detail` names the observed value, since the repair composer reads it. User registration happens as a `tools/` import side effect during UDF discovery; collision policy is three-way — shadowing a built-in raises, the same name from a different file or function raises `DuplicateFunctionError`, and true re-import of the same function is idempotent. | `validation` |
+| `expression.py` | Module | Parses and evaluates an `expression` rule's condition against the whole record. `condition_holds()` is the same evaluation with the opposite error contract — it raises rather than reporting false — for callers deciding whether a rule applies, which must not read "we could not tell" as "it does not apply". Reuses the guard machinery verbatim — `GuardParser`'s blocklist plus the `WhereClauseParser` grammar — so a condition string is portable between `guard:` and `expect:` unchanged; `udf:` conditions are rejected with a pointer to `expectation_check`. A false condition's detail carries the values of every field the condition read; a missing field or an unquoted-literal semantic error becomes a failed outcome carrying the evaluator's own message. Imports from `guards/` and `input/preprocessing/parsing/` are deliberate and stay within the pipeline-free rule, which bans only `workflow`/`processing`/`storage`. | `validation` |
 | `loader.py` | Module | Builds a `Suite` from a schema-path file's rules — those declared under a `fields:` entry, which carry that field as their selector, and those in the file's own `expectations:` block (`load_named_suite` via `SchemaLoader`, `build_suite_from_schema_data`) — or from an action's inline list (`build_inline_suite`). | `output` |
 | `judge.py` | Module | `llm_judge` invocation, `votes:` majority voting, the per-action verdict cache (`CachedJudge`), and the per-run judge budget (`JudgeBudget`). `invoke_judge()` parses the model's verdict as strict JSON text, never a vendor-native structured-output schema — a malformed response is always a failure. | `processing` |
-| `runner.py` | Module | Evaluates every expectation against one record via `run_suite()`. Deterministic types call `registry.get(...).check()` directly; `llm_judge` dispatches through an injected `judge` callable and an optional `context_source`, keeping this module free of any pipeline or network import. Every rule runs even after an earlier failure. A missing field, an unresolvable `context:` ref, or a judge dispatched with no caller wired are each handled explicitly — the first two as failed outcomes, the third as a raised error. | `validation` |
+| `runner.py` | Module | Evaluates every expectation against one record via `run_suite()`. A rule's `row_condition` argument is the first gate: false waives the rule (a passing outcome marked skipped, naming the condition), a condition that cannot be evaluated fails it, and the argument is withheld from the check. Deterministic types call `registry.get(...).check()` directly; `expression` dispatches to `expression.evaluate_condition` against the whole record before field resolution; `llm_judge` dispatches through an injected `judge` callable and an optional `context_source`, keeping this module free of any pipeline or network import. Every rule runs even after an earlier failure, and a check call that raises is isolated into a failed outcome (`check raised {Type}: ...`) with a warning-level traceback. Still raised, deliberately: an unregistered type, a judge dispatched with no caller wired, and a `None`-field expectation reaching field resolution without a record-scoped dispatch branch — each is a wiring bug, not a data outcome. | `validation` |
 | `service.py` | Module | Runs one generation through `ExpectationService.execute()`, taking the same `llm_operation` callable contract as `RepromptService`. Unwraps a real online record's length-1 list response before validating — `create_dynamic_agent` always returns `list[Any]`, so a bare dict is never what a real single-record call produces. `create_expectation_service_from_config()` is the composition point: it builds a `CachedJudge`/`JudgeBudget` pair from `agent_config`/`judge_budget` only when a suite actually contains `llm_judge`, and injects the composed dispatcher into `run_suite()`. `attach_verdict()` writes the verdict under the record's `expect` key. | `processing` |
 
 ## Project Surface
@@ -20,25 +21,29 @@ their results, and the service that runs them around generation.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `load_named_suite` | `schema/{workflow}/{name}.yml` | Reads | `schema_path` |
+| `schema_rule_entries` | `schema/{workflow}/{action}.yml` | Reads `fields[].expectations` and the file's own `expectations:` | `schema_path` |
 | `create_expectation_service_from_config` | `agent_config/{workflow}.yml` | Reads | `actions[].expect` |
 | `attach_verdict` | `agent_io/target/{action}/` | Writes | — |
-| `CachedJudge` | agent's own `model_vendor`/`model_name` | Reads | `actions[].expect.expectations[].model` |
+| `CachedJudge` | agent's own `model_vendor`/`model_name` | Reads | `actions[].expect.expectations[].params.model` |
 | `JudgeBudget` | — | Bounds | `actions[].expect.judge_budget` |
+| `expectation_check` | `tools/{workflow}/*.py` | Reads (import side effect) | `actions[].expect.expectations[].type` |
 
-**Internal only**: `Outcome`, `SuiteResult`, `ExpectationType`, `ExpectationRunResult`, `resolve`, `referenced_names`, `resolve_context` -- no direct project surface.
+**Internal only**: `Outcome`, `SuiteResult`, `ExpectationType`, `ExpectationRunResult`, `resolve`, `referenced_names`, `resolve_context`, `parse_condition`, `referenced_field_paths`, `evaluate_condition` -- no direct project surface.
 
 ## Dependencies
 
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `processing` | inbound | `OnlineStrategy` composes `ExpectationService` as the outermost recovery layer |
-| `validation` | inbound | `expectations_validator` reads the registry and field selectors at preflight |
+| `validation` | inbound | `expectations_validator` reads the registry, field selectors, and expression parsing at preflight |
+| `input` | inbound | `input/loaders/udf.py` imports `tools/` files declaring `expectation_check`, registering user types before preflight |
 | `config` | outbound | `ExpectConfig` lives in `config/schema.py` |
 | `output` | outbound | `loader.py` resolves suite names through `SchemaLoader`, exactly as `schema:` resolves |
+| `guards`, `input` | outbound | `expression.py` reuses `GuardParser`'s blocklist and the `input/preprocessing/parsing` grammar/AST |
 
 ## Notes
 
-The engine core (`types`, `fields`, `registry`, `loader`, `runner`) imports nothing
+The engine core (`types`, `fields`, `registry`, `expression`, `loader`, `runner`) imports nothing
 from `workflow/`, `processing/` or `storage/`. `service.py` is the only module here
 that knows about the pipeline. Keeping that boundary is what lets the runner be
 tested without a network and the CLI start without loading the workflow stack.
