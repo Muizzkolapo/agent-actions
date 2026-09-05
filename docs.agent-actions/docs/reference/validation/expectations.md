@@ -207,7 +207,7 @@ Every ref in `context:` is automatically added to the action's own `context_scop
 ### Caching and budget
 
 - **Cache:** a judge call is keyed on `(expectation, resolved value)`. If two records (or two rules) produce byte-identical content for the same rule, the second call is served from cache instead of spending another real LLM call.
-- **Budget:** `judge_budget` on the `expect:` block caps real judge calls across every record the action processes in one run — cache hits don't count against it. Once exhausted, further judge outcomes are marked `skipped` (not `failed`) with a message naming the exhaustion.
+- **Budget:** `judge_budget` on the `expect:` block caps real judge calls across every record the action processes in one run — cache hits don't count against it. Once exhausted, further judge outcomes are marked `skipped` with a message naming the exhaustion. A skipped outcome did not pass, so an `error`-severity one appears in **both** the verdict's `failed` and `skipped` lists — it could not be checked, and a rule that could not be checked has not been satisfied.
 - **Failure isolation:** if the judge LLM call itself errors (network, auth, rate limit), that single outcome fails with the error in its `detail` — it does not crash the record's processing.
 
 ## Severity
