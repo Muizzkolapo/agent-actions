@@ -137,3 +137,17 @@ class Suite(BaseModel):
 
     name: str
     expectations: list[Expectation] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _ids_are_unique(self) -> Suite:
+        """Two rules sharing an id are indistinguishable once they are outcomes."""
+        seen: set[str] = set()
+        for expectation in self.expectations:
+            rule_id = expectation.resolved_id
+            if rule_id in seen:
+                raise ValueError(
+                    f"two expectations share the id '{rule_id}'; an id names an outcome "
+                    f"in the verdict and matches a hint to its rule, so it has to be unique"
+                )
+            seen.add(rule_id)
+        return self
