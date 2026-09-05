@@ -5,6 +5,7 @@ from typing import Any
 
 from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.schema import compile_unified_schema
+from agent_actions.output.response.schema_conversion import _without_rules
 from agent_actions.utils.schema_utils import is_compiled_schema
 
 logger = logging.getLogger(__name__)
@@ -78,10 +79,12 @@ def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None
         and "items" in schema_fields
         and "fields" not in schema_fields
     ):
-        items_schema = schema_fields["items"]
+        # This path assigns the schema straight through, so it does its own
+        # stripping — rule blocks are for the author, never for a provider.
+        items_schema = _without_rules(schema_fields["items"])
         if isinstance(items_schema, dict) and items_schema.get("type") == "object":
             items_schema.setdefault("additionalProperties", False)
-        agent["output_schema"] = unified_schema
+        agent["output_schema"] = _without_rules(unified_schema)
         agent["json_output_schema"] = items_schema
         return
 

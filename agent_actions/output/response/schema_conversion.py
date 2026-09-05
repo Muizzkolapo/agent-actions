@@ -141,6 +141,20 @@ def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, An
     }
 
 
+def _without_rules(node: Any) -> Any:
+    """A schema node with any expectations: block removed, at every depth.
+
+    Rules ride in the schema file for the author's benefit; the provider is sent
+    the shape only, and a nested block would otherwise be copied through with
+    the structure that carries it.
+    """
+    if isinstance(node, dict):
+        return {k: _without_rules(v) for k, v in node.items() if k != "expectations"}
+    if isinstance(node, list):
+        return [_without_rules(item) for item in node]
+    return node
+
+
 def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]:
     """
     Convert a single unified field into the shape required by the target system.
@@ -158,7 +172,7 @@ def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]
         if k in field:
             prop[k] = field[k]
     if field["type"] == "array" and "items" in field:
-        prop["items"] = field["items"]
+        prop["items"] = _without_rules(field["items"])
     if "enum" in field:
         prop["enum"] = field["enum"]
     if "validators" in field:

@@ -23,6 +23,10 @@ from agent_actions.validation.dag_schema_fit_validator import (
     find_dag_schema_compatibility_gaps,
 )
 from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
+from agent_actions.validation.expectations_validator import (
+    EXPECTATIONS_REMEDY,
+    find_expectation_defects,
+)
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
@@ -137,6 +141,10 @@ class PreflightService:
         # guarantee every field the tool consumer requires (implicit), or does the
         # consumer declare `defaults:` for it? (warn-only.)
         self._warn_dag_schema_compatibility_gaps()
+
+        # 10. Expect blocks: registered types, accepted parameters, and fields
+        # the action actually produces.
+        self._check_expectation_defects()
 
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
@@ -278,6 +286,28 @@ class PreflightService:
             if emitted:
                 synthesized[name] = emitted
         return synthesized
+
+    def _collect_action_output_fields(self) -> dict[str, set[str]]:
+        """Every non-dropped output field name per action, regardless of source."""
+        if self.schema_service is None:
+            return {}
+        return {
+            name: {f.name for f in action_schema.output_fields if not f.is_dropped}
+            for name, action_schema in self.schema_service.get_all_schemas().items()
+        }
+
+    def _check_expectation_defects(self) -> None:
+        """Refuse when an expect block names an unknown type, parameter, or field."""
+        defects = find_expectation_defects(
+            self.action_configs,
+            self._collect_action_output_fields(),
+            project_root=self.project_root,
+        )
+        if defects:
+            raise PreFlightValidationError(
+                "\n".join(f"{action}: {msg}" for action, msgs in defects.items() for msg in msgs),
+                hint=EXPECTATIONS_REMEDY,
+            )
 
     @staticmethod
     def _warn_findings(
