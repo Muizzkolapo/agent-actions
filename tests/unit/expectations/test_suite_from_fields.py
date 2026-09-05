@@ -233,3 +233,20 @@ def test_a_nested_list_that_is_not_rules_is_not_mistaken_for_them():
     }
     suite = build_suite_from_schema_data("page_shape", data)
     assert [e.field for e in suite.expectations] == ["survey"]
+
+
+def test_a_record_scoped_rule_under_a_field_is_refused_where_the_author_wrote_it():
+    data = {
+        "fields": [
+            {
+                "id": "score",
+                "type": "integer",
+                "expectations": [{"type": "expression", "params": {"condition": "score >= 0"}}],
+            }
+        ]
+    }
+    with pytest.raises(ValueError) as excinfo:
+        build_suite_from_schema_data("page_shape", data)
+    message = str(excinfo.value)
+    assert "expression" in message
+    assert "expectations: block" in message

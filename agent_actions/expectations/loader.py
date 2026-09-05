@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.expectations.types import Expectation, Suite
+from agent_actions.expectations.types import _RECORD_SCOPED_TYPES, Expectation, Suite
 
 
 class SuiteLoadError(ValueError):
@@ -102,6 +102,14 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[A
                 defects.append(
                     f"{label}: a rule on field '{field_id}' must not declare field: — "
                     f"position already names what it tests"
+                )
+                continue
+            if entry.get("type") in _RECORD_SCOPED_TYPES:
+                label = entry.get("id") or entry.get("type") or "<unnamed>"
+                defects.append(
+                    f"{label}: a rule on field '{field_id}' is type '{entry['type']}', which "
+                    f"is evaluated against the whole record and takes no field; move it to "
+                    f"the file's own expectations: block"
                 )
                 continue
             entries.append({**entry, "field": field_id})
