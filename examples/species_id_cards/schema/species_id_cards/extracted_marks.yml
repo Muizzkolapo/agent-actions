@@ -1,0 +1,16 @@
+name: extracted_marks
+description: Candidate field marks pulled out of one entry by a single extraction pass
+fields:
+  - id: marks
+    type: array
+    items:
+      type: object
+      properties:
+        mark_text: {type: string}
+        mark_kind: {type: string, enum: [plumage, structure, voice, behaviour, habitat]}
+        species: {type: string}
+    description: "Candidate marks, each with its text, kind and the species it describes"
+  - id: pass_notes
+    type: string
+    description: "What this pass prioritised"
+required: [marks]

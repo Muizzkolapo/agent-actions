@@ -1,0 +1,17 @@
+name: auto_review
+description: Automated screen for grounding and for marks only usable in the hand
+fields:
+  - id: grounding_score
+    type: number
+    description: "How well the passage supports the note, 0 to 1"
+  - id: in_hand_only
+    type: boolean
+    description: "True when the mark cannot be used on a bird in the field"
+  - id: review_recommendation
+    type: string
+    enum: [pass, review]
+    description: "pass or review"
+  - id: review_reason
+    type: string
+    description: "Why that recommendation"
+required: [grounding_score, review_recommendation]

@@ -1,0 +1,20 @@
+name: approved_mark
+description: A mark the voters kept, carried forward for grounding
+fields:
+  - id: mark_text
+    type: string
+    description: "The mark as a reader would use it in the field"
+  - id: mark_kind
+    type: string
+    description: "plumage, structure, voice, behaviour or habitat"
+  - id: species
+    type: string
+    description: "The species the mark belongs to"
+  - id: decision
+    type: string
+    enum: [keep, drop]
+    description: "The majority decision that let it through"
+  - id: vote_summary
+    type: string
+    description: "Each voter's reason, joined"
+required: [mark_text, species, decision]

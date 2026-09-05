@@ -1,0 +1,17 @@
+name: canonical_marks
+description: The three extraction passes reconciled into one set, near-duplicates merged
+fields:
+  - id: canonical_marks
+    type: array
+    items:
+      type: object
+      properties:
+        mark_text: {type: string}
+        mark_kind: {type: string, enum: [plumage, structure, voice, behaviour, habitat]}
+        species: {type: string}
+        merged_count: {type: integer}
+    description: "Merged marks; each carries mark_text, mark_kind, species and merged_count"
+  - id: reconcile_notes
+    type: string
+    description: "What was merged and why"
+required: [canonical_marks]

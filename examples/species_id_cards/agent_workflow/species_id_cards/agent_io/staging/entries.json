@@ -1,0 +1,20 @@
+[
+  {
+    "entry_id": "e-001",
+    "guide": "Handbook of Western Palearctic Birds",
+    "species": "Willow Warbler",
+    "entry_text": "A small, slim warbler with a gentle expression and a fine bill. The legs are usually pale — a warm straw or pinkish brown — which is the most reliable structural difference from Chiffchaff in the field. The primary projection is long, roughly equal to the exposed tertial length, giving the bird an attenuated rear end. The song is the surest mark of all: a soft descending cadence that fades away at the end, quite unlike the flat two-note repetition of its close relative. Fresh autumn birds show a distinct yellow wash across the breast and supercilium."
+  },
+  {
+    "entry_id": "e-002",
+    "guide": "Field Notes on Northern Passerines",
+    "species": "Willow Warbler",
+    "entry_text": "Separating this species from Chiffchaff rests on a small number of marks. Leg colour is pale, usually straw, though poor light makes this treacherous. The primary projection is long, roughly equal to the exposed tertial length. Song is diagnostic where it can be heard: a descending series that trails off, against the mechanical repetition of Chiffchaff. Birders should be aware that wing formula, while decisive, requires the bird in the hand and is of no use in the field."
+  },
+  {
+    "entry_id": "e-003",
+    "guide": "Handbook of Western Palearctic Birds",
+    "species": "Marsh Tit",
+    "entry_text": "A neat black-capped tit with a glossy crown, best told from Willow Tit by the pale spot at the base of the upper mandible, visible at close range in good light. The call is the readiest mark: an explosive pitchoo, quite distinct from the buzzing nasal notes of Willow Tit. The cap is glossy rather than dull, though this varies with wear and should not be relied on alone. Prefers mature deciduous woodland, particularly where the canopy is closed."
+  }
+]

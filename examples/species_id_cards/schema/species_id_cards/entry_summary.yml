@@ -1,0 +1,14 @@
+name: entry_summary
+description: One-line summary of a field-guide entry and how much identification detail it carries
+fields:
+  - id: summary
+    type: string
+    description: "One sentence describing what the entry covers"
+  - id: detail_level
+    type: string
+    enum: [high, medium, low]
+    description: "How much usable identification detail the entry carries: high, medium or low"
+  - id: detail_reason
+    type: string
+    description: "Why that level was chosen"
+required: [summary, detail_level]

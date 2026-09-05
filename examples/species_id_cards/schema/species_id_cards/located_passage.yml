@@ -1,0 +1,10 @@
+name: located_passage
+description: The passage around the supporting quote, and whether the quote was found at all
+fields:
+  - id: passage
+    type: string
+    description: "Text either side of the quote; empty when the quote is not in the entry"
+  - id: passage_found
+    type: boolean
+    description: "False when the quote does not appear in the entry it claims to come from"
+required: [passage, passage_found]

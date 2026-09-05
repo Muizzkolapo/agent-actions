@@ -1,0 +1,198 @@
+################################################################################
+# Field-guide species identification — extraction, selection, grounding
+################################################################################
+# Phase 1  Extract   summarise entry, extract field marks in parallel, merge,
+#                    flatten 1->N, deduplicate across guides at FILE granularity
+# Phase 2  Select    three voters rank diagnostic value, majority aggregate,
+#                    filter to the marks that survived the vote
+# Phase 3  Ground    draft an identification note twice, consolidate, locate the
+#                    supporting passage, and refuse to review what is ungrounded
+################################################################################
+name: species_id_cards
+description: "Build grounded species identification notes from field-guide entries"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: true
+  record_limit: 2
+  reprompt:
+    on_schema_mismatch: reprompt
+    max_attempts: 3
+    use_self_reflection: true
+    on_exhausted: return_last
+  context_scope:
+    seed:
+      identification_rules: $file:identification_rules.json
+      mark_taxonomy: $file:mark_taxonomy.json
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+
+  # ── PHASE 1: EXTRACTION & DEDUPLICATION ─────────────────────────────────────
+
+  - name: summarize_entry
+    intent: "Summarise a field-guide entry and judge how much identification detail it carries"
+    schema: entry_summary
+    prompt: $species_id.Summarize_Entry
+    retry: { enabled: true, max_attempts: 3 }
+    context_scope:
+      observe: [source.entry_text, source.guide]
+
+  - name: extract_field_marks
+    dependencies: [summarize_entry]
+    intent: "Extract candidate field marks from the entry"
+    schema: extracted_marks
+    prompt: $species_id.Extract_Field_Marks
+    versions: { param: iteration, range: [1, 2, 3], mode: parallel }
+    guard:
+      condition: 'summarize_entry.detail_level == "high" or summarize_entry.detail_level == "medium"'
+      on_false: "filter"
+    retry: { enabled: true, max_attempts: 3 }
+    context_scope:
+      observe:
+        - source.entry_text
+        - summarize_entry.detail_level    # dependency anchor only — not used by the prompt
+
+  - name: canonicalize_marks
+    dependencies: [extract_field_marks]
+    intent: "Reconcile the three extraction passes into one canonical set of marks"
+    schema: canonical_marks
+    prompt: $species_id.Canonicalize_Marks
+    version_consumption: { source: extract_field_marks, pattern: merge }
+    context_scope:
+      observe: [extract_field_marks.*]
+
+  - name: flatten_marks
+    dependencies: [canonicalize_marks]
+    kind: tool
+    impl: flatten_marks
+    intent: "One record per canonical mark, so each is voted on independently"
+    schema: flattened_mark
+    context_scope:
+      observe: [canonicalize_marks.*]
+
+  - name: dedupe_across_guides
+    dependencies: [flatten_marks]
+    kind: tool
+    impl: dedupe_across_guides
+    intent: "Drop marks that two guides describe in the same words"
+    schema: deduped_mark
+    granularity: File
+    context_scope:
+      observe: [flatten_marks.*]
+
+  # ── PHASE 2: VOTING & SELECTION ─────────────────────────────────────────────
+
+  - name: rank_diagnostic_value
+    dependencies: [dedupe_across_guides]
+    intent: "Judge whether a mark actually separates this species from its look-alikes"
+    schema: diagnostic_vote
+    prompt: $species_id.Rank_Diagnostic_Value
+    versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
+    context_scope:
+      observe: [dedupe_across_guides.*]
+
+  - name: aggregate_votes
+    dependencies: [rank_diagnostic_value]
+    kind: tool
+    impl: aggregate_votes
+    intent: "Majority rule over the three voters"
+    schema: vote_result
+    version_consumption: { source: rank_diagnostic_value, pattern: merge }
+    context_scope:
+      observe: [rank_diagnostic_value.*]
+
+  - name: select_approved_marks
+    dependencies: [aggregate_votes]
+    kind: tool
+    impl: select_approved_marks
+    intent: "Carry forward only the marks the voters kept"
+    schema: approved_mark
+    guard: { condition: 'aggregate_votes.decision == "keep"', on_false: "filter" }
+    context_scope:
+      observe:
+        - aggregate_votes.decision
+        - aggregate_votes.vote_summary
+        - dedupe_across_guides.mark_text
+        - dedupe_across_guides.mark_kind
+        - dedupe_across_guides.species
+        - dedupe_across_guides.merged_count
+
+  # ── PHASE 3: GROUNDING ──────────────────────────────────────────────────────
+
+  - name: draft_id_note
+    dependencies: [select_approved_marks]
+    intent: "Draft an identification note for the mark, quoting the entry it came from"
+    schema: id_note_draft
+    prompt: $species_id.Draft_Id_Note
+    versions: { param: drafter_id, range: [1, 2], mode: parallel }
+    context_scope:
+      observe:
+        - select_approved_marks.*
+        - source.entry_text
+        - source.guide
+        - summarize_entry.summary
+      drop:
+        - select_approved_marks.vote_summary
+        - select_approved_marks.decision
+
+  - name: consolidate_id_note
+    dependencies: [draft_id_note]
+    intent: "Reconcile the two drafts into one note and one supporting quote"
+    schema: consolidated_id_note
+    prompt: $species_id.Consolidate_Id_Note
+    version_consumption: { source: draft_id_note, pattern: merge }
+    context_scope:
+      observe:
+        - draft_id_note.*
+        - dedupe_across_guides.mark_text
+        - source.entry_text
+
+  - name: locate_supporting_passage
+    dependencies: [consolidate_id_note]
+    kind: tool
+    impl: locate_supporting_passage
+    intent: "Find the quote in the entry and return the passage around it"
+    schema: located_passage
+    context_scope:
+      observe:
+        - consolidate_id_note.supporting_quote
+        - source.entry_text
+
+  - name: describe_confusion_risk
+    dependencies: [locate_supporting_passage]
+    guard: { condition: 'locate_supporting_passage.passage_found == true', on_false: "filter" }
+    intent: "Name the look-alikes this mark is most often confused with"
+    schema:
+      confusable_with: string
+      why_confusable: string
+      separating_detail: string
+    prompt: $species_id.Describe_Confusion_Risk
+    context_scope:
+      observe:
+        - consolidate_id_note.note_text
+        - consolidate_id_note.supporting_quote
+        - locate_supporting_passage.passage
+        - dedupe_across_guides.species
+
+  - name: auto_review_note
+    dependencies: [locate_supporting_passage]
+    guard: { condition: 'locate_supporting_passage.passage_found == true', on_false: "filter" }
+    intent: "Screen the note for grounding and for marks that only work in the hand"
+    schema: auto_review
+    prompt: $species_id.Auto_Review_Note
+    context_scope:
+      observe:
+        - dedupe_across_guides.mark_text
+        - consolidate_id_note.note_text
+        - locate_supporting_passage.passage
+        - locate_supporting_passage.passage_found

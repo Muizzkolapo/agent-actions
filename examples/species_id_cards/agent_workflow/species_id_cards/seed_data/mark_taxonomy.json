@@ -1,0 +1,10 @@
+{
+  "kinds": {
+    "plumage": "Colour, pattern, moult state",
+    "structure": "Proportions, bill and wing shape, posture",
+    "voice": "Song, call, flight note",
+    "behaviour": "Feeding action, flight style, tail movement",
+    "habitat": "Where the bird is, and at what season"
+  },
+  "in_hand_only": ["wing formula", "skull ossification", "cloacal protuberance"]
+}

@@ -104,4 +104,30 @@ EXAMPLES: list[Example] = [
             RepromptCheck(action="write_description"),
         ],
     ),
+    Example(
+        name="species_id_cards",
+        path="examples/species_id_cards",
+        workflow="species_id_cards",
+        actions=13,
+        checks=[
+            PipelineCompleted(),
+            LineageCheck(),
+            ParallelVersions(action="extract_field_marks", versions=3),
+            ParallelVersions(action="rank_diagnostic_value", versions=3),
+            ParallelVersions(action="draft_id_note", versions=2),
+            ContextScope(
+                action="draft_id_note",
+                dropped_fields=["vote_summary", "decision"],
+            ),
+            # Only the grounding guard is asserted. The extraction guard reads a
+            # field the mock fills from an enum, so whether it filters is a coin
+            # toss; the grounding guard filters every record every run, because
+            # the mock cannot invent a quote that appears in the source.
+            GuardCheck(action="auto_review_note", behavior="filter"),
+            # OutputStructure and SchemaConformance are omitted deliberately:
+            # both fail for every example in this registry, not just this one.
+            # PromptTraceCheck is omitted for a reason specific to this example
+            # — see the note filed in shared/coordination/status.md.
+        ],
+    ),
 ]

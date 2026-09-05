@@ -1,0 +1,17 @@
+name: vote_result
+description: Majority decision over the three voters
+fields:
+  - id: decision
+    type: string
+    enum: [keep, drop]
+    description: "keep or drop, by majority"
+  - id: keep_votes
+    type: integer
+    description: "How many voters said keep"
+  - id: vote_summary
+    type: string
+    description: "Each voter's reason, joined"
+  - id: split_decision
+    type: boolean
+    description: "True when the voters did not agree unanimously"
+required: [decision, keep_votes, vote_summary]

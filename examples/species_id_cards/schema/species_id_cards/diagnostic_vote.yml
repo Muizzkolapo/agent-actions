@@ -1,0 +1,14 @@
+name: diagnostic_vote
+description: One voter's judgement on whether a mark separates the species from its look-alikes
+fields:
+  - id: verdict
+    type: string
+    enum: [keep, drop]
+    description: "keep or drop"
+  - id: diagnostic_score
+    type: number
+    description: "How well the mark separates the species, 0 to 1"
+  - id: reason
+    type: string
+    description: "Why the voter reached that verdict"
+required: [verdict, diagnostic_score, reason]

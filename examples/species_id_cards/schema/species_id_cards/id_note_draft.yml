@@ -1,0 +1,13 @@
+name: id_note_draft
+description: One drafter's identification note, with the quote it rests on
+fields:
+  - id: note_text
+    type: string
+    description: "How to use this mark in the field"
+  - id: supporting_quote
+    type: string
+    description: "The sentence from the entry that supports the note, verbatim"
+  - id: confidence
+    type: number
+    description: "The drafter's confidence that the quote supports the note, 0 to 1"
+required: [note_text, supporting_quote]
