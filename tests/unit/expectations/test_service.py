@@ -112,15 +112,36 @@ def test_factory_builds_an_inline_suite_named_after_the_action():
 
 
 @pytest.mark.parametrize("mode", ["auto", "retry"])
-def test_factory_refuses_repair_modes_this_build_does_not_implement(mode):
-    with pytest.raises(ConfigurationError, match="repair: none"):
-        create_expectation_service_from_config(
-            {"expectations": INLINE, "repair": mode}, action_name="a"
-        )
+def test_factory_builds_the_repair_loop_with_all_knobs(mode):
+    service = create_expectation_service_from_config(
+        {"expectations": INLINE, "repair": mode, "max_iterations": 2, "on_exhausted": "fail"},
+        action_name="a",
+    )
+    calls = []
+
+    def failing(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = service.execute(failing, "P")
+    assert len(calls) == 2
+    assert result.executed is False
+    assert result.response is None
+    assert result.exhausted is True
+
+
+def test_factory_threads_the_schema_for_the_structural_gate():
+    service = create_expectation_service_from_config(
+        {"expectations": INLINE, "repair": "retry", "max_iterations": 1},
+        action_name="a",
+        agent_config={"name": "a", "schema": SCHEMA},
+    )
+    result = service.execute(lambda p: ({"bad": 1}, True), "P")
+    assert [o.id for o in result.suite_result.outcomes] == ["_structural"]
 
 
 def test_factory_refuses_a_repair_prompt_mapping():
-    with pytest.raises(ConfigurationError, match="repair: none"):
+    with pytest.raises(ConfigurationError, match="not implemented yet"):
         create_expectation_service_from_config(
             {"expectations": INLINE, "repair": {"prompt": "$wf.Fix"}}, action_name="a"
         )

@@ -18,9 +18,10 @@ from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 
 EXPECTATIONS_REMEDY = (
-    "Fix the expectation declaration: use a registered type (each defect below "
-    "lists the registered ones), put the type's arguments under params:, and "
-    "target a field the action's schema produces."
+    "Fix the expect: block — each defect names its correction. For "
+    "type/parameter/field defects: use a registered type (each unknown-type "
+    "defect lists the registered ones), put the type's arguments under params:, "
+    "and target a field the action's schema produces."
 )
 
 _VERDICT_KEY = "expect"
@@ -48,6 +49,7 @@ def find_expectation_defects(
 
         fields = available_fields.get(action_name)
         messages: list[str] = []
+        messages.extend(_repair_mode_defects(action, expect))
 
         if fields is not None and _VERDICT_KEY in fields:
             messages.append(
@@ -73,6 +75,54 @@ def find_expectation_defects(
             defects[action_name] = sorted(messages)
 
     return defects
+
+
+def _config_token(value: Any) -> str:
+    """Normalize a config value that may be an enum member or a cased string."""
+    raw = getattr(value, "value", value)
+    return str(raw).lower() if raw is not None else ""
+
+
+def _repair_mode_defects(action: dict[str, Any], expect: dict[str, Any]) -> list[str]:
+    """Defects for the repair-loop keys against the action's execution shape."""
+    messages: list[str] = []
+    if _config_token(action.get("run_mode")) == "batch":
+        messages.append(
+            "expect: has no effect under batch run_mode — expectations run only on "
+            "the online path; remove the block or run the action online"
+        )
+    repair = expect.get("repair", "auto")
+    if repair == "none":
+        return messages
+    if isinstance(repair, dict):
+        messages.append("repair: {prompt:} is not implemented; use retry or auto")
+        return messages
+    from agent_actions.processing.helpers import _is_tool_action
+
+    if _is_tool_action(action):
+        messages.append(
+            f"repair: {repair} cannot run on a tool action — re-running a "
+            "deterministic UDF yields the same output; use repair: none"
+        )
+    if _config_token(action.get("granularity")) == "file":
+        messages.append(
+            f"repair: {repair} cannot run at file granularity — a multi-record "
+            "response can never satisfy the record-shaped structural gate; use "
+            "repair: none or record granularity"
+        )
+    schema = action.get("schema")
+    if schema is not None and not isinstance(schema, dict):
+        messages.append(
+            f"repair: {repair} found a non-mapping schema ({type(schema).__name__}); "
+            "the structural gate would silently check record shape only — fix the schema"
+        )
+    elif schema is None and action.get("schema_name"):
+        messages.append(
+            f"repair: {repair} declared, but the named schema "
+            f"'{action['schema_name']}' was not inlined — the structural gate "
+            "would silently check record shape only; fix the schema reference"
+        )
+    return messages
 
 
 def _default_suite_defects(
