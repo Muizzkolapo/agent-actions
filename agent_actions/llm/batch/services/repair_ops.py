@@ -207,6 +207,7 @@ def submit_repair_batch(
         output_directory=output_directory,
         batch_name=batch_name,
         source_data=_load_source_data_for_reprompt(storage_backend),
+        attempt=attempt,
         feedback_by_id=feedback_by_id,
     )
 

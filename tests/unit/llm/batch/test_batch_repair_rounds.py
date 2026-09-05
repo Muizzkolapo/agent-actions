@@ -357,3 +357,35 @@ class TestAnExhaustedRecordKeepsTheRuleThatFailed:
         strategy.evaluate(result)
         stamp_exhausted([result], strategy, attempts=1)
         assert result.recovery_metadata.expectations.failed == []
+
+
+def test_a_repair_round_stamps_its_round_number_on_the_prompt_trace():
+    strategy = build_repair_strategy(_agent_config(repair="auto"))
+    failed = BatchResult(custom_id=CUSTOM_ID, content=FAILING, success=True)
+    strategy.evaluate(failed)
+
+    prepared = MagicMock()
+    prepared.formatted_prompt = ORIGINAL_PROMPT
+    prepared.llm_context = {"source": {"text": "the original input"}}
+    prepared.should_execute = True
+
+    with patch(
+        "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=prepared
+    ) as prepare:
+        submit_repair_batch(
+            action_indices={ACTION: 0},
+            dependency_configs={},
+            storage_backend=None,
+            provider=RecordingProvider(),
+            failed_results=[failed],
+            strategy=strategy,
+            context_map=_context_map(),
+            output_directory="/tmp/test",
+            file_name="f.json",
+            agent_config=_agent_config(repair="auto"),
+            attempt=2,
+        )
+
+    # A trace row is keyed (action, record, attempt) and written INSERT OR REPLACE,
+    # so a round that does not stamp its number overwrites the previous prompt.
+    assert prepare.call_args.kwargs["attempt"] == 2

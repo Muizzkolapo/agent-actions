@@ -924,7 +924,8 @@ class ResultCollector:
             Tuple of (output_records, stats). Stats contain counts by status.
 
         Raises:
-            AgentActionsError: If on_exhausted=raise and records exhausted retries.
+            AgentActionsError: If on_exhausted=raise and records exhausted retries,
+            unless the caller asked for it to be deferred.
         """
         return collect_results_from_processing_results(
             results,

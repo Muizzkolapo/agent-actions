@@ -1,8 +1,8 @@
 """Consolidated reprompt exhaustion handling.
 
 Single source of truth for what happens when reprompt recovery attempts
-are exhausted. Optionally raises based on the ``on_exhausted`` policy
-configured in the workflow.
+are exhausted. Hands the halt back rather than raising it, so the caller can
+throw after its output is written.
 """
 
 from __future__ import annotations

@@ -235,9 +235,21 @@ def handle_retry_recovery(
             return None
 
     exhausted_recovery = None
-    if still_missing:
+    if still_missing and state.retry_attempt >= state.retry_max_attempts:
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             still_missing, updated_counts
+        )
+    elif still_missing:
+        # Reached here with attempts left, so submission failed rather than the
+        # budget running out. Stamping exhaustion would tell the on_exhausted
+        # policy the run is over when the next pass can still resubmit.
+        logger.warning(
+            "Retry submission for %s did not go out with %d of %d attempts left; "
+            "%d record(s) carried forward unexhausted",
+            identity.file_name,
+            state.retry_max_attempts - state.retry_attempt,
+            state.retry_max_attempts,
+            len(still_missing),
         )
 
     should_continue = check_and_submit_reprompt(
