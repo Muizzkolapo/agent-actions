@@ -274,3 +274,26 @@ def test_a_rule_that_is_not_a_mapping_is_reported_not_ignored():
     message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
     assert "must be a mapping" in message
     assert "str" in message
+
+
+def test_a_schema_given_as_a_list_of_fields_still_has_its_rules_read(tmp_path):
+    schema = [
+        {
+            "id": "summary",
+            "type": "string",
+            "expectations": [{"id": "present", "type": "not_null"}],
+        }
+    ]
+    configs = {"summarize": {"name": "summarize", "schema": schema, "expect": {"repair": "none"}}}
+    defects = find_expectation_defects(configs, FIELDS, project_root=project(tmp_path))
+    assert defects == {}
+
+
+def test_a_list_schema_with_a_defective_rule_reports_the_rule(tmp_path):
+    schema = [{"id": "summary", "type": "string", "expectations": [{"type": "vibe_check"}]}]
+    configs = {"summarize": {"name": "summarize", "schema": schema, "expect": {"repair": "none"}}}
+    message = " ".join(
+        find_expectation_defects(configs, FIELDS, project_root=project(tmp_path))["summarize"]
+    )
+    assert "vibe_check" in message
+    assert "declares no schema" not in message
