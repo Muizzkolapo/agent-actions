@@ -108,3 +108,25 @@ def test_to_record_dict_reports_only_error_severity_ids_as_failed():
 def test_suite_requires_at_least_one_expectation():
     with pytest.raises(ValidationError):
         Suite(name="empty", expectations=[])
+
+
+def test_two_rules_may_not_share_an_id():
+    with pytest.raises(ValidationError, match="present"):
+        Suite(
+            name="s",
+            expectations=[
+                {"id": "present", "type": "not_null", "field": "a"},
+                {"id": "present", "type": "not_null", "field": "b"},
+            ],
+        )
+
+
+def test_rules_without_ids_do_not_collide():
+    suite = Suite(
+        name="s",
+        expectations=[
+            {"type": "not_null", "field": "a"},
+            {"type": "not_null", "field": "b"},
+        ],
+    )
+    assert len({e.resolved_id for e in suite.expectations}) == 2
