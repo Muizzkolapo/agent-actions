@@ -306,3 +306,145 @@ def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_
     assert result.suite_result.overall_pass is False
     assert result.suite_result.outcomes[0].skipped is False
     assert "provider unreachable" in result.suite_result.outcomes[0].detail
+
+
+def test_retry_repair_regenerates_until_the_suite_passes():
+    responses = iter([{"ideas": ["a"]}, {"ideas": ["a"]}, {"ideas": ["a", "b", "c"]}])
+    calls = []
+
+    def flaky(prompt):
+        calls.append(prompt)
+        return next(responses), True
+
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    result = service.execute(flaky, "PROMPT")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 3
+    assert result.exhausted is False
+    assert calls == ["PROMPT", "PROMPT", "PROMPT"]
+
+
+def test_retry_repair_exits_on_first_pass_without_extra_calls():
+    calls = []
+
+    def counting(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a", "b", "c"]}, True
+
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    result = service.execute(counting, "PROMPT")
+    assert result.iterations == 1
+    assert len(calls) == 1
+
+
+def test_retry_repair_exhausts_after_max_iterations():
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    calls = []
+
+    def always_bad(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = service.execute(always_bad, "PROMPT")
+    assert len(calls) == 3
+    assert result.iterations == 3
+    assert result.exhausted is True
+    assert result.suite_result.overall_pass is False
+    assert result.response == {"ideas": ["a"]}
+
+
+def test_warn_severity_failures_never_trigger_repair():
+    warn_suite = Suite(
+        name="s",
+        expectations=[
+            {
+                "id": "count",
+                "type": "item_count",
+                "field": "ideas",
+                "params": {"min": 2},
+                "severity": "warn",
+            }
+        ],
+    )
+    calls = []
+
+    def counting(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = ExpectationService(warn_suite, repair="retry", max_iterations=3).execute(
+        counting, "PROMPT"
+    )
+    assert len(calls) == 1
+    assert result.exhausted is False
+    assert result.suite_result.overall_pass is True
+
+
+def test_observe_mode_never_iterates_regardless_of_max_iterations():
+    calls = []
+
+    def counting(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = ExpectationService(SUITE, repair="none", max_iterations=3).execute(counting, "PROMPT")
+    assert len(calls) == 1
+    assert result.exhausted is False
+
+
+def test_a_mid_loop_collapse_makes_exactly_two_calls():
+    calls = []
+    responses = iter([({"ideas": ["a"]}, True), (None, False)])
+
+    def op(prompt):
+        calls.append(prompt)
+        return next(responses)
+
+    ExpectationService(SUITE, repair="retry", max_iterations=3).execute(op, "PROMPT")
+    assert len(calls) == 2
+
+
+def test_a_mid_loop_collapse_keeps_the_last_failing_verdict():
+    # Inner recovery (retry/reprompt) can exhaust to (None, False) on a later
+    # iteration; a record that had data must not be downgraded below what
+    # observe mode would have shipped.
+    responses = iter([({"ideas": ["a"]}, True), (None, False)])
+    service = ExpectationService(SUITE, repair="retry", max_iterations=3)
+    result = service.execute(lambda p: next(responses), "PROMPT")
+    assert result.executed is True
+    assert result.response == {"ideas": ["a"]}
+    assert result.suite_result is not None
+    assert result.suite_result.overall_pass is False
+    assert result.exhausted is True
+
+
+def test_a_first_call_guard_skip_returns_unvalidated():
+    calls = []
+
+    def skipped(prompt):
+        calls.append(prompt)
+        return None, False
+
+    result = ExpectationService(SUITE, repair="retry", max_iterations=3).execute(skipped, "P")
+    assert result.executed is False
+    assert result.response is None
+    assert result.suite_result is None
+    assert len(calls) == 1
+
+
+def test_max_iterations_below_one_raises_at_construction():
+    with pytest.raises(ValueError, match="max_iterations"):
+        ExpectationService(SUITE, repair="retry", max_iterations=0)
+
+
+def test_repair_with_max_iterations_one_validates_once_and_exhausts():
+    calls = []
+
+    def bad(prompt):
+        calls.append(prompt)
+        return {"ideas": ["a"]}, True
+
+    result = ExpectationService(SUITE, repair="retry", max_iterations=1).execute(bad, "P")
+    assert len(calls) == 1
+    assert result.exhausted is True
+    assert result.suite_result.overall_pass is False

@@ -25,6 +25,7 @@ class ExpectationRunResult:
     executed: bool
     suite_result: SuiteResult | None = None
     iterations: int = 0
+    exhausted: bool = False
 
 
 class ExpectationService:
@@ -40,10 +41,14 @@ class ExpectationService:
         repair: str | dict[str, Any],
         *,
         judge: JudgeDispatch | None = None,
+        max_iterations: int = 3,
     ) -> None:
+        if max_iterations < 1:
+            raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
         self.suite = suite
         self.repair = repair
         self._judge = judge
+        self._max_iterations = max_iterations
 
     def execute(
         self,
@@ -52,29 +57,72 @@ class ExpectationService:
         context: str = "",
         llm_context: dict[str, Any] | None = None,
     ) -> ExpectationRunResult:
-        """Generate once, then validate. Repair modes arrive with the loop."""
-        response, executed = llm_operation(original_prompt)
+        """Generate, validate, and — under a repair policy — regenerate until the suite passes."""
+        iterations = self._max_iterations if self.repair != "none" else 1
+        suite_result: SuiteResult | None = None
+        response: Any = None
+        executed = False
+        last_response: dict[str, Any] | None = None
+        last_suite_result: SuiteResult | None = None
 
-        # A real record-granularity online call arrives as a length-1 list, not a
-        # bare dict; a longer list (file granularity) has no expect: semantics.
-        if isinstance(response, list) and len(response) == 1 and isinstance(response[0], dict):
-            response = response[0]
+        for iteration in range(1, iterations + 1):
+            response, executed = llm_operation(self._prompt_for(iteration, original_prompt))
 
-        if not executed or not isinstance(response, dict):
-            return ExpectationRunResult(response=response, executed=executed)
+            # A real record-granularity online call arrives as a length-1 list, not a
+            # bare dict; a longer list (file granularity) has no expect: semantics.
+            if isinstance(response, list) and len(response) == 1 and isinstance(response[0], dict):
+                response = response[0]
 
-        suite_result = run_suite(
-            self.suite, response, judge=self._judge, context_source=llm_context
-        )
-        if not suite_result.overall_pass:
-            logger.info(
-                "[%s] Expectations failed: %s",
-                context or "expectations",
-                ", ".join(o.id for o in suite_result.failed),
+            if not executed or not isinstance(response, dict):
+                if last_response is not None and last_suite_result is not None:
+                    # A regeneration that collapsed (inner recovery exhausted)
+                    # must not downgrade a record that already had data.
+                    return ExpectationRunResult(
+                        response=last_response,
+                        executed=True,
+                        suite_result=last_suite_result,
+                        iterations=iteration,
+                        exhausted=True,
+                    )
+                return ExpectationRunResult(response=response, executed=executed)
+
+            suite_result = run_suite(
+                self.suite, response, judge=self._judge, context_source=llm_context
             )
+            if suite_result.overall_pass:
+                return ExpectationRunResult(
+                    response=response,
+                    executed=True,
+                    suite_result=suite_result,
+                    iterations=iteration,
+                )
+            last_response, last_suite_result = response, suite_result
+            if self.repair == "none":
+                logger.info(
+                    "[%s] Expectations failed: %s",
+                    context or "expectations",
+                    ", ".join(o.id for o in suite_result.failed),
+                )
+            else:
+                logger.info(
+                    "[%s] Expectations failed (iteration %d/%d): %s",
+                    context or "expectations",
+                    iteration,
+                    iterations,
+                    ", ".join(o.id for o in suite_result.failed),
+                )
+
         return ExpectationRunResult(
-            response=response, executed=True, suite_result=suite_result, iterations=1
+            response=response,
+            executed=True,
+            suite_result=suite_result,
+            iterations=iterations,
+            exhausted=self.repair != "none",
         )
+
+    def _prompt_for(self, iteration: int, original_prompt: str) -> str:
+        """The prompt for one generation; retry always re-samples the original."""
+        return original_prompt
 
 
 def attach_verdict(response: dict[str, Any], suite_result: SuiteResult) -> dict[str, Any]:
