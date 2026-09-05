@@ -205,7 +205,7 @@ class ExpectConfig(BaseModel):
 
     suite: str | None = Field(
         default=None,
-        description="Schema-path file whose expectations: block supplies the rules; "
+        description="Schema-path file whose rules — on its fields, in its own expectations: block, or both — supply this action's; "
         "omitted with no inline list, the action's own schema: file is read",
     )
     expectations: list[dict[str, Any]] | None = Field(
@@ -248,7 +248,7 @@ class ExpectConfig(BaseModel):
                 "expect takes at most one of:\n"
                 "  suite: my_rules        # a schema-path file with an expectations: block\n"
                 "  expectations: [...]    # an inline list\n"
-                "Omit both to read the expectations: block of the action's own schema."
+                "Omit both to read the rules of the action's own schema."
             )
         if self.suite == "":
             raise ValueError(
