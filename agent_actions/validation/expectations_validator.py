@@ -9,6 +9,11 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent_actions.expectations import registry
+from agent_actions.expectations.expression import (
+    ExpressionParseError,
+    parse_condition,
+    referenced_field_paths,
+)
 from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 
@@ -215,8 +220,21 @@ def _rule_defects(
 
     messages = _argument_defects(label, etype, expectation.params)
 
+    if "row_condition" in expectation.params:
+        messages.extend(
+            _expression_defects(
+                f"{label}: row_condition", expectation.params["row_condition"], fields
+            )
+        )
+
     selector = expectation.field
-    if fields is not None and selector is not None:
+    if expectation.type == "expression":
+        # Only when supplied: an absent condition is already the missing-parameter defect.
+        if "condition" in expectation.params:
+            messages.extend(_expression_defects(label, expectation.params["condition"], fields))
+    elif selector is not None and len(selector) == 0:
+        messages.append(f"{label}: field must not be empty")
+    elif fields is not None and selector is not None:
         for name in referenced_names(selector):
             if name not in fields:
                 messages.append(f"{label}: field '{name}' is not produced by this action")
@@ -250,4 +268,29 @@ def _rule_defects(
                         f"does not produce field '{ref_field}'"
                     )
 
+    return messages
+
+
+def _expression_defects(label: str, condition: Any, fields: set[str] | None) -> list[str]:
+    if not isinstance(condition, str) or not condition.strip():
+        return [f"{label}: condition must be a non-empty string, got {condition!r}"]
+    try:
+        ast = parse_condition(condition)
+    except ExpressionParseError as exc:
+        return [f"{label}: {exc}"]
+    paths = referenced_field_paths(ast.root)
+    if not paths:
+        return [
+            f"{label}: condition references no record fields, so it always evaluates the same way"
+        ]
+    if fields is None:
+        return []
+    messages = []
+    for path in paths:
+        top_segment = path.split(".", 1)[0]
+        if top_segment not in fields:
+            messages.append(
+                f"{label}: condition references '{path}' but this action "
+                f"does not produce field '{top_segment}'"
+            )
     return messages
