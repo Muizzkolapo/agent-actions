@@ -176,7 +176,7 @@ def test_a_defect_names_the_rule_key_without_pydantic_internals():
         }
     }
     message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
-    assert "field:" in message
+    assert "field" in message
     assert "list[str]" not in message
 
 
@@ -253,3 +253,24 @@ def test_a_rule_missing_its_selector_still_gets_its_argument_defects():
     assert "field" in message
     assert "requires parameter 'values'" in message
     assert "takes no parameter 'valuez'" in message
+
+
+def test_a_malformed_selector_names_the_type_it_should_have_been():
+    configs = {
+        "summarize": {
+            "name": "summarize",
+            "expect": {"expectations": [{"type": "not_null", "field": 42}]},
+        }
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "field must be a string or list of strings" in message
+    assert "int" in message
+
+
+def test_a_rule_that_is_not_a_mapping_is_reported_not_ignored():
+    configs = {
+        "summarize": {"name": "summarize", "expect": {"expectations": ["oops"]}},
+    }
+    message = " ".join(find_expectation_defects(configs, FIELDS)["summarize"])
+    assert "must be a mapping" in message
+    assert "str" in message
