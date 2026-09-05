@@ -91,3 +91,25 @@ def test_every_context_builder_is_under_the_wrapper():
             f"{target.__qualname__} builds a RecoveryContext and parks below it, "
             "but is not wrapped; an exception there discards the halt silently"
         )
+
+
+def test_a_configuration_error_is_not_rebadged_as_a_policy_halt():
+    """A broken expect: block is fix-the-config-and-rerun, not on_exhausted: raise.
+
+    Substituting the halt would make raised_by_exhaustion_policy answer True, and
+    the workflow layer then refuses to run the action on the next pass and
+    excludes it from reset_retryable — so the operator fixes the YAML and the
+    action stays pinned as halted.
+    """
+    from agent_actions.expectations.service import ExpectationConfigurationError
+
+    context = _context()
+    context.pending_exhaustion = exhaustion_halt("Retry exhausted for rec-a")
+    broken_config = ExpectationConfigurationError("suite 'x' could not be loaded")
+
+    with pytest.raises(ExpectationConfigurationError), halt_survives_failure(context):
+        raise broken_config
+
+    assert context.pending_exhaustion is not None, (
+        "the halt was consumed by an error that is not a policy halt"
+    )

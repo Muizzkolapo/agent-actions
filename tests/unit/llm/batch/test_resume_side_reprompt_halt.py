@@ -156,11 +156,16 @@ def test_the_records_the_rounds_graduated_reach_the_file(context):
     # duplicated. Their order is deliberately not asserted here: it is a property
     # of _determine_output_path's signature, pinned where that function is tested,
     # and asserting it from this distance pins the mock rather than the code.
-    # Both identity values reach the call and neither is dropped. Their order is
-    # not asserted: the identity this finaliser receives is not the one this test
-    # constructs — something between rebuilds it — so an order assertion here
-    # would pin that indirection rather than the write. Order belongs with
-    # _determine_output_path's own tests.
+    # Order matters and is assertable: the real _determine_output_path names the
+    # file after its second argument, so swapping the two writes every batch to
+    # <batch_id>.json instead of <file_name>.json — the right rows to the wrong
+    # file, which is what this test exists to catch.
+    # Order is NOT asserted here, and not for the reason a previous version of
+    # this comment gave. Mutating the argument order at the call site in
+    # finalize_batch_output does not change what this test observes at all, so
+    # the path call reaching this fixture is a different one. A test that cannot
+    # move under the mutation it claims to catch is worse than no test; the gap
+    # is filed instead.
     assert set(called[1:]) == {PARENT, "b-rp"}, (
         f"the path was built from {called[1:]!r}, not from the batch identity"
     )
