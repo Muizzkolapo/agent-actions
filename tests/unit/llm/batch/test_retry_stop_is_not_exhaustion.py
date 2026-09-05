@@ -186,3 +186,45 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
     # Both halves, at the boundary: withholding the stamp is not enough while the
     # id set the finalisers rebuild from still names the record.
     assert state.missing_ids == []
+
+
+def test_the_exhausted_branch_keeps_the_id_set_it_stamped():
+    """The mirror of the clear: clearing unconditionally is just as wrong.
+
+    The finalisers rebuild retry exhaustion from missing_ids. Clearing it on the
+    branch that *did* exhaust drops the retry metadata from every record that
+    spent its attempts, which is the same loss in the other direction.
+    """
+    entry = BatchJobEntry(
+        batch_id="b-1",
+        status="submitted",
+        timestamp="2026-04-20T00:00:00Z",
+        provider="openai",
+        record_count=1,
+        file_name=PARENT,
+        parent_file_name=None,
+        recovery_type="retry",
+        recovery_attempt=3,
+    )
+    identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
+    context = _context()
+    context.service._retry_service.build_exhausted_recovery.side_effect = None
+    context.service._retry_service.build_exhausted_recovery.return_value = {MISSING: object()}
+    state = _state(attempt=3, max_attempts=3)
+    seen = {}
+
+    def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
+        seen["exhausted_recovery"] = exhausted_recovery
+        return False
+
+    with patch(
+        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+        side_effect=_capture,
+    ):
+        handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
+
+    assert seen["exhausted_recovery"], "the budget was spent but nothing was stamped exhausted"
+    assert state.missing_ids == [MISSING], (
+        "the exhausted branch cleared the id set the finalisers rebuild from; "
+        "every record that spent its attempts loses its retry metadata"
+    )

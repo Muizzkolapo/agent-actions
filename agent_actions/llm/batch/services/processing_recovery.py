@@ -1026,6 +1026,7 @@ def handle_repair_recovery(
         context_map=context_map,
         recovery_state=state,
     ):
+        raise_pending_exhaustion(context)
         return None
 
     loop = EvaluationLoop(strategy)
@@ -1107,6 +1108,7 @@ def handle_repair_recovery(
                 identity.file_name,
                 state,  # type: ignore[arg-type]
             )
+            raise_pending_exhaustion(context)
             return None
 
     pending = None
@@ -1143,13 +1145,20 @@ def handle_repair_recovery(
 
 
 def raise_pending_exhaustion(context: RecoveryContext) -> None:
-    """Halt the run for `on_exhausted: raise`, now that the output is on disk.
+    """Halt the run for `on_exhausted: raise`, once nothing is left to lose.
 
-    Called from the finalisers, not from the policy itself: batch writes its
+    Called from the finalisers rather than the policy itself: batch writes its
     file once at the end, so raising earlier takes down every record the round
     had already graduated. Callers park on the statement before the finaliser,
     because anything that throws in between reaches the outer loop, which logs
     a non-RuntimeError and moves on — forgetting the halt.
+
+    Also called before every early return that would otherwise skip a finaliser
+    while a halt is parked. Those paths write nothing, so raising there costs no
+    records — but returning past a parked halt discards it, and the context does
+    not survive the pass. Two of those sites are not reachable today; the guard
+    is uniform so that making one reachable does not silently reintroduce the
+    loss.
     """
     pending = context.pending_exhaustion
     if pending is None:

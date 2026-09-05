@@ -68,10 +68,11 @@ def context():
         None,
     )
     context.service._determine_output_path.return_value = "/tmp/out.json"
+    context.service._determine_output_path.side_effect = None
     context.written = []
 
     def _write(output_file, main_output, output_directory, action_name=None):
-        context.written.append(list(main_output))
+        context.written.append((str(output_file), list(main_output)))
 
     context.service._write_batch_output.side_effect = _write
     context.service._retry_service.apply_exhausted_reprompt_metadata.return_value = exhaustion_halt(
@@ -135,9 +136,15 @@ def test_the_records_the_rounds_graduated_reach_the_file(context):
     assert len(context.written) == 1, f"the output was written {len(context.written)} times"
     # The records the conversion produced, not merely a non-empty list: asserting
     # truthiness is satisfied by writing anything at all before raising.
-    assert context.written[0] == GRADUATED, (
-        f"the file did not receive what the conversion produced ({context.written[0]}); "
+    path, payload = context.written[0]
+    assert payload == GRADUATED, (
+        f"the file did not receive what the conversion produced ({payload}); "
         "every record the reprompt rounds graduated is lost"
+    )
+    # The probe used to bind the path and discard it, so writing the right rows to
+    # the wrong file passed.
+    assert path == str(context.service._determine_output_path.return_value), (
+        f"the rows were written to {path}, not the path the caller reports"
     )
 
 
@@ -241,5 +248,75 @@ def test_the_retry_handler_also_surfaces_a_halt_before_deferring(context):
     assert raised is not None, (
         "the halt parked before the repair deferral was discarded; on_exhausted: "
         "raise finished the run reporting success"
+    )
+    assert raised_by_exhaustion_policy(raised)
+
+
+def _repair_state():
+    state = MagicMock()
+    state.repair_attempt = 1
+    state.repair_max_attempts = 3
+    state.repair_judge_budget_remaining = None
+    state.repair_submitted_ids = []
+    state.graduated_results = []
+    state.missing_ids = []
+    state.record_failure_counts = {}
+    return state
+
+
+def test_the_repair_handler_surfaces_a_halt_before_submitting_another_round(context):
+    """The third deferral, on the repair-resume path.
+
+    handle_repair_recovery calls check_and_submit_reprompt — which can park —
+    and then returns twice: once when reprompt defers, once when it submits the
+    next repair round. Both skip the finaliser.
+    """
+    from agent_actions.llm.batch.services.processing_recovery import handle_repair_recovery
+
+    context.pending_exhaustion = exhaustion_halt("Reprompt validation exhausted for rec-a")
+    failing = BatchResult(custom_id=FAILING, content={"x": 1}, success=True)
+
+    strategy = MagicMock()
+    strategy.name = "expect"
+    strategy.max_attempts = 3
+    strategy.judge_budget_remaining = None
+    loop = MagicMock()
+    loop.split.return_value = ([], [failing], {})
+    submission = MagicMock()
+    submission.sent_ids = {FAILING}
+
+    raised = None
+    with (
+        patch(
+            "agent_actions.llm.batch.services.repair_ops.build_repair_strategy",
+            return_value=strategy,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.repair_ops.submit_repair_batch",
+            return_value=submission,
+        ),
+        patch("agent_actions.processing.evaluation.EvaluationLoop", return_value=loop),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
+            return_value=True,
+        ),
+        patch("agent_actions.llm.batch.services.processing_recovery.register_recovery_batch"),
+        patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
+    ):
+        try:
+            handle_repair_recovery(
+                context,
+                BatchIdentity(batch_id="b-rp", file_name=PARENT, entry=_entry()),
+                _repair_state(),
+                [failing],
+                [],
+                {FAILING: {}},
+            )
+        except BaseException as exc:  # noqa: BLE001 - the test is about which one
+            raised = exc
+
+    assert raised is not None, (
+        "the halt parked before the repair round was submitted was discarded; "
+        "on_exhausted: raise finished the run reporting success"
     )
     assert raised_by_exhaustion_policy(raised)
