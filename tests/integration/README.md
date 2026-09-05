@@ -165,3 +165,45 @@ about a second.
 
 Adding an author means adding the project directory and its verdict; a fixture
 with no verdict fails `test_every_author_has_a_verdict`.
+
+## test_runtime_probes.py
+
+Runtime failure behaviour driven through the real CLI. Ported from a real
+project, where these existed as throwaway workflows for watching failure
+handling live against a local model.
+
+Fixture: `fixtures/runtime_probes/` — one project, three workflows, all offline
+against `agac-provider`.
+
+### Why CLI-level rather than unit-level
+
+Every mechanism here already has unit coverage. What has none is the seam
+between the layers: the staging guard rejects a file, the pipeline decides
+whether that is fatal, the summary counts what ran, and the status file records
+what happened. Those are four layers, and a unit test sees one at a time.
+
+| Workflow | What it pins |
+|---|---|
+| `staging_namespace_collision` | Every record carries a field named `source`. The run must fail, name the field, and print the rename remedy. |
+| `partial_file_rejection` | One clean file, one rejected. Only the clean record persists — and the action still reports a clean success (see below). |
+| `repair_exhaustion` | A rule that can never be satisfied. `on_exhausted: return_last` must keep the record and attach its last verdict. |
+
+### The known defect
+
+`test_a_partially_rejected_action_is_not_reported_as_a_clean_success` is a
+strict `xfail`. A staging file rejected at load leaves no durable trace: the
+action records status `completed`, the run exits 0, and the only evidence is a
+log line. The same workflow with *every* file rejected exits 1 — the silence is
+specific to the partial case.
+
+It is strict so that fixing the defect fails the suite until the marker is
+removed.
+
+### Not ported
+
+The real project also carried a batch retry-exhaustion probe. It drives failures
+through `OLLAMA_FAIL_FIRST_N`, which only the `ollama` client implements, so it
+needs a live Ollama and cannot run here. `agac-provider`'s batch client has no
+failure path at all. Porting it means giving that provider count-based injection
+mirroring the ollama one — worth doing, but it is a change to a shipped provider
+rather than a test addition.

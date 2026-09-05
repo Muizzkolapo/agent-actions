@@ -1,0 +1,31 @@
+name: repair_exhaustion
+description: "A repair loop that cannot satisfy its rule, so it exhausts and returns the last record"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: summarize
+    intent: "Assess page exam-density"
+    schema: probe_page_summary
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect:
+      repair: auto
+      max_iterations: 3
+      on_exhausted: return_last
+      expectations:
+        - id: density_is_a_known_bucket
+          type: accepted_values
+          field: exam_density
+          params:
+            values: [high, medium, low]
+          hint: exam_density must be exactly one of high, medium or low
+        - id: reason_is_present
+          type: not_null
+          field: density_reason

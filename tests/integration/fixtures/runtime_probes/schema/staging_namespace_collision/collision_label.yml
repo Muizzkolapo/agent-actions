@@ -1,0 +1,6 @@
+name: collision_label
+fields:
+  - id: topic
+    type: string
+  - id: difficulty
+    type: string
