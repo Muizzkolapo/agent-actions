@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import (
@@ -1158,12 +1158,17 @@ def halt_survives_failure(context: Any) -> Iterator[None]:
     """
     try:
         yield
-    except ConfigurationError:
-        # A broken config is fix-and-rerun, not a policy halt. Substituting the
-        # halt would make raised_by_exhaustion_policy answer True, and the
-        # workflow layer then refuses to re-run the action and keeps it out of
-        # reset_retryable — so the operator fixes the YAML and stays stuck. The
-        # halt is left parked; the config error is what the run must answer.
+    except ExpectationConfigurationError:
+        # The one error kind that is already run-fatal: process_all_batch_results
+        # re-raises it, because every remaining file carries the same broken
+        # action config. Substituting the halt would only change its
+        # classification — raised_by_exhaustion_policy would answer True, and the
+        # workflow layer would then refuse to re-run the action and keep it out
+        # of reset_retryable, so the operator fixes the YAML and stays stuck.
+        #
+        # Deliberately not the whole ConfigurationError family. The others are
+        # per-record and the outer loop logs them and moves on, so passing one
+        # through would take the parked halt with it and finish reporting success.
         raise
     except Exception as exc:
         pending = context.pending_exhaustion

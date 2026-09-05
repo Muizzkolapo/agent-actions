@@ -118,3 +118,25 @@ def test_a_configuration_error_is_not_rebadged_as_a_policy_halt():
     assert context.pending_exhaustion is not None, (
         "the halt was consumed by an error that is not a policy halt"
     )
+
+
+def test_only_the_run_fatal_config_error_is_exempt():
+    """The exemption has to match what the outer loop treats as run-fatal.
+
+    process_all_batch_results re-raises (RuntimeError, ExpectationConfigurationError)
+    and logs everything else before moving to the next file. Exempting a config
+    error the loop does NOT re-raise drops the halt and lets the run finish
+    reporting success — the failure the substitution exists to prevent.
+    """
+    from agent_actions.errors import RecordContextError
+
+    context = _context()
+    context.pending_exhaustion = exhaustion_halt("Retry exhausted for rec-a")
+
+    with pytest.raises(RuntimeError) as caught, halt_survives_failure(context):
+        raise RecordContextError("malformed lifecycle state for one record")
+
+    assert raised_by_exhaustion_policy(caught.value), (
+        "a per-record config error passed through and took the halt with it; the "
+        "outer loop logs that kind and continues, so the run reports success"
+    )
