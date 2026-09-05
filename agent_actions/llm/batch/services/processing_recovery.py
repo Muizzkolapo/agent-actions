@@ -276,6 +276,10 @@ def handle_retry_recovery(
     if not check_and_submit_repair(
         context, identity, batch_results=merged, context_map=context_map, recovery_state=state
     ):
+        # Deferring skips the finaliser, which is the only place a parked halt is
+        # raised, and the context does not survive the pass. Nothing is written on
+        # this path, so raising here costs no records.
+        raise_pending_exhaustion(context)
         return None
 
     return _finalize_and_cleanup(
@@ -457,6 +461,7 @@ def handle_reprompt_recovery(
     if not check_and_submit_repair(
         context, identity, batch_results=final_results, context_map=context_map, recovery_state=None
     ):
+        raise_pending_exhaustion(context)
         return None
 
     return _finalize_and_cleanup(

@@ -61,10 +61,18 @@ def context():
     context.pending_exhaustion = None
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = MagicMock()
-    context.service._convert_batch_results_to_workflow_format.return_value = ([], MagicMock(), None)
+    context.service._convert_batch_results_to_workflow_format.return_value = (
+        [{"target_id": "graduated-earlier"}],
+        MagicMock(),
+        None,
+    )
     context.service._determine_output_path.return_value = "/tmp/out.json"
-    context.order = []
-    context.service._write_batch_output.side_effect = lambda *a, **k: context.order.append("write")
+    context.written = []
+
+    def _write(output_file, main_output, output_directory, action_name=None):
+        context.written.append(list(main_output))
+
+    context.service._write_batch_output.side_effect = _write
     context.service._retry_service.apply_exhausted_reprompt_metadata.return_value = exhaustion_halt(
         "Reprompt validation exhausted for rec-failing after 2 attempts"
     )
@@ -112,15 +120,22 @@ def test_the_resume_path_hands_its_halt_back(context):
     assert "exhausted" in str(raised).lower()
 
 
-def test_the_file_is_written_before_the_resume_path_halts(context):
-    """Parked, not thrown. Raising in place satisfies the assertion above too,
-    and it is the ordering that decides whether the round's work survives."""
+def test_the_records_the_rounds_graduated_reach_the_file(context):
+    """What the halt must not cost.
+
+    Asserting only that a write happened is satisfied by raising in place after
+    poking the write with an empty payload, so this reads the payload. The probe
+    also takes the real signature, so a call a live run would reject as a
+    TypeError cannot pass here either.
+    """
     _run(context)
 
-    assert context.order[:1] == ["write"], (
-        f"the run halted before writing the file ({context.order}); every record "
-        "the reprompt rounds graduated is lost"
+    assert context.written, "nothing was written; the halt fired before the output existed"
+    assert context.written[0], (
+        f"the file was written empty ({context.written[0]}); every record the "
+        "reprompt rounds graduated is lost"
     )
+    assert len(context.written) == 1, f"the output was written {len(context.written)} times"
 
 
 def test_the_configured_policy_is_what_decides(context):
@@ -132,3 +147,47 @@ def test_the_configured_policy_is_what_decides(context):
         "the resume path did not forward the configured policy; a hardcoded "
         "return_last here makes on_exhausted: raise silently do nothing"
     )
+
+
+def test_the_halt_is_not_dropped_when_repair_defers(context):
+    """The branch that skips the finaliser entirely.
+
+    When repair submits another round the function returns before
+    _finalize_and_cleanup, which is the only place a parked halt is raised. The
+    context is rebuilt per pass and does not carry pending_exhaustion, so a halt
+    parked here is gone — on_exhausted: raise silently doing nothing.
+    """
+    failing = BatchResult(custom_id=FAILING, content=None, success=False, error="bad shape")
+    loop, strategy = MagicMock(), MagicMock()
+    strategy.name = "schema_check"
+    loop.split.return_value = ([], [failing], {})
+
+    raised = None
+    with (
+        patch(
+            "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
+            return_value=(loop, strategy),
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=False,
+        ),
+        patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
+    ):
+        try:
+            handle_reprompt_recovery(
+                context,
+                BatchIdentity(batch_id="b-rp", file_name=PARENT, entry=_entry()),
+                _state(),
+                [failing],
+                [],
+                {FAILING: {}},
+            )
+        except BaseException as exc:  # noqa: BLE001 - the test is about which one
+            raised = exc
+
+    assert raised is not None, (
+        "the reprompt halt was parked and then discarded when repair deferred; "
+        "on_exhausted: raise finished the run reporting success"
+    )
+    assert raised_by_exhaustion_policy(raised)

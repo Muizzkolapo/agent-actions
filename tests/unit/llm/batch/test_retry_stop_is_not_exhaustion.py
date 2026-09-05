@@ -168,6 +168,7 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
     )
     identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
     context = _context()
+    state = _state(attempt=2, max_attempts=3)
     seen = {}
 
     def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
@@ -178,9 +179,10 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
         "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
         side_effect=_capture,
     ):
-        handle_retry_recovery(
-            context, identity, _state(attempt=2, max_attempts=3), [], [], {MISSING: {}}
-        )
+        handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
 
     context.service._retry_service.build_exhausted_recovery.assert_not_called()
     assert seen["exhausted_recovery"] is None
+    # Both halves, at the boundary: withholding the stamp is not enough while the
+    # id set the finalisers rebuild from still names the record.
+    assert state.missing_ids == []
