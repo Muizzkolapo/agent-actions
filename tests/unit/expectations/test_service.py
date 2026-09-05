@@ -729,3 +729,145 @@ def test_auto_repair_hint_reaches_the_composed_prompt():
 
     ExpectationService(hinted_suite, repair="auto", max_iterations=2).execute(flaky, "O")
     assert "brainstorm additional distinct ideas" in prompts[1]
+
+
+JUDGED_TWO_FIELD = [
+    {"id": "count", "type": "item_count", "field": "ideas", "params": {"min": 2}},
+    {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}},
+]
+JUDGE_AGENT = {"model_vendor": "anthropic", "model_name": "claude-sonnet-5"}
+
+
+def test_a_repair_that_keeps_a_judged_field_identical_reuses_the_cached_verdict():
+    service = create_expectation_service_from_config(
+        {"expectations": JUDGED_TWO_FIELD, "repair": "retry", "max_iterations": 3},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    responses = iter([{"ideas": ["a"], "title": "T"}, {"ideas": ["a", "b"], "title": "T"}])
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+    mock_invoke.assert_called_once()
+
+
+def test_a_budget_exhausted_mid_loop_never_produces_a_false_green():
+    # The judged rule is the ONLY rule, so a budget skip is the only thing that
+    # can hold the verdict false -- no deterministic failure props it up.
+    judged_only = [
+        {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judged_only, "repair": "retry", "max_iterations": 3, "judge_budget": 1},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    titles = iter(["T1", "T2", "T3", "T4"])
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        first = service.execute(lambda p: ({"title": next(titles)}, True), "P")
+        second = service.execute(lambda p: ({"title": next(titles)}, True), "P")
+    assert first.suite_result.overall_pass is True
+    assert second.suite_result.overall_pass is False
+    assert second.exhausted is True
+    assert all(o.skipped and o.severity == "error" for o in second.suite_result.failed)
+
+
+def test_a_deterministic_failure_does_not_short_circuit_judged_rules():
+    service = create_expectation_service_from_config(
+        {"expectations": JUDGED_TWO_FIELD, "repair": "none"},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: ({"ideas": ["a"], "title": "T"}, True), "P")
+    mock_invoke.assert_called_once()
+    assert [(o.id, o.passed) for o in result.suite_result.outcomes] == [
+        ("count", False),
+        ("on_topic", True),
+    ]
+
+
+def test_a_budget_skipped_judged_rule_still_lets_the_loop_repair_the_others():
+    # A spent budget must not abandon the iterations: the deterministic rule is
+    # still repairable, and return_last ships whatever the last attempt holds.
+    service = create_expectation_service_from_config(
+        {
+            "expectations": JUDGED_TWO_FIELD,
+            "repair": "retry",
+            "max_iterations": 3,
+            "judge_budget": 1,
+        },
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        service.execute(lambda p: ({"ideas": ["a", "b"], "title": "T0"}, True), "P")
+        responses = iter(
+            [
+                {"ideas": ["a"], "title": "T1"},
+                {"ideas": ["a", "b", "c"], "title": "T2"},
+                {"ideas": ["a", "b", "c"], "title": "T3"},
+            ]
+        )
+        result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.response["ideas"] == ["a", "b", "c"]
+    assert [o.passed for o in result.suite_result.outcomes if o.id == "count"] == [True]
+
+
+def test_a_budget_skipped_rule_can_still_pass_from_cache_on_a_later_iteration():
+    # A skipped rule is not permanently unsatisfiable: a regeneration whose
+    # judged content is already cached passes it at zero judge cost.
+    rules = [
+        {"id": "count", "type": "item_count", "field": "ideas", "params": {"max": 2}},
+        {
+            "id": "on_topic",
+            "type": "llm_judge",
+            "field": "ideas[*]",
+            "params": {"rule": "on topic"},
+        },
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": rules, "repair": "retry", "max_iterations": 3, "judge_budget": 2},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    responses = iter([{"ideas": ["A", "B", "C"]}, {"ideas": ["A", "B"]}])
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ) as mock_invoke:
+        result = service.execute(lambda p: (next(responses), True), "P")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+    assert mock_invoke.call_count == 2
+
+
+def test_a_suite_failing_only_on_skipped_rules_stops_generating():
+    """A skipped rule was never evaluated, so regenerating cannot change it."""
+    judged_only = [
+        {"id": "on_topic", "type": "llm_judge", "field": "title", "params": {"rule": "on topic"}}
+    ]
+    service = create_expectation_service_from_config(
+        {"expectations": judged_only, "repair": "auto", "max_iterations": 3, "judge_budget": 1},
+        action_name="a",
+        agent_config=JUDGE_AGENT,
+    )
+    titles = iter(["T1", "T2", "T3", "T4", "T5"])
+    calls = []
+    with patch(
+        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
+    ):
+        service.execute(lambda p: ({"title": next(titles)}, True), "P")
+        after = service.execute(lambda p: (calls.append(p) or {"title": next(titles)}, True), "P")
+    assert len(calls) == 1
+    assert after.exhausted is True
+    assert after.suite_result.overall_pass is False
+    assert all(o.skipped for o in after.suite_result.failed)

@@ -130,8 +130,10 @@ def _run_one(
         results = [judge(expectation, value, context) for value in inputs]
         failing = [(detail, skipped) for passed, detail, skipped in results if not passed]
         if failing:
-            skipped_any = any(skipped for _, skipped in failing)
-            return outcome(False, "; ".join(detail for detail, _ in failing), skipped=skipped_any)
+            # Skipped only when nothing real was found: one genuinely failing
+            # element makes the whole outcome actionable feedback.
+            all_skipped = all(skipped for _, skipped in failing)
+            return outcome(False, "; ".join(detail for detail, _ in failing), skipped=all_skipped)
         return outcome(True, "; ".join(detail for _, detail, _ in results if detail))
 
     details = []

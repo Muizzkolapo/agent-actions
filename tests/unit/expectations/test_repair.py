@@ -103,3 +103,15 @@ def test_a_waived_rule_is_not_offered_as_something_the_output_already_satisfies(
     prompt = compose_repair_prompt("P", {"summary": "x"}, result, hints={})
     assert "genuinely_passing" in prompt
     assert "waived" not in prompt
+
+
+def test_a_partly_skipped_outcome_still_reaches_the_repair_prompt():
+    # Only a wholly-unevaluated rule is unactionable; a rule where some element
+    # genuinely failed must keep its detail in the feedback.
+    result = SuiteResult(
+        suite_name="s",
+        outcomes=[_outcome("on_topic", False, detail="off topic; budget exhausted")],
+    )
+    prompt = compose_repair_prompt("P", {"ideas": ["bad"]}, result, hints={})
+    assert "off topic" in prompt
+    assert "(none)" not in prompt
