@@ -329,7 +329,11 @@ def _drive_round_two(tmp_path: Path, included_ids: list[str]):
             action_indices={}, dependency_configs={}, storage_backend=None, **kw
         )
     )
-    service._convert_batch_results_to_workflow_format.side_effect = lambda b, **k: ([], MagicMock())
+    service._convert_batch_results_to_workflow_format.side_effect = lambda b, **k: (
+        [],
+        MagicMock(),
+        None,
+    )
     service._determine_output_path.return_value = tmp_path / "out.json"
 
     context = RecoveryContext(

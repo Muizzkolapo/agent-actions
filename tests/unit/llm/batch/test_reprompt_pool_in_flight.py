@@ -56,7 +56,10 @@ def _submit_a_reprompt_round(returned: list[BatchResult], prior: RecoveryState |
     context.agent_config = _agent_config()
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = None
-    context.service._retry_service.submit_reprompt_batch.return_value = ("b-rp", len(bad))
+    context.service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "b-rp",
+        {r.custom_id for r in kw["failed_results"]},
+    )
     saved: list[RecoveryState] = []
     with (
         patch(
@@ -170,7 +173,10 @@ class TestAReturningRepromptRoundRespectsItToo:
         context.agent_config = _agent_config()
         context.service._resolve_action_name.return_value = ACTION
         context.service._storage_backend = None
-        context.service._retry_service.submit_reprompt_batch.return_value = ("b-rp2", 1)
+        context.service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "b-rp2",
+            {r.custom_id for r in kw["failed_results"]},
+        )
         saved: list[RecoveryState] = []
         with (
             patch(

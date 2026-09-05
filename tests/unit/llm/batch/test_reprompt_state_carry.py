@@ -51,7 +51,10 @@ def _state_after_a_reprompt_round(prior: RecoveryState) -> RecoveryState:
     }
     context.service._resolve_action_name.return_value = ACTION
     context.service._storage_backend = None
-    context.service._retry_service.submit_reprompt_batch.return_value = ("b-rp", 1)
+    context.service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+        "b-rp",
+        {r.custom_id for r in kw["failed_results"]},
+    )
     saved: list[RecoveryState] = []
     with (
         patch(

@@ -129,6 +129,9 @@ class _Harness:
             "batch_reprompt_1",
             {r.custom_id for r in kw["failed_results"]},
         )
+        # Returns the halt on_exhausted: raise wants thrown after the write, and
+        # None otherwise — which is this harness, so nothing is parked.
+        service._retry_service.apply_exhausted_reprompt_metadata.return_value = None
         service._convert_batch_results_to_workflow_format.side_effect = self._capture
         service._determine_output_path.return_value = tmp_path / "out.json"
         self.service = service
@@ -145,7 +148,7 @@ class _Harness:
 
     def _capture(self, batch_results, **_kwargs):
         self.finalized = list(batch_results)
-        return ([], MagicMock())
+        return ([], MagicMock(), None)
 
     def submit_pass(self, batch_results: list[BatchResult]) -> bool:
         return check_and_submit_reprompt(

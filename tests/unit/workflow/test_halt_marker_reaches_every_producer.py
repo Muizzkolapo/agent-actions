@@ -134,12 +134,6 @@ class TestTheHaltNeedNotFailFirst:
         assert _halt_marker(raised) is None
 
 
-def _capture(call) -> Exception:
-    with pytest.raises(Exception) as exc_info:  # noqa: PT011 - the type is the subject
-        call()
-    return exc_info.value
-
-
 class TestEveryRaiseSiteAttachesThePolicy:
     """A halt is a halt whichever recovery loop exhausted.
 
@@ -153,14 +147,14 @@ class TestEveryRaiseSiteAttachesThePolicy:
         from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
 
         result = BatchResult(custom_id="rec-1", content={}, success=False, error=None)
-        error = _capture(
-            lambda: apply_exhausted_reprompt(
-                results=[result],
-                failed_ids={"rec-1"},
-                validation_name="schema_check",
-                attempt=2,
-                on_exhausted="raise",
-            )
+        # Handed back rather than raised: batch writes its output file once at
+        # the end, so the halt travels to the caller and is thrown after that.
+        error = apply_exhausted_reprompt(
+            results=[result],
+            failed_ids={"rec-1"},
+            validation_name="schema_check",
+            attempt=2,
+            on_exhausted="raise",
         )
 
         assert _halt_marker(error) == HALT_MARKER
@@ -178,7 +172,8 @@ class TestEveryRaiseSiteAttachesThePolicy:
             on_exhausted="return_last",
         )
 
-        assert returned == [result]
+        assert returned is None
+        assert result.recovery_metadata.reprompt.passed is False
 
 
 class TestABatchHaltIsNotLeftRetryable:

@@ -57,6 +57,20 @@ def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason:
     RecordEnvelope.transition(record, state, action_name, reason)
 
 
+def _spent_its_retries(result: ProcessingResult) -> bool:
+    """Whether the retry loop gave up on *result*.
+
+    A record the provider answered with a per-record error keeps its FAILED
+    status so that error survives into the output, so status alone would miss
+    exactly the case the policy exists for. Both run modes set ``succeeded``
+    False only once the attempts are spent.
+    """
+    if result.status == ProcessingStatus.EXHAUSTED:
+        return True
+    retry = result.recovery_metadata.retry if result.recovery_metadata else None
+    return result.status == ProcessingStatus.FAILED and retry is not None and not retry.succeeded
+
+
 def _get_retry_attempts(result: ProcessingResult) -> str | int:
     """Extract retry attempt count from a result's recovery metadata.
 
@@ -936,7 +950,7 @@ class ResultCollector:
         exhausted_results = [
             r
             for r in results
-            if r.status == ProcessingStatus.EXHAUSTED
+            if _spent_its_retries(r)
             # Expectations exhaustion resolved its own on_exhausted policy in
             # the service; the retry config's policy does not apply to it.
             and not (r.recovery_metadata and r.recovery_metadata.expectations)

@@ -934,7 +934,10 @@ class TestTheRepromptPoolDoesNotDuplicate:
         mock_build_loop.return_value = (mock_loop, mock_strategy)
 
         service = MagicMock()
-        service._retry_service.submit_reprompt_batch.return_value = ("batch_rp_next", 1)
+        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
+            "batch_rp_next",
+            {r.custom_id for r in kw["failed_results"]},
+        )
         context = RecoveryContext(
             service=service,
             manager=MagicMock(),
