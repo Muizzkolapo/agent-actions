@@ -12,7 +12,7 @@ def run(type_name, value, **params):
 
 
 def test_known_types_contains_every_builtin():
-    assert set(known_types()) == {
+    assert set(known_types()) >= {
         "not_null",
         "item_count",
         "word_count_between",

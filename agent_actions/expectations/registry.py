@@ -13,6 +13,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.expectations.judge import _llm_judge_unreachable
+
 Check = Callable[[Any, dict[str, Any]], tuple[bool, str]]
 
 _REGISTRY: dict[str, ExpectationType] = {}
@@ -172,3 +174,8 @@ def _contains_terms_from(value: Any, params: dict[str, Any]) -> tuple[bool, str]
             f"matched {len(hits)} term(s), expected at least {needed} from {list(params['terms'])!r}",
         )
     return True, ""
+
+
+_REGISTRY["llm_judge"] = ExpectationType(
+    "llm_judge", frozenset({"rule", "model"}), frozenset({"rule"}), _llm_judge_unreachable
+)
