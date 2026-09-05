@@ -7,6 +7,7 @@
 | [cli](cli/_MANIFEST.md) | Command-line interface for agent-actions. |
 | [config](config/_MANIFEST.md) | Workflow configuration loading, validation, and path resolution. |
 | [errors](errors/_MANIFEST.md) | Centralized error exports for agent-actions. |
+| [expectations](expectations/_MANIFEST.md) | Declarative output expectations: typed rules, results, and the service that runs them. |
 | [guards](guards/_MANIFEST.md) | Guard expression parsing and configuration. |
 | [input](input/_MANIFEST.md) | Data ingestion utilities (context loaders, preprocessors, and transformers). |
 | [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/online execution. |
