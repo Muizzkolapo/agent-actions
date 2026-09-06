@@ -114,7 +114,7 @@ The database carries five framework-owned tables:
 | `target_data`        | Per-action output records, one row per `(action_name, relative_path)`              |
 | `record_disposition` | Per-record dispositions (success/failed/exhausted/skipped) emitted by each action  |
 | `prompt_trace`       | Compiled prompt + LLM response per record per attempt (online and batch)           |
-| `checkpoint_output`  | Mid-action checkpoint records (resumable batch retrieval and reprompt recovery)    |
+| `checkpoint_output`  | Mid-action checkpoint records (resumable batch retrieval and repair recovery)     |
 
 Plus a `workflow_metadata` bookkeeping table for run-level key/value state.
 

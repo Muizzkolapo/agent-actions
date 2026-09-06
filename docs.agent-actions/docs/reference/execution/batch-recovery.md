@@ -100,79 +100,27 @@ message is the more useful signal of the two, so it is preserved rather than rep
 empty tombstone. Counting retry exhaustion means counting both — filter on
 `_recovery.retry.succeeded == false`, not on the disposition alone.
 
-## Phase 2: Validate and Reprompt
+## Phase 2: Validate and Repair
 
-After Phase 1 ensures all recoverable records are present, Phase 2 checks whether the outputs are actually valid. This only runs if reprompt is configured with a validation function.
+After Phase 1 ensures all recoverable records are present, Phase 2 checks whether the outputs are
+actually valid. This runs when the action carries an [`expect:`](../validation/expectations.md)
+block with a repair policy.
 
 ### How It Works
 
-1. Load the validation UDF specified in `reprompt.validation`
-2. For each attempt (up to `max_attempts`):
-   - Validate every result that has not already passed — an API-failed record fails validation rather than graduating
-   - Identify failures
-   - If all pass, stop
-   - For each failed result that still carries content:
-     - Look up the original record from the context map (a record missing from it is
-       corrupt state and fails the run, rather than being skipped silently)
-     - Build validation feedback (what failed + the failed response)
-     - Append feedback to the original `user_content`
-     - Collect into a reprompt batch
-   - A failed result with no content is withheld — there is nothing to repair — and
-     carried to finalization with its provider error
-   - So is a record task preparation does not admit (a guard filter, or a preparation
-     error): the submitter reports which records it actually sent, and the rest are
-     carried the same way rather than counted as attempted. They reach finalization
-     marked as still failing, so they disposition as `exhausted` rather than collecting
-     as successes. For a record whose reprompt *preparation* raised, that terminal
-     disposition replaces the `failed` row preparation wrote, which means the next run
-     leaves it alone instead of reprocessing it — recover it with `agac retry`.
-   - Submit the reprompt batch and poll for completion
-   - Merge new results, replacing old ones by `custom_id`
-3. Apply exhaustion metadata to any records still failing
+A repair round is a whole provider batch, so it defers rather than blocking:
 
-### Feedback Injection
+1. Run the action's expectation suite over every returned record, including the structural gate
+   that checks schema conformance
+2. Records that pass **graduate** into a pool and are never evaluated again — a later round does
+   not re-spend the judge budget on them
+3. Records that fail are collected into a repair batch, each carrying its own regeneration prompt
+4. The batch is submitted and the run defers; the next pass resumes into the same loop
+5. When `max_iterations` rounds are spent, `on_exhausted` decides what ships
 
-The key mechanism: when a record fails validation, the error feedback is **appended to the original prompt**, not replaced. The LLM sees its previous attempt plus specific guidance on what went wrong:
-
-```
-[Original prompt content]
-
----
-Your response failed validation: BISAC code must be a valid category
-
-Your response: {"bisac_codes": ["INVALID_CODE"]}
-
-Please correct and respond again.
-```
-
-### Metadata Preservation
-
-When a record goes through both phases, retry metadata from Phase 1 is preserved into Phase 2. A record that was missing from the initial batch, recovered via retry, then failed validation and was reprompted will carry both:
-
-```json
-{
-  "_recovery": {
-    "retry": {
-      "attempts": 2,
-      "failures": 1,
-      "succeeded": true,
-      "reason": "missing",
-      "timestamp": "2024-06-15T10:30:45Z"
-    },
-    "reprompt": {
-      "attempts": 2,
-      "passed": true,
-      "validation": "check_valid_bisac"
-    }
-  }
-}
-```
-
-### Skip Logic
-
-Phase 2 skips records that already have reprompt metadata marked as passed (from a previous cycle).
-
-API-failed records are still **evaluated** — they fail validation rather than graduating silently. What they are not is **resubmitted**: a reprompt has nothing to repair on a record with no content, so it is withheld from the reprompt batch and carried to finalization with its provider error and its retry history. Records preparation does not admit are carried the same way. When `retry:` is configured, Phase 1 claims such records first, so by Phase 2 they have already spent their attempts. With no `retry:` block there is no Phase 1, and the record reaches finalization with its provider error but no retry history.
+A record the provider never returns is reconstructed as a failure rather than left to become a
+silent passthrough, and a record with no content at all failed at the provider rather than at its
+expectations, so it keeps its own error.
 
 ## Recovery Metadata
 
@@ -190,11 +138,9 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
       "reason": "missing",
       "timestamp": "2024-06-15T10:30:45Z"
     },
-    "reprompt": {
+    "expectations": {
       "attempts": 2,
-      "passed": true,
-      "validation": "check_format",
-      "parse_error_count": 1
+      "failed": []
     }
   }
 }
@@ -226,12 +172,12 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
 :::note Sparse serialization
 Counter fields use a sparse contract: absent means zero. Consumers should use `record.get("parse_error_count", 0)`, not assume the key exists.
 
-Counter fields are populated by both the online and batch reprompt paths. Earlier documentation incorrectly stated that batch paths always default to 0; in practice, batch recovery also populates these counters when the provider returns per-record error classification.
+Counter fields are populated by both the online and batch paths.
 :::
 
 ### Serialization
 
-Recovery metadata survives serialization. When batch results are saved to disk and reloaded (e.g., for `agac batch retrieve`), both retry and reprompt metadata are preserved through the round-trip.
+Recovery metadata survives serialization. When batch results are saved to disk and reloaded (e.g., for `agac batch retrieve`), both retry and expectations metadata are preserved through the round-trip.
 
 ## Example: Full Recovery Flow
 
@@ -254,12 +200,12 @@ Submit 100 records
 Final output:
   94 records — clean (no recovery needed)
    5 records — _recovery.retry present
-   1 record  — _recovery.retry + _recovery.reprompt (both phases)
+   1 record  — _recovery.retry + _recovery.expectations (both phases)
 ```
 
 ## See Also
 
 - [Retry & Error Handling](./retry.md) — Transport-layer retry for online mode
-- [Reprompting](../validation/reprompting.md) — Validation-layer reprompting
+- [Expectations](../validation/expectations.md) — Output rules and the repair loop
 - [Run Modes](./run-modes.md) — Online vs batch execution
 - [Output Format](../data-io/output-format.md) — Output structure and `_recovery` field

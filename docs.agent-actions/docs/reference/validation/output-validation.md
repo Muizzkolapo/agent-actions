@@ -31,18 +31,18 @@ Guards run last because they evaluate semantic conditions that require valid, sc
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
 | **1. JSON** | Structural integrity | Reprompt with error feedback |
-| **2. Schema** | Type/field validation | Schema constraints + reprompt |
+| **2. Schema** | Type/field validation | Schema constraints + `expect:` repair |
 | **3. Guard** | Semantic validation | Condition expressions |
 
 ## Layer 1: JSON Validation
 
-Ensures the LLM returns valid JSON. If parsing fails and reprompt is configured, the LLM is retried with forceful JSON feedback including the expected field names:
+Ensures the LLM returns valid JSON. If parsing fails and an `expect:` block carries a repair policy, the response is regenerated:
 
 ```yaml
 - name: extract_data
   schema: my_schema
-  reprompt:
-    on_schema_mismatch: reprompt    # enables JSON + schema reprompt
+  expect:
+    repair: auto
     max_attempts: 3
     on_exhausted: return_last
 ```
@@ -151,50 +151,35 @@ This is valid JSON and structurally matches a JSON object, but contains zero dec
 
 **Empty object** — The model returns `{}`. This passes structural validation when no fields are `required`, but is semantically useless. The validator now rejects empty objects when the schema declares any output fields, even if none are marked required.
 
-Both failures trigger reprompt when `on_schema_mismatch: reprompt` is configured, giving the model another chance to produce valid output.
+Both failures become a structural failure when an `expect:` block carries a repair policy, giving the model another chance to produce valid output.
 
 :::note Meta-key nuance
 If your schema legitimately declares a field named `type` (or another JSON Schema keyword), outputs containing that field are **not** rejected. The check only triggers when the output has *zero* declared schema fields.
 :::
 
-### Reprompt on Schema Failure
+### Regenerating on Schema Failure
 
-When schema validation fails, reprompting retries with error context. Set `on_schema_mismatch: reprompt` inside the `reprompt` block to enable this:
+Schema conformance is enforced by an [`expect:`](./expectations.md) block. Its structural gate
+turns a response the schema rejects into a failing outcome the repair loop acts on:
 
 ```yaml
 - name: generate_analysis
   schema: analysis_schema
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 4
+  expect:
+    repair: auto
+    max_iterations: 4
     on_exhausted: return_last
 ```
 
-The retry prompt includes:
-- Original response that failed
-- Specific validation errors (missing fields, wrong types)
-- Expected field names from the schema
+The block needs no rules of its own — with a repair policy and nothing else it is the structural
+contract: conform to your schema, regenerate when the output does not. Set it once under
+`defaults:` to apply it across a workflow.
 
-### Schema Mismatch Behavior
+By default a schema failure re-sends the original prompt unchanged, because a response the schema
+rejected has no partial result worth preserving. `structural: auto` sends the schema feedback
+instead — the setting for a model that mis-formats systematically rather than occasionally.
 
-Control what happens when an LLM response doesn't match the expected schema using `on_schema_mismatch` inside the `reprompt` block:
-
-```yaml
-- name: extract_entities
-  schema: entity_schema
-  reprompt:
-    on_schema_mismatch: reprompt   # "reprompt" | "reject"
-    max_attempts: 3
-```
-
-| Value | Behavior |
-|-------|----------|
-| `reprompt` | Trigger reprompt with schema errors as feedback |
-| `reject` | Reject the response, action fails |
-
-When not set, schema is not enforced — the output is accepted regardless of schema conformance.
-
-When set to `reprompt`, no custom validation UDF is needed — the schema errors are used directly as feedback to the LLM.
+Without an `expect:` block a schema mismatch is logged and the record ships as it is.
 
 ## Layer 3: Guard Validation
 
@@ -261,12 +246,12 @@ Now let's see how these layers work together in real agentic workflows.
 
 ```yaml
 actions:
-  # Step 1: Extract with schema validation + reprompt
+  # Step 1: Extract with schema validation + repair
   - name: extract_facts
     prompt: $prompts.extract_facts
     schema: candidate_facts_list  # Layer 2: type/structure
-    reprompt:
-      on_schema_mismatch: reprompt
+    expect:
+      repair: auto
       max_attempts: 4
       on_exhausted: return_last
 
@@ -281,8 +266,8 @@ actions:
   - name: score_quality
     dependencies: validate_facts  # Input source
     schema: quality_score  # Ensures score is 0-100
-    reprompt:
-      on_schema_mismatch: reprompt
+    expect:
+      repair: auto
       max_attempts: 3
       on_exhausted: return_last
 
@@ -304,8 +289,8 @@ actions:
   - name: generate_content
     prompt: $prompts.generate
     schema: content_schema
-    reprompt:
-      on_schema_mismatch: reprompt
+    expect:
+      repair: auto
       max_attempts: 4
       on_exhausted: return_last
 
@@ -347,8 +332,8 @@ properties:
 # Workflow guards against unwanted category
 - name: classify_content
   schema: classification
-  reprompt:
-    on_schema_mismatch: reprompt
+  expect:
+    repair: auto
     max_attempts: 3
     on_exhausted: return_last
 
@@ -374,15 +359,15 @@ properties:
     description: "Confidence from 0-100. Must be >= 70 for high confidence."
 
 ---
-# Action with reprompt
+# Action with a repair policy
 - name: assess_confidence
   prompt: |
     Assess confidence in this analysis.
     Return a score from 0-100.
     Scores below 70 indicate low confidence.
   schema: score_schema
-  reprompt:
-    on_schema_mismatch: reprompt
+  expect:
+    repair: auto
     max_attempts: 5
     on_exhausted: return_last
 
@@ -404,8 +389,8 @@ For complex validation logic, use a tool action:
 actions:
   - name: generate_content
     schema: content_schema
-    reprompt:
-      on_schema_mismatch: reprompt
+    expect:
+      repair: auto
       max_attempts: 3
       on_exhausted: return_last
 
@@ -450,7 +435,7 @@ def validate_content(data: dict) -> dict:
 
 | Want to Reject | Use | Example |
 |----------------|-----|---------|
-| Invalid JSON | `reprompt: { on_schema_mismatch: reprompt }` | Malformed response |
+| Invalid JSON | `expect: { repair: auto }` | Malformed response |
 | Wrong type | Schema `type` | String instead of number |
 | Missing field | Schema `required` | No "title" field |
 | Wrong value | Schema `enum` | "maybe" not in ["yes", "no"] |
@@ -461,29 +446,29 @@ def validate_content(data: dict) -> dict:
 | Wrong category | Guard `!= value` | Category == "invalid" |
 | Complex logic | Tool action | Custom business rules |
 
-## Reprompt vs Guard
+## Repair vs Guard
 
-You might wonder: when should I use reprompting, and when should I use a guard? The key distinction is whether the LLM can fix the problem.
+When should output be regenerated, and when should it be filtered? The distinction is whether the LLM can fix the problem.
 
-| Aspect | Reprompt | Guard |
-|--------|----------|-------|
+| Aspect | Repair | Guard |
+|--------|--------|-------|
 | **When** | Before accepting output | After output accepted |
 | **Purpose** | Fix LLM mistakes | Filter valid but unwanted |
-| **Action** | Retry LLM call | Skip/remove record |
+| **Action** | Regenerate | Skip/remove record |
 | **Cost** | Additional LLM calls | No additional cost |
 | **Use for** | Structural issues | Semantic filtering |
 
-**Use reprompt when:**
+**Repair when:**
 - Output is malformed (JSON errors)
 - Schema validation fails
-- LLM can fix the issue with guidance
+- A rule names a defect the model can correct
 
-**Use guard when:**
+**Guard when:**
 - Output is valid but doesn't meet criteria
 - Filtering based on values (scores, categories)
 - Business logic decisions
 
-The limitation here: reprompting costs API tokens. Guards are free. If you're filtering on a value the LLM produced correctly, use a guard—don't reprompt hoping for a different answer.
+The limitation: repair costs API tokens. Guards are free. If you're filtering on a value the LLM produced correctly, use a guard — don't regenerate hoping for a different answer.
 
 ## Best Practices
 
@@ -493,8 +478,8 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
 # Layer 1 & 2: Schema + Reprompt
 - name: extract
   schema: extraction_schema
-  reprompt:
-    on_schema_mismatch: reprompt
+  expect:
+    repair: auto
     max_attempts: 4
     on_exhausted: return_last
 
@@ -528,19 +513,19 @@ properties:
     description: "Quality score. 85+ is high quality, below 50 is rejected."
 ```
 
-### 4. Set Reasonable Reprompt Limits
+### 4. Set Reasonable Repair Limits
 
 ```yaml
-# Simple schema: fewer attempts
-reprompt:
-  on_schema_mismatch: reprompt
-  max_attempts: 3
+# Simple schema: fewer iterations
+expect:
+  repair: auto
+  max_iterations: 3
   on_exhausted: return_last
 
-# Complex schema: more attempts, fail on exhaustion
-reprompt:
-  on_schema_mismatch: reprompt
-  max_attempts: 5
+# Complex schema: more iterations, halt on exhaustion
+expect:
+  repair: auto
+  max_iterations: 5
   on_exhausted: raise
 ```
 

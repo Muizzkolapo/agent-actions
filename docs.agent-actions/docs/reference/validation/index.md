@@ -66,7 +66,7 @@ Feature support varies by vendor:
 
 ## Schema Validation
 
-Schema validation catches structural errors but can't verify semantic correctness. A response might match your schema but still contain incorrect information—that's where guards and reprompting come in.
+Schema validation catches structural errors but can't verify semantic correctness. A response might match your schema but still contain incorrect information—that's where guards and expectations come in.
 
 For schema definition details, see [Schemas](../schemas/index.md).
 
@@ -99,7 +99,6 @@ The error context shows exactly what field failed and why, helping you fix issue
 
 ## Learn More
 
-- **[Output Validation Pipeline](./output-validation.md)** - Multi-layer validation with guards and reprompting
-- **[Reprompting](./reprompting.md)** - Automatic retry with presets (basic, smart, thorough)
+- **[Output Validation Pipeline](./output-validation.md)** - Multi-layer validation with guards and expectations
 - **[AI Expectations](./expectations.md)** - Deterministic and LLM-judged semantic checks via `expect:`, and the repair loop that regenerates on failure
 - **[Troubleshooting](../../guides/troubleshooting.md)** - Debug errors, trace data lineage, common fixes

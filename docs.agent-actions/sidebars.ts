@@ -164,7 +164,6 @@ const sidebars: SidebarsConfig = {
             id: 'reference/validation/index',
           },
           items: [
-            'reference/validation/reprompting',
             'reference/validation/output-validation',
             'reference/validation/expectations',
           ],

@@ -230,7 +230,7 @@ Under a repair policy the action stops merely reporting quality and starts enfor
 
 **What "regenerated" actually does differs by run mode — neither one restarts the action.** Nothing here re-enters the DAG: dependencies, guards, and `context_scope` all ran once, upstream, and are not evaluated again.
 
-- **Online**, a failing record loops **in place**, inside the single call that produced it. The same per-record invocation runs again — including any `retry:`/`reprompt:` wrapping around it, which is why the two nest rather than replace each other (see [Repair and `reprompt:`](#repair-and-reprompt) below) — with `original_prompt` for `retry`, or the composed-feedback prompt for `auto`. Every other record the action is processing is untouched; a slow record does not hold up its neighbours, and a fast one does not skip the check.
+- **Online**, a failing record loops **in place**, inside the single call that produced it. The same per-record invocation runs again — including any `retry:` wrapping around it — with `original_prompt` for `retry`, or the composed-feedback prompt for `auto`. Every other record the action is processing is untouched; a slow record does not hold up its neighbours, and a fast one does not skip the check.
 - **Batch** has no call to loop around — a round *is* a whole batch submission, so there is nothing to re-enter synchronously. Instead each round submits a **new, smaller batch** containing only the records still failing, with feedback composed per record exactly as online does; records that already passed are carried forward and never resubmitted. `max_iterations` here bounds the number of these rounds, not the number of tries any one record gets — see [Current limitations](#current-limitations) for what that means for a record that happens to fail in round one.
 
 ```yaml
@@ -301,25 +301,50 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 `tests/integration/fixtures/runtime_probes/repair_exhaustion` is a rule the mock provider can never satisfy, `on_exhausted: return_last`, run through the real CLI in `tests/integration/test_runtime_probes.py`. It asserts the record survives with its final failing verdict attached — the concrete shape of the `return_last` row above. The same fixture project's `partial_file_rejection` workflow is also worth reading if you're relying on a run's exit code to mean "every record succeeded": it currently doesn't, for a reason unrelated to `expect:` — see the test file's docstring.
 :::
 
-### Repair and `reprompt:`
+### Migrating from `reprompt:`
 
-Under a repair policy the loop also owns **structural** quality. A response that isn't a JSON object, or one that doesn't conform to the action's schema, becomes a failing iteration carrying the schema feedback — the same ground `reprompt:` covers with its default schema checking.
+`reprompt:` has been removed. A config carrying it is refused at load, naming its replacement.
 
-Keeping both on one action multiplies cost, because the reprompt loop runs *inside* every repair iteration: `max_iterations × reprompt.max_attempts` provider calls in the worst case, `3 × 2` at their defaults, and more again if the action also configures `retry:`.
+**A block that only checked the schema** — the common case — becomes a rule-free `expect:`. Set it
+once for the workflow:
 
-So a `reprompt:` block that only does schema checking is redundant under `repair: auto`, and deleting it is the migration. Check what yours actually does first — `reprompt:` also runs a `validation:` UDF and supports `use_llm_critique` / `use_self_reflection`, none of which the structural gate replaces. If your block uses those, either keep it and accept the nesting cost, or port the UDF to an [`@expectation_check`](#extending-with-your-own-checks) so the suite owns it.
+```yaml
+# before                                  # after
+defaults:                                 defaults:
+  reprompt:                                 expect:
+    on_schema_mismatch: reprompt              repair: auto
+    max_attempts: 3                           max_iterations: 3
+    use_self_reflection: true                 structural: auto
+    on_exhausted: return_last                 on_exhausted: return_last
+```
 
-One more caveat: `repair: retry` records structural failures in the verdict but re-sends the original prompt unchanged, so it does not carry schema feedback back to the model the way `reprompt:` does. Use `repair: auto` if you are replacing a reprompt block.
+`structural: auto` keeps the schema feedback the old block sent. Leave it off and a schema failure
+re-sends the original prompt instead, which is usually what you want — a response the schema
+rejected has no partial result worth preserving.
 
-### Budgeting the judge under repair
+`use_self_reflection` has no replacement and needs none: it appended one fixed question, while
+`repair: auto` sends the actual failure with each rule's `detail` and `hint`.
 
-Two things change once the loop can regenerate.
+**A block naming a `validation:` UDF** becomes a rule. Most UDFs turn out to be a built-in:
 
-The verdict cache is keyed on the **field value** a rule reads, not on the whole response. A repair that leaves a judged field untouched — which is what the `auto` prompt asks for, since it names the passing rules as things to preserve — is served from cache and costs nothing. A repair that rewrites the judged field is genuinely new content and costs a real call. So iterations multiply judge spend only for the rules whose fields actually change; `records × iterations` is the safe upper bound, not the expected cost.
+| The UDF checked | The rule |
+|---|---|
+| no field came back null | `no_null_fields` |
+| a field matches a pattern | `matches_regex` |
+| a field's length | `word_count_between`, `item_count` |
+| a field is one of a set | `accepted_values` |
+| the response parsed at all | nothing — the structural gate covers it |
 
-`judge_budget` counts *budget units*, and one unit is acquired per rule per value — not per provider call. With `votes: 3`, one unit spends three real calls, so a budget of `200` permits up to 600 provider calls. Divide by `votes` when sizing it.
+What is genuinely project-specific becomes an [`@expectation_check`](#extending-with-your-own-checks),
+which returns `(passed, detail)` rather than a bare boolean — so the failure reaches the repair
+prompt instead of only the log.
 
-Once the budget is spent, later records carry a `skipped` judged outcome, which can never satisfy an `error`-severity rule. Those records still have their other rules repaired and ship with an honest failing verdict.
+**`on_schema_mismatch:` is gone too.** `reprompt` mode is what `expect: {repair: auto}` does.
+`reject` — halt rather than regenerate — becomes `max_iterations: 1` with `on_exhausted: raise`.
+
+**A run deferred mid-reprompt** cannot resume: its stored state names a recovery phase that no
+longer exists, and it is refused rather than reinterpreted. Re-run the action with `--fresh`; the
+records it had already completed are in the store.
 
 ## Setting it once for a workflow
 

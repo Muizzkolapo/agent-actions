@@ -179,7 +179,7 @@ actions:
 | Field | Type | Description |
 |-------|------|-------------|
 | `json_mode` | boolean | Enable structured JSON output |
-| `reprompt` | object/false | Reprompt configuration for validation failures (see [Reprompting](../validation/reprompting.md)) |
+| `expect` | object | Output rules and repair policy (see [Expectations](../validation/expectations.md)) |
 | `expect` | object | Output expectations and their enforcement policy (see [AI Expectations](../validation/expectations.md)) |
 
 ### Tool Action Fields

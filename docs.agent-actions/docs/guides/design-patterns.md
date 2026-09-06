@@ -557,7 +557,7 @@ actions:
 
 ## Iterative Refinement
 
-Repeatedly improve output until quality thresholds are met. Use reprompting for automatic retry on validation failures.
+Repeatedly improve output until quality thresholds are met. Use an `expect:` repair policy for automatic regeneration on validation failures.
 
 ```yaml
 actions:
@@ -567,10 +567,9 @@ actions:
       translated_text: string
       confidence: number
       difficult_phrases: array
-    reprompt:
-      enabled: true
-      max_attempts: 3
-      strategy: validation_feedback
+    expect:
+      repair: auto
+      max_iterations: 3
 ```
 
 For multi-stage refinement with parallel strategy generation, use versioned actions:
@@ -677,7 +676,7 @@ actions:
 
 **Use cases:** Translation, content localization, quality-critical text generation
 
-See [Reprompting](../reference/validation/reprompting) for automatic refinement.
+See [Expectations](../reference/validation/expectations.md) for automatic refinement.
 
 ---
 
@@ -997,4 +996,4 @@ Explore the features that make these patterns possible:
 - **[Guards](../reference/execution/guards)** — Conditional execution
 - **[Granularity](../reference/execution/granularity)** — Record and file modes
 - **[Context Scope](../reference/context/context-scope)** — Data flow control
-- **[Reprompting](../reference/validation/reprompting)** — Automatic refinement on failures
+- **[Expectations](../reference/validation/expectations.md)** — Automatic refinement on failures

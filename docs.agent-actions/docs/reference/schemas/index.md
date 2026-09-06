@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Schema System
 
-What happens when an LLM returns malformed JSON or misses a required field? The Schema System provides output validation for LLM actions. Schemas define the expected structure of action outputs, enabling automatic validation, reprompting on failure, and type-safe data flow between actions.
+What happens when an LLM returns malformed JSON or misses a required field? The Schema System provides output validation for LLM actions. Schemas define the expected structure of action outputs, enabling automatic validation, regeneration on failure, and type-safe data flow between actions.
 
 Think of schemas like contracts: they define exactly what each action promises to deliver. When the LLM output does not match the contract, Agent Actions catches the error before it propagates downstream.
 
@@ -495,7 +495,7 @@ actions:
 When enabled:
 - LLM is instructed to return JSON
 - Provider-specific JSON modes are used when available
-- Invalid JSON triggers repair and reprompting
+- Invalid JSON triggers repair
 
 ## Best Practices
 
@@ -557,8 +557,8 @@ score:
 
 What happens when schema validation fails? Agent Actions provides several fallback mechanisms:
 
-1. If reprompting enabled: Retry with error context
-2. If reprompting disabled: Action fails
+1. If a repair policy is set: regenerate with the failure list
+2. Otherwise: the mismatch is logged and the record ships
 3. Downstream actions using this output are skipped
 
 This means a single validation failure does not necessarily crash your entire agentic workflow. Downstream actions that depend on the failed output will be skipped, but independent branches continue.

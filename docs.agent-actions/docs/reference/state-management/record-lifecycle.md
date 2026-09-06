@@ -18,7 +18,7 @@ Every record has a `_state` field governed by a finite state machine. There are 
 | `guard_skipped` | Resettable | Reset to `active` at the next action boundary |
 | `cascade_skipped` | Terminal | Record stops flowing — upstream dependency failed |
 | `failed` | Terminal | Record hit an unrecoverable error |
-| `exhausted` | Terminal | Record exhausted all reprompt attempts |
+| `exhausted` | Terminal | Record exhausted all repair iterations |
 
 > **Note:** `committed` and `guard_deferred` were **removed** from the `RecordState` enum in VIOL-0029/0030. They had zero stamp sites — no code path ever wrote them — so the state machine now produces only the six states above. A record carrying either value fails loudly (`RecordEnvelopeError`) on load.
 
@@ -72,7 +72,7 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | `filtered` | Guard condition was false; record excluded from output |
 | `unprocessed` | A dependency didn't produce output (cascade casualty) |
 | `deferred` | In-flight HITL/batch awaiting resolution |
-| `exhausted` | All reprompt attempts failed |
+| `exhausted` | All repair iterations failed |
 | `failed` | Unrecoverable error |
 
 ### `reason` column
@@ -81,7 +81,7 @@ A free-form canonical reason string giving the specific cause (see
 `agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
 `guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
 `prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`, and
-`reprompt_exhausted`.
+`expectations_exhausted`.
 
 > **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
 > `disposition` values — the matching disposition for both is `unprocessed`. Query the

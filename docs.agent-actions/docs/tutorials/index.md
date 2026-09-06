@@ -67,7 +67,7 @@ agent_workflow/
 
 ## 2. Define Your Schemas
 
-**Why schemas matter:** When an LLM generates output, how do you know it's valid? Schemas act as contracts—they define exactly what structure you expect, and Agent Actions validates every response against them. If the LLM returns malformed data, Agent Actions automatically reprompts until it conforms.
+**Why schemas matter:** When an LLM generates output, how do you know it's valid? Schemas act as contracts—they define exactly what structure you expect, and Agent Actions validates every response against them. If the LLM returns malformed data, an `expect:` repair policy regenerates until it conforms.
 
 Create these schema files:
 
@@ -237,7 +237,7 @@ Let's walk through what Agent Actions did behind the scenes:
 2. **generate_content** received extract_data's output via `{{ extract_data.field }}` references, generated marketing content, and validated against the `marketing_content` schema
 3. Both actions wrote their records as rows in the `target_data` table of `agent_io/store/product_pipeline.db`
 
-**What if the LLM returns invalid JSON?** If you configure reprompting on an action, Agent Actions automatically retries until the output conforms to your schema. See [Reprompting](../reference/validation/reprompting.md) to enable this.
+**What if the LLM returns invalid JSON?** If you configure `expect:` with a repair policy, Agent Actions regenerates until the output conforms to your schema. See [Expectations](../reference/validation/expectations.md) to enable this.
 
 ## Next Steps
 

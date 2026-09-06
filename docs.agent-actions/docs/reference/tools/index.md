@@ -187,7 +187,7 @@ Reference tools by function name:
 
 1. Scans directories in `tool_path` recursively
 2. Lists Python files (`*.py`), skipping files starting with `_` or `test_`
-3. Imports only files that declare a tool-registering decorator (`@udf_tool` or `@reprompt_validation`), detected by parsing the source without executing it — helper scripts without a decorator are skipped, so a broken helper cannot block discovery
+3. Imports only files that declare a tool-registering decorator (`@udf_tool` or `@expectation_check`), detected by parsing the source without executing it — helper scripts without a decorator are skipped, so a broken helper cannot block discovery
 4. Executes matching modules to trigger decorator registration
 5. Validates `impl` references in agentic workflow config
 

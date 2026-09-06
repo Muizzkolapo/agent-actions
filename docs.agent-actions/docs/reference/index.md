@@ -19,7 +19,7 @@ This is your comprehensive guide to Agent Actions features. Whether you're build
 **Running Agentic Workflows**
 
 - [Execution](./execution/) — Run modes, guards, granularity
-- [Validation](./validation/) — Pre-flight checks and reprompting
+- [Validation](./validation/) — Pre-flight checks and output expectations
 - [Tools](./tools/) — Custom tools with `@udf_tool`
 
 **Understanding the System**
@@ -61,7 +61,7 @@ Notice how each action can have its own schema validation, context scope, and gu
 
 **Guard** — Conditional execution: skip or filter actions based on data conditions. Guards are quality checkpoints—if input doesn't meet standards, the action is skipped entirely.
 
-**Schema** — JSON Schema validation for outputs. Invalid responses trigger automatic reprompting. Note that schema validation catches structural errors but can't verify semantic correctness—a response might match your schema but still contain incorrect information.
+**Schema** — JSON Schema validation for outputs. An `expect:` repair policy regenerates invalid responses. Note that schema validation catches structural errors but can't verify semantic correctness—a response might match your schema but still contain incorrect information.
 
 ## Example: Fact Extraction Agentic Workflow
 
