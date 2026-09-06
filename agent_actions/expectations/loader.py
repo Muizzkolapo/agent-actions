@@ -8,7 +8,8 @@ from typing import Any
 import yaml
 
 from agent_actions.errors import AgentActionsError
-from agent_actions.expectations.types import _RECORD_SCOPED_TYPES, Expectation, Suite
+from agent_actions.expectations import registry
+from agent_actions.expectations.types import Expectation, Suite
 
 
 class SuiteLoadError(ValueError):
@@ -104,7 +105,7 @@ def _field_scoped_entries(suite_name: str, data: dict[str, Any]) -> tuple[list[A
                     f"position already names what it tests"
                 )
                 continue
-            if entry.get("type") in _RECORD_SCOPED_TYPES:
+            if registry.is_record_scoped(str(entry.get("type"))):
                 label = entry.get("id") or entry.get("type") or "<unnamed>"
                 defects.append(
                     f"{label}: a rule on field '{field_id}' is type '{entry['type']}', which "
