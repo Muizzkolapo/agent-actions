@@ -31,7 +31,7 @@ The SQLite database carries five framework-owned tables:
 | `target_data`         | Per-action output records — one row per `(action_name, relative_path)`                   |
 | `record_disposition`  | Per-record dispositions (success/failed/exhausted/skipped) emitted by each action        |
 | `prompt_trace`        | Compiled prompt + LLM response per record per attempt (online and batch)                 |
-| `checkpoint_output`   | Mid-action checkpoint records (used for resumable batch retrieval and reprompt recovery) |
+| `checkpoint_output`   | Mid-action checkpoint records (used for resumable batch retrieval and repair recovery) |
 
 Plus one bookkeeping table `workflow_metadata` for run-level key/value state.
 
@@ -122,7 +122,7 @@ Records may carry underscore-prefixed system fields that control internal proces
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `_recovery` | `object` | Recovery metadata — present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records and/or reprompt for validation failures). Contains `retry` and/or `reprompt` sub-objects with attempt counts, success status, and timestamps. |
+| `_recovery` | `object` | Recovery metadata — present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records and/or repair for expectation failures). Contains `retry` and/or `expectations` sub-objects with attempt counts and status. |
 | `_unprocessed` | `true` | Upstream action failed (API error, missing batch result) — automatically skipped by downstream actions |
 
 These fields are excluded from content extraction and should not be set by users. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.

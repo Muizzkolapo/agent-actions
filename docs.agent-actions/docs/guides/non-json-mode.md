@@ -17,7 +17,7 @@ In non-JSON mode, schemas are not injected. Instead, each action uses **`output_
 |---|---|---|
 | Output definition | `schema: my_schema` | `output_field: field_name` |
 | LLM returns | Structured JSON matching schema | Plain text |
-| Validation | Schema validation + reprompt | None (raw text stored) |
+| Validation | Schema validation + `expect:` repair | None (raw text stored) |
 | Model requirements | Must support JSON output | Any model works |
 | Fields per action | Multiple | One |
 

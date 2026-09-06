@@ -63,9 +63,9 @@ Available: ['title', 'type', 'properties', 'required', 'additionalProperties']
 
 | Cause | What happened | Fix |
 |-------|--------------|-----|
-| Schema-echo | LLM returned the JSON Schema definition instead of data | Enable `on_schema_mismatch: reprompt` — the validator now detects schema-echo payloads and triggers reprompt |
+| Schema-echo | LLM returned the JSON Schema definition instead of data | Add `expect: {repair: auto}` — the validator detects schema-echo payloads and the repair loop regenerates |
 | Empty object | LLM returned `{}` | Same fix — empty objects are now rejected when the schema declares fields |
-| Existing poison | Bad data already in `target_data` from a previous run | Re-run the upstream action with reprompt enabled, or manually clean the SQLite row |
+| Existing poison | Bad data already in `target_data` from a previous run | Re-run the upstream action with a repair policy, or manually clean the SQLite row |
 
 **Behavior:** When a single record has corrupted namespace data, that record is skipped and processing continues for the remaining records in the file. The skipped record is logged at WARNING level. This prevents one bad record from failing an entire file of valid records.
 
@@ -272,10 +272,11 @@ def my_function(data: dict) -> dict:
     }
 ```
 
-Or enable reprompting for LLM actions:
+Or enable repair for LLM actions:
 ```yaml
-reprompt:
-  max_attempts: 4
+expect:
+  repair: auto
+  max_iterations: 4
   on_exhausted: return_last
 ```
 
@@ -301,7 +302,7 @@ Prompt traces only exist for **LLM actions**. Tool (UDF) actions do not generate
 
 - **Missing context**: Template variables resolved to empty strings or wrong values — check your `context_scope` and dependency chain
 - **Ambiguous instructions**: The prompt doesn't clearly constrain the output format — tighten the prompt template
-- **Schema mismatch**: The LLM response doesn't match the expected JSON structure — consider enabling reprompting
+- **Schema mismatch**: The LLM response doesn't match the expected JSON structure — consider adding an `expect:` block with a repair policy
 - **Model badge**: Check if the model name matches what you expected — a misconfigured provider can route to the wrong model
 
 ### Querying Traces Directly
@@ -496,19 +497,20 @@ def safe_function(data: dict) -> dict:
 
 ## Reprompting
 
-What happens when an LLM returns invalid JSON? Rather than failing immediately, Agent Actions can automatically retry with feedback about what went wrong. This is reprompting.
+What happens when an LLM returns invalid JSON? Rather than failing immediately, Agent Actions can automatically retry with feedback about what went wrong. This is the repair loop.
 
 ### Configuration
 
 Reprompt requires explicit configuration:
 
 ```yaml
-reprompt:
-  max_attempts: 3          # Number of retry attempts
-  on_exhausted: return_last   # return_last | raise
+expect:
+  repair: auto              # how a rule failure is regenerated
+  max_iterations: 3         # total generations, counting the first
+  on_exhausted: return_last # return_last | fail | raise
 ```
 
-To disable: `reprompt: false`
+To disable: omit the `expect:` block.
 
 ### Configuration Options
 
@@ -583,7 +585,7 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 | `X is not of type 'string'` | `str(value)` or `Union[int, str]` |
 | `X is not of type 'array'` | `[value] if isinstance(value, str) else value` |
 | `X was unexpected` | Add field to TypedDict |
-| `X is a required property` | Return field from tool or use `reprompt` |
+| `X is a required property` | Return field from tool or use `expect: {repair: auto}` |
 | `Dict[str, int]` fails | Use plain `dict` |
 
 ### Debug Checklist
@@ -596,7 +598,7 @@ When debugging agentic workflow errors, work through this checklist:
 4. [ ] Check TypedDict matches actual data shape
 5. [ ] Enable `prompt_debug: true` for LLM actions
 6. [ ] Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG` for tracebacks
-7. [ ] Consider enabling reprompt with `max_attempts: 3` for LLM schema failures
+7. [ ] Consider `expect: {repair: auto, max_iterations: 3}` for LLM schema failures
 
 Most errors fall into one of two categories: schema mismatches (the data structure doesn't match expectations) or missing fields (required data wasn't provided). The checklist above helps you identify which category you're dealing with.
 

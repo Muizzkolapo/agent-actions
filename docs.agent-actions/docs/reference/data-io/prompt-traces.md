@@ -22,7 +22,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `prompt_length` | Character count of the compiled prompt |
 | `context_length` | Character count of the LLM context sent to the model |
 | `response_length` | Character count of the LLM response |
-| `attempt` | Attempt number (0 = initial, 1+ = reprompt retries) |
+| `attempt` | Attempt number (0 = initial, 1+ = repair iterations) |
 | `source_guid` | Durable identity of the record that was prompted |
 | `run_id` | The workflow run that wrote the row |
 
@@ -118,7 +118,7 @@ WHERE t.action_name = 'classify_issue'
   AND t.source_guid = '<source_guid>'
 ORDER BY t.id DESC;
 
--- Find records with reprompt retries
+-- Find records with repair iterations
 SELECT action_name, record_id, MAX(attempt) as max_attempts
 FROM prompt_trace
 GROUP BY action_name, record_id

@@ -61,10 +61,11 @@ actions:
     context_scope:
       observe:
         - extract_metadata.*
-    reprompt:
-      validation: "check_valid_bisac"
-      max_attempts: 3
-      on_exhausted: "return_last"
+    expect:
+      max_iterations: 3
+      expectations:
+        - { type: matches_regex, field: primary_bisac_code,
+            params: { pattern: '^[A-Z]{3}\d{6}$' } }
 ```
 
 **Action fields:**
@@ -80,7 +81,7 @@ actions:
 | **impl** | For tool actions, the function name to call |
 | **hitl** | For hitl actions, configuration block (port, instructions, timeout, etc.) |
 | **context_scope** | Progressive context disclosure—control exactly what data flows into this action (`observe`, `drop`, `passthrough`) |
-| **reprompt** | Auto-retry config when validation fails |
+| **expect** | Output rules and the repair policy that regenerates on failure |
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
 | **model_name** | Which model to use (inherited from defaults if not specified) |
 | **run_mode** | `online` or `batch` processing (inherited from defaults if not specified) |
@@ -196,7 +197,7 @@ The `{{ action_name.field }}` syntax pulls data from completed upstream actions.
 
 ## Schema Validation
 
-**What happens when an LLM returns malformed JSON?** Every action output is validated against a JSON Schema. If you configure `reprompt` on an action, Agent Actions automatically retries until the output conforms.
+**What happens when an LLM returns malformed JSON?** Every action output is validated against a JSON Schema. If you configure `expect:` with a repair policy, Agent Actions regenerates until the output conforms.
 
 ```json
 {

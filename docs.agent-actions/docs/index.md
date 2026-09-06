@@ -51,7 +51,7 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 **Build pipelines from YAML:** Define your workflow in plain YAML. Agent Actions handles DAG orchestration, parallelization, and dependency resolution.
 
-**Validate every output:** Every LLM response is validated against JSON Schema. Invalid outputs trigger automatic reprompting until they conform.
+**Validate every output:** Every LLM response is validated against JSON Schema. An `expect:` block regenerates output that does not conform.
 
 **Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, and Ollama in the same workflow. Switch models per-action.
 

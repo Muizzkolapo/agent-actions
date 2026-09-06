@@ -52,10 +52,10 @@ actions:
 | Network Issues | Connection timeout, DNS failure | Yes |
 | Server Errors | HTTP 502, 503, 504 | Yes |
 | Invalid Request | Bad API key, malformed input | No |
-| Schema Violation | Invalid JSON output | No (uses reprompt) |
+| Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
 
 :::info
-For invalid LLM outputs, Agent Actions uses [reprompting](../validation/reprompting.md) instead of retry.
+For invalid LLM outputs, Agent Actions uses the [expectations](../validation/expectations.md) repair loop instead of retry.
 :::
 
 ## Provider Support
@@ -80,5 +80,5 @@ retry:
 
 ## See Also
 
-- [Reprompting](../validation/reprompting.md) - Handling invalid LLM outputs
+- [Expectations](../validation/expectations.md) - Handling invalid LLM outputs
 - [Run Modes](./run-modes.md) - Batch vs online execution

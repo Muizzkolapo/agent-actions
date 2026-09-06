@@ -294,5 +294,5 @@ The record survives this because `_state_history` spans both processes. The `sou
 
 - [Data Lineage](../reference/data-io/data-lineage.md) — how `target_id`, `parent_target_id`, and `root_target_id` track ancestry
 - [Guards](../reference/execution/guards.md) — conditional execution and guard skip behavior
-- [Batch Recovery](../reference/execution/batch-recovery.md) — retry and reprompt mechanics
+- [Batch Recovery](../reference/execution/batch-recovery.md) — retry and repair mechanics
 - [Prompt Traces](../reference/data-io/prompt-traces.md) — LLM request/response observability per record

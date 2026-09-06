@@ -203,7 +203,7 @@ Complete telemetry of all system events in JSON Lines format (one event per line
 
 #### Recovery Events (R004/R005)
 
-When reprompt validation retries, the event stream shows each attempt:
+When the repair loop regenerates, the event stream shows each attempt:
 
 - **R004 `RepromptRetryEvent`** — fired before each retry attempt (not on the first attempt). Contains `attempt` (the upcoming 1-indexed attempt), `max_attempts`, and `error` (reason for failure).
 - **R005 `RepromptRecoveredEvent`** — fired when validation passes after retries. Contains `attempt` (the 1-indexed attempt that succeeded) and `validation_name`.
@@ -226,7 +226,7 @@ ERROR-level events only — a filtered subset of `events.json` for quick error d
 ```
 
 :::caution Monitoring change
-`LLMJSONParseErrorEvent` (code L005) is now WARN level — it no longer appears in `errors.json`. Parse errors that reprompt recovers from are not true errors. Consumers monitoring parse failures must switch to `events.json` filtered by code `L005`.
+`LLMJSONParseErrorEvent` (code L005) is now WARN level — it no longer appears in `errors.json`. Parse errors the repair loop recovers from are not true errors. Consumers monitoring parse failures must switch to `events.json` filtered by code `L005`.
 :::
 
 :::tip

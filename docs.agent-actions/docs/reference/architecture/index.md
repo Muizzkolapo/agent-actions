@@ -130,7 +130,7 @@ flowchart TB
 
 Two recovery loops are visible here:
 - **Transport retry** (Retry → Providers): same request resubmitted with exponential backoff when network errors or rate limits occur
-- **Validation reprompt** (Reprompt → Template): prompt rebuilt with error feedback when schema validation fails
+- **Repair** (Expectations → Template): prompt rebuilt with the failure list when validation fails
 
 In batch mode, these run as two sequential phases after the batch completes. See [Batch Recovery](../execution/batch-recovery.md) for details.
 
