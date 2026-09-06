@@ -18,7 +18,11 @@ from agent_actions.expectations.loader import (
     build_suite_from_schema_data,
     load_named_suite,
 )
-from agent_actions.expectations.repair import compose_repair_prompt
+from agent_actions.expectations.repair import (
+    check_repair_template,
+    compose_repair_prompt,
+    render_repair_template,
+)
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_KEY
@@ -28,6 +32,26 @@ logger = logging.getLogger(__name__)
 # The type stamped on the structural gate's own outcome. No registered
 # expectation type uses it, so it identifies a schema failure unambiguously.
 STRUCTURAL_OUTCOME_TYPE = "schema"
+
+
+def _check_repair_mode(key: str, mode: Any, *, allow_none: bool) -> None:
+    """Both regeneration keys take the same vocabulary; this is the one check.
+
+    ``none`` turns the loop off entirely, so it belongs to ``repair:`` alone —
+    there is no such thing as not regenerating one kind of failure.
+    """
+    allowed = ("none", "retry", "auto") if allow_none else ("retry", "auto")
+    if isinstance(mode, dict):
+        if set(mode) != {"prompt"}:
+            raise ValueError(
+                f"{key}: mapping form takes exactly one key, 'prompt'; got: {sorted(mode)}"
+            )
+        check_repair_template(mode["prompt"])
+        return
+    if mode not in allowed:
+        raise ValueError(
+            f"{key} must be one of {', '.join(allowed)} or a {{prompt: ...}} mapping; got: {mode!r}"
+        )
 
 
 @dataclass
@@ -112,24 +136,16 @@ class ExpectationService:
         max_iterations: int = 3,
         schema: dict[str, Any] | None = None,
         on_exhausted: str = "return_last",
-        structural: str = "retry",
+        structural: str | dict[str, Any] = "retry",
     ) -> None:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
-        if repair not in ("none", "retry", "auto"):
-            raise ValueError(
-                f"repair must be 'none', 'retry', or 'auto'; got: {repair!r}. "
-                "The prompt-mapping form is not supported yet."
-            )
+        _check_repair_mode("repair", repair, allow_none=True)
         if on_exhausted not in ("return_last", "fail", "raise"):
             raise ValueError(
                 f"on_exhausted must be 'return_last', 'fail', or 'raise'; got: {on_exhausted!r}"
             )
-        if structural not in ("retry", "auto"):
-            raise ValueError(
-                f"structural must be 'retry' or 'auto'; got: {structural!r}. "
-                "The prompt-mapping form is not supported yet."
-            )
+        _check_repair_mode("structural", structural, allow_none=False)
         if repair == "none" and structural != "retry":
             raise ValueError(
                 "structural: decides how a schema failure is regenerated, so it has no "
@@ -344,7 +360,12 @@ class ExpectationService:
         """The prompt for one generation; retry re-samples the original, auto composes feedback."""
         if iteration == 1 or last_suite_result is None:
             return original_prompt
-        if self._mode_for(last_suite_result) != "auto":
+        mode = self._mode_for(last_suite_result)
+        if isinstance(mode, dict):
+            return render_repair_template(
+                mode["prompt"], original_prompt, last_response, last_suite_result, self._hints
+            )
+        if mode != "auto":
             return original_prompt
         return compose_repair_prompt(original_prompt, last_response, last_suite_result, self._hints)
 
@@ -489,12 +510,6 @@ def create_expectation_service_from_config(
         return None
 
     repair = expect_config.get("repair", "auto")
-    if isinstance(repair, dict):
-        raise ConfigurationError(
-            f"Action '{action_name}' uses the repair prompt-mapping form; custom "
-            "repair prompts are not implemented yet. Use repair: retry or auto.",
-            context={"action": action_name, "repair": repair},
-        )
 
     suite_name = expect_config.get("suite")
     entries = expect_config.get("expectations")

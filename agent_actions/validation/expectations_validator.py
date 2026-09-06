@@ -125,9 +125,21 @@ def _repair_mode_defects(
                 "meaning under repair: none, which never regenerates"
             )
         return messages
-    if isinstance(repair, dict):
-        messages.append("repair: {prompt:} is not implemented; use retry or auto")
-        return messages
+    for key in ("repair", "structural"):
+        mode = expect.get(key)
+        if not isinstance(mode, dict):
+            continue
+        if set(mode) != {"prompt"}:
+            messages.append(
+                f"{key}: mapping form takes exactly one key, 'prompt'; got: {sorted(mode)}"
+            )
+            continue
+        from agent_actions.expectations.repair import RepairTemplateError, check_repair_template
+
+        try:
+            check_repair_template(mode["prompt"])
+        except RepairTemplateError as exc:
+            messages.append(f"{key}: {exc}")
     from agent_actions.processing.helpers import _is_tool_action
 
     if _is_tool_action(action):

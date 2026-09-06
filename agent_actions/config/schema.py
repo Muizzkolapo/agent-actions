@@ -219,10 +219,10 @@ class ExpectConfig(BaseModel):
         description="none (observe), retry (re-run prompt), or auto (composed feedback); "
         "the {prompt: $wf.X} mapping form is reserved and not implemented yet",
     )
-    structural: Literal["retry", "auto"] = Field(
+    structural: str | dict[str, Any] = Field(
         default="retry",
-        description="How a schema failure is regenerated: retry (re-send the original prompt) "
-        "or auto (send the schema feedback); repair: governs rule failures",
+        description="How a schema failure is regenerated: retry (re-send the original prompt), "
+        "auto (send the schema feedback), or {prompt: $wf.X}; repair: governs rule failures",
     )
     on_exhausted: Literal["return_last", "fail", "raise"] = Field(
         default="return_last",
@@ -235,7 +235,7 @@ class ExpectConfig(BaseModel):
         "None is uncapped",
     )
 
-    @field_validator("repair")
+    @field_validator("repair", "structural")
     @classmethod
     def validate_repair(cls, v):
         if isinstance(v, str):

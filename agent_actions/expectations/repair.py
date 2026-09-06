@@ -54,6 +54,66 @@ def _failed_line(outcome: Outcome, hint: str | None) -> str:
     return line
 
 
+REPAIR_PLACEHOLDERS = ("original_prompt", "response_json", "failed_lines", "passing_lines")
+
+
+class RepairTemplateError(ValueError):
+    """An authored repair template names something the framework cannot supply."""
+
+
+def check_repair_template(template: Any) -> None:
+    """Refuse a template the composer could not fill, naming what it may use.
+
+    Checked once at construction rather than per failure, so a typo is a config
+    error rather than a regeneration that silently loses its feedback.
+    """
+    if not isinstance(template, str):
+        raise RepairTemplateError(
+            f"repair prompt must be a string, found {type(template).__name__}"
+        )
+    known = ", ".join(f"{{{name}}}" for name in REPAIR_PLACEHOLDERS)
+    try:
+        template.format(**dict.fromkeys(REPAIR_PLACEHOLDERS, ""))
+    except KeyError as exc:
+        raise RepairTemplateError(
+            f"repair prompt names unknown placeholder {exc.args[0]!r}; it may use {known}"
+        ) from exc
+    except (IndexError, ValueError) as exc:
+        raise RepairTemplateError(
+            f"repair prompt is not a valid template ({exc}); it may use {known}"
+        ) from exc
+
+
+def render_repair_template(
+    template: str,
+    original_prompt: str,
+    response: Any,
+    suite_result: SuiteResult,
+    hints: dict[str, str],
+) -> str:
+    """The author's template, filled with the payload ``auto`` would have composed."""
+    return template.format(
+        original_prompt=original_prompt,
+        response_json=json.dumps(response, default=str),
+        failed_lines=_failed_lines(suite_result, hints),
+        passing_lines=_passing_lines(suite_result),
+    )
+
+
+def _failed_lines(suite_result: SuiteResult, hints: dict[str, str]) -> str:
+    lines = "\n".join(
+        _failed_line(o, _hint_for(o.id, hints))
+        for o in suite_result.outcomes
+        if not o.passed and not o.skipped
+    )
+    return lines or "(none)"
+
+
+def _passing_lines(suite_result: SuiteResult) -> str:
+    passing = [o.id for o in suite_result.outcomes if o.passed and not o.skipped]
+    return "\n".join(f"- {oid}" for oid in passing) if passing else "(none yet)"
+
+
 def compose_repair_prompt(
     original_prompt: str,
     response: Any,
@@ -74,18 +134,11 @@ def compose_repair_feedback(
     Skipped outcomes are omitted: a rule the judge budget left unevaluated says
     nothing the regeneration can act on.
     """
-    failed_lines = "\n".join(
-        _failed_line(o, _hint_for(o.id, hints))
-        for o in suite_result.outcomes
-        if not o.passed and not o.skipped
-    )
     # Skipped outcomes say nothing either way: one that failed was never
     # evaluated, one that passed was waived, and neither is something the
     # regenerated output can be asked to preserve.
-    passing = [o.id for o in suite_result.outcomes if o.passed and not o.skipped]
-    passing_lines = "\n".join(f"- {oid}" for oid in passing) if passing else "(none yet)"
     return REPAIR_FEEDBACK_TEMPLATE.format(
         response_json=json.dumps(response, default=str),
-        failed_lines=failed_lines or "(none)",
-        passing_lines=passing_lines,
+        failed_lines=_failed_lines(suite_result, hints),
+        passing_lines=_passing_lines(suite_result),
     )
