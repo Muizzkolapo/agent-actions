@@ -25,6 +25,10 @@ from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_K
 
 logger = logging.getLogger(__name__)
 
+# The type stamped on the structural gate's own outcome. No registered
+# expectation type uses it, so it identifies a schema failure unambiguously.
+STRUCTURAL_OUTCOME_TYPE = "schema"
+
 
 @dataclass
 class ExpectationRunResult:
@@ -108,6 +112,7 @@ class ExpectationService:
         max_iterations: int = 3,
         schema: dict[str, Any] | None = None,
         on_exhausted: str = "return_last",
+        structural: str = "retry",
     ) -> None:
         if max_iterations < 1:
             raise ValueError(f"max_iterations must be >= 1, got: {max_iterations}")
@@ -120,9 +125,20 @@ class ExpectationService:
             raise ValueError(
                 f"on_exhausted must be 'return_last', 'fail', or 'raise'; got: {on_exhausted!r}"
             )
+        if structural not in ("retry", "auto"):
+            raise ValueError(
+                f"structural must be 'retry' or 'auto'; got: {structural!r}. "
+                "The prompt-mapping form is not supported yet."
+            )
+        if repair == "none" and structural != "retry":
+            raise ValueError(
+                "structural: decides how a schema failure is regenerated, so it has no "
+                "meaning under repair: none, which never regenerates"
+            )
         self.suite = suite
         self._on_exhausted = on_exhausted
         self.repair = repair
+        self.structural = structural
         self._judge = judge
         self._max_iterations = max_iterations
         self._schema = schema if isinstance(schema, dict) else None
@@ -326,11 +342,24 @@ class ExpectationService:
         last_suite_result: SuiteResult | None,
     ) -> str:
         """The prompt for one generation; retry re-samples the original, auto composes feedback."""
-        if self.repair == "auto" and iteration > 1 and last_suite_result is not None:
-            return compose_repair_prompt(
-                original_prompt, last_response, last_suite_result, self._hints
-            )
-        return original_prompt
+        if iteration == 1 or last_suite_result is None:
+            return original_prompt
+        if self._mode_for(last_suite_result) != "auto":
+            return original_prompt
+        return compose_repair_prompt(original_prompt, last_response, last_suite_result, self._hints)
+
+    def _mode_for(self, suite_result: SuiteResult) -> str | dict[str, Any]:
+        """Which regeneration mode governs the failure that just happened.
+
+        A schema failure and a rule failure carry different information: the
+        rule names a defect in usable output, the schema failure means there was
+        no usable output to preserve. Matching on the outcome's type rather than
+        its id because a multi-record verdict suffixes ids with their index.
+        """
+        failed = suite_result.failed
+        if failed and all(outcome.type == STRUCTURAL_OUTCOME_TYPE for outcome in failed):
+            return self.structural
+        return self.repair
 
     def _record_verdict(
         self, record: Any, llm_context: dict[str, Any] | None, *, check_schema: bool
@@ -577,6 +606,7 @@ def create_expectation_service_from_config(
         max_iterations=expect_config.get("max_iterations", 3),
         schema=config.get(SCHEMA_KEY),
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
+        structural=expect_config.get("structural", "retry"),
     )
     service._judge_budget = budget if judge_dispatch is not None else None
     return service

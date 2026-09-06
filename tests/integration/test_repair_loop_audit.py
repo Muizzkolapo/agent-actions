@@ -399,7 +399,24 @@ class TestStructuralGate:
         assert run.calls == 2
         assert any(v["expect"]["overall_pass"] is True for v in run.verdicts())
 
-    def test_the_structural_failure_reaches_the_repair_prompt(self, project):
+    def test_the_structural_failure_reaches_the_repair_prompt_under_structural_auto(self, project):
+        project.write_actions(
+            BRAINSTORM.format(
+                expect_body=_expect(
+                    "repair: auto\nstructural: auto\nmax_iterations: 3\n" + ENOUGH_IDEAS
+                )
+            )
+        )
+        run = run_workflow(
+            project,
+            [
+                {"wrong_key": "not the schema"},
+                {"ideas": ["alpha", "beta", "gamma"]},
+            ],
+        )
+        assert "_structural" in run.prompts[1]
+
+    def test_a_structural_failure_re_runs_the_original_prompt_by_default(self, project):
         project.write_actions(
             BRAINSTORM.format(
                 expect_body=_expect("repair: auto\nmax_iterations: 3\n" + ENOUGH_IDEAS)
@@ -412,7 +429,8 @@ class TestStructuralGate:
                 {"ideas": ["alpha", "beta", "gamma"]},
             ],
         )
-        assert "_structural" in run.prompts[1]
+        assert run.prompts[0] == run.prompts[1]
+        assert "_structural" not in run.prompts[1]
 
     def test_observe_mode_never_applies_the_structural_gate(self, project):
         project.write_actions(
