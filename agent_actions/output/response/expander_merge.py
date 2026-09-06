@@ -1,5 +1,6 @@
 """Config merge and initialization functions extracted from ActionExpander."""
 
+import copy
 from typing import Any
 
 from agent_actions.output.response.config_fields import get_default
@@ -102,3 +103,23 @@ def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None
         if isinstance(context, list):
             refs.extend(context)
     return refs
+
+
+def merge_expect(defaults: Any, action: Any) -> dict[str, Any] | None:
+    """The action's ``expect:`` block over the workflow's, key by key.
+
+    Key by key rather than whole-value, because the block holds two decisions
+    made at different levels: the repair policy is a workflow-wide choice, and
+    the rules belong to one action. Replacing would mean an action that adds a
+    rule silently returns to the default policy.
+
+    A non-mapping on either side is ignored here; ``ExpectConfig`` refuses it
+    with a message about the block, which is the better error.
+    """
+    base = defaults if isinstance(defaults, dict) else None
+    override = action if isinstance(action, dict) else None
+    if base is None and override is None:
+        return None
+    # An empty dict is the bare block — "read my own schema" — so it survives
+    # the merge as a block rather than collapsing to no block at all.
+    return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}

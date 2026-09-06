@@ -29,6 +29,7 @@ from .expander_merge import (
     deep_merge_context_scope,
     initialize_optional_fields,
     merge_directive_value,
+    merge_expect,
     process_chunk_config,
 )
 from .expander_schema import (
@@ -289,9 +290,11 @@ class ActionExpander:
         if interceptors:
             agent["interceptors"] = interceptors
 
-        # Pass through the expect block unchanged; ExpectConfig validated its
-        # shape already, and AgentConfig (extra="allow") preserves it as-is.
-        agent["expect"] = action.get("expect")
+        # The workflow's block under the action's, key by key: the repair policy
+        # is set once for the workflow and the rules belong to each action.
+        # ExpectConfig validated both shapes already, and AgentConfig
+        # (extra="allow") preserves the result as-is.
+        agent["expect"] = merge_expect(defaults.get("expect"), action.get("expect"))
 
         # Union context: refs into observe so infer_dependencies picks up the
         # source action automatically. The action's inline list, or its resolved
