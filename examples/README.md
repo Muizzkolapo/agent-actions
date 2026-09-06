@@ -11,7 +11,7 @@ Six workflows demonstrating agent-actions patterns — from single-vendor local 
 | [product_listing_enrichment](./product_listing_enrichment) | 6 | Gemini, OpenAI | Strict LLM/Tool alternation, progressive context (drop raw_specs after distillation), guard-based skip, seed data |
 | [support_resolution](./support_resolution) | 7 | Ollama | `json_mode: false`, `output_field` (no schema needed), works with any model including local 3B, guard as cost control |
 | [contract_reviewer](./contract_reviewer) | 4 | OpenAI | Map-Reduce (split → per-clause analysis → FILE granularity aggregate), context scoping with drop |
-| [book_catalog_enrichment](./book_catalog_enrichment) | 15 | Ollama, Groq, OpenAI | HITL review, reprompt validation, grounded recommendations (LLM → Tool search → LLM rank), 4-way parallel fan-out |
+| [book_catalog_enrichment](./book_catalog_enrichment) | 15 | Ollama, Groq, OpenAI | HITL review, expectations, grounded recommendations (LLM → Tool search → LLM rank), 4-way parallel fan-out |
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ All workflows default to `record_limit: 2` for quick testing. Remove or increase
 | Parallel voting + merge | review_analyzer, incident_triage |
 | Guards (conditional execution) | All except contract_reviewer |
 | Multi-vendor model selection | review_analyzer, incident_triage, product_listing_enrichment, book_catalog_enrichment |
-| Retry + reprompt validation | All (retry); review_analyzer, incident_triage, product_listing_enrichment, contract_reviewer, book_catalog_enrichment (reprompt) |
+| Retry + expectations | All (retry); review_analyzer, incident_triage, product_listing_enrichment, contract_reviewer, book_catalog_enrichment, species_id_cards (expect) |
 | Seed data injection | All |
 | Progressive context (observe/drop/passthrough) | All |
 | Map-Reduce + FILE granularity | contract_reviewer |
@@ -70,7 +70,5 @@ Every example follows the same layout:
 ├── schema/
 │   └── <workflow>/                   # Output schemas per action
 └── tools/
-    ├── <workflow>/                   # Tool implementations (UDFs)
-    └── shared/                       # Shared reprompt validations
-        └── reprompt_validations.py
+    └── <workflow>/                   # Tool implementations (UDFs)
 ```

@@ -4,7 +4,7 @@
 
 An [agent-actions](https://github.com/Muizzkolapo/agent-actions) example that turns raw book metadata into production-ready catalog entries -- BISAC classification, marketing copy, SEO metadata, reading-level assessment, grounded recommendations, and per-user views.
 
-With **15 actions**, it's the most complex example in the repository and the **only one** demonstrating **Human-in-the-Loop (HITL) review** and **reprompt validation** -- two patterns critical for production AI pipelines that need human oversight and automatic output correction.
+With **15 actions**, it's the most complex example in the repository and the **only one** demonstrating **Human-in-the-Loop (HITL) review** and **expectations** -- two patterns critical for production AI pipelines that need human oversight and automatic output correction.
 
 ---
 
@@ -35,7 +35,7 @@ Manual enrichment at scale is slow and inconsistent. This workflow automates the
 
 | Step | Action | Type | What It Does |
 |------|--------|------|--------------|
-| 1 | `classify_genre` | LLM (Ollama `llama3.2:latest`) | Assigns primary and secondary BISAC codes. BISAC is a fixed taxonomy so a local model suffices. Uses **reprompt validation** to retry if codes are malformed. |
+| 1 | `classify_genre` | LLM (Ollama `llama3.2:latest`) | Assigns primary and secondary BISAC codes. BISAC is a fixed taxonomy so a local model suffices. Uses an **expectation** to regenerate if codes are malformed. |
 | 2 | `ai_review_classification` | LLM (Groq `llama-3.1-8b-instant`) | Simple QA check -- fast and cheap. Flags issues and provides a confidence score for the human reviewer. |
 | 3 | `review_classification` | **HITL** | A human reviews the classification alongside the AI assessment. Approves, corrects, or overrides. |
 | 4 | `validate_bisac` | Tool | Deterministically validates and normalizes BISAC codes (format, prefix, length). |
@@ -44,7 +44,7 @@ Manual enrichment at scale is slow and inconsistent. This workflow automates the
 
 | Step | Action | Type | What It Does |
 |------|--------|------|--------------|
-| 5 | `write_description` | LLM | Writes a marketing description with hook sentence, benefits, and target audience. Uses **reprompt validation** to retry if word count is below threshold. |
+| 5 | `write_description` | LLM | Writes a marketing description with hook sentence, benefits, and target audience. Uses an **expectation** to regenerate if word count is below threshold. |
 | 6 | `validate_description` | Tool | Checks word count, benefit count, and scans for placeholder text. |
 
 ### Phase 3: Parallel Enrichment (4-way fan-out from `write_description`)
@@ -120,9 +120,9 @@ Key details:
 
 ### Reprompt Validation
 
-When an LLM produces output that fails a registered validation function, the framework automatically reprompts with the failure reason. The LLM gets another chance to fix its output. No other example in the repository uses this pattern.
+When an LLM produces output that fails a declared rule, the framework automatically regenerates, steering with the rule's `hint`. The LLM gets another chance to fix its output.
 
-Two actions use reprompt validation in this workflow:
+Two actions declare rules in this workflow:
 
 **`classify_genre`** (Ollama Local `llama3.2:latest`) -- validates BISAC code format:
 
@@ -134,10 +134,12 @@ Two actions use reprompt validation in this workflow:
   model_vendor: ollama_local           # Fixed BISAC taxonomy -- local model suffices
   model_name: llama3.2:latest
   prompt_debug: true
-  reprompt:
-    validation: "check_valid_bisac"   # Registered @reprompt_validation UDF
-    max_attempts: 3                    # Retry up to 3 times
-    on_exhausted: "return_last"        # Accept best attempt if all retries fail
+  expect:
+    max_iterations: 3                  # Regenerate up to 3 times
+    expectations:
+      - { type: matches_regex, field: primary_bisac_code,
+          params: { pattern: '^[A-Z]{3}\d{6}$' },
+          hint: "nine characters: three letters then six digits, e.g. FIC000000" }
 ```
 
 **`write_description`** -- validates minimum word count:
@@ -148,21 +150,25 @@ Two actions use reprompt validation in this workflow:
   intent: "Write compelling marketing description for the book"
   schema: write_description
   prompt: $book_catalog_enrichment.Write_Marketing_Description
-  reprompt:
-    validation: check_description_word_count  # Must produce at least 50 words
-    max_attempts: 3
-    on_exhausted: return_last
+  expect:
+    max_iterations: 3
+    expectations:
+      - { type: word_count_between, field: marketing_description,
+          params: { min: 50 },
+          hint: "write at least 50 words" }
 ```
 
 The cycle:
 
 1. The LLM produces output.
-2. The framework runs the registered validation function (e.g., `check_valid_bisac`) against it.
-3. Validation fails? The framework reprompts, appending the failure reason to the original prompt.
-4. Steps 1-3 repeat up to `max_attempts` times.
-5. If all attempts fail, `on_exhausted: return_last` accepts the best result rather than raising an error.
+2. The framework checks it against the declared rules.
+3. A rule fails? The framework regenerates, steering with that rule's `hint`.
+4. Steps 1-3 repeat up to `max_iterations` times.
+5. If every iteration fails, `on_exhausted: return_last` accepts the best result rather than raising an error.
 
-Set `prompt_debug: true` on the action to see the reprompt feedback in your logs.
+The rules are declarative -- `matches_regex` and `word_count_between` are built-in
+types, so neither action needs a Python validation function. Set `prompt_debug: true`
+on the action to see the steering text in your logs.
 
 ### AI-Assisted Human Review
 
