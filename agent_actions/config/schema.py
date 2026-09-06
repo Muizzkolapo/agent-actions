@@ -100,46 +100,6 @@ class RetryConfig(BaseModel):
     )
 
 
-class RepromptConfig(BaseModel):
-    """Configuration for reprompt behavior on validation failures.
-
-    ``validation`` is optional when ``on_schema_mismatch`` is set — the schema
-    itself serves as the validator.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    validation: str | None = Field(default=None, description="Name of validation UDF function")
-    on_schema_mismatch: Literal["reject", "reprompt"] | None = Field(
-        default=None,
-        description="Schema conformance check: reject (hard fail) or reprompt (retry on mismatch)",
-    )
-    max_attempts: int = Field(
-        default=2,
-        ge=1,
-        le=10,
-        description="Maximum number of reprompt attempts (1-10)",
-    )
-    on_exhausted: Literal["return_last", "raise"] = Field(
-        default="return_last",
-        description="Behavior when max_attempts exhausted: return_last or raise",
-    )
-    use_self_reflection: bool = Field(
-        default=False,
-        description="Include self-reflection instruction in retry prompts",
-    )
-    use_llm_critique: bool = Field(
-        default=False,
-        description="Enable LLM critique for stubborn validation failures",
-    )
-    critique_after_attempt: int = Field(
-        default=2,
-        ge=1,
-        le=10,
-        description="Critique fires starting on attempt N (e.g. 2 means critique on 2nd failed attempt onward)",
-    )
-
-
 class HitlConfig(BaseModel):
     """Configuration for Human-in-the-Loop actions."""
 
@@ -178,24 +138,13 @@ class HitlConfig(BaseModel):
         return [r.strip() for r in v if r and r.strip()]
 
 
-class _RetryRepromptValidators(BaseModel):
-    """Shared before-mode coercion for the retry/reprompt shorthand fields."""
+class _RetryValidators(BaseModel):
+    """Shared before-mode coercion for the retry shorthand field."""
 
     @field_validator("retry", mode="before", check_fields=False)
     @classmethod
     def validate_retry(cls, v):
         return _validate_bool_or_mapping(v, "retry", "use retry: {max_attempts: N} or omit")
-
-    @field_validator("reprompt", mode="before", check_fields=False)
-    @classmethod
-    def validate_reprompt(cls, v):
-        return _validate_bool_or_mapping(
-            v,
-            "reprompt",
-            "Use one of:\n"
-            "  reprompt: {on_schema_mismatch: reprompt}  # schema validates (no UDF needed)\n"
-            "  reprompt: {validation: fn_name}            # custom UDF validates",
-        )
 
 
 class ExpectConfig(BaseModel):
@@ -283,10 +232,38 @@ class ExpectConfig(BaseModel):
         return self
 
 
-class ActionConfig(_RetryRepromptValidators):
+_RETIRED_KEYS = {
+    "reprompt": (
+        "reprompt: has been replaced by expect:. A block that only checked the "
+        "schema becomes expect: {repair: auto}; one with validation: becomes a "
+        "rule under expect: {expectations: [...]}."
+    ),
+    "on_schema_mismatch": (
+        "on_schema_mismatch: has been replaced by expect:. Schema conformance is "
+        "enforced by expect: {repair: auto}, which regenerates a response the "
+        "schema rejects."
+    ),
+}
+
+
+def _refuse_retired_keys(data: Any) -> Any:
+    """Name the replacement for a key that used to configure the reprompt loop."""
+    if isinstance(data, dict):
+        for key, guidance in _RETIRED_KEYS.items():
+            if key in data:
+                raise ValueError(guidance)
+    return data
+
+
+class ActionConfig(_RetryValidators):
     """Configuration for a workflow action."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_retired_keys(cls, data: Any) -> Any:
+        return _refuse_retired_keys(data)
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -323,9 +300,6 @@ class ActionConfig(_RetryRepromptValidators):
     )
     retry: RetryConfig | None = Field(
         default=None, description="Retry configuration for transport-layer failures"
-    )
-    reprompt: RepromptConfig | None = Field(
-        default=None, description="Reprompt configuration for validation failures"
     )
     idempotency_key: str | None = Field(default=None, description="Idempotency key template")
     prompt: str | None = Field(default=None, description="Prompt template or reference")
@@ -370,7 +344,7 @@ class ActionConfig(_RetryRepromptValidators):
     max_tokens: int | None = Field(default=None, description="Maximum tokens")
     top_p: float | None = Field(default=None, description="Top-p sampling parameter")
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
-    constraints: Any | None = Field(default=None, description="Constraints for reprompting")
+    constraints: Any | None = Field(default=None, description="Generation constraints")
 
     # --- Runtime-consumed keys (from AgentConfig) ---
     where_clause: dict[str, Any] | None = Field(
@@ -438,8 +412,13 @@ class ActionConfig(_RetryRepromptValidators):
         return v
 
 
-class DefaultsConfig(_RetryRepromptValidators):
+class DefaultsConfig(_RetryValidators):
     """Default configuration applied to all actions."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_retired_keys(cls, data: Any) -> Any:
+        return _refuse_retired_keys(data)
 
     # extra="ignore" (not "forbid"): workflow defaults may contain vendor-specific
     # params like frequency_penalty, presence_penalty that vary by provider and are
@@ -481,9 +460,6 @@ class DefaultsConfig(_RetryRepromptValidators):
     max_tokens: int | None = Field(default=None, description="Default max tokens")
     top_p: float | None = Field(default=None, description="Default top-p")
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
-    reprompt: RepromptConfig | None = Field(
-        default=None, description="Default reprompt configuration"
-    )
     constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
     expect: ExpectConfig | None = Field(
@@ -616,7 +592,6 @@ __all__ = [
     "HitlConfig",
     "VersionConfig",
     "RetryConfig",
-    "RepromptConfig",
     "ActionConfig",
     "DefaultsConfig",
     "WorkflowConfig",

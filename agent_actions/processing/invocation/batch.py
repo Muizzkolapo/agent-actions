@@ -85,7 +85,7 @@ class BatchStrategy(InvocationStrategy):
         )
 
     def supports_recovery(self) -> bool:
-        """BatchStrategy does not support inline retry/reprompt."""
+        """BatchStrategy does not support inline recovery."""
         return False
 
     def flush(

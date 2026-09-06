@@ -30,67 +30,6 @@ class TestActionConfigForbidsUnknownKeys:
         with pytest.raises(ConfigValidationError, match="on_falsee"):
             ActionConfig.model_validate(data)
 
-    def test_accepts_all_valid_action_keys(self):
-        """Comprehensive dict covering every ActionConfig field."""
-        data = {
-            "name": "full_action",
-            "intent": "Test every field",
-            "kind": "llm",
-            "impl": None,
-            "model_vendor": "openai",
-            "model_name": "gpt-4",
-            "schema": {"type": "object"},
-            "drops": ["field_a"],
-            "observe": ["field_b"],
-            "granularity": "record",
-            "guard": "len(items) > 0",
-            "policy": "default",
-            "versions": None,
-            "version_consumption": None,
-            "retry": {"max_attempts": 3},
-            "reprompt": {"validation": "check_fn", "on_schema_mismatch": "reject"},
-            "idempotency_key": "key-{id}",
-            "prompt": "Do something",
-            "dependencies": ["dep_a"],
-            "primary_dependency": "dep_a",
-            "reduce_key": "group_id",
-            "hitl": None,
-            "on_empty": "warn",
-            # SIMPLE_CONFIG_FIELDS
-            "api_key": "sk-xxx",
-            "base_url": "http://localhost",
-            "run_mode": "online",
-            "is_operational": True,
-            "json_mode": True,
-            "prompt_debug": False,
-            "output_field": "raw_response",
-            "temperature": 0.7,
-            "max_tokens": 1000,
-            "top_p": 0.9,
-            "stop": ["\n"],
-            "constraints": [],
-            # Runtime-consumed (from AgentConfig)
-            "where_clause": {"clause": "status = 'active'"},
-            "anthropic_version": "2023-06-01",
-            "enable_prompt_caching": True,
-            "max_execution_time": 600,
-            "enable_caching": True,
-            # Batch concurrency
-            "batch_max_workers": 4,
-            # Expander-consumed
-            "interceptors": [{"name": "log"}],
-            "chunk_config": {"size": 100},
-            "chunk_size": 100,
-            "chunk_overlap": 10,
-            "context_scope": {"input": "seed_data"},
-            "version_mode": "parallel",
-            # Internal
-            "_version_context": {"v1": "ctx"},
-        }
-        config = ActionConfig.model_validate(data)
-        assert config.name == "full_action"
-        assert config.version_context == {"v1": "ctx"}
-
     def test_version_context_accepted_via_alias(self):
         data = {"name": "a", "intent": "i", "_version_context": {"key": "val"}}
         config = ActionConfig.model_validate(data)
@@ -109,29 +48,6 @@ class TestActionConfigForbidsUnknownKeys:
             ActionConfig.model_validate(data)
 
     # --- retry / reprompt mapping validation ---
-
-    def test_reprompt_false_converts_to_none(self):
-        """reprompt: false (disabled) is accepted and converted to None."""
-        data = {"name": "a", "intent": "i", "reprompt": False}
-        config = ActionConfig.model_validate(data)
-        assert config.reprompt is None
-
-    def test_reprompt_true_rejected(self):
-        """reprompt: true is ambiguous and rejected (must use mapping)."""
-        data = {"name": "a", "intent": "i", "reprompt": True}
-        with pytest.raises(ValidationError, match="reprompt"):
-            ActionConfig.model_validate(data)
-
-    def test_reprompt_config_accepted(self):
-        data = {"name": "a", "intent": "i", "reprompt": {"validation": "check"}}
-        config = ActionConfig.model_validate(data)
-        assert config.reprompt.validation == "check"
-
-    def test_reprompt_without_validation_accepted(self):
-        """Reprompt without validation (used with reprompt.on_schema_mismatch: reprompt)."""
-        data = {"name": "a", "intent": "i", "reprompt": {"max_attempts": 3}}
-        config = ActionConfig.model_validate(data)
-        assert config.reprompt.max_attempts == 3
 
     def test_retry_false_converts_to_none(self):
         """retry: false (disabled) is accepted and converted to None."""
@@ -160,12 +76,6 @@ class TestActionConfigForbidsUnknownKeys:
     def test_max_tokens_rejects_non_int(self):
         data = {"name": "a", "intent": "i", "max_tokens": "lots"}
         with pytest.raises(ValidationError, match="max_tokens"):
-            ActionConfig.model_validate(data)
-
-    def test_on_schema_mismatch_rejects_invalid_value_in_reprompt(self):
-        """Invalid on_schema_mismatch inside reprompt dict is rejected."""
-        data = {"name": "a", "intent": "i", "reprompt": {"on_schema_mismatch": "ignore"}}
-        with pytest.raises(ValidationError, match="on_schema_mismatch"):
             ActionConfig.model_validate(data)
 
     def test_top_level_on_schema_mismatch_rejected(self):
@@ -233,16 +143,6 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.kind.value == "llm"
 
-    def test_on_schema_mismatch_in_reprompt_accepted(self):
-        """on_schema_mismatch inside reprompt dict is accepted."""
-        data = {
-            "name": "a",
-            "intent": "i",
-            "reprompt": {"on_schema_mismatch": "reject"},
-        }
-        config = ActionConfig.model_validate(data)
-        assert config.reprompt.on_schema_mismatch == "reject"
-
     # --- Version config ---
 
     def test_versions_without_param_defaults_to_i(self):
@@ -307,41 +207,6 @@ class TestDefaultsConfigValidation:
         assert config.model_vendor == "openai"
         assert config.temperature == 0.7
 
-    def test_accepts_all_valid_defaults_keys(self):
-        """Comprehensive dict covering every DefaultsConfig field."""
-        data = {
-            "model_vendor": "openai",
-            "model_name": "gpt-4",
-            "json_mode": True,
-            "granularity": "record",
-            "run_mode": "online",
-            "drops": ["field_a"],
-            "observe": ["field_b"],
-            "data_source": "local",
-            "hitl_timeout": 60,
-            # SIMPLE_CONFIG_FIELDS
-            "api_key": "sk-xxx",
-            "base_url": "http://localhost",
-            "kind": "llm",
-            "is_operational": True,
-            "prompt_debug": False,
-            "output_field": "raw_response",
-            "temperature": 0.7,
-            "max_tokens": 1000,
-            "top_p": 0.9,
-            "stop": ["\n"],
-            "reprompt": {"on_schema_mismatch": "reject"},
-            "constraints": [],
-            "retry": None,
-            # Expander-consumed
-            "context_scope": {"input": "seed_data"},
-            "chunk_config": {"size": 100},
-            "chunk_size": 100,
-            "chunk_overlap": 10,
-        }
-        config = DefaultsConfig.model_validate(data)
-        assert config.model_vendor == "openai"
-
     def test_empty_defaults_accepted(self):
         config = DefaultsConfig.model_validate({})
         assert config.model_vendor is None
@@ -360,11 +225,6 @@ class TestDefaultsConfigValidation:
         with pytest.raises(ValidationError, match="temperature"):
             DefaultsConfig.model_validate({"temperature": "warm"})
 
-    def test_on_schema_mismatch_rejects_invalid_value_in_reprompt(self):
-        """Invalid on_schema_mismatch inside reprompt dict is rejected in defaults."""
-        with pytest.raises(ValidationError, match="on_schema_mismatch"):
-            DefaultsConfig.model_validate({"reprompt": {"on_schema_mismatch": "ignore"}})
-
     def test_retry_false_converts_to_none(self):
         config = DefaultsConfig.model_validate({"retry": False})
         assert config.retry is None
@@ -372,11 +232,3 @@ class TestDefaultsConfigValidation:
     def test_retry_true_rejected(self):
         with pytest.raises(ValidationError, match="retry"):
             DefaultsConfig.model_validate({"retry": True})
-
-    def test_reprompt_false_converts_to_none(self):
-        config = DefaultsConfig.model_validate({"reprompt": False})
-        assert config.reprompt is None
-
-    def test_reprompt_true_rejected(self):
-        with pytest.raises(ValidationError, match="reprompt"):
-            DefaultsConfig.model_validate({"reprompt": True})

@@ -217,10 +217,6 @@ class WorkflowParser:
                 action["reduce_key"] = action_data["reduce_key"]
 
             # Reprompt/retry configuration
-            if "reprompt" in action_data:
-                action["reprompt"] = action_data[
-                    "reprompt"
-                ]  # {validation, max_attempts, on_exhausted}
 
             # Execution mode configuration
             if "run_mode" in action_data:

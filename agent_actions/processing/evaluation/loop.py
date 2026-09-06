@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class EvaluationStrategy(Protocol):
-    """What changes between reprompt, critique, etc."""
+    """What changes between one evaluation strategy and another."""
 
     def evaluate(self, result: BatchResult) -> EvaluationOutcome: ...
 
@@ -51,7 +51,7 @@ class EvaluationLoop:
 
         The flag names the strategy that set it: several loops run over the same
         results, and one loop's pass says nothing about another's rules. Without
-        the name, a record reprompt graduated would skip its expectations
+        the name, a record another loop graduated would skip its expectations
         entirely — no repair, and no verdict, since nothing else validates under
         a repair policy.
         """

@@ -4,8 +4,6 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import (
     HITL_FILE_GRANULARITY_ERROR,
     JSON_MODE_KEY,
-    SCHEMA_KEY,
-    SCHEMA_NAME_KEY,
 )
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
@@ -58,25 +56,7 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
                     f"Add 'json_mode: false' to this action's config."
                 )
 
-        reprompt_raw = normalized_entry.get("reprompt")
-        reprompt_cfg = reprompt_raw if isinstance(reprompt_raw, dict) else {}
-        has_schema = bool(normalized_entry.get(SCHEMA_KEY) or normalized_entry.get(SCHEMA_NAME_KEY))
-        schema_mismatch_mode = reprompt_cfg.get("on_schema_mismatch")
-        if schema_mismatch_mode in ("reprompt", "reject") and not has_schema:
-            errors.append(
-                f"{desc} reprompt.on_schema_mismatch: {schema_mismatch_mode} requires "
-                "a schema to validate against. Define 'schema' or 'schema_name'."
-            )
-
-        warnings = []
-        if reprompt_cfg and has_schema and not schema_mismatch_mode:
-            warnings.append(
-                f"{desc} has 'reprompt' and 'schema' configured but no "
-                "'on_schema_mismatch'. Schema validation is disabled during reprompt. "
-                "Add 'on_schema_mismatch: reprompt' under 'reprompt:' to enable it."
-            )
-
-        if errors or warnings:
-            return ActionEntryValidationResult(errors=errors, warnings=warnings)
+        if errors:
+            return ActionEntryValidationResult(errors=errors)
 
         return ActionEntryValidationResult.success()

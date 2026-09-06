@@ -312,19 +312,7 @@ def write_record_dispositions(
             continue
         metadata = item.get("metadata", {})
 
-        recovery = item.get("_recovery", {})
-        reprompt_recovery = recovery.get("reprompt", {})
-        if reprompt_recovery.get("passed") is False:
-            validation = reprompt_recovery.get("validation", "unknown")
-            _safe_set_disposition(
-                storage_backend,
-                action_name,
-                source_guid,
-                DISPOSITION_EXHAUSTED,
-                reason=f"evaluation_exhausted:{validation}",
-                input_snapshot=_serialize_snapshot(item),
-            )
-        elif metadata.get("retry_exhausted"):
+        if metadata.get("retry_exhausted"):
             # The marker flag is set on every exhausted tombstone; the actual
             # cause lives in the tombstone's own reason field.
             _safe_set_disposition(

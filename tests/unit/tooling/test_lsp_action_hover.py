@@ -47,10 +47,6 @@ class TestBuildActionHover:
         result = _build_action_hover(_make_meta(guard_condition='status == "PASS"'))
         assert '**Guard**: `status == "PASS"`' in result
 
-    def test_shows_reprompt(self):
-        result = _build_action_hover(_make_meta(reprompt_validation="check_required"))
-        assert "**Reprompt**: `check_required`" in result
-
     def test_shows_observe(self):
         result = _build_action_hover(_make_meta(context_observe=["extract.*", "source.report"]))
         assert "**Observe**" in result
@@ -61,25 +57,6 @@ class TestBuildActionHover:
         result = _build_action_hover(_make_meta(context_passthrough=["upstream.*"]))
         assert "**Passthrough**" in result
         assert "`upstream.*`" in result
-
-    def test_full_action_all_fields(self):
-        """A fully populated action shows all sections."""
-        result = _build_action_hover(
-            _make_meta(
-                dependencies=["extract_incident_details"],
-                versions_summary="range [1,3], mode parallel",
-                prompt_ref="$incident_triage.Classify_Severity",
-                schema_ref="classify_severity",
-                reprompt_validation="check_required_fields",
-                context_observe=["extract_incident_details.*", "source.incident_report"],
-            )
-        )
-        assert "**Dependencies**" in result
-        assert "**Versions**" in result
-        assert "**Prompt**" in result
-        assert "**Schema**" in result
-        assert "**Reprompt**" in result
-        assert "**Observe**" in result
 
     def test_omits_empty_fields(self):
         """Fields that are None/empty are not shown."""

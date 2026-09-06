@@ -403,9 +403,11 @@ class ExpectationService:
         detail = f"response was {type(response).__name__}, expected a JSON object"
         if self._schema:
             try:
-                from agent_actions.processing.recovery.reprompt import _extract_field_names
+                from agent_actions.validation.schema_output_validator import (
+                    _extract_schema_fields,
+                )
 
-                fields = _extract_field_names(self._schema)
+                fields = sorted(_extract_schema_fields(self._schema)[0])
             except Exception:
                 # A schema the extractor cannot walk degrades to feedback
                 # without field names; it must never crash the record.

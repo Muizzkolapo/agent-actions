@@ -57,8 +57,6 @@ class ActionMetadata:
     versions_line: int | None = None
     versions_summary: str | None = None
     versions_params: list[str] = field(default_factory=list)
-    reprompt_validation: str | None = None
-    reprompt_line: int | None = None
 
 
 @dataclass

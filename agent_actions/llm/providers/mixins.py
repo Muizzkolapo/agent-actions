@@ -69,7 +69,7 @@ class JSONResponseMixin:
             )
             return result  # type: ignore[return-value]
 
-        # All parse strategies failed — return error dict for reprompt
+        # All parse strategies failed — return an error dict the repair loop can act on
         logger.warning(
             "%s returned unparseable JSON, returning error dict for repair",
             vendor_name,

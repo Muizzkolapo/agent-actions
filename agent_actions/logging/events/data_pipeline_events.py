@@ -429,7 +429,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
 
 @dataclass
 class ExhaustedRecordEvent(BaseEvent):
-    """Fired when a record is exhausted (retry/reprompt failed)."""
+    """Fired when a record is exhausted (recovery failed)."""
 
     action_name: str = ""
     record_index: int = 0

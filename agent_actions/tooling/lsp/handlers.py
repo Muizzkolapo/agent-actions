@@ -94,9 +94,6 @@ def _build_action_hover(meta) -> str:
     if m.guard_condition:
         lines.append(f"\n**Guard**: `{m.guard_condition}`")
 
-    if m.reprompt_validation:
-        lines.append(f"\n**Reprompt**: `{m.reprompt_validation}`")
-
     if m.context_observe:
         observe_list = ", ".join(f"`{o}`" for o in m.context_observe[:8])
         lines.append(f"\n**Observe**: {observe_list}")

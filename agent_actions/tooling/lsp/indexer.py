@@ -157,7 +157,6 @@ def _index_workflow_lines(
     current_context_list = None
     guard_indent = None
     versions_indent = None
-    reprompt_indent = None
 
     for i, line in enumerate(lines):
         action_match = re.match(r"^(\s*)-\s*name:\s*['\"]?([^'\"]+)['\"]?\s*$", line)
@@ -190,7 +189,6 @@ def _index_workflow_lines(
             current_context_list = None
             guard_indent = None
             versions_indent = None
-            reprompt_indent = None
             continue
 
         if not current_action:
@@ -210,7 +208,6 @@ def _index_workflow_lines(
             current_context_list = None
             guard_indent = None
             versions_indent = None
-            reprompt_indent = None
             continue
 
         # Prompt reference
@@ -365,20 +362,6 @@ def _index_workflow_lines(
                     condition = condition_match.group(1).strip()
                     current_action.guard_condition = condition
                     current_action.guard_variables = _extract_condition_variables(condition)
-
-        # Reprompt tracking
-        if re.match(r"^\s*reprompt:\s*$", line):
-            reprompt_indent = line_indent
-            continue
-
-        if reprompt_indent is not None:
-            if line.strip() and line_indent <= reprompt_indent:
-                reprompt_indent = None
-            else:
-                validation_match = re.match(r"^\s*validation:\s*(.+)$", line)
-                if validation_match:
-                    current_action.reprompt_validation = validation_match.group(1).strip()
-                    current_action.reprompt_line = i
 
         # Versions tracking
         if re.match(r"^\s*versions:\s*$", line):

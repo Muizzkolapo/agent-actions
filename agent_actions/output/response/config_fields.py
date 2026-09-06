@@ -36,8 +36,6 @@ SIMPLE_CONFIG_FIELDS = {
     "max_tokens": None,  # Default: None (use provider default)
     "top_p": None,  # Default: None (use provider default)
     "stop": None,  # Default: None (no stop sequences)
-    # Reprompt configuration
-    "reprompt": False,  # Default: False (reprompting disabled)
     "constraints": (),  # Default: empty tuple (immutable — no cross-agent mutation)
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)

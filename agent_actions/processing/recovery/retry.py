@@ -20,7 +20,7 @@ RETRIABLE_ERRORS = (NetworkError, RateLimitError)
 class RetryExhaustedException(Exception):
     """Raised when all retry attempts are exhausted.
 
-    Carries the :class:`RetryResult` so callers (e.g. the reprompt loop)
+    Carries the :class:`RetryResult` so callers (e.g. the repair loop)
     can distinguish retry exhaustion from a legitimate guard-skip.
     """
 

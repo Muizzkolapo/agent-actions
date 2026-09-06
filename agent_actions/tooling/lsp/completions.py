@@ -76,7 +76,7 @@ def build_context_scope_completions(
 
 
 def build_guard_completions(file_path: Path, index: ProjectIndex) -> list[lsp.CompletionItem]:
-    """Build completions for guard/reprompt conditions."""
+    """Build completions for guard conditions."""
     from .diagnostics import collect_available_guard_variables
 
     variables = collect_available_guard_variables(file_path, index)

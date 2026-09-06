@@ -31,7 +31,7 @@ class AgacClient(BaseClient):
     - Schema-aware fake data generation
     - Prompt-aware responses (uses prompt to seed RNG for reproducibility)
     - Field-name-aware generation (email fields get emails, etc.)
-    - Attempt-based quality variation for testing reprompt/retry
+    - Attempt-based quality variation for testing recovery
 
     Quality by attempt:
     - Attempt 1: Short responses (3 words) - likely fails validation
