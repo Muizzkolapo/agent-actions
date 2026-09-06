@@ -25,9 +25,9 @@ version: "1.0.0"
 
 defaults:
   json_mode: false                    # ← Plain text responses, no JSON required
-  # Note: reprompt: on_schema_mismatch is NOT used here because json_mode is false
-  # and outputs are named via output_field. Schema mismatch reprompt only applies
-  # when json_mode is true and a structured schema is expected.
+  # Note: no expect: block here because json_mode is false and outputs are named
+  # via output_field. The structural gate compares a record against a schema, so
+  # it has nothing to check when the response is plain text.
   granularity: Record
   is_operational: true
   run_mode: online                    # ← Use "batch" for async Gemini batch API
