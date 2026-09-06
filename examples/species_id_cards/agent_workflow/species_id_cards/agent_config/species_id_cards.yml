@@ -21,10 +21,10 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: true
   record_limit: 2
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 3
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
   context_scope:
     seed:

@@ -33,11 +33,11 @@ defaults:
   retry:
     enabled: true
     max_attempts: 2
-  reprompt:
-    on_schema_mismatch: reprompt
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
-    max_attempts: 3
   data_source:
     type: local
     folder: ./staging
@@ -52,10 +52,10 @@ actions:
     intent: "Extract structured information from raw incident report"
     schema: extract_incident_details
     prompt: $incident_triage.Extract_Incident_Details
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     context_scope:
       observe:
         - source.incident_report
@@ -73,10 +73,10 @@ actions:
       mode: parallel
     schema: classify_severity
     prompt: $incident_triage.Classify_Severity
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     context_scope:
       observe:
         - extract_incident_details.*
