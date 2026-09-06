@@ -9,9 +9,20 @@ import hashlib
 import json
 import logging
 import random
+import threading
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _GenerationContext:
+    """One thread's seed, prompt and random stream."""
+
+    rng: random.Random
+    seed: int | None = None
+    prompt: str | None = None
 
 
 class FakeDataGenerator:
@@ -288,42 +299,53 @@ class FakeDataGenerator:
 
     PRIORITIES = ["low", "medium", "high", "critical", "urgent"]
 
-    # Current generation context
-    _current_seed: int | None = None
-    _current_prompt: str | None = None
-    _rng: random.Random = random.Random()
+    # Generation context, per thread. A workflow runs actions in parallel, so a
+    # version fan-out generates from several threads at once; sharing one RNG
+    # would let each thread's set_context reset the stream the others are
+    # drawing from, and one prompt would stop meaning one answer.
+    _context = threading.local()
+
+    @classmethod
+    def _ctx(cls) -> _GenerationContext:
+        """This thread's generation context, created on first use."""
+        context: _GenerationContext | None = getattr(cls._context, "state", None)
+        if context is None:
+            context = _GenerationContext(rng=random.Random())
+            cls._context.state = context
+        return context
 
     @classmethod
     def set_context(cls, seed: int | None = None, prompt: str | None = None):
         """
         Set generation context for reproducibility and prompt-awareness.
 
+        Applies to the calling thread only.
+
         Args:
             seed: Random seed for reproducibility (None = use hash of prompt or random)
             prompt: Prompt text to extract context from
         """
-        cls._current_prompt = prompt
+        context = cls._ctx()
+        context.prompt = prompt
 
         if seed is not None:
-            cls._current_seed = seed
+            context.seed = seed
         elif prompt:
-            cls._current_seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
+            context.seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
         else:
-            cls._current_seed = random.randint(0, 2**32 - 1)
+            context.seed = random.randint(0, 2**32 - 1)
 
-        cls._rng = random.Random(cls._current_seed)
+        context.rng = random.Random(context.seed)
         logger.debug(
             "FakeDataGenerator context set: seed=%s, has_prompt=%s",
-            cls._current_seed,
+            context.seed,
             prompt is not None,
         )
 
     @classmethod
     def _get_rng(cls) -> random.Random:
-        """Get the current random number generator."""
-        if cls._rng is None:
-            cls._rng = random.Random()  # type: ignore[unreachable]
-        return cls._rng
+        """Get the calling thread's random number generator."""
+        return cls._ctx().rng
 
     @classmethod
     def generate_from_schema(
@@ -345,7 +367,7 @@ class FakeDataGenerator:
         Returns:
             Generated data matching the schema structure
         """
-        if prompt and prompt != cls._current_prompt:
+        if prompt and prompt != cls._ctx().prompt:
             cls.set_context(prompt=prompt)
 
         if not isinstance(schema, dict):
