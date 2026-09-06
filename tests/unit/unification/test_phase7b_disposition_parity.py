@@ -192,32 +192,6 @@ class TestExhaustedInputSnapshot:
         parsed = json.loads(input_snapshot)
         assert "source_guid" in parsed or "content" in parsed
 
-    def test_evaluation_exhausted_includes_input_snapshot(self):
-        """Evaluation exhaustion (reprompt.passed=False) also gets input_snapshot."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "target_id": "t-001",
-                "source_guid": "sg-001",
-                "_state": RecordState.EXHAUSTED.value,
-                "content": {"text": "original"},
-                "metadata": {},
-                "_recovery": {"reprompt": {"passed": False, "validation": "schema_check"}},
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        exhausted_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_EXHAUSTED
-        ]
-        assert len(exhausted_calls) == 1
-        input_snapshot = _get_kwarg(exhausted_calls[0], "input_snapshot")
-        assert input_snapshot is not None
-
 
 class TestFailedInputSnapshot:
     """U-3.2a: FAILED disposition must include input_snapshot and detail like online."""

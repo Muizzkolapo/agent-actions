@@ -27,7 +27,6 @@ from agent_actions.output.response.dispatch_injection import (
 from agent_actions.output.response.schema import ResponseSchemaCompiler
 from agent_actions.output.response.vendor_compilation import compile_unified_schema
 from agent_actions.processing.helpers import (
-    _resolve_schema_mismatch_mode,
     _validate_llm_output_schema,
 )
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
@@ -397,69 +396,6 @@ class TestVendorCompilation:
 # ===================================================================
 
 
-class TestSchemaMismatchModes:
-    """Tests for reprompt.on_schema_mismatch: reprompt, reject."""
-
-    def _config(self, on_schema_mismatch=None) -> dict[str, Any]:
-        base: dict[str, Any] = {
-            "schema": {
-                "fields": [
-                    {"name": "title", "type": "string", "required": True},
-                    {"name": "score", "type": "number", "required": True},
-                ]
-            },
-        }
-        if on_schema_mismatch:
-            base["reprompt"] = {"on_schema_mismatch": on_schema_mismatch}
-        return base
-
-    def test_default_is_warn_when_no_reprompt(self):
-        assert _resolve_schema_mismatch_mode({}) == "warn"
-
-    def test_explicit_reprompt(self):
-        config = {"reprompt": {"on_schema_mismatch": "reprompt"}}
-        assert _resolve_schema_mismatch_mode(config) == "reprompt"
-
-    def test_explicit_reject(self):
-        config = {"reprompt": {"on_schema_mismatch": "reject"}}
-        assert _resolve_schema_mismatch_mode(config) == "reject"
-
-    def test_no_mismatch_mode_returns_response(self):
-        """No on_schema_mismatch set returns response unchanged (no raise)."""
-        config = self._config()
-        response = {"wrong_field": "value"}
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response
-
-    def test_reject_raises_on_mismatch(self):
-        """Reject mode raises SchemaValidationError."""
-        config = self._config(on_schema_mismatch="reject")
-        response = {"wrong_field": "value"}
-        with pytest.raises(SchemaValidationError):
-            _validate_llm_output_schema(response, config, "test")
-
-    def test_reject_passes_on_valid(self):
-        """Reject mode returns response when output matches schema."""
-        config = self._config(on_schema_mismatch="reject")
-        response = {"title": "ok", "score": 5}
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response
-
-    def test_reprompt_skips_when_flag_set(self):
-        """Reprompt mode with skip flag defers to outer reprompt loop."""
-        config = self._config(on_schema_mismatch="reprompt")
-        response = {"wrong": "data"}
-        result = _validate_llm_output_schema(response, config, "test", skip_schema_validation=True)
-        assert result == response
-
-    def test_reprompt_falls_back_to_warn_without_flag(self):
-        """Reprompt mode without skip flag falls back to warn (no raise)."""
-        config = self._config(on_schema_mismatch="reprompt")
-        response = {"wrong": "data"}
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response
-
-
 # ===================================================================
 # 4. JSON Mode Interaction
 # ===================================================================
@@ -664,19 +600,6 @@ class TestSchemalessActions:
         """Schema that's not a dict (e.g., string schema_name) skips inline validation."""
         config = {"schema": "some_schema_name"}
         response = {"data": 1}
-        result = _validate_llm_output_schema(response, config, "test")
-        assert result == response
-
-    def test_schemaless_with_reject_not_enforced(self):
-        """Schemaless action + reprompt.on_schema_mismatch=reject does NOT raise.
-
-        This is a known gap: when no schema is defined, _validate_llm_output_schema
-        returns early before checking mismatch mode. The intent of 'reject' is
-        violated silently.
-        """
-        config = {"reprompt": {"on_schema_mismatch": "reject"}}  # no schema key
-        response = {"any_field": "any_value"}
-        # Does NOT raise — schema check is bypassed when schema is None
         result = _validate_llm_output_schema(response, config, "test")
         assert result == response
 

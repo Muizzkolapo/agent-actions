@@ -1,80 +1,19 @@
-"""Shared ResponseValidator protocol and implementations for reprompt validation."""
+"""Schema conformance check for a produced record.
+
+Used by the expectation loop's structural gate, which turns a record the schema
+rejects into a failing outcome the repair prompt can act on.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Strategy callable: (failed_response, feedback_message) -> extra prompt text
 FeedbackStrategy = Callable[[Any, str], str]
-
-
-# ---------------------------------------------------------------------------
-# Protocol
-# ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class ResponseValidator(Protocol):
-    """Shared protocol for all validators -- UDF, schema, composed."""
-
-    def validate(self, response: Any) -> bool:
-        """Return True if *response* passes validation."""
-        ...
-
-    @property
-    def feedback_message(self) -> str:
-        """Human-readable explanation shown to the LLM on failure."""
-        ...
-
-    @property
-    def name(self) -> str:
-        """Short identifier for logging / metadata."""
-        ...
-
-
-# ---------------------------------------------------------------------------
-# UDF validator
-# ---------------------------------------------------------------------------
-
-
-class UdfValidator:
-    """Wraps a UDF registered via ``@reprompt_validation``."""
-
-    def __init__(self, validation_name: str) -> None:
-        from agent_actions.errors import ConfigurationError
-
-        from .validation import get_validation_function
-
-        self._name = validation_name
-        try:
-            self._func, self._feedback_message = get_validation_function(validation_name)
-        except ValueError as e:
-            raise ConfigurationError(
-                f"Validation UDF '{validation_name}' not found: {e}",
-                context={"validation_name": validation_name},
-                cause=e,
-            ) from e
-
-    def validate(self, response: Any) -> bool:  # noqa: D401
-        return self._func(response)
-
-    @property
-    def feedback_message(self) -> str:
-        return self._feedback_message
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-
-# ---------------------------------------------------------------------------
-# Schema validator
-# ---------------------------------------------------------------------------
 
 
 class SchemaValidator:
@@ -156,131 +95,3 @@ class SchemaValidator:
     @property
     def name(self) -> str:
         return f"schema:{self._action_name}"
-
-
-# ---------------------------------------------------------------------------
-# Composed validator
-# ---------------------------------------------------------------------------
-
-
-class ComposedValidator:
-    """Chains multiple validators, failing on the first failure (not thread-safe)."""
-
-    def __init__(self, validators: list[ResponseValidator]) -> None:
-        if not validators:
-            raise ValueError("ComposedValidator requires at least one validator")
-        self._validators = validators
-        self._last_failed: ResponseValidator | None = None
-
-    def validate(self, response: Any) -> bool:  # noqa: D401
-        for v in self._validators:
-            if not v.validate(response):
-                self._last_failed = v
-                return False
-        self._last_failed = None
-        return True
-
-    @property
-    def feedback_message(self) -> str:
-        if self._last_failed is not None:
-            return self._last_failed.feedback_message
-        return ""
-
-    @property
-    def name(self) -> str:
-        return "+".join(v.name for v in self._validators)
-
-
-# ---------------------------------------------------------------------------
-# Shared feedback formatter
-# ---------------------------------------------------------------------------
-
-
-def serialize_response(response: Any) -> str:
-    """Serialize an LLM response to a human-readable string.
-
-    Strings are returned as-is. Dicts/lists are JSON-serialized.
-    Non-serializable objects fall back to ``str()``.
-    """
-    if isinstance(response, str):
-        return response
-    try:
-        return json.dumps(response, indent=2)
-    except Exception:
-        return str(response)
-
-
-def build_validation_feedback(
-    failed_response: Any,
-    feedback_message: str,
-    strategies: list[FeedbackStrategy] | None = None,
-) -> str:
-    """Build the feedback string appended to the prompt on validation failure."""
-    response_str = serialize_response(failed_response)
-
-    base = f"""---
-Your response failed validation: {feedback_message}
-
-Your response: {response_str}
-
-Please correct and respond again."""
-
-    for strategy in strategies or []:
-        base += "\n\n" + strategy(failed_response, feedback_message)
-
-    return base
-
-
-# ---------------------------------------------------------------------------
-# Feedback strategies
-# ---------------------------------------------------------------------------
-
-
-def self_reflection_strategy(failed_response: Any, feedback_message: str) -> str:
-    """Instruct the model to analyze its failure before retrying."""
-    return """Before producing your corrected response, analyze what went wrong:
-1. What specific error did you make in your previous response?
-2. Why did you make this error?
-3. What must be different in your next response to pass validation?
-
-Now produce your corrected response."""
-
-
-def resolve_feedback_strategies(
-    reprompt_config: dict | None,
-) -> list[FeedbackStrategy]:
-    """Turn reprompt config flags into an ordered list of feedback strategies."""
-    strategies: list[FeedbackStrategy] = []
-    if (reprompt_config or {}).get("use_self_reflection"):
-        strategies.append(self_reflection_strategy)
-    return strategies
-
-
-# ---------------------------------------------------------------------------
-# Shared validation helper
-# ---------------------------------------------------------------------------
-
-
-def safe_validate(
-    validate_fn: Callable[[Any], bool],
-    response: Any,
-    *,
-    context: str = "",
-    catch: tuple[type[BaseException], ...] = (ValueError, TypeError, LookupError),
-) -> bool:
-    """Call *validate_fn(response)*, catching specified exceptions as failures.
-
-    Returns ``True`` if validation passes, ``False`` if it fails or raises
-    a caught exception.  Uncaught exceptions propagate.
-    """
-    try:
-        return validate_fn(response)
-    except catch as e:
-        logger.warning(
-            "[%s] Validation raised exception (treating as failure): %s: %s",
-            context,
-            e.__class__.__name__,
-            e,
-            exc_info=True,
-        )
-        return False

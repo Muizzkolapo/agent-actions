@@ -218,13 +218,6 @@ class TestTheJudgeAsksForTextSoItDoesItsOwnReading:
             invoke_judge(_agent_config(json_mode=True), "rule", "value")
         assert mock.call_args.kwargs["agent_config"]["json_mode"] is False
 
-    def test_the_critique_call_does_not_inherit_json_mode(self):
-        from agent_actions.processing.recovery.critique import invoke_critique
-
-        with patch(INVOKE, return_value=_raw_result("too vague")) as mock:
-            invoke_critique(_agent_config(json_mode=True), {"a": 1}, "errors")
-        assert mock.call_args.kwargs["agent_config"]["json_mode"] is False
-
     def test_the_caller_config_is_not_mutated(self):
         config = _agent_config(json_mode=True)
         with patch(INVOKE, return_value=_raw_result('{"passed": true, "reason": "ok"}')):

@@ -161,7 +161,7 @@ class AgacBatchClient(BaseBatchClient):
             custom_id = task.get("custom_id", "unknown")
             body = task.get("body", {})
 
-            # Track attempt for this custom_id (for reprompt testing)
+            # Track attempt for this custom_id (for recovery testing)
             attempt = self._get_attempt_for_custom_id(custom_id)
 
             # Generate fake data using schema from request

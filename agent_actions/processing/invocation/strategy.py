@@ -39,7 +39,7 @@ class InvocationStrategy(ABC):
 
     @abstractmethod
     def supports_recovery(self) -> bool:
-        """Return True if this strategy handles retry/reprompt internally."""
+        """Return True if this strategy handles recovery internally."""
         pass
 
     def cleanup(self) -> None:  # noqa: B027

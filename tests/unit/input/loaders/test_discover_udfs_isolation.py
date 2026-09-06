@@ -6,9 +6,9 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.errors import UDFLoadError
+from agent_actions.expectations.registry import _REGISTRY as _CHECK_REGISTRY
 from agent_actions.input.loaders import udf as udf_loader
 from agent_actions.input.loaders.udf import discover_udfs
-from agent_actions.processing.recovery.validation import _VALIDATION_REGISTRY
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, clear_registry
 
 _GOOD_UDF = (
@@ -55,12 +55,12 @@ _ATTR_FORM_UDF = (
 )
 
 # Registers a reprompt validator via import side effect; declares no udf_tool.
-_VALIDATION_ONLY = (
-    "from agent_actions import reprompt_validation\n"
+_CHECK_ONLY = (
+    "from agent_actions import expectation_check\n"
     "\n"
-    '@reprompt_validation("answer must cite a source")\n'
-    "def check_citation(data):\n"
-    "    return True\n"
+    '@expectation_check("check_citation")\n'
+    "def check_citation(value, params):\n"
+    "    return True, ''\n"
 )
 
 
@@ -71,12 +71,15 @@ def _evict_udf_modules():
 
 @pytest.fixture(autouse=True)
 def _isolated_registry():
+    # The check registry holds the built-in expectation types, so it is restored
+    # rather than cleared: emptying it would unregister them for the whole run.
+    builtins = dict(_CHECK_REGISTRY)
     clear_registry()
-    _VALIDATION_REGISTRY.clear()
     _evict_udf_modules()
     yield
     clear_registry()
-    _VALIDATION_REGISTRY.clear()
+    _CHECK_REGISTRY.clear()
+    _CHECK_REGISTRY.update(builtins)
     _evict_udf_modules()
 
 
@@ -121,10 +124,10 @@ def test_attribute_form_decorator_is_discovered(tmp_path):
     assert "rewrite_labels" in UDF_REGISTRY
 
 
-def test_reprompt_validation_only_file_is_imported(tmp_path):
-    (tmp_path / "citation_checks.py").write_text(_VALIDATION_ONLY)
+def test_a_check_only_file_is_imported(tmp_path):
+    (tmp_path / "citation_checks.py").write_text(_CHECK_ONLY)
     discover_udfs(tmp_path)
-    assert "check_citation" in _VALIDATION_REGISTRY
+    assert "check_citation" in _CHECK_REGISTRY
 
 
 # ── Source encoding: discovery must decode like the import machinery ──
@@ -141,14 +144,14 @@ _LATIN1_UDF = (
 )
 
 # Same, but registering the OTHER decorator the gate admits.
-_LATIN1_VALIDATION = (
+_LATIN1_CHECK = (
     "# -*- coding: latin-1 -*-\n"
-    "from agent_actions import reprompt_validation\n"
+    "from agent_actions import expectation_check\n"
     "\n"
     "# V\xe9rifie la citation.\n"
-    '@reprompt_validation("answer must cite a source")\n'
-    "def check_accent_citation(data):\n"
-    "    return True\n"
+    '@expectation_check("check_accent_citation")\n'
+    "def check_accent_citation(value, params):\n"
+    "    return True, ''\n"
 )
 
 _BOM_UDF = (
@@ -172,10 +175,10 @@ def test_validation_only_file_with_encoding_cookie_is_discovered(tmp_path):
     one of them would leave the other silently unregistered.
     """
     (tmp_path / "good.py").write_text(_GOOD_UDF)
-    (tmp_path / "accent_checks.py").write_bytes(_LATIN1_VALIDATION.encode("latin-1"))
+    (tmp_path / "accent_checks.py").write_bytes(_LATIN1_CHECK.encode("latin-1"))
     discover_udfs(tmp_path)
     assert "normalize_text" in UDF_REGISTRY
-    assert "check_accent_citation" in _VALIDATION_REGISTRY
+    assert "check_accent_citation" in _CHECK_REGISTRY
 
 
 def test_udf_with_utf8_bom_is_discovered(tmp_path):

@@ -153,7 +153,6 @@ class ActionConfigDict(TypedDict, total=False):
 
     # Optional features
     add_dispatch: bool
-    reprompt: dict[str, Any]
     constraints: list[str]
     retry: dict[str, Any]
     max_execution_time: int

@@ -80,7 +80,6 @@ class ActionCommand(BaseInspectCommand):
             get_default("run_mode")
         )
         json_mode = "yes" if action_config.get("json_mode") else "no"
-        reprompt_label = self._describe_reprompt(action_config.get("reprompt"))
         retry_label = self._describe_retry(action_config.get("retry"))
 
         input_label = self._describe_input(info["input_sources"], info["context_sources"])
@@ -116,8 +115,6 @@ class ActionCommand(BaseInspectCommand):
             ("Granularity", granularity),
             ("Run mode", f"{run_mode}  ·  json mode: {json_mode}"),
         ]
-        if reprompt_label:
-            fields.append(("Reprompt", reprompt_label))
         if retry_label:
             fields.append(("Retry", retry_label))
         fields.append(("Guard", guard_label))
@@ -203,21 +200,6 @@ class ActionCommand(BaseInspectCommand):
         if hasattr(value, "value"):
             return str(value.value)
         return str(value)
-
-    @staticmethod
-    def _describe_reprompt(reprompt: object) -> str:
-        if not isinstance(reprompt, dict):
-            return ""
-        bits = []
-        if reprompt.get("max_attempts"):
-            bits.append(f"max {reprompt['max_attempts']}")
-        if reprompt.get("on_schema_mismatch"):
-            bits.append(f"on_schema_mismatch={reprompt['on_schema_mismatch']}")
-        if reprompt.get("on_exhausted"):
-            bits.append(f"on_exhausted={reprompt['on_exhausted']}")
-        if reprompt.get("use_self_reflection"):
-            bits.append("self-reflection")
-        return ", ".join(bits) or "yes"
 
     @staticmethod
     def _describe_retry(retry: object) -> str:

@@ -14,7 +14,7 @@ from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 logger = logging.getLogger(__name__)
 
 # Decorators that register user tool code via import side effect.
-_TOOL_DECORATORS = frozenset({"udf_tool", "reprompt_validation", "expectation_check"})
+_TOOL_DECORATORS = frozenset({"udf_tool", "expectation_check"})
 
 
 def _mentions_tool_decorator_bytes(py_file: Path) -> bool:
@@ -93,7 +93,7 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
     Only files that declare a tool-registering decorator (``udf_tool``,
-    ``reprompt_validation``, or ``expectation_check``) are imported; other
+    or ``expectation_check``) are imported; other
     ``.py`` files under the tree (helper scripts, notes) are skipped so a
     broken non-UDF file cannot block discovery.
 

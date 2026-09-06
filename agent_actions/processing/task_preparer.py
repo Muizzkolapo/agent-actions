@@ -39,7 +39,7 @@ class TaskPreparer:
     ) -> PreparedTask:
         """Prepare a single task: normalize, load context, evaluate guard, render prompt.
 
-        ``attempt`` is the recovery round (reprompt rounds re-prepare the same
+        ``attempt`` is the recovery round (repair rounds re-prepare the same
         record); it stamps the prompt trace so rounds accumulate instead of
         overwriting attempt 0.
         """

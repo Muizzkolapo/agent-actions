@@ -293,7 +293,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
     elif is_in_context_scope_block(lines, params.position.line):
         items.extend(build_context_scope_completions(index))
 
-    # Guard/reprompt completions
+    # Guard completions
     elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:
         items.extend(build_guard_completions(current_file, index))
 
@@ -535,7 +535,7 @@ def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
     lsp.SignatureHelpOptions(trigger_characters=[":"]),
 )
 def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
-    """Provide signature help for guard/reprompt conditions."""
+    """Provide signature help for guard conditions."""
     current_file = uri_to_path(params.text_document.uri)
     index = _index_for_file(current_file)
     if not index:

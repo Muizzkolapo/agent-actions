@@ -302,56 +302,6 @@ class TestRecoveryValidation:
                 retry={"on_exhausted": "crash"},
             )
 
-    def test_reprompt_udf_exists(self):
-        """Reprompt validation referencing non-existent UDF caught by static analyzer."""
-        result = _analyze(
-            [
-                {
-                    "name": "llm_action",
-                    "reprompt": {"validation": "totally_nonexistent_validator_xyz"},
-                    "context_scope": {"observe": ["source.*"]},
-                    "schema": {
-                        "type": "object",
-                        "properties": {"text": {"type": "string"}},
-                    },
-                },
-            ]
-        )
-        # The static analyzer should flag the missing UDF
-        assert any("totally_nonexistent_validator_xyz" in e.message for e in result.errors)
-
-    def test_on_schema_mismatch_reprompt_requires_schema(self):
-        """reprompt.on_schema_mismatch: reprompt without schema is caught."""
-        errors, _ = _validate_entry(
-            {
-                "name": "test",
-                "agent_type": "llm",
-                "model_name": "gpt-4",
-                "reprompt": {"on_schema_mismatch": "reprompt"},
-                # no schema
-            }
-        )
-        assert any("on_schema_mismatch" in e.lower() for e in errors)
-
-    def test_on_schema_mismatch_reprompt_with_schema_passes(self):
-        """reprompt.on_schema_mismatch: reprompt with schema passes validation."""
-        errors, _ = _validate_entry(
-            {
-                "name": "test",
-                "agent_type": "llm",
-                "model_name": "gpt-4",
-                "reprompt": {
-                    "on_schema_mismatch": "reprompt",
-                    "validation": "my_validator",
-                },
-                "schema": {"summary": "string"},
-            }
-        )
-        mismatch_errors = [
-            e for e in errors if "on_schema_mismatch" in e.lower() and "reprompt" in e.lower()
-        ]
-        assert len(mismatch_errors) == 0
-
 
 # ── TestTypeSpecificValidation ───────────────────────────────────────
 
@@ -509,21 +459,6 @@ class TestActionableErrors:
         assert len(hitl_errors) > 0
         # Error message should tell user how to fix
         assert any("granularity: file" in e.lower() or "remove" in e.lower() for e in hitl_errors)
-
-    def test_reprompt_mismatch_error_is_actionable(self):
-        """reprompt.on_schema_mismatch error tells the user what to add."""
-        errors, _ = _validate_entry(
-            {
-                "name": "test",
-                "agent_type": "llm",
-                "model_name": "gpt-4",
-                "reprompt": {"on_schema_mismatch": "reprompt"},
-            }
-        )
-        reprompt_errors = [e for e in errors if "on_schema_mismatch" in e.lower()]
-        assert len(reprompt_errors) > 0
-        # Should suggest defining a schema
-        assert any("schema" in e.lower() or "define" in e.lower() for e in reprompt_errors)
 
 
 # ── TestPromptRequiredCrossCheck ─────────────────────────────────────
