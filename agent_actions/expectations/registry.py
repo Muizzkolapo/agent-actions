@@ -149,6 +149,32 @@ def _not_null(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
+@register("no_null_fields", params=("exclude",), scope="record")
+def _no_null_fields(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
+    """No field the model was asked to fill came back null.
+
+    Underscore-prefixed keys are the framework's own and are never the model's
+    to fill. Null is not emptiness: an empty string is a value the model chose,
+    and ``not_null`` is the rule for rejecting it on a named field.
+    """
+    if not isinstance(value, dict):
+        return False, f"expected a record, found {type(value).__name__}"
+
+    excluded = set(params.get("exclude") or ())
+    checked = {
+        name: field
+        for name, field in value.items()
+        if not name.startswith("_") and name not in excluded
+    }
+    if not checked:
+        return False, "record has no fields to check"
+
+    nulls = sorted(name for name, field in checked.items() if field is None)
+    if nulls:
+        return False, f"null field(s): {', '.join(nulls)}"
+    return True, ""
+
+
 @register("item_count", params=("equals", "min", "max"))
 def _item_count(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     if not isinstance(value, list):
