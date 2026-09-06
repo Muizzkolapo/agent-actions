@@ -105,6 +105,51 @@ def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None
     return refs
 
 
+def _cannot_repair(agent: dict[str, Any]) -> bool:
+    """Whether regenerating this action's output is meaningless.
+
+    Re-running a deterministic tool yields the same output, and one
+    file-granularity call produces every record, so a single failing record
+    would regenerate all of them.
+    """
+    from agent_actions.processing.helpers import _is_tool_action
+
+    granularity = agent.get("granularity")
+    return _is_tool_action(agent) or str(granularity or "").lower() == "file"
+
+
+def adapt_inherited_expect(
+    merged: dict[str, Any] | None,
+    action_expect: Any,
+    agent: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Bend the parts of *merged* the action did not ask for to suit the action.
+
+    A workflow-wide block is a statement about the workflow, and a real workflow
+    mixes LLM actions with tools and file writers. Applying an inherited policy
+    to an action that cannot honour it would make one defaults line unusable on
+    every real config. A policy the author wrote on the action is left alone —
+    it is a decision, and preflight is where a wrong one is reported.
+    """
+    if merged is None:
+        return None
+    own = action_expect if isinstance(action_expect, dict) else {}
+    result = dict(merged)
+
+    if "repair" not in own and _cannot_repair(agent):
+        # Rules still say something true about a tool's output, so they stay and
+        # stop repairing. A block with no rules had nothing but the policy.
+        if result.get("expectations") is None and result.get("suite") is None:
+            return None
+        result["repair"] = "none"
+
+    if result.get("repair") == "none" and "structural" not in own:
+        # Nothing regenerates, so an inherited structural mode describes nothing.
+        result.pop("structural", None)
+
+    return result
+
+
 def merge_expect(defaults: Any, action: Any) -> dict[str, Any] | None:
     """The action's ``expect:`` block over the workflow's, key by key.
 

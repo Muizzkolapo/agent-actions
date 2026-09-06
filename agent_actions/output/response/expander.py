@@ -25,6 +25,7 @@ from .expander_action_types import (
     process_tool_action,
 )
 from .expander_merge import (
+    adapt_inherited_expect,
     collect_judge_context_refs,
     deep_merge_context_scope,
     initialize_optional_fields,
@@ -294,7 +295,11 @@ class ActionExpander:
         # is set once for the workflow and the rules belong to each action.
         # ExpectConfig validated both shapes already, and AgentConfig
         # (extra="allow") preserves the result as-is.
-        agent["expect"] = merge_expect(defaults.get("expect"), action.get("expect"))
+        agent["expect"] = adapt_inherited_expect(
+            merge_expect(defaults.get("expect"), action.get("expect")),
+            action.get("expect"),
+            agent,
+        )
 
         # Union context: refs into observe so infer_dependencies picks up the
         # source action automatically. The action's inline list, or its resolved
