@@ -98,6 +98,20 @@ def _run_one(
             return outcome(False, f"check raised {type(exc).__name__}: {exc}")
         return outcome(passed, detail)
 
+    params_without_condition = {k: v for k, v in expectation.params.items() if k != "row_condition"}
+
+    if etype.scope == "record":
+        try:
+            passed, detail = etype.check(record, params_without_condition)
+        except Exception as exc:
+            logger.warning(
+                "Expectation '%s' check raised, treating as a failed outcome",
+                expectation.resolved_id,
+                exc_info=True,
+            )
+            return outcome(False, f"check raised {type(exc).__name__}: {exc}")
+        return outcome(passed, detail)
+
     if expectation.field is None:
         raise ValueError(
             f"Expectation '{expectation.resolved_id}' has no field selector and "
@@ -109,7 +123,7 @@ def _run_one(
     except FieldResolutionError as exc:
         return outcome(False, str(exc))
 
-    params = {k: v for k, v in expectation.params.items() if k != "row_condition"}
+    params = params_without_condition
 
     if expectation.type == "llm_judge":
         if judge is None:

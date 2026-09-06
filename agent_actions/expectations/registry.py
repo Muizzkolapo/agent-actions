@@ -12,13 +12,15 @@ import inspect
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from agent_actions.errors import DuplicateFunctionError
 from agent_actions.expectations.expression import _expression_unreachable
 from agent_actions.expectations.judge import _llm_judge_unreachable
 
 Check = Callable[[Any, dict[str, Any]], tuple[bool, str]]
+
+Scope = Literal["field", "record"]
 
 _REGISTRY: dict[str, ExpectationType] = {}
 
@@ -29,12 +31,18 @@ _UNIVERSAL_PARAMS = frozenset({"row_condition"})
 
 @dataclass(frozen=True)
 class ExpectationType:
-    """A registered check plus the parameters it accepts."""
+    """A registered check plus the parameters it accepts.
+
+    ``scope`` decides what the check is handed: a field-scoped check receives one
+    resolved value per ``field:`` selector, a record-scoped check receives the
+    whole record and takes no selector at all.
+    """
 
     name: str
     params: frozenset[str]
     required: frozenset[str]
     check: Check
+    scope: Scope = "field"
 
     def __post_init__(self) -> None:
         # Unioned here rather than at each registration site so no path can
@@ -43,24 +51,44 @@ class ExpectationType:
 
 
 def register(
-    name: str, params: Iterable[str] = (), required: Iterable[str] = ()
+    name: str,
+    params: Iterable[str] = (),
+    required: Iterable[str] = (),
+    scope: Scope = "field",
 ) -> Callable[[Check], Check]:
     def decorate(fn: Check) -> Check:
         _REGISTRY[name] = ExpectationType(
-            name, frozenset(params) | _UNIVERSAL_PARAMS, frozenset(required), fn
+            name, frozenset(params) | _UNIVERSAL_PARAMS, frozenset(required), fn, scope
         )
         return fn
 
     return decorate
 
 
+def is_record_scoped(name: str) -> bool:
+    """Whether *name* is a type that reads the whole record.
+
+    An unregistered name answers False so rule-shape validation reports the
+    missing ``field:`` rather than the unknown type; the runner names the
+    unknown type, and it is the more useful of the two errors.
+    """
+    etype = _REGISTRY.get(name)
+    return etype is not None and etype.scope == "record"
+
+
 _USER_CHECK_SOURCES: dict[str, tuple[str, str]] = {}
 
 
 def expectation_check(
-    name: str, params: Iterable[str] = (), required: Iterable[str] = ()
+    name: str,
+    params: Iterable[str] = (),
+    required: Iterable[str] = (),
+    scope: Scope = "field",
 ) -> Callable[[Check], Check]:
     """Register a project-defined expectation type under the built-in check contract.
+
+    ``scope="record"`` hands the check the whole record instead of a resolved
+    field, for a rule about no single field.
 
     Shadowing a built-in raises; the same name from two files raises
     DuplicateFunctionError; re-decorating from the same file is idempotent so
@@ -93,7 +121,7 @@ def expectation_check(
                 f"expectation type '{name}' is a built-in and cannot be redefined; "
                 f"choose a different name"
             )
-        _REGISTRY[name] = ExpectationType(name, frozenset(params), frozenset(required), fn)
+        _REGISTRY[name] = ExpectationType(name, frozenset(params), frozenset(required), fn, scope)
         _USER_CHECK_SOURCES[name] = (location, source_file)
         return fn
 
@@ -237,4 +265,5 @@ _REGISTRY["expression"] = ExpectationType(
     frozenset({"condition"}),
     frozenset({"condition"}),
     _expression_unreachable,
+    "record",
 )

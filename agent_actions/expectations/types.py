@@ -15,8 +15,6 @@ _RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
 
 _RENAMED_SEVERITIES = {"fail": "error"}
 
-_RECORD_SCOPED_TYPES = frozenset({"expression"})
-
 
 # Measured against every argument name the registered types accept: the closest
 # any of them comes to a rule key is 0.615, while the common typos — a
@@ -86,11 +84,15 @@ class Expectation(BaseModel):
 
     @model_validator(mode="after")
     def _field_matches_type(self) -> Expectation:
-        if self.type in _RECORD_SCOPED_TYPES:
+        # Imported here, not at module scope: the registry reaches this module
+        # through judge.py, so a top-level import would close a cycle.
+        from agent_actions.expectations import registry
+
+        if registry.is_record_scoped(self.type):
             if self.field is not None:
                 raise ValueError(
                     f"type '{self.type}' evaluates against the whole record and does not "
-                    "take field:; it reads the fields named in its condition"
+                    "take field:; it reads the record itself"
                 )
         elif self.field is None:
             raise ValueError(f"type '{self.type}' requires field:")
