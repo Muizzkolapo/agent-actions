@@ -495,11 +495,17 @@ def create_expectation_service_from_config(
                 schema_name or f"{action_name}:schema", schema_data
             )
         except NoRulesDeclared as exc:
-            raise ExpectationConfigurationError(
-                f"Action '{action_name}' has a bare expect: block, but its "
-                f"schema has no expectations to run: {exc}",
-                context={"action": action_name},
-            ) from exc
+            if repair == "none":
+                raise ExpectationConfigurationError(
+                    f"Action '{action_name}' has a bare expect: block under "
+                    f"repair: none, but its schema has no expectations to run, so "
+                    f"nothing would be checked and nothing regenerated: {exc}",
+                    context={"action": action_name},
+                ) from exc
+            # Under a repair policy the block is the structural contract on its
+            # own: conform to the schema, regenerate when the output does not.
+            # The suite is empty and the gate is what enforces.
+            suite = Suite(name=schema_name or f"{action_name}:schema", expectations=[])
         except ValueError as exc:
             # The schema has rules; they are in the wrong place or the wrong
             # shape, which is a different thing from having none.
