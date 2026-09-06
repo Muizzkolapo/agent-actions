@@ -39,10 +39,10 @@ defaults:
     seed:
       brand_voice: $file:brand_voice.json
       marketplace_rules: $file:marketplace_rules.json
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 3
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
   retry:
     enabled: true
@@ -82,10 +82,10 @@ actions:
     intent: "Generate a structured product description from raw technical specs and image context"
     schema: generate_description
     prompt: $product_listing_enrichment.Generate_Product_Description
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     context_scope:
       observe:
         - normalize_product.raw_specs
@@ -131,10 +131,10 @@ actions:
     intent: "Write compelling marketplace copy with competitive positioning"
     schema: write_marketing_copy
     prompt: $product_listing_enrichment.Write_Marketing_Copy
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     context_scope:
       observe:
         - generate_description.*

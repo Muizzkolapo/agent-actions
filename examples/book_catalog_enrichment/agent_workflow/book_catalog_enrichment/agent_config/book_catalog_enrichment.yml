@@ -28,10 +28,10 @@ defaults:
   retry:
     enabled: true
     max_attempts: 2
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 3
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
 
 actions:
@@ -46,10 +46,12 @@ actions:
       observe:
         - source.*
       # Add reprompt configuration
-    reprompt:
-      validation: "check_valid_bisac"   # Name of registered validation UDF
-      max_attempts: 3                    # Max reprompt attempts
-      on_exhausted: "return_last"        # or "raise"
+    expect:
+      max_iterations: 3
+      expectations:
+        - { type: matches_regex, field: primary_bisac_code,
+            params: { pattern: '^[A-Z]{3}\d{6}$' },
+            hint: "nine characters: three letters then six digits, e.g. FIC000000" }
   # ============================================================================
   # STEP 1.5a: AI PRE-REVIEW OF CLASSIFICATION
   # ============================================================================
@@ -138,10 +140,12 @@ actions:
         - source.page_count
         - source.description
     # Reprompt: Validate marketing description quality
-    reprompt:
-      validation: check_description_word_count  # Must have at least 50 words
-      max_attempts: 3  # Try up to 3 times
-      on_exhausted: return_last  # Return best attempt even if validation fails
+    expect:
+      max_iterations: 3
+      expectations:
+        - { type: word_count_between, field: marketing_description,
+            params: { min: 50 },
+            hint: "write at least 50 words" }
 
 
   # ============================================================================

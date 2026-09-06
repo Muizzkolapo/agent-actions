@@ -41,10 +41,10 @@ defaults:
   retry:
     enabled: true
     max_attempts: 2
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 3
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
 
   data_source:
@@ -110,10 +110,10 @@ actions:
     intent: "Independently score review quality against rubric criteria"
     schema: score_quality
     prompt: $review_analyzer.Score_Quality
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     versions:
       param: scorer_id                          # ← 3 parallel scorers
       range: [1, 2, 3]

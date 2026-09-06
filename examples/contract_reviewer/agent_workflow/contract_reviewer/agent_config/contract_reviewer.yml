@@ -28,10 +28,10 @@ defaults:
   context_scope:
     seed:
       risk_criteria: $file:risk_criteria.json
-  reprompt:
-    on_schema_mismatch: reprompt
-    max_attempts: 3
-    use_self_reflection: true
+  expect:
+    repair: auto
+    structural: auto
+    max_iterations: 3
     on_exhausted: return_last
   retry:
     enabled: true
@@ -77,10 +77,10 @@ actions:
     intent: "Analyze a single contract clause for risk level, obligations, and deadlines"
     schema: analyze_clause
     prompt: $contract_reviewer.Analyze_Clause
-    reprompt:
-      validation: check_required_fields
-      max_attempts: 2
-      on_exhausted: return_last
+    expect:
+      max_iterations: 2
+      expectations:
+        - { type: no_null_fields }
     # model_vendor: anthropic                   # Uncomment for stronger legal analysis
     # model_name: claude-sonnet-4-20250514
     # api_key: ANTHROPIC_API_KEY
