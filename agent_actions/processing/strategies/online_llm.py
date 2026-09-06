@@ -59,7 +59,6 @@ from agent_actions.record.reasons import (
     LLM_LAYER_GUARD_FILTER,
     LLM_LAYER_GUARD_SKIP,
     PREP_FAILED,
-    REPROMPT_EXHAUSTED,
     RETRY_EXHAUSTED,
     UPSTREAM_UNPROCESSED,
 )
@@ -511,9 +510,7 @@ class OnlineLLMStrategy:
         if not executed:
             if response is None:
                 if recovery_metadata and (
-                    recovery_metadata.retry
-                    or recovery_metadata.reprompt
-                    or recovery_metadata.expectations
+                    recovery_metadata.retry or recovery_metadata.expectations
                 ):
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         cast(dict[str, Any], context.agent_config)
@@ -533,19 +530,11 @@ class OnlineLLMStrategy:
                             "expectations_failed": expectations.failed,
                             "expectations_iterations": expectations.attempts,
                         }
-                    elif recovery_metadata.retry:
-                        tombstone_reason = RETRY_EXHAUSTED
-                        error_msg = (
-                            f"Retry exhausted after {recovery_metadata.retry.attempts} attempts"
-                        )
                     else:
-                        reprompt = recovery_metadata.reprompt
-                        assert reprompt is not None
-                        tombstone_reason = REPROMPT_EXHAUSTED
-                        error_msg = (
-                            f"Reprompt exhausted after {reprompt.attempts} attempts "
-                            f"(validation: {reprompt.validation})"
-                        )
+                        retry = recovery_metadata.retry
+                        assert retry is not None
+                        tombstone_reason = RETRY_EXHAUSTED
+                        error_msg = f"Retry exhausted after {retry.attempts} attempts"
                     tombstone = build_exhausted_tombstone(
                         context.action_name,
                         input_record,

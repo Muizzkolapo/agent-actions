@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from agent_actions.processing.recovery.response_validator import ResponseValidator
+from typing import Any
 
 from agent_actions.config.types import RunMode
 from agent_actions.processing.invocation.batch import BatchStrategy
@@ -43,19 +40,11 @@ class InvocationStrategyFactory:
             create_expectation_service_from_config,
         )
         from agent_actions.processing.helpers import _is_tool_action
-        from agent_actions.processing.recovery.reprompt import (
-            create_reprompt_service_from_config,
-        )
         from agent_actions.processing.recovery.retry import (
             create_retry_service_from_config,
         )
 
-        retry_config = agent_config.get("retry")
-        reprompt_config = agent_config.get("reprompt")
-
-        validator = InvocationStrategyFactory._build_validator(agent_config)
-
-        retry_service = create_retry_service_from_config(retry_config)
+        retry_service = create_retry_service_from_config(agent_config.get("retry"))
 
         expect_config = agent_config.get("expect")
         action_name = agent_config.get("name", "unknown")
@@ -72,59 +61,14 @@ class InvocationStrategyFactory:
                 )
             return OnlineStrategy(
                 retry_service=retry_service,
-                reprompt_service=None,
                 expectation_service=create_expectation_service_from_config(
                     expect_config, action_name=action_name, agent_config=agent_config
                 ),
             )
 
-        critique_fn = None
-        if reprompt_config and reprompt_config.get("use_llm_critique"):
-            from agent_actions.processing.recovery.critique import invoke_critique
-
-            def critique_fn(response: Any, errors: str) -> str:
-                return invoke_critique(agent_config, response, errors)
-
-        reprompt_service = create_reprompt_service_from_config(
-            reprompt_config, validator=validator, critique_fn=critique_fn
-        )
-
         return OnlineStrategy(
             retry_service=retry_service,
-            reprompt_service=reprompt_service,
             expectation_service=create_expectation_service_from_config(
                 expect_config, action_name=action_name, agent_config=agent_config
             ),
         )
-
-    @staticmethod
-    def _build_validator(agent_config: dict[str, Any]) -> ResponseValidator | None:
-        """Compose a ResponseValidator from UDF and schema config, or return None."""
-        from agent_actions.processing.helpers import _resolve_schema_mismatch_mode
-        from agent_actions.processing.recovery.response_validator import (
-            ComposedValidator,
-            SchemaValidator,
-            UdfValidator,
-        )
-        from agent_actions.utils.constants import SCHEMA_KEY
-
-        validators: list[ResponseValidator] = []
-
-        reprompt_config = agent_config.get("reprompt")
-        if reprompt_config:
-            validation_name = reprompt_config.get("validation")
-            if validation_name:
-                validators.append(UdfValidator(validation_name))
-
-        schema = agent_config.get(SCHEMA_KEY)
-        if schema and isinstance(schema, dict):
-            mode = _resolve_schema_mismatch_mode(agent_config)
-            if mode == "reprompt":
-                action_name = agent_config.get("name", "unknown")
-                validators.append(SchemaValidator(schema, action_name))
-
-        if not validators:
-            return None
-        if len(validators) == 1:
-            return validators[0]
-        return ComposedValidator(validators)

@@ -86,24 +86,6 @@ expectations:
     hint: list at least three distinct ideas
 """
 
-# The same action carrying reprompt instead of expect, for parity comparison.
-REPROMPT_ONLY = """\
-  - name: brainstorm
-    intent: generate ideas
-    kind: llm
-    prompt: "List ideas."
-    context_scope:
-      observe: ["source.*"]
-    schema:
-      fields:
-        - id: ideas
-          type: array
-          required: true
-    reprompt:
-      max_attempts: 2
-      on_schema_mismatch: reprompt
-"""
-
 
 @pytest.fixture()
 def project(tmp_path):
@@ -478,32 +460,6 @@ class TestExhaustion:
         assert run.calls == 2
         assert not run.verdicts(), "fail mode must not ship the failing record"
         assert run.exit_code != 0
-
-    def test_fail_matches_reprompt_exhaustion_exactly(self, project):
-        """The expectations arm must not invent its own exhaustion shape.
-
-        Neither layer persists its tombstone when a single-record file exhausts:
-        the file-processing layer counts the file as unprocessed and errors the
-        action. That is pre-existing behaviour of the EXHAUSTED path shared by
-        every recovery layer, not something the expectations arm introduced, and
-        this test is what will notice if the two ever diverge.
-        """
-        expectations_actions = BRAINSTORM.format(
-            expect_body=_expect(
-                "repair: retry\nmax_iterations: 2\non_exhausted: fail\n" + ENOUGH_IDEAS
-            )
-        )
-        project.write_actions(expectations_actions)
-        expectations_run = run_workflow(project, [{"ideas": ["never enough"]}])
-
-        project.write_actions(REPROMPT_ONLY)
-        reprompt_run = run_workflow(project, [{"wrong_key": "never conforms"}])
-
-        assert expectations_run.calls == 2
-        assert reprompt_run.calls == 2
-        assert expectations_run.exit_code != 0
-        assert expectations_run.exit_code == reprompt_run.exit_code
-        assert not expectations_run.verdicts()
 
     def test_raise_halts_the_run(self, project):
         project.write_actions(
