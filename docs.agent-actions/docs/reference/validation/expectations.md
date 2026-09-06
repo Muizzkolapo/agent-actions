@@ -71,7 +71,8 @@ The example above uses observe mode: run the checks, attach the verdict, keep go
 |-----|------|---------|---------|
 | `expectations` | list | — | Inline list of expectation entries (mutually exclusive with `suite`; omit both to read the action's own schema file) |
 | `suite` | string | — | Name of a schema-path file carrying rules — on its fields, in its own `expectations:` block, or both (see [Rules in the schema file](#rules-in-the-schema-file)) — instead of an inline list |
-| `repair` | string | `auto` | `none` (observe), `retry` (re-send the original prompt), or `auto` (re-send with composed feedback) |
+| `repair` | string or mapping | `auto` | How a **rule** failure is regenerated: `none` (observe), `retry` (re-send the original prompt), `auto` (re-send with composed feedback), or `{prompt: $wf.X}` (an authored template holding the same failure list) |
+| `structural` | string or mapping | `retry` | How a **schema** failure is regenerated. Same four values minus `none`; see [Re-roll or steer](#re-roll-or-steer) |
 | `max_iterations` | integer 1–10 | `3` | Total generations per record, counting the first. Setting it explicitly alongside `repair: none` is a config error, not a no-op |
 | `on_exhausted` | string | `return_last` | What to do when the iterations run out: `return_last`, `fail`, or `raise`. Same rule — do not set it under `repair: none` |
 | `judge_budget` | integer ≥ 1 | uncapped | Max real `llm_judge` LLM calls this action's suite may make across the whole run |
@@ -94,6 +95,7 @@ Those six keys are the whole vocabulary: anything else at the top level of a rul
 | Type | Params | Checks |
 |------|--------|--------|
 | `not_null` | — | Value isn't `None` and isn't an empty string/list/dict |
+| `no_null_fields` | `exclude` | **Record-scoped** — no field in the whole record is `None`. Takes no `field:`; `exclude` waives fields that are legitimately nullable. Null is not emptiness: an empty string is a value the model chose, and `not_null` is the rule for rejecting that on a named field |
 | `item_count` | `equals`, `min`, `max` | Length of a list field |
 | `word_count_between` | `min`, `max` | Whitespace-split word count |
 | `word_count_ratio` | `max_ratio` *(required)* | Longest/shortest word count across a list of items doesn't exceed a ratio — catches one option in a list being wildly longer than its siblings |
@@ -246,10 +248,46 @@ Under a repair policy the action stops merely reporting quality and starts enfor
         hint: write exactly four options, one correct and three plausible distractors
 ```
 
-Each iteration runs the **whole** suite again, not just the rules that failed last time — a repair that fixes one rule by breaking another does not pass. The two policies differ only in what the regeneration is told:
+Each iteration runs the **whole** suite again, not just the rules that failed last time — a repair that fixes one rule by breaking another does not pass. The policies differ only in what the regeneration is told:
 
 - **`retry`** re-sends the original prompt unchanged. Use it when failures look like sampling noise.
 - **`auto`** re-sends the original prompt plus composed feedback: the previous output, every failed expectation with its detail and `hint`, and the list of rules that already passed and must stay passing. Use it when the model needs to know what was wrong.
+- **`{prompt: $wf.Section}`** sends an authored template holding that same failure list, for when the built-in wording is not the wording you want. See [An authored repair prompt](#an-authored-repair-prompt).
+
+### Re-roll or steer
+
+There is one question behind those modes: when this fails, do you send the same prompt again, or say something about the failure? Re-roll or steer.
+
+A generation can fail in two ways, and each gets its own answer. `repair:` governs a **rule** failure. `structural:` governs a **schema** failure — output that was not a JSON object, or did not conform to the action's schema.
+
+They default differently because the two carry different information. A rule failure names a specific defect in output that is otherwise usable, so the failure list is exactly what the regeneration needs: `repair` defaults to `auto`. A schema failure means there was no usable output to preserve, so there is nothing to say beyond the original instruction: `structural` defaults to `retry`.
+
+| You want | The block |
+|---|---|
+| Re-roll everything, never steer | `expect: {repair: retry}` |
+| Steer rule failures, re-roll malformed output — the default | `expect: {repair: auto}` |
+| Steer everything | `expect: {repair: auto, structural: auto}` |
+| Steer in your own words | `expect: {repair: {prompt: $wf.Fix}}` |
+| Validate, never regenerate | `expect: {repair: none}` |
+
+`structural: auto` is worth reaching for when a model mis-formats *systematically* rather than occasionally: there, blind re-rolls spend the whole iteration budget where one line naming the expected fields would have fixed it on the second attempt. Both keys spend the same `max_iterations` — it does not reset when the failure kind changes.
+
+`structural:` has no `none`, and setting it under `repair: none` is a config error: nothing regenerates, so there is nothing for it to describe.
+
+### An authored repair prompt
+
+`repair: {prompt: $wf.Section}` resolves through the same prompt-reference path an action's own `prompt:` uses, and the resolved text is the whole regeneration prompt. It is filled with the payload `auto` composes:
+
+| Placeholder | Holds |
+|---|---|
+| `{original_prompt}` | The action's rendered prompt |
+| `{response_json}` | The output that failed |
+| `{failed_lines}` | One bullet per failed rule: id, detail, and the author's `hint` |
+| `{passing_lines}` | The rules that already pass and must stay passing |
+
+A template naming a placeholder that does not exist is refused at preflight, not at the failure — so a typo is a config error rather than a regeneration that silently loses its feedback and looks like a re-roll.
+
+Handing over the payload is what separates this from `retry`: an authored prompt that cannot see which rules failed can only repeat the instruction.
 
 `max_iterations` counts *total* generations, so `3` means the first attempt plus at most two repairs. When they run out, `on_exhausted` decides:
 
@@ -282,6 +320,38 @@ The verdict cache is keyed on the **field value** a rule reads, not on the whole
 `judge_budget` counts *budget units*, and one unit is acquired per rule per value — not per provider call. With `votes: 3`, one unit spends three real calls, so a budget of `200` permits up to 600 provider calls. Divide by `votes` when sizing it.
 
 Once the budget is spent, later records carry a `skipped` judged outcome, which can never satisfy an `error`-severity rule. Those records still have their other rules repaired and ship with an honest failing verdict.
+
+## Setting it once for a workflow
+
+An `expect:` block can sit in `defaults:`, where every action inherits it:
+
+```yaml
+defaults:
+  expect: {repair: auto, max_iterations: 3}
+
+actions:
+  - name: classify_genre
+    expect:
+      expectations:
+        - {type: matches_regex, field: code, params: {pattern: '^[A-Z]{3}\d{6}$'}}
+```
+
+The two blocks merge **key by key**, with the action's winning. That is what lets the policy live where it is decided — the repair policy is usually a workflow-wide choice, while rules belong to one action. An action that adds rules and says nothing about `repair` keeps the workflow's policy rather than falling back to the default.
+
+An inherited block adapts to the action it lands on. Tool actions and file-granularity actions cannot repair — re-running a deterministic UDF yields the same output, and one file call produces every record — so an inherited repair policy is not applied to them: with rules they keep validating and stop repairing, without rules the block is dropped. A policy you write **on** the action is your decision, and preflight reports it if the action cannot honour it.
+
+## A block with no rules
+
+Under a repair policy, an `expect:` block needs no rules at all:
+
+```yaml
+defaults:
+  expect: {repair: auto}
+```
+
+That is the structural contract on its own: every action's output must conform to its schema, and is regenerated when it does not. It is the smallest way to turn schema enforcement on across a workflow.
+
+Under `repair: none` it is refused — with no rules and no repair, nothing would be checked and nothing regenerated. An empty inline `expectations: []` is also refused, since that reads as a list you meant to fill rather than a deliberate absence.
 
 ## Where results land
 
@@ -475,7 +545,6 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 - **Repair runs in both modes, but it counts iterations differently.** Online, each record loops on its own: one record can take three generations while its neighbour passes first time. Batch loops the whole set — every round re-submits the records still failing, so `max_iterations` bounds the number of *batches*, not the number of tries any single record gets. A record that fails in round one and passes in round two has had two generations either way; what differs is that a batch round waits for the slowest record in it.
 - **A judged `context:` ref is online only.** Batch validates from the stored result and has no `llm_context`, so a judged rule with `context:` refs is refused at preflight rather than failing every record on a missing context source.
 - **Record granularity only for repair.** One file-granularity call produces the whole file, so a single failing record would regenerate all of them; preflight refuses `repair` on a `granularity: file` action. Observe mode works there — a response holding many records has each one validated and annotated independently, the same as an action whose LLM returns a JSON array.
-- **No custom repair prompt.** The `repair: {prompt: $wf.X}` mapping form is reserved in the schema but not implemented; it is refused with a message saying so. Use `retry` or `auto`.
 - **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight; observe mode works normally.
 - **The prompt trace shows the original prompt.** A record repaired on iteration 2 or later has a stored trace pairing the *first* prompt with the *final* response, and that response carries the attached verdict.
 - **`context:` refs are single-level.** `action.field` only — no nested paths into a wildcard element (`action.items[*].text` is not valid inside a `context:` ref).
