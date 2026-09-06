@@ -2,7 +2,7 @@
 Integration tests for EvaluationLoop end-to-end in batch mode.
 
 These tests prove the graduated pool pattern works across the full lifecycle:
-batch submission -> evaluation -> graduation -> reprompt -> disposition.
+batch submission -> evaluation -> graduation -> repair -> disposition.
 
 All LLM/batch API calls are mocked. Integration = testing the interaction
 between EvaluationLoop, strategies, RecoveryState, and processing_recovery.
@@ -24,12 +24,6 @@ evaluation_mod = pytest.importorskip(
 )
 EvaluationLoop = evaluation_mod.EvaluationLoop
 EvaluationStrategy = evaluation_mod.EvaluationStrategy
-
-strategies_mod = pytest.importorskip(
-    "agent_actions.processing.evaluation.strategies",
-    reason="Requires validation strategy",
-)
-ValidationStrategy = strategies_mod.ValidationStrategy
 
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────────
@@ -345,7 +339,7 @@ class TestStrategyPluggable:
     """Mock strategy with custom evaluate/build_feedback works identically."""
 
     def test_custom_strategy_same_behavior(self, make_batch_results):
-        """A custom strategy produces same loop behavior as ValidationStrategy."""
+        """A custom strategy drives the loop the same way a built-in one does."""
 
         class AlwaysFailStrategy:
             name = "always_fail"
@@ -393,7 +387,7 @@ class TestBackwardCompat:
 
     def test_old_state_no_graduated_field(self):
         """Deserialized old state defaults graduated_results to []."""
-        state = RecoveryState(phase="reprompt")
+        state = RecoveryState(phase="repair")
         assert hasattr(state, "graduated_results")
         assert state.graduated_results == []
         assert state.evaluation_strategy_name is None

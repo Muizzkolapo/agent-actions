@@ -1,4 +1,4 @@
-"""Recovery state persistence for async batch retry/reprompt."""
+"""Recovery state persistence for async batch retry and repair."""
 
 import json
 import logging
@@ -13,9 +13,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# A run deferred mid-reprompt left a row naming a phase this machine no longer
+# has. Reinterpreting it would re-enter the wrong handler and either reprocess
+# records that already graduated or drop them, so it is refused by name.
+_RETIRED_PHASES = {"reprompt"}
+
+
+def _coerce_phase(value: str) -> RecoveryPhase:
+    if value in _RETIRED_PHASES:
+        raise RecoveryStateUnreadable(
+            f"This run was deferred mid-{value}, a recovery phase that no longer exists. "
+            f"Its stored state cannot be resumed. Re-run the action with --fresh to start "
+            f"it again; the records it had already completed are in the store."
+        )
+    return RecoveryPhase(value)
+
+
+class RecoveryStateUnreadable(RuntimeError):
+    """Persisted recovery state names something this version cannot act on."""
+
+
 @dataclass
 class RecoveryState:
-    """Cross-pass state for batch recovery (retry + reprompt).
+    """Cross-pass state for batch recovery (retry + repair).
 
     Persisted to StorageBackend metadata between workflow re-runs so that
     the processing service can track progress across multiple async batch
@@ -26,7 +46,7 @@ class RecoveryState:
 
     def __post_init__(self):
         if isinstance(self.phase, str):
-            self.phase = RecoveryPhase(self.phase)
+            self.phase = _coerce_phase(self.phase)
         if isinstance(self.on_exhausted, str):
             self.on_exhausted = OnExhaustedPolicy(self.on_exhausted)
 
@@ -36,12 +56,6 @@ class RecoveryState:
     missing_ids: list[str] = field(default_factory=list)
     record_failure_counts: dict[str, int] = field(default_factory=dict)
 
-    # Reprompt state
-    reprompt_attempt: int = 0
-    reprompt_max_attempts: int = 2
-    validation_name: str | None = None
-    reprompt_attempts_per_record: dict[str, int] = field(default_factory=dict)
-    validation_status: dict[str, bool] = field(default_factory=dict)
     on_exhausted: OnExhaustedPolicy = OnExhaustedPolicy.RETURN_LAST
 
     # Repair state (expect: regeneration rounds)
@@ -55,9 +69,6 @@ class RecoveryState:
 
     # Evaluation loop: graduated results (passed evaluation, never re-evaluated)
     graduated_results: list[dict[str, Any]] = field(default_factory=list)
-
-    # Still-failing results withheld from the reprompt batch, carried to finalization
-    unrepromptable_results: list[dict[str, Any]] = field(default_factory=list)
 
     # Which evaluation strategy is active (e.g., "validation", "critique")
     evaluation_strategy_name: str | None = None
@@ -96,12 +107,12 @@ class RecoveryStateManager:
         key = RecoveryStateManager._metadata_key(action_name, file_name)
         backend.save_metadata(key, json.dumps(state.to_dict(), ensure_ascii=False))
         logger.debug(
-            "Saved recovery state for %s/%s (phase=%s, retry=%d, reprompt=%d)",
+            "Saved recovery state for %s/%s (phase=%s, retry=%d, repair=%d)",
             action_name,
             file_name,
             state.phase,
             state.retry_attempt,
-            state.reprompt_attempt,
+            state.repair_attempt,
         )
 
     @staticmethod

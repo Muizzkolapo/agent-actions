@@ -271,7 +271,7 @@ class TestOnlyTheLiveAttemptIsProcessed:
                     f"{PARENT}_reprompt_1",
                     at="09:02:00",
                     parent_file_name=PARENT,
-                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_type=RecoveryType.REPAIR,
                     recovery_attempt=1,
                 ),
             }
@@ -396,7 +396,7 @@ class TestLiveIsDecidedByRegistrationTime:
                     f"{PARENT}_reprompt_1",
                     at="09:01:00",
                     parent_file_name=PARENT,
-                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_type=RecoveryType.REPAIR,
                     recovery_attempt=1,
                 ),
                 CHILD: _child("batch_retry_1", at="09:02:00", attempt=1),
@@ -534,7 +534,7 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
                     f"{PARENT}_reprompt_1",
                     at="09:01:00",
                     parent_file_name=PARENT,
-                    recovery_type=RecoveryType.REPROMPT,
+                    recovery_type=RecoveryType.REPAIR,
                     recovery_attempt=1,
                 ),
             }

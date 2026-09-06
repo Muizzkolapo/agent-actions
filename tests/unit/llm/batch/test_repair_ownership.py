@@ -23,7 +23,7 @@ from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services import processing_recovery as pr
 from agent_actions.llm.providers.batch_base import BatchResult
 
-from .test_reprompt_feedback_delivery import RecordingProvider
+from .recording_provider import RecordingProvider
 
 ACTION = "author"
 FAILING = {"options": ["only-one"]}

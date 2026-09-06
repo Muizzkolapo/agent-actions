@@ -67,9 +67,15 @@ def test_a_transient_submit_failure_does_not_stamp_exhaustion():
         seen["exhausted_recovery"] = exhausted_recovery
         return False
 
-    with patch(
-        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        side_effect=_capture,
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery._finalize_and_cleanup",
+            side_effect=_capture,
+        ),
     ):
         handle_retry_recovery(_context(), identity, _state(), [], [], {MISSING: {}})
 
@@ -81,7 +87,7 @@ def test_a_transient_submit_failure_does_not_stamp_exhaustion():
 def test_the_records_are_not_carried_forward_as_exhausted():
     """Gating the local call is not enough — the id set travels too.
 
-    The reprompt and repair finalisers rebuild exhaustion metadata from
+    The repair finaliser rebuilds exhaustion metadata from
     ``state.missing_ids``. Leaving the pre-round set on the state hands them the
     very records the guard just refused to exhaust.
     """
@@ -99,15 +105,21 @@ def test_the_records_are_not_carried_forward_as_exhausted():
     identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
     state = _state()
 
-    with patch(
-        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        return_value=False,
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery._finalize_and_cleanup",
+            return_value=False,
+        ),
     ):
         handle_retry_recovery(_context(), identity, state, [], [], {MISSING: {}})
 
     assert state.missing_ids == [], (
         "the retry state still names records the guard declined to exhaust; the "
-        "reprompt and repair finalisers will rebuild the stamp from this set"
+        "repair finaliser will rebuild the stamp from this set"
     )
 
 
@@ -141,9 +153,15 @@ def test_a_permanent_submission_failure_does_stamp_exhaustion():
         seen["exhausted_recovery"] = exhausted_recovery
         return False
 
-    with patch(
-        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        side_effect=_capture,
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery._finalize_and_cleanup",
+            side_effect=_capture,
+        ),
     ):
         handle_retry_recovery(context, identity, _state(), [], [], {MISSING: {}})
 
@@ -178,9 +196,15 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
         seen["exhausted_recovery"] = exhausted_recovery
         return False
 
-    with patch(
-        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        side_effect=_capture,
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery._finalize_and_cleanup",
+            side_effect=_capture,
+        ),
     ):
         handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
 
@@ -220,9 +244,15 @@ def test_the_exhausted_branch_keeps_the_id_set_it_stamped():
         seen["exhausted_recovery"] = exhausted_recovery
         return False
 
-    with patch(
-        "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-        side_effect=_capture,
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery.check_and_submit_repair",
+            return_value=True,
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing_recovery._finalize_and_cleanup",
+            side_effect=_capture,
+        ),
     ):
         handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
 

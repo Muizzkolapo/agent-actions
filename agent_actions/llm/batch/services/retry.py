@@ -2,7 +2,6 @@
 
 Implementation is split across:
 - retry_ops.py: Retry-specific operations (resubmit missing records)
-- reprompt_ops.py: Reprompt/validation operations (validate and resubmit failures)
 - retry_serialization.py: Serialize/deserialize BatchResult objects
 - retry_polling.py: Batch polling and validation module import utilities
 """
@@ -13,7 +12,6 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 # Import operation modules for delegation
-from agent_actions.llm.batch.services import reprompt_ops as _reprompt
 from agent_actions.llm.batch.services import retry_ops as _retry
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -26,11 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 class BatchRetryService:
-    """Handles retry and reprompt logic for batch processing.
+    """Handles retry logic for batch processing.
 
     This is a thin facade — each method delegates to a focused operation
-    module. See module docstrings in retry_ops, reprompt_ops,
-    retry_serialization, and retry_polling for details.
+    module. See module docstrings in retry_ops, retry_serialization, and
+    retry_polling for details.
     """
 
     def __init__(
@@ -58,11 +56,7 @@ class BatchRetryService:
         file_name: str | None = None,
         agent_config: dict[str, Any] | None = None,
     ) -> tuple[list[BatchResult], dict[str, RecoveryMetadata] | None]:
-        """Retrieve batch results with retry for missing records.
-
-        Phase 1 (retry) is handled by retry_ops; Phase 2 (validation)
-        is handled by reprompt_ops.
-        """
+        """Retrieve batch results, resubmitting the records the provider did not return."""
         from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 
         retry_config = (agent_config or {}).get("retry")
@@ -138,17 +132,6 @@ class BatchRetryService:
                         missing_ids, record_failure_counts, retry_attempts
                     )
 
-        # PHASE 2: VALIDATE — ensure all records meet validation conditions
-        if file_name:
-            all_results = self.validate_and_reprompt(
-                results=all_results,
-                provider=provider,
-                context_map=context_map,
-                output_directory=output_directory,
-                file_name=file_name,
-                agent_config=agent_config,
-            )
-
         return all_results, exhausted_recovery
 
     def _resubmit_missing_records(
@@ -219,102 +202,4 @@ class BatchRetryService:
             missing_ids=missing_ids,
             record_failure_counts=record_failure_counts,
             retry_attempts=retry_attempts,
-        )
-
-    # =========================================================================
-    # REPROMPT / VALIDATION OPERATIONS (delegated to reprompt_ops)
-    # =========================================================================
-
-    def validate_and_reprompt(
-        self,
-        results: list[BatchResult],
-        provider: BaseBatchClient,
-        context_map: dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        agent_config: dict[str, Any] | None,
-    ) -> list[BatchResult]:
-        """Validate results and reprompt failures with feedback."""
-        return _reprompt.validate_and_reprompt(
-            action_indices=self._action_indices,
-            dependency_configs=self._dependency_configs,
-            storage_backend=self._storage_backend,
-            results=results,
-            provider=provider,
-            context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            agent_config=agent_config,
-        )
-
-    def validate_results(
-        self,
-        results: list[BatchResult],
-        agent_config: dict[str, Any] | None,
-    ) -> tuple[list[BatchResult], str | None]:
-        """Validate results using configured UDF without resubmitting."""
-        return _reprompt.validate_results(
-            results=results,
-            agent_config=agent_config,
-        )
-
-    def submit_reprompt_batch(
-        self,
-        provider: BaseBatchClient,
-        failed_results: list[BatchResult],
-        context_map: dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        agent_config: dict[str, Any] | None,
-        attempt: int,
-    ) -> tuple[str, set[str]] | None:
-        """Submit a reprompt batch, returning the ids it actually submitted."""
-        return _reprompt.submit_reprompt_batch(
-            action_indices=self._action_indices,
-            dependency_configs=self._dependency_configs,
-            storage_backend=self._storage_backend,
-            provider=provider,
-            failed_results=failed_results,
-            context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            agent_config=agent_config,
-            attempt=attempt,
-        )
-
-    def process_reprompt_results(
-        self,
-        reprompt_results: list[BatchResult],
-        accumulated_results: list[BatchResult],
-    ) -> list[BatchResult]:
-        """Merge reprompt results into accumulated results (override by custom_id)."""
-        return _reprompt.process_reprompt_results(
-            reprompt_results=reprompt_results,
-            accumulated_results=accumulated_results,
-        )
-
-    def apply_exhausted_reprompt_metadata(
-        self,
-        results: list[BatchResult],
-        failed_ids: set[str],
-        validation_name: str,
-        attempt: int,
-        on_exhausted: str,
-        per_record_attempts: dict[str, int] | None = None,
-        failure_type_counts: dict[str, dict[str, int]] | None = None,
-    ) -> Exception | None:
-        """Apply reprompt exhaustion metadata; hand back the halt, if any.
-
-        *results* is mutated in place, so the caller already has the records.
-        """
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        return apply_exhausted_reprompt(
-            results=results,
-            failed_ids=failed_ids,
-            validation_name=validation_name,
-            attempt=attempt,
-            on_exhausted=on_exhausted,
-            per_record_attempts=per_record_attempts,
-            failure_type_counts=failure_type_counts,
         )

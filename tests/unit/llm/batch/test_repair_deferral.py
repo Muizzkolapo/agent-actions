@@ -24,7 +24,7 @@ from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services import processing_recovery as pr
 from agent_actions.llm.providers.batch_base import BatchResult
 
-from .test_reprompt_feedback_delivery import RecordingProvider
+from .recording_provider import RecordingProvider
 
 ACTION = "author"
 FILE = "f.json"
@@ -437,7 +437,7 @@ class TestTheLoadedStateIsTrustedWhole:
 
     A phase guard cannot separate a stale file from a live one — a run that
     crashed mid-repair leaves a REPAIR state too — and discarding the state
-    throws away the retry and reprompt bookkeeping the reprompt handoff needs.
+    throws away the retry bookkeeping finalisation needs.
     """
 
     JUDGED = [{"id": "j", "type": "llm_judge", "field": "options", "params": {"rule": "on topic"}}]
@@ -447,47 +447,6 @@ class TestTheLoadedStateIsTrustedWhole:
         config["expect"]["expectations"] = self.JUDGED
         config["model_vendor"] = "anthropic"
         return config
-
-    def test_a_live_reprompt_state_is_not_discarded_by_the_repair_round(self):
-        """`handle_reprompt_recovery` hands repair a None, so repair reloads.
-
-        Driven through `check_and_submit_repair` rather than `carry_forward`,
-        because it is the reload that decides what survives — calling the
-        composer directly with an explicit prior proves nothing about it.
-        """
-        import json
-
-        live = RecoveryState(
-            phase=RecoveryPhase.REPROMPT,
-            missing_ids=["m1"],
-            record_failure_counts={"m1": 3},
-            retry_attempt=3,
-            reprompt_attempt=2,
-            validation_name="schema",
-        )
-        backend = _Backend()
-        backend.meta[f"recovery_state:{ACTION}:{FILE}"] = json.dumps(live.to_dict())
-
-        failing = BatchResult(custom_id="r1", content=FAILING, success=True)
-        provider = RecordingProvider()
-        with patch(
-            "agent_actions.processing.task_preparer.TaskPreparer.prepare", return_value=_prepared()
-        ):
-            pr.check_and_submit_repair(
-                _context(provider, backend, _agent_config(max_iterations=2)),
-                _identity(),
-                batch_results=[failing],
-                context_map=_context_map("r1"),
-                recovery_state=None,
-            )
-        saved = _state(backend)
-        assert saved.missing_ids == ["m1"], (
-            "the repair round discarded the retry bookkeeping finalisation rebuilds "
-            "exhausted_recovery from"
-        )
-        assert saved.record_failure_counts == {"m1": 3}
-        assert saved.reprompt_attempt == 2
-        assert saved.validation_name == "schema"
 
     def test_an_in_flight_repair_state_still_supplies_its_balance(self):
         import json
@@ -657,7 +616,7 @@ class TestTheOriginalBatchFinaliserAlsoRaises:
     """The original-batch path has its own finaliser, and it is the common one.
 
     An action with `max_iterations: 1` exhausts on the first pass — no retry, no
-    reprompt, no repair round — so this is the shortest route to `raise` and it
+    no repair round — so this is the shortest route to `raise` and it
     goes through `BatchProcessingService._finalize_batch_output`, not the
     recovery finaliser the other tests drive.
     """
@@ -859,7 +818,7 @@ class TestNothingSitsBetweenParkingAndRaising:
 class TestARecordIsNeverBothPooledAndInFlight:
     """A record sent back to the model has left the pool of finished work.
 
-    The pool is what finalisation ships. A record an earlier reprompt round
+    The pool is what finalisation ships. A record an earlier round
     graduated sits there tagged with that round's strategy; when the repair loop
     re-evaluates it and it fails, it is resubmitted — and if its stale copy stays
     behind, the final merge ships the record twice, once repaired and verdicted
@@ -870,7 +829,7 @@ class TestARecordIsNeverBothPooledAndInFlight:
         from agent_actions.llm.batch.services.retry_serialization import serialize_results
 
         return RecoveryState(
-            phase=RecoveryPhase.REPROMPT,
+            phase=RecoveryPhase.REPAIR,
             graduated_results=serialize_results(list(results)),
             evaluation_strategy_name="validation",
         )
@@ -916,7 +875,7 @@ class TestARecordIsNeverBothPooledAndInFlight:
 
         bystander = BatchResult(custom_id="untouched", content=PASSING, success=True)
         prior = RecoveryState(
-            phase=RecoveryPhase.REPROMPT,
+            phase=RecoveryPhase.REPAIR,
             graduated_results=serialize_results([bystander]),
             evaluation_strategy_name="validation",
         )
@@ -1214,7 +1173,6 @@ class TestEveryEntryPointActuallyConsultsRepair:
                 "agent_actions.llm.batch.services.processing.retrieve_and_reconcile",
                 return_value=self._failing(),
             ),
-            patch.object(service, "_check_and_submit_reprompt", return_value=True),
             patch.object(service, "_finalize_batch_output", return_value="/out.json") as finalize,
             patch(
                 "agent_actions.processing.task_preparer.TaskPreparer.prepare",
@@ -1274,7 +1232,6 @@ class TestEveryEntryPointActuallyConsultsRepair:
             patch.object(pr.RecoveryStateManager, "load", return_value=state),
             patch.object(pr, "register_recovery_batch"),
             patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
-            patch.object(pr, "check_and_submit_reprompt", return_value=True),
             patch.object(pr, "cleanup_recovery"),
         ):
             returned = handler(
@@ -1292,43 +1249,6 @@ class TestEveryEntryPointActuallyConsultsRepair:
         state = RecoveryState(phase=RecoveryPhase.RETRY, evaluation_strategy_name="validation")
         returned, submitted, finalize = self._run_recovery(pr.handle_retry_recovery, state)
         assert submitted, "the retry recovery path never consulted the repair loop"
-        assert returned is None and finalize.call_count == 0, "it wrote the file anyway"
-
-    def test_the_reprompt_recovery_path_submits_a_repair_round(self):
-        """Reprompt has two exits into repair — this drives the one with no loop."""
-        state = RecoveryState(phase=RecoveryPhase.REPROMPT, evaluation_strategy_name="validation")
-        provider = RecordingProvider()
-        context = _context(
-            provider, _Backend(), _agent_config(max_iterations=3, on_exhausted="fail")
-        )
-        context.service = MagicMock()
-        context.service._resolve_action_name.return_value = ACTION
-        context.service._action_indices = {ACTION: 0}
-        context.service._dependency_configs = {}
-        context.service._storage_backend = None
-        with (
-            patch(
-                "agent_actions.processing.task_preparer.TaskPreparer.prepare",
-                return_value=_prepared(),
-            ),
-            patch.object(pr.RecoveryStateManager, "save"),
-            patch.object(pr.RecoveryStateManager, "load", return_value=state),
-            patch.object(pr, "register_recovery_batch"),
-            patch.object(pr, "_finalize_and_cleanup", return_value="/out.json") as finalize,
-            patch(
-                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
-                return_value=None,
-            ),
-        ):
-            returned = pr.handle_reprompt_recovery(
-                context,
-                _identity(),
-                state=state,
-                recovery_results=self._failing(),
-                accumulated=self._failing(),
-                context_map=_context_map("r1"),
-            )
-        assert provider.submitted, "the reprompt recovery path never consulted the repair loop"
         assert returned is None and finalize.call_count == 0, "it wrote the file anyway"
 
 

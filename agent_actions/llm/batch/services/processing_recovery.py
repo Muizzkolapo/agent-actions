@@ -1,11 +1,10 @@
 """Async recovery orchestration for batch processing.
 
 State machine:
-    Initial batch → retry (if missing_ids) → reprompt (if configured) → finalize
+    Initial batch → retry (if missing_ids) → repair (if expect:) → finalize
 
 Entry points:
     process_recovery_batch() — dispatches on recovery_type
-    check_and_submit_reprompt() — initial evaluation + reprompt submission
     finalize_batch_output() — convert, write, event, status
     cleanup_recovery() — remove registry entries after finalization
 """
@@ -20,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.expectations.service import ExpectationConfigurationError
-from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryPhase, RecoveryType
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -38,11 +37,6 @@ from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
-from agent_actions.logging.events.validation_events import (
-    RepromptRecoveredEvent,
-    RepromptRetryEvent,
-)
-from agent_actions.processing.evaluation.loop import accumulate_failure_types
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -69,7 +63,7 @@ def process_recovery_batch(
     manager: BatchRegistryManager,
     action_name: str | None = None,
 ) -> str | None:
-    """Process a recovery batch (retry or reprompt).
+    """Process a recovery batch (retry or repair).
 
     Returns output file path if complete, None if more recovery is needed.
     """
@@ -157,7 +151,6 @@ def process_recovery_batch(
     # lost to an unrelated failure on the way to the finaliser.
     handlers = {
         RecoveryType.RETRY: handle_retry_recovery,
-        RecoveryType.REPROMPT: handle_reprompt_recovery,
         RecoveryType.REPAIR: handle_repair_recovery,
     }
     handler = handlers.get(entry.recovery_type) if entry.recovery_type else None
@@ -244,7 +237,7 @@ def handle_retry_recovery(
     elif still_missing:
         # A transient submission failure with attempts left. These records are not
         # exhausted, and the id set must be cleared as well as the stamp withheld:
-        # the reprompt and repair finalisers rebuild exhaustion from missing_ids,
+        # the repair finaliser rebuilds exhaustion from missing_ids,
         # so leaving it populated reinstates exactly what was just declined.
         state.missing_ids = []
         logger.warning(
@@ -255,18 +248,6 @@ def handle_retry_recovery(
             state.retry_max_attempts,
             len(still_missing),
         )
-
-    should_continue = check_and_submit_reprompt(
-        context,
-        identity,
-        batch_results=merged,
-        context_map=context_map,
-        recovery_state=state,
-        exhausted_recovery=exhausted_recovery,
-    )
-    if not should_continue:
-        raise_pending_exhaustion(context)
-        return None
 
     if not check_and_submit_repair(
         context, identity, batch_results=merged, context_map=context_map, recovery_state=state
@@ -284,381 +265,6 @@ def handle_retry_recovery(
         context_map=context_map,
         exhausted_recovery=exhausted_recovery,
     )
-
-
-# ---------------------------------------------------------------------------
-# Reprompt recovery
-# ---------------------------------------------------------------------------
-
-
-def handle_reprompt_recovery(
-    context: RecoveryContext,
-    identity: BatchIdentity,
-    state: RecoveryState,
-    recovery_results: list[BatchResult],
-    accumulated: list[BatchResult],
-    context_map: dict[str, Any],
-) -> str | None:
-    """Handle reprompt recovery batch completion.
-
-    Uses the graduated pool pattern: only recovery_results are evaluated
-    (never the full accumulated set). Graduated records are persisted to
-    state and never re-evaluated.
-    """
-    from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
-
-    setup = build_evaluation_loop(
-        context.agent_config,
-        max_attempts=state.reprompt_max_attempts,
-        on_exhausted=state.on_exhausted,
-    )
-    if setup is None:
-        # Merge prior carried-forward results with current cycle before finalizing.
-        final_results = deserialize_results(state.graduated_results)
-        final_results.extend(deserialize_results(state.unrepromptable_results))
-        final_results.extend(recovery_results)
-        # Repair still owes these records a verdict: under a repair policy the
-        # result assembler does not write one, so a finalize that skips this
-        # check ships them with no `expect` block at all.
-        if not check_and_submit_repair(
-            context,
-            identity,
-            batch_results=final_results,
-            context_map=context_map,
-            recovery_state=None,
-        ):
-            return None
-        return _finalize_and_cleanup(
-            context,
-            identity,
-            batch_results=final_results,
-            context_map=context_map,
-            exhausted_recovery=None,
-        )
-
-    loop, strategy = setup
-    validation_name = strategy.name
-    graduated, still_failing, failure_types = loop.split(recovery_results)
-    loop.tag_graduated(graduated)
-    state.graduated_results = pool_records(
-        state.graduated_results, graduated, in_flight=state.repair_submitted_ids
-    )
-    state.evaluation_strategy_name = validation_name
-
-    accumulate_failure_types(state.failure_type_counts, failure_types)
-
-    if still_failing and state.reprompt_attempt < state.reprompt_max_attempts:
-        next_attempt = state.reprompt_attempt + 1
-        submission = context.service._retry_service.submit_reprompt_batch(
-            provider=context.provider,
-            failed_results=still_failing,
-            context_map=context_map,
-            output_directory=context.output_directory,
-            file_name=identity.file_name,
-            agent_config=context.agent_config,
-            attempt=next_attempt,
-        )
-        if submission:
-            reprompt_batch_id, submitted_ids = submission
-            submitted = {str(custom_id) for custom_id in submitted_ids}
-            unsubmitted = [fr for fr in still_failing if str(fr.custom_id) not in submitted]
-            if unsubmitted:
-                logger.warning(
-                    "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
-                    identity.file_name,
-                    len(submitted),
-                    len(submitted) + len(unsubmitted),
-                    sorted(str(fr.custom_id) for fr in unsubmitted),
-                )
-                state.unrepromptable_results = list(state.unrepromptable_results) + (
-                    serialize_results(
-                        _stamp_withheld(
-                            unsubmitted,
-                            validation_name,
-                            state.reprompt_attempts_per_record,
-                            state.failure_type_counts,
-                        )
-                    )
-                )
-
-            register_recovery_batch(
-                context.manager,
-                (reprompt_batch_id, len(submitted)),
-                identity.file_name,
-                identity.entry.provider,
-                RecoveryType.REPROMPT,
-                next_attempt,
-            )
-            fire_event(
-                RepromptRetryEvent(
-                    action_name=identity.file_name,
-                    attempt=next_attempt,
-                    max_attempts=state.reprompt_max_attempts,
-                    error=f"{len(submitted)} records failed validation",
-                    failed_count=len(submitted),
-                )
-            )
-            for fr in still_failing:
-                if str(fr.custom_id) not in submitted:
-                    continue
-                state.reprompt_attempts_per_record[fr.custom_id] = (
-                    state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
-                )
-            state.reprompt_attempt = next_attempt
-            RecoveryStateManager.save(
-                context.service._storage_backend,
-                context.service._resolve_action_name(context.action_name),
-                identity.file_name,
-                state,
-            )
-            return None
-
-    # Exhausted or all graduated — finalize.
-    if still_failing:
-        failed_ids = {r.custom_id for r in still_failing}
-        # Parked, not thrown: the file has not been written yet, and halting
-        # here would discard every record the reprompt rounds graduated.
-        park_halt(
-            context,
-            context.service._retry_service.apply_exhausted_reprompt_metadata(
-                results=still_failing,
-                failed_ids=failed_ids,
-                validation_name=validation_name,
-                attempt=state.reprompt_attempt,
-                on_exhausted=state.on_exhausted,
-                per_record_attempts=state.reprompt_attempts_per_record or None,
-                failure_type_counts=state.failure_type_counts or None,
-            ),
-        )
-
-    final_results = deserialize_results(state.graduated_results)
-    final_results.extend(deserialize_results(state.unrepromptable_results))
-    if still_failing:
-        final_results.extend(still_failing)
-
-    if state.graduated_results:
-        fire_event(
-            RepromptRecoveredEvent(
-                action_name=identity.file_name,
-                attempt=state.reprompt_attempt,
-                max_attempts=state.reprompt_max_attempts,
-                validation_name=validation_name,
-            )
-        )
-
-    # Rebuild exhausted_recovery from retry phase state (frozen at phase transition).
-    exhausted_recovery = None
-    if state.missing_ids:
-        exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
-            set(state.missing_ids), state.record_failure_counts
-        )
-
-    if not check_and_submit_repair(
-        context, identity, batch_results=final_results, context_map=context_map, recovery_state=None
-    ):
-        raise_pending_exhaustion(context)
-        return None
-
-    return _finalize_and_cleanup(
-        context,
-        identity,
-        batch_results=final_results,
-        context_map=context_map,
-        exhausted_recovery=exhausted_recovery,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Reprompt check + submission
-# ---------------------------------------------------------------------------
-
-
-def check_and_submit_reprompt(
-    context: RecoveryContext,
-    identity: BatchIdentity,
-    batch_results: list[BatchResult],
-    context_map: dict[str, Any],
-    recovery_state: RecoveryState | None = None,
-    exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-) -> bool:
-    """Check if reprompt is needed and submit async batch if so.
-
-    Returns:
-        True if processing should continue (no reprompt needed or exhausted).
-        False if a reprompt batch was submitted (caller should return None).
-    """
-    from agent_actions.llm.batch.services.reprompt_ops import build_evaluation_loop
-
-    setup = build_evaluation_loop(context.agent_config)
-    if setup is None:
-        return True
-
-    loop, strategy = setup
-    validation_name = strategy.name
-    max_attempts = strategy.max_attempts
-    on_exhausted = strategy.on_exhausted
-
-    graduated, still_failing, failure_types = loop.split(batch_results)
-    loop.tag_graduated(graduated)
-
-    # No content is a provider failure, not a content-quality issue — a reprompt
-    # has nothing to repair. The withheld records must still be carried to
-    # finalization, or they surface there as records the batch never returned.
-    repromptable = [r for r in still_failing if r.content is not None]
-    unrepromptable = [r for r in still_failing if r.content is None]
-
-    if not repromptable:
-        return True
-
-    current_attempt = recovery_state.reprompt_attempt if recovery_state else 0
-
-    # Seed from prior-round counts (if resuming from persisted state)
-    ftc: dict[str, dict[str, int]] = (
-        dict(recovery_state.failure_type_counts) if recovery_state else {}
-    )
-    accumulate_failure_types(ftc, failure_types)
-
-    if current_attempt >= max_attempts:
-        failed_ids = {r.custom_id for r in still_failing}
-        per_record_attempts = (
-            recovery_state.reprompt_attempts_per_record if recovery_state else None
-        )
-        park_halt(
-            context,
-            context.service._retry_service.apply_exhausted_reprompt_metadata(
-                results=still_failing,
-                failed_ids=failed_ids,
-                validation_name=validation_name,
-                attempt=current_attempt,
-                on_exhausted=on_exhausted,
-                per_record_attempts=per_record_attempts,
-                failure_type_counts=ftc or None,
-            ),
-        )
-        return True
-
-    next_attempt = current_attempt + 1
-    submission = context.service._retry_service.submit_reprompt_batch(
-        provider=context.provider,
-        failed_results=repromptable,
-        context_map=context_map,
-        output_directory=context.output_directory,
-        file_name=identity.file_name,
-        agent_config=context.agent_config,
-        attempt=next_attempt,
-    )
-
-    if not submission:
-        return True
-
-    reprompt_batch_id, submitted_ids = submission
-    # Preparation can admit fewer records than were handed to it. Whatever it left
-    # behind is not in flight, so it belongs with the withheld pool rather than
-    # being booked as an attempt nobody made.
-    submitted = {str(custom_id) for custom_id in submitted_ids}
-    unsubmitted = [fr for fr in repromptable if str(fr.custom_id) not in submitted]
-    repromptable = [fr for fr in repromptable if str(fr.custom_id) in submitted]
-    unrepromptable = unrepromptable + _stamp_withheld(
-        unsubmitted,
-        strategy.name,
-        dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {},
-        ftc,
-    )
-    if unsubmitted:
-        logger.warning(
-            "Reprompt batch for %s admitted %d of %d records; carrying %s to finalization",
-            identity.file_name,
-            len(submitted),
-            len(submitted) + len(unsubmitted),
-            sorted(str(fr.custom_id) for fr in unsubmitted),
-        )
-
-    register_recovery_batch(
-        context.manager,
-        (reprompt_batch_id, len(submitted)),
-        identity.file_name,
-        identity.entry.provider,
-        RecoveryType.REPROMPT,
-        next_attempt,
-    )
-
-    state = RecoveryState(
-        phase=RecoveryPhase.REPROMPT,
-        reprompt_attempt=next_attempt,
-        reprompt_max_attempts=max_attempts,
-        validation_name=strategy.name,
-        on_exhausted=on_exhausted,
-        evaluation_strategy_name=strategy.name,
-        # Whatever this round puts in flight leaves the pool, and so does
-        # anything the repair loop still holds: a record is never both pooled as
-        # finished and out being regenerated.
-        graduated_results=pool_records(
-            list(recovery_state.graduated_results) if recovery_state else [],
-            graduated,
-            in_flight=[r.custom_id for r in repromptable]
-            + (list(recovery_state.repair_submitted_ids) if recovery_state else []),
-        ),
-        unrepromptable_results=pool_records(
-            list(recovery_state.unrepromptable_results) if recovery_state else [], unrepromptable
-        ),
-        reprompt_attempts_per_record=(
-            dict(recovery_state.reprompt_attempts_per_record) if recovery_state else {}
-        ),
-        retry_attempt=recovery_state.retry_attempt if recovery_state else 0,
-        retry_max_attempts=recovery_state.retry_max_attempts if recovery_state else 3,
-        accumulated_results=list(recovery_state.accumulated_results) if recovery_state else [],
-        failure_type_counts=ftc,
-        # Finalisation rebuilds exhausted_recovery from the retry bookkeeping, so
-        # a record's retry exhaustion must not be lost because a reprompt round
-        # happened — the same reason carry_forward keeps it across a repair one.
-        missing_ids=list(recovery_state.missing_ids) if recovery_state else [],
-        record_failure_counts=(
-            dict(recovery_state.record_failure_counts) if recovery_state else {}
-        ),
-        validation_status=dict(recovery_state.validation_status) if recovery_state else {},
-        # A repair loop can be mid-flight around this round; dropping its counter
-        # would restart its rounds from zero, and dropping the judge budget would
-        # hand each one a full budget again.
-        repair_attempt=recovery_state.repair_attempt if recovery_state else 0,
-        repair_max_attempts=recovery_state.repair_max_attempts if recovery_state else 1,
-        repair_submitted_ids=(list(recovery_state.repair_submitted_ids) if recovery_state else []),
-        repair_judge_budget_remaining=(
-            recovery_state.repair_judge_budget_remaining if recovery_state else None
-        ),
-    )
-    for fr in repromptable:
-        state.reprompt_attempts_per_record[fr.custom_id] = (
-            state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
-        )
-
-    if exhausted_recovery:
-        state.missing_ids = list(exhausted_recovery.keys())
-        state.record_failure_counts = {
-            rid: meta.retry.failures for rid, meta in exhausted_recovery.items() if meta.retry
-        }
-
-    RecoveryStateManager.save(
-        context.service._storage_backend,
-        context.service._resolve_action_name(context.action_name),
-        identity.file_name,
-        state,  # type: ignore[arg-type]
-    )
-    fire_event(
-        RepromptRetryEvent(
-            action_name=identity.file_name,
-            attempt=next_attempt,
-            max_attempts=max_attempts,
-            error=f"{len(repromptable)} records failed validation",
-            failed_count=len(repromptable),
-        )
-    )
-    logger.info(
-        "Async reprompt submitted for %s: %d failed records, batch %s",
-        identity.file_name,
-        len(repromptable),
-        reprompt_batch_id,
-    )
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -830,7 +436,6 @@ def check_and_submit_repair(
         apply_exhaustion_policy,
         build_repair_strategy,
         carry_forward,
-        pool_records,
         stamp_exhausted,
         submit_repair_batch,
     )
@@ -847,7 +452,7 @@ def check_and_submit_repair(
         # record of where the loop got to. A phase guard cannot separate stale
         # from live here — a run that crashed mid-repair leaves a REPAIR state
         # too — so the budget's staleness is a known limitation, not something
-        # to approximate by discarding state the reprompt handoff needs.
+        # to approximate by discarding state the repair loop needs.
         recovery_state = RecoveryStateManager.load(
             context.service._storage_backend,
             context.service._resolve_action_name(context.action_name),
@@ -992,7 +597,6 @@ def handle_repair_recovery(
         apply_exhaustion_policy,
         build_repair_strategy,
         dropped_from,
-        pool_records,
         stamp_exhausted,
         submit_repair_batch,
     )
@@ -1009,20 +613,6 @@ def handle_repair_recovery(
             ),
             context_map=context_map,
         )
-
-    # Online runs reprompt inside every repair iteration, so output that does not
-    # match the schema is regenerated with that feedback before the suite judges
-    # it. Here a reprompt round is its own batch: it defers, and its handler
-    # resumes into this loop on the way back.
-    if not check_and_submit_reprompt(
-        context,
-        identity,
-        batch_results=recovery_results,
-        context_map=context_map,
-        recovery_state=state,
-    ):
-        raise_pending_exhaustion(context)
-        return None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(recovery_results)
@@ -1224,38 +814,6 @@ def _finalize_and_cleanup(
     cleanup_recovery(context, identity)
     raise_pending_exhaustion(context)
     return output_path
-
-
-def _stamp_withheld(
-    records: list[BatchResult],
-    validation_name: str,
-    attempts_made: dict[str, int],
-    failure_type_counts: dict[str, dict[str, int]],
-) -> list[BatchResult]:
-    """Mark records that never reached the reprompt batch as still failing.
-
-    They were repromptable, so they carry content — without a failure stamp they
-    collect as successes and the operator never sees that validation rejected them.
-    The count comes from the per-record ledger, which does not book an attempt for
-    a record that was not sent: stamping the round number instead would make one
-    that never left look like one that was tried and failed.
-    """
-    from agent_actions.processing.types import RepromptMetadata
-
-    for record in records:
-        if record.recovery_metadata is None:
-            record.recovery_metadata = RecoveryMetadata()
-        if record.recovery_metadata.reprompt is None:
-            counts = failure_type_counts.get(str(record.custom_id), {})
-            record.recovery_metadata.reprompt = RepromptMetadata(
-                attempts=attempts_made.get(str(record.custom_id), 0),
-                passed=False,
-                validation=validation_name,
-                parse_error_count=counts.get("parse_error", 0),
-                schema_fail_count=counts.get("schema_fail", 0),
-                udf_fail_count=counts.get("udf_fail", 0),
-            )
-    return records
 
 
 def register_recovery_batch(

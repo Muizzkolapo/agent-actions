@@ -28,14 +28,6 @@ def test_a_repair_round_counter_survives_the_round_trip():
     assert restored.repair_max_attempts == 2
 
 
-def test_the_reprompt_counters_still_survive():
-    state = RecoveryState(reprompt_attempt=2, reprompt_max_attempts=3, validation_name="schema")
-    restored = RecoveryState(**state.to_dict())
-    assert restored.reprompt_attempt == 2
-    assert restored.reprompt_max_attempts == 3
-    assert restored.validation_name == "schema"
-
-
 def test_the_phase_survives_as_an_enum():
     restored = RecoveryState(**RecoveryState(phase=RecoveryPhase.REPAIR).to_dict())
     assert restored.phase is RecoveryPhase.REPAIR
@@ -68,9 +60,7 @@ def test_a_state_file_from_before_the_repair_fields_still_loads():
     loop having lost the graduated pool — so this must not be left to chance.
     """
     old_shape = {
-        "phase": "reprompt",
-        "reprompt_attempt": 1,
-        "reprompt_max_attempts": 3,
+        "phase": "repair",
         "graduated_results": [{"custom_id": "g1", "content": {"a": 1}, "success": True}],
         "evaluation_strategy_name": "validation",
     }

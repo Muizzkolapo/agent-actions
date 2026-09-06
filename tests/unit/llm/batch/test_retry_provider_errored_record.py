@@ -444,28 +444,6 @@ def test_a_provider_parse_error_placeholder_survives_the_merge():
 # ---------------------------------------------------------------------------
 
 
-def test_exhaustion_metadata_does_not_erase_the_reprompt_half():
-    from agent_actions.processing.types import RepromptMetadata
-
-    errored = _errored(ERR_ID)
-    errored.recovery_metadata = RecoveryMetadata(
-        reprompt=RepromptMetadata(attempts=3, passed=False, validation="shape_check")
-    )
-
-    results = BatchResultStrategy().process(
-        [errored],
-        context_map={ERR_ID: {"user_content": "two", "source_guid": ERR_ID}},
-        agent_config=AGENT_CONFIG,
-        exhausted_recovery=_exhausted(ERR_ID),
-    )
-
-    meta = results[0].recovery_metadata
-    assert meta is not None
-    assert meta.retry is not None and meta.retry.attempts == 2
-    assert meta.reprompt is not None, "the reprompt half was overwritten by the retry half"
-    assert meta.reprompt.validation == "shape_check"
-
-
 def test_an_errored_result_that_still_carries_content_is_not_an_answer():
     """Both halves of the consumer's predicate are load-bearing, not just content."""
     salvaged = BatchResult(custom_id=ERR_ID, content={"partial": "x"}, success=False, error="boom")

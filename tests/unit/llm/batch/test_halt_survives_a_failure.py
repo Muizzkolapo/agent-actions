@@ -131,7 +131,6 @@ def test_every_entry_point_runs_its_real_work_inside_the_wrapper():
     expected = {
         processing_recovery.process_recovery_batch: {"handler"},
         processing.BatchProcessingService._process_original_batch: {
-            "_check_and_submit_reprompt",
             "_check_and_submit_repair_impl",
             "_finalize_batch_output",
         },

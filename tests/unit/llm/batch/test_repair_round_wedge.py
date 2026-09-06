@@ -84,12 +84,6 @@ class TestOnlyThisFilesRepairRounds:
         entry.parent_file_name = "other.json"
         assert pr._repair_round_in_flight(context, identity) is False
 
-    def test_a_reprompt_round_is_ignored(self):
-        context, identity = _round(BatchStatus.IN_PROGRESS)
-        entry = next(iter(context.manager.get_all_jobs.return_value.values()))
-        entry.recovery_type = RecoveryType.REPROMPT
-        assert pr._repair_round_in_flight(context, identity) is False
-
     def test_no_rounds_at_all(self):
         context, identity = _round(BatchStatus.IN_PROGRESS)
         context.manager.get_all_jobs.return_value = {}

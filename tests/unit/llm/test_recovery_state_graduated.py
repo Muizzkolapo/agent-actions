@@ -40,7 +40,7 @@ class TestRecoveryStateGraduatedFields:
 
     def test_evaluation_strategy_name_set(self):
         """evaluation_strategy_name can be set to a string."""
-        state = RecoveryState(phase="reprompt", evaluation_strategy_name="validation")
+        state = RecoveryState(phase="repair", evaluation_strategy_name="validation")
         assert state.evaluation_strategy_name == "validation"
 
     def test_graduated_and_accumulated_are_separate(self):
@@ -81,8 +81,7 @@ class TestRecoveryStateSerialization:
     def test_serialize_roundtrip_with_graduated(self, backend):
         """State with graduated results survives save/load roundtrip."""
         state = RecoveryState(
-            phase="reprompt",
-            reprompt_attempt=1,
+            phase="repair",
             graduated_results=[
                 {"custom_id": "r1", "content": '{"x": 1}', "success": True},
                 {"custom_id": "r2", "content": '{"x": 2}', "success": True},
@@ -95,8 +94,7 @@ class TestRecoveryStateSerialization:
         assert restored is not None
         assert restored.graduated_results == state.graduated_results
         assert restored.evaluation_strategy_name == "validation"
-        assert restored.phase == "reprompt"
-        assert restored.reprompt_attempt == 1
+        assert restored.phase == "repair"
 
     def test_serialize_roundtrip_empty_graduated(self, backend):
         """State with default (empty) graduated fields roundtrips correctly."""
@@ -117,11 +115,6 @@ class TestRecoveryStateSerialization:
             "retry_max_attempts": 3,
             "missing_ids": ["rec_001"],
             "record_failure_counts": {"rec_001": 1},
-            "reprompt_attempt": 0,
-            "reprompt_max_attempts": 2,
-            "validation_name": None,
-            "reprompt_attempts_per_record": {},
-            "validation_status": {},
             "on_exhausted": "return_last",
             "accumulated_results": [{"custom_id": "r1", "content": "x", "success": True}],
         }
@@ -166,7 +159,7 @@ class TestRecoveryStateManagerIntegration:
     def test_save_load_delete_cycle(self, backend):
         """Full create-read-delete cycle with graduated results."""
         state = RecoveryState(
-            phase="reprompt",
+            phase="repair",
             graduated_results=[{"custom_id": "g1"}],
             accumulated_results=[{"custom_id": "a1"}],
             evaluation_strategy_name="critique",
@@ -190,13 +183,13 @@ class TestRecoveryStateManagerIntegration:
     def test_overwrite_preserves_graduated(self, backend):
         """Saving updated state overwrites previous graduated results."""
         state1 = RecoveryState(
-            phase="reprompt",
+            phase="repair",
             graduated_results=[{"custom_id": "g1"}],
         )
         RecoveryStateManager.save(backend, "test_action", "overwrite_test", state1)
 
         state2 = RecoveryState(
-            phase="reprompt",
+            phase="repair",
             graduated_results=[{"custom_id": "g1"}, {"custom_id": "g2"}],
             evaluation_strategy_name="validation",
         )
@@ -241,7 +234,7 @@ class TestRecoveryStateCorruptionHandling:
         key = RecoveryStateManager._metadata_key("test_action", "test_file")
         backend.save_metadata(
             key,
-            json.dumps({"phase": "not_a_real_phase", "retry_attempt": 0, "reprompt_attempt": 0}),
+            json.dumps({"phase": "not_a_real_phase", "retry_attempt": 0}),
         )
 
         with caplog.at_level(logging.ERROR, logger=self._LOGGER):
@@ -272,8 +265,7 @@ class TestRecoveryStateLargeRoundtrip:
     def test_large_state_serialization_roundtrip(self, backend):
         """200-record graduated state survives save/load roundtrip."""
         state = RecoveryState(
-            phase="reprompt",
-            reprompt_attempt=1,
+            phase="repair",
             graduated_results=[
                 {"custom_id": f"rec_{i:04d}", "content": f'{{"v": {i}}}', "success": True}
                 for i in range(200)

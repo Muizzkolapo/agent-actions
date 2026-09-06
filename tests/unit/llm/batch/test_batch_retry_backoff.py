@@ -33,7 +33,7 @@ def _run_retry_loop(
 
     Patches retrieve_and_reconcile (returns []), find_missing_ids (returns all
     keys from context_map), collect_result_custom_ids (returns custom_ids from
-    successful results), and validate_and_reprompt (passthrough).
+    successful results).
     """
     all_ids = set(context_map.keys())
 
@@ -46,11 +46,6 @@ def _run_retry_loop(
             service,
             "_resubmit_missing_records",
             side_effect=resubmit_side_effect,
-        ),
-        patch.object(
-            service,
-            "validate_and_reprompt",
-            side_effect=lambda results, **kw: results,
         ),
         patch(
             "agent_actions.llm.batch.processing.reconciler.BatchResultReconciler.find_missing_ids",
@@ -271,11 +266,6 @@ def test_no_sleep_when_retry_disabled(mock_sleep, _mock_uniform):
         patch(
             "agent_actions.llm.batch.services.retry.retrieve_and_reconcile",
             return_value=[],
-        ),
-        patch.object(
-            service,
-            "validate_and_reprompt",
-            side_effect=lambda results, **kw: results,
         ),
     ):
         service.retrieve_results_with_retry(

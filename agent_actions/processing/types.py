@@ -56,41 +56,6 @@ class RetryMetadata:
 
 
 @dataclass
-class RepromptMetadata:
-    """Metadata for reprompt recovery, stored in output _recovery.reprompt field.
-
-    Failure-type counters (``parse_error_count``, ``schema_fail_count``,
-    ``udf_fail_count``) are populated by both online and batch paths.
-    Online: ``RepromptService.execute()`` increments counters per attempt.
-    Batch: ``EvaluationLoop.split()`` returns failure classifications via
-    ``EvaluationOutcome.failure_type``, accumulated across rounds and
-    wired into counters by ``apply_exhausted_reprompt()``.
-    """
-
-    attempts: int
-    passed: bool
-    validation: str
-    parse_error_count: int = 0
-    schema_fail_count: int = 0
-    udf_fail_count: int = 0
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        result = {
-            "attempts": self.attempts,
-            "passed": self.passed,
-            "validation": self.validation,
-        }
-        if self.parse_error_count:
-            result["parse_error_count"] = self.parse_error_count
-        if self.schema_fail_count:
-            result["schema_fail_count"] = self.schema_fail_count
-        if self.udf_fail_count:
-            result["udf_fail_count"] = self.udf_fail_count
-        return result
-
-
-@dataclass
 class EvaluationOutcome:
     """Result of a single evaluation — pass/fail with failure classification."""
 
@@ -131,7 +96,6 @@ class RecoveryMetadata:
     """Container for recovery metadata, stored under the _recovery output key."""
 
     retry: RetryMetadata | None = None
-    reprompt: RepromptMetadata | None = None
     evaluation: EvaluationMetadata | None = None
     expectations: ExpectationsMetadata | None = None
 
@@ -140,8 +104,6 @@ class RecoveryMetadata:
         result: dict[str, Any] = {}
         if self.retry:
             result["retry"] = self.retry.to_dict()
-        if self.reprompt:
-            result["reprompt"] = self.reprompt.to_dict()
         if self.evaluation:
             result["evaluation"] = self.evaluation.to_dict()
         if self.expectations:
@@ -150,12 +112,7 @@ class RecoveryMetadata:
 
     def is_empty(self) -> bool:
         """Return True if no recovery occurred."""
-        return (
-            self.retry is None
-            and self.reprompt is None
-            and self.evaluation is None
-            and self.expectations is None
-        )
+        return self.retry is None and self.evaluation is None and self.expectations is None
 
 
 @dataclass

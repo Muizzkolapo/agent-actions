@@ -1,8 +1,7 @@
 """One resubmission round: prepare, submit, wait, retrieve, reconcile.
 
-Shared by every batch loop that sends failing records back to the model —
-reprompt for schema and UDF validation, repair for `expect:` — so the two
-cannot drift on what "resubmit this set" means.
+Shared by every batch loop that sends failing records back to the model, so no
+two can drift on what "resubmit this set" means.
 """
 
 from __future__ import annotations
