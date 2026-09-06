@@ -326,16 +326,18 @@ defaults:
     max_attempts: 2
 ```
 
-`extract_incident_details` and `classify_severity` also have reprompt validation. If the LLM returns null fields or incomplete structured output, the framework rejects the response and reprompts automatically:
+`extract_incident_details` and `classify_severity` also carry expectations. If the LLM returns null fields or incomplete structured output, the block fails and the framework regenerates automatically:
 
 ```yaml
-reprompt:
-  validation: check_required_fields    # Rejects any response with null values
-  max_attempts: 2
-  on_exhausted: return_last            # Accept best attempt if retries fail
+expect:
+  max_iterations: 2
+  expectations:
+    - { type: no_null_fields }
 ```
 
-The `check_required_fields` UDF in `tools/shared/reprompt_validations.py` is generic -- it checks that no field in the response is null, without hardcoding field names.
+`no_null_fields` is a built-in record-scoped rule: it checks every field of the
+record at once rather than one named field, so it needs no field list. The
+repair policy and `on_exhausted` come from the workflow's `defaults.expect`.
 
 ## Quick Start
 

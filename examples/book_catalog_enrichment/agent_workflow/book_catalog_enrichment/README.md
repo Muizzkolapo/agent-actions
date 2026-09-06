@@ -81,13 +81,15 @@ The final tool action builds three views from each enriched record — one for t
 ### Reprompt Validation
 
 ```yaml
-reprompt:
-  validation: "check_valid_bisac"
-  max_attempts: 3
-  on_exhausted: "return_last"
+expect:
+  max_iterations: 3
+  expectations:
+    - { type: matches_regex, field: primary_bisac_code,
+        params: { pattern: '^[A-Z]{3}\d{6}$' },
+        hint: "nine characters: three letters then six digits, e.g. FIC000000" }
 ```
 
-Registered `@reprompt_validation` UDFs run against the LLM output before it is accepted. If validation fails, the framework reprompts with the failure reason. Used on `classify_genre` (BISAC format) and `write_description` (minimum word count).
+Declared rules run against the LLM output before it is accepted. If a rule fails, the framework regenerates, steering with the rule's `hint`. Used on `classify_genre` (BISAC format) and `write_description` (minimum word count).
 
 ### Grounded Retrieval
 

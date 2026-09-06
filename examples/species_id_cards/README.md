@@ -4,7 +4,7 @@ A field-guide pipeline that turns entries into grounded identification notes. It
 exists to exercise the framework's stages **combined**, not one at a time: three
 version fan-outs with their merges, a 1→N expansion, a FILE-granularity reduce,
 four guards — one of them reading a tool's boolean — `drop:` over a merged
-parent, seeds, retry and reprompt, all in a single DAG.
+parent, seeds, retry and expectations, all in a single DAG.
 
 Every other example in this tree covers a feature or two. The largest is 14
 actions with one fan-out. This is 13 declared actions that expand to 18, with
