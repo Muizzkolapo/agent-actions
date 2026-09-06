@@ -156,30 +156,6 @@ class TestOnlineStrategy:
         assert result.recovery_metadata.retry.attempts == 3
 
     @patch("agent_actions.processing.helpers.run_dynamic_agent")
-    def test_reprompt_triggers_metadata(self, mock_run_agent, basic_prepared_task, basic_context):
-        """Test reprompt service populates reprompt metadata when validation fails then passes."""
-        from agent_actions.processing.recovery.reprompt import RepromptResult, RepromptService
-
-        reprompt_service = MagicMock(spec=RepromptService)
-        reprompt_service.execute.return_value = RepromptResult(
-            response={"refined": "answer"},
-            executed=True,
-            attempts=2,
-            passed=True,
-            validation_name="check_json",
-        )
-
-        strategy = OnlineStrategy(reprompt_service=reprompt_service)
-        result = strategy.invoke(basic_prepared_task, basic_context)
-
-        assert result.executed is True
-        assert result.response == {"refined": "answer"}
-        assert result.recovery_metadata is not None
-        assert result.recovery_metadata.reprompt.attempts == 2
-        assert result.recovery_metadata.reprompt.passed is True
-        assert result.recovery_metadata.reprompt.validation == "check_json"
-
-    @patch("agent_actions.processing.helpers.run_dynamic_agent")
     def test_direct_execution_not_executed(
         self, mock_run_agent, basic_prepared_task, basic_context
     ):
@@ -192,40 +168,6 @@ class TestOnlineStrategy:
         assert result.executed is False
         assert result.response is None
         assert result.recovery_metadata is None
-
-    @patch("agent_actions.processing.helpers.run_dynamic_agent")
-    def test_reprompt_exhaustion_on_first_attempt_records_metadata(
-        self, mock_run_agent, basic_prepared_task, basic_context
-    ):
-        """Reprompt exhaustion on the first attempt (attempts=1, exhausted=True) must still record metadata.
-
-        Before the fix, the gate was ``attempts > 1`` which suppressed metadata
-        when retry exhausted on the very first reprompt attempt.  Users lost
-        observability into strict-failure runs.  The gate now also fires when
-        ``exhausted`` is True.
-        """
-        from agent_actions.processing.recovery.reprompt import RepromptResult, RepromptService
-        from agent_actions.processing.recovery.retry import RetryService
-
-        retry_service = MagicMock(spec=RetryService)
-        reprompt_service = MagicMock(spec=RepromptService)
-        reprompt_service.execute.return_value = RepromptResult(
-            response=None,
-            executed=True,
-            attempts=1,
-            passed=False,
-            validation_name="check_json",
-            exhausted=True,
-        )
-
-        strategy = OnlineStrategy(retry_service=retry_service, reprompt_service=reprompt_service)
-        result = strategy.invoke(basic_prepared_task, basic_context)
-
-        assert result.recovery_metadata is not None
-        assert result.recovery_metadata.reprompt is not None
-        assert result.recovery_metadata.reprompt.attempts == 1
-        assert result.recovery_metadata.reprompt.passed is False
-        assert result.recovery_metadata.reprompt.validation == "check_json"
 
 
 class TestBatchStrategy:

@@ -194,43 +194,35 @@ def test_a_guard_skip_is_not_misrouted_to_the_exhaustion_channel(monkeypatch):
     assert result.recovery_metadata is None or result.recovery_metadata.expectations is None
 
 
-class _ScriptedReprompt:
+class _ScriptedRetry:
+    """A retry service that hands back a scripted result per repair iteration."""
+
     def __init__(self, results):
         self._results = iter(results)
 
-    def execute(self, llm_operation, original_prompt, context=""):
+    def execute(self, operation, context=""):
         return next(self._results)
 
 
 def test_recovery_metadata_describes_the_shipped_generation_only():
-    # Iteration 1's inner reprompt needs 2 attempts and its output fails the
-    # suite; iteration 2 passes first try. The shipped record must not carry
-    # the discarded generation's reprompt metadata.
-    from agent_actions.processing.recovery.reprompt import RepromptResult
+    # Iteration 1's inner retry needs 2 attempts and its output fails the suite;
+    # iteration 2 succeeds first try. The shipped record must describe the
+    # generation that shipped, not the discarded one.
+    from agent_actions.processing.recovery.retry import RetryResult
 
-    reprompt = _ScriptedReprompt(
+    retry = _ScriptedRetry(
         [
-            RepromptResult(
-                response={"ideas": ["a"]},
-                executed=True,
-                attempts=2,
-                passed=True,
-                validation_name="check",
-            ),
-            RepromptResult(
-                response={"ideas": ["a", "b", "c"]},
-                executed=True,
-                attempts=1,
-                passed=True,
-                validation_name="check",
-            ),
+            RetryResult(response=({"ideas": ["a"]}, True), attempts=2, reason="timeout"),
+            RetryResult(response=({"ideas": ["a", "b", "c"]}, True), attempts=1),
         ]
     )
     service = ExpectationService(SUITE, repair="retry", max_iterations=3)
-    strategy = OnlineStrategy(reprompt_service=reprompt, expectation_service=service)
+    strategy = OnlineStrategy(retry_service=retry, expectation_service=service)
+
     result = strategy.invoke(make_task(), make_context())
+
     assert result.response["ideas"] == ["a", "b", "c"]
-    assert result.recovery_metadata is None or result.recovery_metadata.reprompt is None
+    assert result.recovery_metadata is None or result.recovery_metadata.retry is None
 
 
 def test_every_record_of_an_expansion_carries_its_own_verdict(monkeypatch):
