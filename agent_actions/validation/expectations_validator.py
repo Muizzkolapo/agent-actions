@@ -72,7 +72,9 @@ def find_expectation_defects(
             messages.extend(suite_messages)
             messages.extend(_entry_defects(resolved, fields, available_fields))
         elif entries is None and suite_name is None and project_root is not None:
-            resolved, schema_messages = _own_schema_entries(action, project_root)
+            resolved, schema_messages = _own_schema_entries(
+                action, project_root, rules_optional=expect.get("repair", "auto") != "none"
+            )
             messages.extend(schema_messages)
             messages.extend(_entry_defects(resolved, fields, available_fields))
 
@@ -150,7 +152,7 @@ def _repair_mode_defects(
 
 
 def _own_schema_entries(
-    action: dict[str, Any], project_root: Path | None
+    action: dict[str, Any], project_root: Path | None, *, rules_optional: bool = False
 ) -> tuple[list[Any], list[str]]:
     """The rules a bare expect: reads, which are the action's own schema's.
 
@@ -170,11 +172,15 @@ def _own_schema_entries(
         try:
             entries, defects = schema_rule_entries(str(label), schema_data)
         except NoRulesDeclared as exc:
-            return [], [
-                f"a bare expect: reads the rules of the action's own schema — {exc}; "
-                f"declare them under a field or in the file's expectations: block, "
-                f"or use suite: or an inline expectations: list"
-            ]
+            if not rules_optional:
+                return [], [
+                    f"a bare expect: reads the rules of the action's own schema — {exc}; "
+                    f"declare them under a field or in the file's expectations: block, "
+                    f"or use suite: or an inline expectations: list"
+                ]
+            # Under a repair policy the block enforces the schema on its own, so
+            # having no rules is a choice rather than an omission.
+            return [], []
         except ValueError as exc:
             # The file has rules; they are in the wrong place or the wrong shape,
             # so the advice for a file with none would contradict the message.

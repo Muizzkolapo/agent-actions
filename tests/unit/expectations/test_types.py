@@ -105,9 +105,14 @@ def test_to_record_dict_reports_only_error_severity_ids_as_failed():
     assert len(payload["outcomes"]) == 3
 
 
-def test_suite_requires_at_least_one_expectation():
-    with pytest.raises(ValidationError):
-        Suite(name="empty", expectations=[])
+def test_a_suite_may_be_empty():
+    """A rule-free block under a repair policy is the structural contract alone.
+
+    The model no longer refuses an empty suite. Whether having no rules is a
+    choice or an omission depends on the repair mode, which the model cannot
+    see, so that judgement is made at preflight instead.
+    """
+    assert Suite(name="empty", expectations=[]).expectations == []
 
 
 def test_two_rules_may_not_share_an_id():

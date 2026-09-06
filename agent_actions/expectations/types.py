@@ -161,7 +161,11 @@ class Suite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    expectations: list[Expectation] = Field(..., min_length=1)
+    # Empty is legal: under a repair policy a rule-free block is the structural
+    # contract on its own, and the schema gate is what enforces it. An empty
+    # inline expectations: list is still a defect, reported at preflight where
+    # the difference between "no rules" and "a list you forgot to fill" is known.
+    expectations: list[Expectation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _ids_are_unique(self) -> Suite:
