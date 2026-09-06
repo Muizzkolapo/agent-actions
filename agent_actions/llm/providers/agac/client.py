@@ -7,6 +7,7 @@ without real API calls. Generates realistic data based on schema and prompts.
 
 import json
 import logging
+import threading
 import time
 import uuid
 from typing import Any, ClassVar
@@ -49,6 +50,7 @@ class AgacClient(BaseClient):
 
     # Class-level tracking of attempts per ID
     _attempt_counts: dict[str, int] = {}
+    _attempt_lock = threading.Lock()
 
     @classmethod
     def reset(cls):
@@ -59,16 +61,29 @@ class AgacClient(BaseClient):
 
     @classmethod
     def _get_attempt_count(cls, identifier: str) -> int:
-        """Get current attempt count for an identifier."""
-        if identifier not in cls._attempt_counts:
-            cls._attempt_counts[identifier] = 0
-        cls._attempt_counts[identifier] += 1
-        return cls._attempt_counts[identifier]
+        """How many times this action has been called for this record.
+
+        Locked because a workflow runs actions in parallel: without it two
+        concurrent calls read the same count and one attempt is lost.
+        """
+        with cls._attempt_lock:
+            cls._attempt_counts[identifier] = cls._attempt_counts.get(identifier, 0) + 1
+            return cls._attempt_counts[identifier]
 
     @staticmethod
     def get_api_key(agent_config: dict[str, Any]) -> str | None:
         """Override to skip API key validation for mock client."""
         return "agac-mock-key"
+
+    @staticmethod
+    def _action_name(agent_config: Any) -> str:
+        """The action being generated for, which distinguishes concurrent siblings."""
+        if isinstance(agent_config, dict):
+            for key in ("name", "agent_type"):
+                value = agent_config.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        return "action"
 
     @staticmethod
     def _extract_identifier(context_data: Any) -> str:
@@ -122,9 +137,18 @@ class AgacClient(BaseClient):
         Returns:
             List of response dicts matching schema
         """
-        identifier = AgacClient._extract_identifier(context_data)
+        action = AgacClient._action_name(agent_config)
+        # Per action, not per record: a version fan-out sends several actions
+        # for one record, and a shared counter would hand them attempt 1, 2 and
+        # 3 in whatever order they happened to arrive.
+        identifier = f"{action}:{AgacClient._extract_identifier(context_data)}"
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
+        # Seeds the generator. The action name makes sibling versions of one
+        # prompt answer differently, as a vote needs; the record's guid is left
+        # out because it is minted fresh on every run, which would make the same
+        # workflow produce different fake data each time it ran.
+        seed_key = f"{action}:{prompt}"
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
@@ -148,14 +172,14 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
-        FakeDataGenerator.set_context(prompt=f"{identifier}:{prompt}")
+        FakeDataGenerator.set_context(prompt=seed_key)
 
         if schema:
             # Extract the actual schema structure
             # Schema can be: {"name": "...", "schema": {...}} or just {...}
             actual_schema = schema.get("schema", schema)
             fake_data = FakeDataGenerator.generate_from_schema(
-                actual_schema, attempt, prompt=prompt
+                actual_schema, attempt, prompt=seed_key
             )
             logger.debug(
                 "Generated fake data from schema: attempt=%d, fields=%d",
@@ -197,9 +221,18 @@ class AgacClient(BaseClient):
         Returns:
             List with single response dict containing output_field
         """
-        identifier = AgacClient._extract_identifier(context_data)
+        action = AgacClient._action_name(agent_config)
+        # Per action, not per record: a version fan-out sends several actions
+        # for one record, and a shared counter would hand them attempt 1, 2 and
+        # 3 in whatever order they happened to arrive.
+        identifier = f"{action}:{AgacClient._extract_identifier(context_data)}"
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
+        # Seeds the generator. The action name makes sibling versions of one
+        # prompt answer differently, as a vote needs; the record's guid is left
+        # out because it is minted fresh on every run, which would make the same
+        # workflow produce different fake data each time it ran.
+        seed_key = f"{action}:{prompt}"
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
@@ -223,7 +256,7 @@ class AgacClient(BaseClient):
         )
 
         # Generate text response based on prompt
-        content = FakeDataGenerator.generate_text_response(prompt, attempt)
+        content = FakeDataGenerator.generate_text_response(seed_key, attempt)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
