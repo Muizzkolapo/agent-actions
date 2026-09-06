@@ -29,6 +29,13 @@ def _load_template_globals(env, templates_folder):
         templates_folder: Path to templates directory
     """
     templates_path = Path(templates_folder)
+    # A project with no templates/ is as valid as one with an empty templates/;
+    # exists() rather than is_dir() so a non-directory at that path still raises.
+    if not templates_path.exists():
+        logger.debug(
+            "No templates directory at %s, so there are no globals to load.", templates_path
+        )
+        return
     template_files = [p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")]
     for template_file in template_files:
         try:

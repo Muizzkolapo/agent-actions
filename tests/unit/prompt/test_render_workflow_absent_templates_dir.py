@@ -56,3 +56,13 @@ def test_a_templates_directory_that_exists_still_supplies_its_globals(tmp_path: 
     )
 
     assert "hello" in rendered
+
+
+def test_a_non_directory_at_the_templates_path_still_raises(tmp_path: Path, config: Path):
+    not_a_dir = tmp_path / "templates"
+    not_a_dir.write_text("this is a file, not a directory")
+
+    with pytest.raises(NotADirectoryError):
+        render_pipeline_with_templates(
+            config, not_a_dir, compile_schemas=False, project_root=tmp_path
+        )
