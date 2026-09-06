@@ -18,7 +18,7 @@ from agent_actions.llm.batch.services.repair_ops import (
 )
 from agent_actions.llm.providers.batch_base import BatchResult
 
-from .test_reprompt_feedback_delivery import RecordingProvider
+from .recording_provider import RecordingProvider
 
 ACTION = "author"
 CUSTOM_ID = "t-001"

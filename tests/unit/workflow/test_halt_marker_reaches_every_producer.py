@@ -142,39 +142,6 @@ class TestEveryRaiseSiteAttachesThePolicy:
     the next run read as an ordinary, resettable failure.
     """
 
-    def test_batch_reprompt_validation_exhaustion(self):
-        from agent_actions.llm.providers.batch_base import BatchResult
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        result = BatchResult(custom_id="rec-1", content={}, success=False, error=None)
-        # Handed back rather than raised: batch writes its output file once at
-        # the end, so the halt travels to the caller and is thrown after that.
-        error = apply_exhausted_reprompt(
-            results=[result],
-            failed_ids={"rec-1"},
-            validation_name="schema_check",
-            attempt=2,
-            on_exhausted="raise",
-        )
-
-        assert _halt_marker(error) == HALT_MARKER
-
-    def test_batch_reprompt_return_last_does_not_halt(self):
-        from agent_actions.llm.providers.batch_base import BatchResult
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        result = BatchResult(custom_id="rec-1", content={}, success=False, error=None)
-        returned = apply_exhausted_reprompt(
-            results=[result],
-            failed_ids={"rec-1"},
-            validation_name="schema_check",
-            attempt=2,
-            on_exhausted="return_last",
-        )
-
-        assert returned is None
-        assert result.recovery_metadata.reprompt.passed is False
-
 
 class TestABatchHaltIsNotLeftRetryable:
     """A batch halt escaped the failure handler entirely and kept CHECKING_BATCH."""

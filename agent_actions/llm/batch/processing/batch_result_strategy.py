@@ -280,13 +280,12 @@ class BatchResultStrategy:
                 exhausted = self._exhausted_recovery_for(ctx, custom_id)
                 if exhausted is not None:
                     # Retry exhaustion is one part of the record's history; a
-                    # reprompt, evaluation or expectations part may already be on
+                    # evaluation or expectations part may already be on
                     # it. Dropping the expectations part loses which rules failed
                     # and defeats the collector's guard against applying the retry
                     # policy to a record the expectations policy already settled.
                     recovery_metadata = RecoveryMetadata(
                         retry=exhausted[1],
-                        reprompt=recovery_metadata.reprompt if recovery_metadata else None,
                         evaluation=recovery_metadata.evaluation if recovery_metadata else None,
                         expectations=(
                             recovery_metadata.expectations if recovery_metadata else None
@@ -357,11 +356,11 @@ class BatchResultStrategy:
         if isinstance(generated_obj, str):
             if ctx.json_mode:
                 # JSON mode but content is still a string — parsing failed.
-                # Wrap in _parse_error dict so batch reprompt can detect and
+                # Wrap in _parse_error dict so the repair loop can detect and
                 # retry, matching the online-path convention.
                 logger.warning(
                     "Batch result for %s is unparsed string in json_mode; "
-                    "wrapping as _parse_error for reprompt",
+                    "wrapping as _parse_error for repair",
                     custom_id,
                 )
                 generated_obj = {
@@ -371,7 +370,7 @@ class BatchResultStrategy:
             else:
                 generated_obj = {ctx.output_field: generated_obj}
 
-        # Schema-echo guard: replace with _parse_error so reprompt can retry
+        # Schema-echo guard: replace with _parse_error so the repair loop can regenerate
         if _is_schema_echo(generated_obj):
             logger.warning(
                 "[%s] Schema-echo detected in batch result — replacing with "

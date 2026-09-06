@@ -3,7 +3,6 @@
 These tests exercise the real orchestration logic in processing_recovery.py:
 - process_recovery_batch() dispatch on recovery_type
 - handle_retry_recovery() state transitions
-- handle_reprompt_recovery() graduated pool + resubmission
 - finalize_batch_output() event + output + cleanup
 - RecoveryState persistence between cycles
 
@@ -26,9 +25,7 @@ from agent_actions.llm.batch.core.batch_models import (
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.processing_recovery import (
-    check_and_submit_reprompt,
     finalize_batch_output,
-    handle_reprompt_recovery,
     handle_retry_recovery,
     process_recovery_batch,
 )
@@ -74,8 +71,6 @@ def _make_state(phase: str = "retry", **kwargs) -> RecoveryState:
         "retry_max_attempts": 3,
         "missing_ids": ["id-1", "id-2"],
         "record_failure_counts": {"id-1": 1, "id-2": 1},
-        "reprompt_attempt": 0,
-        "reprompt_max_attempts": 2,
         "on_exhausted": "return_last",
         "accumulated_results": [],
         "graduated_results": [],
@@ -89,7 +84,6 @@ def _mock_service():
     service = MagicMock()
     service._retry_service = MagicMock()
     # returns the halt to raise after the write, or None
-    service._retry_service.apply_exhausted_reprompt_metadata.return_value = None
     service._context_manager = MagicMock()
     service._client_resolver = MagicMock()
     service._storage_backend = MagicMock()
@@ -152,81 +146,6 @@ def _make_context_and_identity(
 
 class TestProcessRecoveryBatchDispatch:
     """process_recovery_batch() dispatches correctly on recovery_type."""
-
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    @patch("agent_actions.llm.batch.services.processing_recovery.retrieve_and_reconcile")
-    def test_retry_type_dispatches_to_handle_retry_recovery(self, mock_reconcile, mock_state_mgr):
-        service = _mock_service()
-        entry = _make_entry(recovery_type="retry")
-        state = _make_state(phase="retry")
-        mock_state_mgr.load.return_value = state
-        mock_reconcile.return_value = [_make_result("id-1")]
-
-        service._retry_service.process_retry_results.return_value = (
-            [_make_result("id-1")],  # merged
-            set(),  # no still_missing
-            {},  # updated_counts
-            [],  # dropped
-        )
-
-        with (
-            patch(
-                "agent_actions.llm.batch.services.processing_recovery.check_and_submit_reprompt",
-                return_value=True,
-            ),
-            patch(
-                "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
-                return_value="/tmp/output.json",
-            ),
-        ):
-            result = process_recovery_batch(
-                service,
-                batch_id="batch-123",
-                file_name="test_file_retry_1",
-                entry=entry,
-                output_directory="/tmp",
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                action_name="test_action",
-            )
-
-        assert result == "/tmp/output.json"
-        service._retry_service.process_retry_results.assert_called_once()
-
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    @patch("agent_actions.llm.batch.services.processing_recovery.retrieve_and_reconcile")
-    def test_reprompt_type_dispatches_to_handle_reprompt_recovery(
-        self, mock_reconcile, mock_state_mgr
-    ):
-        service = _mock_service()
-        entry = _make_entry(recovery_type="reprompt")
-        state = _make_state(phase="reprompt", reprompt_attempt=1)
-        mock_state_mgr.load.return_value = state
-        mock_reconcile.return_value = [_make_result("id-1")]
-
-        with (
-            patch(
-                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop",
-                return_value=None,
-            ),
-            patch(
-                "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
-                return_value="/tmp/output.json",
-            ),
-        ):
-            result = process_recovery_batch(
-                service,
-                batch_id="batch-123",
-                file_name="test_file_reprompt_1",
-                entry=entry,
-                output_directory="/tmp",
-                agent_config={"kind": "llm"},
-                manager=MagicMock(),
-                action_name="test_action",
-            )
-
-        assert result == "/tmp/output.json"
-        service._retry_service.process_retry_results.assert_not_called()
 
     @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
     @patch("agent_actions.llm.batch.services.processing_recovery.retrieve_and_reconcile")
@@ -324,67 +243,8 @@ class TestHandleRetryRecovery:
         assert entry.status == BatchStatus.SUBMITTED
 
     @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    def test_retry_exhausted_transitions_to_reprompt_phase(self, mock_build_loop, mock_fire_event):
-        """When retries exhausted, runs check_and_submit_reprompt for real (phase transition).
-
-        This exercises the actual transition — not a mock of it. We let
-        check_and_submit_reprompt run through with build_evaluation_loop returning
-        a loop that graduates everything, so it finalizes immediately.
-        """
-        service = _mock_service()
-        state = _make_state(
-            phase="retry",
-            retry_attempt=3,
-            retry_max_attempts=3,
-            missing_ids=["id-2"],
-        )
-
-        service._retry_service.process_retry_results.return_value = (
-            [_make_result("id-1")],
-            {"id-2"},  # still_missing after max retries
-            {"id-2": 3},
-            [],
-        )
-        service._retry_service.build_exhausted_recovery.return_value = {"id-2": MagicMock()}
-
-        # build_evaluation_loop returns a loop where all records graduate
-        loop = MagicMock()
-        strategy = MagicMock()
-        strategy.name = "validation"
-        strategy.max_attempts = 2
-        strategy.on_exhausted = "return_last"
-        loop.split.return_value = ([_make_result("id-1")], [], {})  # all pass
-        mock_build_loop.return_value = (loop, strategy)
-
-        ctx, ident = _make_context_and_identity(service=service, file_name="test_file")
-
-        with patch(
-            "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
-        ) as mock_mgr:
-            result = handle_retry_recovery(
-                ctx,
-                ident,
-                state=state,
-                recovery_results=[_make_result("id-1")],
-                accumulated=[],
-                context_map={},
-            )
-
-        # Observable: phase transition happened (reprompt ran), then finalized
-        assert result == "/tmp/output.json"
-        service._write_batch_output.assert_called_once()
-        # build_exhausted_recovery was called with the still_missing IDs
-        service._retry_service.build_exhausted_recovery.assert_called_once_with(
-            {"id-2"}, {"id-2": 3}
-        )
-        # Recovery state was deleted (finalization completed)
-        mock_mgr.delete.assert_called_once()
-
-    @patch("agent_actions.llm.batch.services.processing_recovery.fire_event")
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    def test_all_recovered_finalizes_with_event_and_status(self, mock_build_loop, mock_fire_event):
-        """All recovered + no reprompt: writes output, fires event with correct counts."""
+    def test_all_recovered_finalizes_with_event_and_status(self, mock_fire_event):
+        """All recovered: writes output, fires event with correct counts."""
         service = _mock_service()
         state = _make_state(phase="retry", retry_attempt=1, missing_ids=[])
         manager = MagicMock()
@@ -395,7 +255,6 @@ class TestHandleRetryRecovery:
             {},
             [],
         )
-        mock_build_loop.return_value = None  # no reprompt configured
 
         ctx, ident = _make_context_and_identity(
             service=service, manager=manager, file_name="test_file"
@@ -430,155 +289,6 @@ class TestHandleRetryRecovery:
 # ---------------------------------------------------------------------------
 # TestHandleRepromptRecovery
 # ---------------------------------------------------------------------------
-
-
-class TestHandleRepromptRecovery:
-    """handle_reprompt_recovery() graduated pool + resubmission."""
-
-    def _setup_eval_loop(self, graduated_ids, failing_ids):
-        """Create mock evaluation loop that splits results by ID."""
-        loop = MagicMock()
-        strategy = MagicMock()
-        strategy.name = "validation"
-        strategy.max_attempts = 3
-        strategy.on_exhausted = "return_last"
-
-        graduated = [_make_result(cid) for cid in graduated_ids]
-        failing = [_make_result(cid, success=False) for cid in failing_ids]
-        loop.split.return_value = (graduated, failing, {})
-
-        return loop, strategy
-
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_all_graduated_finalizes_output(self, mock_mgr, mock_build_loop):
-        """When all records pass evaluation, finalize immediately."""
-        loop, strategy = self._setup_eval_loop(["id-1", "id-2"], [])
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        state = _make_state(phase="reprompt", reprompt_attempt=1)
-
-        ctx, ident = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
-        )
-
-        with patch(
-            "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
-            return_value="/tmp/output.json",
-        ) as mock_finalize:
-            result = handle_reprompt_recovery(
-                ctx,
-                ident,
-                state=state,
-                recovery_results=[_make_result("id-1"), _make_result("id-2")],
-                accumulated=[],
-                context_map={},
-            )
-
-        assert result == "/tmp/output.json"
-        mock_finalize.assert_called_once()
-        mock_mgr.delete.assert_called_once()
-
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_still_failing_submits_next_reprompt(self, mock_mgr, mock_build_loop):
-        """When records still fail and attempts remain, submit next reprompt."""
-        loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
-        manager = MagicMock()
-
-        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-            "reprompt-batch-2",
-            {r.custom_id for r in kw["failed_results"]},
-        )
-
-        ctx, ident = _make_context_and_identity(
-            service=service,
-            manager=manager,
-            entry=_make_entry(recovery_type="reprompt"),
-            file_name="test_file",
-        )
-
-        result = handle_reprompt_recovery(
-            ctx,
-            ident,
-            state=state,
-            recovery_results=[_make_result("id-1"), _make_result("id-2")],
-            accumulated=[],
-            context_map={},
-        )
-
-        assert result is None  # More reprompts pending
-        assert state.reprompt_attempt == 2
-        mock_mgr.save.assert_called_once()
-        manager.save_batch_job.assert_called_once()
-
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_exhausted_applies_exhaustion_metadata(self, mock_mgr, mock_build_loop):
-        """When attempts exhausted, applies exhaustion metadata and finalizes."""
-        loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        # reprompt_attempt == max → exhausted
-        state = _make_state(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
-
-        ctx, ident = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
-        )
-
-        with patch(
-            "agent_actions.llm.batch.services.processing_recovery.finalize_batch_output",
-            return_value="/tmp/output.json",
-        ):
-            result = handle_reprompt_recovery(
-                ctx,
-                ident,
-                state=state,
-                recovery_results=[_make_result("id-1"), _make_result("id-2")],
-                accumulated=[],
-                context_map={},
-            )
-
-        assert result == "/tmp/output.json"
-        service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
-
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_graduated_results_accumulated_in_state(self, mock_mgr, mock_build_loop):
-        """Graduated results from each cycle are accumulated in state."""
-        loop, strategy = self._setup_eval_loop(["id-1"], ["id-2"])
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
-        # Pre-existing graduated from previous cycle
-        state.graduated_results = [{"custom_id": "id-0", "content": "old", "success": True}]
-
-        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-            "reprompt-batch",
-            {r.custom_id for r in kw["failed_results"]},
-        )
-
-        ctx, ident = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
-        )
-
-        handle_reprompt_recovery(
-            ctx,
-            ident,
-            state=state,
-            recovery_results=[_make_result("id-1"), _make_result("id-2")],
-            accumulated=[],
-            context_map={},
-        )
-
-        assert len(state.graduated_results) == 2  # 1 old + 1 new (id-1 graduated)
 
 
 # ---------------------------------------------------------------------------
@@ -732,127 +442,10 @@ class TestRecoveryStatePersistence:
         assert state.retry_attempt == 2
         mock_mgr.save.assert_called_once()
 
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_reprompt_attempt_increments_on_resubmit(self, mock_mgr, mock_build_loop):
-        """Reprompt attempt counter increments when submitting next reprompt."""
-        loop = MagicMock()
-        strategy = MagicMock()
-        strategy.name = "validation"
-        loop.split.return_value = ([], [_make_result("id-1")], {})  # all failing
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        state = _make_state(phase="reprompt", reprompt_attempt=1, reprompt_max_attempts=3)
-        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-            "reprompt-batch",
-            {r.custom_id for r in kw["failed_results"]},
-        )
-
-        ctx, ident = _make_context_and_identity(
-            service=service, entry=_make_entry(recovery_type="reprompt"), file_name="test_file"
-        )
-
-        handle_reprompt_recovery(
-            ctx,
-            ident,
-            state=state,
-            recovery_results=[_make_result("id-1")],
-            accumulated=[],
-            context_map={},
-        )
-
-        assert state.reprompt_attempt == 2
-        mock_mgr.save.assert_called_once()
-
 
 # ---------------------------------------------------------------------------
 # TestApplyExhaustedReprompt (direct unit tests for exhaustion.py)
 # ---------------------------------------------------------------------------
-
-
-class TestApplyExhaustedReprompt:
-    """Direct tests for apply_exhausted_reprompt — per_record_attempts and metadata preservation."""
-
-    def test_per_record_attempts_used_when_provided(self):
-        """per_record_attempts dict overrides scalar attempt for each record."""
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        r1 = _make_result("id-a")
-        r2 = _make_result("id-b")
-
-        apply_exhausted_reprompt(
-            results=[r1, r2],
-            failed_ids={"id-a", "id-b"},
-            validation_name="schema_check",
-            attempt=99,
-            on_exhausted="return_last",
-            per_record_attempts={"id-a": 3, "id-b": 5},
-        )
-
-        assert r1.recovery_metadata.reprompt.attempts == 3
-        assert r2.recovery_metadata.reprompt.attempts == 5
-        assert r1.recovery_metadata.reprompt.passed is False
-
-    def test_scalar_fallback_when_id_missing_from_per_record_dict(self):
-        """Falls back to scalar attempt when ID not in per_record_attempts."""
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        r1 = _make_result("id-not-in-dict")
-        apply_exhausted_reprompt(
-            results=[r1],
-            failed_ids={"id-not-in-dict"},
-            validation_name="check",
-            attempt=7,
-            on_exhausted="return_last",
-            per_record_attempts={"id-other": 2},
-        )
-
-        assert r1.recovery_metadata.reprompt.attempts == 7
-
-    def test_raise_with_per_record_attempts(self):
-        """on_exhausted='raise' still halts when per_record_attempts is provided.
-
-        The halt is handed back rather than thrown — this runs before batch
-        writes its output file, so throwing here would discard every record in
-        it the reprompt rounds had already graduated.
-        """
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-
-        pending = apply_exhausted_reprompt(
-            results=[_make_result("id-x")],
-            failed_ids={"id-x"},
-            validation_name="strict",
-            attempt=3,
-            on_exhausted="raise",
-            per_record_attempts={"id-x": 3},
-        )
-        assert isinstance(pending, RuntimeError)
-        assert "Reprompt validation exhausted" in str(pending)
-        assert "id-x" in str(pending)
-
-    def test_preserves_existing_retry_metadata(self):
-        """Pre-existing retry metadata is not clobbered when adding reprompt metadata."""
-        from agent_actions.processing.evaluation.exhaustion import apply_exhausted_reprompt
-        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
-
-        r1 = _make_result("id-1")
-        r1.recovery_metadata = RecoveryMetadata(
-            retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="missing")
-        )
-
-        apply_exhausted_reprompt(
-            results=[r1],
-            failed_ids={"id-1"},
-            validation_name="check",
-            attempt=2,
-            on_exhausted="return_last",
-        )
-
-        assert r1.recovery_metadata.reprompt.attempts == 2
-        assert r1.recovery_metadata.reprompt.passed is False
-        assert r1.recovery_metadata.retry.attempts == 3
-        assert r1.recovery_metadata.retry.succeeded is False
 
 
 # ---------------------------------------------------------------------------
@@ -961,7 +554,7 @@ class TestRecoveryLoopRootCauses:
     def test_completed_recovery_entry_is_processed(self):
         parent_entry = _make_parent_entry()
         recovery_entry = _make_entry(
-            recovery_type="reprompt",
+            recovery_type="repair",
             batch_id="batch-recovery",
             parent_file_name="my_action",
             status=BatchStatus.COMPLETED,
@@ -970,7 +563,7 @@ class TestRecoveryLoopRootCauses:
         manager = MagicMock()
         manager.get_all_jobs.return_value = {
             "my_action": parent_entry,
-            "my_action_reprompt_1": recovery_entry,
+            "my_action_repair_1": recovery_entry,
         }
 
         svc = BatchProcessingService.__new__(BatchProcessingService)
@@ -986,139 +579,7 @@ class TestRecoveryLoopRootCauses:
 
         svc.process_all_batch_results("/tmp/output", action_name="test_action")
 
-        assert "my_action_reprompt_1" in calls_received
-
-    @patch("agent_actions.llm.batch.services.processing.retrieve_and_reconcile")
-    @patch(
-        "agent_actions.llm.batch.services.processing._check_and_submit_reprompt_impl",
-        return_value=True,
-    )
-    @patch("agent_actions.llm.batch.services.processing.RecoveryStateManager")
-    def test_process_original_batch_ignores_stale_recovery_state(
-        self, mock_state_mgr, mock_check_reprompt, mock_reconcile
-    ):
-        """Original batch path must NOT load recovery state from disk.
-
-        Any existing recovery_state file is stale (left by a crashed run).
-        Passing it to check_and_submit_reprompt would poison the reprompt
-        check with a stale reprompt_attempt counter, causing it to skip
-        reprompt when it should start fresh.
-        """
-        # Stale state exists on disk — should be ignored
-        persisted_state = _make_state(
-            phase="reprompt",
-            reprompt_attempt=2,
-            reprompt_max_attempts=2,
-            graduated_results=[{"custom_id": "id-grad", "content": "ok", "success": True}],
-        )
-        mock_state_mgr.load.return_value = persisted_state
-        mock_reconcile.return_value = [_make_result("id-1")]
-
-        svc = BatchProcessingService.__new__(BatchProcessingService)
-        svc._context_manager = MagicMock()
-        svc._context_manager.load_batch_context_map.return_value = {"id-1": {"user_content": "x"}}
-        svc._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})
-        svc._client_resolver = MagicMock()
-        svc._retry_service = MagicMock()
-        svc._storage_backend = MagicMock()
-        svc._workflow_name = "test_action"
-        svc._update_prompt_trace_responses = MagicMock()
-        svc._finalize_batch_output = MagicMock(return_value="/tmp/output.json")
-
-        svc._process_original_batch(
-            batch_id="batch-parent",
-            file_name="my_action",
-            entry=_make_parent_entry(record_count=1),
-            output_directory="/tmp/output",
-            agent_config={"kind": "llm"},
-            manager=MagicMock(),
-            action_name="test_action",
-        )
-
-        mock_check_reprompt.assert_called_once()
-        # recovery_state must be None — stale state is NOT passed
-        recovery_state_arg = mock_check_reprompt.call_args.kwargs.get("recovery_state")
-        assert recovery_state_arg is None
-        # RecoveryStateManager.load should NOT be called in original batch path
-        mock_state_mgr.load.assert_not_called()
-
-    def test_attempt_counter_not_reset_across_runs(self):
-        persisted_state = _make_state(
-            phase="reprompt",
-            reprompt_attempt=1,
-            reprompt_max_attempts=2,
-            graduated_results=[{"custom_id": "id-ok", "content": "good", "success": True}],
-            reprompt_attempts_per_record={"id-fail": 1},
-        )
-
-        service = _mock_service()
-        results = [_make_result("id-fail", success=False)]
-
-        with (
-            patch(
-                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
-            ) as mock_build_loop,
-            patch(
-                "agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"
-            ) as mock_state_mgr,
-        ):
-            loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results, {})
-            mock_build_loop.return_value = (loop, strategy)
-            service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-                "reprompt-batch-2",
-                {r.custom_id for r in kw["failed_results"]},
-            )
-
-            ctx, ident = _make_context_and_identity(
-                service=service,
-                entry=_make_parent_entry(record_count=1),
-                file_name="my_action",
-            )
-
-            should_continue = check_and_submit_reprompt(
-                ctx,
-                ident,
-                batch_results=results,
-                context_map={"id-fail": {"user_content": "test"}},
-                recovery_state=persisted_state,
-            )
-
-        assert not should_continue
-        mock_state_mgr.save.assert_called_once()
-        saved_state = mock_state_mgr.save.call_args[0][
-            3
-        ]  # (backend, action_name, file_name, state)
-        assert saved_state.reprompt_attempt == 2
-
-    def test_max_attempts_enforced_when_state_loaded(self):
-        exhausted_state = _make_state(phase="reprompt", reprompt_attempt=2, reprompt_max_attempts=2)
-        service = _mock_service()
-        results = [_make_result("id-fail", success=False)]
-
-        with patch(
-            "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
-        ) as mock_build_loop:
-            loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-            loop.split.return_value = ([], results, {})
-            mock_build_loop.return_value = (loop, strategy)
-
-            ctx, ident = _make_context_and_identity(
-                service=service,
-                entry=_make_parent_entry(record_count=1),
-                file_name="my_action",
-            )
-
-            should_continue = check_and_submit_reprompt(
-                ctx,
-                ident,
-                batch_results=results,
-                context_map={},
-                recovery_state=exhausted_state,
-            )
-
-        assert should_continue is True
-        service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
+        assert "my_action_repair_1" in calls_received
 
 
 class TestDownstreamBugs:
@@ -1150,80 +611,6 @@ class TestDownstreamBugs:
 
         with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):
             svc.process_all_batch_results("/tmp/output", action_name="test_action")
-
-    @patch("agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop")
-    @patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager")
-    def test_retry_to_reprompt_does_not_mutate_retry_state(self, mock_mgr, mock_build_loop):
-        loop, strategy = _make_eval_loop_mocks(max_attempts=2)
-        loop.split.return_value = ([], [_make_result("id-1", success=False)], {})
-        mock_build_loop.return_value = (loop, strategy)
-
-        service = _mock_service()
-        service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-            "reprompt-batch",
-            {r.custom_id for r in kw["failed_results"]},
-        )
-
-        state = _make_state(
-            phase="retry",
-            retry_attempt=3,
-            retry_max_attempts=3,
-            accumulated_results=[{"custom_id": "id-1", "content": "retry-data", "success": True}],
-        )
-
-        ctx, ident = _make_context_and_identity(
-            service=service,
-            entry=_make_parent_entry(record_count=1),
-            file_name="my_action",
-        )
-
-        check_and_submit_reprompt(
-            ctx,
-            ident,
-            batch_results=[_make_result("id-1", success=False)],
-            context_map={},
-            recovery_state=state,
-        )
-
-        assert state.phase == "retry"
-
-    def test_none_content_records_filtered_from_reprompt(self):
-        service = _mock_service()
-        results = [
-            _make_result("id-real-fail", content="bad output", success=False),
-            BatchResult(custom_id="id-none", content=None, success=False, error="provider_error"),
-        ]
-
-        with (
-            patch(
-                "agent_actions.llm.batch.services.reprompt_ops.build_evaluation_loop"
-            ) as mock_build_loop,
-            patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"),
-        ):
-            loop, strategy = _make_eval_loop_mocks(max_attempts=3)
-            loop.split.return_value = ([], results, {})
-            mock_build_loop.return_value = (loop, strategy)
-            service._retry_service.submit_reprompt_batch.side_effect = lambda **kw: (
-                "reprompt-batch",
-                {r.custom_id for r in kw["failed_results"]},
-            )
-
-            ctx, ident = _make_context_and_identity(
-                service=service,
-                entry=_make_parent_entry(record_count=2),
-                file_name="my_action",
-            )
-
-            check_and_submit_reprompt(
-                ctx,
-                ident,
-                batch_results=results,
-                context_map={"id-real-fail": {}, "id-none": {}},
-            )
-
-        submitted = service._retry_service.submit_reprompt_batch.call_args.kwargs["failed_results"]
-        none_ids = [r.custom_id for r in submitted if r.content is None]
-        assert not none_ids
 
 
 # ---------------------------------------------------------------------------

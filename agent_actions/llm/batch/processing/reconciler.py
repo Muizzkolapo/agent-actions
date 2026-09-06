@@ -107,7 +107,7 @@ class BatchResultReconciler:
 
         ``error_line_N`` stands in for an unparseable line and ``unknown`` for a
         response carrying no id of its own. Neither is a record: they have no
-        context-map entry, and nothing downstream can rebuild or reprompt them.
+        context-map entry, and nothing downstream can rebuild or regenerate them.
         """
         custom_id_str = str(custom_id or "")
         return custom_id_str.startswith("error_line_") or custom_id_str == UNATTRIBUTED_CUSTOM_ID

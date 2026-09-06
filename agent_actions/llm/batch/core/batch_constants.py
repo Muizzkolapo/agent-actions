@@ -52,7 +52,6 @@ class RecoveryType(str, Enum):
     """Type of recovery operation for async batch processing."""
 
     RETRY = "retry"
-    REPROMPT = "reprompt"
     REPAIR = "repair"
 
     def __str__(self) -> str:
@@ -63,7 +62,6 @@ class RecoveryPhase(str, Enum):
     """Current phase in the recovery state machine."""
 
     RETRY = "retry"
-    REPROMPT = "reprompt"
     REPAIR = "repair"
     DONE = "done"
 
@@ -72,7 +70,7 @@ class RecoveryPhase(str, Enum):
 
 
 class OnExhaustedPolicy(str, Enum):
-    """Policy when retry/reprompt attempts are exhausted."""
+    """Policy when retry or repair attempts are exhausted."""
 
     RETURN_LAST = "return_last"
     RAISE = "raise"

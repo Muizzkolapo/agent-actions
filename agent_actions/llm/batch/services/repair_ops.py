@@ -1,9 +1,9 @@
-"""Batch repair rounds for `expect:` — the same deferred loop reprompt runs.
+"""Batch repair rounds for `expect:`, as a deferred graduated pool.
 
 Online, `ExpectationService.execute` loops around one call. Batch cannot: a
 round is a whole batch submission, so the loop is the graduated pool — evaluate
 the set, resubmit only what failed, never re-evaluate what passed — and each
-round defers exactly like a reprompt round, so a long-running provider batch
+round defers, so a long-running provider batch
 does not hold the process open.
 """
 
@@ -22,6 +22,38 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _load_source_data(storage_backend: StorageBackend | None) -> list[Any] | None:
+    """The run's source records, read back for a repair round's prompt rebuild.
+
+    Initial preparation is handed ``source_data`` so the ``source.*`` observe
+    namespace resolves. A repair round needs the same data and is not on that
+    call path, so it reads back what was persisted at ingest.
+
+    None when no backend is configured or no source files exist, which leaves
+    the caller on its own fallback.
+    """
+    if storage_backend is None:
+        return None
+
+    try:
+        source_files = storage_backend.list_source_files()
+        if not source_files:
+            return None
+
+        all_source_data: list[Any] = []
+        for path in source_files:
+            try:
+                all_source_data.extend(storage_backend.read_source(path))
+            except FileNotFoundError:
+                logger.warning("Source file not found while loading repair data: %s", path)
+                continue
+
+        return all_source_data or None
+    except Exception:
+        logger.warning("Could not load source data for repair", exc_info=True)
+        return None
 
 
 @dataclass(frozen=True)
@@ -176,7 +208,6 @@ def submit_repair_batch(
     Returns the submission, or None when there is nothing to send.
     """
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-    from agent_actions.llm.batch.services.reprompt_ops import _load_source_data_for_reprompt
 
     repair_records: list[dict[str, Any]] = []
     feedback_by_id: dict[str, str] = {}
@@ -206,7 +237,7 @@ def submit_repair_batch(
         provider=provider,
         output_directory=output_directory,
         batch_name=batch_name,
-        source_data=_load_source_data_for_reprompt(storage_backend),
+        source_data=_load_source_data(storage_backend),
         attempt=attempt,
         feedback_by_id=feedback_by_id,
     )
@@ -296,7 +327,7 @@ def carry_forward(
     submitted_ids: list[str] | None = None,
     judge_budget_remaining: int | None = None,
 ) -> RecoveryState:
-    """The state a repair round persists, keeping what retry and reprompt put there.
+    """The state a repair round persists, keeping what retry put there.
 
     Finalisation rebuilds `exhausted_recovery` from `missing_ids` and
     `record_failure_counts`, so a repair round that replaced the state with a
@@ -324,11 +355,6 @@ def carry_forward(
     state.record_failure_counts = dict(prior.record_failure_counts)
     state.retry_attempt = prior.retry_attempt
     state.retry_max_attempts = prior.retry_max_attempts
-    state.reprompt_attempt = prior.reprompt_attempt
-    state.reprompt_max_attempts = prior.reprompt_max_attempts
-    state.reprompt_attempts_per_record = dict(prior.reprompt_attempts_per_record)
-    state.validation_name = prior.validation_name
-    state.validation_status = dict(prior.validation_status)
     state.on_exhausted = prior.on_exhausted
     state.accumulated_results = list(prior.accumulated_results)
     state.failure_type_counts = dict(prior.failure_type_counts)

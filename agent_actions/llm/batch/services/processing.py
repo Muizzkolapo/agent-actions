@@ -14,7 +14,6 @@ from agent_actions.errors import ProcessingError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
-    OnExhaustedPolicy,
     RecoveryPhase,
     RecoveryType,
 )
@@ -39,9 +38,6 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_repair as _check_and_submit_repair_impl,
-)
-from agent_actions.llm.batch.services.processing_recovery import (
-    check_and_submit_reprompt as _check_and_submit_reprompt_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     cleanup_recovery as _cleanup_recovery_impl,
@@ -83,7 +79,7 @@ def _is_dead_retry(entry: BatchJobEntry) -> bool:
 
     It holds the live recovery state, and the failure path continues it: the
     spent attempt is counted and the next one submitted, or exhaustion applies.
-    Reprompt recoveries are excluded — their in-flight records' last responses
+    Repair recoveries are excluded — their in-flight records' last responses
     are not recoverable from state, so their dead batches keep the
     processed-from-scratch path.
     """
@@ -101,13 +97,13 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     its next step is counting the spent attempt, then resubmission or
     exhaustion — but only when the parent has no readable recovery: a dead
     attempt must not outrank a usable sibling's actual results. Anything else
-    (a dead reprompt, an unrecognised status) supersedes nothing, because
+    (a dead recovery batch, an unrecognised status) supersedes nothing, because
     nothing would process it and a parent skipped for a recovery that never
     produces wedges the action.
 
     Among live recoveries the newest wins, ranked by registration time, not by
     attempt or phase: a store written before registration started replacing
-    its predecessor can hold a retry registered *after* a reprompt and
+    its predecessor can hold a retry registered *after* a repair and
     numbered below it, which either of those orderings gets backwards.
     """
     live: dict[str, tuple[str, int, str]] = {}
@@ -140,7 +136,7 @@ class BatchProcessingService:
     """Service for processing batch job results.
 
     Handles result retrieval, conversion, and output file generation.
-    Delegates retry/reprompt logic to BatchRetryService.
+    Delegates retry logic to BatchRetryService.
     """
 
     def __init__(
@@ -163,8 +159,8 @@ class BatchProcessingService:
             result_processor: Processor for batch results
             registry_manager_factory: Factory function to create registry managers
             source_handler: Optional handler for source data
-            action_indices: Dict mapping agent names to node indices (for reprompt)
-            dependency_configs: Dict mapping dependency names to configs (for reprompt)
+            action_indices: Dict mapping agent names to node indices (for recovery)
+            dependency_configs: Dict mapping dependency names to configs (for recovery)
             storage_backend: Optional storage backend for database persistence
             workflow_name: Workflow-level name (fallback when per-action name unavailable)
         """
@@ -206,9 +202,9 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
     ) -> str:
-        """Process a single batch by ID with retry/reprompt support.
+        """Process a single batch by ID with retry and repair support.
 
-        Uses the same retry/reprompt logic as the production path
+        Uses the same retry and repair logic as the production path
         (process_all_batch_results). If recovery is needed, a recovery
         batch is submitted and ProcessingError is raised — the caller
         must re-invoke after the recovery batch completes.
@@ -582,7 +578,7 @@ class BatchProcessingService:
 
         1. Retrieve results
         2. Check for missing records → submit async retry if needed
-        3. Validate results → submit async reprompt if needed
+        3. Validate results → submit async repair if needed
         4. If neither needed → write output
 
         Returns:
@@ -646,14 +642,6 @@ class BatchProcessingService:
                         record_failure_counts=record_failure_counts,
                         accumulated_results=serialize_results(batch_results),
                     )
-                    from agent_actions.processing.recovery.reprompt import parse_reprompt_config
-
-                    reprompt_parsed = parse_reprompt_config((agent_config or {}).get("reprompt"))
-                    if reprompt_parsed:
-                        state.reprompt_max_attempts = reprompt_parsed.max_attempts
-                        state.validation_name = reprompt_parsed.validation_name
-                        state.on_exhausted = OnExhaustedPolicy(reprompt_parsed.on_exhausted)
-
                     RecoveryStateManager.save(
                         self._storage_backend,  # type: ignore[arg-type]
                         effective_name,  # type: ignore[arg-type]
@@ -686,23 +674,11 @@ class BatchProcessingService:
 
         # Do NOT load recovery state here. The original batch path processes
         # from scratch — any existing recovery_state file is stale (left by a
-        # crashed run). Passing it would poison the reprompt check with a stale
-        # reprompt_attempt counter, causing it to think attempts are exhausted.
+        # crashed run), and a stale repair counter would read as exhausted.
         # Stale files are cleaned up in _finalize_batch_output.
         # Same wrapper the recovery handlers get: a halt parked below must not be
         # lost to an unrelated failure on the way to the finaliser.
         with _halt_survives_failure_impl(context):
-            should_continue = self._check_and_submit_reprompt(
-                context=context,
-                identity=identity,
-                batch_results=batch_results,
-                context_map=context_map,
-                recovery_state=None,
-            )
-            if not should_continue:
-                _raise_pending_exhaustion_impl(context)
-                return None  # Reprompt submitted, processing paused
-
             if not _check_and_submit_repair_impl(
                 context=context,
                 identity=identity,
@@ -734,7 +710,7 @@ class BatchProcessingService:
         manager: BatchRegistryManager,
         action_name: str | None = None,
     ) -> str | None:
-        """Process a recovery batch (retry or reprompt).
+        """Process a recovery batch (retry or repair).
 
         Delegates to processing_recovery.process_recovery_batch.
         """
@@ -747,28 +723,6 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             action_name=action_name,
-        )
-
-    def _check_and_submit_reprompt(
-        self,
-        context: RecoveryContext,
-        identity: BatchIdentity,
-        batch_results: list[BatchResult],
-        context_map: dict[str, Any],
-        recovery_state: RecoveryState | None = None,
-        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
-    ) -> bool:
-        """Check if reprompt is needed and submit async batch if so.
-
-        Delegates to processing_recovery.check_and_submit_reprompt.
-        """
-        return _check_and_submit_reprompt_impl(
-            context,
-            identity,
-            batch_results=batch_results,
-            context_map=context_map,
-            recovery_state=recovery_state,
-            exhausted_recovery=exhausted_recovery,
         )
 
     def _finalize_batch_output(

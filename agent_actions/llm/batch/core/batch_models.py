@@ -21,7 +21,7 @@ class BatchJobEntry:
     # Version context fields for loop correlation
     is_versioned_agent: bool | None = None
     version_base_name: str | None = None
-    # Recovery fields for async retry/reprompt batches
+    # Recovery fields for async retry/repair batches
     parent_file_name: str | None = None  # links to original batch's file_name key
     recovery_type: RecoveryType | None = None
     recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
@@ -43,7 +43,7 @@ class BatchJobEntry:
         """Create BatchJobEntry from dictionary (JSON deserialization)."""
         known_fields = {f.name for f in dataclasses.fields(cls)}
         filtered = {k: v for k, v in data.items() if k in known_fields}
-        # Coerce recovery_type string to enum (JSON stores "retry"/"reprompt")
+        # Coerce recovery_type string to enum (JSON stores "retry"/"repair")
         rt = filtered.get("recovery_type")
         if rt is not None and isinstance(rt, str):
             filtered["recovery_type"] = RecoveryType(rt)

@@ -41,7 +41,7 @@ def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]
         feedback = feedback_by_id.get(key)
         if feedback is None:
             logger.warning(
-                "No reprompt feedback for resubmitted record %r — it will be "
+                "No repair feedback for resubmitted record %r — it will be "
                 "re-sent with the original prompt",
                 key,
             )
@@ -78,7 +78,7 @@ class BatchTaskPreparator:
     ) -> PreparedBatchTasks:
         """Prepare batch tasks from raw data.
 
-        ``attempt`` is the recovery round; reprompt resubmissions pass their
+        ``attempt`` is the recovery round; repair resubmissions pass their
         round number so prompt traces stamp it.
 
         Raises:
