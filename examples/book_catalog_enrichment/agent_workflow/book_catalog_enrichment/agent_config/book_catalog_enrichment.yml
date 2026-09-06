@@ -1,6 +1,6 @@
 ################################################################################
 # Book Catalog Enrichment Pipeline
-# Demonstrates: HITL review, tool actions, reprompt on schema mismatch,
+# Demonstrates: HITL review, tool actions, output expectations with repair,
 #   parallel branches with dependency merging, context_scope observe/passthrough,
 #   multi-model routing, and quality filtering with user views.
 ################################################################################
@@ -45,7 +45,6 @@ actions:
     context_scope:
       observe:
         - source.*
-      # Add reprompt configuration
     expect:
       max_iterations: 3
       expectations:
