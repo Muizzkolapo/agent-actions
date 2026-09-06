@@ -141,10 +141,17 @@ def test_factory_threads_the_schema_for_the_structural_gate():
     assert [o.id for o in result.suite_result.outcomes] == ["_structural"]
 
 
-def test_factory_refuses_a_repair_prompt_mapping():
-    with pytest.raises(ConfigurationError, match="not implemented yet"):
+def test_factory_accepts_a_repair_prompt_mapping():
+    service = create_expectation_service_from_config(
+        {"expectations": INLINE, "repair": {"prompt": "redo: {failed_lines}"}}, action_name="a"
+    )
+    assert service.repair == {"prompt": "redo: {failed_lines}"}
+
+
+def test_factory_refuses_a_repair_prompt_naming_an_unknown_placeholder():
+    with pytest.raises(Exception, match="failed_lines"):
         create_expectation_service_from_config(
-            {"expectations": INLINE, "repair": {"prompt": "$wf.Fix"}}, action_name="a"
+            {"expectations": INLINE, "repair": {"prompt": "redo: {nope}"}}, action_name="a"
         )
 
 
@@ -534,7 +541,12 @@ def test_auto_repair_composes_from_the_latest_failing_response():
 
 def test_unknown_repair_value_is_rejected_at_construction():
     with pytest.raises(ValueError, match="repair must be"):
-        ExpectationService(SUITE, repair={"prompt": "fix it"})
+        ExpectationService(SUITE, repair="sideways")
+
+
+def test_a_repair_mapping_with_the_wrong_key_is_rejected_at_construction():
+    with pytest.raises(ValueError, match="exactly one key"):
+        ExpectationService(SUITE, repair={"template": "fix it"})
 
 
 def test_retry_repair_still_uses_the_original_prompt_every_iteration():

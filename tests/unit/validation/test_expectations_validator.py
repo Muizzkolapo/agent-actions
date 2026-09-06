@@ -586,12 +586,22 @@ def action_config(name="a", *, expect, **action_keys):
     return {name: {"name": name, "expect": expect, **action_keys}}
 
 
-def test_repair_prompt_mapping_is_a_defect():
+def test_a_valid_repair_prompt_mapping_is_accepted():
     defects = find_expectation_defects(
-        action_config(expect={"repair": {"prompt": "$wf.Fix"}, "expectations": NOT_NULL}),
+        action_config(
+            expect={"repair": {"prompt": "redo: {failed_lines}"}, "expectations": NOT_NULL}
+        ),
         {"a": {"options"}},
     )
-    assert any("not implemented" in m for m in defects["a"])
+    assert "a" not in defects
+
+
+def test_a_repair_prompt_naming_an_unknown_placeholder_is_a_defect():
+    defects = find_expectation_defects(
+        action_config(expect={"repair": {"prompt": "redo: {nope}"}, "expectations": NOT_NULL}),
+        {"a": {"options"}},
+    )
+    assert any("nope" in m for m in defects["a"])
 
 
 def test_observe_on_a_batch_action_is_allowed():
