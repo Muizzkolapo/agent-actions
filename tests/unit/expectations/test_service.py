@@ -557,7 +557,26 @@ SCHEMA = {
 }
 
 
-def test_schema_mismatch_under_repair_regenerates_with_feedback():
+def test_schema_mismatch_under_structural_auto_regenerates_with_feedback():
+    responses = iter([{"wrong_key": 1}, {"ideas": ["a", "b", "c"]}])
+    prompts = []
+
+    def flaky(prompt):
+        prompts.append(prompt)
+        return next(responses), True
+
+    service = ExpectationService(
+        SUITE, repair="auto", structural="auto", max_iterations=3, schema=SCHEMA
+    )
+    result = service.execute(flaky, "ORIGINAL")
+    assert result.suite_result.overall_pass is True
+    assert result.iterations == 2
+    assert "_structural" in prompts[1]
+    assert "ideas" in prompts[1]
+
+
+def test_schema_mismatch_re_runs_the_original_prompt_by_default():
+    """structural: defaults to retry — a response the schema rejected has nothing to preserve."""
     responses = iter([{"wrong_key": 1}, {"ideas": ["a", "b", "c"]}])
     prompts = []
 
@@ -567,10 +586,9 @@ def test_schema_mismatch_under_repair_regenerates_with_feedback():
 
     service = ExpectationService(SUITE, repair="auto", max_iterations=3, schema=SCHEMA)
     result = service.execute(flaky, "ORIGINAL")
+
     assert result.suite_result.overall_pass is True
-    assert result.iterations == 2
-    assert "_structural" in prompts[1]
-    assert "ideas" in prompts[1]
+    assert prompts == ["ORIGINAL", "ORIGINAL"]
 
 
 def test_a_schema_conforming_record_still_runs_the_semantic_suite():
@@ -597,7 +615,9 @@ def test_non_record_feedback_names_the_expected_fields_under_auto():
         prompts.append(prompt)
         return next(responses), True
 
-    ExpectationService(SUITE, repair="auto", max_iterations=3, schema=SCHEMA).execute(flaky, "O")
+    ExpectationService(
+        SUITE, repair="auto", structural="auto", max_iterations=3, schema=SCHEMA
+    ).execute(flaky, "O")
     assert "expected a JSON object" in prompts[1]
     assert "ideas" in prompts[1]
 

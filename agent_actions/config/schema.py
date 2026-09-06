@@ -219,6 +219,11 @@ class ExpectConfig(BaseModel):
         description="none (observe), retry (re-run prompt), or auto (composed feedback); "
         "the {prompt: $wf.X} mapping form is reserved and not implemented yet",
     )
+    structural: Literal["retry", "auto"] = Field(
+        default="retry",
+        description="How a schema failure is regenerated: retry (re-send the original prompt) "
+        "or auto (send the schema feedback); repair: governs rule failures",
+    )
     on_exhausted: Literal["return_last", "fail", "raise"] = Field(
         default="return_last",
         description="Behavior when iterations exhaust: return_last, fail (tombstone), or raise",

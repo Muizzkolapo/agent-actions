@@ -119,6 +119,11 @@ def _repair_mode_defects(
                 )
     repair = expect.get("repair", "auto")
     if repair == "none":
+        if expect.get("structural", "retry") != "retry":
+            messages.append(
+                "structural: decides how a schema failure is regenerated, so it has no "
+                "meaning under repair: none, which never regenerates"
+            )
         return messages
     if isinstance(repair, dict):
         messages.append("repair: {prompt:} is not implemented; use retry or auto")
