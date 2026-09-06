@@ -481,6 +481,11 @@ class DefaultsConfig(_RetryRepromptValidators):
     )
     constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
+    expect: ExpectConfig | None = Field(
+        default=None,
+        description="Default output expectations and enforcement policy; an action's own "
+        "expect: block merges over this key by key",
+    )
 
     # --- Expander-consumed keys ---
     context_scope: dict[str, Any] | None = Field(default=None, description="Default ctx scope")
