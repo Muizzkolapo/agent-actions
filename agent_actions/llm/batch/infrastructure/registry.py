@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
@@ -254,6 +254,13 @@ class BatchRegistryManager:
         for file_name, entry_dict in raw_data.items():
             try:
                 registry[file_name] = BatchJobEntry.from_dict(entry_dict)
+            except RetiredRecoveryState as e:
+                # `agac batch` resolves an action by sweeping every registry, so a
+                # refusal has to say which one to re-run.
+                raise RetiredRecoveryState(
+                    f"Batch registry entry '{file_name}' for action "
+                    f"'{self._action_name}' cannot be read. {e}"
+                ) from e
             except (TypeError, ValueError) as e:
                 logger.warning("Invalid entry for %s in registry: %s", file_name, e)
                 continue

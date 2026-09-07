@@ -5,32 +5,16 @@ import logging
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.llm.batch.core.batch_constants import OnExhaustedPolicy, RecoveryPhase
+from agent_actions.llm.batch.core.batch_constants import (
+    OnExhaustedPolicy,
+    RecoveryPhase,
+    coerce_recovery_phase,
+)
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
-
-
-# A run deferred mid-reprompt left a row naming a phase this machine no longer
-# has. Reinterpreting it would re-enter the wrong handler and either reprocess
-# records that already graduated or drop them, so it is refused by name.
-_RETIRED_PHASES = {"reprompt"}
-
-
-def _coerce_phase(value: str) -> RecoveryPhase:
-    if value in _RETIRED_PHASES:
-        raise RecoveryStateUnreadable(
-            f"This run was deferred mid-{value}, a recovery phase that no longer exists. "
-            f"Its stored state cannot be resumed. Re-run the action with --fresh to start "
-            f"it again; the records it had already completed are in the store."
-        )
-    return RecoveryPhase(value)
-
-
-class RecoveryStateUnreadable(RuntimeError):
-    """Persisted recovery state names something this version cannot act on."""
 
 
 @dataclass
@@ -46,7 +30,7 @@ class RecoveryState:
 
     def __post_init__(self):
         if isinstance(self.phase, str):
-            self.phase = _coerce_phase(self.phase)
+            self.phase = coerce_recovery_phase(self.phase)
         if isinstance(self.on_exhausted, str):
             self.on_exhausted = OnExhaustedPolicy(self.on_exhausted)
 
