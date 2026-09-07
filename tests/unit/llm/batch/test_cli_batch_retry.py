@@ -1,12 +1,11 @@
-"""Tests for F15: CLI batch path (process_batch_results) retry/reprompt parity.
+"""The CLI batch path recovers the same way the production path does.
 
-process_batch_results should use the same retry/reprompt logic as the
-production path (process_all_batch_results → _process_original_batch).
+process_batch_results should use the same retry and repair logic as
+process_all_batch_results → _process_original_batch:
 
-These tests verify that:
 1. Missing records trigger retry submission (not immediate tombstone)
-2. Reprompt logic is invoked when configured
-3. When no recovery is needed, output matches production path
+2. Repair is invoked when an expect: block configures it
+3. When no recovery is needed, output matches the production path
 """
 
 from unittest.mock import MagicMock, patch
@@ -56,11 +55,11 @@ def _make_entry(
 
 
 class TestProcessBatchResultsRetryParity:
-    """process_batch_results delegates to _process_single_batch_file for retry/reprompt."""
+    """process_batch_results delegates to _process_single_batch_file for recovery."""
 
     def test_delegates_to_process_single_batch_file(self):
         """process_batch_results routes through _process_single_batch_file,
-        which has retry/reprompt logic — not direct retrieve_and_reconcile."""
+        which has the recovery logic — not direct retrieve_and_reconcile."""
         manager = MagicMock()
         entry = _make_entry()
         manager.get_batch_job_by_id.return_value = entry

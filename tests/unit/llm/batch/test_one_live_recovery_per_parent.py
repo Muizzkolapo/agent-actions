@@ -37,14 +37,15 @@ def test_a_parent_with_a_live_repair_child_is_superseded():
     )
     assert PARENT in _superseded_entries(jobs), (
         "the parent would be reprocessed while its repair round is still running, "
-        "and the reprompt it starts would sweep that round's registry entry away"
+        "and the round it starts would sweep that one's registry entry away"
     )
 
 
-def test_a_parent_with_a_live_reprompt_child_is_superseded():
+def test_a_parent_with_a_live_retry_child_is_superseded():
+    """Both recovery kinds hold the parent, not just repair."""
     jobs = _jobs(
         _entry(PARENT, BatchStatus.COMPLETED),
-        _entry(f"{PARENT}_reprompt_1", BatchStatus.SUBMITTED, PARENT, "reprompt", 1),
+        _entry(f"{PARENT}_retry_1", BatchStatus.SUBMITTED, PARENT, "retry", 1),
     )
     assert PARENT in _superseded_entries(jobs)
 

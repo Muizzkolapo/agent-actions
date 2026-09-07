@@ -8,7 +8,6 @@ from typing import Any
 import jsonschema  # type: ignore[import-untyped]
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
-from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -502,36 +501,3 @@ def _check_field_types(
             type_errors[field_name] = (expected_type, actual_type)
 
     return type_errors
-
-
-def validate_and_raise_if_invalid(
-    llm_output: Any,
-    schema: dict[str, Any],
-    action_name: str,
-    strict_mode: bool = False,
-) -> SchemaValidationReport:
-    """Validate LLM output and raise SchemaValidationError if invalid.
-
-    Raises:
-        SchemaValidationError: If validation fails.
-    """
-    report = validate_output_against_schema(llm_output, schema, action_name, strict_mode)
-
-    if not report.is_compliant:
-        hint = "Check that the LLM prompt clearly specifies the expected output format"
-        if report.namespace_hint:
-            hint = f"{hint}. {report.namespace_hint}"
-        raise SchemaValidationError(
-            f"LLM output does not match expected schema for action '{action_name}'",
-            schema_name=report.schema_name,
-            validation_type="output",
-            action_name=action_name,
-            expected_fields=list(report.expected_fields),
-            actual_fields=list(report.actual_fields),
-            missing_fields=report.missing_required,
-            extra_fields=report.extra_fields,
-            type_errors=report.type_errors,
-            hint=hint,
-        )
-
-    return report

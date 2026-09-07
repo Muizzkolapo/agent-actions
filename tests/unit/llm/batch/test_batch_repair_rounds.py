@@ -1,7 +1,7 @@
 """Batch runs the repair loop, so the same expect: block works in either run_mode.
 
 Online, `ExpectationService.execute` loops around one call. Batch cannot: a round
-is a whole batch submission, so it defers like a reprompt round and resumes on the
+is a whole batch submission, so it defers like a retry round and resumes on the
 next pass. These tests cover the pieces that carry the loop's decisions — what the
 model is sent, and what happens when the iterations run out.
 """

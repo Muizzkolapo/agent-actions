@@ -4,11 +4,7 @@ Ensures that malformed 'properties' values (null, string, list, etc.) produce a
 validation error instead of crashing with an AttributeError or TypeError.
 """
 
-import pytest
-
-from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_output_validator import (
-    validate_and_raise_if_invalid,
     validate_output_against_schema,
 )
 
@@ -30,15 +26,6 @@ class TestPropertiesNull:
         assert not report.is_compliant
         assert any("properties" in e and "dict" in e for e in report.validation_errors)
 
-    def test_raise_variant(self):
-        schema = {"name": "test_schema", "properties": None}
-        with pytest.raises(SchemaValidationError):
-            validate_and_raise_if_invalid(
-                llm_output={"foo": "bar"},
-                schema=schema,
-                action_name="test_action",
-            )
-
 
 class TestPropertiesInvalidString:
     """Schema with properties: "invalid" should produce a validation error, not crash."""
@@ -52,15 +39,6 @@ class TestPropertiesInvalidString:
         )
         assert not report.is_compliant
         assert any("properties" in e and "str" in e for e in report.validation_errors)
-
-    def test_raise_variant(self):
-        schema = {"name": "test_schema", "properties": "invalid"}
-        with pytest.raises(SchemaValidationError):
-            validate_and_raise_if_invalid(
-                llm_output={"foo": "bar"},
-                schema=schema,
-                action_name="test_action",
-            )
 
 
 class TestPropertiesInvalidList:

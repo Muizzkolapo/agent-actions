@@ -2,7 +2,7 @@
 
 When json_mode=True and the LLM response fails all parse strategies,
 batch_result_strategy must wrap the string in a _parse_error dict so
-the batch reprompt loop (EvaluationLoop) can detect and retry.
+the batch repair loop (EvaluationLoop) can detect and regenerate.
 """
 
 from typing import Any
@@ -40,7 +40,7 @@ def processor():
 
 
 class TestJsonModeParseErrorWrapping:
-    """String content in json_mode must produce _parse_error for reprompt."""
+    """String content in json_mode must produce _parse_error for the repair loop."""
 
     def test_string_content_in_json_mode_produces_parse_error(self, processor):
         """Unparsed string in json_mode wraps as _parse_error dict."""

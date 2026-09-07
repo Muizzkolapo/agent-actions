@@ -47,7 +47,6 @@ decoders to schema validators and preflight checks.
 | `PathValidator.validate` | `agent_io/staging/` | Validates | — |
 | `PathValidator.validate` | `agent_io/target/{action}/` | Validates | — |
 | `validate_output_against_schema` | `schema/{workflow}/{action}.yml` | Validates | `fields`, `properties`, `required` |
-| `validate_and_raise_if_invalid` | `schema/{workflow}/{action}.yml` | Validates | `fields`, `properties`, `required` |
 | `PromptASTAnalyzer.extract_variables` | `prompt_store/{workflow}.md` | Reads | — |
 | `ValidateUDFsCommand.validate` | `agent_config/{workflow}.yml` | Validates | `impl` |
 | `ValidateUDFsCommand.validate` | `tools/{workflow}/*.py` | Validates | — |
