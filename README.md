@@ -70,7 +70,7 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 | Context isolation per step | `observe` / `drop` | You build it | Not available |
 | Pre-check guards (skip before LLM call) | `guard:` | If-statements | Post-hoc branching |
 | Parallel consensus (3 voters + merge) | 2 lines of YAML | Custom code | Many nodes + JS |
-| Schema validation + auto-reprompt | Built in | DIY | Not available |
+| Schema validation + auto-repair | Built in | DIY | Not available |
 | Batch processing (1000s of records) | Built in | For-loops | Loop nodes |
 | The YAML *is* the documentation | Yes | No | Visual graph |
 
@@ -100,7 +100,7 @@ Switch providers per-action by changing `model_vendor`.
 - **Pre-flight validation** — schemas, dependencies, templates, and credentials checked before any LLM call
 - **Batch processing** — route thousands of records through provider batch APIs
 - **User-defined functions** — Python tools for pre/post-processing and custom logic
-- **Reprompting** — auto-retry when LLM output doesn't match schema
+- **Expectations** — declare rules the output must satisfy; failures are regenerated with the rule's feedback
 - **Observability** — per-action timing, token counts, and structured event logs
 - **Interactive docs** — `agac docs` builds and serves a visual workflow dashboard
 
