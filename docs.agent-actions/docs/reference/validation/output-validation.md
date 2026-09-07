@@ -16,8 +16,8 @@ LLM outputs pass through three validation layers. Let's walk through what each l
 ```mermaid
 flowchart TD
     A[LLM Response] --> B{Layer 1+2: JSON & Schema Valid?}
-    B -->|No| G{Reprompt Enabled?}
-    G -->|Yes| E[Reprompt with Error Feedback]
+    B -->|No| G{expect: repair set?}
+    G -->|Yes| E[Regenerate with Error Feedback]
     G -->|No| H[Action Fails]
     E --> A
     B -->|Yes| I{Layer 3: Guard Passes?}
@@ -30,7 +30,7 @@ Guards run last because they evaluate semantic conditions that require valid, sc
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
-| **1. JSON** | Structural integrity | Reprompt with error feedback |
+| **1. JSON** | Structural integrity | Regenerate with error feedback |
 | **2. Schema** | Type/field validation | Schema constraints + `expect:` repair |
 | **3. Guard** | Semantic validation | Condition expressions |
 
@@ -43,7 +43,7 @@ Ensures the LLM returns valid JSON. If parsing fails and an `expect:` block carr
   schema: my_schema
   expect:
     repair: auto
-    max_attempts: 3
+    max_iterations: 3
     on_exhausted: return_last
 ```
 
@@ -252,7 +252,7 @@ actions:
     schema: candidate_facts_list  # Layer 2: type/structure
     expect:
       repair: auto
-      max_attempts: 4
+      max_iterations: 4
       on_exhausted: return_last
 
   # Step 2: Filter empty results (Layer 3)
@@ -268,7 +268,7 @@ actions:
     schema: quality_score  # Ensures score is 0-100
     expect:
       repair: auto
-      max_attempts: 3
+      max_iterations: 3
       on_exhausted: return_last
 
   # Step 4: Filter low quality (Layer 3)
@@ -291,7 +291,7 @@ actions:
     schema: content_schema
     expect:
       repair: auto
-      max_attempts: 4
+      max_iterations: 4
       on_exhausted: return_last
 
   # LLM validates the content
@@ -334,7 +334,7 @@ properties:
   schema: classification
   expect:
     repair: auto
-    max_attempts: 3
+    max_iterations: 3
     on_exhausted: return_last
 
 - name: process_valid
@@ -344,7 +344,7 @@ properties:
     on_false: filter
 ```
 
-### Pattern: Numeric Threshold with Reprompt
+### Pattern: Numeric Threshold with Repair
 
 Force the LLM to return acceptable scores:
 
@@ -368,7 +368,7 @@ properties:
   schema: score_schema
   expect:
     repair: auto
-    max_attempts: 5
+    max_iterations: 5
     on_exhausted: return_last
 
 # Guard for business threshold
@@ -391,7 +391,7 @@ actions:
     schema: content_schema
     expect:
       repair: auto
-      max_attempts: 3
+      max_iterations: 3
       on_exhausted: return_last
 
   - name: custom_validate
@@ -475,12 +475,12 @@ The limitation: repair costs API tokens. Guards are free. If you're filtering on
 ### 1. Layer Your Validation
 
 ```yaml
-# Layer 1 & 2: Schema + Reprompt
+# Layer 1 & 2: Schema + repair
 - name: extract
   schema: extraction_schema
   expect:
     repair: auto
-    max_attempts: 4
+    max_iterations: 4
     on_exhausted: return_last
 
 # Layer 3: Guard for quality

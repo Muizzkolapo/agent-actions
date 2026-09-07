@@ -14,7 +14,7 @@ Think of schemas like contracts: they define exactly what each action promises t
 Let's explore what schemas provide in your agentic workflow:
 
 - **Output Validation** - Ensure LLM responses match expected structure
-- **Reprompting** - Automatic retry when validation fails
+- **Repair** - Automatic regeneration when the output fails the action's `expect:` suite
 - **Documentation** - Define contracts between actions
 - **Type Safety** - Catch structural issues before downstream processing
 
@@ -469,8 +469,8 @@ flowchart TD
     D -->|No| E[Validation Error]
     D -->|Yes| F{Schema Valid?}
     B -->|Yes| F
-    F -->|No| G{Reprompt Enabled?}
-    G -->|Yes| H[Reprompt with Error]
+    F -->|No| G{expect: structural set?}
+    G -->|Yes| H[Regenerate with Error]
     H --> A
     G -->|No| E
     F -->|Yes| I[Output Validated]

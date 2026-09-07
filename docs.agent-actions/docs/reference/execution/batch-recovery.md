@@ -19,7 +19,7 @@ flowchart TD
     C -->|No| G
     D --> E[Resubmit as New Batch]
     E --> F[Poll for Completion]
-    F --> G{Reprompt Configured?}
+    F --> G{Expectations Configured?}
     G -->|Yes| H[Phase 2: Validate All Results]
     G -->|No| L[Done]
     H --> I{Failures?}
@@ -31,7 +31,7 @@ flowchart TD
 
 **Phase 1 (Retry)** recovers records the provider did not answer — ones it dropped outright (network errors, timeouts, silent failures) and ones it returned with a per-record error and no content. The same request is resubmitted unchanged.
 
-**Phase 2 (Reprompt)** fixes records where the LLM responded but produced invalid output — schema violations, failed custom validation. The prompt is modified with error feedback before resubmitting.
+**Phase 2 (Repair)** fixes records where the LLM responded but produced output that fails the action's `expect:` suite — schema violations, failed rules. The prompt is modified with the failure feedback before resubmitting.
 
 ## Phase 1: Retry Missing Records
 
@@ -158,22 +158,19 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
 | `reason` | string | Why retry was needed: `missing`, `network_error`, `rate_limit`, `timeout` |
 | `timestamp` | string | ISO 8601 timestamp of the recovery |
 
-**Reprompt metadata** (present when validation-layer recovery occurred):
+**Expectations metadata** (`_recovery.expectations`, present when the repair loop exhausted):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `attempts` | integer | Number of validation attempts |
-| `passed` | boolean | Whether validation ultimately passed |
-| `validation` | string | Name of the validation UDF used |
-| `parse_error_count` | integer | JSON parse failures (absent when 0) |
-| `schema_fail_count` | integer | Schema validation failures (absent when 0) |
-| `udf_fail_count` | integer | UDF validation failures (absent when 0) |
+| `attempts` | integer | Iterations spent, counting the first generation |
+| `failed` | list | Ids of the expectations still failing when iterations ran out |
 
-:::note Sparse serialization
-Counter fields use a sparse contract: absent means zero. Consumers should use `record.get("parse_error_count", 0)`, not assume the key exists.
+**Evaluation metadata** (`_recovery.evaluation`, present when a batch record graduated through the loop):
 
-Counter fields are populated by both the online and batch paths.
-:::
+| Field | Type | Description |
+|-------|------|-------------|
+| `passed` | boolean | Whether the record graduated |
+| `strategy_name` | string | Which evaluation strategy judged it |
 
 ### Serialization
 
@@ -191,7 +188,7 @@ Submit 100 records
 │   ├── Attempt 2: 1 recovered
 │   └── Result: 100 records (all recovered)
 │
-└── Phase 2: Reprompt
+└── Phase 2: Repair
     ├── Validate 100 results → 10 fail
     ├── Attempt 1: resubmit 10 with feedback → 8 pass
     ├── Attempt 2: resubmit 2 with feedback → 1 passes

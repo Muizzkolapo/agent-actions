@@ -495,17 +495,21 @@ def safe_function(data: dict) -> dict:
     return {'result': value}
 ```
 
-## Reprompting
+## The repair loop
 
-What happens when an LLM returns invalid JSON? Rather than failing immediately, Agent Actions can automatically retry with feedback about what went wrong. This is the repair loop.
+What happens when an LLM returns invalid JSON, or output that breaks a rule you
+declared? Rather than failing immediately, Agent Actions can regenerate with
+feedback about what went wrong. This is the repair loop, and it is driven by an
+action's `expect:` block.
 
 ### Configuration
 
-Reprompt requires explicit configuration:
+Repair requires explicit configuration:
 
 ```yaml
 expect:
   repair: auto              # how a rule failure is regenerated
+  structural: retry         # how a schema failure is regenerated
   max_iterations: 3         # total generations, counting the first
   on_exhausted: return_last # return_last | fail | raise
 ```
@@ -516,19 +520,21 @@ To disable: omit the `expect:` block.
 
 | Option | Description |
 |--------|-------------|
-| `max_attempts` | Maximum retry attempts (default: 2) |
-| `on_exhausted` | Behavior when exhausted: `return_last`, `raise` |
+| `repair` | `none` (observe only), `retry` (re-send the original prompt), or `auto` (send the failure detail and hint) |
+| `structural` | Same choices, for a response the schema rejects (default: `retry`) |
+| `max_iterations` | Total generations, counting the first (1-10, default: 3) |
+| `on_exhausted` | Behavior when iterations run out: `return_last`, `fail`, `raise` |
 
 ### When to Use
 
 Consider what your agentic workflow needs:
 
-- **Simple schemas** — Low `max_attempts` (2-3)
-- **Complex schemas** — Higher `max_attempts` (4-5)
-- **Critical outputs** — Maximum attempts, `on_exhausted: raise`
+- **Simple schemas** — Low `max_iterations` (2-3)
+- **Complex schemas** — Higher `max_iterations` (4-5)
+- **Critical outputs** — More iterations, `on_exhausted: raise`
 
 :::warning
-Reprompting adds latency and token cost. For high-volume agentic workflows, consider fixing schema issues at the source rather than relying on retries.
+Repair adds latency and token cost. For high-volume agentic workflows, consider fixing schema issues at the source rather than relying on regeneration.
 :::
 
 ## Log Analysis
