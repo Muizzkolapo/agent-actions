@@ -70,8 +70,14 @@ def test_a_legacy_reprompt_entry_does_not_silently_disappear_from_the_registry()
     backend.store[f"{BatchRegistryManager.METADATA_KEY_PREFIX}{ACTION}"] = _legacy_registry_json()
     manager = BatchRegistryManager(backend, ACTION)
 
-    with pytest.raises(RetiredRecoveryState):
+    with pytest.raises(RetiredRecoveryState) as exc:
         manager.get_all_jobs()
+
+    # `agac batch` resolves an action by sweeping every action's registry, so a
+    # refusal that does not name the offending one fails the whole workflow blind.
+    message = str(exc.value)
+    assert ACTION in message, f"the refusal must name the action, got: {message}"
+    assert LEGACY_CHILD in message, f"the refusal must name the entry, got: {message}"
 
 
 def test_a_genuinely_malformed_entry_is_still_skipped():
