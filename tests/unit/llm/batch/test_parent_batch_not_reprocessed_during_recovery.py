@@ -259,16 +259,16 @@ class TestOnlyTheLiveAttemptIsProcessed:
 
         assert _run(_service(manager)) == ["batch_retry_2"]
 
-    def test_a_reprompt_supersedes_the_retry_it_followed(self):
-        """The handoff loses a whole completed reprompt batch otherwise."""
+    def test_a_repair_supersedes_the_retry_it_followed(self):
+        """The handoff loses a whole completed repair batch otherwise."""
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
                 CHILD: _child("batch_retry_1", attempt=1),
-                f"{PARENT}_reprompt_1": _entry(
-                    "batch_reprompt_1",
+                f"{PARENT}_repair_1": _entry(
+                    "batch_repair_1",
                     BatchStatus.COMPLETED,
-                    f"{PARENT}_reprompt_1",
+                    f"{PARENT}_repair_1",
                     at="09:02:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.REPAIR,
@@ -277,7 +277,7 @@ class TestOnlyTheLiveAttemptIsProcessed:
             }
         )
 
-        assert _run(_service(manager)) == ["batch_reprompt_1"]
+        assert _run(_service(manager)) == ["batch_repair_1"]
 
     def test_registering_an_attempt_removes_the_one_it_supersedes(self):
         """Prevents new stores from reaching the state above at all."""
@@ -378,22 +378,22 @@ class TestTheSingleBatchSiblingRefusesASupersededId:
 
 
 class TestLiveIsDecidedByRegistrationTime:
-    """Not by attempt number, and not by retry-then-reprompt phase order.
+    """Not by attempt number, and not by retry-then-repair phase order.
 
     `_process_original_batch` writes `phase=RETRY` whenever it runs, so a store
     written before a parent stopped being re-processed can hold a retry
-    registered *after* a reprompt. Ranking by phase picks the older reprompt;
+    registered *after* a repair. Ranking by phase picks the older repair;
     ranking by attempt picks whichever happens to number higher.
     """
 
-    def test_a_retry_registered_after_a_reprompt_wins(self):
+    def test_a_retry_registered_after_a_repair_wins(self):
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
-                f"{PARENT}_reprompt_1": _entry(
-                    "batch_reprompt_1",
+                f"{PARENT}_repair_1": _entry(
+                    "batch_repair_1",
                     BatchStatus.COMPLETED,
-                    f"{PARENT}_reprompt_1",
+                    f"{PARENT}_repair_1",
                     at="09:01:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.REPAIR,
@@ -517,21 +517,21 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
         assert _run(_service(manager)) == ["batch_child_dead"]
 
     @pytest.mark.parametrize("dead", [BatchStatus.FAILED, BatchStatus.CANCELLED])
-    def test_a_dead_reprompt_leaves_the_parent_processable(self, dead):
+    def test_a_dead_repair_leaves_the_parent_processable(self, dead):
         """Only retry recoveries are continued from a dead batch.
 
-        A reprompt's still-failing records' last responses are not recoverable
+        A repair's still-failing records' last responses are not recoverable
         from state — continuing one with no results would finalize on the
         graduated records alone and silently drop the rest — so a dead
-        reprompt keeps the processed-from-scratch path.
+        repair keeps the processed-from-scratch path.
         """
         manager = _registry(
             {
                 PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
-                f"{PARENT}_reprompt_1": _entry(
-                    "batch_reprompt_dead",
+                f"{PARENT}_repair_1": _entry(
+                    "batch_repair_dead",
                     dead,
-                    f"{PARENT}_reprompt_1",
+                    f"{PARENT}_repair_1",
                     at="09:01:00",
                     parent_file_name=PARENT,
                     recovery_type=RecoveryType.REPAIR,
