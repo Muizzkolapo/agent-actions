@@ -138,7 +138,7 @@ actions:
         - source.publish_year
         - source.page_count
         - source.description
-    # Reprompt: Validate marketing description quality
+    # Expect: regenerate until the marketing description is long enough
     expect:
       max_iterations: 3
       expectations:

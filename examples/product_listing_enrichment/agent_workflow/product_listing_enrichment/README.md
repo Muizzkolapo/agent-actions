@@ -178,11 +178,9 @@ product_listing_enrichment/
 │       ├── optimize_seo.yml
 │       └── format_listing.yml
 └── tools/
-    ├── product_listing_enrichment/
-    │   ├── normalize_product.py            # NEW
-    │   ├── fetch_competitor_prices.py
-    │   ├── validate_marketplace_compliance.py
-    │   └── format_marketplace_listing.py
-    └── shared/
-        └── reprompt_validations.py
+    └── product_listing_enrichment/
+        ├── normalize_product.py            # NEW
+        ├── fetch_competitor_prices.py
+        ├── validate_marketplace_compliance.py
+        └── format_marketplace_listing.py
 ```

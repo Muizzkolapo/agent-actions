@@ -326,7 +326,7 @@ Every config field follows the same inheritance chain:
 
 inherit_simple_fields() applies this for 30+ fields:
   model_vendor, model_name, api_key, run_mode, json_mode,
-  temperature, max_tokens, top_p, stop, reprompt, retry,
+  temperature, max_tokens, top_p, stop, expect, retry,
   granularity, is_operational, prompt_debug, output_field,
   chunk_size, chunk_overlap, record_limit, file_limit, ...
 

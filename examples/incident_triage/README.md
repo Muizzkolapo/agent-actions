@@ -315,7 +315,7 @@ No special keyword needed. The DAG scheduler detects that both actions become ru
   dependencies: [assess_customer_impact, assess_system_impact]
 ```
 
-### Retry and Reprompt
+### Retry and Expectations
 
 All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
 
@@ -398,10 +398,8 @@ incident_triage/
 │       ├── generate_executive_summary.yml
 │       └── format_triage_output.yml
 └── tools/
-    ├── incident_triage/
-    │   ├── aggregate_severity_votes.py
-    │   ├── assign_team_based_on_impact.py
-    │   └── format_incident_triage.py
-    └── shared/
-        └── reprompt_validations.py
+    └── incident_triage/
+        ├── aggregate_severity_votes.py
+        ├── assign_team_based_on_impact.py
+        └── format_incident_triage.py
 ```

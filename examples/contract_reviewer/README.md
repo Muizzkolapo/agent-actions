@@ -195,7 +195,7 @@ actions:
 
 Balance cost and quality stage by stage. Legal clause analysis benefits from a stronger model; the executive summary, operating on already-structured data, works fine with a lighter one.
 
-### Retry and Reprompt
+### Retry and Expectations
 
 All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
 
@@ -275,9 +275,7 @@ contract_reviewer/
 │       ├── aggregate_risk_summary.yml
 │       └── generate_executive_summary.yml
 └── tools/
-    ├── contract_reviewer/
-    │   ├── split_contract_by_clause.py
-    │   └── aggregate_clause_analyses.py
-    └── shared/
-        └── reprompt_validations.py
+    └── contract_reviewer/
+        ├── split_contract_by_clause.py
+        └── aggregate_clause_analyses.py
 ```

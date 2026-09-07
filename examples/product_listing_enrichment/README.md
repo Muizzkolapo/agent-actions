@@ -173,7 +173,7 @@ context_scope:
 
 Configuration stays in JSON files, not prompts. Brand voice changes? Edit `brand_voice.json`. Marketplace updates its rules? Edit `marketplace_rules.json`. No prompt surgery needed.
 
-### 5. Retry and Reprompt
+### 5. Retry and Expectations
 
 All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
 
@@ -251,10 +251,8 @@ product_listing_enrichment/
 │       ├── optimize_seo.yml
 │       └── format_listing.yml
 └── tools/
-    ├── product_listing_enrichment/
-    │   ├── fetch_competitor_prices.py
-    │   ├── validate_marketplace_compliance.py
-    │   └── format_marketplace_listing.py
-    └── shared/
-        └── reprompt_validations.py
+    └── product_listing_enrichment/
+        ├── fetch_competitor_prices.py
+        ├── validate_marketplace_compliance.py
+        └── format_marketplace_listing.py
 ```

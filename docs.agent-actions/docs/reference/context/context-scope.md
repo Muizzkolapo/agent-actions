@@ -96,7 +96,7 @@ defaults:
     file_type: [json]
   expect:
     repair: auto
-    max_attempts: 3
+    max_iterations: 3
   batch_max_workers: 6
 ```
 

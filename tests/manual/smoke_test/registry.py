@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from tests.manual.smoke_test.checks.context_scope import ContextScope
+from tests.manual.smoke_test.checks.expectations import ExpectationCheck
 from tests.manual.smoke_test.checks.guards import GuardCheck
 from tests.manual.smoke_test.checks.lineage import LineageCheck
 from tests.manual.smoke_test.checks.output_structure import OutputStructure
 from tests.manual.smoke_test.checks.parallel import ParallelVersions
 from tests.manual.smoke_test.checks.pipeline import PipelineCompleted
 from tests.manual.smoke_test.checks.prompt_trace import PromptTraceCheck
-from tests.manual.smoke_test.checks.reprompt import RepromptCheck
 from tests.manual.smoke_test.checks.schema_conformance import SchemaConformance
 from tests.manual.smoke_test.context import Example
 
@@ -36,8 +36,8 @@ EXAMPLES: list[Example] = [
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="generate_executive_summary", behavior="filter"),
-            RepromptCheck(action="extract_incident_details"),
-            RepromptCheck(action="classify_severity"),
+            ExpectationCheck(action="extract_incident_details"),
+            ExpectationCheck(action="classify_severity"),
         ],
     ),
     Example(
@@ -52,8 +52,8 @@ EXAMPLES: list[Example] = [
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="optimize_seo", behavior="skip"),
-            RepromptCheck(action="generate_description"),
-            RepromptCheck(action="write_marketing_copy"),
+            ExpectationCheck(action="generate_description"),
+            ExpectationCheck(action="write_marketing_copy"),
         ],
     ),
     Example(
@@ -70,7 +70,7 @@ EXAMPLES: list[Example] = [
             ParallelVersions(action="score_quality", versions=3),
             GuardCheck(action="generate_response", behavior="filter"),
             GuardCheck(action="extract_product_insights", behavior="filter"),
-            RepromptCheck(action="score_quality"),
+            ExpectationCheck(action="score_quality"),
             ContextScope(action="generate_response", dropped_fields=["source.star_rating"]),
         ],
     ),
@@ -85,7 +85,7 @@ EXAMPLES: list[Example] = [
             LineageCheck(),
             PromptTraceCheck(),
             SchemaConformance(),
-            RepromptCheck(action="analyze_clause"),
+            ExpectationCheck(action="analyze_clause"),
         ],
     ),
     Example(
@@ -100,8 +100,8 @@ EXAMPLES: list[Example] = [
             PromptTraceCheck(),
             SchemaConformance(),
             GuardCheck(action="select_for_users", behavior="filter"),
-            RepromptCheck(action="classify_genre"),
-            RepromptCheck(action="write_description"),
+            ExpectationCheck(action="classify_genre"),
+            ExpectationCheck(action="write_description"),
         ],
     ),
     Example(

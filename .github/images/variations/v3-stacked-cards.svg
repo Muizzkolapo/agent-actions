@@ -127,7 +127,7 @@
     </g>
     <g transform="translate(161, 46)">
       <rect x="0" y="0" width="85" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
-      <text x="42" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">reprompt</text>
+      <text x="42" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">expectations</text>
     </g>
     <g transform="translate(254, 46)">
       <rect x="0" y="0" width="95" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>

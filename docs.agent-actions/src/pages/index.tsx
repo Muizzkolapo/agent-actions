@@ -62,7 +62,7 @@ const YAML_LINES: {h?: boolean; html: string}[] = [
 const FEATURES = [
   {ic: IC.layers, n: '01', t: 'Action composition', d: 'Define actions in YAML with explicit dependencies. The engine resolves the execution order — each domino knows when to fall.'},
   {ic: IC.check, n: '02', t: 'Schema validation', d: 'Every LLM output is validated against a declared schema. Failed validations trigger auto-retry with error context.'},
-  {ic: IC.repeat, n: '03', t: 'Built-in retry', d: 'Automatic reprompting with configurable max attempts. A failed domino doesn’t break the chain — it tries again.'},
+  {ic: IC.repeat, n: '03', t: 'Built-in repair', d: 'Declare expectations and the framework regenerates failing output, up to a configurable number of iterations. A failed domino doesn’t break the chain — it tries again.'},
 ];
 
 const QNAV = [

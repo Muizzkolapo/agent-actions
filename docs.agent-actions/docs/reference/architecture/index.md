@@ -115,7 +115,7 @@ flowchart TB
     subgraph Recovery["Error Recovery"]
         RETRY["Transport Retry"]
         SCHEMA["Schema Validator"]
-        REPROMPT["Reprompting"]
+        REPAIR["Expectations"]
     end
 
     RUN --> YAML --> VALIDATE --> DAG
@@ -124,8 +124,8 @@ flowchart TB
     TEMPLATE --> REFS --> ONLINE
     ONLINE --> PROVIDERS --> RETRY
     RETRY -.->|"NetworkError / RateLimitError"| PROVIDERS
-    RETRY --> SCHEMA --> REPROMPT
-    REPROMPT -.->|"validation failure"| TEMPLATE
+    RETRY --> SCHEMA --> REPAIR
+    REPAIR -.->|"validation failure"| TEMPLATE
 ```
 
 Two recovery loops are visible here:
@@ -165,7 +165,7 @@ For each level:
 2. Prepare prompts (resolve field references, apply context scope)
 3. Execute actions in parallel (up to concurrency limit)
 4. Validate outputs against schemas
-5. Reprompt on validation failure (if enabled)
+5. Regenerate on expectation failure (if an `expect:` block is set)
 6. Write outputs to target directory
 
 ### 5. Output

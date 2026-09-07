@@ -2,7 +2,7 @@
 
 Usage:
     python -m tests.manual.doc_audit                   # run all audits
-    python -m tests.manual.doc_audit retry_reprompt     # run one by name
+    python -m tests.manual.doc_audit guard_filtered_schema   # run one by name
 """
 
 from __future__ import annotations

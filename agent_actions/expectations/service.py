@@ -123,8 +123,8 @@ class ExpectationsExhaustedError(RuntimeError):
 class ExpectationService:
     """Wraps LLM execution with expectation validation.
 
-    ``execute`` takes the same ``llm_operation`` contract as ``RepromptService``,
-    so this composes as the outermost recovery layer.
+    ``execute`` takes an ``llm_operation`` callable, so it composes as the
+    outermost recovery layer over whatever produces the response.
     """
 
     def __init__(

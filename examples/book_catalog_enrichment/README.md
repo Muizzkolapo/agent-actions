@@ -11,7 +11,7 @@ With **15 actions**, it's the most complex example in the repository and the **o
 ## What You'll Learn
 
 - **HITL (Human-in-the-Loop) review** -- how to insert a human approval step into an automated pipeline, and how to pair it with an AI pre-review so the human reviewer gets actionable context instead of raw output.
-- **Reprompt validation** -- how to register a validation function that automatically rejects bad LLM output and reprompts with feedback, up to N attempts, before accepting the best result.
+- **Expectations** -- how to declare rules an LLM's output must satisfy, so the framework regenerates bad output with the rule's hint as feedback, up to N iterations, before accepting the best result.
 - **Grounded recommendations** -- how to prevent hallucinated suggestions by splitting the task into three steps: LLM generates search criteria, a tool retrieves real candidates from a catalog, and the LLM ranks only from those real results.
 - **4-way parallel fan-out** -- how to declare independent branches that run concurrently, then merge at a single downstream action.
 - **Guard-based filtering** -- how to conditionally skip an action based on a field value from a prior step.
@@ -40,7 +40,7 @@ Manual enrichment at scale is slow and inconsistent. This workflow automates the
 | 3 | `review_classification` | **HITL** | A human reviews the classification alongside the AI assessment. Approves, corrects, or overrides. |
 | 4 | `validate_bisac` | Tool | Deterministically validates and normalizes BISAC codes (format, prefix, length). |
 
-### Phase 2: Marketing Description with Reprompt Validation
+### Phase 2: Marketing Description with Expectations
 
 | Step | Action | Type | What It Does |
 |------|--------|------|--------------|
@@ -118,7 +118,7 @@ Key details:
 - **`hitl.instructions`** -- guidance displayed to the reviewer in the UI.
 - `context_scope.observe` controls exactly what data the reviewer sees: both the original classification and the AI's pre-review assessment.
 
-### Reprompt Validation
+### Expectations
 
 When an LLM produces output that fails a declared rule, the framework automatically regenerates, steering with the rule's `hint`. The LLM gets another chance to fix its output.
 
@@ -395,15 +395,13 @@ book_catalog_enrichment/
 │       ├── filter_quality.yml
 │       └── select_for_users.yml
 └── tools/
-    ├── book_catalog_enrichment/
-    │   ├── filter_by_quality.py
-    │   ├── format_catalog_entry.py
-    │   ├── search_book_catalog.py
-    │   ├── select_for_users.py
-    │   ├── validate_bisac_codes.py
-    │   └── validate_description.py
-    └── shared/
-        └── reprompt_validations.py
+    └── book_catalog_enrichment/
+        ├── filter_by_quality.py
+        ├── format_catalog_entry.py
+        ├── search_book_catalog.py
+        ├── select_for_users.py
+        ├── validate_bisac_codes.py
+        └── validate_description.py
 ```
 
 For the full design philosophy, detailed action table, and customization guide, see [`agent_workflow/book_catalog_enrichment/README.md`](agent_workflow/book_catalog_enrichment/README.md).

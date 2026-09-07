@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 class JSONResponseMixin:
     """Mixin providing standardized JSON response parsing with error handling.
 
-    Returns error dict on parse failure to allow RepromptEngine to attempt repair
-    via JSONRepairStrategy. This is appropriate for providers with variable JSON
-    quality (Groq, Gemini, Cohere).
+    Returns an error dict on parse failure rather than raising, leaving the
+    caller to decide whether to regenerate. This is appropriate for providers
+    with variable JSON quality (Groq, Gemini, Cohere).
     """
 
     @staticmethod
@@ -35,7 +35,7 @@ class JSONResponseMixin:
 
         Uses the shared :func:`parse_llm_json` utility (strips markdown
         fences, tries ``json_repair``) before falling back to a
-        ``_parse_error`` dict that lets RepromptEngine retry.
+        ``_parse_error`` dict.
 
         Args:
             response_content: Raw JSON string from API

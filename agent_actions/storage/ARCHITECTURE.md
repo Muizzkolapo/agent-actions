@@ -187,7 +187,7 @@ two identifiers, answering two different questions:
 A 1→N expansion writes one trace for the parent prompt and mints its children's
 ids only afterwards, so a child reaches that trace through its
 `parent_target_id`; a record prepared here in its own right always resolves to
-its own row first. Reprompt rounds re-prepare the same record at `attempt=N`,
+its own row first. Repair rounds re-prepare the same record at `attempt=N`,
 and the newest attempt wins. Rows written before the identity columns existed
 keep `NULL` in both and are excluded from durable-key joins.
 

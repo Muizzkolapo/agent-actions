@@ -41,7 +41,7 @@ This is the simpler path. A single record goes in, an LLM response comes out.
 │                   CALLER (workflow engine)               │
 │                                                          │
 │   OnlineStrategy.invoke()                                │
-│     └─ retry + reprompt wrappers                         │
+│     └─ retry + expectations wrappers                     │
 │          └─ _call_llm()                                  │
 └──────────────────────┬───────────────────────────────────┘
                        │
@@ -147,10 +147,10 @@ This is the complex path. Hundreds of records go through a multi-phase lifecycle
 │                                              │               │  │
 │                                         Phase 5         Phase 6  │
 │                                        ┌──────────┐  ┌─────────┐│
-│                                        │ RETRY    │  │REPROMPT ││
+│                                        │ RETRY    │  │ REPAIR  ││
 │                                        │          │  │         ││
 │                                        │Missing   │  │Failed   ││
-│                                        │records?  │  │validn?  ││
+│                                        │records?  │  │expects? ││
 │                                        │Resubmit  │  │Resubmit ││
 │                                        └──────────┘  └─────────┘│
 └─────────────────────────────────────────────────────────────────┘
@@ -251,14 +251,14 @@ Reconciliation (reconciler.py):
              YES          NO ───────┤
               │                     │
         ┌─────▼──────┐              │
-        │  REPROMPT   │              │
+        │   REPAIR    │              │
         │  attempt 1  │              │
         └─────┬──────┘              │
               │                     │
          still failing?             │
               │                     │
         ┌─────▼──────┐              │
-        │  REPROMPT   │              │
+        │   REPAIR    │              │
         │  attempt 2  │              │
         └─────┬──────┘              │
               │                     │
@@ -442,10 +442,10 @@ DEFERRED    → Batch submitted but not yet completed (temporary)
 PASSTHROUGH → Record passed through without LLM processing
 ```
 
-### What about reprompt? (validation failures)
+### What about repair? (expectation failures)
 
 After retry recovers missing records, there's an optional validation step.
-If the LLM output doesn't pass a user-defined validation function:
+If the LLM output doesn't satisfy the action's `expect:` suite:
 
 ```
 Say records A and C pass validation, but B fails:
@@ -454,12 +454,12 @@ Say records A and C pass validation, but B fails:
   B → still_failing → resubmit with corrective feedback
   C → graduated (passed validation) ✓
 
-Reprompt attempt 1:
+Repair attempt 1:
   B resubmitted with: "Your previous output failed because: ..."
   Provider returns new output for B
   B passes validation → graduated ✓
 
-If B keeps failing after max_attempts:
+If B keeps failing after max_iterations:
   B → EXHAUSTED with failure_type_counts metadata
   Policy decides: return last attempt ("return_last") or raise error
 ```
@@ -476,7 +476,7 @@ Run 3:  Load recovery_state → retry attempt 2 → ...    [success]
 State files on disk:
   .batch_registry.json        ← which batches exist, their status
   .context_map_{name}         ← original input data for each record
-  .recovery_state_{name}.json ← retry/reprompt progress
+  .recovery_state_{name}.json ← retry/repair progress
 ```
 
 Each run picks up where the last one left off. No records are reprocessed.
@@ -546,7 +546,7 @@ providers/
 | Ollama Cloud | Schema injected into prompt text | Simulated (threads) | No structured output support |
 | HITL | N/A | N/A | Flask server, human approval |
 | Tool | N/A | N/A | Runs Python functions |
-| AGAC | Mock | Mock | Quality degrades by attempt (tests reprompt) |
+| AGAC | Mock | Mock | Quality degrades by attempt (tests the repair loop) |
 
 ### Error unification
 
@@ -624,7 +624,7 @@ Both paths share:
 | `realtime/builder.py` | Online entry point — the function everything routes through |
 | `realtime/services/invocation.py` | Client registry + lazy import + dispatch |
 | `batch/services/submission.py` | Batch submit: prepare → save → submit → register |
-| `batch/services/processing.py` | Batch process: retrieve → reconcile → retry → reprompt → finalize |
+| `batch/services/processing.py` | Batch process: retrieve → reconcile → retry → repair → finalize |
 | `batch/processing/preparator.py` | Per-record task preparation + context_map building |
 | `batch/processing/reconciler.py` | Expected vs answered ID math, missing detection |
 | `batch/processing/batch_result_strategy.py` | Convert BatchResult → ProcessingResult |
@@ -634,7 +634,7 @@ Both paths share:
 |------|------|
 | `batch/services/retry.py` | Retry facade |
 | `batch/services/retry_ops.py` | Resubmit missing records |
-| `batch/services/reprompt_ops.py` | Validation + reprompt loop |
+| `batch/services/repair_ops.py` | Expectation evaluation + repair rounds |
 | `batch/services/processing_recovery.py` | Recovery state machine |
 | `batch/infrastructure/recovery_state.py` | RecoveryState persistence |
 
@@ -784,7 +784,7 @@ JSON Parse Failures — treated as DATA, not exceptions:
   Returns sentinel: [{"raw_response": "...", "_parse_error": "..."}]
        │
        ▼
-  Reprompt engine detects _parse_error → sends corrective prompt → retries
+  The repair loop detects _parse_error → sends corrective prompt → regenerates
 
 
 Online Retry (per-record):
@@ -793,11 +793,11 @@ Online Retry (per-record):
   → Non-retriable? → raise immediately
   → Exhausted? → RetryResult(exhausted=True)
 
-Online Reprompt (per-record):
-  RepromptService wraps the retry loop
-  → Parse error? → build forceful JSON feedback → retry
-  → Schema mismatch? → build validation feedback → retry
-  → Exhausted? → return last response or raise (configurable)
+Online Expectations (per-record):
+  ExpectationService wraps the retry loop
+  → Structural failure (non-record or schema-non-conforming)? → regenerate
+  → Failing expectation? → build feedback per the repair policy → regenerate
+  → Exhausted? → return_last / fail / raise (configurable)
 ```
 
 ---
@@ -890,9 +890,9 @@ Schema Echo Detection
      │
      ▼
 Schema Validation (_validate_llm_output_schema)
-  on_schema_mismatch: reject   → SchemaValidationError
-  on_schema_mismatch: reprompt → deferred to reprompt loop
-  on_schema_mismatch: warn     → log warning, pass through
+  Reports a mismatch as a warning and passes the response through.
+  Enforcement belongs to an `expect:` block, whose structural gate
+  regenerates a response the schema rejects.
      │
      ▼
 Enrichment Pipeline (UnifiedProcessor)
@@ -902,7 +902,7 @@ Enrichment Pipeline (UnifiedProcessor)
   │ VersionIdEnricher  → version_correlation_id       │
   │ PassthroughEnricher → merge passthrough fields     │
   │ RequiredFieldsEnricher → ensure required fields    │
-  │ RecoveryEnricher   → retry/reprompt metadata       │
+  │ RecoveryEnricher   → retry metadata                │
   └─────────────────────────────────────┘
      │
      ▼
@@ -1049,7 +1049,7 @@ Logging levels:
   │     {custom_id: {original_data, _batch_filter_status, _passthrough_fields}}
   │     Written at submission, read at result processing
   │
-  ├── .recovery_state_{name}.json   ← retry/reprompt state machine
+  ├── .recovery_state_{name}.json   ← retry/repair state machine
   │     {phase, retry_attempt, missing_ids, graduated_results, ...}
   │     Survives crashes — each run picks up where the last left off
   │     Deleted after successful finalization

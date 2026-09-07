@@ -264,7 +264,7 @@ When `consensus_score` is below 6, the action is skipped entirely. No prompt ass
 
 Both `generate_response` and `extract_product_insights` share the same guard. They run in parallel for records that pass the gate. Records that don't? Both skipped.
 
-### Retry and Reprompt
+### Retry and Expectations
 
 All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
 
@@ -342,9 +342,7 @@ review_analyzer/
 │       ├── extract_product_insights.yml
 │       └── format_output.yml
 └── tools/
-    ├── review_analyzer/
-    │   ├── aggregate_quality_scores.py
-    │   └── format_analysis_output.py
-    └── shared/
-        └── reprompt_validations.py       # check_required_fields UDF
+    └── review_analyzer/
+        ├── aggregate_quality_scores.py
+        └── format_analysis_output.py
 ```

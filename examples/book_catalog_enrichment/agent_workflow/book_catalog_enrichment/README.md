@@ -26,7 +26,7 @@ Rather than one large prompt that tries to do everything, each enrichment task i
 
 ### 2. Validation is built in, not bolted on
 
-After every LLM step that produces a structured output, a deterministic tool action validates it. `validate_bisac` checks that codes are exactly 9 characters in the right prefix set. `validate_description` checks word count, benefit count, and scans for placeholder text. Both trigger automatic reprompting if the output fails — the LLM retries up to 3 times before the framework accepts the best available result.
+After every LLM step that produces a structured output, a deterministic tool action validates it. `validate_bisac` checks that codes are exactly 9 characters in the right prefix set. `validate_description` checks word count, benefit count, and scans for placeholder text. Both are paired with an `expect:` block, so a failing output is regenerated — up to 3 iterations before the framework accepts the best available result.
 
 ### 3. Recommendations are grounded, not hallucinated
 
@@ -78,7 +78,7 @@ The final tool action builds three views from each enriched record — one for t
 
 ## Key Patterns
 
-### Reprompt Validation
+### Expectations
 
 ```yaml
 expect:
@@ -206,7 +206,7 @@ Required side input format:
 |------|-------|
 | BISAC valid prefixes | `tools/book_catalog_enrichment/validate_bisac_codes.py` |
 | Quality filter thresholds | `tools/book_catalog_enrichment/filter_by_quality.py` |
-| Reprompt attempts | `max_attempts` in `agent_config/book_catalog_enrichment.yml` |
+| Repair iterations | `expect.max_iterations` in `agent_config/book_catalog_enrichment.yml` |
 | Search backend (vector DB / SQL) | `tools/book_catalog_enrichment/search_book_catalog.py` |
 | User view field selection | `tools/book_catalog_enrichment/select_for_users.py` |
 | Prompts | `prompt_store/book_catalog_enrichment.md` |

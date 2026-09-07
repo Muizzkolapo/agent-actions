@@ -22,7 +22,7 @@ Phase 1: CONFIG LOAD                Phase 2: PRE-RUN                Phase 3: PER
         |                                   |                              |
         v                                   v                              v
   errors[] / warnings[]             StaticValidationResult          SchemaValidationReport
-  (blocks CLI startup)              (blocks workflow run)            (triggers reprompt or reject)
+  (blocks CLI startup)              (blocks workflow run)            (warns; `expect:` enforces)
 ```
 
 Phase 1 catches structural problems (missing keys, bad types, invalid YAML).
@@ -135,7 +135,7 @@ WorkflowStaticAnalyzer.analyze()
              - drop directive targeting
              - guard-nullable field detection
              - lineage reachability
-             - reprompt UDF references
+             - expect: block defects
              - json_mode vs schema mismatch
 ```
 
@@ -284,18 +284,21 @@ SchemaValidationReport
   (all field analysis + type_errors + validation_errors)
 ```
 
-### on_schema_mismatch modes
+### What happens on a schema mismatch
 
-Configured in `reprompt.on_schema_mismatch` in action config:
+Schema validation reports; it does not block. `_validate_llm_output_schema` logs a
+warning and passes the response through, so an action with no `expect:` block still
+ships its output.
 
-| Mode | Behavior |
-|------|----------|
-| `reject` | Raises `SchemaValidationError` immediately |
-| `reprompt` | Sends corrective feedback to LLM, retries |
-| `warn` | Logs warning, passes output through unchanged |
-| (not set) | Schema validation skipped entirely |
+Enforcement belongs to `expect:`. Its structural gate turns a schema-non-conforming
+record into a `_structural` failing outcome and regenerates it, and `structural:`
+chooses how: `retry` re-sends the original prompt, `auto` sends the schema feedback.
 
-`validate_and_raise_if_invalid()` is the convenience wrapper that calls `validate_output_against_schema()` and raises `SchemaValidationError` on failure (used by the reject path).
+Schema-echo detection is the exception — it runs unconditionally, because an echoed
+schema is never valid output.
+
+`validate_and_raise_if_invalid()` is a public convenience wrapper that calls
+`validate_output_against_schema()` and raises `SchemaValidationError` on failure.
 
 ---
 

@@ -343,7 +343,7 @@ Run 2: Poll
         ├── "completed" → process_all_batch_results()
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
-        │     → recovery state machine (retry → reprompt → finalize)
+        │     → recovery state machine (retry → repair → finalize)
         │     → write output + dispositions
         │
         ├── "in_progress" → poll provider APIs
@@ -391,7 +391,7 @@ Run N: Resume (if recovery submitted)
 | Checkpoint records | `agent_io/store/{name}.db` | SQLite table | Per-record during invocation |
 | Target output | `agent_io/store/{name}.db` + `agent_io/target/` | SQLite + JSON file | After `save_main_output` |
 | Batch registry | `agent_io/target/{action}/batch/.batch_registry.json` | JSON | After batch submit |
-| Recovery state | `agent_io/target/{action}/batch/.recovery_state_{file}.json` | JSON | Between retry/reprompt rounds |
+| Recovery state | `agent_io/target/{action}/batch/.recovery_state_{file}.json` | JSON | Between retry/repair rounds |
 | Prompt traces | `agent_io/store/{name}.db` | SQLite table | During collection |
 
 ---

@@ -15,7 +15,6 @@ Agent Actions catches these problems through multiple validation layers, from sc
 |------|------|---------|
 | **Schema Analysis** | Before execution | Analyze field dependencies and schemas |
 | **Schema Validation** | After LLM response | Validate output structure |
-| **Reprompting** | On validation failure | Automatic retry with feedback |
 | **Guards** | After validation | Filter or skip based on semantic conditions |
 | **AI Expectations** | After schema validation | Deterministic + LLM-judged semantic checks, observed and reported |
 | **Expectation Repair** | On expectation failure | Regenerate and re-validate until the suite passes, or exhaust into a verdict, tombstone, or halt |

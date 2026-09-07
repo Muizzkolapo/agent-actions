@@ -199,16 +199,14 @@ Complete telemetry of all system events in JSON Lines format (one event per line
 | Guard | G | `GuardEvaluationEvent`, `GuardPassEvent`, `GuardFailEvent` |
 | Data I/O | FIO | `FileWriteStartedEvent`, `FileWriteCompleteEvent` |
 | Cache | C | `CacheHitEvent`, `CacheMissEvent` |
-| Recovery | R | `RetryExhaustedEvent` (R001), `RepromptValidationFailedEvent` (R002), `RepromptRetryEvent` (R004), `RepromptRecoveredEvent` (R005) |
+| Recovery | R | `RetryExhaustedEvent` (R001), `ExhaustedRecordEvent` (RC004) |
 
-#### Recovery Events (R004/R005)
+#### Recovery Events
 
-When the repair loop regenerates, the event stream shows each attempt:
+- **R001 `RetryExhaustedEvent`** — fired when transport retry gives up. Contains the operation, the attempt count and the last error.
+- **RC004 `ExhaustedRecordEvent`** — fired when a record is exhausted after recovery failed. Contains `action_name`, `record_index`, `source_guid` and `reason`.
 
-- **R004 `RepromptRetryEvent`** — fired before each retry attempt (not on the first attempt). Contains `attempt` (the upcoming 1-indexed attempt), `max_attempts`, and `error` (reason for failure).
-- **R005 `RepromptRecoveredEvent`** — fired when validation passes after retries. Contains `attempt` (the 1-indexed attempt that succeeded) and `validation_name`.
-
-A successful run that needed no retries produces zero R004/R005 events. This is by design — the events only fire when recovery actually occurs.
+A run whose records all succeed first time produces neither. This is by design — the events only fire when recovery actually occurs.
 
 #### File Lifecycle
 
@@ -252,7 +250,7 @@ The SQLite database stores structured workflow data:
 | `passthrough` | Record processed successfully |
 | `skipped` | Intentionally skipped (guard with `on_false: skip`) |
 | `filtered` | Removed from pipeline (guard with `on_false: filter`) |
-| `exhausted` | Reprompt max attempts exceeded |
+| `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
 | `failed` | Processing failed |
 | `unprocessed` | Not yet processed |
 

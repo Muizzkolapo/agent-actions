@@ -327,16 +327,16 @@ agac dispositions -a {workflow} -u tools
 
 Use `record_limit: N` on the first action in the YAML to test cheaply on a subset of source records.
 
-`retry` and `reprompt` are separate concerns — keep them distinct:
+`retry` and `expect` are separate concerns — keep them distinct:
 ```yaml
 retry:
   enabled: true
   max_attempts: 3        # retries on transient errors: network, rate limits, timeouts
 
-reprompt:                # in defaults — applies to LLM actions only
-  on_schema_mismatch: reprompt
-  max_attempts: 3        # retries when LLM output fails schema validation
-  use_self_reflection: true
+expect:                  # in defaults — applies to LLM actions only
+  repair: auto           # regenerate with the failure detail when a rule fails
+  structural: auto       # send the schema feedback when the response does not conform
+  max_iterations: 3      # counting the first generation
   on_exhausted: return_last
 ```
 
