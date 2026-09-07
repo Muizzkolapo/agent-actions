@@ -8,14 +8,11 @@ from tests.manual.smoke_test.context import CheckResult, RunContext
 
 
 @dataclass
-class RepromptCheck(Check):
-    """Verify a reprompt-enabled action ran validation.
+class ExpectationCheck(Check):
+    """Verify an action with an ``expect:`` block ran output validation.
 
     Parses events.json (NDJSON) for DataValidationStartedEvent or
-    LogEvent messages mentioning the action and validation/reprompt.
-
-    Args:
-        action: action name with reprompt configured
+    LogEvent messages mentioning the action and its validation.
     """
 
     action: str
@@ -25,8 +22,8 @@ class RepromptCheck(Check):
             return [
                 CheckResult(
                     False,
-                    f"reprompt({self.action}): pipeline completed",
-                    f"exit code {ctx.exit_code} — cannot verify reprompt",
+                    f"expect({self.action}): pipeline completed",
+                    f"exit code {ctx.exit_code} — cannot verify expectations",
                 )
             ]
 
@@ -35,7 +32,7 @@ class RepromptCheck(Check):
             return [
                 CheckResult(
                     False,
-                    f"reprompt({self.action}): events.json exists",
+                    f"expect({self.action}): events.json exists",
                     "events.json not found",
                 )
             ]
@@ -67,7 +64,7 @@ class RepromptCheck(Check):
             return [
                 CheckResult(
                     False,
-                    f"reprompt({self.action}): events readable",
+                    f"expect({self.action}): events readable",
                     "failed to read events.json",
                 )
             ]
@@ -75,7 +72,7 @@ class RepromptCheck(Check):
         return [
             CheckResult(
                 passed=validation_count > 0,
-                name=f"reprompt({self.action}): validation ran",
+                name=f"expect({self.action}): validation ran",
                 message=f"{validation_count} validation events found"
                 if validation_count > 0
                 else f"no validation events for '{self.action}' in events.json",
