@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.context_data import (
     _compile_schema_for_vendor,
     _unwrap_nested_schema,
@@ -35,7 +35,6 @@ from agent_actions.validation.schema_output_validator import (
     _check_field_types,
     _check_properties_type,
     _extract_schema_fields,
-    validate_and_raise_if_invalid,
     validate_output_against_schema,
 )
 
@@ -705,24 +704,6 @@ class TestOutputValidation:
         assert not report.is_compliant
         assert report.namespace_hint is not None
         assert "canonicalize_qa" in report.namespace_hint
-
-    def test_validate_and_raise_on_invalid(self):
-        """validate_and_raise_if_invalid raises SchemaValidationError."""
-        schema = {
-            "name": "test",
-            "fields": [{"id": "x", "type": "string", "required": True}],
-        }
-        with pytest.raises(SchemaValidationError):
-            validate_and_raise_if_invalid({"wrong": "data"}, schema, "test")
-
-    def test_validate_and_raise_passes_on_valid(self):
-        """validate_and_raise_if_invalid returns report when valid."""
-        schema = {
-            "name": "test",
-            "fields": [{"id": "x", "type": "string", "required": True}],
-        }
-        report = validate_and_raise_if_invalid({"x": "hello"}, schema, "test")
-        assert report.is_compliant
 
     def test_json_schema_format_validation(self):
         """Validator handles JSON Schema format (properties/required) not just unified."""

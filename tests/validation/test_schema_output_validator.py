@@ -1,11 +1,7 @@
 """Unit tests for schema_output_validator module."""
 
-import pytest
-
-from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_output_validator import (
     SchemaValidationReport,
-    validate_and_raise_if_invalid,
     validate_output_against_schema,
 )
 
@@ -296,52 +292,6 @@ class TestValidateOutputAgainstSchema:
         report = validate_output_against_schema(output, schema, "test_action")
 
         assert report.is_compliant
-
-
-class TestValidateAndRaiseIfInvalid:
-    """Tests for validate_and_raise_if_invalid function."""
-
-    def test_valid_output_returns_report(self):
-        """Test valid output returns report without raising."""
-        schema = {
-            "name": "test_schema",
-            "fields": [{"id": "name", "type": "string", "required": True}],
-        }
-        output = {"name": "John"}
-
-        report = validate_and_raise_if_invalid(output, schema, "test_action")
-
-        assert report.is_compliant
-
-    def test_invalid_output_raises_error(self):
-        """Test invalid output raises SchemaValidationError."""
-        schema = {
-            "name": "test_schema",
-            "fields": [{"id": "name", "type": "string", "required": True}],
-        }
-        output = {}  # Missing required 'name'
-
-        with pytest.raises(SchemaValidationError) as exc_info:
-            validate_and_raise_if_invalid(output, schema, "test_action")
-
-        error = exc_info.value
-        assert error.schema_name == "test_schema"
-        assert error.action_name == "test_action"
-        assert "name" in error.missing_fields
-
-    def test_strict_mode_fails_on_extra_fields(self):
-        """Test strict mode raises error on extra fields."""
-        schema = {
-            "name": "test_schema",
-            "fields": [{"id": "name", "type": "string", "required": True}],
-        }
-        output = {"name": "John", "extra": "value"}
-
-        with pytest.raises(SchemaValidationError) as exc_info:
-            validate_and_raise_if_invalid(output, schema, "test_action", strict_mode=True)
-
-        error = exc_info.value
-        assert "extra" in error.extra_fields
 
 
 # ---------------------------------------------------------------------------

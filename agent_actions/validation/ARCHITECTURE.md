@@ -297,9 +297,6 @@ chooses how: `retry` re-sends the original prompt, `auto` sends the schema feedb
 Schema-echo detection is the exception — it runs unconditionally, because an echoed
 schema is never valid output.
 
-`validate_and_raise_if_invalid()` is a public convenience wrapper that calls
-`validate_output_against_schema()` and raises `SchemaValidationError` on failure.
-
 ---
 
 ## File Index
