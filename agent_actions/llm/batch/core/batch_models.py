@@ -4,7 +4,11 @@ import dataclasses
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
+from agent_actions.llm.batch.core.batch_constants import (
+    BatchStatus,
+    RecoveryType,
+    coerce_recovery_type,
+)
 
 
 @dataclass
@@ -46,7 +50,7 @@ class BatchJobEntry:
         # Coerce recovery_type string to enum (JSON stores "retry"/"repair")
         rt = filtered.get("recovery_type")
         if rt is not None and isinstance(rt, str):
-            filtered["recovery_type"] = RecoveryType(rt)
+            filtered["recovery_type"] = coerce_recovery_type(rt)
         return cls(**filtered)
 
     def to_dict(self) -> dict:
