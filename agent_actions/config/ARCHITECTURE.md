@@ -138,7 +138,7 @@ Values flow through five layers. Later layers override earlier ones. The first n
 Layer 1: Pydantic field defaults
   ActionConfig(temperature=None, json_mode=None, ...)
   RetryConfig(max_attempts=3, on_exhausted="return_last")
-  RepromptConfig(max_attempts=2, use_self_reflection=False)
+  ExpectConfig(max_iterations=3, repair="auto", structural="retry")
 
 Layer 2: Project defaults (agent_actions.yml → default_agent_config)
   default_agent_config:
@@ -250,7 +250,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 ### Schema & Validation
 | File | Role |
 |------|------|
-| `schema.py` | `WorkflowConfig`, `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=ignore), `RetryConfig`, `RepromptConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
+| `schema.py` | `WorkflowConfig`, `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=ignore), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
 | `types.py` | `Granularity`, `RunMode` enums; `ActionConfigDict`, `ActionEntryDict`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict` typed dicts |
 | `environment.py` | `EnvironmentConfig` (pydantic-settings), API key validation, environment detection helpers |
 
@@ -352,9 +352,9 @@ The cycle detection in `WorkflowConfig.validate_workflow_invariants()` uses an i
 
 `PathManager.clean_path()` calls `is_within_project()` before deleting anything. If the path is not under the project root, it raises `ValueError` immediately. This is a safety boundary to prevent accidental deletion of system files. The check depends on `get_project_root()` being resolvable — if the manager was not primed with a root, it will resolve from CWD.
 
-### 18. retry and reprompt reject boolean `true` in YAML
+### 18. retry rejects boolean `true` in YAML
 
-Both `ActionConfig` and `DefaultsConfig` have validators that accept `retry: false` (disables) but reject `retry: true` (ambiguous). You must use a mapping like `retry: {max_attempts: 3}`. This prevents users from enabling retry/reprompt without specifying parameters, which would use defaults they might not be aware of.
+Both `ActionConfig` and `DefaultsConfig` have validators that accept `retry: false` (disables) but reject `retry: true` (ambiguous). You must use a mapping like `retry: {max_attempts: 3}`. This prevents users from enabling retry without specifying parameters, which would use defaults they might not be aware of.
 
 ### 19. guard expressions are validated at parse time
 

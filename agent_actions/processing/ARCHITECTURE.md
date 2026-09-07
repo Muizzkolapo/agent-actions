@@ -12,7 +12,7 @@ This document maps the moving parts of `agent_actions/processing/` — the modul
          ┌─────────────────┼─────────────────────┐
          │                 │                      │
      strategies/       invocation/            recovery/
-   (what to do)     (how to call it)     (retry + reprompt)
+   (what to do)     (how to call it)       (transport retry)
          │                 │                      │
          └────────┬────────┘                      │
                   │                               │
@@ -25,8 +25,8 @@ This document maps the moving parts of `agent_actions/processing/` — the modul
     .py     _collector   _gate                    │
               .py        .py                      │
                                            evaluation/
-                                         (batch reprompt
-                                          validation)
+                                         (batch repair
+                                          rounds)
 ```
 
 The module has **five concerns**:
@@ -35,8 +35,8 @@ The module has **five concerns**:
 |---------|-------|-------------|
 | Pipeline skeleton | `unified.py` | Guard → cascade → invoke → enrich → collect |
 | Strategies | `strategies/` | Per-record LLM, file-level tool, file-level HITL |
-| Invocation | `invocation/` | Online (sync + retry/reprompt) vs batch (deferred queue) |
-| Recovery | `recovery/` | RetryService (transport errors), RepromptService (validation) |
+| Invocation | `invocation/` | Online (sync + retry + expectations) vs batch (deferred queue) |
+| Recovery | `recovery/` | `RetryService` (transport errors); validation-layer recovery lives in `expectations/` |
 | Post-processing | `enrichment.py`, `result_collector.py`, `disposition_gate.py` | Lineage, metadata, dispositions, carry-forward |
 
 ---
@@ -116,8 +116,8 @@ Input records (from staging or upstream action)
 │  │       → resolve context, render prompt,         │ │
 │  │         evaluate per-record guard               │ │
 │  │    2. InvocationStrategy.invoke(prepared)       │ │
-│  │       → OnlineStrategy: LLM call + retry/       │ │
-│  │         reprompt wrappers                       │ │
+│  │       → OnlineStrategy: LLM call wrapped in     │ │
+│  │         retry, then the expectations loop       │ │
 │  │       → BatchStrategy: queue for deferred API   │ │
 │  │    3. _checkpoint_record()                      │ │
 │  │       → write disposition + output to SQLite    │ │
@@ -162,7 +162,7 @@ Input records (from staging or upstream action)
 │                           into content namespace     │
 │  5. RequiredFieldsEnricher → source_guid, target_id  │
 │  6. RecoveryEnricher    → _recovery metadata         │
-│                           (retry/reprompt details)   │
+│                           (retry details)            │
 │                                                      │
 │  Carry-forward records bypass enrichment (already    │
 │  have correct lineage from prior run).               │
@@ -213,10 +213,10 @@ OnlineLLMStrategy.process_record()
           │
           ├── OnlineStrategy (online mode)
           │     │
-          │     ├── retry only:     RetryService.execute(llm_call)
-          │     ├── reprompt only:  RepromptService.execute(llm_call)
-          │     ├── both:           reprompt(retry(llm_call))
-          │     └── neither:        direct llm_call
+          │     ├── retry only:   RetryService.execute(llm_call)
+          │     ├── expect only:  ExpectationService.execute(llm_call)
+          │     ├── both:         expectations(retry(llm_call))
+          │     └── neither:      direct llm_call
           │
           └── BatchStrategy (batch mode)
                 └── queue task, return InvocationResult.queued()
@@ -239,32 +239,36 @@ RetryService.execute(operation)     recovery/retry.py:108
     └── all attempts failed → RetryResult(exhausted=True)
 ```
 
-### Reprompt (validation-layer recovery)
+### Expectations (validation-layer recovery)
 
 ```
-RepromptService.execute(llm_operation, original_prompt)
-    │                                         recovery/reprompt.py:179
-    for attempt in 1..max_attempts:
+ExpectationService.execute(llm_operation, original_prompt)
+    │                                       expectations/service.py
+    for iteration in 1..max_iterations:
     │   response = llm_operation(current_prompt)
     │   │
-    │   ├── JSON parse error?
-    │   │     → build parse-error feedback, retry
+    │   ├── Structural gate (if structural: retry|auto)
+    │   │     → non-record or schema-non-conforming response becomes
+    │   │       a synthetic `_structural` failing outcome
     │   │
-    │   ├── Schema validation fail? (if on_schema_mismatch: reprompt)
-    │   │     → build schema feedback, retry
+    │   ├── Suite runs every expectation over the record
+    │   │     → each outcome carries severity, detail and hint
     │   │
-    │   ├── UDF validation fail? (if validation: fn_name)
-    │   │     → build UDF feedback, retry
+    │   ├── Any `error` outcome? repair policy decides the next prompt:
+    │   │     retry → re-send the original
+    │   │     auto  → original + the failure detail, hint and last output
+    │   │     {prompt: $wf.X} → the named repair prompt
     │   │
-    │   ├── LLM critique? (if use_self_reflection and attempt ≥ threshold)
-    │   │     → append critique to feedback
-    │   │
-    │   └── All pass → RepromptResult(passed=True)
+    │   └── Suite passes → return the response with its verdict attached
     │
-    └── exhausted → RepromptResult(passed=False, exhausted=True)
-        on_exhausted: "return_last" → return last response
-        on_exhausted: "raise" → raise AgentActionsError
+    └── exhausted → on_exhausted decides:
+        "return_last" → ship the annotated last attempt
+        "fail"        → executed=False, response None, verdict kept
+        "raise"       → raise ExpectationsExhaustedError
 ```
+
+`repair: none` is observe mode: one unlooped pass that attaches a verdict and
+never consults the schema.
 
 ---
 
@@ -568,7 +572,7 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `strategies/file_tool.py` | FILE-granularity tool invocation + output reconciliation |
 | `strategies/hitl.py` | FILE-granularity HITL broadcast |
 | `invocation/strategy.py` | `InvocationStrategy` ABC, `BatchProvider` protocol |
-| `invocation/online.py` | `OnlineStrategy` — sync LLM call with retry + reprompt |
+| `invocation/online.py` | `OnlineStrategy` — sync LLM call with retry + expectations |
 | `invocation/batch.py` | `BatchStrategy` — deferred queue + flush |
 | `invocation/factory.py` | `InvocationStrategyFactory` — builds strategy from config |
 | `invocation/result.py` | `InvocationResult` — immediate / filtered / queued |
@@ -584,11 +588,8 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `source_resolution.py` | Identity resolution for non-first-stage content — own guid, then parent_source_guid, then None |
 | `batch_context_adapter.py` | Bridge batch state into `ProcessingContext` |
 | `error_handling.py` | `ProcessorErrorHandlerMixin` |
+| `helpers.py` | Shared processor utilities — dynamic agent call, schema echo rejection, passthrough transform |
 | `recovery/retry.py` | `RetryService` — transport-layer retry with backoff |
-| `recovery/reprompt.py` | `RepromptService` — validation-layer reprompt |
 | `recovery/response_validator.py` | Schema + UDF validators, `ComposedValidator` |
-| `recovery/critique.py` | LLM self-critique for stubborn failures |
-| `recovery/validation.py` | Thread-safe UDF registry |
 | `evaluation/loop.py` | `EvaluationLoop` — graduated pool (batch only) |
-| `evaluation/strategies/validation.py` | `ValidationStrategy` — batch result validation |
-| `evaluation/exhaustion.py` | `apply_exhausted_reprompt` metadata stamping |
+| `evaluation/strategies/expectations.py` | `ExpectationStrategy` — batch result validation |

@@ -11,7 +11,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. `OnlineStrategy` accepts an optional `expectation_service: ExpectationService \| None` (from `agent_actions.expectations`), composed as the outermost recovery layer around the existing retry/reprompt dispatch when an action's config sets `expect:`. `invoke()` threads `task.llm_context` into `ExpectationService.execute()` so a judged expectation's `context:` refs can resolve; `InvocationStrategyFactory` threads `agent_config` into the service factory so a judged expectation's LLM call can reuse the generating action's own model. |
+| [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. `OnlineStrategy` accepts an optional `expectation_service: ExpectationService \| None` (from `agent_actions.expectations`), composed as the outermost recovery layer around the existing retry dispatch when an action's config sets `expect:`. `invoke()` threads `task.llm_context` into `ExpectationService.execute()` so a judged expectation's `context:` refs can resolve; `InvocationStrategyFactory` threads `agent_config` into the service factory so a judged expectation's LLM call can reuse the generating action's own model. |
 | [strategies](strategies/) | Pipeline-level processing strategies for FILE-granularity modes (`FileToolStrategy`, `HITLStrategy`). |
 | [recovery](recovery/_MANIFEST.md) | Retry, checkpoint, and recovery helpers for failed batches. |
 
@@ -26,7 +26,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `helpers.py` | Module | Shared helpers (UUID construction, tuple flattening) for processors. | `processing` |
 | `record_helpers.py` | Module | Shared record assembly helpers: `build_tombstone`, `build_exhausted_tombstone`, `carry_framework_fields`, `apply_version_merge`. Used by all processing paths (online, batch, FILE). | `record`, `processing` |
 | `source_resolution.py` | Module | Shared source content resolution for non-first-stage records, by identity: content envelope source key → own guid → carried parent_source_guid → None (no positional fallback). Used by `task_preparer.py` and `guard_context.py`. | `input`, `prompt` |
-| `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. Exports `write_node_level_disposition` (node-level skip/passthrough) and `write_record_dispositions` (batch record dispositions). All `set_disposition` calls (except executor-level) are centralized here. Exhausted records take their lifecycle-stamp and disposition reason from the tombstone's own `_tombstone_reason`/`metadata.reason`, not a hardcoded `retry_exhausted`, so reprompt- and expectations-exhausted records are labelled honestly; the retry config's `on_exhausted: raise` policy skips expectations-exhausted results, whose policy already resolved inside `ExpectationService`. | `output` |
+| `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. Counts UNPROCESSED results separately from successes. Exports `write_node_level_disposition` (node-level skip/passthrough) and `write_record_dispositions` (batch record dispositions). All `set_disposition` calls (except executor-level) are centralized here. Exhausted records take their lifecycle-stamp and disposition reason from the tombstone's own `_tombstone_reason`/`metadata.reason`, not a hardcoded `retry_exhausted`, so expectations-exhausted records are labelled honestly; the retry config's `on_exhausted: raise` policy skips expectations-exhausted results, whose policy already resolved inside `ExpectationService`. | `output` |
 | `prepared_task.py` | Module | `GuardStatus` enum (PASSED, SKIPPED, FILTERED, UPSTREAM_UNPROCESSED), `PreparedTask` dataclass, and `PreparationContext` (carries `mode: RunMode` directly). | `typing` |
 | `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. Short-circuits upstream-unprocessed records before context loading. | `input`, `prompt` |
 | `types.py` | Module | `ProcessingStatus` enum (SUCCESS, SKIPPED, FILTERED, FAILED, EXHAUSTED, DEFERRED, UNPROCESSED), `ProcessingResult` factories, and `ProcessingContext` (uses `RunMode` for mode). | `typing` |
@@ -43,11 +43,11 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 | `ProcessorErrorHandlerMixin.load_file()` | `agent_io/staging/` | Reads | — |
 
-**Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `RepromptMetadata`, `ExpectationsMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.
+**Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `EvaluationMetadata`, `ExpectationsMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.
 
-`OnlineLLMStrategy.process_record`'s not-executed branch has three exhaustion arms, checked in
+`OnlineLLMStrategy.process_record`'s not-executed branch has two exhaustion arms, checked in
 that order: expectations (they wrap the inner layers, so their exhaustion is the terminal cause
-even when inner retry metadata is also present), then retry, then reprompt. The expectations arm
+even when inner retry metadata is also present), then retry. The expectations arm
 writes reason `expectations_exhausted` plus `expectations_failed`/`expectations_iterations` in the
 tombstone metadata. `ExpectationsExhaustedError` joins `ConfigurationError`/`EmptyOutputError`/
 `SchemaValidationError` in the action-fatal re-raise list — `on_exhausted: raise` halts the run
@@ -62,7 +62,7 @@ rather than degrading into a per-record failure.
 | `workflow` | inbound | Pipeline orchestrator calls processing for each action stage |
 | `prompt` | outbound | TaskPreparer uses PromptPreparationService for context and prompt rendering |
 | `input` | outbound | Uses guard evaluators and field resolution from preprocessing |
-| `output` | outbound | Uses ResponseSchemaCompiler for schema validation during reprompt |
+| `output` | outbound | Uses ResponseSchemaCompiler for schema validation during expectation checks |
 | `storage` | outbound | ResultCollector writes dispositions to StorageBackend |
 | `config` | outbound | Reads action configuration types and run mode from config |
 | `expectations` | outbound | `OnlineStrategy`/`InvocationStrategyFactory` build and compose an `ExpectationService` from an action's `expect:` config |
