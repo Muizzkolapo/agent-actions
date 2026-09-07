@@ -335,7 +335,7 @@ retry:
 
 expect:                  # in defaults — applies to LLM actions only
   repair: auto           # regenerate with the failure detail when a rule fails
-  structural: auto       # treat a schema-non-conforming response as a failure
+  structural: auto       # send the schema feedback when the response does not conform
   max_iterations: 3      # counting the first generation
   on_exhausted: return_last
 ```

@@ -247,17 +247,17 @@ ExpectationService.execute(llm_operation, original_prompt)
     for iteration in 1..max_iterations:
     │   response = llm_operation(current_prompt)
     │   │
-    │   ├── Structural gate (if structural: retry|auto)
+    │   ├── Structural gate (skipped only in observe mode)
     │   │     → non-record or schema-non-conforming response becomes
-    │   │       a synthetic `_structural` failing outcome
+    │   │       a synthetic `_structural` failing outcome, and
+    │   │       `structural:` picks how it is regenerated
     │   │
     │   ├── Suite runs every expectation over the record
     │   │     → each outcome carries severity, detail and hint
     │   │
-    │   ├── Any `error` outcome? repair policy decides the next prompt:
+    │   ├── Any `error` outcome? `repair:` decides the next prompt:
     │   │     retry → re-send the original
     │   │     auto  → original + the failure detail, hint and last output
-    │   │     {prompt: $wf.X} → the named repair prompt
     │   │
     │   └── Suite passes → return the response with its verdict attached
     │
