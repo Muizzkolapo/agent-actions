@@ -60,10 +60,10 @@ def test_a_failure_with_nothing_parked_is_left_alone():
         DependencyError("upstream action produced nothing"),
         # The outer loop re-raises (RuntimeError, ExpectationConfigurationError).
         # Widening the guard to match that tuple is the obvious edit, and it drops
-        # the halt for the commonest error family on this path — reprompt_ops
-        # raises a bare RuntimeError for a record absent from the context map, and
-        # result_collector for an action that produced nothing.
-        RuntimeError("Cannot reprompt rec-a: absent from the context map"),
+        # the halt for the commonest error family on this path: a bare RuntimeError
+        # for a record absent from the context map, or for an action that produced
+        # nothing.
+        RuntimeError("Cannot repair rec-a: absent from the context map"),
     ],
 )
 def test_any_failure_type_preserves_the_halt(failure):
