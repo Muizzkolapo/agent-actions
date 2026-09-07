@@ -180,26 +180,55 @@ The most recent 100 executions are kept; older entries roll off as new runs land
 Complete telemetry of all system events in JSON Lines format (one event per line):
 
 ```jsonl
-{"type": "WorkflowStartEvent", "timestamp": "2026-03-24T10:00:00Z", "workflow": "product_pipeline"}
-{"type": "ActionStartEvent", "timestamp": "2026-03-24T10:00:01Z", "action": "extract_data"}
-{"type": "LLMCallEvent", "timestamp": "2026-03-24T10:00:02Z", "vendor": "openai", "tokens": 500}
-{"type": "ValidationPassEvent", "timestamp": "2026-03-24T10:00:03Z", "action": "extract_data"}
-{"type": "ActionCompleteEvent", "timestamp": "2026-03-24T10:00:04Z", "action": "extract_data"}
+{"event_type": "WorkflowStartEvent", "code": "W001", "level": "info", "category": "workflow", "message": "Running workflow product_pipeline (4 actions)", "meta": {"timestamp": "2026-03-24T10:00:00Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"workflow_name": "product_pipeline", "action_count": 4, "execution_mode": "parallel"}}
+{"event_type": "ActionStartEvent", "code": "A001", "level": "info", "category": "action", "message": "2/4 START extract_data", "meta": {"timestamp": "2026-03-24T10:00:01Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "action_type": "llm", "input_path": "", "mode": "online"}}
+{"event_type": "LLMRequestEvent", "code": "L001", "level": "debug", "category": "llm", "message": "LLM request to openai/gpt-4o (412 prompt tokens)", "meta": {"timestamp": "2026-03-24T10:00:02Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "request_id": ""}}
+{"event_type": "LLMResponseEvent", "code": "L002", "level": "debug", "category": "llm", "message": "LLM response: 500 tokens in 1840ms", "meta": {"timestamp": "2026-03-24T10:00:03Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "completion_tokens": 88, "total_tokens": 500, "latency_ms": 1840.0, "request_id": ""}}
+{"event_type": "ActionCompleteEvent", "code": "A002", "level": "info", "category": "action", "message": "2/4 OK extract_data in 2.10s", "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "execution_time": 2.1, "output_path": "", "record_count": 23, "tokens": {}, "mode": "online"}}
 ```
 
-#### Event Categories
+Every line carries the same envelope. A parser should key on `event_type` or `code`;
+the payload is always under `data`, and the timestamp under `meta`, never at the top
+level.
 
-| Category | Prefix | Examples |
-|----------|--------|----------|
-| Workflow | W | `WorkflowStartEvent`, `WorkflowCompleteEvent`, `WorkflowFailedEvent` |
-| Action | A | `ActionStartEvent`, `ActionCompleteEvent`, `ActionSkipEvent`, `ActionFailedEvent` |
-| Batch | B | `BatchSubmissionEvent`, `BatchStatusEvent` |
-| LLM | L | `LLMCallEvent`, `TemplateRenderEvent` |
-| Validation | V | `ValidationStartEvent`, `ValidationPassEvent`, `ValidationFailEvent` |
-| Guard | G | `GuardEvaluationEvent`, `GuardPassEvent`, `GuardFailEvent` |
-| Data I/O | FIO | `FileWriteStartedEvent`, `FileWriteCompleteEvent` |
-| Cache | C | `CacheHitEvent`, `CacheMissEvent` |
-| Recovery | R | `RetryExhaustedEvent` (R001), `ExhaustedRecordEvent` (RC004) |
+| Key | What it holds |
+|-----|---------------|
+| `event_type` | The class name, e.g. `ActionStartEvent` |
+| `code` | Stable short code, e.g. `A001` — prefer this over the class name for matching |
+| `level` | `debug`, `info`, `warn` or `error` |
+| `category` | Coarse grouping, e.g. `action`, `llm`, `data_processing` |
+| `message` | Rendered human-readable line |
+| `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id` |
+| `data` | Per-event fields; the shape differs by `event_type` |
+
+#### Event Codes
+
+Codes are prefix + ordinal. The prefix groups related events; it is not always the
+same string as `category`.
+
+| Prefix | Category | Examples |
+|--------|----------|----------|
+| W | `workflow` | `WorkflowStartEvent` (W001), `WorkflowCompleteEvent` (W002), `WorkflowFailedEvent` (W003) |
+| A | `action` | `ActionStartEvent` (A001), `ActionCompleteEvent` (A002), `ActionSkipEvent` (A003), `ActionFailedEvent` (A004), `ActionCachedEvent` (A005) |
+| L | `llm` | `LLMRequestEvent` (L001), `LLMResponseEvent` (L002), `LLMErrorEvent` (L003), `RateLimitEvent` (L004), `LLMJSONParseErrorEvent` (L005) |
+| T | `template` | `TemplateRenderingFailedEvent` (T001) |
+| B | `batch` | `BatchSubmittedEvent` (B001), `BatchProgressEvent` (B002), `BatchCompleteEvent` (B003), `BatchStatusEvent` (B008), `BatchSubmissionFailedEvent` (B009) |
+| BP | `data_processing` | `BatchProcessingStartedEvent` (BP001), `BatchProcessingProgressEvent` (BP002), `BatchDataProcessingCompleteEvent` (BP003) |
+| RP | `data_processing` | `RecordProcessingStartedEvent` (RP001), `RecordFilteredEvent` (RP002), `RecordTransformedEvent` (RP003), `RecordEmptyOutputEvent` (RP005) |
+| DT | `data_processing` | `EnrichmentPipelineStartedEvent` (DT001), `EnricherExecutedEvent` (DT002), `EnrichmentPipelineCompleteEvent` (DT003) |
+| RC | `data_processing` | `ResultCollectionStartedEvent` (RC001), `ResultCollectedEvent` (RC002), `ResultCollectionCompleteEvent` (RC003), `ExhaustedRecordEvent` (RC004) |
+| CX | `data` | `ContextNamespaceLoadedEvent` (CX001), `ContextFieldSkippedEvent` (CX002), `ContextScopeAppliedEvent` (CX003), `ContextFieldNotFoundEvent` (CX006) |
+| D | `data` | `DataParsingErrorEvent` (D001), `DataLoadingErrorEvent` (D002) |
+| V | `validation` | `ValidationStartEvent` (V001), `ValidationCompleteEvent` (V002), `ValidationErrorEvent` (V003), `ValidationWarningEvent` (V004) |
+| DV | `validation` | `DataValidationStartedEvent` (DV001), `DataValidationPassedEvent` (DV002), `DataValidationFailedEvent` (DV003) |
+| G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
+| R | `recovery` | `RetryExhaustedEvent` (R001) |
+| SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
+| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006) |
+| C | `cache` | `CacheHitEvent` (C001), `CacheMissEvent` (C002), `CacheInvalidationEvent` (C003) |
+| F | `configuration` | `ConfigLoadStartEvent` (F001), `ConfigLoadEvent` (F002) |
+| I | `initialization` | `CLIInitStartEvent` (I001), `WorkflowInitializationStartEvent` (I008), `ProjectInitializedEvent` (I013) |
+| P | `plugin` | `UDFDiscoveryStartEvent` (P001), `UDFDiscoveryCompleteEvent` (P003) |
 
 #### Recovery Events
 
