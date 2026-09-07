@@ -7,8 +7,9 @@ for Groq API integration, supporting models like Llama3.
 SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 
-JSON parse failures return error dicts for RepromptEngine repair support,
-as Groq's json_object mode can produce malformed output.
+JSON parse failures return an error dict rather than raising, leaving the
+caller to decide whether to regenerate; Groq's json_object mode can produce
+malformed output.
 """
 
 import logging

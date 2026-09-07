@@ -440,8 +440,8 @@ def collect_results_from_processing_results(
             # Detect parse-error records masquerading as SUCCESS.
             # The LLM provider returns {"_parse_error": ...} on JSON
             # parse failure, which flows through as SUCCESS data.
-            # Reprompt has already had its chance to repair (it runs
-            # during invocation, before result collection).
+            # The repair loop has already had its chance (it runs during
+            # invocation, before result collection).
             if data and _data_has_parse_error(data):
                 result.status = ProcessingStatus.FAILED
                 for d in data:
