@@ -16,7 +16,7 @@ LLM outputs pass through three validation layers. Let's walk through what each l
 ```mermaid
 flowchart TD
     A[LLM Response] --> B{Layer 1+2: JSON & Schema Valid?}
-    B -->|No| G{expect: repair set?}
+    B -->|No| G{Repair policy set?}
     G -->|Yes| E[Regenerate with Error Feedback]
     G -->|No| H[Action Fails]
     E --> A

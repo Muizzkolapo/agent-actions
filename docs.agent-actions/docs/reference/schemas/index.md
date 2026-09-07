@@ -469,7 +469,7 @@ flowchart TD
     D -->|No| E[Validation Error]
     D -->|Yes| F{Schema Valid?}
     B -->|Yes| F
-    F -->|No| G{expect: structural set?}
+    F -->|No| G{Structural repair set?}
     G -->|Yes| H[Regenerate with Error]
     H --> A
     G -->|No| E
