@@ -1,3 +1,0 @@
-kind: Breaking Change
-body: "`validate_and_raise_if_invalid` is removed from `agent_actions.validation`. It had no callers inside the framework — the `on_schema_mismatch: reject` path it served went with the `reprompt:` block — and it was not reachable as public API in practice, being absent from the docs site, the examples and the README. `validate_output_against_schema`, which does the validation and is what the framework itself calls, stays exported; the removed wrapper only added \"and raise `SchemaValidationError`\" on top of it, which a caller can do from the returned report."
-time: 2026-09-07T19:00:00Z
