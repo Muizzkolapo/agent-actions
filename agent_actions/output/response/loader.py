@@ -59,12 +59,12 @@ class SchemaLoader:
         """
         from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
-        effective_root = resolve_project_root(project_root)
-        # Absolute key: a relative root means something different after a chdir,
-        # and it would otherwise cache the same project twice.
-        cache_key = effective_root.resolve()
+        # Resolve up front so the cache key and the discovered paths agree: a
+        # relative root names a different directory after a chdir, and storing
+        # relative paths under an absolute key reopens them against the new cwd.
+        effective_root = resolve_project_root(project_root).resolve()
         if not refresh:
-            cached = _discovery_cache.get(cache_key)
+            cached = _discovery_cache.get(effective_root)
             if cached is not None:
                 return cached
 
@@ -102,7 +102,7 @@ class SchemaLoader:
                 else:
                     result[name] = match
 
-        _discovery_cache[cache_key] = (result, collisions)
+        _discovery_cache[effective_root] = (result, collisions)
         return result, collisions
 
     @staticmethod
