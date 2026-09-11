@@ -6,7 +6,7 @@ import re
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
@@ -173,25 +173,17 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         events_path = logs_dir / "events.json"
         if not events_path.exists():
             events_path = target_dir / "events.json"
-        action_metrics = {}
+        action_metrics: dict[str, Any] = {}
         runtime_warnings: list[dict[str, Any]] = []
         if events_path.exists():
             try:
-                action_metrics = extract_action_metrics(events_path)
+                action_metrics, runtime_warnings = extract_run_events(events_path)
             except (OSError, ValueError, KeyError) as e:
                 logger.warning(
-                    "Failed to extract action metrics from %s: %s",
+                    "Failed to extract run events from %s: %s",
                     events_path,
                     e,
                     exc_info=True,
-                )
-            try:
-                runtime_warnings = extract_runtime_warnings(events_path)
-            except (OSError, ValueError) as e:
-                logger.debug(
-                    "Failed to extract runtime warnings from %s: %s",
-                    events_path,
-                    e,
                 )
 
         # Load .manifest.json for execution plan and per-action status
@@ -305,108 +297,114 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
     return logs_data
 
 
-def extract_runtime_warnings(events_path: Path) -> list[dict[str, Any]]:
-    """Extract warn/error-level LogEvents from a target events.json file.
+class RunEvents(NamedTuple):
+    """Per-action metrics and warn/error events read from one events.json."""
+
+    action_metrics: dict[str, Any]
+    runtime_warnings: list[dict[str, Any]]
+
+
+def _collect_runtime_warning(event: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
+    """Append *event* to *warnings* when it is a warn/error-level LogEvent.
 
     These are operational warnings emitted during workflow execution
     (e.g., "All N records filtered by guard") that the docs site should
     surface alongside static validation events.
     """
-    warnings: list[dict[str, Any]] = []
+    level = event.get("level")
+    if level not in ("warn", "error"):
+        return
 
-    try:
-        for event in _iter_events(events_path):
-            level = event.get("level")
-            if level not in ("warn", "error"):
-                continue
-
-            meta = event.get("meta", {})
-            warnings.append(
-                {
-                    "level": level,
-                    "message": event.get("message", ""),
-                    "action_name": meta.get("action_name"),
-                    "timestamp": meta.get("timestamp"),
-                    "event_type": event.get("event_type"),
-                    "code": event.get("code"),
-                }
-            )
-
-    except OSError as e:
-        logger.debug("Could not read runtime warnings from %s: %s", events_path, e)
-
-    return warnings
+    meta = event.get("meta", {})
+    warnings.append(
+        {
+            "level": level,
+            "message": event.get("message", ""),
+            "action_name": meta.get("action_name"),
+            "timestamp": meta.get("timestamp"),
+            "event_type": event.get("event_type"),
+            "code": event.get("code"),
+        }
+    )
 
 
-def extract_action_metrics(events_path: Path) -> dict[str, Any]:
-    """Extract per-action metrics from events.json file."""
+def _collect_action_metrics(event: dict[str, Any], action_metrics: dict[str, Any]) -> None:
+    """Fold one event into the per-action metrics accumulator."""
+    event_type = event.get("event_type")
+    meta = event.get("meta", {})
+    data = event.get("data", {})
+    agent_name = meta.get("action_name") or data.get("action_name")
+
+    if not agent_name:
+        return
+
+    if agent_name not in action_metrics:
+        action_metrics[agent_name] = {
+            "execution_time": None,
+            "tokens": {},
+            "record_count": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "filtered_count": 0,
+            "skipped_count": 0,
+            "exhausted_count": 0,
+            "latency_ms": 0.0,
+            "llm_request_count": 0,
+            "provider": None,
+            "model": None,
+            "cache_miss_count": 0,
+        }
+
+    # Extract from ActionCompleteEvent
+    if event_type == "ActionCompleteEvent":
+        action_metrics[agent_name]["execution_time"] = data.get("execution_time")
+        action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
+        if data.get("tokens"):
+            action_metrics[agent_name]["tokens"] = data["tokens"]
+
+    # Extract from ResultCollectionCompleteEvent
+    elif event_type == "ResultCollectionCompleteEvent":
+        action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
+        action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
+        action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
+        action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
+        action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
+
+    # Extract from LLMResponseEvent for token counts, latency, provider
+    elif event_type == "LLMResponseEvent":
+        tokens = action_metrics[agent_name]["tokens"]
+        tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get("prompt_tokens", 0)
+        tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
+            "completion_tokens", 0
+        )
+        # Accumulate latency for averaging later
+        action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
+        action_metrics[agent_name]["llm_request_count"] += 1
+        # Capture provider/model from first LLM event
+        if action_metrics[agent_name]["provider"] is None:
+            action_metrics[agent_name]["provider"] = data.get("provider") or None
+            action_metrics[agent_name]["model"] = data.get("model") or None
+
+    # Extract from CacheMissEvent
+    elif event_type == "CacheMissEvent":
+        action_metrics[agent_name]["cache_miss_count"] += 1
+
+
+def extract_run_events(events_path: Path) -> RunEvents:
+    """Read an events.json once, returning action metrics and runtime warnings.
+
+    Event logs grow to hundreds of megabytes on an active project, so both
+    projections are folded from a single pass rather than a read each.
+    """
     action_metrics: dict[str, Any] = {}
+    runtime_warnings: list[dict[str, Any]] = []
 
     try:
         for event in _iter_events(events_path):
-            event_type = event.get("event_type")
-            meta = event.get("meta", {})
-            data = event.get("data", {})
-            agent_name = meta.get("action_name") or data.get("action_name")
-
-            if not agent_name:
-                continue
-
-            if agent_name not in action_metrics:
-                action_metrics[agent_name] = {
-                    "execution_time": None,
-                    "tokens": {},
-                    "record_count": 0,
-                    "success_count": 0,
-                    "failed_count": 0,
-                    "filtered_count": 0,
-                    "skipped_count": 0,
-                    "exhausted_count": 0,
-                    "latency_ms": 0.0,
-                    "llm_request_count": 0,
-                    "provider": None,
-                    "model": None,
-                    "cache_miss_count": 0,
-                }
-
-            # Extract from ActionCompleteEvent
-            if event_type == "ActionCompleteEvent":
-                action_metrics[agent_name]["execution_time"] = data.get("execution_time")
-                action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
-                if data.get("tokens"):
-                    action_metrics[agent_name]["tokens"] = data["tokens"]
-
-            # Extract from ResultCollectionCompleteEvent
-            elif event_type == "ResultCollectionCompleteEvent":
-                action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
-                action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
-                action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
-                action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
-                action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
-
-            # Extract from LLMResponseEvent for token counts, latency, provider
-            elif event_type == "LLMResponseEvent":
-                tokens = action_metrics[agent_name]["tokens"]
-                tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
-                    "prompt_tokens", 0
-                )
-                tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
-                    "completion_tokens", 0
-                )
-                # Accumulate latency for averaging later
-                action_metrics[agent_name]["latency_ms"] += data.get("latency_ms", 0.0)
-                action_metrics[agent_name]["llm_request_count"] += 1
-                # Capture provider/model from first LLM event
-                if action_metrics[agent_name]["provider"] is None:
-                    action_metrics[agent_name]["provider"] = data.get("provider") or None
-                    action_metrics[agent_name]["model"] = data.get("model") or None
-
-            # Extract from CacheMissEvent
-            elif event_type == "CacheMissEvent":
-                action_metrics[agent_name]["cache_miss_count"] += 1
-
+            _collect_runtime_warning(event, runtime_warnings)
+            _collect_action_metrics(event, action_metrics)
     except OSError as e:
-        logger.debug("Could not read action metrics from %s: %s", events_path, e)
+        logger.debug("Could not read run events from %s: %s", events_path, e)
 
     # Post-process: convert accumulated latency to average per LLM request.
     for metrics in action_metrics.values():
@@ -414,4 +412,4 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
         if req_count > 0:
             metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
-    return action_metrics
+    return RunEvents(action_metrics, runtime_warnings)

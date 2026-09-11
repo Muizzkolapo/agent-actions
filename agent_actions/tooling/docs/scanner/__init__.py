@@ -28,8 +28,7 @@ from .component_scanners import (
     scan_vendors,
 )
 from .data_scanners import (
-    extract_action_metrics,
-    extract_runtime_warnings,
+    extract_run_events,
     scan_logs,
     scan_prompts,
     scan_runs,
@@ -53,8 +52,7 @@ __all__ = [
     "scan_workflow_data",
     "scan_runs",
     "scan_logs",
-    "extract_action_metrics",
-    "extract_runtime_warnings",
+    "extract_run_events",
     # Code scanners
     "scan_tool_functions",
     # Component scanners

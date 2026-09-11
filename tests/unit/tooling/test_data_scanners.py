@@ -1,4 +1,4 @@
-"""Tests for data scanners: scan_logs, extract_action_metrics, extract_runtime_warnings.
+"""Tests for data scanners: scan_logs, extract_run_events.
 
 Also covers SQLiteBackend.scan_data() prompt trace attachment
 and namespace unwrapping.
@@ -12,8 +12,7 @@ from pathlib import Path
 
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.tooling.docs.scanner.data_scanners import (
-    extract_action_metrics,
-    extract_runtime_warnings,
+    extract_run_events,
     scan_logs,
 )
 
@@ -83,23 +82,23 @@ class TestScanLogs:
 
 
 # ---------------------------------------------------------------------------
-# extract_action_metrics
+# extract_run_events — action metrics
 # ---------------------------------------------------------------------------
 
 
-class TestExtractActionMetrics:
+class TestRunEventsActionMetrics:
     def test_returns_metrics_for_known_events(self, tmp_path):
-        """extract_action_metrics parses ActionCompleteEvent correctly."""
+        """extract_run_events parses ActionCompleteEvent correctly."""
         events_path = tmp_path / "events.json"
         with open(events_path, "w") as f:
             f.write(json.dumps(_action_event("my_action")) + "\n")
-        result = extract_action_metrics(events_path)
+        result = extract_run_events(events_path).action_metrics
         assert "my_action" in result
         assert result["my_action"]["execution_time"] == 1.0
 
 
 # ---------------------------------------------------------------------------
-# extract_runtime_warnings
+# extract_run_events — runtime warnings
 # ---------------------------------------------------------------------------
 
 
@@ -117,13 +116,13 @@ def _warn_event(action_name: str, message: str, level: str = "warn") -> dict:
     }
 
 
-class TestExtractRuntimeWarnings:
+class TestRunEventsRuntimeWarnings:
     def test_captures_warn_level(self, tmp_path):
         events_path = tmp_path / "events.json"
         with open(events_path, "w") as f:
             f.write(json.dumps(_warn_event("my_action", "All records filtered")) + "\n")
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert len(result) == 1
         assert result[0]["level"] == "warn"
@@ -135,7 +134,7 @@ class TestExtractRuntimeWarnings:
         with open(events_path, "w") as f:
             f.write(json.dumps(_warn_event("act", "Something broke", level="error")) + "\n")
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert len(result) == 1
         assert result[0]["level"] == "error"
@@ -146,7 +145,7 @@ class TestExtractRuntimeWarnings:
             f.write(json.dumps(_warn_event("a", "info msg", level="info")) + "\n")
             f.write(json.dumps(_warn_event("b", "debug msg", level="debug")) + "\n")
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert result == []
 
@@ -158,20 +157,20 @@ class TestExtractRuntimeWarnings:
             f.write(json.dumps(_warn_event("c", "worse", level="error")) + "\n")
             f.write(json.dumps(_action_event("d")) + "\n")  # not a warn/error
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert len(result) == 2
         assert result[0]["action_name"] == "b"
         assert result[1]["action_name"] == "c"
 
     def test_missing_file_returns_empty(self, tmp_path):
-        result = extract_runtime_warnings(tmp_path / "nonexistent.json")
+        result = extract_run_events(tmp_path / "nonexistent.json").runtime_warnings
         assert result == []
 
     def test_empty_file_returns_empty(self, tmp_path):
         events_path = tmp_path / "events.json"
         events_path.write_text("")
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
         assert result == []
 
     def test_malformed_json_lines_skipped(self, tmp_path):
@@ -181,7 +180,7 @@ class TestExtractRuntimeWarnings:
             f.write(json.dumps(_warn_event("a", "real warning")) + "\n")
             f.write("{truncated\n")
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert len(result) == 1
         assert result[0]["action_name"] == "a"
@@ -193,12 +192,12 @@ class TestExtractRuntimeWarnings:
             f.write("  \n")
             f.write(json.dumps(_warn_event("a", "found it")) + "\n")
 
-        result = extract_runtime_warnings(events_path)
+        result = extract_run_events(events_path).runtime_warnings
 
         assert len(result) == 1
 
 
-class TestExtractActionMetricsEnrichment:
+class TestRunEventsMetricsEnrichment:
     """Tests for enriched action metrics: latency, provider, model, cache, disposition."""
 
     def _write_events(self, path: Path, events: list[dict]) -> None:
@@ -238,7 +237,7 @@ class TestExtractActionMetricsEnrichment:
                 },
             ],
         )
-        result = extract_action_metrics(events_path)
+        result = extract_run_events(events_path).action_metrics
         m = result["classify"]
         assert m["latency_ms"] == 300.0  # average of 200 and 400
         assert m["provider"] == "openai"  # first event wins, not overwritten
@@ -265,7 +264,7 @@ class TestExtractActionMetricsEnrichment:
                 },
             ],
         )
-        result = extract_action_metrics(events_path)
+        result = extract_run_events(events_path).action_metrics
         m = result["summarize"]
         assert m["exhausted_count"] == 4
         assert m["filtered_count"] == 2
@@ -289,14 +288,14 @@ class TestExtractActionMetricsEnrichment:
                 },
             ],
         )
-        result = extract_action_metrics(events_path)
+        result = extract_run_events(events_path).action_metrics
         assert result["extract"]["cache_miss_count"] == 2
 
     def test_no_llm_events_leaves_defaults(self, tmp_path):
         """Action with no LLM events has zero latency and null provider."""
         events_path = tmp_path / "events.json"
         self._write_events(events_path, [_action_event("tool_action")])
-        result = extract_action_metrics(events_path)
+        result = extract_run_events(events_path).action_metrics
         m = result["tool_action"]
         assert m["latency_ms"] == 0.0
         assert m["provider"] is None
