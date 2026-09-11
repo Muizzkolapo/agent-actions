@@ -23,9 +23,13 @@ from agent_actions.utils.path_utils import resolve_relative_to
 
 logger = LoggerFactory.get_logger(__name__)
 
-# Collision pairs already warned about, so repeated discovery walks (one per
-# action in an inspect run) do not repeat the same warning.
+# Collision pairs already warned about, so repeated discovery walks do not
+# repeat the same warning.
 _warned_collisions: set[tuple[str, tuple[str, ...]]] = set()
+
+# Discovery result per resolved project root: load_schema runs once per action,
+# so re-walking the tree per call is quadratic in the number of schemas.
+_discovery_cache: dict[Path, tuple[dict[str, Path], dict[str, list[Path]]]] = {}
 
 
 def _warn_new_collisions(collisions: dict[str, list[Path]]) -> None:
@@ -45,11 +49,22 @@ class SchemaLoader:
     """Loads, validates, and constructs schemas from YAML/JSON files or inline definitions."""
 
     @staticmethod
-    def _discover(project_root: Path | None) -> tuple[dict[str, Path], dict[str, list[Path]]]:
-        """Walk schema dirs once: (stem -> first path, stem -> all colliding paths)."""
+    def _discover(
+        project_root: Path | None, *, refresh: bool = False
+    ) -> tuple[dict[str, Path], dict[str, list[Path]]]:
+        """Walk schema dirs once: (stem -> first path, stem -> all colliding paths).
+
+        The walk is memoized per project root. Pass ``refresh`` to re-walk when
+        the caller needs the tree's current contents.
+        """
         from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
         effective_root = resolve_project_root(project_root)
+        if not refresh:
+            cached = _discovery_cache.get(effective_root)
+            if cached is not None:
+                return cached
+
         sp = get_schema_path(effective_root)
 
         # Collect search directories
@@ -84,6 +99,7 @@ class SchemaLoader:
                 else:
                     result[name] = match
 
+        _discovery_cache[effective_root] = (result, collisions)
         return result, collisions
 
     @staticmethod
@@ -94,12 +110,13 @@ class SchemaLoader:
 
         Walks ``{project_root}/{schema_path}/`` and every
         ``agent_workflow/*/{schema_path}/`` (``schema_path`` from
-        ``agent_actions.yml``). Never fails on a duplicate name — first
-        occurrence wins, warned once per process — because the LSP indexer and
-        docs scanner call this directly and must not crash on a user project
+        ``agent_actions.yml``), always re-walking so an enumerating caller sees
+        files added since an earlier lookup. Never fails on a duplicate name —
+        first occurrence wins, warned once per process — because the LSP indexer
+        and docs scanner call this directly and must not crash on a user project
         state. :meth:`load_schema` is where an ambiguous reference hard-fails.
         """
-        result, collisions = SchemaLoader._discover(project_root)
+        result, collisions = SchemaLoader._discover(project_root, refresh=True)
         _warn_new_collisions(collisions)
         return result
 
