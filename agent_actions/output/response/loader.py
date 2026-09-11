@@ -60,8 +60,11 @@ class SchemaLoader:
         from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
         effective_root = resolve_project_root(project_root)
+        # Absolute key: a relative root means something different after a chdir,
+        # and it would otherwise cache the same project twice.
+        cache_key = effective_root.resolve()
         if not refresh:
-            cached = _discovery_cache.get(effective_root)
+            cached = _discovery_cache.get(cache_key)
             if cached is not None:
                 return cached
 
@@ -99,7 +102,7 @@ class SchemaLoader:
                 else:
                     result[name] = match
 
-        _discovery_cache[effective_root] = (result, collisions)
+        _discovery_cache[cache_key] = (result, collisions)
         return result, collisions
 
     @staticmethod
@@ -118,7 +121,7 @@ class SchemaLoader:
         """
         result, collisions = SchemaLoader._discover(project_root, refresh=True)
         _warn_new_collisions(collisions)
-        return result
+        return dict(result)  # the walk result is retained; hand back a private copy
 
     @staticmethod
     def load_schema(
@@ -132,6 +135,8 @@ class SchemaLoader:
         than one file — schema names must be globally unique, and picking
         one by directory sort order can validate output against the wrong
         shape.  Raises ``FileNotFoundError`` if the schema is not found.
+        Reuses the memoized schema-tree walk; call
+        :meth:`discover_schema_files` first to pick up files added since.
         """
         from agent_actions.config.path_config import (
             get_required_by_default,
