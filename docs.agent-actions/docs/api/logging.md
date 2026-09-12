@@ -70,8 +70,8 @@ manager = LoggerFactory.initialize(
 - `output_dir` (Optional[str | Path]): Directory for run_results.json and event logs. Defaults to None.
 - `workflow_name` (str): Name of the workflow being executed. Defaults to "".
 - `invocation_id` (Optional[str]): Unique ID for this invocation. Auto-generated if not provided.
-- `verbose` (bool): Show DEBUG level events on console. Defaults to False.
-- `quiet` (bool): Only show WARN and ERROR events on console. Defaults to False.
+- `verbose` (Optional[bool]): Show DEBUG level events, all categories, and diagnostic events on console. `None` (the default) keeps whatever a previous call configured, so a `force=True` re-init that omits it does not discard the CLI's flags.
+- `quiet` (Optional[bool]): Only show WARN and ERROR events on console. `None` (the default) keeps whatever a previous call configured.
 - `force` (bool): Reinitialize even if already initialized. Defaults to False.
 
 **Returns:** EventManager instance
@@ -362,6 +362,7 @@ class MyEvent(BaseEvent):
 - `event_type` (str): Specific event type
 - `message` (str): Human-readable message
 - `data` (Dict[str, Any]): Structured event data
+- `diagnostic` (bool): Framework internals rather than something the user can act on. Kept by the file handlers, dropped by the console unless verbose
 - `meta` (EventMetadata): Metadata (invocation_id, workflow_name, etc.)
 
 ---
@@ -761,6 +762,7 @@ handler = ConsoleEventHandler(
 - `show_timestamp` (bool): Include timestamp in output
 - `formatter` (Optional[Callable]): Custom formatter function
 - `categories` (Optional[Set[str]]): Event categories to display (None = all)
+- `show_diagnostics` (bool): Display events marked diagnostic. Defaults to False, which drops them at any level
 
 ---
 

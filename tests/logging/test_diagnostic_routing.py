@@ -17,7 +17,7 @@ from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.handlers import ConsoleEventHandler, JSONFileHandler
 from agent_actions.logging.core.handlers.bridge import LoggingBridgeHandler
 from agent_actions.logging.core.manager import EventManager
-from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.logging.diagnostics import DIAGNOSTIC, DIAGNOSTIC_KEY
 from agent_actions.logging.factory import LoggerFactory
 
 
@@ -111,7 +111,7 @@ class TestTheBridgeCarriesTheMarker:
         assert self._emit(None).diagnostic is False
 
     def test_the_marker_does_not_also_land_in_the_payload(self):
-        assert "diagnostic" not in self._emit(DIAGNOSTIC).data
+        assert DIAGNOSTIC_KEY not in self._emit(DIAGNOSTIC).data
 
     def test_other_extras_still_reach_the_payload(self):
         event = self._emit({**DIAGNOSTIC, "action_name": "review"})
