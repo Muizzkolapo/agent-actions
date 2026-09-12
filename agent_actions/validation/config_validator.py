@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.file_handler import FileHandler
+from agent_actions.utils.file_handler import FileHandler, prune_non_project_dirs
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
     ActionEntryValidationOrchestrator,
@@ -51,6 +51,7 @@ class ConfigValidator(BaseValidator):
         """Collect all agent config files, returning name-to-paths mapping."""
         name_locations: dict[str, list[str]] = {}
         for root, dirs, _ in os.walk(project_dir_str):
+            prune_non_project_dirs(root, dirs)
             if "agent_config" not in dirs:
                 continue
             agent_cfg_dir = Path(root) / "agent_config"

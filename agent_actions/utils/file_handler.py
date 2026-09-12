@@ -10,6 +10,25 @@ from agent_actions.config.path_config import resolve_project_root
 
 logger = logging.getLogger(__name__)
 
+# Directory names that never hold a user's workflow, prompt or config.
+_NON_PROJECT_DIRS = frozenset({".git", "node_modules", "__pycache__"})
+
+
+def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> None:
+    """Drop directories a project search must not descend into, in place.
+
+    A virtualenv is identified by its ``pyvenv.cfg`` rather than by name, so any
+    of ``.venv``/``venv``/``env`` is caught. These trees dwarf the project, and a
+    dependency's file matching the searched name would otherwise win or lose by
+    filesystem order. The probe uses ``os.path.isfile`` because it reports an
+    unreadable directory as False where ``Path.is_file`` raises.
+    """
+    dirs[:] = [
+        d
+        for d in dirs
+        if d not in _NON_PROJECT_DIRS and not os.path.isfile(os.path.join(root, d, "pyvenv.cfg"))
+    ]
+
 
 class FileHandler:
     """Utilities for file and directory path discovery."""
@@ -17,7 +36,8 @@ class FileHandler:
     @staticmethod
     def find_file_in_directory(directory, target_filename):
         """Recursively search for a file by name, returning its full path or None."""
-        for root, _, files in os.walk(directory):
+        for root, dirs, files in os.walk(directory):
+            prune_non_project_dirs(root, dirs)
             if target_filename in files:
                 return str(Path(root) / target_filename)
         return None
@@ -26,6 +46,7 @@ class FileHandler:
     def find_specific_folder(current_dir, parent_folder_name, folder_name):
         """Find a subfolder under a named parent folder, returning its full path or None."""
         for root, dirs, _ in os.walk(current_dir):
+            prune_non_project_dirs(root, dirs)
             if parent_folder_name in dirs:
                 target_folder_path = Path(root) / parent_folder_name / folder_name
                 if target_folder_path.is_dir():
@@ -37,6 +58,7 @@ class FileHandler:
         """Return every matching folder path under a named parent folder (empty if none)."""
         matches = []
         for root, dirs, _ in os.walk(current_dir):
+            prune_non_project_dirs(root, dirs)
             if parent_folder_name in dirs:
                 target_folder_path = Path(root) / parent_folder_name / folder_name
                 if target_folder_path.is_dir():
@@ -83,7 +105,8 @@ class FileHandler:
     def get_all_agent_paths(base_dir):
         """Return all .yml file paths found recursively under base_dir."""
         agent_paths = []
-        for root, _, files in os.walk(base_dir):
+        for root, dirs, files in os.walk(base_dir):
+            prune_non_project_dirs(root, dirs)
             for file in files:
                 if file.endswith(".yml"):
                     agent_paths.append(str(Path(root) / file))

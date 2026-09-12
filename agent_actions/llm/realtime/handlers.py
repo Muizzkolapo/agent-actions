@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from agent_actions.errors import AgentNotFoundError
+from agent_actions.utils.file_handler import prune_non_project_dirs
 from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class AgentManager:
             )
         agent_yml = f"{agent_name}.yml"
         for root, dirs, files in os.walk(project_root):
+            prune_non_project_dirs(root, dirs)
             dirs[:] = [d for d in dirs if "rendered_workflow" not in d]
             if agent_yml in files:
                 base_dir = Path(root).parent
