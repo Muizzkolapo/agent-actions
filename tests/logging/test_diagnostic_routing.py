@@ -12,12 +12,12 @@ from __future__ import annotations
 import logging
 
 import pytest
-from agent_actions.logging.diagnostics import DIAGNOSTIC
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.handlers import ConsoleEventHandler, JSONFileHandler
 from agent_actions.logging.core.handlers.bridge import LoggingBridgeHandler
 from agent_actions.logging.core.manager import EventManager
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.factory import LoggerFactory
 
 
@@ -276,3 +276,17 @@ class TestEnrichmentDiagnostics:
         events = _warns_from(self._enrich({0: [0, 5]}), tmp_path)
 
         _assert_kept_off_the_console(events, "indices out of bounds")
+
+
+class TestScopeApplicationDiagnostics:
+    def test_a_null_safe_field_resolution_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.prompt.context.scope_application import apply_context_scope
+
+        def run():
+            apply_context_scope(
+                field_context={"dep": {"present": 1}},
+                context_scope={"passthrough": ["dep.absent"]},
+                action_name="consumer",
+            )
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "NULL-SAFE")
