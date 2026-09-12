@@ -109,7 +109,8 @@ def scan_readmes(project_root: Path) -> dict[str, ReadmeData]:
     Uses last-write-wins on duplicate workflow stems, matching the
     collision policy in scan_workflows() so README content stays paired
     with the workflow metadata that catalog generation actually uses.
-    rglob ordering is filesystem-dependent.
+    Discovery order is filesystem-dependent, so which duplicate wins is
+    arbitrary.
 
     READMEs larger than 100 KB are truncated with a trailing notice.
     """

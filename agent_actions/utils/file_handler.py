@@ -36,7 +36,9 @@ def find_project_dirs(root: Path, name_matches: Callable[[str], bool]) -> list[P
 
     ``Path.rglob`` cannot prune, so it pays for the whole tree; this walks the
     same shape while skipping what :func:`prune_non_project_dirs` excludes.
-    Order is filesystem order, as ``rglob``'s was.
+    Results are depth-first in directory order, where ``rglob`` yielded
+    shallower matches first — so callers that resolve duplicate names by
+    last-write-wins may pick a different winner.
     """
     found: list[Path] = []
     for parent, dirs, _ in os.walk(root):

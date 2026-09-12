@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from agent_actions.tooling.docs import scanner
@@ -63,6 +64,30 @@ class TestScanRunsSkipsNonProjectDirs:
 
         assert "real_wf" in runs
         assert "vendored" not in runs
+
+
+class TestPrunedSubtreesAreNotTraversed:
+    def test_virtualenv_subtree_is_never_scanned(self, tmp_path, monkeypatch):
+        """Filtering a full walk's results after the fact would return the same paths
+        at the same cost; the point is not descending."""
+        venv = _make_venv(tmp_path)
+        (venv / "lib" / "site-packages" / "pkg" / "nested").mkdir(parents=True)
+        _workflow(tmp_path / "agent_workflow", "real_wf")
+
+        scanned: list[str] = []
+        real_scandir = os.scandir
+
+        def recording_scandir(path=".", *args, **kwargs):
+            scanned.append(str(path))
+            return real_scandir(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "scandir", recording_scandir)
+        found = scanner.scan_workflows(tmp_path)
+        monkeypatch.undo()
+
+        assert "real_wf" in found
+        inside_venv = [p for p in scanned if p.startswith(str(venv))]
+        assert inside_venv == [], f"descended into the virtualenv: {inside_venv[:3]}"
 
 
 class TestProjectDirsAreStillFound:
