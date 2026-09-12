@@ -52,6 +52,33 @@ class TestFindFileInDirectorySkipsNonProjectDirs:
         assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
 
 
+class TestVirtualenvDetectionIsByMarkerNotName:
+    def test_virtualenv_under_an_arbitrary_name_is_skipped(self, tmp_path):
+        """Projects name their env anything; pyvenv.cfg is what identifies it."""
+        venv = _make_venv(tmp_path, name=".myproject_env")
+        (venv / "lib" / "overview.md").write_text("dependency docs")
+
+        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") is None
+
+    def test_directory_named_venv_without_the_marker_is_still_searched(self, tmp_path):
+        """A plain directory called venv is the user's, not an environment."""
+        plain = tmp_path / "venv"
+        plain.mkdir()
+        target = plain / "overview.md"
+        target.write_text("real prompt")
+
+        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+
+    def test_unlisted_dot_directory_is_still_searched(self, tmp_path):
+        """Only the named dirs and virtualenvs are skipped, not every dot-directory."""
+        skills = tmp_path / ".claude" / "skills"
+        skills.mkdir(parents=True)
+        target = skills / "overview.md"
+        target.write_text("real prompt")
+
+        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+
+
 class TestFolderSearchesSkipNonProjectDirs:
     def test_agent_config_inside_a_virtualenv_is_not_a_project_agent(self, tmp_path):
         """A packaged example shipped by a dependency is not the user's workflow."""
