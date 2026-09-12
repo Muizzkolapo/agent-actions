@@ -41,6 +41,24 @@ def test_ambiguous_reference_raises_naming_all_paths(tmp_path):
     assert str(path_b) in message, f"error must name {path_b}, got: {message}"
 
 
+def test_ambiguous_reference_raises_after_an_earlier_load_walked_the_tree(tmp_path):
+    """The hard-fail must survive discovery reuse — a dropped collision map picks alphabetically."""
+    _setup_project(tmp_path)
+    _write_schema(tmp_path / "schema" / "unique.yml", "unique_schema")
+    path_a = tmp_path / "agent_workflow" / "wf_a" / "schema" / "answer.yml"
+    path_b = tmp_path / "agent_workflow" / "wf_b" / "schema" / "answer.yml"
+    _write_schema(path_a, "wf_a_copy")
+    _write_schema(path_b, "wf_b_copy")
+
+    SchemaLoader.load_schema("unique", project_root=tmp_path)
+
+    with pytest.raises(SchemaValidationError) as exc_info:
+        SchemaLoader.load_schema("answer", project_root=tmp_path)
+    message = str(exc_info.value)
+    assert str(path_a) in message, f"error must name {path_a}, got: {message}"
+    assert str(path_b) in message, f"error must name {path_b}, got: {message}"
+
+
 def test_project_level_collision_with_workflow_raises(tmp_path):
     _setup_project(tmp_path)
     _write_schema(tmp_path / "schema" / "dup.yml", "project_copy")
