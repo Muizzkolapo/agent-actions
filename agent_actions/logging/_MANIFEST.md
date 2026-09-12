@@ -22,8 +22,9 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 | `config.py` | Module | Dataclasses that capture project logging, handler, and formatting defaults. | `logging` |
 | `FileHandlerSettings` | Class | File handler configuration used by the factory. | `logging` |
 | `LoggingConfig` | Class | Central logging configuration builder with `from_project_config`/`from_environment`. | `logging` |
-| `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. Registers four handler types: Console, `events.json` (all levels), `errors.json` (ERROR-only, output_dir runs only), and `run_results.json`. On init, clamps noisy third-party SDK/HTTP loggers (httpx, urllib3, openai, anthropic, ollama, groq, cohere, google_genai, googleapiclient, etc.) to WARNING and applies user-supplied `logging.module_levels` overrides; pre-init levels are snapshotted and restored by `reset()`. | `logging` |
+| `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. Registers four handler types: Console, `events.json` (all levels), `errors.json` (ERROR-only, output_dir runs only), and `run_results.json`. On init, clamps noisy third-party SDK/HTTP loggers (httpx, urllib3, openai, anthropic, ollama, groq, cohere, google_genai, googleapiclient, etc.) to WARNING and applies user-supplied `logging.module_levels` overrides; pre-init levels are snapshotted and restored by `reset()`. Remembers the console verbosity the CLI flags asked for, so a `force=True` re-init that omits `verbose`/`quiet` preserves it. | `logging` |
 | `LoggerFactory` | Class | Manages logger creation, third-party suppression, and the `events.json` bridge. | `logging` |
+| `diagnostics.py` | Module | `DIAGNOSTIC` marker passed as `extra=` on log calls describing framework mechanics: dropped by the console unless the run is verbose, kept at full level by the JSON handlers. | `logging` |
 | `filters.py` | Module | Custom filters (e.g., `RedactingFilter`) to sanitize sensitive payloads. | `logging` |
 
 ## Project Surface
