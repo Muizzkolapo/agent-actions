@@ -14,18 +14,19 @@ logger = logging.getLogger(__name__)
 _NON_PROJECT_DIRS = frozenset({".git", "node_modules", "__pycache__"})
 
 
-def prune_non_project_dirs(root: str, dirs: list[str]) -> None:
+def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> None:
     """Drop directories a project search must not descend into, in place.
 
-    A virtualenv is identified by its ``pyvenv.cfg`` rather than by name, so
-    any of ``.venv``/``venv``/``env`` is caught. These trees dwarf the project
-    itself, and a dependency's file matching the searched name would otherwise
-    win or lose by filesystem order.
+    A virtualenv is identified by its ``pyvenv.cfg`` rather than by name, so any
+    of ``.venv``/``venv``/``env`` is caught. These trees dwarf the project, and a
+    dependency's file matching the searched name would otherwise win or lose by
+    filesystem order. The probe uses ``os.path.isfile`` because it reports an
+    unreadable directory as False where ``Path.is_file`` raises.
     """
     dirs[:] = [
         d
         for d in dirs
-        if d not in _NON_PROJECT_DIRS and not (Path(root) / d / "pyvenv.cfg").is_file()
+        if d not in _NON_PROJECT_DIRS and not os.path.isfile(os.path.join(root, d, "pyvenv.cfg"))
     ]
 
 
