@@ -4,6 +4,7 @@ Shared file and directory operations utilities.
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from agent_actions.config.path_config import resolve_project_root
@@ -28,6 +29,22 @@ def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> Non
         for d in dirs
         if d not in _NON_PROJECT_DIRS and not os.path.isfile(os.path.join(root, d, "pyvenv.cfg"))
     ]
+
+
+def find_project_dirs(root: Path, name_matches: Callable[[str], bool]) -> list[Path]:
+    """Directories under *root* whose name satisfies *name_matches*.
+
+    ``Path.rglob`` cannot prune, so it pays for the whole tree; this walks the
+    same shape while skipping what :func:`prune_non_project_dirs` excludes.
+    Results are depth-first in directory order, where ``rglob`` yielded
+    shallower matches first — so callers that resolve duplicate names by
+    last-write-wins may pick a different winner.
+    """
+    found: list[Path] = []
+    for parent, dirs, _ in os.walk(root):
+        prune_non_project_dirs(parent, dirs)
+        found.extend(Path(parent) / d for d in dirs if name_matches(d))
+    return found
 
 
 class FileHandler:

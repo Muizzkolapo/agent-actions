@@ -18,6 +18,7 @@ from agent_actions.config.defaults import DocsDefaults
 from agent_actions.tooling.code_scanner import (
     scan_tool_functions,
 )
+from agent_actions.utils.file_handler import find_project_dirs
 
 from .component_scanners import (
     scan_data_loaders,
@@ -79,7 +80,7 @@ def scan_workflows(project_root: Path) -> dict[str, dict[str, Any]]:
 
     # Then, scan for original workflows with plan sections
     # Skip the artefact directory to avoid scanning generated docs
-    for agent_config_dir in project_root.rglob("agent_config"):
+    for agent_config_dir in find_project_dirs(project_root, lambda n: n == "agent_config"):
         # Skip if inside artefact directory
         if artefact_dir in agent_config_dir.parents or agent_config_dir == artefact_dir:
             continue
@@ -108,14 +109,15 @@ def scan_readmes(project_root: Path) -> dict[str, ReadmeData]:
     Uses last-write-wins on duplicate workflow stems, matching the
     collision policy in scan_workflows() so README content stays paired
     with the workflow metadata that catalog generation actually uses.
-    rglob ordering is filesystem-dependent.
+    Discovery order is filesystem-dependent, so which duplicate wins is
+    arbitrary.
 
     READMEs larger than 100 KB are truncated with a trailing notice.
     """
     readmes: dict[str, ReadmeData] = {}
     artefact_dir = project_root / "artefact"
 
-    for agent_config_dir in project_root.rglob("agent_config"):
+    for agent_config_dir in find_project_dirs(project_root, lambda n: n == "agent_config"):
         if artefact_dir in agent_config_dir.parents or agent_config_dir == artefact_dir:
             continue
 
