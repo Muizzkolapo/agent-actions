@@ -64,6 +64,9 @@ class BaseEvent:
     meta: EventMeta = field(default_factory=EventMeta)
     data: dict[str, Any] = field(default_factory=dict)
 
+    # Framework internals: dropped by the console, kept by the log files.
+    diagnostic: bool = False
+
     def __post_init__(self) -> None:
         """Hook for subclasses to set level, category, and message."""
         pass
@@ -86,6 +89,7 @@ class BaseEvent:
             "level": self.level.value,
             "category": self.category,
             "message": self.message,
+            "diagnostic": self.diagnostic,
             "meta": self.meta.to_dict(),
             "data": self.data,
         }

@@ -22,6 +22,7 @@ class ConsoleEventHandler:
         formatter: Callable[[BaseEvent], str] | None = None,
         console: Any | None = None,
         categories: set[str] | None = None,
+        show_diagnostics: bool = False,
     ) -> None:
         """Initialize the console handler."""
         from agent_actions.logging.core.events import EventLevel
@@ -30,6 +31,7 @@ class ConsoleEventHandler:
         self.show_timestamp = show_timestamp
         self.formatter = formatter
         self.categories = categories
+        self.show_diagnostics = show_diagnostics
 
         if RICH_AVAILABLE and Console is not None:
             self._console = console or Console(stderr=True)
@@ -44,6 +46,10 @@ class ConsoleEventHandler:
 
         level_order = EventLevel.ordered()
         if level_order.index(event.level) < level_order.index(self.min_level):
+            return False
+
+        # Framework internals: the log files keep these, the terminal does not.
+        if event.diagnostic and not self.show_diagnostics:
             return False
 
         # WARN and ERROR always shown regardless of category — errors from

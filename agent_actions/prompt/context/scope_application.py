@@ -8,6 +8,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError, RecordContextError
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
@@ -76,6 +77,7 @@ def _resolve_missing_field(
             field_ref,
             action_name,
             ns_name,
+            extra=DIAGNOSTIC,
         )
         return None
 
