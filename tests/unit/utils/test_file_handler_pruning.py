@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+import pytest
 
 from agent_actions.utils.file_handler import FileHandler
 
@@ -77,6 +80,22 @@ class TestVirtualenvDetectionIsByMarkerNotName:
         target.write_text("real prompt")
 
         assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+
+
+class TestUnreadableDirectoriesDoNotBreakTheSearch:
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permissions")
+    def test_directory_the_user_cannot_read_is_skipped_not_raised(self, tmp_path):
+        """The venv probe stats inside every candidate dir; an unreadable one must not crash."""
+        (tmp_path / "prompt_store").mkdir()
+        target = tmp_path / "prompt_store" / "overview.md"
+        target.write_text("real prompt")
+        restricted = tmp_path / "restricted"
+        restricted.mkdir()
+        restricted.chmod(0o000)
+        try:
+            assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+        finally:
+            restricted.chmod(0o755)
 
 
 class TestFolderSearchesSkipNonProjectDirs:
