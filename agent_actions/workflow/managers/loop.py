@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsError, ConfigurationError, DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
@@ -218,7 +219,8 @@ class VersionOutputCorrelator:
         if base_record.get("source_guid") is None:
             logger.warning(
                 "Missing 'source_guid' in base record during version output correlation; "
-                "merged record will have source_guid=None"
+                "merged record will have source_guid=None",
+                extra=DIAGNOSTIC,
             )
 
         # Version-specific invariant: every record must have its own namespace.

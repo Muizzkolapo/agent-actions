@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.utils.content import get_existing_content
 
@@ -109,6 +110,7 @@ def merge_branch_records(
                 "Branch '%s' missing own namespace in content. Keys: %s",
                 branch_name,
                 sorted(branch_content.keys()),
+                extra=DIAGNOSTIC,
             )
         else:
             merged_content[branch_name] = branch_content[branch_name]
