@@ -405,6 +405,20 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 
 **Diagnostic events.** A call site that logs framework mechanics rather than something a user can act on passes `extra=DIAGNOSTIC` (from `logging/diagnostics.py`). The bridge lifts the marker onto `BaseEvent.diagnostic`, and the ConsoleEventHandler drops such events at any level unless it was built with `show_diagnostics=True`, which the factory sets for verbose runs. Both JSON handlers ignore the flag and record the event at its own level, so the message stays in `events.json` at full fidelity. Demoting these call sites to `debug` instead would remove them from the log files as well.
 
+
+Deciding whether a message qualifies: **can the person running the workflow change the outcome?**
+
+| | Console | Log files |
+|---|---|---|
+| No — a framework constant, a namespace the framework assembles, an identifier it mints | hidden | kept at its own level |
+| Yes — their config, prompt, schema, or UDF tool code produced it | shown | kept |
+
+Two things the test is deliberately not. It is not *how noisy is this*: a message that fires on every record still belongs on the console when the user can act on it, and the fix for volume is to aggregate, not to hide.
+
+And it is not *which module is this in*. `workflow/merge.py` holds one of each: the branch-namespace message describes a structure the merge assembles itself and is marked, while the unreadable-input-file message a few functions away names a file the user wrote and is not. Classification binds to the call site, never to the module or the logger name — silencing a module wholesale would take both.
+
+When a message passes the test but reads like machinery, rewrite the wording. Marking it would hide a real problem behind a vocabulary choice.
+
 **JSONFileHandler buffering.** Events are buffered in memory (default buffer_size=5 for events.json, 1 for errors.json) and only flushed to disk when the buffer fills, when `flush()` is called, or at interpreter exit via `atexit`. A crash between buffer fills loses buffered events. The errors.json handler uses buffer_size=1 to minimize this risk for error events.
 
 **Force re-init atomicity.** When `initialize(force=True)` is called, existing handlers are stashed before new ones are registered. If registration fails, stashed handlers are restored. This prevents the logging system from being left in a degraded state during re-initialization (e.g., when switching workflows in the same process).

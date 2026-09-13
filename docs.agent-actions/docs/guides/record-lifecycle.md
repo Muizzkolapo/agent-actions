@@ -205,13 +205,13 @@ Every record carries its complete transition history in `_state_history`. Each e
 | `reason` | Why the transition happened (`success`, `guard_skip`, `downstream_reset`, etc.) |
 | `detail` | Optional additional context |
 
-The history is capped at 64 entries (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`) to bound memory usage. Because each action contributes 2–4 transitions per record (downstream-reset to `active` plus a final state, plus one entry per retry), workflows with roughly 16 or more actions can start seeing older entries dropped. The framework emits an INFO log the first time truncation fires for each action in a process:
+The history is capped at 64 entries (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`) to bound memory usage. Because each action contributes 2–4 transitions per record (downstream-reset to `active` plus a final state, plus one entry per retry), workflows with roughly 16 or more actions can start seeing older entries dropped. The framework logs this the first time truncation fires for each action in a process. It describes a framework constant rather than anything you configure, so it is written to `events.json` at WARNING but kept off the terminal; run with `-v` to see it there:
 
 ```
 _state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'.
 ```
 
-If you see this line, the record's oldest transitions have already been lost for that action. Subsequent truncations for the same action are silent by design (one log per action per process, so the diagnostic doesn't become per-record spam).
+When this line appears in `events.json`, the record's oldest transitions have already been lost for that action. Subsequent truncations for the same action are silent by design (one log per action per process, so the diagnostic doesn't become per-record spam).
 
 :::tip
 You can filter records by their history to answer questions like "which records were guard-skipped at action X?" or "which records required retries?" — without needing separate log aggregation.

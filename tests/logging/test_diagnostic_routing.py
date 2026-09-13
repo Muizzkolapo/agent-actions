@@ -290,3 +290,155 @@ class TestScopeApplicationDiagnostics:
             )
 
         _assert_kept_off_the_console(_warns_from(run, tmp_path), "NULL-SAFE")
+
+
+class TestFrameworkMechanicsElsewhereAreDiagnostic:
+    """Messages the user cannot act on, in modules beyond the first pass."""
+
+    def test_the_state_history_cap_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.record.envelope import (
+            _log_history_truncation_once,
+            _reset_truncation_log_state_for_tests,
+        )
+
+        def run():
+            _reset_truncation_log_state_for_tests()
+            _log_history_truncation_once("review", dropped=3)
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "_state_history capped")
+
+    def test_a_branch_missing_its_namespace_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.workflow.merge import merge_branch_records
+
+        def run():
+            merge_branch_records({"draft": {"content": {"unrelated": 1}}})
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "missing own namespace")
+
+    def test_an_unresolved_source_guid_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+
+        records = {"v1": {"source_guid": None, "content": {"v1": {"answer": "a"}}}}
+
+        def run():
+            VersionOutputCorrelator(agent_folder=tmp_path)._create_merged_record(
+                records, {k: [v] for k, v in records.items()}
+            )
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "source_guid")
+
+
+class TestUserAuthoredToolProblemsStayOnTheConsole:
+    """A FILE tool is the user's own code, so its output problems are theirs to fix.
+
+    These name an internal field but fail the criterion's actual test — the user
+    can change the outcome — so they must survive any later sweep of the marker.
+    """
+
+    @staticmethod
+    def _resolve(raw_outputs):
+        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
+
+        def run():
+            _resolve_source_mapping(raw_outputs, [{"node_id": "n0", "content": {}}], "dedup_tool")
+
+        return run
+
+    def _assert_reaches_console(self, events, fragment):
+        matching = [e for e in events if fragment in e.message]
+        assert matching, f"no WARN mentioning {fragment!r}: {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False, f"wrongly marked diagnostic: {event.message}"
+            assert console.accepts(event) is True, f"hidden from the user: {event.message}"
+
+    def test_a_tool_output_without_a_node_id_still_reaches_the_console(self, tmp_path):
+        events = _warns_from(self._resolve([{"content": {}}]), tmp_path)
+
+        self._assert_reaches_console(events, "has no node_id")
+
+    def test_a_tool_output_with_an_unknown_node_id_still_reaches_the_console(self, tmp_path):
+        events = _warns_from(self._resolve([{"node_id": "ghost", "content": {}}]), tmp_path)
+
+        self._assert_reaches_console(events, "not found in inputs")
+
+
+class TestTheDocsSiteHonoursTheMarker:
+    """The generated docs surface runtime warnings to the same person the console
+    serves, so it must make the same distinction the console does."""
+
+    @staticmethod
+    def _collect(event: dict) -> list[dict]:
+        from agent_actions.tooling.docs.scanner.data_scanners import _collect_runtime_warning
+
+        warnings: list[dict] = []
+        _collect_runtime_warning(event, warnings)
+        return warnings
+
+    def test_a_diagnostic_warning_is_not_surfaced(self):
+        event = {"level": "warn", "message": "internal", "diagnostic": True, "meta": {}}
+
+        assert self._collect(event) == []
+
+    def test_an_ordinary_warning_is_still_surfaced(self):
+        event = {"level": "warn", "message": "act on me", "diagnostic": False, "meta": {}}
+
+        assert [w["message"] for w in self._collect(event)] == ["act on me"]
+
+    def test_an_event_written_before_the_marker_existed_is_still_surfaced(self):
+        assert len(self._collect({"level": "error", "message": "old line", "meta": {}})) == 1
+
+
+class TestSiblingsOfMarkedSitesStayOnTheConsole:
+    """A later sweep silencing a whole module would hide these."""
+
+    def test_an_unreadable_merge_input_still_reaches_the_console(self, tmp_path):
+        from agent_actions.workflow.merge import merge_json_files
+
+        bad = tmp_path / "broken.json"
+        bad.write_text("{not json")
+
+        events = _warns_from(lambda: merge_json_files([bad]), tmp_path)
+        matching = [e for e in events if "Could not read JSON file" in e.message]
+
+        assert matching, f"no WARN for the unreadable file: {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False
+            assert console.accepts(event) is True
+
+
+class TestRemainingMechanicsInTheEditedModules:
+    def test_a_vanished_target_listing_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+
+        class _RacingBackend:
+            def list_target_files(self, version_agent):
+                return ["gone.json"]
+
+            def read_target(self, version_agent, relative_path):
+                raise FileNotFoundError(relative_path)
+
+        def run():
+            VersionOutputCorrelator(
+                agent_folder=tmp_path, storage_backend=_RacingBackend()
+            )._load_from_storage_backend("v1")
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "TOCTOU")
+
+    def test_a_duplicate_target_id_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.processing.invocation.batch import BatchStrategy
+        from agent_actions.processing.prepared_task import PreparedTask
+        from agent_actions.processing.types import ProcessingContext
+
+        task = PreparedTask(target_id="t-1", source_guid="sg-1")
+        context = ProcessingContext(
+            agent_config={"kind": "llm"}, agent_name="score", is_first_stage=True, source_data=[]
+        )
+
+        def run():
+            strategy = BatchStrategy(provider=None)
+            strategy.invoke(task, context)
+            strategy.invoke(task, context)
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "Duplicate target_id")

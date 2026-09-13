@@ -13,6 +13,7 @@ import datetime
 import logging
 from typing import Any
 
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.state import (
     CASCADE_BLOCKING_STATES,
     PROCESSABLE_STATES,
@@ -44,6 +45,7 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
         STATE_HISTORY_CAP,
         dropped,
         action_name,
+        extra=DIAGNOSTIC,
     )
 
 
