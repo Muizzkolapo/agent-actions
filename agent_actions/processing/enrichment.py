@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
     EnricherExecutedEvent,
     EnrichmentPipelineCompleteEvent,
@@ -100,6 +101,7 @@ class LineageEnricher(Enricher):
                             len(source_idx),
                             source_data_len,
                             context.action_name,
+                            extra=DIAGNOSTIC,
                         )
                     result.data[i] = LineageBuilder.add_lineage_tracking_from_sources(
                         obj=item,
@@ -124,6 +126,7 @@ class LineageEnricher(Enricher):
                             source_idx,
                             source_data_len,
                             context.action_name,
+                            extra=DIAGNOSTIC,
                         )
                         parent_item = None
             elif use_per_item_parent_lookup:

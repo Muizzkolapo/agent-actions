@@ -12,6 +12,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
 from agent_actions.prompt.context.null_namespace import SKIPPED_NAMESPACE
 from agent_actions.prompt.context.scope_inference import infer_dependencies
@@ -168,6 +169,7 @@ class DependencyNamespaceBuilder:
                             dep_name,
                             agent_name,
                             type(dep_data).__name__,
+                            extra=DIAGNOSTIC,
                         )
                         continue
 
@@ -185,6 +187,7 @@ class DependencyNamespaceBuilder:
                             dep_name,
                             sorted(allowed_fields),
                             sorted(dep_data.keys()),
+                            extra=DIAGNOSTIC,
                         )
                         dep_namespaces[dep_name] = SKIPPED_NAMESPACE
                         continue

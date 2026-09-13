@@ -44,6 +44,10 @@ class LoggerFactory:
     # logger name → its level before the framework first touched it; used by reset()
     # to restore pre-init state and by force-reinit to drop loggers no longer managed.
     _original_logger_levels: dict[str, int] = {}
+    # Console verbosity from the CLI flags. A re-init that omits them is
+    # attaching the run's file handlers, not reconfiguring the terminal.
+    _console_verbose: bool = False
+    _console_quiet: bool = False
 
     @classmethod
     def initialize(
@@ -52,8 +56,8 @@ class LoggerFactory:
         output_dir: str | Path | None = None,
         workflow_name: str = "",
         invocation_id: str | None = None,
-        verbose: bool = False,
-        quiet: bool = False,
+        verbose: bool | None = None,
+        quiet: bool | None = None,
         force: bool = False,
     ) -> EventManager:
         """Initialize the unified logging system and return the EventManager."""
@@ -64,6 +68,12 @@ class LoggerFactory:
             return cls._event_manager
 
         cls._config = config or LoggingConfig.from_environment()
+        if verbose is not None:
+            cls._console_verbose = verbose
+        if quiet is not None:
+            cls._console_quiet = quiet
+        verbose = cls._console_verbose
+        quiet = cls._console_quiet
 
         if verbose or cls._config.default_level == "DEBUG":
             console_level_str = "DEBUG"
@@ -159,6 +169,7 @@ class LoggerFactory:
             show_timestamp=True,
             formatter=formatter.format,
             categories=categories,
+            show_diagnostics=verbose,
         )
         manager.register(console_handler)
 
@@ -313,6 +324,8 @@ class LoggerFactory:
         """Reset factory state and restore loggers we touched to their pre-init levels."""
         cls._initialized = False
         cls._config = None
+        cls._console_verbose = False
+        cls._console_quiet = False
         cls._event_manager = None
         cls._run_results_collector = None
 

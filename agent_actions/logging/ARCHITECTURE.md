@@ -229,6 +229,7 @@ Purpose:  User-facing terminal output via Rich (or plain stderr fallback)
 Filter:   min_level (verbose=DEBUG, quiet=WARN, default=INFO)
           + category filter: {"workflow", "agent", "batch"} unless verbose
           WARN and ERROR bypass category filter -- always shown
+          diagnostic events are dropped at any level unless show_diagnostics
 Format:   AgentActionsFormatter dispatch table for known event types,
           _format_default for everything else
 Output:   Rich Console(stderr=True) or print(file=sys.stderr)
@@ -402,6 +403,10 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 
 **Category bypass for WARN/ERROR.** The ConsoleEventHandler always shows WARN and ERROR events regardless of the category filter. This means errors from modules outside the configured categories (e.g., `llm`, `processing`) are still visible on the console. This is intentional -- errors must not be silently hidden by category filtering.
 
+**Diagnostic events.** A call site that logs framework mechanics rather than something a user can act on passes `extra=DIAGNOSTIC` (from `logging/diagnostics.py`). The bridge lifts the marker onto `BaseEvent.diagnostic`, and the ConsoleEventHandler drops such events at any level unless it was built with `show_diagnostics=True`, which the factory sets for verbose runs. Both JSON handlers ignore the flag and record the event at its own level, so the message stays in `events.json` at full fidelity. Demoting these call sites to `debug` instead would remove them from the log files as well.
+
 **JSONFileHandler buffering.** Events are buffered in memory (default buffer_size=5 for events.json, 1 for errors.json) and only flushed to disk when the buffer fills, when `flush()` is called, or at interpreter exit via `atexit`. A crash between buffer fills loses buffered events. The errors.json handler uses buffer_size=1 to minimize this risk for error events.
 
 **Force re-init atomicity.** When `initialize(force=True)` is called, existing handlers are stashed before new ones are registered. If registration fails, stashed handlers are restored. This prevents the logging system from being left in a degraded state during re-initialization (e.g., when switching workflows in the same process).
+
+**Console verbosity is remembered, not re-derived.** `verbose` and `quiet` default to `None`, meaning "keep what was configured". The CLI group callback passes them once from its flags; the later `force=True` re-init that attaches a run's file handlers passes neither and so preserves them. Passing an explicit `False` overrides a remembered `True`, and `reset()` clears both.

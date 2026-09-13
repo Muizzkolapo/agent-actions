@@ -180,11 +180,11 @@ The most recent 100 executions are kept; older entries roll off as new runs land
 Complete telemetry of all system events in JSON Lines format (one event per line):
 
 ```jsonl
-{"event_type": "WorkflowStartEvent", "code": "W001", "level": "info", "category": "workflow", "message": "Running workflow product_pipeline (4 actions)", "meta": {"timestamp": "2026-03-24T10:00:00Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"workflow_name": "product_pipeline", "action_count": 4, "execution_mode": "parallel"}}
-{"event_type": "ActionStartEvent", "code": "A001", "level": "info", "category": "action", "message": "2/4 START extract_data", "meta": {"timestamp": "2026-03-24T10:00:01Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "action_type": "llm", "input_path": "", "mode": "online"}}
-{"event_type": "LLMRequestEvent", "code": "L001", "level": "debug", "category": "llm", "message": "LLM request to openai/gpt-4o (412 prompt tokens)", "meta": {"timestamp": "2026-03-24T10:00:02Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "request_id": ""}}
-{"event_type": "LLMResponseEvent", "code": "L002", "level": "debug", "category": "llm", "message": "LLM response: 500 tokens in 1840ms", "meta": {"timestamp": "2026-03-24T10:00:03Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "completion_tokens": 88, "total_tokens": 500, "latency_ms": 1840.0, "request_id": ""}}
-{"event_type": "ActionCompleteEvent", "code": "A002", "level": "info", "category": "action", "message": "2/4 OK extract_data in 2.10s", "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "execution_time": 2.1, "output_path": "", "record_count": 23, "tokens": {}, "mode": "online"}}
+{"event_type": "WorkflowStartEvent", "code": "W001", "level": "info", "category": "workflow", "message": "Running workflow product_pipeline (4 actions)", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:00Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"workflow_name": "product_pipeline", "action_count": 4, "execution_mode": "parallel"}}
+{"event_type": "ActionStartEvent", "code": "A001", "level": "info", "category": "action", "message": "2/4 START extract_data", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:01Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "action_type": "llm", "input_path": "", "mode": "online"}}
+{"event_type": "LLMRequestEvent", "code": "L001", "level": "debug", "category": "llm", "message": "LLM request to openai/gpt-4o (412 prompt tokens)", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:02Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "request_id": ""}}
+{"event_type": "LLMResponseEvent", "code": "L002", "level": "debug", "category": "llm", "message": "LLM response: 500 tokens in 1840ms", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:03Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "completion_tokens": 88, "total_tokens": 500, "latency_ms": 1840.0, "request_id": ""}}
+{"event_type": "ActionCompleteEvent", "code": "A002", "level": "info", "category": "action", "message": "2/4 OK extract_data in 2.10s", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "execution_time": 2.1, "output_path": "", "record_count": 23, "tokens": {}, "mode": "online"}}
 ```
 
 Every line carries the same envelope. A parser should key on `event_type` or `code`;
@@ -198,6 +198,7 @@ level.
 | `level` | `debug`, `info`, `warn` or `error` |
 | `category` | Coarse grouping, e.g. `action`, `llm`, `data_processing` |
 | `message` | Rendered human-readable line |
+| `diagnostic` | `true` when the line describes framework internals. The console hides these unless the run is verbose; they are always written here |
 | `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id` |
 | `data` | Per-event fields; the shape differs by `event_type` |
 

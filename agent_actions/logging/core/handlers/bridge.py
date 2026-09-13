@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.logging.diagnostics import DIAGNOSTIC_KEY
+
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
@@ -46,6 +48,7 @@ class LoggingBridgeHandler(logging.Handler):
             event_level = level_map.get(record.levelno, EventLevel.INFO)
 
             category = self._extract_category(record.name)
+            diagnostic = bool(record.__dict__.get(DIAGNOSTIC_KEY, False))
 
             # Normalize exc_info: filter out the (None, None, None) tuple form
             exc_info_normalized: tuple[type[BaseException], BaseException, Any] | None = None
@@ -61,10 +64,11 @@ class LoggingBridgeHandler(logging.Handler):
                 source_line=record.lineno,
                 func_name=record.funcName,
                 exc_info=exc_info_normalized,
+                diagnostic=diagnostic,
             )
 
             for key, value in record.__dict__.items():
-                if key not in _LOG_RECORD_ATTRS:
+                if key not in _LOG_RECORD_ATTRS and key != DIAGNOSTIC_KEY:
                     event.data[key] = value
 
             self._event_manager.fire(event)
