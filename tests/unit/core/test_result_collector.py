@@ -1269,3 +1269,38 @@ class TestCollectorStateStamping:
         )
 
         assert output[0]["_state"] == "processed"
+
+
+class TestTheTerminalFailureNamesTheCause:
+    """The message is rendered by views that truncate, so the cause must lead it."""
+
+    def test_the_cause_leads_the_message(self):
+        stats = CollectionStats(failed=2, causes=("disk on fire", "disk on fire"))
+        with pytest.raises(RuntimeError) as exc:
+            stats.raise_if_terminal_failure("act", [1, 2], [])
+        assert str(exc.value).startswith("disk on fire")
+        assert "produced 0 successful records" in str(exc.value)
+
+    def test_the_most_common_cause_wins(self):
+        stats = CollectionStats(failed=3, causes=("rare", "common", "common"))
+        with pytest.raises(RuntimeError) as exc:
+            stats.raise_if_terminal_failure("act", [1, 2, 3], [])
+        assert str(exc.value).startswith("common")
+
+    def test_without_a_cause_the_action_is_still_named(self):
+        """Nothing wraps an exhaustion-only failure with the action name."""
+        stats = CollectionStats(exhausted=2)
+        with pytest.raises(RuntimeError) as exc:
+            stats.raise_if_terminal_failure("act", [1, 2], [])
+        assert "Action 'act'" in str(exc.value)
+
+    def test_blank_causes_are_not_treated_as_a_cause(self):
+        stats = CollectionStats(failed=1, causes=("",))
+        with pytest.raises(RuntimeError) as exc:
+            stats.raise_if_terminal_failure("act", [1], [])
+        assert "Action 'act'" in str(exc.value)
+
+    def test_causes_do_not_count_towards_the_guard_only_total(self):
+        """only_guard_outcomes totals counts; a non-count field must not break it."""
+        assert CollectionStats(skipped=1, filtered=1, causes=("x", "y")).only_guard_outcomes
+        assert not CollectionStats(skipped=1, filtered=1, failed=1).only_guard_outcomes
