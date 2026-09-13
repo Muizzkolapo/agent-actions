@@ -103,3 +103,27 @@ class TestOrphanEntriesIgnored:
         assert summary[ActionStatus.COMPLETED] == 1
         assert summary[ActionStatus.PENDING] == 1
         assert len(summary) == 2
+
+
+class TestSummaryKeysAreReadable:
+    """get_summary() is annotated dict[str, int] and its keys reach the terminal."""
+
+    def test_an_enum_status_is_reported_by_name(self, tmp_path):
+        sm = _make_state_manager(
+            tmp_path,
+            ["a", "b"],
+            {"a": ActionStatus.BATCH_SUBMITTED, "b": ActionStatus.COMPLETED},
+        )
+
+        summary = sm.get_summary()
+        # ActionStatus is a str enum, so equality passes while formatting does
+        # not: f"{ActionStatus.BATCH_SUBMITTED}" is "ActionStatus.BATCH_SUBMITTED".
+        rendered = ", ".join(f"{k}: {v}" for k, v in summary.items())
+        assert "ActionStatus." not in rendered, f"the summary reaches the terminal as {rendered!r}"
+        assert "batch_submitted: 1" in rendered
+        assert "completed: 1" in rendered
+
+    def test_a_string_status_is_left_alone(self, tmp_path):
+        sm = _make_state_manager(tmp_path, ["a"], {"a": "completed"})
+
+        assert sm.get_summary() == {"completed": 1}
