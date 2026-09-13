@@ -267,6 +267,21 @@ class TestRunCommandStatusMessages:
         assert "Run again to check status and continue" in out
         assert tracker.finalize_workflow_run.call_args[1]["status"] == "PAUSED"
 
+    def test_batch_submitted_states_how_much_of_the_run_is_left(self, tmp_path, capsys):
+        """A paused run stops before WorkflowCompleteEvent, so nothing else totals it."""
+        self._execute(
+            tmp_path,
+            {
+                "is_workflow_complete": False,
+                "is_workflow_done": False,
+                "get_batch_submitted_actions": ["action_b"],
+                "get_summary": {"completed": 1, "batch_submitted": 1, "pending": 2},
+            },
+        )
+        out = capsys.readouterr().out
+        assert "completed: 1" in out, "a paused run reports no progress totals at all"
+        assert "pending: 2" in out
+
     def test_not_done_no_batch_shows_generic_paused(self, tmp_path, capsys):
         """Not done, no batch → generic paused with summary."""
         tracker = self._execute(
