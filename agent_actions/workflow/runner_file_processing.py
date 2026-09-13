@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
@@ -116,6 +117,9 @@ def _log_processing_errors(
         _format_error_sample(messages),
         suffix,
         extra={
+            # Embeds the per-file messages the handlers above already logged,
+            # so it restates them whether the action failed wholly or in part.
+            **DIAGNOSTIC,
             "action_name": action_name,
             "files_found": total,
             "files_processed": processed,

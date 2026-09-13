@@ -23,6 +23,7 @@ from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationsExhaustedError
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
     BatchProcessingProgressEvent,
@@ -307,11 +308,15 @@ class OnlineLLMStrategy:
                 # result discards the policy with the exception.
                 if raised_by_exhaustion_policy(e):
                     raise
+                # The result collector reports this record to the user, for
+                # online and batch alike. This copy carries the traceback for
+                # the log file, and the item index the collector cannot know.
                 logger.exception(
                     "[%s] Error processing item %d: %s",
                     context.agent_name,
                     idx,
                     str(e),
+                    extra=DIAGNOSTIC,
                 )
                 input_record = item if isinstance(item, dict) else None
                 # Read the stamped guid — a first-stage record is stamped at
@@ -322,7 +327,9 @@ class OnlineLLMStrategy:
                     TaskPreparer._prepare_source_snapshot(item) if context.is_first_stage else None
                 )
                 failed_result = ProcessingResult.failed(
-                    error=f"Error processing item {idx}: {str(e)}",
+                    # The cause, unwrapped: every layer above renders this, and
+                    # the item index is already on the log line just above.
+                    error=str(e),
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,

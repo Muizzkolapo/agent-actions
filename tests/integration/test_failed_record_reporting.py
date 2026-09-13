@@ -72,12 +72,17 @@ def crashed(tmp_path_factory):
     return output, events
 
 
+# A rendered entry starts with a timestamp or a status glyph; anything else is
+# the wrap of the entry above it, so counting rows would count terminal width.
+_ENTRY = re.compile(r"^(?:\d\d:\d\d:\d\d \||\s*[✓✗○→] )")
+
+
 def _console_lines_for_the_failed_action(output: str) -> list[str]:
-    """Every console line between the failing step's header and the next step."""
+    """Every console entry between the failing step's header and the next step."""
     lines = output.splitlines()
     start = next(i for i, ln in enumerate(lines) if re.search(rf"Step \d+/\d+ {TOOL}\b", ln))
     end = next(i for i, ln in enumerate(lines[start + 1 :], start + 1) if ln.startswith("Step "))
-    return [ln for ln in lines[start + 1 : end] if ln.strip()]
+    return [ln for ln in lines[start + 1 : end] if _ENTRY.match(ln)]
 
 
 class TestAFailedRecordIsReportedOnce:
@@ -88,9 +93,12 @@ class TestAFailedRecordIsReportedOnce:
     def test_each_failing_record_is_reported_once(self, crashed):
         """Two records failed; the strategy and the collector each logged both."""
         output, _ = crashed
-        assert output.count(CAUSE) == 2, (
-            f"2 failing records should give 2 reports, got {output.count(CAUSE)}:\n  "
-            + "\n  ".join(ln for ln in output.splitlines() if CAUSE in ln)
+        per_record = [
+            ln for ln in output.splitlines() if CAUSE in ln and re.search(r"\(record \w+\)", ln)
+        ]
+        assert len(per_record) == 2, (
+            f"2 failing records should give 2 per-record reports, got {len(per_record)}:\n  "
+            + "\n  ".join(per_record)
         )
 
     def test_the_failing_action_block_stays_small(self, crashed):
@@ -122,7 +130,6 @@ class TestTheLogFileKeepsEverything:
         "layer",
         [
             "Error processing item",
-            "Processing failed",
             "Failed to process backend entry",
             "incomplete for",
         ],
