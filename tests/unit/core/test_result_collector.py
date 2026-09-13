@@ -1289,9 +1289,16 @@ class TestTheTerminalFailureNamesTheCause:
             stats.raise_if_terminal_failure("act", [1, 2, 3], [])
         assert str(exc.value).startswith("common")
 
-    def test_without_a_cause_the_action_is_still_named(self):
-        """Nothing wraps an exhaustion-only failure with the action name."""
-        stats = CollectionStats(exhausted=2)
+    @pytest.mark.parametrize(
+        "stats",
+        [
+            CollectionStats(exhausted=2),
+            CollectionStats(failed=2, causes=("disk on fire", "disk on fire")),
+        ],
+        ids=["no cause", "with cause"],
+    )
+    def test_the_action_is_always_named(self, stats):
+        """Only some paths reach a caller that re-adds the action name."""
         with pytest.raises(RuntimeError) as exc:
             stats.raise_if_terminal_failure("act", [1, 2], [])
         assert "Action 'act'" in str(exc.value)

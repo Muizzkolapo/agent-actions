@@ -161,11 +161,15 @@ class CollectionStats:
             )
             # The cause leads: every view that renders this truncates, so a
             # cause appended after the tally is the part that gets cut.
-            # With a cause, it leads and the action name is left to the caller
-            # that wraps this — repeating it here pushes the cause past the
-            # 60-character truncation `agac dispositions` applies.
+            # The cause leads and the action follows it. Leading, because every
+            # view that renders this truncates — `agac dispositions` at 60
+            # characters — so a trailing cause is the part that gets cut.
+            # Always naming the action, because only some paths reach a caller
+            # that re-adds it, and an unnamed failure is worse than a repeated
+            # name.
             cause = self.dominant_cause
-            raise RuntimeError(f"{cause} — {tally}" if cause else f"Action '{action_name}' {tally}")
+            named = f"Action '{action_name}' {tally}"
+            raise RuntimeError(f"{cause} — {named}" if cause else named)
 
     @property
     def dominant_cause(self) -> str:
