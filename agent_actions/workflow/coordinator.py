@@ -13,11 +13,16 @@ from rich.console import Console
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.logging.core.manager import get_manager
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
-from agent_actions.workflow.execution_events import WorkflowEventLogger
+from agent_actions.workflow.execution_events import (
+    WorkflowEventLogger,
+    fire_step_complete,
+    fire_step_start,
+)
 from agent_actions.workflow.executor import action_is_halted
 from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
@@ -295,9 +300,6 @@ class AgentWorkflow:
             try:
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self._persist_execution_metadata(levels)
-                self.services.core.action_level_orchestrator.log_execution_levels(
-                    levels, self.action_indices
-                )
 
                 from agent_actions.workflow.parallel.action_executor import LevelExecutionParams
 
@@ -318,6 +320,7 @@ class AgentWorkflow:
                             state_manager=self.services.core.state_manager,
                             action_executor=self.services.core.action_executor,
                             concurrency_limit=concurrency_limit,
+                            total_steps=len(levels),
                         )
                     )
 
@@ -380,10 +383,6 @@ class AgentWorkflow:
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self._persist_execution_metadata(levels)
-                self.services.core.action_level_orchestrator.log_execution_levels(
-                    levels, self.action_indices
-                )
-                self.console.print(f"Found {total_actions} actions to run.")
                 state_mgr = self.services.core.state_manager
                 executor = self.services.core.action_executor
 
@@ -395,34 +394,28 @@ class AgentWorkflow:
                             executor.verify_completion_status(action_name)
 
                     pending = [a for a in level_actions if not state_mgr.is_completed(a)]
-                    if not pending:
-                        self.console.print(
-                            f"[yellow]Step {level_idx}: All actions complete (skipped)[/yellow]"
-                        )
-                        continue
-
-                    action_count = len(pending)
-                    self.console.print(
-                        f"[cyan]Step {level_idx}: Starting "
-                        f"{action_count} {'action' if action_count == 1 else 'actions'}...[/cyan]"
-                    )
-
                     level_start = datetime.now()
-                    stop = False
-                    for action_name in pending:
-                        idx = self.action_indices[action_name]
-                        manager.set_context(action_name=action_name, action_index=idx)
-                        should_stop = self._run_single_action(idx, action_name, total_actions)
-                        if should_stop:
-                            stop = True
-                            break
+                    fire_step_start(level_idx, len(levels), level_actions, pending)
 
-                    level_duration = (datetime.now() - level_start).total_seconds()
-                    has_failed = any(state_mgr.is_failed(a) for a in level_actions)
-                    color = "red" if has_failed else "green"
-                    self.console.print(
-                        f"[{color}]Step {level_idx} complete ({level_duration:.2f}s)[/{color}]"
-                    )
+                    # A step that opened must close, however this level exits.
+                    stop = False
+                    try:
+                        for action_name in pending:
+                            idx = self.action_indices[action_name]
+                            manager.set_context(action_name=action_name, action_index=idx)
+                            should_stop = self._run_single_action(idx, action_name, total_actions)
+                            if should_stop:
+                                stop = True
+                                break
+                    finally:
+                        fire_step_complete(
+                            level_idx,
+                            len(levels),
+                            (datetime.now() - level_start).total_seconds(),
+                            level_actions,
+                            state_mgr,
+                            batch_pending=state_mgr.get_batch_submitted_actions(level_actions),
+                        )
 
                     if stop:
                         break
@@ -522,6 +515,7 @@ class AgentWorkflow:
                 end_time=end_time,
                 duration=duration,
                 run_mode=run_mode,
+                action_config=action_config,
             )
         )
 
@@ -535,5 +529,5 @@ class AgentWorkflow:
             return False
 
         # Action failed — log and continue (circuit breaker handles downstream)
-        logger.warning("Action '%s' failed: %s", action_name, result.error)
+        logger.warning("Action '%s' failed: %s", action_name, result.error, extra=DIAGNOSTIC)
         return False

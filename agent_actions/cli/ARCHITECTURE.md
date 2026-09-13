@@ -12,8 +12,8 @@ This document maps the moving parts of `agent_actions/cli/` -- the Click-based c
             ┌──────────────────┼──────────────────┐
             │                  │                  │
         bootstrap          commands            renderers/
-     (main.py,          (run, retry,        (execution_renderer,
-      cli_decorators,    preview, schema,    schema_renderer)
+     (main.py,          (run, retry,        (schema_renderer)
+      cli_decorators,    preview, schema,
       workflow_loader)   inspect, init, ...)
 ```
 
@@ -29,7 +29,7 @@ The module is a **Click group** (`agent-actions`) with 17 registered commands. E
 | `cli_decorators.py` | `@handles_user_errors` (error formatting) + `@requires_project` (project root injection) |
 | `workflow_loader.py` | Shared `load_workflow()` helper used by run, retry, schema, dispositions |
 | `inspect_base.py` | `BaseInspectCommand` base class for all inspect subcommands |
-| `renderers/` | Rich terminal output: `ExecutionRenderer` (post-run summary), `SchemaRenderer` (schema tables) |
+| `renderers/` | Rich terminal output: `SchemaRenderer` (schema tables). Run progress is rendered live by `ProgressRenderer` in the logging layer |
 
 ---
 
@@ -233,9 +233,6 @@ RunCommand.execute()
   │
   ├─ workflow.run() or asyncio.run(workflow.async_run())
   │
-  ├─ build_execution_snapshot() + ExecutionRenderer  ← post-run summary
-  │   (wrapped in try/except -- failures are swallowed to logger.debug)
-  │
   ├─ State check: is_workflow_complete / is_workflow_done / batch pending
   │
   └─ tracker.finalize_workflow_run()
@@ -394,25 +391,15 @@ All subcommands use `@handles_user_errors` and `@requires_project`. Each impleme
 ```
 renderers/
   ├─ __init__.py              ← exports SchemaRenderer
-  ├─ execution_renderer.py    ← post-run workflow summary
   └─ schema_renderer.py       ← schema display tables
 ```
 
-### ExecutionRenderer
+### Run progress
 
-Renders a structured post-run summary with execution levels, status icons, kind badges, provider info, and latency. Used only by `RunCommand`.
-
-```
-build_execution_snapshot(workflow, elapsed)    ← reads action_configs + state_manager
-  └─ WorkflowExecutionSnapshot                ← frozen dataclass
-
-ExecutionRenderer(console).render(snapshot)
-  ├─ _render_header()      ← workflow name, version, action/vendor counts
-  ├─ _render_levels()      ← per-level: sequential or parallel box
-  │   ├─ _render_sequential_action()   ← "├─ ✓ action_name  llm  openai  1.2s"
-  │   └─ _render_parallel_level()      ← boxed group of concurrent actions
-  └─ _render_footer()      ← "✓ Done in 5.2s (3 completed, 1 skipped)"
-```
+Progress during a run is not rendered by the CLI. Every step boundary and action
+result is an event, and `ProgressRenderer`
+(`agent_actions/logging/core/handlers/progress.py`) is the console handler that
+groups them into a per-step stream. See the logging architecture guide.
 
 ### SchemaRenderer
 
@@ -471,7 +458,6 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 | File | Role |
 |------|------|
 | `renderers/__init__.py` | Exports `SchemaRenderer` |
-| `renderers/execution_renderer.py` | `ExecutionRenderer` + `build_execution_snapshot()` -- post-run visual summary |
 | `renderers/schema_renderer.py` | `SchemaRenderer` -- schema tables and data flow panels |
 
 ---
@@ -490,20 +476,19 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 
 6. **Checkpoint clearing on retry.** `backend.clear_checkpoint_records(action)` is called for each downstream action during retry. Without this, stale partial output from a prior interrupted run would be carried forward instead of reprocessing the records.
 
-7. **`ExecutionRenderer` failures are swallowed.** The post-run summary render in `RunCommand._execute_single()` is wrapped in a bare `try/except` that logs to `logger.debug`. If the renderer crashes (e.g., accessing state that was cleaned up), the user never sees the summary but the run still succeeds. This is intentional -- the summary is informational, not functional.
 
-8. **Logging is initialized 3-4 times.** See "Logging Initialization Order" above. Each call to `LoggerFactory.initialize(force=True)` replaces the previous configuration. Events fired before Phase 2 use a bare logger. The Phase 4 init (run command only) adds a file handler after the workflow is loaded, so early log messages are not written to the run log file.
+7. **Logging is initialized 3-4 times.** See "Logging Initialization Order" above. Each call to `LoggerFactory.initialize(force=True)` replaces the previous configuration. Events fired before Phase 2 use a bare logger. The Phase 4 init (run command only) adds a file handler after the workflow is loaded, so early log messages are not written to the run log file.
 
-9. **`_LazyCLI` proxy.** `main.py` exports a module-level `cli` object that defers `CLI()` instantiation until first access. This exists so that tools importing the module (e.g., for testing or documentation) don't trigger the full bootstrap (signal handlers, event firing) on import.
+8. **`_LazyCLI` proxy.** `main.py` exports a module-level `cli` object that defers `CLI()` instantiation until first access. This exists so that tools importing the module (e.g., for testing or documentation) don't trigger the full bootstrap (signal handlers, event firing) on import.
 
-10. **`BaseInspectCommand._load_workflow()` duplicates `load_workflow()`.** The inspect base class has its own workflow loading logic instead of calling the shared `workflow_loader.load_workflow()`. This is because inspect commands omit `output_dir` from `ConfigRenderingService().render_and_load_config()` and always set `use_tools=False`. The duplication is intentional but means changes to config loading must be applied in both places.
+9. **`BaseInspectCommand._load_workflow()` duplicates `load_workflow()`.** The inspect base class has its own workflow loading logic instead of calling the shared `workflow_loader.load_workflow()`. This is because inspect commands omit `output_dir` from `ConfigRenderingService().render_and_load_config()` and always set `use_tools=False`. The duplication is intentional but means changes to config loading must be applied in both places.
 
-11. **`init` uses `_InitGroup` for implicit routing.** `agac init my_project` works because `_InitGroup.resolve_command()` detects that `my_project` is not a known subcommand and routes it to the `new` subcommand. This means you cannot name a project `list`, `new`, or `example` without using the explicit `agac init new list` form.
+10. **`init` uses `_InitGroup` for implicit routing.** `agac init my_project` works because `_InitGroup.resolve_command()` detects that `my_project` is not a known subcommand and routes it to the `new` subcommand. This means you cannot name a project `list`, `new`, or `example` without using the explicit `agac init new list` form.
 
-12. **Preview unwraps namespaced content.** Records in storage use the additive model where `content` is `{"action_a": {...}, "action_b": {...}}`. `PreviewCommand._unwrap_records()` strips this namespace when previewing a specific action so the table shows flat fields. Guard-skipped actions have `content[action] = None`, which is replaced with `{}` rather than showing a sentinel.
+11. **Preview unwraps namespaced content.** Records in storage use the additive model where `content` is `{"action_a": {...}, "action_b": {...}}`. `PreviewCommand._unwrap_records()` strips this namespace when previewing a specific action so the table shows flat fields. Guard-skipped actions have `content[action] = None`, which is replaced with `{}` rather than showing a sentinel.
 
-13. **`retry` uses `auto_create=False` despite being a write command.** Even though retry re-runs the workflow (which writes output), the `ProjectPathsFactory` call uses `auto_create=False` because the directories must already exist from a prior run. The actual directory creation happens inside the workflow engine during re-execution.
+12. **`retry` uses `auto_create=False` despite being a write command.** Even though retry re-runs the workflow (which writes output), the `ProjectPathsFactory` call uses `auto_create=False` because the directories must already exist from a prior run. The actual directory creation happens inside the workflow engine during re-execution.
 
-14. **Signal handler registration can fail silently.** `_register_signal_handlers()` catches `AttributeError` and `ValueError` (e.g., when running in a non-main thread or certain embedded environments) and logs a warning instead of crashing. This means SIGINT handling may not work in all contexts.
+13. **Signal handler registration can fail silently.** `_register_signal_handlers()` catches `AttributeError` and `ValueError` (e.g., when running in a non-main thread or certain embedded environments) and logs a warning instead of crashing. This means SIGINT handling may not work in all contexts.
 
-15. **`--debug` flag detection in catch-all.** The top-level `Exception` handler in `CLI.execute()` checks for `"--debug" in argv` to decide whether to print the full traceback. This is a string match against raw argv, not a Click-parsed flag, because the exception may have occurred before Click finished parsing.
+14. **`--debug` flag detection in catch-all.** The top-level `Exception` handler in `CLI.execute()` checks for `"--debug" in argv` to decide whether to print the full traceback. This is a string match against raw argv, not a Click-parsed flag, because the exception may have occurred before Click finished parsing.

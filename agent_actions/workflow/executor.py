@@ -19,6 +19,7 @@ from agent_actions.errors import (
 )
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,
@@ -807,6 +808,7 @@ class ActionExecutor:
             logger.info(
                 "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,
+                extra=DIAGNOSTIC,
             )
             return ActionStatus.SKIPPED
         if (
@@ -1448,16 +1450,21 @@ class ActionExecutor:
         self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
-        try:
-            correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-        except AllVersionsFilteredError as avf:
-            return self._handle_all_versions_filtered(params, avf)
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
         # except clause below: only failures from the user-supplied action
         # runner should be funneled through _handle_run_failure.
+        # It is taken before input resolution because a version merge writes the
+        # correlated input to this action's own target; counting after that
+        # would net the action's own output to zero.
         pre_run_count = self._count_records_for_action(params.action_name)
+
+        try:
+            correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
+        except AllVersionsFilteredError as avf:
+            return self._handle_all_versions_filtered(params, avf)
+
         try:
             output_folder = self.deps.action_runner.run_action(
                 params.action_config,
@@ -1484,13 +1491,15 @@ class ActionExecutor:
         self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
         self._track_action_start(params)
+
+        # See sync counterpart for the rationale on snapshot placement.
+        pre_run_count = self._count_records_for_action(params.action_name)
+
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
         except AllVersionsFilteredError as avf:
             return self._handle_all_versions_filtered(params, avf)
 
-        # See sync counterpart for the rationale on snapshot placement.
-        pre_run_count = self._count_records_for_action(params.action_name)
         try:
             output_folder = await asyncio.to_thread(
                 self.deps.action_runner.run_action,

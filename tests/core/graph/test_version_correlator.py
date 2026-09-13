@@ -673,7 +673,6 @@ class TestVersionCorrelationFailureError:
                 action_configs=agent_configs,
                 action_status={},
                 version_correlator=version_correlator,
-                console=MagicMock(),  # Mock console to avoid print errors
                 storage_backend=storage_backend,
             )
             output_manager = AgentOutputManager(config)

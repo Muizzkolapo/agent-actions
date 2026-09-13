@@ -64,11 +64,10 @@ class ConsoleEventHandler:
 
     def handle(self, event: BaseEvent) -> None:
         """Output the event to the console."""
-        if self.formatter:
-            message = self.formatter(event)
-        else:
-            message = self._default_format(event)
+        self._write(self.formatter(event) if self.formatter else self._default_format(event))
 
+    def _write(self, message: str) -> None:
+        """Emit one already-formatted line."""
         if self._use_rich and self._console:
             self._console.print(message, highlight=False)
         else:

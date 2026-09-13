@@ -154,7 +154,6 @@ def initialize_services(
             action_configs=metadata.action_configs,
             action_status=state_manager.action_status,
             version_correlator=version_correlator,
-            console=console,
             storage_backend=action_runner.storage_backend,
             data_source_config=action_runner.data_source_config,
         )
@@ -172,7 +171,7 @@ def initialize_services(
     )
 
     action_level_orchestrator = ActionLevelOrchestrator(
-        metadata.execution_order, metadata.action_configs, console
+        metadata.execution_order, metadata.action_configs
     )
 
     manifest_manager = ManifestManager(agent_folder)

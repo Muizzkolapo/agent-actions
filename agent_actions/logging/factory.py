@@ -134,7 +134,7 @@ class LoggerFactory:
     ) -> None:
         """Build and register all event handlers on the manager."""
         from agent_actions.logging.core.events import EventLevel
-        from agent_actions.logging.core.handlers import ConsoleEventHandler, JSONFileHandler
+        from agent_actions.logging.core.handlers import JSONFileHandler, ProgressRenderer
         from agent_actions.logging.events import AgentActionsFormatter
         from agent_actions.logging.events.handlers import RunResultsCollector
 
@@ -164,7 +164,7 @@ class LoggerFactory:
         else:
             categories = {"workflow", "action", "batch"}
 
-        console_handler = ConsoleEventHandler(
+        console_handler = ProgressRenderer(
             min_level=console_level,
             show_timestamp=True,
             formatter=formatter.format,

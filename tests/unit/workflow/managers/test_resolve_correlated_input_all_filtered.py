@@ -60,7 +60,6 @@ def _real_manager(tmp_path, source_records: dict[str, list]) -> tuple[ActionOutp
         action_configs=action_configs,
         action_status={},
         version_correlator=VersionOutputCorrelator(tmp_path, storage_backend=backend),
-        console=MagicMock(),
         storage_backend=backend,
     )
     return ActionOutputManager(config), backend
@@ -79,7 +78,6 @@ def _delegating_manager(version_sources: list[str], **prepare) -> ActionOutputMa
         action_configs={},
         action_status={},
         version_correlator=correlator,
-        console=MagicMock(),
         storage_backend=MagicMock(),
     )
     return ActionOutputManager(config)

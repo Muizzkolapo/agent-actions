@@ -152,7 +152,6 @@ class TestExecuteLevelAsyncVerification:
         orchestrator = ActionLevelOrchestrator(
             execution_order=["write_description"],
             action_configs={"write_description": {"agent_type": "write_description"}},
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(
@@ -162,6 +161,7 @@ class TestExecuteLevelAsyncVerification:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)
@@ -192,7 +192,6 @@ class TestExecuteLevelAsyncVerification:
         orchestrator = ActionLevelOrchestrator(
             execution_order=["write_description"],
             action_configs={"write_description": {"agent_type": "write_description"}},
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(
@@ -202,6 +201,7 @@ class TestExecuteLevelAsyncVerification:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)
@@ -447,7 +447,6 @@ class TestExecuteLevelAsyncMixedLevel:
                 "action_a": {"agent_type": "action_a"},
                 "action_b": {"agent_type": "action_b"},
             },
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(
@@ -457,6 +456,7 @@ class TestExecuteLevelAsyncMixedLevel:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)

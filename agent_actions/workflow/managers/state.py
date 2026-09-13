@@ -230,7 +230,10 @@ class ActionStateManager:
         summary: dict[str, int] = {}
         for name in self.execution_order:
             status = self.action_status.get(name, {}).get("status", ActionStatus.PENDING)
-            summary[status] = summary.get(status, 0) + 1
+            # ActionStatus is a str enum: it compares equal to its value but
+            # formats as "ActionStatus.X", and these keys are printed.
+            key = getattr(status, "value", status)
+            summary[key] = summary.get(key, 0) + 1
         return summary
 
     def is_workflow_complete(self) -> bool:

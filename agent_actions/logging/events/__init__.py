@@ -110,6 +110,8 @@ from agent_actions.logging.events.workflow_events import (
     ActionFailedEvent,
     ActionSkipEvent,
     ActionStartEvent,
+    StepCompleteEvent,
+    StepStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
@@ -126,6 +128,8 @@ __all__ = [
     "ActionSkipEvent",
     "ActionFailedEvent",
     "ActionCachedEvent",
+    "StepStartEvent",
+    "StepCompleteEvent",
     # Batch
     "BatchSubmittedEvent",
     "BatchProgressEvent",

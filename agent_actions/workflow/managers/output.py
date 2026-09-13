@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from rich.console import Console
-
 from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -49,7 +47,6 @@ class OutputManagerConfig:
     action_configs: dict[str, dict[str, Any]]
     action_status: dict[str, dict[str, Any]]
     version_correlator: Any
-    console: Console | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     data_source_config: str | dict[str, Any] | None = None
 
@@ -74,7 +71,6 @@ class ActionOutputManager:
         self.action_configs = config.action_configs
         self.action_status = config.action_status
         self.version_correlator = config.version_correlator
-        self.console = config.console or Console()
         self.storage_backend = config.storage_backend
         self.data_source_config = config.data_source_config
         self._version_consumption_map: dict | None = None
@@ -209,9 +205,11 @@ class ActionOutputManager:
         correlated_dir = self.version_correlator.prepare_correlated_input(
             current_agent, version_sources, idx
         )
-        self.console.print(
-            f"[blue]🔗 Using correlated input for {current_agent} from "
-            f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
+        logger.debug(
+            "Correlated input for %s from %d version sources (pattern: %s)",
+            current_agent,
+            len(version_sources),
+            getattr(pattern, "value", pattern),
         )
         return [str(correlated_dir)]
 

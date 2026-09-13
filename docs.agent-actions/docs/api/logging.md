@@ -77,7 +77,7 @@ manager = LoggerFactory.initialize(
 **Returns:** EventManager instance
 
 **Side Effects:**
-- Creates and registers ConsoleEventHandler
+- Creates and registers ProgressRenderer (the run's console handler)
 - Creates and registers JSONFileHandler (if output_dir provided)
 - Creates and registers RunResultsCollector (if output_dir provided)
 - Sets up LoggingBridgeHandler to convert Python logging to events
@@ -444,6 +444,52 @@ fire_event(WorkflowFailedEvent(
 
 ---
 
+#### StepStartEvent
+
+Emitted when a dependency level begins. Fires even when nothing in it is pending.
+
+```python
+from agent_actions.logging.events import StepStartEvent
+
+fire_event(StepStartEvent(
+    step_index=1,
+    total_steps=3,
+    actions=["extract_a", "extract_b"],
+    pending=["extract_b"],
+))
+```
+
+**Fields:**
+- `step_index` (int): Level position, 0-based (rendered 1-based)
+- `total_steps` (int): Number of levels in the run
+- `actions` (List[str]): Every action in the level
+- `pending` (List[str]): The subset that will actually run
+
+---
+
+#### StepCompleteEvent
+
+Emitted when a dependency level ends, whatever the outcome.
+
+```python
+from agent_actions.logging.events import StepCompleteEvent
+
+fire_event(StepCompleteEvent(
+    step_index=1,
+    total_steps=3,
+    elapsed_time=12.4,
+    completed=2,
+))
+```
+
+**Fields:**
+- `step_index` / `total_steps` (int): As above
+- `elapsed_time` (float): Wall time for the level
+- `completed` / `partial` / `skipped` / `failed` / `unfinished` (int): Outcome tallies; they sum to the size of the level
+- `batch_pending` (List[str]): Actions whose batch jobs are still outstanding; non-empty means the level paused rather than finished
+
+---
+
 ### Action Events
 
 #### ActionStartEvent
@@ -486,6 +532,9 @@ fire_event(ActionCompleteEvent(
     output_path="/path/to/output.json",
     record_count=100,
     tokens={"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+    model_vendor="openai",
+    model_name="gpt-4o",
+    kind="llm",
 ))
 ```
 
@@ -495,8 +544,11 @@ fire_event(ActionCompleteEvent(
 - `total_actions` (int): Total number of actions
 - `execution_time` (float): Execution time in seconds
 - `output_path` (str): Path to output file
-- `record_count` (int): Number of records processed
+- `record_count` (int): Number of records this execution wrote
 - `tokens` (Dict[str, int]): Token usage breakdown
+- `mode` (str): `"online"` or `"batch"`
+- `model_vendor` / `model_name` (str): The model that ran the action; empty for a tool or HITL action
+- `kind` (str): `"llm"`, `"tool"`, `"hitl"`, … — consumers use it to decide whether a model is meaningful
 
 ---
 
@@ -739,6 +791,20 @@ class MyHandler(EventHandler):
 - `accepts(event)` → bool: Return True if handler processes this event
 - `handle(event)` → None: Process the event
 - `flush()` → None: Flush buffered data
+
+---
+
+### ProgressRenderer
+
+The console handler a run installs. Subclasses `ConsoleEventHandler` and renders
+workflow, step and action events as a grouped per-step progress stream; every
+other event falls through to the formatting below.
+
+```python
+from agent_actions.logging.core.handlers import ProgressRenderer
+```
+
+Takes the same parameters as `ConsoleEventHandler`.
 
 ---
 

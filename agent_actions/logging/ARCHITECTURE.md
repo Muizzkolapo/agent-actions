@@ -29,7 +29,7 @@ The module has **three packages** and **three top-level files**:
 
 | Package / File | What it does |
 |----------------|-------------|
-| `core/` | Singleton EventManager, the EventHandler protocol, and the three built-in handler implementations (Console, JSONFile, LoggingBridge) |
+| `core/` | Singleton EventManager, the EventHandler protocol, and the four built-in handler implementations (Console, Progress, JSONFile, LoggingBridge) |
 | `events/` | Concrete event dataclasses organized by domain (workflow, batch, LLM, validation, etc.) plus the AgentActionsFormatter for console display |
 | `errors/` | ErrorTranslator with a chain of 10 formatter strategies that convert any Python exception into a structured UserError for CLI display |
 | `factory.py` | LoggerFactory -- the single entry point that initializes EventManager, registers handlers, and wires the stdlib logging bridge |
@@ -56,7 +56,8 @@ LoggerFactory.initialize(config, output_dir, workflow_name, verbose, quiet)
      |       +-- ConsoleEventHandler
      |       |     min_level from verbose/quiet/config
      |       |     categories: {"workflow", "agent", "batch"} unless verbose
-     |       |     formatter: AgentActionsFormatter (Rich color output)
+     |       |     ProgressRenderer (per-step stream; falls through to
+     |       |     AgentActionsFormatter for everything else)
      |       |
      |       +-- JSONFileHandler (events.json) -- all levels, buffer_size=5
      |       |     only when output_dir is provided
@@ -178,7 +179,7 @@ Each domain gets a letter prefix. The code is the primary stable identifier for 
 
 | Prefix | Domain | Example |
 |--------|--------|---------|
-| W | Workflow lifecycle | W001 WorkflowStartEvent |
+| W | Workflow lifecycle | W001 WorkflowStartEvent, W004 StepStartEvent |
 | A | Action execution | A001 ActionStartEvent |
 | B | Batch processing | B001 BatchSubmittedEvent |
 | L | LLM interaction | L001 LLMRequestEvent |
@@ -205,7 +206,7 @@ Event types are spread across 8 source files in `events/`:
 
 | File | Domain | Count (approx.) |
 |------|--------|-----------------|
-| `workflow_events.py` | Workflow + action lifecycle | 8 |
+| `workflow_events.py` | Workflow + action lifecycle | 10 |
 | `batch_events.py` | Batch submission, polling, completion | 10 |
 | `llm_events.py` | LLM requests, responses, errors | 6 |
 | `validation_events.py` | Validation, recovery, guard | 12 |
@@ -214,7 +215,7 @@ Event types are spread across 8 source files in `events/`:
 | `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
 | `cache_events.py` | Cache hit/miss/invalidation | 5 |
 
-All 84 event types are re-exported from `events/__init__.py`.
+All 85 event types are re-exported from `events/__init__.py`.
 
 ---
 
@@ -364,12 +365,13 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 | `core/protocols.py` | EventHandler protocol |
 | `core/handlers/bridge.py` | LoggingBridgeHandler + LogEvent, DebugEvent, SystemEvent |
 | `core/handlers/console.py` | ConsoleEventHandler -- Rich or plain stderr output |
+| `core/handlers/progress.py` | ProgressRenderer -- the console handler a run installs; groups workflow/step/action events into a per-step stream |
 | `core/handlers/json_file.py` | JSONFileHandler -- buffered NDJSON writer with rotation |
 
 ### events/
 | File | Role |
 |------|------|
-| `events/__init__.py` | Re-exports all 84 event types + AgentActionsFormatter |
+| `events/__init__.py` | Re-exports all 85 event types + AgentActionsFormatter |
 | `events/types.py` | EventCategories constants + `_safe_value_repr()` |
 | `events/formatters.py` | AgentActionsFormatter -- dispatch table for console display |
 | `events/workflow_events.py` | W/A prefix events (workflow + action lifecycle) |

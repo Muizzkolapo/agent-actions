@@ -75,3 +75,47 @@ def test_a_documented_event_exists_and_emits_its_documented_code(name, code):
         f"{_REFERENCE.name} names {name}, which is not in agent_actions.logging.events"
     )
     assert actual[name] == code, f"{name} emits {actual[name]}, but the reference says {code}"
+
+
+# Events that predate this check and are not yet in the reference. The list may
+# shrink, never grow: an entry here is a documentation gap, not an exemption.
+_UNDOCUMENTED_BACKLOG = {
+    "BatchErrorEvent",
+    "BatchPassthroughEvent",
+    "BatchProcessingCompleteEvent",
+    "BatchResultsProcessedEvent",
+    "BatchStatusCheckFailedEvent",
+    "CLIArgumentParsingEvent",
+    "CLIInitCompleteEvent",
+    "CacheLoadEvent",
+    "CacheUpdateEvent",
+    "ContextDependencyInferredEvent",
+    "ProjectDirectoryCreatedEvent",
+    "ProjectInitializationStartEvent",
+    "ProjectValidationEvent",
+    "SchemaLoadingStartedEvent",
+    "SourceDataSavedEvent",
+    "WorkflowServicesInitializationStartEvent",
+}
+
+
+@pytest.mark.parametrize("name", sorted(_actual_codes()))
+def test_an_event_that_reaches_the_log_file_is_documented(name):
+    """Docs->code parity alone lets a brand new event ship unlisted; this is the reverse."""
+    if name in _UNDOCUMENTED_BACKLOG:
+        pytest.skip(f"{name} is a known documentation gap")
+    assert name in _documented_names(), (
+        f"{name} is emitted into events.json but {_REFERENCE.name} does not list it"
+    )
+
+
+def test_the_backlog_holds_nothing_that_is_already_fixed():
+    """A backlog that outlives its gaps stops reporting the next one."""
+    documented = set(_documented_names())
+    existing = set(_actual_codes())
+    assert not (_UNDOCUMENTED_BACKLOG & documented), (
+        f"{sorted(_UNDOCUMENTED_BACKLOG & documented)} are documented now — drop them"
+    )
+    assert not (_UNDOCUMENTED_BACKLOG - existing), (
+        f"{sorted(_UNDOCUMENTED_BACKLOG - existing)} no longer exist — drop them"
+    )

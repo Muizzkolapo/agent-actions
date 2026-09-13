@@ -77,6 +77,7 @@ class ActionLogParams:
     end_time: datetime
     duration: float
     run_mode: str = ""
+    action_config: dict[str, Any] | None = None
 
 
 @dataclass

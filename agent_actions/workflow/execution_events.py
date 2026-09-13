@@ -11,14 +11,67 @@ from agent_actions.logging.events import (
     ActionFailedEvent,
     ActionSkipEvent,
     ActionStartEvent,
+    StepCompleteEvent,
+    StepStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
+
+
+def fire_step_start(
+    step_index: int, total_steps: int, actions: list[str], pending: list[str]
+) -> None:
+    """Announce a dependency level. Fires even when nothing in it is pending."""
+    fire_event(
+        StepStartEvent(
+            step_index=step_index,
+            total_steps=total_steps,
+            actions=list(actions),
+            pending=list(pending),
+        )
+    )
+
+
+def fire_step_complete(
+    step_index: int,
+    total_steps: int,
+    elapsed_time: float,
+    actions: list[str],
+    state_manager,
+    batch_pending: list[str] | None = None,
+) -> None:
+    """Close a dependency level, tallying its outcomes from the state manager."""
+    partial = sum(1 for a in actions if state_manager.is_completed_with_failures(a))
+    failed = len(state_manager.get_failed_actions(actions))
+    skipped = sum(1 for a in actions if state_manager.is_skipped(a))
+    completed = sum(
+        1
+        for a in actions
+        if state_manager.is_completed(a) and not state_manager.is_completed_with_failures(a)
+    )
+
+    fire_event(
+        StepCompleteEvent(
+            step_index=step_index,
+            total_steps=total_steps,
+            elapsed_time=elapsed_time,
+            completed=completed,
+            partial=partial,
+            skipped=skipped,
+            failed=failed,
+            # Batch-submitted, interrupted and still-running actions belong to
+            # none of the buckets above; without this the tallies silently
+            # fail to account for the level.
+            unfinished=len(actions) - completed - partial - skipped - failed,
+            batch_pending=list(batch_pending or []),
+        )
+    )
 
 
 class WorkflowEventLogger:
@@ -98,6 +151,7 @@ class WorkflowEventLogger:
                 tokens = params.result.tokens
             metrics = getattr(params.result, "metrics", None)
             record_count = metrics.record_count if metrics is not None else 0
+            config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
                     action_name=params.action_name,
@@ -108,6 +162,9 @@ class WorkflowEventLogger:
                     record_count=record_count,
                     tokens=tokens,
                     mode=params.run_mode,
+                    model_vendor=config.get("model_vendor") or "",
+                    model_name=config.get("model_name") or "",
+                    kind=config.get("kind") or DEFAULT_ACTION_KIND,
                 )
             )
         elif not params.result.success:

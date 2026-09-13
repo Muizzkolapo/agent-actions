@@ -14,6 +14,8 @@ __all__ = [
     "ActionSkipEvent",
     "ActionFailedEvent",
     "ActionCachedEvent",
+    "StepStartEvent",
+    "StepCompleteEvent",
 ]
 
 
@@ -28,7 +30,8 @@ class WorkflowStartEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        self.message = f"Running workflow {self.workflow_name} ({self.action_count} actions)"
+        noun = "action" if self.action_count == 1 else "actions"
+        self.message = f"Running workflow {self.workflow_name} ({self.action_count} {noun})"
         self.data = {
             "workflow_name": self.workflow_name,
             "action_count": self.action_count,
@@ -146,6 +149,9 @@ class ActionCompleteEvent(BaseEvent):
     record_count: int = 0
     tokens: dict[str, int] = field(default_factory=dict)
     mode: str = ""  # "online" or "batch" — see RunMode
+    model_vendor: str = ""
+    model_name: str = ""
+    kind: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -164,6 +170,9 @@ class ActionCompleteEvent(BaseEvent):
             "record_count": self.record_count,
             "tokens": self.tokens,
             "mode": self.mode,
+            "model_vendor": self.model_vendor,
+            "model_name": self.model_name,
+            "kind": self.kind,
         }
 
     @property
@@ -261,3 +270,90 @@ class ActionCachedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "A005"
+
+
+@dataclass
+class StepStartEvent(BaseEvent):
+    """Fired when a dependency level begins executing."""
+
+    step_index: int = 0
+    total_steps: int = 0
+    actions: list[str] = field(default_factory=list)
+    pending: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.WORKFLOW
+        # 1-based: a run whose last line reads "Step 11/12" looks unfinished.
+        idx_str = f"Step {self.step_index + 1}/{self.total_steps}"
+        if not self.pending:
+            self.message = f"{idx_str}: all actions already complete"
+        elif len(self.pending) > 1:
+            # Not "in parallel": the same level runs serially under
+            # --execution-mode sequential.
+            self.message = f"{idx_str}: {len(self.pending)} actions ({', '.join(self.pending)})"
+        else:
+            self.message = f"{idx_str}: {self.pending[0]}"
+        self.data = {
+            "step_index": self.step_index,
+            "total_steps": self.total_steps,
+            "actions": list(self.actions),
+            "pending": list(self.pending),
+        }
+
+    @property
+    def code(self) -> str:
+        return "W004"
+
+
+@dataclass
+class StepCompleteEvent(BaseEvent):
+    """Fired when a dependency level finishes, whatever the outcome."""
+
+    step_index: int = 0
+    total_steps: int = 0
+    elapsed_time: float = 0.0
+    completed: int = 0
+    partial: int = 0
+    skipped: int = 0
+    failed: int = 0
+    unfinished: int = 0
+    batch_pending: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Always INFO: a step is a boundary, not a fault. ActionFailedEvent
+        # reports failures, and a WARN here would double-count them wherever
+        # warnings are collected.
+        self.level = EventLevel.INFO
+        self.category = EventCategories.WORKFLOW
+        idx_str = f"Step {self.step_index + 1}/{self.total_steps}"
+        if self.batch_pending:
+            self.message = (
+                f"{idx_str} paused after {self.elapsed_time:.2f}s — "
+                f"{len(self.batch_pending)} batch job(s) pending"
+            )
+        elif self.unfinished:
+            # Saying "complete" while actions are still mid-flight is the one
+            # claim this event must never make.
+            self.message = (
+                f"{idx_str} ended after {self.elapsed_time:.2f}s — {self.unfinished} unfinished"
+            )
+        else:
+            self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"
+            if self.failed:
+                self.message += f" ({self.failed} failed)"
+        self.data = {
+            "step_index": self.step_index,
+            "total_steps": self.total_steps,
+            "elapsed_time": self.elapsed_time,
+            "completed": self.completed,
+            "partial": self.partial,
+            "skipped": self.skipped,
+            "failed": self.failed,
+            "unfinished": self.unfinished,
+            "batch_pending": list(self.batch_pending),
+        }
+
+    @property
+    def code(self) -> str:
+        return "W005"

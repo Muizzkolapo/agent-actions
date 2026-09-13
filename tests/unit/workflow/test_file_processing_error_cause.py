@@ -30,9 +30,8 @@ from agent_actions.workflow.runner_file_processing import _MAX_TRACKED_ERRORS, p
 ACTION = "collect_questions"
 CAUSE = "Function 'write_rows' not found"
 
-# The CLI summary panel prints ``error_message[:80]`` (cli/renderers/
-# execution_renderer.py), so a cause appended after the counts is invisible
-# there even once it is in the message.
+# A summary surface that truncates the message hides a cause appended after the
+# counts, even once the cause is in the message.
 SUMMARY_PANEL_WIDTH = 80
 
 
