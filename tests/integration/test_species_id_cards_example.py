@@ -142,8 +142,14 @@ def test_no_framework_internals_reach_the_terminal(run):
         assert leak not in run, f"{leak!r} is framework internals, not something a user can act on"
 
 
-def test_the_run_has_exactly_one_ending(run):
-    assert run.count("16 completed, 2 skipped") == 1, "the run summary is stated more than once"
+def test_the_run_is_summarised_once(run):
+    """The stream owns the ending; a second renderer restating it is the defect."""
+    assert run.count("16 completed, 2 skipped") == 1, "the run tally is stated more than once"
+    # Markers unique to the post-run summary: its header and its own footer.
+    for marker in ("◆ ", "Done in "):
+        assert marker not in run, (
+            f"{marker!r} is the post-run summary re-rendering actions the stream already showed"
+        )
 
 
 @pytest.mark.parametrize(

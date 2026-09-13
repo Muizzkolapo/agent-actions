@@ -454,6 +454,14 @@ class TestAFanOutNamesItsActions:
         )
         assert "parallel" not in out
 
+    def test_a_resumed_step_counts_only_what_is_left(self, rendered):
+        """Counting the level instead of its pending set overstates a resumed run."""
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=3, actions=["a", "b", "c"], pending=["b", "c"])
+        )
+        assert "Step 1/3 2 actions: b, c" in out
+        assert "3 actions" not in out
+
     def test_a_wide_fan_out_is_truncated(self, rendered):
         names = [f"a{i}" for i in range(9)]
         out = rendered(StepStartEvent(step_index=0, total_steps=1, actions=names, pending=names))
