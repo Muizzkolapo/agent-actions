@@ -142,3 +142,20 @@ def test_no_framework_internals_reach_the_terminal(run):
 
 def test_the_run_has_exactly_one_ending(run):
     assert run.count("16 completed, 2 skipped") == 1, "the run summary is stated more than once"
+
+
+@pytest.mark.parametrize(
+    "action,records",
+    [("canonicalize_marks", 2), ("aggregate_votes", 2), ("consolidate_id_note", 1)],
+)
+def test_a_version_merge_consumer_reports_the_records_it_produced(run, action, records):
+    """Correlated input is written to the consumer's own target before it runs.
+
+    Counting from a snapshot taken after that write makes every merge consumer
+    report zero, which is the first number the user reads on its line.
+    """
+    noun = "record" if records == 1 else "records"
+    assert re.search(rf"✓ {action}\s+{records} {noun} in ", run), (
+        f"{action} did not report {records} {noun} — the per-run record delta is being "
+        f"measured from a snapshot that already includes its correlated input"
+    )
