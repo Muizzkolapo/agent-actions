@@ -185,6 +185,15 @@ def _warns_from(run, tmp_path) -> list[BaseEvent]:
     return [e for e in capture.events if e.level is EventLevel.WARN]
 
 
+def _events_from(run, tmp_path, level: EventLevel) -> list[BaseEvent]:
+    """Run framework code with real logging wired up; return events at *level*."""
+    LoggerFactory.initialize(output_dir=tmp_path, workflow_name="w", force=True)
+    capture = _Capture()
+    EventManager.get().register(capture)
+    run()
+    return [e for e in capture.events if e.level is level]
+
+
 def _assert_kept_off_the_console(events: list[BaseEvent], fragment: str) -> None:
     matching = [e for e in events if fragment in e.message]
     assert matching, f"no WARN event mentioning {fragment!r}; got {[e.message for e in events]}"
@@ -515,3 +524,54 @@ class TestStorageMechanicsAreDiagnostic:
             )
 
         _assert_kept_off_the_console(_warns_from(run, tmp_path), "has no content")
+
+    def test_a_delta_record_without_content_is_kept_off_the_console(self, tmp_path):
+        """Same function and same condition as the upstream-record warning, logged
+        at error. Routing the pair differently on level alone would be arbitrary."""
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        class _StubbedUpstream(SQLiteBackend):
+            def _get_upstream_actions(self, action_name):
+                return ["extract"]
+
+            def _read_target_raw_batch(self, actions, relative_path):
+                return {"extract": [{"source_guid": "g1", "content": {"extract": {}}}]}
+
+        backend = _StubbedUpstream(str(tmp_path / "agent_io" / "t.db"), "quiz")
+        backend.initialize()
+
+        def run():
+            backend._reconstruct_from_deltas(
+                "review",
+                "part.json",
+                [{"source_guid": "g1", "_delta_mode": "delta", "content": None}],
+            )
+
+        _assert_kept_off_the_console(
+            _events_from(run, tmp_path, EventLevel.ERROR), "has no content key"
+        )
+
+    def test_a_schema_echo_in_the_same_function_still_reaches_the_console(self, tmp_path):
+        """Marked site A fires from this function too. A module-wide sweep would
+        take both, and this one is the user's prompt or schema to fix."""
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        class _NoBatch(SQLiteBackend):
+            def set_dispositions_batch(self, rows):
+                raise NotImplementedError
+
+        backend = _NoBatch(str(tmp_path / "agent_io" / "t.db"), "quiz")
+        backend.initialize()
+        echoed = {"review": {"title": "ReviewSchema", "type": "object", "properties": {}}}
+
+        def run():
+            backend._gate_schema_echo_records("review", [{"source_guid": "g1", "content": echoed}])
+
+        events = _warns_from(run, tmp_path)
+        matching = [e for e in events if "Schema-echo in delta" in e.message]
+
+        assert matching, f"no schema-echo WARN; got {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False, f"wrongly marked: {event.message}"
+            assert console.accepts(event) is True, f"hidden from the user: {event.message}"
