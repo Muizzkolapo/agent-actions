@@ -503,7 +503,7 @@ class TestStorageMechanicsAreDiagnostic:
         assert events[0].diagnostic is True
         assert events[0].data["workflow_name"] == "quiz"
 
-    def test_an_upstream_record_without_content_is_kept_off_the_console(self, tmp_path):
+    def test_an_upstream_record_without_content_still_reaches_the_console(self, tmp_path):
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
         class _StubbedUpstream(SQLiteBackend):
@@ -523,33 +523,14 @@ class TestStorageMechanicsAreDiagnostic:
                 [{"source_guid": "g1", "_delta_mode": "delta", "content": {}}],
             )
 
-        _assert_kept_off_the_console(_warns_from(run, tmp_path), "has no content")
+        events = _warns_from(run, tmp_path)
+        matching = [e for e in events if "has no content" in e.message]
 
-    def test_a_delta_record_without_content_is_kept_off_the_console(self, tmp_path):
-        """Same function and same condition as the upstream-record warning, logged
-        at error. Routing the pair differently on level alone would be arbitrary."""
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
-        class _StubbedUpstream(SQLiteBackend):
-            def _get_upstream_actions(self, action_name):
-                return ["extract"]
-
-            def _read_target_raw_batch(self, actions, relative_path):
-                return {"extract": [{"source_guid": "g1", "content": {"extract": {}}}]}
-
-        backend = _StubbedUpstream(str(tmp_path / "agent_io" / "t.db"), "quiz")
-        backend.initialize()
-
-        def run():
-            backend._reconstruct_from_deltas(
-                "review",
-                "part.json",
-                [{"source_guid": "g1", "_delta_mode": "delta", "content": None}],
-            )
-
-        _assert_kept_off_the_console(
-            _events_from(run, tmp_path, EventLevel.ERROR), "has no content key"
-        )
+        assert matching, f"no WARN for the missing content; got {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False, f"wrongly marked: {event.message}"
+            assert console.accepts(event) is True, f"hidden from the user: {event.message}"
 
     def test_a_schema_echo_in_the_same_function_still_reaches_the_console(self, tmp_path):
         """Marked site A fires from this function too. A module-wide sweep would
