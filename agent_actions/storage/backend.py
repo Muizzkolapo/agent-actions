@@ -365,11 +365,7 @@ class StorageBackend(ABC):
                 if guid:
                     rec_content = rec.get("content")
                     if rec_content is None:
-                        logger.warning(
-                            "Upstream record %s in '%s' has no content.",
-                            guid,
-                            act,
-                        )
+                        logger.warning("Upstream record %s in '%s' has no content.", guid, act)
                         rec_content = {}
                     guid_map[guid] = rec_content
                     if rec.get("_delta_mode") == "full":

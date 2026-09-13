@@ -185,15 +185,6 @@ def _warns_from(run, tmp_path) -> list[BaseEvent]:
     return [e for e in capture.events if e.level is EventLevel.WARN]
 
 
-def _events_from(run, tmp_path, level: EventLevel) -> list[BaseEvent]:
-    """Run framework code with real logging wired up; return events at *level*."""
-    LoggerFactory.initialize(output_dir=tmp_path, workflow_name="w", force=True)
-    capture = _Capture()
-    EventManager.get().register(capture)
-    run()
-    return [e for e in capture.events if e.level is level]
-
-
 def _assert_kept_off_the_console(events: list[BaseEvent], fragment: str) -> None:
     matching = [e for e in events if fragment in e.message]
     assert matching, f"no WARN event mentioning {fragment!r}; got {[e.message for e in events]}"
@@ -552,6 +543,24 @@ class TestStorageMechanicsAreDiagnostic:
         matching = [e for e in events if "Schema-echo in delta" in e.message]
 
         assert matching, f"no schema-echo WARN; got {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False, f"wrongly marked: {event.message}"
+            assert console.accepts(event) is True, f"hidden from the user: {event.message}"
+
+    def test_a_failed_trace_update_in_the_same_file_still_reaches_the_console(self, tmp_path):
+        """Fires from the same function as a marked site. A file-scoped sweep would
+        take it, along with every other failed write in this backend."""
+        backend = self._backend(tmp_path)
+        backend.connection.execute("DROP TABLE prompt_trace")
+
+        def run():
+            backend.update_prompt_trace_response("score", "r-1", "answer")
+
+        events = _warns_from(run, tmp_path)
+        matching = [e for e in events if "Failed to update prompt trace response" in e.message]
+
+        assert matching, f"no WARN for the failed update; got {[e.message for e in events]}"
         console = _registered_console()
         for event in matching:
             assert event.diagnostic is False, f"wrongly marked: {event.message}"
