@@ -126,16 +126,38 @@ Formats events for user-facing CLI output using Rich.
 - Timestamp display
 - Category filtering (show only workflow/action/batch events by default)
 - Verbose mode shows all events
+- Drops events marked diagnostic unless the run is verbose
+
+#### ProgressRenderer
+
+**Location:** `agent_actions/logging/core/handlers/progress.py`
+
+The console handler a run installs. It consumes the workflow, step and action
+events and renders them as one grouped progress stream: one line per action,
+under the dependency step that produced it. Anything it does not recognise falls
+through to `ConsoleEventHandler`'s formatting, so warnings and errors from any
+module are untouched.
 
 **Example Output:**
 ```
-19:40:16 | ▶ WORKFLOW support_resolution started (5 actions, parallel)
-19:40:17 | 1/5 START action: extract_raw_qa...
-19:40:32 | 1/5 DONE extract_raw_qa (15.23s, 1.2K tokens)
-19:40:32 | 2/5 START action: flatten_raw_questions...
-19:40:33 | 2/5 DONE flatten_raw_questions (0.12s, tool)
-19:42:15 | ✓ WORKFLOW complete (1m 59s, 12.5K tokens, 5 actions)
+species_id_cards — 18 actions
+Step 1/12 summarize_entry
+  ✓ summarize_entry  2 records in 0.4s (agac-provider/gpt-4o-mini)
+Step 2/12 3 actions: extract_field_marks_1, extract_field_marks_2, extract_field_marks_3
+  ✓ extract_field_marks_1  2 records in 0.1s (agac-provider/gpt-4o-mini)
+  ✓ extract_field_marks_2  2 records in 0.1s (agac-provider/gpt-4o-mini)
+  ✓ extract_field_marks_3  2 records in 0.1s (agac-provider/gpt-4o-mini)
+Step 4/12 flatten_marks
+  ✓ flatten_marks  3 records in 0.0s
+Step 12/12 2 actions: auto_review_note, describe_confusion_risk
+  ○ auto_review_note  skipped — All records guard-filtered — no output produced
+
+✓ 0.6s — 16 completed, 2 skipped
 ```
+
+An action reports once, on completion; `--verbose` additionally announces each
+one as it starts. A batch action's duration is marked `(batch)` so provider
+queue time does not read as local work.
 
 #### JSONFileHandler
 
@@ -246,7 +268,7 @@ LoggerFactory.initialize(
 
 This:
 1. Creates EventManager singleton
-2. Registers ConsoleEventHandler
+2. Registers ProgressRenderer (the console handler for a run)
 3. Registers JSONFileHandler (writes to `{output_dir}/target/events.json`)
 4. Registers RunResultsCollector (writes to `{output_dir}/target/run_results.json`)
 5. Sets up LoggingBridgeHandler to convert `logger.*` calls to events

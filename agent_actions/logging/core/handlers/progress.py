@@ -91,8 +91,9 @@ class ProgressRenderer(ConsoleEventHandler):
 
     def _workflow_failed(self, event: BaseEvent) -> str:
         icon = self._icon("✗", "FAILED", "red")
+        name = self._escape(event.data.get("workflow_name", ""))
         message = self._escape(event.data.get("error_message", ""))
-        return f"\n{icon} {message}"
+        return f"\n{icon} {self._style(name, 'bold')} failed — {message}"
 
     # ── steps ─────────────────────────────────────────────────────────
 
@@ -159,7 +160,12 @@ class ProgressRenderer(ConsoleEventHandler):
 
     def _action_complete(self, event: BaseEvent) -> str:
         detail = [_records(event.data.get("record_count", 0))]
-        detail.append(f"in {_duration(event.data.get('execution_time', 0.0))}")
+        elapsed = _duration(event.data.get("execution_time", 0.0))
+        # Provider queue time is not the action working; saying so stops a long
+        # batch reading as a slow action.
+        if event.data.get("mode") == "batch":
+            elapsed += " (batch)"
+        detail.append(f"in {elapsed}")
         model = self._model(event)
         if model:
             detail.append(f"({model})")

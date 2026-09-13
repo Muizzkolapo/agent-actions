@@ -12,8 +12,8 @@ This document maps the moving parts of `agent_actions/cli/` -- the Click-based c
             ┌──────────────────┼──────────────────┐
             │                  │                  │
         bootstrap          commands            renderers/
-     (main.py,          (run, retry,        (schema_renderer,
-      cli_decorators,    preview, schema,    schema_renderer)
+     (main.py,          (run, retry,        (schema_renderer)
+      cli_decorators,    preview, schema,
       workflow_loader)   inspect, init, ...)
 ```
 

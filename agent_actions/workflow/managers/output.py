@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from rich.console import Console
-
 from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
@@ -49,7 +47,6 @@ class OutputManagerConfig:
     action_configs: dict[str, dict[str, Any]]
     action_status: dict[str, dict[str, Any]]
     version_correlator: Any
-    console: Console | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     data_source_config: str | dict[str, Any] | None = None
 

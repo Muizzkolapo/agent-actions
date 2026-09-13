@@ -154,7 +154,6 @@ def initialize_services(
             action_configs=metadata.action_configs,
             action_status=state_manager.action_status,
             version_correlator=version_correlator,
-            console=console,
             storage_backend=action_runner.storage_backend,
             data_source_config=action_runner.data_source_config,
         )

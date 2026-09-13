@@ -18,6 +18,11 @@ from rich.console import Console
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.manager import EventManager
+from agent_actions.workflow.execution_events import (
+    WorkflowEventLogger,
+    fire_step_complete,
+    fire_step_start,
+)
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
     LevelExecutionParams,
@@ -435,3 +440,58 @@ class TestAStepIsClosedWhateverHappens:
             )
 
         assert len(_of_type(captured, "StepCompleteEvent")) == 1
+
+
+class TestTheAsyncCoordinatorFiresTheSameEvents:
+    """The parallel path is what a fan-out DAG actually takes."""
+
+    @staticmethod
+    def _workflow(execution_order, levels):
+        wf = TestSequentialPathFiresTheSameEvents._workflow(execution_order, levels)
+
+        async def execute_level(params):
+            fire_step_start(
+                params.level_idx, params.total_steps, params.level_actions, params.level_actions
+            )
+            fire_step_complete(
+                params.level_idx,
+                params.total_steps,
+                0.0,
+                params.level_actions,
+                params.state_manager,
+            )
+            return True
+
+        wf.services.core.action_level_orchestrator.execute_level_async = execute_level
+        return wf
+
+    def test_every_level_is_announced(self, captured):
+        wf = self._workflow(["a", "b"], [["a"], ["b"]])
+        wf._run_storage_maintenance = MagicMock()
+
+        asyncio.run(wf.async_run())
+
+        assert [e.data["step_index"] for e in _of_type(captured, "StepStartEvent")] == [0, 1]
+        assert [e.data["total_steps"] for e in _of_type(captured, "StepStartEvent")] == [2, 2]
+
+    def test_the_async_console_carries_no_step_boundaries(self, captured, capsys):
+        wf = self._workflow(["a"], [["a"]])
+        wf._run_storage_maintenance = MagicMock()
+
+        asyncio.run(wf.async_run())
+
+        assert wf.runtime.console.file.getvalue() == "", (
+            "a console.print here reaches the terminal and never events.json"
+        )
+        io = capsys.readouterr()
+        assert io.out == ""
+        assert io.err == ""
+
+    def test_the_workflow_start_event_fires_exactly_once(self, captured):
+        wf = self._workflow(["a"], [["a"]])
+        wf.event_logger = WorkflowEventLogger("wf", ["a"], wf.config, wf.services)
+        wf._run_storage_maintenance = MagicMock()
+
+        asyncio.run(wf.async_run())
+
+        assert len(_of_type(captured, "WorkflowStartEvent")) == 1

@@ -23,6 +23,7 @@ from agent_actions.logging.events import (
     StepCompleteEvent,
     StepStartEvent,
     WorkflowCompleteEvent,
+    WorkflowFailedEvent,
     WorkflowStartEvent,
 )
 
@@ -506,3 +507,81 @@ class TestWorkflowHeaderGrammar:
         out = rendered(WorkflowStartEvent(workflow_name="w", action_count=1))
         assert "w — 1 action" in out
         assert "1 actions" not in out
+
+
+class TestABatchActionIsMarkedAsOne:
+    def test_batch_latency_is_labelled(self, rendered):
+        """Sixteen minutes of provider queue reads like sixteen minutes of work."""
+        event = _complete("x", records=40, seconds=974.0)
+        event.data["mode"] = "batch"
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["x"], pending=["x"]), event
+        )
+        assert "16m14s (batch)" in out
+
+    def test_an_online_action_is_not_labelled(self, rendered):
+        event = _complete("x", seconds=2.0)
+        event.data["mode"] = "online"
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["x"], pending=["x"]), event
+        )
+        assert "(batch)" not in out
+
+
+class TestAFailedRunIsUnmistakable:
+    def test_a_workflow_failure_is_reported(self, rendered):
+        out = rendered(
+            WorkflowFailedEvent(workflow_name="quiz_gen", error_message="schema 'answer' not found")
+        )
+        assert "schema 'answer' not found" in out
+        assert "quiz_gen" in out, "the failure must name the workflow it belongs to"
+
+    def test_the_footer_marks_a_failed_run(self, rendered):
+        out = rendered(
+            WorkflowCompleteEvent(
+                workflow_name="w", elapsed_time=5.0, actions_completed=1, actions_failed=2
+            )
+        )
+        assert "✗" in out
+        assert "✓" not in out, "a run with failures must not be marked done"
+
+    def test_the_footer_marks_a_clean_run(self, rendered):
+        out = rendered(
+            WorkflowCompleteEvent(workflow_name="w", elapsed_time=5.0, actions_completed=3)
+        )
+        assert "✓" in out
+        assert "✗" not in out
+
+    def test_the_footer_reports_partial_and_skipped(self, rendered):
+        out = rendered(
+            WorkflowCompleteEvent(
+                workflow_name="w",
+                elapsed_time=5.0,
+                actions_completed=1,
+                actions_partial=2,
+                actions_skipped=3,
+            )
+        )
+        assert "1 completed, 2 partial, 3 skipped" in out
+
+
+class TestTheStreamSaysNothingItDoesNotNeedTo:
+    def test_a_finished_step_emits_no_line(self, rendered):
+        before = rendered(StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]))
+        after = rendered(
+            StepCompleteEvent(step_index=0, total_steps=1, elapsed_time=5.0, completed=1)
+        )
+        assert after == before, "the actions already reported; the step adds nothing"
+
+    def test_a_starting_action_emits_no_line(self, rendered):
+        before = rendered(StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]))
+        after = rendered(ActionStartEvent(action_name="a", action_index=0, total_actions=1))
+        assert after == before
+
+    def test_several_pending_batch_jobs_are_pluralised(self, rendered):
+        out = rendered(
+            StepCompleteEvent(
+                step_index=0, total_steps=1, elapsed_time=1.0, batch_pending=["a", "b"]
+            )
+        )
+        assert "2 batch jobs submitted" in out
