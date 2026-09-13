@@ -58,6 +58,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `config` | outbound | Reads storage_backend type and defaults from project config |
+| `logging` | outbound | Backends mark their bookkeeping notices as framework-internal |
 | `output` | inbound | FileWriter and UnifiedSourceDataSaver delegate writes to StorageBackend |
 | `input` | inbound | SourceDataLoader reads from StorageBackend |
 | `workflow` | inbound | Coordinator initializes backend; runner and executor query target/disposition state |

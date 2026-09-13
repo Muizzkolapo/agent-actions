@@ -369,7 +369,6 @@ class StorageBackend(ABC):
                             "Upstream record %s in '%s' has no content.",
                             guid,
                             act,
-                            extra=DIAGNOSTIC,
                         )
                         rec_content = {}
                     guid_map[guid] = rec_content
