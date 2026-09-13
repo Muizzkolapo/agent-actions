@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
@@ -164,6 +165,7 @@ class StorageBackend(ABC):
                     "backend has no set_dispositions_batch",
                     action_name,
                     len(failed_rows),
+                    extra=DIAGNOSTIC,
                 )
         return gated
 

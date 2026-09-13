@@ -11,6 +11,7 @@ from typing import Any
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.errors.validation import DataValidationError
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
@@ -1163,6 +1164,7 @@ class SQLiteBackend(StorageBackend):
                 "Truncating trace field from %d bytes to marker (limit %d)",
                 len(value),
                 self._MAX_TRACE_FIELD_SIZE,
+                extra=DIAGNOSTIC,
             )
             return json.dumps({"__truncated__": True, "original_length": len(value)})
         return value
@@ -1308,7 +1310,7 @@ class SQLiteBackend(StorageBackend):
                         "No prompt trace row for action=%s record=%s — response not recorded",
                         action_name,
                         record_id,
-                        extra={"workflow_name": self.workflow_name},
+                        extra={**DIAGNOSTIC, "workflow_name": self.workflow_name},
                     )
             except sqlite3.Error as e:
                 self.connection.rollback()
