@@ -291,7 +291,7 @@ class TestWorkflowScale:
         dones = _of_type(captured, "StepCompleteEvent")
         assert starts[0].data["total_steps"] == 7
         assert dones[0].data["total_steps"] == 7
-        assert "Step 2/7" in starts[0].message
+        assert "Step 3/7" in starts[0].message
 
     def test_the_start_event_states_the_action_count(self):
         from agent_actions.logging.events import WorkflowStartEvent
@@ -313,13 +313,13 @@ class TestTheMessagesSayStep:
             total_steps=5,
         )
 
-        assert _of_type(captured, "StepStartEvent")[0].message == "Step 1/5: 3 actions in parallel"
+        assert _of_type(captured, "StepStartEvent")[0].message == "Step 2/5: 3 actions (a, b, c)"
 
     def test_a_single_action_step_names_it(self, captured):
         orch = _orchestrator(["only"])
         _run_level(orch, level_idx=0, level_actions=["only"], pending=["only"], total_steps=2)
 
-        assert _of_type(captured, "StepStartEvent")[0].message == "Step 0/2: only"
+        assert _of_type(captured, "StepStartEvent")[0].message == "Step 1/2: only"
 
     def test_a_step_with_nothing_left_says_so(self, captured):
         orch = _orchestrator(["a"])
@@ -327,7 +327,7 @@ class TestTheMessagesSayStep:
 
         assert (
             _of_type(captured, "StepStartEvent")[0].message
-            == "Step 4/9: all actions already complete"
+            == "Step 5/9: all actions already complete"
         )
 
 
@@ -376,3 +376,60 @@ class TestABatchPausedStepDoesNotClaimToBeComplete:
         assert done.data["batch_pending"] == ["a"]
         assert "paused" in done.message
         assert "complete" not in done.message
+
+
+class TestAStepIsClosedWhateverHappens:
+    """StepStartEvent without its StepCompleteEvent leaves every consumer unbalanced."""
+
+    def test_an_action_that_raises_still_closes_its_step(self, captured):
+        orch = _orchestrator(["a"])
+        executor = MagicMock()
+
+        async def boom(action, **kwargs):
+            raise RuntimeError("tool exploded")
+
+        executor.execute_action_async = boom
+        state = _state_manager(pending=["a"])
+
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                orch.execute_level_async(
+                    LevelExecutionParams(
+                        level_idx=0,
+                        level_actions=["a"],
+                        action_indices={"a": 0},
+                        state_manager=state,
+                        action_executor=executor,
+                        total_steps=1,
+                    )
+                )
+            )
+
+        assert len(_of_type(captured, "StepStartEvent")) == 1
+        assert len(_of_type(captured, "StepCompleteEvent")) == 1
+
+    def test_an_interrupt_still_closes_its_step(self, captured):
+        orch = _orchestrator(["a"])
+        executor = MagicMock()
+
+        async def interrupted(action, **kwargs):
+            raise KeyboardInterrupt
+
+        executor.execute_action_async = interrupted
+        state = _state_manager(pending=["a"])
+
+        with pytest.raises(KeyboardInterrupt):
+            asyncio.run(
+                orch.execute_level_async(
+                    LevelExecutionParams(
+                        level_idx=0,
+                        level_actions=["a"],
+                        action_indices={"a": 0},
+                        state_manager=state,
+                        action_executor=executor,
+                        total_steps=1,
+                    )
+                )
+            )
+
+        assert len(_of_type(captured, "StepCompleteEvent")) == 1

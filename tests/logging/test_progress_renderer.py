@@ -66,7 +66,7 @@ class TestOneLinePerAction:
             ),
             ActionStartEvent(action_name="summarize", action_index=0, total_actions=1),
         )
-        assert "Step 0/4 summarize" in out
+        assert "Step 1/4 summarize" in out
         assert "✓" not in out, "an action reports once, on completion"
 
     def test_a_sequential_step_names_its_action_on_both_lines(self, rendered):
@@ -76,7 +76,7 @@ class TestOneLinePerAction:
             ),
             _complete("summarize", records=3, seconds=29.6),
         )
-        assert "Step 0/4 summarize" in out
+        assert "Step 1/4 summarize" in out
         assert "✓ summarize  3 records in 29.6s" in out
 
     def test_a_parallel_step_names_each_action_on_its_own_line(self, rendered):
@@ -87,7 +87,7 @@ class TestOneLinePerAction:
             _complete("qa_1", records=3, seconds=80.1),
             _complete("qa_2", records=2, seconds=62.0),
         )
-        assert "Step 1/4 2 in parallel" in out
+        assert "Step 2/4 2 actions: qa_1, qa_2" in out
         assert "qa_1  3 records in 1m20s" in out
         assert "qa_2  2 records in 1m02s" in out
 
@@ -164,12 +164,12 @@ class TestFailureIsActionable:
 
 
 class TestStepShape:
-    def test_a_step_with_nothing_pending_says_so_and_lists_no_actions(self, rendered):
+    def test_a_step_with_nothing_pending_names_what_is_already_done(self, rendered):
         out = rendered(
             StepStartEvent(step_index=3, total_steps=4, actions=["a", "b"], pending=[]),
             StepCompleteEvent(step_index=3, total_steps=4, elapsed_time=0.0, completed=2),
         )
-        assert "Step 3/4 a, b" in out
+        assert "Step 4/4 a, b" in out
         assert "already complete" in out
         assert "✓" not in out
 
@@ -179,7 +179,7 @@ class TestStepShape:
             _complete("a", seconds=5.0),
             StepCompleteEvent(step_index=0, total_steps=1, elapsed_time=5.0, completed=1),
         )
-        assert out.count("Step 0/1") == 1
+        assert out.count("Step 1/1") == 1
         assert "complete in 5.00s" not in out
 
     def test_a_step_waiting_on_batch_tells_the_user_to_run_again(self, rendered):
@@ -207,7 +207,7 @@ class TestWorkflowFraming:
             StepStartEvent(step_index=0, total_steps=36, actions=["a"], pending=["a"]),
         )
         assert "quiz_gen — 52 actions" in out
-        assert "Step 0/36" in out, "the step count reaches the user on the first step line"
+        assert "Step 1/36" in out, "the step count reaches the user on the first step line"
         assert "Running workflow" not in out, "the header is the workflow, not a log line about it"
 
     def test_the_footer_totals_the_run(self, rendered):
@@ -405,3 +405,86 @@ class TestTheFactoryInstallsTheRenderer:
             assert isinstance(consoles[0], ProgressRenderer)
         finally:
             LoggerFactory.reset()
+
+
+class TestStepNumbering:
+    def test_the_last_step_is_the_total(self, rendered):
+        out = rendered(
+            StepStartEvent(step_index=11, total_steps=12, actions=["z"], pending=["z"]),
+        )
+        assert "Step 12/12 z" in out, "a run that ends at 11/12 looks like it stopped short"
+
+    def test_the_first_step_is_one(self, rendered):
+        out = rendered(StepStartEvent(step_index=0, total_steps=12, actions=["a"], pending=["a"]))
+        assert "Step 1/12 a" in out
+
+
+class TestAFanOutNamesItsActions:
+    def test_a_multi_action_step_lists_them(self, rendered):
+        out = rendered(
+            StepStartEvent(
+                step_index=0, total_steps=3, actions=["a", "b", "c"], pending=["a", "b", "c"]
+            )
+        )
+        assert "Step 1/3 3 actions: a, b, c" in out
+
+    def test_the_step_makes_no_claim_about_parallelism(self, rendered):
+        """A level runs serially under --execution-mode sequential."""
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=3, actions=["a", "b"], pending=["a", "b"])
+        )
+        assert "parallel" not in out
+
+    def test_a_wide_fan_out_is_truncated(self, rendered):
+        names = [f"a{i}" for i in range(9)]
+        out = rendered(StepStartEvent(step_index=0, total_steps=1, actions=names, pending=names))
+        assert "9 actions: a0, a1, a2, a3 +5 more" in out
+
+
+class TestVerboseShowsWhatIsInFlight:
+    @staticmethod
+    def _verbose():
+        buf = io.StringIO()
+        r = ProgressRenderer(
+            min_level=EventLevel.DEBUG,
+            categories=None,
+            show_diagnostics=True,
+            console=Console(file=buf, highlight=False, no_color=True, width=200),
+        )
+        return r, buf
+
+    def test_an_action_announces_itself_when_the_run_is_verbose(self):
+        r, buf = self._verbose()
+        for e in (
+            StepStartEvent(step_index=0, total_steps=2, actions=["a", "b"], pending=["a", "b"]),
+            ActionStartEvent(action_name="a", action_index=0, total_actions=2),
+        ):
+            r.handle(e)
+        assert "→ a" in buf.getvalue(), "a fan-out gives no other way to see what is running"
+
+    def test_a_normal_run_still_reports_each_action_once(self, rendered):
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=2, actions=["a", "b"], pending=["a", "b"]),
+            ActionStartEvent(action_name="a", action_index=0, total_actions=2),
+        )
+        assert "→" not in out
+
+
+class TestAStepThatFinishedNothing:
+    def test_the_message_does_not_claim_completion(self):
+        event = StepCompleteEvent(
+            step_index=0, total_steps=3, elapsed_time=1.0, completed=0, unfinished=2
+        )
+        assert "complete" not in event.message
+        assert "2 unfinished" in event.message
+
+    def test_a_step_that_finished_everything_says_complete(self):
+        event = StepCompleteEvent(step_index=0, total_steps=3, elapsed_time=1.0, completed=2)
+        assert event.message == "Step 1/3 complete in 1.00s"
+
+
+class TestWorkflowHeaderGrammar:
+    def test_a_single_action_workflow_is_not_pluralised(self, rendered):
+        out = rendered(WorkflowStartEvent(workflow_name="w", action_count=1))
+        assert "w — 1 action" in out
+        assert "1 actions" not in out
