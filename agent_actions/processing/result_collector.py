@@ -83,6 +83,12 @@ def _get_retry_attempts(result: ProcessingResult) -> str | int:
     return "unknown"
 
 
+def _short_guid(source_guid: object) -> str:
+    """First segment of a guid — enough to correlate, short enough to read."""
+    text = str(source_guid) if source_guid else "unknown"
+    return text.split("-", 1)[0]
+
+
 @dataclass
 class CollectionStats:
     """Counts from result collection — returned alongside output records."""
@@ -95,16 +101,24 @@ class CollectionStats:
     deferred: int = 0
     unprocessed: int = 0
     carry_forward: int = 0
+    # Why the failures failed, in encounter order. Not a count, so it is
+    # excluded from the total below.
+    causes: tuple[str, ...] = ()
 
     @property
     def only_guard_outcomes(self) -> bool:
         """True when every collected record was guard-skipped or guard-filtered.
 
-        Uses ``dataclasses.fields()`` so that adding a new status field
+        Uses ``dataclasses.fields()`` so that adding a new status count
         automatically makes this return False until the new field is
         accounted for — no manual update needed.
         """
-        total: int = sum(getattr(self, f.name) for f in fields(self))
+        # Filtered on the value, not the annotation: under `from __future__
+        # import annotations` a field's type is the string "int", and matching
+        # on it silently selects nothing.
+        total: int = sum(
+            value for f in fields(self) if isinstance(value := getattr(self, f.name), int)
+        )
         return bool((self.skipped + self.filtered) == total)
 
     def raise_if_terminal_failure(
@@ -140,11 +154,30 @@ class CollectionStats:
 
         active_input_count = len(data) - self.unprocessed
         if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
-            raise RuntimeError(
-                f"Action '{action_name}' produced 0 successful records — "
+            tally = (
+                f"produced 0 successful records — "
                 f"all {active_input_count} active input item(s) failed or exhausted "
                 f"({self.failed} failed, {self.exhausted} exhausted)"
             )
+            # The cause leads: every view that renders this truncates, so a
+            # cause appended after the tally is the part that gets cut.
+            # The cause leads and the action follows it. Leading, because every
+            # view that renders this truncates — `agac dispositions` at 60
+            # characters — so a trailing cause is the part that gets cut.
+            # Always naming the action, because only some paths reach a caller
+            # that re-adds it, and an unnamed failure is worse than a repeated
+            # name.
+            cause = self.dominant_cause
+            named = f"Action '{action_name}' {tally}"
+            raise RuntimeError(f"{cause} — {named}" if cause else named)
+
+    @property
+    def dominant_cause(self) -> str:
+        """The most common failure reason, or empty when none was recorded."""
+        reasons = [c for c in self.causes if c]
+        if not reasons:
+            return ""
+        return collections.Counter(reasons).most_common(1)[0][0]
 
 
 def _build_failed_tombstone(
@@ -420,6 +453,7 @@ def collect_results_from_processing_results(
 
     output: list[dict[str, Any]] = []
     stats: collections.Counter[str] = collections.Counter()
+    causes: list[str] = []
     pending_dispositions: list[DispositionRow] = []
 
     for idx, result in enumerate(results):
@@ -632,12 +666,15 @@ def collect_results_from_processing_results(
                 )
 
         elif status == ProcessingStatus.FAILED:
+            # The cause leads: `agac dispositions` truncates a reason at 60
+            # characters, and this is the line both online and batch runs get.
             logger.error(
-                "[%s] Processing failed for source_guid=%s: %s",
+                "[%s] %s (record %s)",
                 action_name,
-                result.source_guid,
                 result.error,
+                _short_guid(result.source_guid),
             )
+            causes.append(str(result.error) if result.error else "")
 
             if result.data:
                 # Batch FAILED results carry their own data (error items or
@@ -879,6 +916,7 @@ def collect_results_from_processing_results(
         )
 
     return output, CollectionStats(
+        causes=tuple(causes),
         success=stats["success"],
         failed=stats["failed"],
         skipped=stats["skipped"],
