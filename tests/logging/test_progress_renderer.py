@@ -231,6 +231,52 @@ class TestWorkflowFraming:
         assert "failed" not in out
 
 
+class TestAPlainStream:
+    """Without Rich the markup escape has nothing to render it, so it must not run."""
+
+    @staticmethod
+    def _plain():
+        renderer = ProgressRenderer(min_level=EventLevel.INFO, categories={"workflow", "action"})
+        renderer._use_rich = False
+        renderer._console = None
+        return renderer
+
+    @staticmethod
+    def _capture(renderer, *events):
+        import sys
+
+        buf = io.StringIO()
+        stderr, sys.stderr = sys.stderr, buf
+        try:
+            for event in events:
+                renderer.handle(event)
+        finally:
+            sys.stderr = stderr
+        return buf.getvalue()
+
+    def test_an_error_is_shown_verbatim_without_escape_backslashes(self):
+        out = self._capture(
+            self._plain(),
+            ActionFailedEvent(
+                action_name="v",
+                action_index=0,
+                total_actions=1,
+                error_message="field [red]answer[/red] missing",
+            ),
+        )
+        assert "field [red]answer[/red] missing" in out
+        assert "\\" not in out
+
+    def test_results_still_render_without_rich(self):
+        out = self._capture(
+            self._plain(),
+            StepStartEvent(step_index=0, total_steps=2, actions=["a"], pending=["a"]),
+            _complete("a", records=2, seconds=1.0),
+        )
+        assert "Step 0/2 a" in out
+        assert "OK a  2 records in 1.0s" in out
+
+
 class TestNothingIsSwallowed:
     def test_a_warning_from_elsewhere_still_reaches_the_console(self, rendered):
         out = rendered(

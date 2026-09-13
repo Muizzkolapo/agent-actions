@@ -10,13 +10,6 @@ if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
 
-def _escape(text: str) -> str:
-    """Neutralize square brackets so record content cannot be read as markup."""
-    from rich.markup import escape
-
-    return escape(str(text))
-
-
 def _duration(seconds: float) -> str:
     if seconds >= 60:
         return f"{int(seconds // 60)}m{int(seconds % 60):02d}s"
@@ -59,13 +52,25 @@ class ProgressRenderer(ConsoleEventHandler):
     def _style(self, text: str, style: str) -> str:
         return f"[{style}]{text}[/{style}]" if self._use_rich else text
 
+    def _escape(self, text: str) -> str:
+        """Neutralize brackets so record content cannot be read as markup.
+
+        Only when markup is actually rendered: the escape inserts backslashes,
+        and a plain stream would show them.
+        """
+        if not self._use_rich:
+            return str(text)
+        from rich.markup import escape
+
+        return escape(str(text))
+
     def _icon(self, rich_icon: str, plain: str, style: str) -> str:
         return self._style(rich_icon, style) if self._use_rich else plain
 
     # ── workflow ──────────────────────────────────────────────────────
 
     def _workflow_start(self, event: BaseEvent) -> str:
-        name = _escape(event.data.get("workflow_name", ""))
+        name = self._escape(event.data.get("workflow_name", ""))
         actions = event.data.get("action_count", 0)
         return f"\n{self._style(name, 'bold')} — {actions} actions"
 
@@ -84,7 +89,7 @@ class ProgressRenderer(ConsoleEventHandler):
 
     def _workflow_failed(self, event: BaseEvent) -> str:
         icon = self._icon("✗", "FAILED", "red")
-        message = _escape(event.data.get("error_message", ""))
+        message = self._escape(event.data.get("error_message", ""))
         return f"\n{icon} {message}"
 
     # ── steps ─────────────────────────────────────────────────────────
@@ -96,11 +101,11 @@ class ProgressRenderer(ConsoleEventHandler):
         )
         if not pending:
             actions = event.data.get("actions", [])
-            subject = ", ".join(_escape(a) for a in actions)
+            subject = ", ".join(self._escape(a) for a in actions)
             return f"{head} {subject} {self._style('— already complete', 'dim')}"
         if len(pending) > 1:
             return f"{head} {len(pending)} in parallel"
-        return f"{head} {_escape(pending[0])}"
+        return f"{head} {self._escape(pending[0])}"
 
     def _step_complete(self, event: BaseEvent) -> str | None:
         # A step's own timing is noise next to its actions'; only say something
@@ -117,7 +122,7 @@ class ProgressRenderer(ConsoleEventHandler):
     def _subject(self, event: BaseEvent) -> str:
         # Always named, never only in the step header: a reader greps for an
         # action to ask whether it finished, and the answer is this line.
-        return f"{_escape(event.data.get('action_name', ''))}  "
+        return f"{self._escape(event.data.get('action_name', ''))}  "
 
     def _action_start(self, event: BaseEvent) -> None:
         # The step header already named what is about to run.
@@ -129,13 +134,13 @@ class ProgressRenderer(ConsoleEventHandler):
         vendor = event.data.get("model_vendor", "")
         model = event.data.get("model_name", "")
         if vendor and model:
-            detail.append(f"({_escape(vendor)}/{_escape(model)})")
+            detail.append(f"({self._escape(vendor)}/{self._escape(model)})")
         elif vendor:
-            detail.append(f"({_escape(vendor)})")
+            detail.append(f"({self._escape(vendor)})")
         return f"  {self._icon('✓', 'OK', 'green')} {self._subject(event)}{' '.join(detail)}"
 
     def _action_skip(self, event: BaseEvent) -> str:
-        reason = _escape(event.data.get("skip_reason", ""))
+        reason = self._escape(event.data.get("skip_reason", ""))
         suffix = f" — {reason}" if reason else ""
         icon = self._icon("○", "SKIP", "dim")
         return f"  {icon} {self._subject(event)}{self._style('skipped' + suffix, 'dim')}"
@@ -145,12 +150,12 @@ class ProgressRenderer(ConsoleEventHandler):
         return f"  {icon} {self._subject(event)}{self._style('cached', 'dim')}"
 
     def _action_failed(self, event: BaseEvent) -> str:
-        message = _escape(event.data.get("error_message", "")) or "failed"
+        message = self._escape(event.data.get("error_message", "")) or "failed"
         icon = self._icon("✗", "FAIL", "red")
         line = f"  {icon} {self._subject(event)}{self._style(message, 'red')}"
         suggestion = event.data.get("suggestion", "")
         if suggestion:
-            line += "\n    " + self._style(_escape(suggestion), "dim")
+            line += "\n    " + self._style(self._escape(suggestion), "dim")
         return line
 
 
