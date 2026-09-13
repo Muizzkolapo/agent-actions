@@ -442,3 +442,54 @@ class TestRemainingMechanicsInTheEditedModules:
             strategy.invoke(task, context)
 
         _assert_kept_off_the_console(_warns_from(run, tmp_path), "Duplicate target_id")
+
+
+class TestStorageMechanicsAreDiagnostic:
+    """Storage messages describing the framework's own bookkeeping."""
+
+    @staticmethod
+    def _backend(tmp_path):
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        backend = SQLiteBackend(str(tmp_path / "agent_io" / "t.db"), "quiz")
+        backend.initialize()
+        return backend
+
+    def test_a_capability_gap_in_the_backend_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        class _NoBatch(SQLiteBackend):
+            def set_dispositions_batch(self, rows):
+                raise NotImplementedError
+
+        backend = _NoBatch(str(tmp_path / "agent_io" / "t.db"), "quiz")
+        backend.initialize()
+        echoed = {"review": {"title": "ReviewSchema", "type": "object", "properties": {}}}
+
+        def run():
+            backend._gate_schema_echo_records("review", [{"source_guid": "g1", "content": echoed}])
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "Disposition write skipped")
+
+    def test_an_oversized_trace_field_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        backend = self._backend(tmp_path)
+
+        def run():
+            backend._cap_trace_field("x" * (SQLiteBackend._MAX_TRACE_FIELD_SIZE + 1))
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "Truncating trace field")
+
+    def test_the_trace_marker_does_not_displace_the_workflow_name(self, tmp_path):
+        """The one target that already passes extra= must keep its own field."""
+        backend = self._backend(tmp_path)
+
+        def run():
+            backend.update_prompt_trace_response("score", "r-1", "answer")
+
+        events = [e for e in _warns_from(run, tmp_path) if "No prompt trace row" in e.message]
+
+        assert events, "the no-trace-row warning did not fire"
+        assert events[0].diagnostic is True
+        assert events[0].data["workflow_name"] == "quiz"
