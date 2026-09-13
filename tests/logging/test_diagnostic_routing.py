@@ -361,3 +361,84 @@ class TestUserAuthoredToolProblemsStayOnTheConsole:
         events = _warns_from(self._resolve([{"node_id": "ghost", "content": {}}]), tmp_path)
 
         self._assert_reaches_console(events, "not found in inputs")
+
+
+class TestTheDocsSiteHonoursTheMarker:
+    """The generated docs surface runtime warnings to the same person the console
+    serves, so it must make the same distinction the console does."""
+
+    @staticmethod
+    def _collect(event: dict) -> list[dict]:
+        from agent_actions.tooling.docs.scanner.data_scanners import _collect_runtime_warning
+
+        warnings: list[dict] = []
+        _collect_runtime_warning(event, warnings)
+        return warnings
+
+    def test_a_diagnostic_warning_is_not_surfaced(self):
+        event = {"level": "warn", "message": "internal", "diagnostic": True, "meta": {}}
+
+        assert self._collect(event) == []
+
+    def test_an_ordinary_warning_is_still_surfaced(self):
+        event = {"level": "warn", "message": "act on me", "diagnostic": False, "meta": {}}
+
+        assert [w["message"] for w in self._collect(event)] == ["act on me"]
+
+    def test_an_event_written_before_the_marker_existed_is_still_surfaced(self):
+        assert len(self._collect({"level": "error", "message": "old line", "meta": {}})) == 1
+
+
+class TestSiblingsOfMarkedSitesStayOnTheConsole:
+    """A later sweep silencing a whole module would hide these."""
+
+    def test_an_unreadable_merge_input_still_reaches_the_console(self, tmp_path):
+        from agent_actions.workflow.merge import merge_json_files
+
+        bad = tmp_path / "broken.json"
+        bad.write_text("{not json")
+
+        events = _warns_from(lambda: merge_json_files([bad]), tmp_path)
+        matching = [e for e in events if "Could not read JSON file" in e.message]
+
+        assert matching, f"no WARN for the unreadable file: {[e.message for e in events]}"
+        console = _registered_console()
+        for event in matching:
+            assert event.diagnostic is False
+            assert console.accepts(event) is True
+
+
+class TestRemainingMechanicsInTheEditedModules:
+    def test_a_vanished_target_listing_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+
+        class _RacingBackend:
+            def list_target_files(self, version_agent):
+                return ["gone.json"]
+
+            def read_target(self, version_agent, relative_path):
+                raise FileNotFoundError(relative_path)
+
+        def run():
+            VersionOutputCorrelator(
+                agent_folder=tmp_path, storage_backend=_RacingBackend()
+            )._load_from_storage_backend("v1")
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "TOCTOU")
+
+    def test_a_duplicate_target_id_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.processing.invocation.batch import BatchStrategy
+        from agent_actions.processing.prepared_task import PreparedTask
+        from agent_actions.processing.types import ProcessingContext
+
+        task = PreparedTask(target_id="t-1", source_guid="sg-1")
+        context = ProcessingContext(
+            agent_config={"kind": "llm"}, agent_name="score", is_first_stage=True, source_data=[]
+        )
+
+        def run():
+            strategy = BatchStrategy(provider=None)
+            strategy.invoke(task, context)
+            strategy.invoke(task, context)
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "Duplicate target_id")
