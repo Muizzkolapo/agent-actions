@@ -27,6 +27,7 @@ from agent_actions.storage.backend import (
     DispositionRow,
 )
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
+from agent_actions.utils.limits import effective_record_limit
 from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
@@ -487,8 +488,8 @@ class ProcessingPipeline:
                 )
 
         # ── per-action record_limit ──────────────────────────────────────
-        record_limit = self.config.action_config.get("record_limit")
-        if isinstance(record_limit, int) and isinstance(data, list) and len(data) > record_limit:
+        record_limit = effective_record_limit(self.config.action_config)
+        if record_limit is not None and isinstance(data, list) and len(data) > record_limit:
             total = len(data)
             data = data[:record_limit]
             logger.info(

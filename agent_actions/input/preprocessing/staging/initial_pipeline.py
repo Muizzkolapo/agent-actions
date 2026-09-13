@@ -22,6 +22,7 @@ from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.utils.limits import effective_record_limit
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -197,7 +198,7 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
     # Slice BEFORE source save to prevent dedup poisoning
-    record_limit = ctx.agent_config.get("record_limit")
+    record_limit = effective_record_limit(ctx.agent_config)
     if record_limit is not None and isinstance(data_chunk, list) and len(data_chunk) > 0:
         total = len(data_chunk)
         data_chunk = data_chunk[:record_limit]
