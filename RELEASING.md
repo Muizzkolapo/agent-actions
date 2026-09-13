@@ -28,7 +28,18 @@ task changelog:batch -- X.Y.Z
 task changelog:merge
 ```
 
-This updates the version in both `pyproject.toml` and `agent_actions/__version__.py` (configured via `.changie.yaml` replacements), and merges entries into `CHANGELOG.md`.
+This merges entries into `CHANGELOG.md`.
+
+`.changie.yaml` declares `replacements` for `pyproject.toml` and
+`agent_actions/__version__.py`, but changie v1.22.1 does not apply them — not on
+`batch auto` and not on an explicit version either. Set both by hand and keep
+the lockfile in step, or the tag will point at a version the files do not claim:
+
+```bash
+sed -i '' 's/^version = ".*"/version = "X.Y.Z"/' pyproject.toml
+sed -i '' 's/^__version__ = ".*"/__version__ = "X.Y.Z"/' agent_actions/__version__.py
+uv lock                                 # the lock records the project version too
+```
 
 `changie batch` empties `.changes/unreleased/`, but the **Changelog Entry** CI job
 fails any PR whose `.changes/unreleased/` is empty. So the release PR carries one
@@ -47,7 +58,7 @@ That entry is not consumed by this release, so it appears in the *next* one's no
 Commit and open a PR:
 
 ```bash
-git add pyproject.toml agent_actions/__version__.py CHANGELOG.md .changes/
+git add pyproject.toml agent_actions/__version__.py uv.lock CHANGELOG.md .changes/
 git commit -m "chore: release vX.Y.Z"
 git push -u origin chore/release-X.Y.Z
 gh pr create --base main --title "chore: release vX.Y.Z"
