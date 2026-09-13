@@ -20,56 +20,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _resolve_source_mapping(
-    raw_outputs: list[dict],
-    input_data: list[dict],
-    action_name: str,
-) -> dict[int, int | list[int]]:
-    """Resolve which input produced each output by ``node_id``.
-
-    NiFi-inspired: every record carries identity (``node_id``) through the
-    pipeline.  The framework preserves it through the observe filter; tools
-    receive full records and pass them through.  The framework matches each
-    output to its input by ``node_id`` — no heuristics, no guessing.
-
-    Returns a mapping of ``output_index -> input_index`` for outputs that
-    carry a ``node_id`` matching an input.  Outputs without a matching
-    ``node_id`` are omitted — they are new records (e.g. aggregation
-    results) and will receive fresh lineage with no parent.
-    """
-    # Build lookup: node_id -> input index
-    nid_to_idx: dict[str, int] = {}
-    for i, item in enumerate(input_data):
-        if isinstance(item, dict):
-            nid = item.get("node_id")
-            if isinstance(nid, str):
-                nid_to_idx[nid] = i
-
-    mapping: dict[int, int | list[int]] = {}
-    for i, item in enumerate(raw_outputs):
-        nid = item.get("node_id") if isinstance(item, dict) else None
-        if not isinstance(nid, str):
-            logger.warning(
-                "FILE tool '%s': output[%d] has no node_id. "
-                "Record will get fresh lineage with no parent.",
-                action_name,
-                i,
-            )
-            continue
-        if nid not in nid_to_idx:
-            logger.warning(
-                "FILE tool '%s': output[%d] has node_id '%s' not found in inputs. "
-                "Treating as new record.",
-                action_name,
-                i,
-                nid,
-            )
-            continue
-        mapping[i] = nid_to_idx[nid]
-
-    return mapping
-
-
 def _reattach_source_guid(
     structured_data: list[dict],
     source_mapping: dict[int, int | list[int] | None] | None,

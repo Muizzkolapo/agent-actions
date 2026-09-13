@@ -328,41 +328,6 @@ class TestFrameworkMechanicsElsewhereAreDiagnostic:
         _assert_kept_off_the_console(_warns_from(run, tmp_path), "source_guid")
 
 
-class TestUserAuthoredToolProblemsStayOnTheConsole:
-    """A FILE tool is the user's own code, so its output problems are theirs to fix.
-
-    These name an internal field but fail the criterion's actual test — the user
-    can change the outcome — so they must survive any later sweep of the marker.
-    """
-
-    @staticmethod
-    def _resolve(raw_outputs):
-        from agent_actions.workflow.pipeline_file_mode import _resolve_source_mapping
-
-        def run():
-            _resolve_source_mapping(raw_outputs, [{"node_id": "n0", "content": {}}], "dedup_tool")
-
-        return run
-
-    def _assert_reaches_console(self, events, fragment):
-        matching = [e for e in events if fragment in e.message]
-        assert matching, f"no WARN mentioning {fragment!r}: {[e.message for e in events]}"
-        console = _registered_console()
-        for event in matching:
-            assert event.diagnostic is False, f"wrongly marked diagnostic: {event.message}"
-            assert console.accepts(event) is True, f"hidden from the user: {event.message}"
-
-    def test_a_tool_output_without_a_node_id_still_reaches_the_console(self, tmp_path):
-        events = _warns_from(self._resolve([{"content": {}}]), tmp_path)
-
-        self._assert_reaches_console(events, "has no node_id")
-
-    def test_a_tool_output_with_an_unknown_node_id_still_reaches_the_console(self, tmp_path):
-        events = _warns_from(self._resolve([{"node_id": "ghost", "content": {}}]), tmp_path)
-
-        self._assert_reaches_console(events, "not found in inputs")
-
-
 class TestTheDocsSiteHonoursTheMarker:
     """The generated docs surface runtime warnings to the same person the console
     serves, so it must make the same distinction the console does."""
