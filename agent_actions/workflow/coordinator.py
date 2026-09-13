@@ -13,6 +13,7 @@ from rich.console import Console
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.logging.core.manager import get_manager
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.workflow.config_pipeline import load_workflow_configs
@@ -396,33 +397,25 @@ class AgentWorkflow:
                     level_start = datetime.now()
                     fire_step_start(level_idx, len(levels), level_actions, pending)
 
-                    if not pending:
+                    # A step that opened must close, however this level exits.
+                    stop = False
+                    try:
+                        for action_name in pending:
+                            idx = self.action_indices[action_name]
+                            manager.set_context(action_name=action_name, action_index=idx)
+                            should_stop = self._run_single_action(idx, action_name, total_actions)
+                            if should_stop:
+                                stop = True
+                                break
+                    finally:
                         fire_step_complete(
                             level_idx,
                             len(levels),
                             (datetime.now() - level_start).total_seconds(),
                             level_actions,
                             state_mgr,
+                            batch_pending=state_mgr.get_batch_submitted_actions(level_actions),
                         )
-                        continue
-
-                    stop = False
-                    for action_name in pending:
-                        idx = self.action_indices[action_name]
-                        manager.set_context(action_name=action_name, action_index=idx)
-                        should_stop = self._run_single_action(idx, action_name, total_actions)
-                        if should_stop:
-                            stop = True
-                            break
-
-                    fire_step_complete(
-                        level_idx,
-                        len(levels),
-                        (datetime.now() - level_start).total_seconds(),
-                        level_actions,
-                        state_mgr,
-                        batch_pending=state_mgr.get_batch_submitted_actions(level_actions),
-                    )
 
                     if stop:
                         break
@@ -536,5 +529,5 @@ class AgentWorkflow:
             return False
 
         # Action failed — log and continue (circuit breaker handles downstream)
-        logger.warning("Action '%s' failed: %s", action_name, result.error)
+        logger.warning("Action '%s' failed: %s", action_name, result.error, extra=DIAGNOSTIC)
         return False

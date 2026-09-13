@@ -11,7 +11,9 @@ from typing import Any
 
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.execution_events import fire_step_complete, fire_step_start
 from agent_actions.workflow.executor import ExecutionMetrics
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES
@@ -180,7 +182,7 @@ class ActionLevelOrchestrator:
         self._fire_action_result_event(action_name, original_idx, total_actions, result, run_mode)
 
         if not result.success:
-            logger.warning("Action '%s' failed: %s", action_name, result.error)
+            logger.warning("Action '%s' failed: %s", action_name, result.error, extra=DIAGNOSTIC)
 
     async def _execute_parallel_actions(self, params: ParallelExecutionParams):
         """Execute multiple actions in parallel."""
@@ -264,6 +266,7 @@ class ActionLevelOrchestrator:
                     mode=run_mode,
                     model_vendor=config.get("model_vendor") or "",
                     model_name=config.get("model_name") or "",
+                    kind=config.get("kind") or DEFAULT_ACTION_KIND,
                 )
             )
         elif not result.success:
@@ -328,42 +331,38 @@ class ActionLevelOrchestrator:
 
         fire_step_start(params.level_idx, params.total_steps, params.level_actions, pending_actions)
 
-        if not pending_actions:
+        # A step that opened must close, or every consumer pairing the two is
+        # left unbalanced by an action that raised or a Ctrl-C.
+        batch_pending: list[str] = []
+        try:
+            if not pending_actions:
+                return True
+
+            if len(pending_actions) == 1:
+                await self._execute_single_action(
+                    pending_actions[0], params.action_indices, params.action_executor
+                )
+            else:
+                await self._execute_parallel_actions(
+                    ParallelExecutionParams(
+                        pending_actions=pending_actions,
+                        action_indices=params.action_indices,
+                        action_executor=params.action_executor,
+                        concurrency_limit=params.concurrency_limit,
+                        level_idx=params.level_idx,
+                    )
+                )
+
+            batch_pending = params.state_manager.get_batch_submitted_actions(params.level_actions)
+            return self._check_batch_status(
+                params.level_idx, params.level_actions, params.state_manager, batch_pending
+            )
+        finally:
             fire_step_complete(
                 params.level_idx,
                 params.total_steps,
                 (datetime.now() - start_time).total_seconds(),
                 params.level_actions,
                 params.state_manager,
+                batch_pending=batch_pending,
             )
-            return True
-
-        if len(pending_actions) == 1:
-            await self._execute_single_action(
-                pending_actions[0], params.action_indices, params.action_executor
-            )
-        else:
-            await self._execute_parallel_actions(
-                ParallelExecutionParams(
-                    pending_actions=pending_actions,
-                    action_indices=params.action_indices,
-                    action_executor=params.action_executor,
-                    concurrency_limit=params.concurrency_limit,
-                    level_idx=params.level_idx,
-                )
-            )
-
-        duration = (datetime.now() - start_time).total_seconds()
-        batch_pending = params.state_manager.get_batch_submitted_actions(params.level_actions)
-        fire_step_complete(
-            params.level_idx,
-            params.total_steps,
-            duration,
-            params.level_actions,
-            params.state_manager,
-            batch_pending=batch_pending,
-        )
-
-        return self._check_batch_status(
-            params.level_idx, params.level_actions, params.state_manager, batch_pending
-        )

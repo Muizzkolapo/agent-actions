@@ -45,16 +45,17 @@ def rendered():
     return run
 
 
-def _complete(name, *, index=0, total=1, records=3, seconds=1.0, vendor="", model=""):
+def _complete(name, *, index=0, total=1, records=3, seconds=1.0, vendor="", model="", kind="llm"):
     event = ActionCompleteEvent(
         action_name=name,
         action_index=index,
         total_actions=total,
         execution_time=seconds,
         record_count=records,
+        model_vendor=vendor,
+        model_name=model,
+        kind=kind,
     )
-    event.data["model_vendor"] = vendor
-    event.data["model_name"] = model
     return event
 
 
@@ -115,7 +116,24 @@ class TestActionDetail:
         )
         assert "in 2m05s" in out
 
-    def test_a_toolless_action_omits_the_model(self, rendered):
+    def test_a_tool_action_shows_no_model(self, rendered):
+        """A tool carries its kind as the vendor and its impl as the model, so
+        rendering them would echo the action's own name back at the reader."""
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["flat"], pending=["flat"]),
+            _complete("flat", kind="tool", vendor="tool", model="flat"),
+        )
+        assert "✓ flat  3 records in 1.0s" in out
+        assert "(" not in out
+
+    def test_a_hitl_action_shows_no_model(self, rendered):
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["ok"], pending=["ok"]),
+            _complete("ok", kind="hitl", vendor="hitl", model="approve"),
+        )
+        assert "(" not in out
+
+    def test_an_llm_action_with_no_model_configured_omits_it(self, rendered):
         out = rendered(
             StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]),
             _complete("a"),
@@ -273,7 +291,7 @@ class TestAPlainStream:
             StepStartEvent(step_index=0, total_steps=2, actions=["a"], pending=["a"]),
             _complete("a", records=2, seconds=1.0),
         )
-        assert "Step 0/2 a" in out
+        assert "Step 1/2 a" in out
         assert "OK a  2 records in 1.0s" in out
 
 

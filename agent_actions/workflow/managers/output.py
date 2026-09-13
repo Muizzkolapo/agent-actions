@@ -74,7 +74,6 @@ class ActionOutputManager:
         self.action_configs = config.action_configs
         self.action_status = config.action_status
         self.version_correlator = config.version_correlator
-        self.console = config.console or Console()
         self.storage_backend = config.storage_backend
         self.data_source_config = config.data_source_config
         self._version_consumption_map: dict | None = None

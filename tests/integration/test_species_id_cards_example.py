@@ -120,19 +120,21 @@ def test_the_staged_entries_parse_and_carry_the_fields_the_prompts_read():
 def test_the_run_is_rendered_as_one_line_per_action_under_its_step(run):
     """The progress stream is the deliverable: grouped steps, no START/OK pairs."""
     assert re.search(r"species_id_cards — 18 actions", run)
-    assert re.search(r"Step 0/12 summarize_entry", run), "a lone action is named by its step header"
-    assert re.search(r"Step 1/12 3 in parallel", run), "a fan-out step states its width"
+    assert re.search(r"Step 1/12 summarize_entry", run), "a lone action is named by its header"
+    assert re.search(r"Step 2/12 3 actions: extract_field_marks", run), (
+        "a fan-out step names the actions it is running"
+    )
+    assert "in parallel" not in run, "a sequential level must not claim parallelism"
     assert "START" not in run, "an action reports once, on completion"
 
 
 def test_each_completed_action_reports_records_time_and_model(run):
     assert re.search(
         r"✓ summarize_entry\s+2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run
-    ) or (
-        re.search(r"Step 0/12 summarize_entry", run)
-        and re.search(r"✓ 2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run)
-    ), "the completion line lost its record count, duration or model"
-    assert re.search(r"✓ flatten_marks|✓ 3 records in \d+\.\d+s \(tool/flatten_marks\)", run)
+    ), "an llm action lost its record count, duration or model"
+    assert re.search(r"✓ flatten_marks\s+3 records in \d+\.\d+s\s*$", run, re.M), (
+        "a tool action reports records and time, and names no model"
+    )
 
 
 def test_no_framework_internals_reach_the_terminal(run):

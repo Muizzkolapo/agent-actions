@@ -30,7 +30,8 @@ class WorkflowStartEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        self.message = f"Running workflow {self.workflow_name} ({self.action_count} actions)"
+        noun = "action" if self.action_count == 1 else "actions"
+        self.message = f"Running workflow {self.workflow_name} ({self.action_count} {noun})"
         self.data = {
             "workflow_name": self.workflow_name,
             "action_count": self.action_count,
@@ -150,6 +151,7 @@ class ActionCompleteEvent(BaseEvent):
     mode: str = ""  # "online" or "batch" — see RunMode
     model_vendor: str = ""
     model_name: str = ""
+    kind: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -170,6 +172,7 @@ class ActionCompleteEvent(BaseEvent):
             "mode": self.mode,
             "model_vendor": self.model_vendor,
             "model_name": self.model_name,
+            "kind": self.kind,
         }
 
     @property
@@ -281,11 +284,14 @@ class StepStartEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        idx_str = f"Step {self.step_index}/{self.total_steps}"
+        # 1-based: a run whose last line reads "Step 11/12" looks unfinished.
+        idx_str = f"Step {self.step_index + 1}/{self.total_steps}"
         if not self.pending:
             self.message = f"{idx_str}: all actions already complete"
         elif len(self.pending) > 1:
-            self.message = f"{idx_str}: {len(self.pending)} actions in parallel"
+            # Not "in parallel": the same level runs serially under
+            # --execution-mode sequential.
+            self.message = f"{idx_str}: {len(self.pending)} actions ({', '.join(self.pending)})"
         else:
             self.message = f"{idx_str}: {self.pending[0]}"
         self.data = {
@@ -320,11 +326,17 @@ class StepCompleteEvent(BaseEvent):
         # warnings are collected.
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        idx_str = f"Step {self.step_index}/{self.total_steps}"
+        idx_str = f"Step {self.step_index + 1}/{self.total_steps}"
         if self.batch_pending:
             self.message = (
                 f"{idx_str} paused after {self.elapsed_time:.2f}s — "
                 f"{len(self.batch_pending)} batch job(s) pending"
+            )
+        elif self.unfinished:
+            # Saying "complete" while actions are still mid-flight is the one
+            # claim this event must never make.
+            self.message = (
+                f"{idx_str} ended after {self.elapsed_time:.2f}s — {self.unfinished} unfinished"
             )
         else:
             self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"

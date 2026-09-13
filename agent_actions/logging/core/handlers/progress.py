@@ -20,6 +20,10 @@ def _records(count: int) -> str:
     return f"{count} record" if count == 1 else f"{count} records"
 
 
+def _actions(count: int) -> str:
+    return f"{count} action" if count == 1 else f"{count} actions"
+
+
 class ProgressRenderer(ConsoleEventHandler):
     """Renders workflow, step and action events as one grouped progress stream.
 
@@ -36,7 +40,6 @@ class ProgressRenderer(ConsoleEventHandler):
         "ActionStartEvent": "_action_start",
         "ActionCompleteEvent": "_action_complete",
         "ActionSkipEvent": "_action_skip",
-        "ActionCachedEvent": "_action_cached",
         "ActionFailedEvent": "_action_failed",
     }
 
@@ -71,8 +74,7 @@ class ProgressRenderer(ConsoleEventHandler):
 
     def _workflow_start(self, event: BaseEvent) -> str:
         name = self._escape(event.data.get("workflow_name", ""))
-        actions = event.data.get("action_count", 0)
-        return f"\n{self._style(name, 'bold')} — {actions} actions"
+        return f"\n{self._style(name, 'bold')} — {_actions(event.data.get('action_count', 0))}"
 
     def _workflow_complete(self, event: BaseEvent) -> str:
         elapsed = _duration(event.data.get("elapsed_time", 0.0))
@@ -94,18 +96,28 @@ class ProgressRenderer(ConsoleEventHandler):
 
     # ── steps ─────────────────────────────────────────────────────────
 
+    _FAN_OUT_NAMES_SHOWN = 4
+
     def _step_start(self, event: BaseEvent) -> str:
         pending = event.data.get("pending", [])
+        # 1-based: a run ending on "Step 11/12" reads as one step short.
         head = self._style(
-            f"Step {event.data.get('step_index', 0)}/{event.data.get('total_steps', 0)}", "cyan"
+            f"Step {event.data.get('step_index', 0) + 1}/{event.data.get('total_steps', 0)}", "cyan"
         )
         if not pending:
             actions = event.data.get("actions", [])
             subject = ", ".join(self._escape(a) for a in actions)
             return f"{head} {subject} {self._style('— already complete', 'dim')}"
-        if len(pending) > 1:
-            return f"{head} {len(pending)} in parallel"
-        return f"{head} {self._escape(pending[0])}"
+        if len(pending) == 1:
+            return f"{head} {self._escape(pending[0])}"
+
+        shown = [self._escape(a) for a in pending[: self._FAN_OUT_NAMES_SHOWN]]
+        names = ", ".join(shown)
+        if len(pending) > self._FAN_OUT_NAMES_SHOWN:
+            names += f" +{len(pending) - self._FAN_OUT_NAMES_SHOWN} more"
+        # Never "in parallel": the same level runs serially under
+        # --execution-mode sequential.
+        return f"{head} {_actions(len(pending))}: {names}"
 
     def _step_complete(self, event: BaseEvent) -> str | None:
         # A step's own timing is noise next to its actions'; only say something
@@ -119,24 +131,38 @@ class ProgressRenderer(ConsoleEventHandler):
 
     # ── actions ───────────────────────────────────────────────────────
 
+    def _model(self, event: BaseEvent) -> str:
+        """The model behind an action, or nothing when no model ran it.
+
+        A tool or HITL action carries its kind as the vendor and its impl as the
+        model, which would render as the action's own name a second time.
+        """
+        if event.data.get("kind", "") != "llm":
+            return ""
+        vendor = self._escape(event.data.get("model_vendor", ""))
+        model = self._escape(event.data.get("model_name", ""))
+        if vendor and model:
+            return f"{vendor}/{model}"
+        return vendor or model
+
     def _subject(self, event: BaseEvent) -> str:
         # Always named, never only in the step header: a reader greps for an
         # action to ask whether it finished, and the answer is this line.
         return f"{self._escape(event.data.get('action_name', ''))}  "
 
-    def _action_start(self, event: BaseEvent) -> None:
-        # The step header already named what is about to run.
-        return None
+    def _action_start(self, event: BaseEvent) -> str | None:
+        # The step header already named it, so a normal run reports each action
+        # once, on completion. A verbose run wants to see what is in flight.
+        if not self.show_diagnostics:
+            return None
+        return f"  {self._style('→', 'dim')} {self._escape(event.data.get('action_name', ''))}"
 
     def _action_complete(self, event: BaseEvent) -> str:
         detail = [_records(event.data.get("record_count", 0))]
         detail.append(f"in {_duration(event.data.get('execution_time', 0.0))}")
-        vendor = event.data.get("model_vendor", "")
-        model = event.data.get("model_name", "")
-        if vendor and model:
-            detail.append(f"({self._escape(vendor)}/{self._escape(model)})")
-        elif vendor:
-            detail.append(f"({self._escape(vendor)})")
+        model = self._model(event)
+        if model:
+            detail.append(f"({model})")
         return f"  {self._icon('✓', 'OK', 'green')} {self._subject(event)}{' '.join(detail)}"
 
     def _action_skip(self, event: BaseEvent) -> str:
@@ -144,10 +170,6 @@ class ProgressRenderer(ConsoleEventHandler):
         suffix = f" — {reason}" if reason else ""
         icon = self._icon("○", "SKIP", "dim")
         return f"  {icon} {self._subject(event)}{self._style('skipped' + suffix, 'dim')}"
-
-    def _action_cached(self, event: BaseEvent) -> str:
-        icon = self._icon("○", "CACHED", "cyan")
-        return f"  {icon} {self._subject(event)}{self._style('cached', 'dim')}"
 
     def _action_failed(self, event: BaseEvent) -> str:
         message = self._escape(event.data.get("error_message", "")) or "failed"

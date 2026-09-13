@@ -151,7 +151,7 @@ class TestStepStart:
 class TestStepComplete:
     def test_a_step_fires_a_complete_event_with_its_duration(self, captured):
         orch = _orchestrator(["a"])
-        _run_level(orch, level_idx=1, level_actions=["a"], pending=["a"])
+        _run_level(orch, level_idx=1, level_actions=["a"], pending=["a"], completed=["a"])
 
         dones = _of_type(captured, "StepCompleteEvent")
         assert len(dones) == 1
@@ -161,7 +161,9 @@ class TestStepComplete:
 
     def test_the_duration_is_the_time_the_step_actually_took(self, captured):
         orch = _orchestrator(["a"])
-        _run_level(orch, level_idx=0, level_actions=["a"], pending=["a"], takes=0.05)
+        _run_level(
+            orch, level_idx=0, level_actions=["a"], pending=["a"], takes=0.05, completed=["a"]
+        )
 
         assert _of_type(captured, "StepCompleteEvent")[0].data["elapsed_time"] >= 0.05
 

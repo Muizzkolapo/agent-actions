@@ -17,6 +17,7 @@ from agent_actions.logging.events import (
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
@@ -163,6 +164,7 @@ class WorkflowEventLogger:
                     mode=params.run_mode,
                     model_vendor=config.get("model_vendor") or "",
                     model_name=config.get("model_name") or "",
+                    kind=config.get("kind") or DEFAULT_ACTION_KIND,
                 )
             )
         elif not params.result.success:
