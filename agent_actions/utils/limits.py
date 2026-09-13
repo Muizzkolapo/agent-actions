@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
-def effective_record_limit(action_config: dict[str, Any]) -> int | None:
+def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:
     """Return the record limit for an action, or None when it is unlimited.
 
     ``bool`` is rejected rather than treated as an int: ``record_limit: true``
