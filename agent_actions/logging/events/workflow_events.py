@@ -153,6 +153,8 @@ class ActionCompleteEvent(BaseEvent):
     record_count: int = 0
     tokens: dict[str, int] = field(default_factory=dict)
     mode: str = ""  # "online" or "batch" — see RunMode
+    model_vendor: str = ""
+    model_name: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -171,6 +173,8 @@ class ActionCompleteEvent(BaseEvent):
             "record_count": self.record_count,
             "tokens": self.tokens,
             "mode": self.mode,
+            "model_vendor": self.model_vendor,
+            "model_name": self.model_name,
         }
 
     @property

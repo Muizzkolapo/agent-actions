@@ -8,10 +8,12 @@ from agent_actions.logging.core.handlers.bridge import (
 )
 from agent_actions.logging.core.handlers.console import ConsoleEventHandler
 from agent_actions.logging.core.handlers.json_file import JSONFileHandler
+from agent_actions.logging.core.handlers.progress import ProgressRenderer
 
 __all__ = [
     "ConsoleEventHandler",
     "JSONFileHandler",
+    "ProgressRenderer",
     "LoggingBridgeHandler",
     "LogEvent",
     "DebugEvent",
