@@ -14,6 +14,8 @@ __all__ = [
     "ActionSkipEvent",
     "ActionFailedEvent",
     "ActionCachedEvent",
+    "StepStartEvent",
+    "StepCompleteEvent",
 ]
 
 
@@ -24,15 +26,20 @@ class WorkflowStartEvent(BaseEvent):
     workflow_name: str = ""
     action_count: int = 0
     execution_mode: str = "sequential"
+    step_count: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        self.message = f"Running workflow {self.workflow_name} ({self.action_count} actions)"
+        scale = f"{self.action_count} actions"
+        if self.step_count:
+            scale += f", {self.step_count} steps"
+        self.message = f"Running workflow {self.workflow_name} ({scale})"
         self.data = {
             "workflow_name": self.workflow_name,
             "action_count": self.action_count,
             "execution_mode": self.execution_mode,
+            "step_count": self.step_count,
         }
 
     @property
@@ -261,3 +268,70 @@ class ActionCachedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "A005"
+
+
+@dataclass
+class StepStartEvent(BaseEvent):
+    """Fired when a dependency level begins executing."""
+
+    step_index: int = 0
+    total_steps: int = 0
+    actions: list[str] = field(default_factory=list)
+    pending: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.WORKFLOW
+        idx_str = f"Step {self.step_index}/{self.total_steps}"
+        if not self.pending:
+            self.message = f"{idx_str}: all actions already complete"
+        elif len(self.pending) > 1:
+            self.message = f"{idx_str}: {len(self.pending)} actions in parallel"
+        else:
+            self.message = f"{idx_str}: {self.pending[0]}"
+        self.data = {
+            "step_index": self.step_index,
+            "total_steps": self.total_steps,
+            "actions": list(self.actions),
+            "pending": list(self.pending),
+        }
+
+    @property
+    def code(self) -> str:
+        return "W004"
+
+
+@dataclass
+class StepCompleteEvent(BaseEvent):
+    """Fired when a dependency level finishes, whatever the outcome."""
+
+    step_index: int = 0
+    total_steps: int = 0
+    elapsed_time: float = 0.0
+    completed: int = 0
+    partial: int = 0
+    skipped: int = 0
+    failed: int = 0
+    batch_pending: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN if self.failed else EventLevel.INFO
+        self.category = EventCategories.WORKFLOW
+        idx_str = f"Step {self.step_index}/{self.total_steps}"
+        self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"
+        if self.failed:
+            self.message += f" ({self.failed} failed)"
+        self.data = {
+            "step_index": self.step_index,
+            "total_steps": self.total_steps,
+            "elapsed_time": self.elapsed_time,
+            "completed": self.completed,
+            "partial": self.partial,
+            "skipped": self.skipped,
+            "failed": self.failed,
+            "batch_pending": list(self.batch_pending),
+        }
+
+    @property
+    def code(self) -> str:
+        return "W005"
