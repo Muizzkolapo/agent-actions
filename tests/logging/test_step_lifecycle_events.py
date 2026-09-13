@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,6 +18,7 @@ from rich.console import Console
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.manager import EventManager
+from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
     LevelExecutionParams,
@@ -95,16 +97,13 @@ def _run_level(orchestrator, *, level_idx, level_actions, pending, failed=None, 
     )
 
 
-def _orchestrator(actions: list[str], buf) -> ActionLevelOrchestrator:
-    configs = {a: {"dependencies": []} for a in actions}
-    return ActionLevelOrchestrator(
-        actions, configs, console=Console(file=buf, highlight=False, no_color=True)
-    )
+def _orchestrator(actions: list[str]) -> ActionLevelOrchestrator:
+    return ActionLevelOrchestrator(actions, {a: {"dependencies": []} for a in actions})
 
 
 class TestStepStart:
     def test_a_step_fires_a_start_event_naming_its_actions(self, captured):
-        orch = _orchestrator(["a", "b"], io.StringIO())
+        orch = _orchestrator(["a", "b"])
         _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=["a", "b"])
 
         starts = _of_type(captured, "StepStartEvent")
@@ -114,7 +113,7 @@ class TestStepStart:
         assert starts[0].data["actions"] == ["a", "b"]
 
     def test_a_fully_complete_step_still_fires_start_with_nothing_pending(self, captured):
-        orch = _orchestrator(["a"], io.StringIO())
+        orch = _orchestrator(["a"])
         _run_level(orch, level_idx=3, level_actions=["a"], pending=[])
 
         starts = _of_type(captured, "StepStartEvent")
@@ -126,7 +125,7 @@ class TestStepStart:
 
 class TestStepComplete:
     def test_a_step_fires_a_complete_event_with_its_duration(self, captured):
-        orch = _orchestrator(["a"], io.StringIO())
+        orch = _orchestrator(["a"])
         _run_level(orch, level_idx=1, level_actions=["a"], pending=["a"])
 
         dones = _of_type(captured, "StepCompleteEvent")
@@ -136,7 +135,7 @@ class TestStepComplete:
         assert dones[0].data["failed"] == 0
 
     def test_a_failing_step_reports_its_failure_count_and_warns(self, captured):
-        orch = _orchestrator(["a", "b"], io.StringIO())
+        orch = _orchestrator(["a", "b"])
         _run_level(orch, level_idx=2, level_actions=["a", "b"], pending=["a", "b"], failed=["b"])
 
         dones = _of_type(captured, "StepCompleteEvent")
@@ -145,7 +144,7 @@ class TestStepComplete:
         assert dones[0].level is EventLevel.WARN
 
     def test_a_fully_complete_step_still_fires_complete(self, captured):
-        orch = _orchestrator(["a"], io.StringIO())
+        orch = _orchestrator(["a"])
         _run_level(orch, level_idx=0, level_actions=["a"], pending=[])
 
         assert len(_of_type(captured, "StepCompleteEvent")) == 1
@@ -154,16 +153,16 @@ class TestStepComplete:
 class TestConsoleIsNoLongerAProducer:
     """Step boundaries belong to the event stream; a direct print reaches only the terminal."""
 
-    def test_running_a_step_writes_nothing_to_the_orchestrator_console(self, captured):
-        buf = io.StringIO()
-        orch = _orchestrator(["a", "b"], buf)
+    def test_the_orchestrator_owns_no_console(self, captured):
+        orch = _orchestrator(["a", "b"])
         _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=["a", "b"])
 
-        assert buf.getvalue() == ""
+        assert not hasattr(orch, "console"), (
+            "a console on the orchestrator is a second progress producer"
+        )
 
     def test_the_step_plan_is_not_dumped_up_front(self, captured):
-        buf = io.StringIO()
-        orch = _orchestrator(["a", "b", "c"], buf)
+        orch = _orchestrator(["a", "b", "c"])
         assert not hasattr(orch, "log_execution_levels"), (
             "the up-front step plan duplicates what StepStartEvent carries per step"
         )
@@ -218,7 +217,7 @@ class TestSequentialPathFiresTheSameEvents:
         wf._run_single_action = MagicMock(return_value=False)
         wf._run_storage_maintenance = MagicMock()
 
-        wf._run_workflow_with_context(__import__("datetime").datetime.now())
+        wf._run_workflow_with_context(datetime.now())
 
         starts = _of_type(captured, "StepStartEvent")
         dones = _of_type(captured, "StepCompleteEvent")
@@ -231,6 +230,30 @@ class TestSequentialPathFiresTheSameEvents:
         wf._run_single_action = MagicMock(return_value=False)
         wf._run_storage_maintenance = MagicMock()
 
-        wf._run_workflow_with_context(__import__("datetime").datetime.now())
+        wf._run_workflow_with_context(datetime.now())
 
         assert wf.runtime.console.file.getvalue() == ""
+
+
+class TestWorkflowScale:
+    """The action/step tally the up-front plan used to print now rides the start event."""
+
+    def test_workflow_start_carries_the_step_count(self, captured):
+        wf = TestSequentialPathFiresTheSameEvents._workflow(["a", "b", "c"], [["a", "b"], ["c"]])
+        wf.event_logger = WorkflowEventLogger("wf", ["a", "b", "c"], wf.config, wf.services)
+        wf._run_single_action = MagicMock(return_value=False)
+        wf._run_storage_maintenance = MagicMock()
+
+        wf._run_workflow_with_context(datetime.now())
+
+        starts = _of_type(captured, "WorkflowStartEvent")
+        assert len(starts) == 1
+        assert starts[0].data["action_count"] == 3
+        assert starts[0].data["step_count"] == 2
+        assert "3 actions, 2 steps" in starts[0].message
+
+    def test_a_step_count_of_zero_is_left_out_of_the_message(self):
+        from agent_actions.logging.events import WorkflowStartEvent
+
+        event = WorkflowStartEvent(workflow_name="wf", action_count=3)
+        assert event.message == "Running workflow wf (3 actions)"

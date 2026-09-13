@@ -321,6 +321,8 @@ class StepCompleteEvent(BaseEvent):
         self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"
         if self.failed:
             self.message += f" ({self.failed} failed)"
+        if self.batch_pending:
+            self.message += f" — {len(self.batch_pending)} batch job(s) pending"
         self.data = {
             "step_index": self.step_index,
             "total_steps": self.total_steps,

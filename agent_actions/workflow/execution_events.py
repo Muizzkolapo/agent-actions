@@ -11,6 +11,8 @@ from agent_actions.logging.events import (
     ActionFailedEvent,
     ActionSkipEvent,
     ActionStartEvent,
+    StepCompleteEvent,
+    StepStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
@@ -19,6 +21,49 @@ from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStat
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
+
+
+def fire_step_start(
+    step_index: int, total_steps: int, actions: list[str], pending: list[str]
+) -> None:
+    """Announce a dependency level. Fires even when nothing in it is pending."""
+    fire_event(
+        StepStartEvent(
+            step_index=step_index,
+            total_steps=total_steps,
+            actions=list(actions),
+            pending=list(pending),
+        )
+    )
+
+
+def fire_step_complete(
+    step_index: int,
+    total_steps: int,
+    elapsed_time: float,
+    actions: list[str],
+    state_manager,
+    batch_pending: list[str] | None = None,
+) -> None:
+    """Close a dependency level, tallying its outcomes from the state manager."""
+    partial = [a for a in actions if state_manager.is_completed_with_failures(a)]
+    failed = state_manager.get_failed_actions(actions)
+    skipped = [a for a in actions if state_manager.is_skipped(a)]
+    accounted = set(partial) | set(failed) | set(skipped)
+    completed = [a for a in actions if a not in accounted and state_manager.is_completed(a)]
+
+    fire_event(
+        StepCompleteEvent(
+            step_index=step_index,
+            total_steps=total_steps,
+            elapsed_time=elapsed_time,
+            completed=len(completed),
+            partial=len(partial),
+            skipped=len(skipped),
+            failed=len(failed),
+            batch_pending=list(batch_pending or []),
+        )
+    )
 
 
 class WorkflowEventLogger:
@@ -36,7 +81,9 @@ class WorkflowEventLogger:
         self.config = config
         self.services = services
 
-    def log_workflow_start(self, workflow_start: datetime, is_async: bool = False):
+    def log_workflow_start(
+        self, workflow_start: datetime, is_async: bool = False, step_count: int = 0
+    ):
         """Log workflow start with session separator."""
         correlation_id = get_manager().get_context("correlation_id")
         time_str = workflow_start.strftime("%H:%M:%S.%f")[:-3]
@@ -51,6 +98,7 @@ class WorkflowEventLogger:
                 workflow_name=self.agent_name,
                 action_count=len(self.execution_order),
                 execution_mode=mode,
+                step_count=step_count,
             )
         )
 

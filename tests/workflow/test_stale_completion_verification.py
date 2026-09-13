@@ -152,7 +152,6 @@ class TestExecuteLevelAsyncVerification:
         orchestrator = ActionLevelOrchestrator(
             execution_order=["write_description"],
             action_configs={"write_description": {"agent_type": "write_description"}},
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(
@@ -192,7 +191,6 @@ class TestExecuteLevelAsyncVerification:
         orchestrator = ActionLevelOrchestrator(
             execution_order=["write_description"],
             action_configs={"write_description": {"agent_type": "write_description"}},
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(
@@ -447,7 +445,6 @@ class TestExecuteLevelAsyncMixedLevel:
                 "action_a": {"agent_type": "action_a"},
                 "action_b": {"agent_type": "action_b"},
             },
-            console=MagicMock(),
         )
 
         params = LevelExecutionParams(

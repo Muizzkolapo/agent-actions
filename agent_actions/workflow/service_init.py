@@ -172,7 +172,7 @@ def initialize_services(
     )
 
     action_level_orchestrator = ActionLevelOrchestrator(
-        metadata.execution_order, metadata.action_configs, console
+        metadata.execution_order, metadata.action_configs
     )
 
     manifest_manager = ManifestManager(agent_folder)

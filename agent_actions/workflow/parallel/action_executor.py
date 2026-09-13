@@ -9,11 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from rich.console import Console
-
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
+from agent_actions.workflow.execution_events import fire_step_complete, fire_step_start
 from agent_actions.workflow.executor import ExecutionMetrics
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
@@ -41,6 +40,7 @@ class LevelExecutionParams:
     state_manager: Any
     action_executor: Any
     concurrency_limit: int = 5
+    total_steps: int = 0
 
 
 class ActionLevelOrchestrator:
@@ -50,12 +50,10 @@ class ActionLevelOrchestrator:
         self,
         execution_order: list[str],
         action_configs: dict[str, dict[str, Any]],
-        console: Console | None = None,
     ):
         """Initialize level orchestrator."""
         self.execution_order = execution_order
         self.action_configs = action_configs
-        self.console = console or Console()
 
     def _build_version_base_name_map(self) -> dict[str, list[str]]:
         """Build a mapping from version base names to their expanded action names."""
@@ -154,23 +152,6 @@ class ActionLevelOrchestrator:
         """Return True if any execution level has more than 1 action."""
         levels = self.compute_execution_levels()
         return any(len(level) > 1 for level in levels)
-
-    def log_execution_levels(self, levels: list[list[str]], action_indices: dict[str, int]):
-        """Log execution levels for user transparency."""
-        total_actions = sum(len(level) for level in levels)
-        self.console.print(
-            f"[blue]📊 Execution: {total_actions} action(s) in {len(levels)} step(s)[/blue]"
-        )
-
-        for i, level in enumerate(levels):
-            if len(level) > 1:
-                sorted_actions = sorted(level, key=lambda a: action_indices[a])
-                action_list = ", ".join(sorted_actions)
-                self.console.print(
-                    f"[blue]  Step {i}: {len(level)} actions in parallel - {action_list}[/blue]"
-                )
-            else:
-                self.console.print(f"[dim]  Step {i}: {level[0]} (sequential)[/dim]")
 
     async def _execute_single_action(self, action_name: str, action_indices: dict, action_executor):
         """Execute a single action asynchronously."""
@@ -299,11 +280,9 @@ class ActionLevelOrchestrator:
         # event fires here. submission.py raises the BatchSubmittedEvent.
 
     def _check_batch_status(
-        self, level_idx: int, level_actions: list[str], state_manager, start_time: datetime
+        self, level_idx: int, level_actions: list[str], state_manager, batch_pending: list[str]
     ) -> bool:
-        """Check batch submission status and handle accordingly."""
-        batch_pending = state_manager.get_batch_submitted_actions(level_actions)
-
+        """Return False when batch jobs are still pending for this level."""
         if batch_pending:
             # Log partial failures but don't raise — circuit breaker handles cascade
             failed_actions = state_manager.get_failed_actions(level_actions)
@@ -315,13 +294,6 @@ class ActionLevelOrchestrator:
                     ", ".join(batch_pending),
                 )
 
-            # Batch jobs submitted, need to wait
-            duration = (datetime.now() - start_time).total_seconds()
-            self.console.print(
-                f"[yellow]Step {level_idx}: {len(batch_pending)} "
-                f"batch job(s) submitted ({duration:.2f}s)[/yellow]"
-            )
-            self.console.print("[yellow]Run workflow again to check batch status[/yellow]")
             return False  # Level not complete
 
         return True  # No batch pending
@@ -351,15 +323,17 @@ class ActionLevelOrchestrator:
         # Filter to pending actions only (verification above may have reset some)
         pending_actions = params.state_manager.get_pending_actions(params.level_actions)
 
+        fire_step_start(params.level_idx, params.total_steps, params.level_actions, pending_actions)
+
         if not pending_actions:
-            self.console.print(
-                f"[yellow]Step {params.level_idx}: All actions complete (skipped)[/yellow]"
+            fire_step_complete(
+                params.level_idx,
+                params.total_steps,
+                (datetime.now() - start_time).total_seconds(),
+                params.level_actions,
+                params.state_manager,
             )
             return True
-
-        self.console.print(
-            f"[cyan]Step {params.level_idx}: Starting {len(pending_actions)} {'action' if len(pending_actions) == 1 else 'actions'}...[/cyan]"
-        )
 
         if len(pending_actions) == 1:
             await self._execute_single_action(
@@ -376,23 +350,17 @@ class ActionLevelOrchestrator:
                 )
             )
 
-        if not self._check_batch_status(
-            params.level_idx, params.level_actions, params.state_manager, start_time
-        ):
-            return False
-
         duration = (datetime.now() - start_time).total_seconds()
-
-        has_failed = params.state_manager.get_failed_actions(params.level_actions)
-        has_partial = any(
-            params.state_manager.is_completed_with_failures(a) for a in params.level_actions
+        batch_pending = params.state_manager.get_batch_submitted_actions(params.level_actions)
+        fire_step_complete(
+            params.level_idx,
+            params.total_steps,
+            duration,
+            params.level_actions,
+            params.state_manager,
+            batch_pending=batch_pending,
         )
-        has_skipped = any(params.state_manager.is_skipped(a) for a in params.level_actions)
-        if has_failed:
-            color = "red"
-        elif has_partial or has_skipped:
-            color = "yellow"
-        else:
-            color = "green"
-        self.console.print(f"[{color}]Step {params.level_idx} complete ({duration:.2f}s)[/{color}]")
-        return True
+
+        return self._check_batch_status(
+            params.level_idx, params.level_actions, params.state_manager, batch_pending
+        )
