@@ -413,7 +413,9 @@ Deciding whether a message qualifies: **can the person running the workflow chan
 | No — a framework constant, a namespace the framework assembles, an identifier it mints | hidden | kept at its own level |
 | Yes — their config, prompt, schema, or UDF tool code produced it | shown | kept |
 
-Two things the test is deliberately not. It is not *how noisy is this*: a message that fires on every record still belongs on the console when the user can act on it, and the fix for volume is to aggregate, not to hide. And it is not *does it name an internal field*: records returned by a UDF tool are the user's own code, so a complaint about a missing `node_id` in one stays visible even though `node_id` is framework-owned.
+Two things the test is deliberately not. It is not *how noisy is this*: a message that fires on every record still belongs on the console when the user can act on it, and the fix for volume is to aggregate, not to hide.
+
+And it is not *which module is this in*. `workflow/merge.py` holds one of each: the branch-namespace message describes a structure the merge assembles itself and is marked, while the unreadable-input-file message a few functions away names a file the user wrote and is not. Classification binds to the call site, never to the module or the logger name — silencing a module wholesale would take both.
 
 When a message passes the test but reads like machinery, rewrite the wording. Marking it would hide a real problem behind a vocabulary choice.
 

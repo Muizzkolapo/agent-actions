@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.types import ActionConfigDict
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
@@ -74,7 +75,7 @@ class BatchStrategy(InvocationStrategy):
         self._queued.append(task)
 
         if task.target_id in self._context_map:
-            logger.warning("Duplicate target_id %s, overwriting", task.target_id)
+            logger.warning("Duplicate target_id %s, overwriting", task.target_id, extra=DIAGNOSTIC)
         self._context_map[task.target_id] = self._build_context_entry(
             task, status="included", executed=True
         )

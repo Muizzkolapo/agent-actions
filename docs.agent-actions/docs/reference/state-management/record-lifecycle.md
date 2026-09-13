@@ -51,7 +51,7 @@ The `_state_history` array is capped at **64 entries** (`STATE_HISTORY_CAP` in `
 _state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'.
 ```
 
-The log fires at most once per action per process to avoid per-record spam. If you see it, `_state_history` for that action has already lost its oldest transitions.
+The log fires at most once per action per process to avoid per-record spam. It is written to `events.json` at WARNING but kept off the terminal, since the cap is a framework constant rather than anything you configure; run with `-v` to see it there. When it appears, `_state_history` for that action has already lost its oldest transitions.
 
 ## Dispositions
 

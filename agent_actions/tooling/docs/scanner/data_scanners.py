@@ -316,10 +316,14 @@ def _collect_runtime_warning(event: dict[str, Any], warnings: list[dict[str, Any
 
     These are operational warnings emitted during workflow execution
     (e.g., "All N records filtered by guard") that the docs site should
-    surface alongside static validation events.
+    surface alongside static validation events. Events describing framework
+    internals are skipped: this page serves the same reader as the console.
     """
     level = event.get("level")
     if level not in ("warn", "error"):
+        return
+
+    if event.get("diagnostic"):
         return
 
     meta = event.get("meta", {})

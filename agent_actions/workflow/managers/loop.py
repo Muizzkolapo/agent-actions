@@ -120,6 +120,7 @@ class VersionOutputCorrelator:
                     "Target %s/%s listed but not found (possible TOCTOU race) — skipping",
                     version_agent,
                     relative_path,
+                    extra=DIAGNOSTIC,
                 )
 
         logger.debug(
