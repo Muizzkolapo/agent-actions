@@ -493,3 +493,25 @@ class TestStorageMechanicsAreDiagnostic:
         assert events, "the no-trace-row warning did not fire"
         assert events[0].diagnostic is True
         assert events[0].data["workflow_name"] == "quiz"
+
+    def test_an_upstream_record_without_content_is_kept_off_the_console(self, tmp_path):
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        class _StubbedUpstream(SQLiteBackend):
+            def _get_upstream_actions(self, action_name):
+                return ["extract"]
+
+            def _read_target_raw_batch(self, actions, relative_path):
+                return {"extract": [{"source_guid": "g1", "content": None}]}
+
+        backend = _StubbedUpstream(str(tmp_path / "agent_io" / "t.db"), "quiz")
+        backend.initialize()
+
+        def run():
+            backend._reconstruct_from_deltas(
+                "review",
+                "part.json",
+                [{"source_guid": "g1", "_delta_mode": "delta", "content": {}}],
+            )
+
+        _assert_kept_off_the_console(_warns_from(run, tmp_path), "has no content")
