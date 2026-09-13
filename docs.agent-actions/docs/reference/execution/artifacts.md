@@ -209,7 +209,7 @@ same string as `category`.
 
 | Prefix | Category | Examples |
 |--------|----------|----------|
-| W | `workflow` | `WorkflowStartEvent` (W001), `WorkflowCompleteEvent` (W002), `WorkflowFailedEvent` (W003) |
+| W | `workflow` | `WorkflowStartEvent` (W001), `WorkflowCompleteEvent` (W002), `WorkflowFailedEvent` (W003), `StepStartEvent` (W004), `StepCompleteEvent` (W005) |
 | A | `action` | `ActionStartEvent` (A001), `ActionCompleteEvent` (A002), `ActionSkipEvent` (A003), `ActionFailedEvent` (A004), `ActionCachedEvent` (A005) |
 | L | `llm` | `LLMRequestEvent` (L001), `LLMResponseEvent` (L002), `LLMErrorEvent` (L003), `RateLimitEvent` (L004), `LLMJSONParseErrorEvent` (L005) |
 | T | `template` | `TemplateRenderingFailedEvent` (T001) |

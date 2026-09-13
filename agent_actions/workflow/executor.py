@@ -19,6 +19,7 @@ from agent_actions.errors import (
 )
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,
@@ -807,6 +808,7 @@ class ActionExecutor:
             logger.info(
                 "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,
+                extra=DIAGNOSTIC,
             )
             return ActionStatus.SKIPPED
         if (

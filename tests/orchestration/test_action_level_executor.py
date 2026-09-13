@@ -287,3 +287,29 @@ class TestLoopDependencyExpansion:
         assert levels[0] == ["setup"]
         assert set(levels[1]) == {"loop_1", "loop_2"}
         assert levels[2] == ["consumer"]
+
+
+class TestShouldUseParallelExecution:
+    """Test suite for parallel execution detection."""
+
+    def test_sequential_workflow(self):
+        """Test detection of sequential workflow."""
+        execution_order = ["a", "b", "c"]
+        agent_configs = {
+            "a": {"dependencies": []},
+            "b": {"dependencies": ["a"]},
+            "c": {"dependencies": ["b"]},
+        }
+        orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
+        assert not orchestrator.should_use_parallel_execution()
+
+    def test_parallel_workflow(self):
+        """Test detection of parallel workflow."""
+        execution_order = ["a", "b", "c"]
+        agent_configs = {
+            "a": {"dependencies": []},
+            "b": {"dependencies": []},
+            "c": {"dependencies": ["a", "b"]},
+        }
+        orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
+        assert orchestrator.should_use_parallel_execution()

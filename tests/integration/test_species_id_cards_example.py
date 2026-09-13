@@ -87,7 +87,7 @@ def test_the_file_granularity_reduce_runs(run):
 def test_the_grounding_guard_filters_what_the_mock_could_not_ground(run):
     """The mock invents a quote, so no passage is ever located — both consumers filter."""
     for action in ("auto_review_note", "describe_confusion_risk"):
-        assert re.search(rf"SKIP {action} \(All records guard-filtered", run), (
+        assert re.search(rf"○ {action}\s+skipped — All records guard-filtered", run), (
             f"{action} was not guard-filtered; the grounding guard stopped being load-bearing"
         )
 
@@ -115,3 +115,30 @@ def test_the_staged_entries_parse_and_carry_the_fields_the_prompts_read():
     for entry in entries:
         assert entry.get("entry_text"), "an entry has no entry_text for the prompts to read"
         assert entry.get("guide"), "an entry has no guide"
+
+
+def test_the_run_is_rendered_as_one_line_per_action_under_its_step(run):
+    """The progress stream is the deliverable: grouped steps, no START/OK pairs."""
+    assert re.search(r"species_id_cards — 18 actions", run)
+    assert re.search(r"Step 0/12 summarize_entry", run), "a lone action is named by its step header"
+    assert re.search(r"Step 1/12 3 in parallel", run), "a fan-out step states its width"
+    assert "START" not in run, "an action reports once, on completion"
+
+
+def test_each_completed_action_reports_records_time_and_model(run):
+    assert re.search(
+        r"✓ summarize_entry\s+2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run
+    ) or (
+        re.search(r"Step 0/12 summarize_entry", run)
+        and re.search(r"✓ 2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run)
+    ), "the completion line lost its record count, duration or model"
+    assert re.search(r"✓ flatten_marks|✓ 3 records in \d+\.\d+s \(tool/flatten_marks\)", run)
+
+
+def test_no_framework_internals_reach_the_terminal(run):
+    for leak in ("MergePattern.", "NullNamespace", "marking as skipped", "Traceback"):
+        assert leak not in run, f"{leak!r} is framework internals, not something a user can act on"
+
+
+def test_the_run_has_exactly_one_ending(run):
+    assert run.count("16 completed, 2 skipped") == 1, "the run summary is stated more than once"

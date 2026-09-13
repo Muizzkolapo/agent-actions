@@ -66,10 +66,10 @@ class TestOneLinePerAction:
             ),
             ActionStartEvent(action_name="summarize", action_index=0, total_actions=1),
         )
-        assert "summarize" in out
-        assert out.count("summarize") == 1, "the step header already named it"
+        assert "Step 0/4 summarize" in out
+        assert "✓" not in out, "an action reports once, on completion"
 
-    def test_a_sequential_step_names_its_action_in_the_header_only(self, rendered):
+    def test_a_sequential_step_names_its_action_on_both_lines(self, rendered):
         out = rendered(
             StepStartEvent(
                 step_index=0, total_steps=4, actions=["summarize"], pending=["summarize"]
@@ -77,8 +77,7 @@ class TestOneLinePerAction:
             _complete("summarize", records=3, seconds=29.6),
         )
         assert "Step 0/4 summarize" in out
-        assert "3 records in 29.6s" in out
-        assert out.count("summarize") == 1
+        assert "✓ summarize  3 records in 29.6s" in out
 
     def test_a_parallel_step_names_each_action_on_its_own_line(self, rendered):
         out = rendered(
@@ -89,8 +88,8 @@ class TestOneLinePerAction:
             _complete("qa_2", records=2, seconds=62.0),
         )
         assert "Step 1/4 2 in parallel" in out
-        assert "qa_1  3 records in 80.1s" in out
-        assert "qa_2  2 records in 62.0s" in out
+        assert "qa_1  3 records in 1m20s" in out
+        assert "qa_2  2 records in 1m02s" in out
 
 
 class TestActionDetail:
@@ -99,7 +98,7 @@ class TestActionDetail:
             StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]),
             _complete("a", records=1),
         )
-        assert "1 record in" in out
+        assert "✓ a  1 record in" in out
         assert "1 records" not in out
 
     def test_the_model_that_produced_the_records_is_named(self, rendered):
@@ -188,7 +187,7 @@ class TestStepShape:
             StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]),
             StepCompleteEvent(step_index=0, total_steps=1, elapsed_time=1.0, batch_pending=["a"]),
         )
-        assert "run again to continue" in out
+        assert "1 batch job submitted — run again to continue" in out
 
     def test_a_skipped_action_gives_its_reason(self, rendered):
         out = rendered(
@@ -203,9 +202,12 @@ class TestStepShape:
 
 class TestWorkflowFraming:
     def test_the_header_states_the_scale_of_the_run(self, rendered):
-        out = rendered(WorkflowStartEvent(workflow_name="quiz_gen", action_count=52, step_count=36))
-        assert "quiz_gen" in out
-        assert "52 actions, 36 steps" in out
+        out = rendered(
+            WorkflowStartEvent(workflow_name="quiz_gen", action_count=52),
+            StepStartEvent(step_index=0, total_steps=36, actions=["a"], pending=["a"]),
+        )
+        assert "quiz_gen — 52 actions" in out
+        assert "Step 0/36" in out, "the step count reaches the user on the first step line"
         assert "Running workflow" not in out, "the header is the workflow, not a log line about it"
 
     def test_the_footer_totals_the_run(self, rendered):

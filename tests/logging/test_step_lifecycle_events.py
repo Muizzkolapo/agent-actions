@@ -18,7 +18,6 @@ from rich.console import Console
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.manager import EventManager
-from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
     LevelExecutionParams,
@@ -54,21 +53,35 @@ def _of_type(capture: _Capture, name: str) -> list[BaseEvent]:
     return [e for e in capture.events if e.event_type == name]
 
 
-def _state_manager(*, pending: list[str], failed: list[str] | None = None) -> MagicMock:
+def _state_manager(
+    *,
+    pending: list[str],
+    failed: list[str] | None = None,
+    partial: list[str] | None = None,
+    skipped: list[str] | None = None,
+    completed: list[str] | None = None,
+    batch: list[str] | None = None,
+) -> MagicMock:
+    failed, partial = list(failed or []), list(partial or [])
+    skipped, batch = list(skipped or []), list(batch or [])
+    done = list(completed or []) + partial
+
     state = MagicMock()
-    state.is_completed.return_value = False
     state.get_pending_actions.return_value = list(pending)
-    state.get_batch_submitted_actions.return_value = []
-    state.get_failed_actions.return_value = list(failed or [])
-    state.is_completed_with_failures.return_value = False
-    state.is_skipped.return_value = False
+    state.get_batch_submitted_actions.return_value = batch
+    state.get_failed_actions.side_effect = lambda actions: [a for a in actions if a in failed]
+    state.is_completed.side_effect = lambda a: a in done
+    state.is_completed_with_failures.side_effect = lambda a: a in partial
+    state.is_skipped.side_effect = lambda a: a in skipped
     return state
 
 
-def _action_executor(failed: set[str] | None = None) -> MagicMock:
+def _action_executor(failed: set[str] | None = None, takes: float = 0.0) -> MagicMock:
     failed = failed or set()
 
     async def execute(action, **kwargs):
+        if takes:
+            await asyncio.sleep(takes)
         result = MagicMock()
         result.success = action not in failed
         result.status = "completed"
@@ -82,8 +95,19 @@ def _action_executor(failed: set[str] | None = None) -> MagicMock:
     return executor
 
 
-def _run_level(orchestrator, *, level_idx, level_actions, pending, failed=None, indices=None):
-    state = _state_manager(pending=pending, failed=failed)
+def _run_level(
+    orchestrator,
+    *,
+    level_idx,
+    level_actions,
+    pending,
+    failed=None,
+    indices=None,
+    total_steps=4,
+    takes=0.0,
+    **state_kwargs,
+):
+    state = _state_manager(pending=pending, failed=failed, **state_kwargs)
     return asyncio.run(
         orchestrator.execute_level_async(
             LevelExecutionParams(
@@ -91,7 +115,8 @@ def _run_level(orchestrator, *, level_idx, level_actions, pending, failed=None, 
                 level_actions=level_actions,
                 action_indices=indices or {a: i for i, a in enumerate(level_actions)},
                 state_manager=state,
-                action_executor=_action_executor(set(failed or [])),
+                action_executor=_action_executor(set(failed or []), takes=takes),
+                total_steps=total_steps,
             )
         )
     )
@@ -131,17 +156,32 @@ class TestStepComplete:
         dones = _of_type(captured, "StepCompleteEvent")
         assert len(dones) == 1
         assert dones[0].data["step_index"] == 1
-        assert dones[0].data["elapsed_time"] >= 0.0
         assert dones[0].data["failed"] == 0
+        assert "complete in" in dones[0].message
 
-    def test_a_failing_step_reports_its_failure_count_and_warns(self, captured):
+    def test_the_duration_is_the_time_the_step_actually_took(self, captured):
+        orch = _orchestrator(["a"])
+        _run_level(orch, level_idx=0, level_actions=["a"], pending=["a"], takes=0.05)
+
+        assert _of_type(captured, "StepCompleteEvent")[0].data["elapsed_time"] >= 0.05
+
+    def test_a_failing_step_reports_its_failure_count_without_warning(self, captured):
+        """ActionFailedEvent owns the failure; a WARN here double-counts it."""
         orch = _orchestrator(["a", "b"])
         _run_level(orch, level_idx=2, level_actions=["a", "b"], pending=["a", "b"], failed=["b"])
 
         dones = _of_type(captured, "StepCompleteEvent")
         assert len(dones) == 1
         assert dones[0].data["failed"] == 1
-        assert dones[0].level is EventLevel.WARN
+        assert dones[0].level is EventLevel.INFO
+
+    def test_the_tallies_account_for_every_action_in_the_level(self, captured):
+        orch = _orchestrator(["a", "b"])
+        _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=["a", "b"], failed=["b"])
+
+        data = _of_type(captured, "StepCompleteEvent")[0].data
+        counted = data["completed"] + data["partial"] + data["skipped"] + data["failed"]
+        assert counted + data["unfinished"] == 2
 
     def test_a_fully_complete_step_still_fires_complete(self, captured):
         orch = _orchestrator(["a"])
@@ -153,19 +193,24 @@ class TestStepComplete:
 class TestConsoleIsNoLongerAProducer:
     """Step boundaries belong to the event stream; a direct print reaches only the terminal."""
 
-    def test_the_orchestrator_owns_no_console(self, captured):
+    def test_the_orchestrator_holds_nothing_that_can_write_to_a_terminal(self, captured):
         orch = _orchestrator(["a", "b"])
         _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=["a", "b"])
 
-        assert not hasattr(orch, "console"), (
-            "a console on the orchestrator is a second progress producer"
-        )
+        writers = [
+            name
+            for name in vars(orch)
+            if hasattr(getattr(orch, name), "print") or hasattr(getattr(orch, name), "write")
+        ]
+        assert writers == [], f"{writers} can bypass the event stream"
 
-    def test_the_step_plan_is_not_dumped_up_front(self, captured):
-        orch = _orchestrator(["a", "b", "c"])
-        assert not hasattr(orch, "log_execution_levels"), (
-            "the up-front step plan duplicates what StepStartEvent carries per step"
-        )
+    def test_no_step_boundary_reaches_stdout_or_stderr(self, captured, capsys):
+        orch = _orchestrator(["a", "b"])
+        _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=["a", "b"])
+
+        captured_io = capsys.readouterr()
+        assert captured_io.out == ""
+        assert captured_io.err == ""
 
 
 class TestSequentialPathFiresTheSameEvents:
@@ -236,24 +281,98 @@ class TestSequentialPathFiresTheSameEvents:
 
 
 class TestWorkflowScale:
-    """The action/step tally the up-front plan used to print now rides the start event."""
+    """The action/step tally the up-front plan used to print now rides the step events."""
 
-    def test_workflow_start_carries_the_step_count(self, captured):
-        wf = TestSequentialPathFiresTheSameEvents._workflow(["a", "b", "c"], [["a", "b"], ["c"]])
-        wf.event_logger = WorkflowEventLogger("wf", ["a", "b", "c"], wf.config, wf.services)
-        wf._run_single_action = MagicMock(return_value=False)
-        wf._run_storage_maintenance = MagicMock()
+    def test_every_step_event_carries_the_total(self, captured):
+        orch = _orchestrator(["a", "b"])
+        _run_level(orch, level_idx=2, level_actions=["a", "b"], pending=["a", "b"], total_steps=7)
 
-        wf._run_workflow_with_context(datetime.now())
+        starts = _of_type(captured, "StepStartEvent")
+        dones = _of_type(captured, "StepCompleteEvent")
+        assert starts[0].data["total_steps"] == 7
+        assert dones[0].data["total_steps"] == 7
+        assert "Step 2/7" in starts[0].message
 
-        starts = _of_type(captured, "WorkflowStartEvent")
-        assert len(starts) == 1
-        assert starts[0].data["action_count"] == 3
-        assert starts[0].data["step_count"] == 2
-        assert "3 actions, 2 steps" in starts[0].message
-
-    def test_a_step_count_of_zero_is_left_out_of_the_message(self):
+    def test_the_start_event_states_the_action_count(self):
         from agent_actions.logging.events import WorkflowStartEvent
 
         event = WorkflowStartEvent(workflow_name="wf", action_count=3)
         assert event.message == "Running workflow wf (3 actions)"
+
+
+class TestTheMessagesSayStep:
+    """The rendered wording is the whole point of the event; pin it."""
+
+    def test_a_fan_out_step_says_how_many_run_in_parallel(self, captured):
+        orch = _orchestrator(["a", "b", "c"])
+        _run_level(
+            orch,
+            level_idx=1,
+            level_actions=["a", "b", "c"],
+            pending=["a", "b", "c"],
+            total_steps=5,
+        )
+
+        assert _of_type(captured, "StepStartEvent")[0].message == "Step 1/5: 3 actions in parallel"
+
+    def test_a_single_action_step_names_it(self, captured):
+        orch = _orchestrator(["only"])
+        _run_level(orch, level_idx=0, level_actions=["only"], pending=["only"], total_steps=2)
+
+        assert _of_type(captured, "StepStartEvent")[0].message == "Step 0/2: only"
+
+    def test_a_step_with_nothing_left_says_so(self, captured):
+        orch = _orchestrator(["a"])
+        _run_level(orch, level_idx=4, level_actions=["a"], pending=[], total_steps=9)
+
+        assert (
+            _of_type(captured, "StepStartEvent")[0].message
+            == "Step 4/9: all actions already complete"
+        )
+
+
+class TestTheTalliesAreReal:
+    def test_each_outcome_lands_in_its_own_bucket(self, captured):
+        orch = _orchestrator(["w", "x", "y", "z"])
+        _run_level(
+            orch,
+            level_idx=0,
+            level_actions=["w", "x", "y", "z"],
+            pending=[],
+            completed=["w"],
+            partial=["x"],
+            skipped=["y"],
+            failed=["z"],
+        )
+
+        data = _of_type(captured, "StepCompleteEvent")[0].data
+        assert (data["completed"], data["partial"], data["skipped"], data["failed"]) == (1, 1, 1, 1)
+        assert data["unfinished"] == 0
+
+    def test_an_action_in_no_terminal_state_is_counted_unfinished(self, captured):
+        orch = _orchestrator(["a", "b"])
+        _run_level(orch, level_idx=0, level_actions=["a", "b"], pending=[], completed=["a"])
+
+        data = _of_type(captured, "StepCompleteEvent")[0].data
+        assert data["completed"] == 1
+        assert data["unfinished"] == 1
+
+
+class TestABatchPausedStepDoesNotClaimToBeComplete:
+    def test_the_level_reports_itself_incomplete(self, captured):
+        orch = _orchestrator(["a"])
+        complete = _run_level(
+            orch, level_idx=0, level_actions=["a"], pending=["a"], batch=["a"], total_steps=3
+        )
+        assert complete is False
+
+    def test_the_event_says_paused_and_names_the_pending_jobs(self, captured):
+        orch = _orchestrator(["a"])
+        _run_level(
+            orch, level_idx=0, level_actions=["a"], pending=["a"], batch=["a"], total_steps=3
+        )
+
+        done = _of_type(captured, "StepCompleteEvent")[0]
+        assert done.data["batch_pending"] == ["a"]
+        assert "paused" in done.message
+        assert "complete" not in done.message

@@ -46,21 +46,28 @@ def fire_step_complete(
     batch_pending: list[str] | None = None,
 ) -> None:
     """Close a dependency level, tallying its outcomes from the state manager."""
-    partial = [a for a in actions if state_manager.is_completed_with_failures(a)]
-    failed = state_manager.get_failed_actions(actions)
-    skipped = [a for a in actions if state_manager.is_skipped(a)]
-    accounted = set(partial) | set(failed) | set(skipped)
-    completed = [a for a in actions if a not in accounted and state_manager.is_completed(a)]
+    partial = sum(1 for a in actions if state_manager.is_completed_with_failures(a))
+    failed = len(state_manager.get_failed_actions(actions))
+    skipped = sum(1 for a in actions if state_manager.is_skipped(a))
+    completed = sum(
+        1
+        for a in actions
+        if state_manager.is_completed(a) and not state_manager.is_completed_with_failures(a)
+    )
 
     fire_event(
         StepCompleteEvent(
             step_index=step_index,
             total_steps=total_steps,
             elapsed_time=elapsed_time,
-            completed=len(completed),
-            partial=len(partial),
-            skipped=len(skipped),
-            failed=len(failed),
+            completed=completed,
+            partial=partial,
+            skipped=skipped,
+            failed=failed,
+            # Batch-submitted, interrupted and still-running actions belong to
+            # none of the buckets above; without this the tallies silently
+            # fail to account for the level.
+            unfinished=len(actions) - completed - partial - skipped - failed,
             batch_pending=list(batch_pending or []),
         )
     )
@@ -81,9 +88,7 @@ class WorkflowEventLogger:
         self.config = config
         self.services = services
 
-    def log_workflow_start(
-        self, workflow_start: datetime, is_async: bool = False, step_count: int = 0
-    ):
+    def log_workflow_start(self, workflow_start: datetime, is_async: bool = False):
         """Log workflow start with session separator."""
         correlation_id = get_manager().get_context("correlation_id")
         time_str = workflow_start.strftime("%H:%M:%S.%f")[:-3]
@@ -98,7 +103,6 @@ class WorkflowEventLogger:
                 workflow_name=self.agent_name,
                 action_count=len(self.execution_order),
                 execution_mode=mode,
-                step_count=step_count,
             )
         )
 
@@ -146,6 +150,7 @@ class WorkflowEventLogger:
                 tokens = params.result.tokens
             metrics = getattr(params.result, "metrics", None)
             record_count = metrics.record_count if metrics is not None else 0
+            config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
                     action_name=params.action_name,
@@ -156,6 +161,8 @@ class WorkflowEventLogger:
                     record_count=record_count,
                     tokens=tokens,
                     mode=params.run_mode,
+                    model_vendor=config.get("model_vendor") or "",
+                    model_name=config.get("model_name") or "",
                 )
             )
         elif not params.result.success:

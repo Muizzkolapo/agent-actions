@@ -39,8 +39,8 @@ class LevelExecutionParams:
     action_indices: dict[str, int]
     state_manager: Any
     action_executor: Any
+    total_steps: int
     concurrency_limit: int = 5
-    total_steps: int = 0
 
 
 class ActionLevelOrchestrator:
@@ -251,6 +251,7 @@ class ActionLevelOrchestrator:
         metrics = result.metrics if result.metrics is not None else ExecutionMetrics()
         if result.success and result.status in COMPLETED_STATUSES:
             tokens = metrics.tokens if metrics.tokens else {}
+            config = self.action_configs.get(action_name, {})
             fire_event(
                 ActionCompleteEvent(
                     action_name=action_name,
@@ -261,6 +262,8 @@ class ActionLevelOrchestrator:
                     record_count=metrics.record_count,
                     tokens=tokens,
                     mode=run_mode,
+                    model_vendor=config.get("model_vendor") or "",
+                    model_name=config.get("model_name") or "",
                 )
             )
         elif not result.success:

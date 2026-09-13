@@ -209,9 +209,11 @@ class ActionOutputManager:
         correlated_dir = self.version_correlator.prepare_correlated_input(
             current_agent, version_sources, idx
         )
-        self.console.print(
-            f"[blue]🔗 Using correlated input for {current_agent} from "
-            f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
+        logger.debug(
+            "Correlated input for %s from %d version sources (pattern: %s)",
+            current_agent,
+            len(version_sources),
+            getattr(pattern, "value", pattern),
         )
         return [str(correlated_dir)]
 

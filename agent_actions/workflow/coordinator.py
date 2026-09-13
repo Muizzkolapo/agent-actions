@@ -292,14 +292,12 @@ class AgentWorkflow:
         self._initialize_event_context()
 
         workflow_start = datetime.now()
+        self.event_logger.log_workflow_start(workflow_start, is_async=True)
 
         manager = get_manager()
         with manager.context():
             try:
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
-                self.event_logger.log_workflow_start(
-                    workflow_start, is_async=True, step_count=len(levels)
-                )
                 self._persist_execution_metadata(levels)
 
                 from agent_actions.workflow.parallel.action_executor import LevelExecutionParams
@@ -383,9 +381,6 @@ class AgentWorkflow:
             try:
                 total_actions = len(self.execution_order)
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
-                self.event_logger.log_workflow_start(
-                    workflow_start, is_async=False, step_count=len(levels)
-                )
                 self._persist_execution_metadata(levels)
                 state_mgr = self.services.core.state_manager
                 executor = self.services.core.action_executor
@@ -527,6 +522,7 @@ class AgentWorkflow:
                 end_time=end_time,
                 duration=duration,
                 run_mode=run_mode,
+                action_config=action_config,
             )
         )
 

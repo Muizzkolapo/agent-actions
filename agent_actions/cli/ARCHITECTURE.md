@@ -12,7 +12,7 @@ This document maps the moving parts of `agent_actions/cli/` -- the Click-based c
             ┌──────────────────┼──────────────────┐
             │                  │                  │
         bootstrap          commands            renderers/
-     (main.py,          (run, retry,        (execution_renderer,
+     (main.py,          (run, retry,        (schema_renderer,
       cli_decorators,    preview, schema,    schema_renderer)
       workflow_loader)   inspect, init, ...)
 ```
@@ -29,7 +29,7 @@ The module is a **Click group** (`agent-actions`) with 17 registered commands. E
 | `cli_decorators.py` | `@handles_user_errors` (error formatting) + `@requires_project` (project root injection) |
 | `workflow_loader.py` | Shared `load_workflow()` helper used by run, retry, schema, dispositions |
 | `inspect_base.py` | `BaseInspectCommand` base class for all inspect subcommands |
-| `renderers/` | Rich terminal output: `ExecutionRenderer` (post-run summary), `SchemaRenderer` (schema tables) |
+| `renderers/` | Rich terminal output: `SchemaRenderer` (schema tables). Run progress is rendered live by `ProgressRenderer` in the logging layer |
 
 ---
 
@@ -233,9 +233,6 @@ RunCommand.execute()
   │
   ├─ workflow.run() or asyncio.run(workflow.async_run())
   │
-  ├─ build_execution_snapshot() + ExecutionRenderer  ← post-run summary
-  │   (wrapped in try/except -- failures are swallowed to logger.debug)
-  │
   ├─ State check: is_workflow_complete / is_workflow_done / batch pending
   │
   └─ tracker.finalize_workflow_run()
@@ -394,25 +391,15 @@ All subcommands use `@handles_user_errors` and `@requires_project`. Each impleme
 ```
 renderers/
   ├─ __init__.py              ← exports SchemaRenderer
-  ├─ execution_renderer.py    ← post-run workflow summary
   └─ schema_renderer.py       ← schema display tables
 ```
 
-### ExecutionRenderer
+### Run progress
 
-Renders a structured post-run summary with execution levels, status icons, kind badges, provider info, and latency. Used only by `RunCommand`.
-
-```
-build_execution_snapshot(workflow, elapsed)    ← reads action_configs + state_manager
-  └─ WorkflowExecutionSnapshot                ← frozen dataclass
-
-ExecutionRenderer(console).render(snapshot)
-  ├─ _render_header()      ← workflow name, version, action/vendor counts
-  ├─ _render_levels()      ← per-level: sequential or parallel box
-  │   ├─ _render_sequential_action()   ← "├─ ✓ action_name  llm  openai  1.2s"
-  │   └─ _render_parallel_level()      ← boxed group of concurrent actions
-  └─ _render_footer()      ← "✓ Done in 5.2s (3 completed, 1 skipped)"
-```
+Progress during a run is not rendered by the CLI. Every step boundary and action
+result is an event, and `ProgressRenderer`
+(`agent_actions/logging/core/handlers/progress.py`) is the console handler that
+groups them into a per-step stream. See the logging architecture guide.
 
 ### SchemaRenderer
 
@@ -471,7 +458,6 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 | File | Role |
 |------|------|
 | `renderers/__init__.py` | Exports `SchemaRenderer` |
-| `renderers/execution_renderer.py` | `ExecutionRenderer` + `build_execution_snapshot()` -- post-run visual summary |
 | `renderers/schema_renderer.py` | `SchemaRenderer` -- schema tables and data flow panels |
 
 ---
@@ -490,7 +476,6 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 
 6. **Checkpoint clearing on retry.** `backend.clear_checkpoint_records(action)` is called for each downstream action during retry. Without this, stale partial output from a prior interrupted run would be carried forward instead of reprocessing the records.
 
-7. **`ExecutionRenderer` failures are swallowed.** The post-run summary render in `RunCommand._execute_single()` is wrapped in a bare `try/except` that logs to `logger.debug`. If the renderer crashes (e.g., accessing state that was cleaned up), the user never sees the summary but the run still succeeds. This is intentional -- the summary is informational, not functional.
 
 8. **Logging is initialized 3-4 times.** See "Logging Initialization Order" above. Each call to `LoggerFactory.initialize(force=True)` replaces the previous configuration. Events fired before Phase 2 use a bare logger. The Phase 4 init (run command only) adds a file handler after the workflow is loaded, so early log messages are not written to the run log file.
 

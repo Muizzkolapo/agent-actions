@@ -161,6 +161,7 @@ class TestExecuteLevelAsyncVerification:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)
@@ -200,6 +201,7 @@ class TestExecuteLevelAsyncVerification:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)
@@ -454,6 +456,7 @@ class TestExecuteLevelAsyncMixedLevel:
             state_manager=state_manager,
             action_executor=action_executor,
             concurrency_limit=5,
+            total_steps=1,
         )
 
         level_complete = await orchestrator.execute_level_async(params)

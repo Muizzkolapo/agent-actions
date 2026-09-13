@@ -26,20 +26,15 @@ class WorkflowStartEvent(BaseEvent):
     workflow_name: str = ""
     action_count: int = 0
     execution_mode: str = "sequential"
-    step_count: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
-        scale = f"{self.action_count} actions"
-        if self.step_count:
-            scale += f", {self.step_count} steps"
-        self.message = f"Running workflow {self.workflow_name} ({scale})"
+        self.message = f"Running workflow {self.workflow_name} ({self.action_count} actions)"
         self.data = {
             "workflow_name": self.workflow_name,
             "action_count": self.action_count,
             "execution_mode": self.execution_mode,
-            "step_count": self.step_count,
         }
 
     @property
@@ -316,17 +311,25 @@ class StepCompleteEvent(BaseEvent):
     partial: int = 0
     skipped: int = 0
     failed: int = 0
+    unfinished: int = 0
     batch_pending: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.level = EventLevel.WARN if self.failed else EventLevel.INFO
+        # Always INFO: a step is a boundary, not a fault. ActionFailedEvent
+        # reports failures, and a WARN here would double-count them wherever
+        # warnings are collected.
+        self.level = EventLevel.INFO
         self.category = EventCategories.WORKFLOW
         idx_str = f"Step {self.step_index}/{self.total_steps}"
-        self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"
-        if self.failed:
-            self.message += f" ({self.failed} failed)"
         if self.batch_pending:
-            self.message += f" — {len(self.batch_pending)} batch job(s) pending"
+            self.message = (
+                f"{idx_str} paused after {self.elapsed_time:.2f}s — "
+                f"{len(self.batch_pending)} batch job(s) pending"
+            )
+        else:
+            self.message = f"{idx_str} complete in {self.elapsed_time:.2f}s"
+            if self.failed:
+                self.message += f" ({self.failed} failed)"
         self.data = {
             "step_index": self.step_index,
             "total_steps": self.total_steps,
@@ -335,6 +338,7 @@ class StepCompleteEvent(BaseEvent):
             "partial": self.partial,
             "skipped": self.skipped,
             "failed": self.failed,
+            "unfinished": self.unfinished,
             "batch_pending": list(self.batch_pending),
         }
 
