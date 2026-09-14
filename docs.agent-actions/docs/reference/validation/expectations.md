@@ -408,7 +408,13 @@ The `skipped` list holds `error`-severity rules that could **not** be checked �
 
 `summary_length` failed and is still recorded in `outcomes`, but it appears in neither `failed` nor `overall_pass`: both count `error`-severity outcomes only, and that rule is `severity: warn`. That is the whole point of `warn` — the finding is on the record without gating anything.
 
-To act on the verdict, read it from a downstream [guard](../execution/guards.md):
+To read the verdicts back across a whole run — which rule fails most often, and on which action — use [`agac expect report`](../cli/expect.md#expect-report):
+
+```bash
+agac expect report -a my_workflow
+```
+
+To act on the verdict inside the workflow, read it from a downstream [guard](../execution/guards.md):
 
 ```yaml
 - name: publish_summary

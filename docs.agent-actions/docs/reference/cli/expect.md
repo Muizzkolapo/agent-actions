@@ -103,6 +103,55 @@ agac expect list -a my_workflow --json | jq '.actions[] | {action, rules: [.rule
 
 A rule with no authored `id:` is listed under the one the engine derives for it (`{type}_{hash}`), which is the same id that appears in a stored verdict.
 
+## `expect report`
+
+Read back the verdicts a run stored. Every run writes one per record; without this they are only reachable by opening the store.
+
+```bash
+agac expect report -a my_workflow
+```
+
+```
+my_workflow   expectation verdicts                           619 records across 10 actions
+
+summarize  412/500 records passed · 82%   ⚠ 3 records carried no verdict
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Rule              ┃ Type               ┃ Severity ┃ Passed ┃ Failed ┃ Skipped ┃ Pass rate ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━┩
+│ summary_is_sized  │ word_count_between │  error   │    412 │     88 │       0 │       82% │
+│ summary_grounded  │ llm_judge          │  warn    │    480 │      0 │      20 │      100% │
+└───────────────────┴────────────────────┴──────────┴────────┴────────┴─────────┴───────────┘
+```
+
+Rules are ordered by how often they failed, so the rule costing an action the most records leads its table.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--agent` | Workflow name (required) |
+| `--action` | Limit the report to one action |
+| `--json` | Emit the report as JSON on stdout |
+
+### How the counts are arrived at
+
+- **Passed / Failed** count the records a rule actually ran on.
+- **Skipped** counts records where it did not run — a judge that hit its [budget](../validation/expectations.md#caching-and-budget), or a rule waived by its [`row_condition`](../validation/expectations.md#row-conditions). A skipped rule is neither a pass nor a fail, so it cannot move a rate over records it never applied to; a rule that never ran shows `—` rather than a rate.
+- **Records passed** counts `overall_pass`, which only `error`-severity outcomes gate. A `warn` rule can fail on a record that still passes — that is what `warn` is for.
+- **`⚠ N records carried no verdict`** appears when an action produced output for records that carry no verdict — a record tombstoned by [`on_exhausted: fail`](../validation/expectations.md#the-expect-block) keeps its output and loses its verdict. Without this line the survivors would read as full health. A [guard-skipped](../execution/guards.md) record produced no output at all and is not counted against the action.
+
+An action that no record carried a verdict for is reported as having none, rather than as zeroes — an action that never ran expectations and one whose rules all passed are different answers.
+
+The report does not run preflight. It reads what already ran, and a config that no longer validates is a reason to want the report rather than a reason to refuse it. It also never writes: a workflow with no store is reported as having none rather than having one created for it.
+
+### JSON output
+
+```bash
+agac expect report -a my_workflow --json | jq '.actions[] | {action, pass_rate}'
+```
+
+Each action carries `records`, `records_passed`, `records_total`, `unverified` and `pass_rate`, and each rule its `passed` / `failed` / `skipped` counts.
+
 ## See also
 
 - **[Expectations](../validation/expectations.md)** — authoring the rules this command lists
