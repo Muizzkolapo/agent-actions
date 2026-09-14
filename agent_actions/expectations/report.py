@@ -43,6 +43,23 @@ class ActionTally:
         return self.records_passed / self.records if self.records else None
 
 
+def _verdict_of(record: dict[str, Any], action: str) -> dict[str, Any] | None:
+    """The verdict *action* wrote on *record*, or None if it wrote none.
+
+    Target storage namespaces an action's output under ``content[action]``, and
+    content is additive — one record carries every upstream action's namespace,
+    so the verdict has to be read from this action's own.
+    """
+    content = record.get("content")
+    if not isinstance(content, dict):
+        return None
+    namespace = content.get(action)
+    if not isinstance(namespace, dict):
+        return None
+    verdict = namespace.get(VERDICT_KEY)
+    return verdict if isinstance(verdict, dict) else None
+
+
 def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | None:
     """One action's verdicts, or None when no record carried one.
 
@@ -50,9 +67,7 @@ def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | No
     whose every rule passed are different answers, and reporting the first as
     zeroes would invent a denominator.
     """
-    verdicts = [
-        record[VERDICT_KEY] for record in records if isinstance(record.get(VERDICT_KEY), dict)
-    ]
+    verdicts = [v for record in records if (v := _verdict_of(record, action))]
     if not verdicts:
         return None
 
