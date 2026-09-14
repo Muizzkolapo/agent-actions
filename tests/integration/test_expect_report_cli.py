@@ -34,6 +34,15 @@ def _verdict(*outcomes):
     }
 
 
+def _stored(action, fields, verdict):
+    """A record as target storage holds it: the action's output under its namespace."""
+    return {
+        "_state": "processed",
+        "source_guid": "guid",
+        "content": {action: {**fields, "expect": verdict}},
+    }
+
+
 def _outcome(rule_id, passed, severity="error", skipped=False, rule_type="not_null"):
     return {
         "id": rule_id,
@@ -51,9 +60,9 @@ class TestTally:
 
     def test_a_rule_is_counted_once_per_record_it_ran_on(self):
         records = [
-            {"expect": _verdict(_outcome("len", passed=True))},
-            {"expect": _verdict(_outcome("len", passed=False))},
-            {"expect": _verdict(_outcome("len", passed=False))},
+            _stored("summarize", {}, _verdict(_outcome("len", passed=True))),
+            _stored("summarize", {}, _verdict(_outcome("len", passed=False))),
+            _stored("summarize", {}, _verdict(_outcome("len", passed=False))),
         ]
         tally = tally_action("summarize", records)
         assert tally.records == 3
@@ -63,33 +72,41 @@ class TestTally:
         )
 
     def test_a_skipped_outcome_counts_as_neither_pass_nor_fail(self):
-        records = [{"expect": _verdict(_outcome("tone", passed=False, skipped=True))}]
+        records = [_stored("summarize", {}, _verdict(_outcome("tone", passed=False, skipped=True)))]
         rule = tally_action("summarize", records).rules[0]
         assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
         assert rule.checked == 0
         assert rule.pass_rate is None, "a rule that never ran has no pass rate"
 
     def test_a_warn_failure_does_not_fail_the_record(self):
-        records = [{"expect": _verdict(_outcome("tone", passed=False, severity="warn"))}]
+        records = [
+            _stored("summarize", {}, _verdict(_outcome("tone", passed=False, severity="warn")))
+        ]
         tally = tally_action("summarize", records)
         assert tally.records_passed == 1
         assert tally.rules[0].failed == 1
 
     def test_records_without_a_verdict_are_not_counted(self):
-        tally = tally_action("summarize", [{"summary": "no verdict here"}])
+        tally = tally_action(
+            "summarize", [{"_state": "processed", "content": {"summarize": {"summary": "x"}}}]
+        )
         assert tally is None, "an action that never ran expectations has nothing to report"
 
     def test_rules_are_ordered_by_how_often_they_fail(self):
         records = [
-            {"expect": _verdict(_outcome("rare", passed=True), _outcome("common", passed=False))},
-            {"expect": _verdict(_outcome("rare", passed=False), _outcome("common", passed=False))},
+            _stored(
+                "s", {}, _verdict(_outcome("rare", passed=True), _outcome("common", passed=False))
+            ),
+            _stored(
+                "s", {}, _verdict(_outcome("rare", passed=False), _outcome("common", passed=False))
+            ),
         ]
         assert [r.id for r in tally_action("s", records).rules] == ["common", "rare"]
 
     def test_the_action_pass_rate_is_over_records_not_rules(self):
         records = [
-            {"expect": _verdict(_outcome("a", passed=True), _outcome("b", passed=True))},
-            {"expect": _verdict(_outcome("a", passed=False), _outcome("b", passed=True))},
+            _stored("s", {}, _verdict(_outcome("a", passed=True), _outcome("b", passed=True))),
+            _stored("s", {}, _verdict(_outcome("a", passed=False), _outcome("b", passed=True))),
         ]
         assert tally_action("s", records).pass_rate == 0.5
 
@@ -112,27 +129,27 @@ def project(tmp_path_factory):
         "summarize",
         "verdicts.json",
         [
-            {
-                "summary": "one",
-                "_state": "processed",
-                "expect": _verdict(
+            _stored(
+                "summarize",
+                {"summary": "one"},
+                _verdict(
                     _outcome("len", passed=True), _outcome("tone", passed=True, severity="warn")
                 ),
-            },
-            {
-                "summary": "two",
-                "_state": "processed",
-                "expect": _verdict(
+            ),
+            _stored(
+                "summarize",
+                {"summary": "two"},
+                _verdict(
                     _outcome("len", passed=False), _outcome("tone", passed=False, severity="warn")
                 ),
-            },
-            {
-                "summary": "three",
-                "_state": "processed",
-                "expect": _verdict(
+            ),
+            _stored(
+                "summarize",
+                {"summary": "three"},
+                _verdict(
                     _outcome("len", passed=False), _outcome("tone", passed=True, severity="warn")
                 ),
-            },
+            ),
         ],
         force_full=True,
     )
