@@ -44,6 +44,17 @@ def _list(author, *extra):
     return CliRunner().invoke(cli, ["expect", "list", "-a", author, *extra])
 
 
+def suite_repair(author, action):
+    """The repair policy the runner would resolve for this action."""
+    inspector = WorkflowInspector(author, project_root=PROJECT)
+    inspector.validate(verify_keys=False)
+    config = inspector.action_configs[action]
+    service = create_expectation_service_from_config(
+        config.get("expect"), action_name=action, agent_config=config
+    )
+    return service.repair
+
+
 def _runner_rules(author):
     """What the runner resolves for this workflow, action by action."""
     inspector = WorkflowInspector(author, project_root=PROJECT)
@@ -77,11 +88,13 @@ def test_the_listing_matches_the_suite_the_runner_builds(author):
         assert [r["id"] for r in listed[name]["rules"]] == [
             e.resolved_id for e in suite.expectations
         ]
+        assert listed[name]["repair"] == suite_repair(author, name)
         for rule, expectation in zip(listed[name]["rules"], suite.expectations, strict=True):
             assert rule["type"] == expectation.type
             assert rule["field"] == expectation.field
             assert rule["severity"] == expectation.severity
             assert rule["params"] == expectation.params
+            assert rule["hint"] == expectation.hint
 
 
 @pytest.mark.parametrize(("author", "phrase"), sorted(REFUSED.items()))
@@ -112,3 +125,45 @@ def test_an_unknown_action_is_refused_by_name():
     result = _list("inline_rules", "--action", "no_such_action")
     assert result.exit_code != 0
     assert "no_such_action" in result.output
+
+
+def test_an_authored_hint_is_listed(monkeypatch):
+    """hint: is an authored rule key and is what repair feeds the model."""
+    listed = json.loads(_list("repair_auto", "--json").stdout)["actions"]
+    hints = [r["hint"] for entry in listed for r in entry["rules"]]
+    assert any(h for h in hints), "no rule carried its authored hint"
+
+
+def test_listing_one_action_does_not_speak_for_the_whole_workflow(monkeypatch):
+    """verdict_guard's summarize declares expectations; publish does not."""
+    result = _list("verdict_guard", "--action", "publish")
+    assert result.exit_code == 0, result.output
+    assert "No action in this workflow declares" not in result.output, result.output
+    assert "publish" in result.output
+
+
+@pytest.fixture
+def file_granularity_tool(tmp_path, monkeypatch):
+    """A tool action at file granularity — a strategy that never runs expectations."""
+    import shutil
+
+    root = tmp_path / "inert"
+    shutil.copytree(PROJECT, root)
+    cfg = root / "agent_workflow" / "tool_action" / "agent_config" / "tool_action.yml"
+    cfg.write_text(cfg.read_text().replace("granularity: Record", "granularity: File"))
+    monkeypatch.chdir(root)
+    return root
+
+
+def test_rules_that_the_strategy_will_never_run_are_not_listed_as_live(file_granularity_tool):
+    result = CliRunner().invoke(cli, ["expect", "list", "-a", "tool_action", "--json"])
+    assert result.exit_code == 0, result.output
+    entry = json.loads(result.stdout)["actions"][0]
+    assert entry["executes"] is False
+    assert entry["rules"], "the rules are still shown — they are authored, just inert"
+
+
+def test_the_rendered_listing_says_why_inert_rules_will_not_run(file_granularity_tool):
+    result = CliRunner().invoke(cli, ["expect", "list", "-a", "tool_action"])
+    assert result.exit_code == 0, result.output
+    assert "not run" in result.output.lower()
