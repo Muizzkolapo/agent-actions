@@ -305,3 +305,14 @@ def test_an_imperfect_rate_is_not_rendered_as_a_perfect_one(tmp_path, monkeypatc
     monkeypatch.chdir(_two_action_project(tmp_path, {"summarize": records}))
     result = CliRunner().invoke(cli, ["expect", "report", "-a", OTHER])
     assert "100%" not in result.output, "199/200 rendered as a perfect rate"
+
+
+def test_output_record_count_separates_a_skipped_action_from_one_that_never_ran():
+    """A guard-skipped record carries a null namespace; the action ran for none."""
+    from agent_actions.expectations.report import output_record_count
+
+    skipped = {"_state": "guard_skipped", "content": {"summarize": None}}
+    ran = _stored("summarize", {}, _verdict(_outcome("len", passed=True)))
+    assert output_record_count([skipped, skipped], "summarize") == 0
+    assert output_record_count([skipped, ran], "summarize") == 1
+    assert output_record_count([], "summarize") == 0

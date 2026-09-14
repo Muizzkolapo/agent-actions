@@ -298,14 +298,24 @@ class ExpectReportCommand:
             self.console.print(table)
 
 
+def _format_percent(percent: float) -> str:
+    """Render a percentage, never showing an imperfect result as 0% or 100%.
+
+    Widens precision until the rendered value differs from the perfect one it
+    is near; `.1f` cannot represent 99.96, and a rate that reads 100% when four
+    records in ten thousand failed is the reading this report exists to prevent.
+    """
+    if percent in (0.0, 100.0):
+        return f"{percent:.0f}%"
+    for places in range(7):
+        text = f"{percent:.{places}f}"
+        if float(text) not in (0.0, 100.0):
+            return f"{text}%"
+    return "<100%" if percent > 50 else ">0%"
+
+
 def _rate(value: float | None) -> str:
-    """A rate that never renders an imperfect result as a perfect one."""
-    if value is None:
-        return "—"
-    percent = value * 100
-    if percent not in (0.0, 100.0) and round(percent) in (0, 100):
-        return f"{percent:.1f}%"
-    return f"{percent:.0f}%"
+    return "—" if value is None else _format_percent(value * 100)
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:

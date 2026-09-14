@@ -64,6 +64,15 @@ def _produced_output(record: dict[str, Any], action: str) -> bool:
     return isinstance(content, dict) and isinstance(content.get(action), dict)
 
 
+def output_record_count(records: list[dict[str, Any]], action: str) -> int:
+    """How many of *records* the action actually produced output for.
+
+    Zero means it ran for none of them — every record was skipped before it —
+    which is a different thing from having run and written no verdict.
+    """
+    return sum(1 for record in records if _produced_output(record, action))
+
+
 def _verdict_of(record: dict[str, Any], action: str) -> dict[str, Any] | None:
     """The verdict *action* wrote on *record*, or None if it wrote none.
 
