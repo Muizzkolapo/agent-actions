@@ -27,14 +27,20 @@ def _record(passed):
         "definition_hash": "hash",
         "skipped": False,
     }
+    # Namespaced under the action, the way target storage holds a record.
     return {
-        "summary": "text",
         "_state": "processed",
-        "expect": {
-            "overall_pass": passed,
-            "failed": [] if passed else ["len"],
-            "skipped": [],
-            "outcomes": [outcome],
+        "source_guid": "guid",
+        "content": {
+            "summarize": {
+                "summary": "text",
+                "expect": {
+                    "overall_pass": passed,
+                    "failed": [] if passed else ["len"],
+                    "skipped": [],
+                    "outcomes": [outcome],
+                },
+            }
         },
     }
 
