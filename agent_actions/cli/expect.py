@@ -196,14 +196,22 @@ class ExpectReportCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.agent_name, auto_create=False, project_root=project_root
         )
-        backend = get_storage_backend(
-            workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
-        )
-        backend.initialize()
-        try:
-            tallies = [t for t in (self._tally(backend, name) for name in actions) if t is not None]
-        finally:
-            backend.close()
+        # Reading must not write: initializing a backend creates the database and
+        # migrates its schema, so a question about a workflow that never ran would
+        # leave a store behind.
+        store = paths.io_dir / "store" / f"{self.agent_name}.db"
+        tallies: list[ActionTally] = []
+        if store.exists():
+            backend = get_storage_backend(
+                workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
+            )
+            backend.initialize()
+            try:
+                tallies = [
+                    t for t in (self._tally(backend, name) for name in actions) if t is not None
+                ]
+            finally:
+                backend.close()
 
         if self.as_json:
             click.echo(
@@ -219,7 +227,11 @@ class ExpectReportCommand:
     def _actions_to_report(self, inspector: WorkflowInspector) -> list[str]:
         configured = inspector.action_configs
         if self.action_filter is None:
-            return [name for name in inspector.execution_order if name in configured]
+            # execution_order holds only operational actions. A report reads what
+            # already ran, so disabling an action must not hide the verdicts it
+            # already wrote.
+            ordered = [name for name in inspector.execution_order if name in configured]
+            return list(dict.fromkeys(ordered + list(configured)))
         if self.action_filter not in configured:
             raise click.ClickException(
                 f"Action '{self.action_filter}' is not in workflow '{self.agent_name}'. "
@@ -287,7 +299,13 @@ class ExpectReportCommand:
 
 
 def _rate(value: float | None) -> str:
-    return "—" if value is None else f"{value * 100:.0f}%"
+    """A rate that never renders an imperfect result as a perfect one."""
+    if value is None:
+        return "—"
+    percent = value * 100
+    if percent not in (0.0, 100.0) and round(percent) in (0, 100):
+        return f"{percent:.1f}%"
+    return f"{percent:.0f}%"
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
@@ -296,6 +314,13 @@ def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
     if suffix:
         detail = f"{detail} · {suffix}"
     heading.append(f"  {detail}", style="dim")
+    if tally.unverified:
+        # The rate above is over rated records only; without this the survivors
+        # of a run that tombstoned records would read as full health.
+        heading.append(
+            f"  ⚠ {tally.unverified} record{'s' if tally.unverified != 1 else ''} carried no verdict",
+            style="yellow",
+        )
     return heading
 
 
@@ -304,6 +329,8 @@ def _tally_row(tally: ActionTally) -> dict[str, Any]:
         "action": tally.action,
         "records": tally.records,
         "records_passed": tally.records_passed,
+        "records_total": tally.records_total,
+        "unverified": tally.unverified,
         "pass_rate": tally.pass_rate,
         "rules": [
             {

@@ -47,3 +47,17 @@ def test_a_rule_id_that_reads_as_markup_is_still_shown(render):
         [_tally(rules=(RuleTally(id="[red]len[/red]", type="not_null", severity="error"),))]
     )
     assert "[red]len[/red]" in out
+
+
+def test_records_without_a_verdict_are_flagged_beside_the_rate(render):
+    out = render(
+        [ActionTally(action="summarize", records=3, records_passed=3, rules=(), records_total=7)]
+    )
+    assert "4 records carried no verdict" in out
+
+
+def test_a_fully_verified_action_carries_no_such_warning(render):
+    out = render(
+        [ActionTally(action="summarize", records=3, records_passed=3, rules=(), records_total=3)]
+    )
+    assert "carried no verdict" not in out

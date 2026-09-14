@@ -37,10 +37,31 @@ class ActionTally:
     records: int
     records_passed: int
     rules: tuple[RuleTally, ...]
+    records_total: int = 0
 
     @property
     def pass_rate(self) -> float | None:
         return self.records_passed / self.records if self.records else None
+
+    @property
+    def unverified(self) -> int:
+        """Records the action produced output for that carry no verdict.
+
+        A record tombstoned for exhausting its repair budget keeps its output
+        and loses its verdict, so counting only rated records would report the
+        survivors at full health.
+        """
+        return max(self.records_total - self.records, 0)
+
+
+def _produced_output(record: dict[str, Any], action: str) -> bool:
+    """Whether *action* ran for this record at all.
+
+    A guard-skipped record carries a null namespace: the action did not run, so
+    its missing verdict is not something that went unchecked.
+    """
+    content = record.get("content")
+    return isinstance(content, dict) and isinstance(content.get(action), dict)
 
 
 def _verdict_of(record: dict[str, Any], action: str) -> dict[str, Any] | None:
@@ -70,6 +91,7 @@ def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | No
     verdicts = [v for record in records if (v := _verdict_of(record, action))]
     if not verdicts:
         return None
+    produced = sum(1 for record in records if _produced_output(record, action))
 
     counts: dict[str, dict[str, Any]] = {}
     for verdict in verdicts:
@@ -84,8 +106,9 @@ def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | No
                     "skipped": 0,
                 },
             )
-            # A skipped rule was not evaluated, so it is neither a pass nor a
-            # fail; counting it either way would move a pass rate it never ran in.
+            # Checked before `passed`: a rule waived by its row_condition is
+            # stored passed and skipped together, and it did not run, so counting
+            # it as a pass would credit records the rule never applied to.
             if outcome.get("skipped"):
                 tally["skipped"] += 1
             elif outcome.get("passed"):
@@ -115,4 +138,5 @@ def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | No
         records=len(verdicts),
         records_passed=sum(1 for v in verdicts if v.get("overall_pass")),
         rules=rules,
+        records_total=produced,
     )
