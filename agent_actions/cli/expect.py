@@ -179,10 +179,17 @@ def _params_cell(params: dict[str, Any]) -> Text:
 class ExpectReportCommand:
     """Aggregate the verdicts a run stored, per action and per rule."""
 
-    def __init__(self, agent: str, action: str | None, as_json: bool) -> None:
+    def __init__(
+        self,
+        agent: str,
+        action: str | None,
+        as_json: bool,
+        fail_under: float | None = None,
+    ) -> None:
         self.agent_name = Path(agent).stem
         self.action_filter = action
         self.as_json = as_json
+        self.fail_under = fail_under
         self.console = Console()
 
     def execute(self, project_root: Path | None = None) -> list[ActionTally]:
@@ -222,7 +229,35 @@ class ExpectReportCommand:
             )
         else:
             self._render(tallies, actions)
+
+        if self.fail_under is not None:
+            self._gate(tallies)
         return tallies
+
+    def _gate(self, tallies: list[ActionTally]) -> None:
+        """Exit non-zero when any action's pass rate falls under the threshold."""
+        threshold = self.fail_under or 0.0
+        if not tallies:
+            raise click.ClickException(
+                f"--fail-under {threshold:g} was asked for, but no stored verdict was "
+                f"found for workflow '{self.agent_name}'. Nothing was checked, so "
+                f"nothing can be gated; run the workflow first."
+            )
+
+        # Rated per action, not pooled: a pooled average lets a healthy action
+        # carry a broken one over the line, which is the reading a gate exists
+        # to prevent.
+        under = [
+            tally
+            for tally in tallies
+            if tally.pass_rate is not None and tally.pass_rate * 100 < threshold
+        ]
+        if under:
+            named = ", ".join(
+                f"{tally.action} {_rate(tally.pass_rate)} ({tally.records_passed}/{tally.records})"
+                for tally in under
+            )
+            raise click.ClickException(f"Expectation pass rate is under {threshold:g}%: {named}")
 
     def _actions_to_report(self, inspector: WorkflowInspector) -> list[str]:
         configured = inspector.action_configs
@@ -367,6 +402,7 @@ def expect() -> None:
         agac expect list -a my_workflow --action extract_facts
         agac expect list -a my_workflow --json
         agac expect report -a my_workflow
+        agac expect report -a my_workflow --fail-under 95
     """
 
 
@@ -397,22 +433,33 @@ def list_rules(
 @click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
 @click.option("--action", default=None, help="Limit the report to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+@click.option(
+    "--fail-under",
+    type=click.FloatRange(0, 100),
+    default=None,
+    help="Exit non-zero if any action's record pass rate is under this percentage.",
+)
 @requires_project
 @handles_user_errors("expect report")
 def report(
     agent_opt: str,
     action: str | None,
     as_json: bool,
+    fail_under: float | None,
     project_root: Path | None = None,
 ) -> None:
     """Report the expectation verdicts a run stored.
 
     Rules are ordered by how often they failed, so the rule costing the most
     records is the first one listed for its action.
+
+    With --fail-under, the report becomes a CI gate: every action is rated
+    separately, and a store holding no verdict at all fails rather than
+    passing on the strength of having checked nothing.
     """
-    ExpectReportCommand(agent=agent_opt, action=action, as_json=as_json).execute(
-        project_root=project_root
-    )
+    ExpectReportCommand(
+        agent=agent_opt, action=action, as_json=as_json, fail_under=fail_under
+    ).execute(project_root=project_root)
 
 
 __all__ = ["expect", "ExpectListCommand", "ExpectReportCommand"]
