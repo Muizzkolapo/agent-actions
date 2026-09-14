@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "agac expect report aggregates the expectation verdicts a run stored, ordering each action's rules by how often they failed"
+time: 2026-09-14T10:01:00Z
