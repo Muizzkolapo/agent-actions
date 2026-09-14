@@ -9,11 +9,11 @@ import shutil
 from pathlib import Path
 
 import pytest
-from agent_actions.expectations.report import RuleTally, tally_action
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.expectations.report import RuleTally, tally_action
 from agent_actions.storage import get_storage_backend
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -114,18 +114,21 @@ def project(tmp_path_factory):
         [
             {
                 "summary": "one",
+                "_state": "processed",
                 "expect": _verdict(
                     _outcome("len", passed=True), _outcome("tone", passed=True, severity="warn")
                 ),
             },
             {
                 "summary": "two",
+                "_state": "processed",
                 "expect": _verdict(
                     _outcome("len", passed=False), _outcome("tone", passed=False, severity="warn")
                 ),
             },
             {
                 "summary": "three",
+                "_state": "processed",
                 "expect": _verdict(
                     _outcome("len", passed=False), _outcome("tone", passed=True, severity="warn")
                 ),
