@@ -254,6 +254,15 @@ class ExpectReportCommand:
             return
 
         for tally in tallies:
+            self.console.print()
+            if not tally.rules:
+                # A rule-free expect: block still gates on the schema, so its
+                # records have a verdict but nothing per-rule to tabulate.
+                self.console.print(
+                    _report_heading(tally, suffix="no rules — the schema is the contract")
+                )
+                continue
+
             table = Table(title=_report_heading(tally), title_justify="left")
             table.add_column("Rule", style="cyan")
             table.add_column("Type")
@@ -274,7 +283,6 @@ class ExpectReportCommand:
                     Text(_rate(rule.pass_rate)),
                 )
 
-            self.console.print()
             self.console.print(table)
 
 
@@ -282,12 +290,12 @@ def _rate(value: float | None) -> str:
     return "—" if value is None else f"{value * 100:.0f}%"
 
 
-def _report_heading(tally: ActionTally) -> Text:
+def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
     heading = Text(tally.action, style="bold cyan")
-    heading.append(
-        f"  {tally.records_passed}/{tally.records} records passed · {_rate(tally.pass_rate)}",
-        style="dim",
-    )
+    detail = f"{tally.records_passed}/{tally.records} records passed · {_rate(tally.pass_rate)}"
+    if suffix:
+        detail = f"{detail} · {suffix}"
+    heading.append(f"  {detail}", style="dim")
     return heading
 
 
