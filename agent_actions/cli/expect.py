@@ -265,18 +265,15 @@ class ExpectReportCommand:
                 f"declared expectations that were never checked"
             )
 
-        # A record tombstoned for exhausting its repair budget keeps its output
-        # and loses its verdict, so it leaves the rate below entirely. Rating
+        # A tombstoned record keeps its output and loses its verdict, so rating
         # only the survivors of such a run reports them at full health.
         partial = [t for t in tallies if t.unverified]
         if partial:
             named = ", ".join(f"{t.action} {t.unverified} of {t.records_total}" for t in partial)
             problems.append(f"records carrying no verdict: {named}")
 
-        # Rated per action, not pooled: a pooled average lets a healthy action
-        # carry a broken one over the line, which is the reading a gate exists
-        # to prevent. Compared as integers — a rate exactly at the threshold is
-        # not under it, and 29/50 * 100 is 57.99999999999999.
+        # Per action, not pooled: a pooled average lets a healthy action carry a
+        # broken one. Integer comparison: 29/50 * 100 is 57.99999999999999.
         under = [t for t in tallies if t.records_passed * 100 < threshold * t.records]
         if under:
             named = ", ".join(
