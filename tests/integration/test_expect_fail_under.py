@@ -204,3 +204,39 @@ def test_gating_one_action_names_that_action_when_it_stored_nothing(multi_gate):
     )
     assert result.exit_code != 0
     assert "resummarize" in result.stderr, result.stderr
+
+
+def _no_verdict_record(action="summarize"):
+    """A record the action produced output for but wrote no verdict on."""
+    return {
+        "_state": "exhausted",
+        "source_guid": "guid",
+        "content": {action: {"summary": "tombstoned"}},
+    }
+
+
+def test_records_the_action_could_not_rate_fail_the_gate(tmp_path, monkeypatch):
+    """Rating only the survivors of a run that tombstoned records reports them
+    at full health; the gate must not accept a denominator that excludes them."""
+    root = tmp_path / "partial"
+    shutil.copytree(SOURCE, root)
+    paths = ProjectPathsFactory.create_project_paths(
+        MULTI, MULTI, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=MULTI)
+    backend.initialize()
+    backend.write_target(
+        "summarize",
+        "verdicts.json",
+        [_record(True), _record(True), _no_verdict_record(), _no_verdict_record()],
+        force_full=True,
+    )
+    backend.write_target(
+        "resummarize", "verdicts.json", [_record(True, action="resummarize")], force_full=True
+    )
+    backend.close()
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "95"])
+    assert result.exit_code != 0, result.output
+    assert "2" in result.stderr and "summarize" in result.stderr, result.stderr
