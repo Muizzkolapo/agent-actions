@@ -187,9 +187,10 @@ def test_the_rendered_report_names_the_rule_that_fails_most(run):
     assert "len" in result.stdout
 
 
-def test_an_action_with_no_stored_verdicts_is_reported_as_such(run):
+def test_an_unknown_action_is_refused_by_name(run):
     result = run("--action", "flatten")
-    assert "flatten" in result.output
+    assert result.exit_code != 0
+    assert "not in workflow" in result.output
 
 
 def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(tmp_path, monkeypatch):
@@ -199,3 +200,108 @@ def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(tmp
     result = CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW])
     assert result.exit_code == 0, result.output
     assert "no verdict" in result.output.lower() or "no stored" in result.output.lower()
+
+
+OTHER = "shared_suite"
+
+
+def _two_action_project(tmp_path, stored):
+    root = tmp_path / "two"
+    shutil.copytree(SOURCE, root)
+    paths = ProjectPathsFactory.create_project_paths(
+        OTHER, OTHER, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=OTHER)
+    backend.initialize()
+    for action, records in stored.items():
+        backend.write_target(action, "verdicts.json", records, force_full=True)
+    backend.close()
+    return root
+
+
+def test_a_verdict_is_read_from_its_own_action_namespace(tmp_path, monkeypatch):
+    """Content is additive, so a record carries every upstream action's namespace."""
+    shared = {
+        "_state": "processed",
+        "source_guid": "guid",
+        "content": {
+            "resummarize": {"summary": "up", "expect": _verdict(_outcome("upstream", passed=True))},
+            "summarize": {"summary": "own", "expect": _verdict(_outcome("own_rule", passed=False))},
+        },
+    }
+    tally = tally_action("summarize", [shared])
+    assert [r.id for r in tally.rules] == ["own_rule"], "read another action's verdict"
+    assert tally.records_passed == 0
+
+    upstream = tally_action("resummarize", [shared])
+    assert [r.id for r in upstream.rules] == ["upstream"]
+    assert upstream.records_passed == 1
+
+
+def test_a_rule_waived_by_its_row_condition_counts_as_not_run(tmp_path):
+    """A waived rule is stored passed=True, skipped=True. It did not run, so it
+    must not inflate a pass rate over records it never applied to."""
+    waived = _outcome("only_when_quoted", passed=True, skipped=True)
+    tally = tally_action("summarize", [_stored("summarize", {}, _verdict(waived))])
+    rule = tally.rules[0]
+    assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
+    assert rule.pass_rate is None
+
+
+def test_records_that_produced_output_without_a_verdict_are_counted_apart():
+    """A record tombstoned for failing expectations carries output but no verdict."""
+    records = [
+        _stored("summarize", {"summary": "ok"}, _verdict(_outcome("len", passed=True))),
+        {
+            "_state": "exhausted",
+            "source_guid": "g2",
+            "content": {"summarize": {"summary": "gone"}},
+        },
+    ]
+    tally = tally_action("summarize", records)
+    assert tally.records == 1, "only the record carrying a verdict is rated"
+    assert tally.records_total == 2
+    assert tally.unverified == 1
+
+
+def test_a_guard_skipped_record_is_not_counted_as_unverified():
+    """A null namespace means the action was skipped for that record, not that
+    it ran and produced no verdict."""
+    records = [
+        _stored("summarize", {"summary": "ok"}, _verdict(_outcome("len", passed=True))),
+        {"_state": "guard_skipped", "source_guid": "g2", "content": {"summarize": None}},
+    ]
+    tally = tally_action("summarize", records)
+    assert tally.records_total == 1
+    assert tally.unverified == 0
+
+
+def test_an_action_with_no_stored_verdicts_reports_that_it_has_none(tmp_path, monkeypatch):
+    stored = {"summarize": [_stored("summarize", {}, _verdict(_outcome("len", passed=True)))]}
+    monkeypatch.chdir(_two_action_project(tmp_path, stored))
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", OTHER, "--action", "resummarize"])
+    assert result.exit_code == 0, result.output
+    assert "no stored verdict" in result.output.lower()
+
+
+def test_a_report_does_not_create_a_store_for_a_workflow_that_never_ran(tmp_path, monkeypatch):
+    """A read-only question must not write to the project."""
+    root = tmp_path / "untouched"
+    shutil.copytree(SOURCE, root)
+    store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW])
+    assert result.exit_code == 0, result.output
+    assert not store.exists(), (
+        f"a read-only report created {sorted(p.name for p in store.iterdir())}"
+    )
+
+
+def test_an_imperfect_rate_is_not_rendered_as_a_perfect_one(tmp_path, monkeypatch):
+    records = [
+        _stored("summarize", {}, _verdict(_outcome("len", passed=i > 0))) for i in range(200)
+    ]
+    monkeypatch.chdir(_two_action_project(tmp_path, {"summarize": records}))
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", OTHER])
+    assert "100%" not in result.output, "199/200 rendered as a perfect rate"
