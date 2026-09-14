@@ -240,3 +240,9 @@ def test_records_the_action_could_not_rate_fail_the_gate(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "95"])
     assert result.exit_code != 0, result.output
     assert "2" in result.stderr and "summarize" in result.stderr, result.stderr
+
+
+def test_a_long_list_of_unchecked_actions_leads_with_the_count(multi_gate):
+    result = multi_gate({}, "--fail-under", "50")
+    assert result.exit_code != 0
+    assert "2 of 2 actions" in result.stderr, result.stderr
