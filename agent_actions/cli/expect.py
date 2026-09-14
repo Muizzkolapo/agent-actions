@@ -231,33 +231,57 @@ class ExpectReportCommand:
             self._render(tallies, actions)
 
         if self.fail_under is not None:
-            self._gate(tallies)
+            declaring = [
+                a for a in actions if inspector.action_configs[a].get("expect") is not None
+            ]
+            self._gate(tallies, self.fail_under, declaring)
         return tallies
 
-    def _gate(self, tallies: list[ActionTally]) -> None:
-        """Exit non-zero when any action's pass rate falls under the threshold."""
-        threshold = self.fail_under or 0.0
-        if not tallies:
+    def _gate(self, tallies: list[ActionTally], threshold: float, declaring: list[str]) -> None:
+        """Exit non-zero unless every action that declares expectations cleared the bar.
+
+        An action is gated on having been checked as well as on its rate: a run
+        that stopped writing verdicts is the regression a gate is for, and it
+        reaches this function as an absence rather than a low number.
+        """
+        problems: list[str] = []
+        scope = (
+            f"action '{self.action_filter}' of workflow '{self.agent_name}'"
+            if self.action_filter
+            else f"workflow '{self.agent_name}'"
+        )
+
+        if not declaring:
             raise click.ClickException(
-                f"--fail-under {threshold:g} was asked for, but no stored verdict was "
-                f"found for workflow '{self.agent_name}'. Nothing was checked, so "
-                f"nothing can be gated; run the workflow first."
+                f"--fail-under {threshold:g} was asked for, but no action in {scope} "
+                f"declares an expect: block, so nothing can ever be checked."
+            )
+
+        rated = {tally.action for tally in tallies}
+        unchecked = [name for name in declaring if name not in rated]
+        if unchecked:
+            problems.append(
+                f"no verdict stored for {', '.join(unchecked)} — "
+                f"declared expectations that were never checked"
             )
 
         # Rated per action, not pooled: a pooled average lets a healthy action
         # carry a broken one over the line, which is the reading a gate exists
-        # to prevent.
-        under = [
-            tally
-            for tally in tallies
-            if tally.pass_rate is not None and tally.pass_rate * 100 < threshold
-        ]
+        # to prevent. Compared as integers — a rate exactly at the threshold is
+        # not under it, and 29/50 * 100 is 57.99999999999999.
+        under = [t for t in tallies if t.records_passed * 100 < threshold * t.records]
         if under:
             named = ", ".join(
-                f"{tally.action} {_rate(tally.pass_rate)} ({tally.records_passed}/{tally.records})"
-                for tally in under
+                f"{t.action} {_exact_rate(t.records_passed, t.records)}"
+                f" ({t.records_passed}/{t.records})"
+                for t in under
             )
-            raise click.ClickException(f"Expectation pass rate is under {threshold:g}%: {named}")
+            problems.append(f"pass rate under {threshold:g}%: {named}")
+
+        if problems:
+            raise click.ClickException(
+                f"Expectation gate failed for {scope}: " + "; ".join(problems)
+            )
 
     def _actions_to_report(self, inspector: WorkflowInspector) -> list[str]:
         configured = inspector.action_configs
@@ -351,6 +375,11 @@ def _format_percent(percent: float) -> str:
 
 def _rate(value: float | None) -> str:
     return "—" if value is None else _format_percent(value * 100)
+
+
+def _exact_rate(passed: int, total: int) -> str:
+    """A rate for the gate's message, which must not round a shortfall into the bar."""
+    return "—" if not total else f"{passed * 100 / total:.4g}%"
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
