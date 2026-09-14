@@ -8,6 +8,7 @@ Surface:
 from __future__ import annotations
 
 import json
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,11 @@ from rich.text import Text
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.inspect_base import render_title_row
 from agent_actions.config.project_paths import ProjectPathsFactory
-from agent_actions.expectations.report import ActionTally, tally_action
+from agent_actions.expectations.report import (
+    ActionTally,
+    output_record_count,
+    tally_action,
+)
 from agent_actions.expectations.service import create_expectation_service_from_config
 from agent_actions.expectations.types import Expectation
 from agent_actions.processing.helpers import bypasses_expectations
@@ -208,15 +213,21 @@ class ExpectReportCommand:
         # leave a store behind.
         store = paths.io_dir / "store" / f"{self.agent_name}.db"
         tallies: list[ActionTally] = []
+        produced: dict[str, int] = {}
+        stored: dict[str, int] = {}
         if store.exists():
             backend = get_storage_backend(
                 workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
             )
             backend.initialize()
             try:
-                tallies = [
-                    t for t in (self._tally(backend, name) for name in actions) if t is not None
-                ]
+                for name in actions:
+                    records = self._read(backend, name)
+                    stored[name] = len(records)
+                    produced[name] = output_record_count(records, name)
+                    tally = tally_action(name, records)
+                    if tally is not None:
+                        tallies.append(tally)
             finally:
                 backend.close()
 
@@ -231,11 +242,40 @@ class ExpectReportCommand:
             self._render(tallies, actions)
 
         if self.fail_under is not None:
-            declaring = [
-                a for a in actions if inspector.action_configs[a].get("expect") is not None
-            ]
-            self._gate(tallies, self.fail_under, declaring)
+            self._gate(
+                tallies, self.fail_under, self._gatable(inspector, actions, produced, stored)
+            )
         return tallies
+
+    def _gatable(
+        self,
+        inspector: WorkflowInspector,
+        actions: list[str],
+        produced: dict[str, int],
+        stored: dict[str, int],
+    ) -> list[str]:
+        """The actions whose missing verdict would mean something went unchecked.
+
+        An action is excluded when no run could ever have written one: it
+        declares nothing, its strategy never evaluates expectations, it is
+        switched off, or it was skipped for every record that reached it.
+        Gating on those leaves a workflow with no passing configuration.
+        """
+        operational = set(inspector.execution_order)
+        gatable = []
+        for name in actions:
+            config = inspector.action_configs[name]
+            if config.get("expect") is None or bypasses_expectations(config):
+                continue
+            if name not in operational:
+                continue
+            # Records reached it and it ran for none of them: every one was
+            # skipped before it, so its missing verdict is not an omission.
+            # No records at all is the opposite — that is a run that never happened.
+            if stored.get(name, 0) > 0 and produced.get(name, 0) == 0:
+                continue
+            gatable.append(name)
+        return gatable
 
     def _gate(self, tallies: list[ActionTally], threshold: float, declaring: list[str]) -> None:
         """Exit non-zero unless every action that declares expectations cleared the bar.
@@ -253,33 +293,30 @@ class ExpectReportCommand:
 
         if not declaring:
             raise click.ClickException(
-                f"--fail-under {threshold:g} was asked for, but no action in {scope} "
-                f"declares an expect: block, so nothing can ever be checked."
+                f"--fail-under {threshold:g} was asked for, but nothing in {scope} can be "
+                f"checked: no action declares an expect: block whose rules a run would evaluate."
             )
 
         rated = {tally.action for tally in tallies}
         unchecked = [name for name in declaring if name not in rated]
         if unchecked:
             problems.append(
-                f"{len(unchecked)} of {len(declaring)} actions declaring expectations stored "
-                f"no verdict: {_named(unchecked)}"
+                f"{len(unchecked)} of {len(declaring)} actions whose rules a run would "
+                f"evaluate stored no verdict: {_named(unchecked)}"
             )
 
-        # A tombstoned record keeps its output and loses its verdict, so rating
-        # only the survivors of such a run reports them at full health.
-        partial = [t for t in tallies if t.unverified]
-        if partial:
-            named = ", ".join(f"{t.action} {t.unverified} of {t.records_total}" for t in partial)
-            problems.append(f"records carrying no verdict: {named}")
-
-        # Per action, not pooled: a pooled average lets a healthy action carry a
-        # broken one. Integer comparison: 29/50 * 100 is 57.99999999999999.
-        under = [t for t in tallies if t.records_passed * 100 < threshold * t.records]
+        # Per action, not pooled, and over every record produced so a tombstoned
+        # one counts against the rate. Exact: 86.4 * 375 is 32400.000000000004,
+        # which fails a run sitting on its bar.
+        bar = Fraction(str(threshold))
+        under = [t for t in tallies if _rate_of(t) < bar]
         if under:
-            named = ", ".join(
-                f"{t.action} {_exact_rate(t.records_passed, t.records)}"
-                f" ({t.records_passed}/{t.records})"
-                for t in under
+            named = _named(
+                [
+                    f"{t.action} {_shortfall_rate(t.records_passed, _denominator(t), threshold)}"
+                    f" ({t.records_passed}/{_denominator(t)})"
+                    for t in under
+                ]
             )
             problems.append(f"pass rate under {threshold:g}%: {named}")
 
@@ -304,11 +341,11 @@ class ExpectReportCommand:
         return [self.action_filter]
 
     @staticmethod
-    def _tally(backend: Any, action: str) -> ActionTally | None:
+    def _read(backend: Any, action: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for relative_path in backend.list_target_files(action):
             records.extend(backend.read_target(action, relative_path))
-        return tally_action(action, records)
+        return records
 
     def _render(self, tallies: list[ActionTally], asked_for: list[str]) -> None:
         self.console.print()
@@ -389,9 +426,30 @@ def _named(names: list[str], limit: int = 5) -> str:
     return f"{', '.join(names[:limit])} and {len(names) - limit} more"
 
 
-def _exact_rate(passed: int, total: int) -> str:
-    """A rate for the gate's message, which must not round a shortfall into the bar."""
-    return "—" if not total else f"{passed * 100 / total:.4g}%"
+def _denominator(tally: ActionTally) -> int:
+    """Every record the action produced, rated or not."""
+    return max(tally.records_total, tally.records)
+
+
+def _rate_of(tally: ActionTally) -> Fraction:
+    total = _denominator(tally)
+    return Fraction(tally.records_passed * 100, total) if total else Fraction(0)
+
+
+def _shortfall_rate(passed: int, total: int, threshold: float) -> str:
+    """A failing rate, rendered precisely enough to read as under the bar it missed.
+
+    94.9% shown as "95%" makes "pass rate under 95%: summarize 95%" contradict
+    itself, so precision widens until the printed value is below the threshold.
+    """
+    if not total:
+        return "—"
+    percent = passed * 100 / total
+    for places in range(7):
+        text = f"{percent:.{places}f}"
+        if float(text) < threshold:
+            return f"{text}%"
+    return f"{percent:.6f}%"
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
