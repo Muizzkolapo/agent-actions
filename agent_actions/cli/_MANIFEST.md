@@ -46,7 +46,7 @@
 | `list_rules` | Function | List the rules each action would run, as a table or JSON. Marks an action whose strategy never evaluates expectations, so inert rules are shown without being claimed to execute. | - |
 | `ExpectReportCommand` | Class | Implementation of the expect report command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Aggregate the verdicts stored for each action and render or emit them. | - |
-| `report` | Function | Report stored expectation verdicts, as a table or JSON. | - |
+| `report` | Function | Report stored expectation verdicts, as a table or JSON; `--fail-under` rates each action separately and exits non-zero when any falls short, or when no verdict was stored at all. | - |
 | `init.py` | Module | Initialize command for the Agent Actions CLI. | `cli`, `configuration`, `errors`, `validation` |
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
