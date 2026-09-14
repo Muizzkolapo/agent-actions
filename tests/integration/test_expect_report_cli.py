@@ -118,7 +118,7 @@ class TestTally:
 def project(tmp_path_factory):
     """A copy of the author fixtures with verdicts already in the store."""
     root = tmp_path_factory.mktemp("expect_report") / "project"
-    shutil.copytree(SOURCE, root)
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
 
     paths = ProjectPathsFactory.create_project_paths(
         WORKFLOW, WORKFLOW, auto_create=True, project_root=root
@@ -195,7 +195,7 @@ def test_an_unknown_action_is_refused_by_name(run):
 
 def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(tmp_path, monkeypatch):
     root = tmp_path / "empty"
-    shutil.copytree(SOURCE, root)
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
     monkeypatch.chdir(root)
     result = CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW])
     assert result.exit_code == 0, result.output
@@ -207,7 +207,7 @@ OTHER = "shared_suite"
 
 def _two_action_project(tmp_path, stored):
     root = tmp_path / "two"
-    shutil.copytree(SOURCE, root)
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
     paths = ProjectPathsFactory.create_project_paths(
         OTHER, OTHER, auto_create=True, project_root=root
     )
@@ -287,7 +287,7 @@ def test_an_action_with_no_stored_verdicts_reports_that_it_has_none(tmp_path, mo
 def test_a_report_does_not_create_a_store_for_a_workflow_that_never_ran(tmp_path, monkeypatch):
     """A read-only question must not write to the project."""
     root = tmp_path / "untouched"
-    shutil.copytree(SOURCE, root)
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
     store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
     monkeypatch.chdir(root)
 
