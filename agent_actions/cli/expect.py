@@ -7,9 +7,7 @@ Surface:
 
 from __future__ import annotations
 
-import contextlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +20,13 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.inspect_base import render_title_row
 from agent_actions.expectations.service import create_expectation_service_from_config
 from agent_actions.expectations.types import Expectation
+from agent_actions.processing.helpers import bypasses_expectations
 from agent_actions.services.workflow_inspector import WorkflowInspector
+
+_INERT_REASON = (
+    "these rules will not run: a tool or HITL action at file granularity is "
+    "processed by a strategy that does not evaluate expectations"
+)
 
 
 def _rule_row(expectation: Expectation) -> dict[str, Any]:
@@ -32,6 +36,7 @@ def _rule_row(expectation: Expectation) -> dict[str, Any]:
         "field": expectation.field,
         "severity": expectation.severity,
         "params": expectation.params,
+        "hint": expectation.hint,
     }
 
 
@@ -48,9 +53,7 @@ class ExpectListCommand:
         inspector = WorkflowInspector(self.agent_name, project_root=project_root)
         # The same preflight `agac run` runs: a workflow it refuses is one
         # whose rules would never execute, and the refusal names the correction.
-        # Preflight narrates to stdout, which under --json is the data stream.
-        with contextlib.redirect_stdout(sys.stderr) if self.as_json else contextlib.nullcontext():
-            inspector.validate(verify_keys=False)
+        inspector.validate(verify_keys=False)
 
         actions = self._actions_to_list(inspector)
         listing = [
@@ -83,10 +86,13 @@ class ExpectListCommand:
         )
         if service is None:
             return None
+        inert = bypasses_expectations(config)
         return {
             "action": name,
             "suite": service.suite.name,
             "repair": service.repair,
+            "executes": not inert,
+            "inert_because": _INERT_REASON if inert else None,
             "rules": [_rule_row(e) for e in service.suite.expectations],
         }
 
@@ -102,14 +108,20 @@ class ExpectListCommand:
         )
 
         if not listing:
-            self.console.print("\n[dim]No action in this workflow declares an expect: block.[/dim]")
+            scope = (
+                f"Action '{self.action_filter}'"
+                if self.action_filter
+                else "No action in this workflow"
+            )
+            verb = "does not declare" if self.action_filter else "declares"
+            self.console.print(f"\n[dim]{scope} {verb} an expect: block.[/dim]")
             return
 
         for entry in listing:
             table = Table(title=_heading(entry), title_justify="left")
-            table.add_column("Rule", style="cyan")
-            table.add_column("Type")
-            table.add_column("Field", style="magenta")
+            table.add_column("Rule", style="cyan", overflow="fold")
+            table.add_column("Type", overflow="fold")
+            table.add_column("Field", style="magenta", overflow="fold")
             table.add_column("Severity", justify="center")
             table.add_column("Params", style="dim", overflow="fold")
 
@@ -134,6 +146,8 @@ def _heading(entry: dict[str, Any], suffix: str | None = None) -> Text:
     heading = Text(entry["action"], style="bold cyan")
     detail = suffix or f"suite {entry['suite']}"
     heading.append(f"  {detail} · repair {entry['repair']}", style="dim")
+    if entry.get("inert_because"):
+        heading.append(f"\n  ⚠ {entry['inert_because']}", style="yellow")
     return heading
 
 
@@ -175,8 +189,8 @@ def expect() -> None:
 @click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
 @click.option("--action", default=None, help="Limit the listing to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the listing as JSON.")
-@requires_project
 @handles_user_errors("expect list")
+@requires_project
 def list_rules(
     agent_opt: str,
     action: str | None,
