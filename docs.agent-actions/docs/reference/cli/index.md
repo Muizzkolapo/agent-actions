@@ -136,6 +136,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`dispositions`](./dispositions) | Inspect record-level processing dispositions per action |
+| [`expect`](./expect) | Show the expectation rules each action would run |
 | [`retry`](./retry) | Retry failed/exhausted records from a specific action forward |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
