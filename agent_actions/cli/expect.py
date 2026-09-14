@@ -261,8 +261,8 @@ class ExpectReportCommand:
         unchecked = [name for name in declaring if name not in rated]
         if unchecked:
             problems.append(
-                f"no verdict stored for {', '.join(unchecked)} — "
-                f"declared expectations that were never checked"
+                f"{len(unchecked)} of {len(declaring)} actions declaring expectations stored "
+                f"no verdict: {_named(unchecked)}"
             )
 
         # A tombstoned record keeps its output and loses its verdict, so rating
@@ -380,6 +380,13 @@ def _format_percent(percent: float) -> str:
 
 def _rate(value: float | None) -> str:
     return "—" if value is None else _format_percent(value * 100)
+
+
+def _named(names: list[str], limit: int = 5) -> str:
+    """Name the first few and count the rest; never truncate without saying so."""
+    if len(names) <= limit:
+        return ", ".join(names)
+    return f"{', '.join(names[:limit])} and {len(names) - limit} more"
 
 
 def _exact_rate(passed: int, total: int) -> str:
