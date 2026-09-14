@@ -68,7 +68,7 @@ def test_the_listing_matches_the_suite_the_runner_builds(author):
     result = _list(author, "--json")
     assert result.exit_code == 0, result.output
 
-    listed = {entry["action"]: entry for entry in json.loads(result.output)["actions"]}
+    listed = {entry["action"]: entry for entry in json.loads(result.stdout)["actions"]}
     expected = _runner_rules(author)
 
     assert set(listed) == set(expected), f"{author}: actions listed do not match the runner's"
@@ -96,15 +96,15 @@ def test_a_bare_block_lists_the_rules_of_the_actions_own_schema():
     result = _list("field_scoped_rules", "--json")
     assert result.exit_code == 0, result.output
 
-    actions = json.loads(result.output)["actions"]
+    actions = json.loads(result.stdout)["actions"]
     assert actions, "a workflow whose rules live on its schema fields listed no rules"
     assert any(entry["rules"] for entry in actions)
 
 
 def test_an_action_filter_narrows_the_listing():
-    everything = json.loads(_list("inline_rules", "--json").output)["actions"]
+    everything = json.loads(_list("inline_rules", "--json").stdout)["actions"]
     one = everything[0]["action"]
-    narrowed = json.loads(_list("inline_rules", "--action", one, "--json").output)["actions"]
+    narrowed = json.loads(_list("inline_rules", "--action", one, "--json").stdout)["actions"]
     assert [entry["action"] for entry in narrowed] == [one]
 
 
