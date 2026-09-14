@@ -16,6 +16,7 @@ from typing import Any
 import click
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.inspect_base import render_title_row
@@ -105,10 +106,7 @@ class ExpectListCommand:
             return
 
         for entry in listing:
-            table = Table(
-                title=f"{entry['action']}  [dim]suite {entry['suite']} · repair {entry['repair']}[/dim]",
-                title_justify="left",
-            )
+            table = Table(title=_heading(entry), title_justify="left")
             table.add_column("Rule", style="cyan")
             table.add_column("Type")
             table.add_column("Field", style="magenta")
@@ -117,11 +115,11 @@ class ExpectListCommand:
 
             for rule in entry["rules"]:
                 table.add_row(
-                    rule["id"],
-                    rule["type"],
-                    _field_label(rule["field"]),
-                    _severity_label(rule["severity"]),
-                    _params_label(rule["params"]),
+                    Text(rule["id"]),
+                    Text(rule["type"]),
+                    _field_cell(rule["field"]),
+                    _severity_cell(rule["severity"]),
+                    _params_cell(rule["params"]),
                 )
 
             self.console.print()
@@ -129,30 +127,36 @@ class ExpectListCommand:
                 self.console.print(table)
             else:
                 # A rule-free block is still a contract: conform to the schema.
-                self.console.print(
-                    f"[cyan]{entry['action']}[/cyan] "
-                    f"[dim]no rules — the schema is the contract, "
-                    f"repair {entry['repair']}[/dim]"
-                )
+                self.console.print(_heading(entry, suffix="no rules — the schema is the contract"))
 
 
-def _field_label(field: Any) -> str:
+def _heading(entry: dict[str, Any], suffix: str | None = None) -> Text:
+    heading = Text(entry["action"], style="bold cyan")
+    detail = suffix or f"suite {entry['suite']}"
+    heading.append(f"  {detail} · repair {entry['repair']}", style="dim")
+    return heading
+
+
+# Every cell below carries user YAML, where a square bracket is ordinary. Text
+# renders it verbatim; a markup string would drop whatever parsed as a tag, and
+# a listing that quietly omits part of a rule is worse than no listing.
+def _field_cell(field: Any) -> Text:
     if field is None:
-        return "[dim]<record>[/dim]"
+        return Text("<record>", style="dim")
     if isinstance(field, list):
-        return ", ".join(str(f) for f in field)
-    return str(field)
+        return Text(", ".join(str(f) for f in field))
+    return Text(str(field))
 
 
-def _severity_label(severity: str) -> str:
+def _severity_cell(severity: str) -> Text:
     colour = {"error": "red", "warn": "yellow", "info": "blue"}.get(severity, "white")
-    return f"[{colour}]{severity}[/{colour}]"
+    return Text(severity, style=colour)
 
 
-def _params_label(params: dict[str, Any]) -> str:
+def _params_cell(params: dict[str, Any]) -> Text:
     if not params:
-        return "—"
-    return ", ".join(f"{key}={value!r}" for key, value in sorted(params.items()))
+        return Text("—", style="dim")
+    return Text(", ".join(f"{key}={value!r}" for key, value in sorted(params.items())))
 
 
 @click.group(invoke_without_command=False)
