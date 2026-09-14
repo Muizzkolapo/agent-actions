@@ -148,7 +148,7 @@ def file_granularity_tool(tmp_path, monkeypatch):
     import shutil
 
     root = tmp_path / "inert"
-    shutil.copytree(PROJECT, root)
+    shutil.copytree(PROJECT, root, ignore=shutil.ignore_patterns("logs"))
     cfg = root / "agent_workflow" / "tool_action" / "agent_config" / "tool_action.yml"
     cfg.write_text(cfg.read_text().replace("granularity: Record", "granularity: File"))
     monkeypatch.chdir(root)
