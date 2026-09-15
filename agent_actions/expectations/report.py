@@ -54,14 +54,22 @@ class ActionTally:
         return max(self.records_total - self.records, 0)
 
 
-def _produced_output(record: dict[str, Any], action: str) -> bool:
-    """Whether *action* ran for this record at all.
+# A record that ran and failed is stored exactly like one that was skipped
+# before the action — a null namespace — and only its state tells them apart.
+# Reading the shape alone drops failures out of the denominator, which rates an
+# action over its survivors. Guard skips are reset to `active` on read, so these
+# two are the whole of "ran, produced nothing".
+_RAN_WITHOUT_OUTPUT = frozenset({"failed", "exhausted"})
 
-    A guard-skipped record carries a null namespace: the action did not run, so
-    its missing verdict is not something that went unchecked.
-    """
+
+def _produced_output(record: dict[str, Any], action: str) -> bool:
+    """Whether *action* ran for this record at all."""
     content = record.get("content")
-    return isinstance(content, dict) and isinstance(content.get(action), dict)
+    if not isinstance(content, dict) or action not in content:
+        return False
+    if isinstance(content[action], dict):
+        return True
+    return str(record.get("_state") or "") in _RAN_WITHOUT_OUTPUT
 
 
 def output_record_count(records: list[dict[str, Any]], action: str) -> int:
