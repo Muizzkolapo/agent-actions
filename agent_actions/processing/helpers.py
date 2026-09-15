@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
+from agent_actions.utils.constants import MODEL_VENDOR_KEY, SCHEMA_KEY, VERDICT_KEY
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -81,6 +81,20 @@ def run_dynamic_agent(
 
 def _is_tool_action(agent_config: dict[str, Any]) -> bool:
     return agent_config.get("kind") == "tool" or agent_config.get("model_vendor") == "tool"
+
+
+def bypasses_expectations(agent_config: dict[str, Any]) -> bool:
+    """True when the action's strategy never runs its ``expect:`` block.
+
+    File-granularity tool and HITL actions are routed to strategies that do not
+    compose an expectation service, so rules declared on them are inert. HITL is
+    always file granularity.
+    """
+    kind = str(agent_config.get("kind") or "").lower()
+    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+    granularity = str(agent_config.get("granularity") or "").lower()
+    synchronous = kind in ("tool", "hitl") or vendor in ("tool", "hitl")
+    return granularity == "file" and synchronous
 
 
 def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:

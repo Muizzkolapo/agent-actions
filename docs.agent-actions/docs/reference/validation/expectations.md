@@ -90,6 +90,12 @@ Every entry in `expectations:` (or in a suite file) shares this shape:
 
 Those six keys are the whole vocabulary: anything else at the top level of a rule is refused by name, so a mistyped `sevrity:` is an error at load rather than an argument the type does not recognise. Type-specific arguments always go under `params:`.
 
+Because rules arrive by three routes, which ones an action ends up with is not always obvious from its own block. [`agac expect list`](../cli/expect.md) resolves them the way the runner does and prints what would execute:
+
+```bash
+agac expect list -a my_workflow --action summarize
+```
+
 ## Deterministic expectation types
 
 | Type | Params | Checks |
@@ -570,7 +576,8 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 - **Repair runs in both modes, but it counts iterations differently.** Online, each record loops on its own: one record can take three generations while its neighbour passes first time. Batch loops the whole set — every round re-submits the records still failing, so `max_iterations` bounds the number of *batches*, not the number of tries any single record gets. A record that fails in round one and passes in round two has had two generations either way; what differs is that a batch round waits for the slowest record in it.
 - **A judged `context:` ref is online only.** Batch validates from the stored result and has no `llm_context`, so a judged rule with `context:` refs is refused at preflight rather than failing every record on a missing context source.
 - **Record granularity only for repair.** One file-granularity call produces the whole file, so a single failing record would regenerate all of them; preflight refuses `repair` on a `granularity: file` action. Observe mode works there — a response holding many records has each one validated and annotated independently, the same as an action whose LLM returns a JSON array.
-- **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight; observe mode works normally.
+- **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight. Observe mode works at record granularity.
+- **A tool or HITL action at file granularity never runs its rules.** Those actions are processed by a strategy that does not evaluate expectations, and preflight does not refuse the combination, so an `expect:` block on one is silently inert. `kind: hitl` is always file granularity, so this is true of every HITL action. [`agac expect list`](../cli/expect.md#rules-that-will-not-run) marks such an action rather than implying its rules run.
 - **The prompt trace shows the original prompt.** A record repaired on iteration 2 or later has a stored trace pairing the *first* prompt with the *final* response, and that response carries the attached verdict.
 - **`context:` refs are single-level.** `action.field` only — no nested paths into a wildcard element (`action.items[*].text` is not valid inside a `context:` ref).
 - **Budget is per run, not persisted.** `judge_budget` resets each time the workflow runs; it does not track spend across separate `agac run` invocations.

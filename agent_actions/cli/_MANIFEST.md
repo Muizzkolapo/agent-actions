@@ -39,6 +39,11 @@
 | `example` | Function | Example command group. | - |
 | `example_list` | Function | List available example projects from GitHub. | - |
 | `example_install` | Function | Install an example project. | - |
+| `expect.py` | Module | Inspect the expectation rules an action would run. | `cli`, `expectations`, `validation` |
+| `ExpectListCommand` | Class | Implementation of the expect list command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Resolve each action's suite through the runner's own loader and print it. | - |
+| `expect` | Function | Expect command group. | - |
+| `list_rules` | Function | List the rules each action would run, as a table or JSON. Marks an action whose strategy never evaluates expectations, so inert rules are shown without being claimed to execute. | - |
 | `init.py` | Module | Initialize command for the Agent Actions CLI. | `cli`, `configuration`, `errors`, `validation` |
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
