@@ -78,7 +78,7 @@ class RunCommandArgs(BaseModel):
     )
     max_records: int | None = Field(
         None,
-        description="Cap every action at this many records, whatever the config sets",
+        description="Cap each action at this many records per input file, whatever the config sets",
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")

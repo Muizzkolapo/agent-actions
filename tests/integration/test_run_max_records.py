@@ -112,20 +112,31 @@ def test_the_cap_does_not_overwrite_a_configured_limit(tmp_path, monkeypatch):
     assert configs["resummarize"]["record_limit"] == 100
 
 
+def _options_section(help_text):
+    """Help below the Options heading — the examples above it also name the flag."""
+    return help_text.split("Options:", 1)[1]
+
+
 class TestTheFlag:
     def test_it_is_offered_on_run(self):
         result = CliRunner().invoke(cli, ["run", "--help"])
-        assert "--max-records" in result.output
+
+        assert "--max-records" in _options_section(result.output), result.output
 
     @pytest.mark.parametrize("value", ["0", "-1", "nonsense", "2.5"])
     def test_a_value_that_cannot_cap_anything_is_refused(self, project, value):
+        """Refused for being out of range, not for the option being unknown —
+        click answers both with exit 2 and a message naming the flag."""
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--max-records", value])
+
         assert result.exit_code == 2, result.output
+        assert "No such option" not in result.output, result.output
 
     def test_it_is_not_required(self):
         result = CliRunner().invoke(cli, ["run", "--help"])
-        assert "--max-records" in result.output
-        assert "[required]" not in result.output.split("--max-records")[1][:120]
+        after = _options_section(result.output).split("--max-records")[1][:160]
+
+        assert "[required]" not in after
 
 
 TOOL_WORKFLOW = "tool_action"
@@ -183,13 +194,34 @@ class TestItActuallyCapsARun:
         assert _processed(project) == 6
 
     def test_the_capped_run_says_so(self, project):
+        """The phrase, not just the flag name — an error message mentioning the
+        flag would otherwise satisfy this."""
         _stage(project, 6)
 
         result = CliRunner().invoke(
             cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
         )
 
-        assert "--max-records" in result.output, result.output
+        assert result.exit_code == 0, result.output
+        assert "--max-records=2 caps this action" in result.output, result.output
+
+    def test_the_cap_counts_per_input_file(self, project):
+        """The same unit record_limit uses. Two files of six under a cap of two
+        is four records, not two — and a single-file fixture cannot tell those apart."""
+        staging = project / "agent_workflow" / TOOL_WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        for index in range(2):
+            (staging / f"pages{index}.json").write_text(
+                json.dumps([{"page_content": f"file {index} page {i}"} for i in range(6)])
+            )
+
+        result = CliRunner().invoke(
+            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert _processed(project) == 4
 
 
 class TestARunThatAlreadyCompleted:
