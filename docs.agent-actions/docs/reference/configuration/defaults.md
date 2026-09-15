@@ -330,7 +330,7 @@ defaults:
   # record_limit and file_limit omitted = unlimited
 ```
 
-To cap a run without editing the project, set `AGAC_MAX_RECORDS`. It applies to
+To cap a run without editing the project, pass [`--max-records`](../cli/run#running-a-project-smaller-than-it-is), or set `AGAC_MAX_RECORDS` where a variable suits better — the flag wins if both are set. It applies to
 every action, including those that configure no limit, which is what makes it
 usable against a project you do not own:
 

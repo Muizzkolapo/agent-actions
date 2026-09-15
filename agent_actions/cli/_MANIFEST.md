@@ -70,7 +70,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
-| `run.py` | Module | Run command for the Agent Actions CLI. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
+| `run.py` | Module | Run command for the Agent Actions CLI. `--max-records` caps every action for the run, carried on the runtime config and stamped onto each action config so the per-action limit resolver reads it. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
