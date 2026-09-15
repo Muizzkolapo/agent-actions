@@ -21,7 +21,13 @@ def render():
 
 
 def _tally(rules=(), records=3, passed=3):
-    return ActionTally(action="summarize", records=records, records_passed=passed, rules=rules)
+    return ActionTally(
+        action="summarize",
+        records=records,
+        records_passed=passed,
+        rules=rules,
+        records_total=records,
+    )
 
 
 def test_an_action_with_no_rules_says_so_instead_of_drawing_an_empty_table(render):

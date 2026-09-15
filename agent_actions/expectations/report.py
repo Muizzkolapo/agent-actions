@@ -37,7 +37,7 @@ class ActionTally:
     records: int
     records_passed: int
     rules: tuple[RuleTally, ...]
-    records_total: int = 0
+    records_total: int
 
     @property
     def pass_rate(self) -> float | None:
