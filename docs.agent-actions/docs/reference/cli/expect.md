@@ -176,7 +176,7 @@ Exit code 0 when every action clears the bar, non-zero otherwise. A rate exactly
 |-------|--------------|
 | An action's pass rate is under the threshold | The thing you asked about |
 | An action whose rules a run would evaluate stored no verdict | They were never checked, so nothing can be gated on them |
-| An action produced records carrying no verdict | Rating only the survivors of a run that tombstoned records reports them at full health |
+| An action produced records carrying no verdict | Rating only the survivors of a run reports them at full health. A record the action ran on and failed carries no output, like a skipped one, and is told apart by its state |
 
 ### What the gate leaves alone
 
@@ -186,11 +186,11 @@ An action is excluded when no run could have written a verdict for it, because n
 |----------|-----|
 | `is_operational: false` | Switching an action off is routine config; it must not make CI unpassable |
 | A tool or HITL action at file granularity | Its [rules never run](#rules-that-will-not-run) |
-| Skipped for every record that reached it | The action did not run, so its missing verdict is not an omission |
+| Skipped or filtered for every record that reached it | The action did not run, so its missing verdict is not an omission. A guard's `on_false: filter` drops the record outright, leaving the action no stored row at all; the disposition is what says a run reached it |
 
 An excluded action is also not gated on verdicts a previous run left behind — otherwise deleting the store would be the only way back to green.
 
-If every declaring action is excluded there is nothing to gate, and the command exits 0. A scope where no action declares an `expect:` block at all is refused outright — nothing there can ever be checked.
+If every declaring action is excluded there is nothing to gate, and the command exits 0 — saying so on stderr, because an exit code alone reads as "checked and passed". A scope where no action declares an `expect:` block at all is refused outright — nothing there can ever be checked.
 
 A threshold that is not a real number is a usage error.
 

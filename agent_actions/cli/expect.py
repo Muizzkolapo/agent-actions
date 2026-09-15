@@ -31,6 +31,7 @@ from agent_actions.expectations.types import Expectation
 from agent_actions.processing.helpers import bypasses_expectations
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.storage import get_storage_backend
+from agent_actions.storage.backend import DISPOSITION_FILTERED
 
 _INERT_REASON = (
     "these rules will not run: a tool or HITL action at file granularity is "
@@ -216,6 +217,7 @@ class ExpectReportCommand:
         tallies: list[ActionTally] = []
         produced: dict[str, int] = {}
         stored: dict[str, int] = {}
+        filtered: set[str] = set()
         if store.exists():
             backend = get_storage_backend(
                 workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
@@ -226,6 +228,11 @@ class ExpectReportCommand:
                     records = self._read(backend, name)
                     stored[name] = len(records)
                     produced[name] = output_record_count(records, name)
+                    # on_false: filter drops the record rather than storing a null
+                    # namespace, so a fully filtered action leaves no row at all —
+                    # only the disposition says a run reached it.
+                    if not records and backend.has_disposition(name, DISPOSITION_FILTERED):
+                        filtered.add(name)
                     tally = tally_action(name, records)
                     if tally is not None:
                         tallies.append(tally)
@@ -244,7 +251,7 @@ class ExpectReportCommand:
 
         if self.fail_under is not None:
             declared = [a for a in actions if inspector.action_configs[a].get("expect") is not None]
-            gatable = self._gatable(inspector, actions, produced, stored)
+            gatable = self._gatable(inspector, actions, produced, stored, filtered)
             self._gate(tallies, self.fail_under, gatable, declared)
         return tallies
 
@@ -254,6 +261,7 @@ class ExpectReportCommand:
         actions: list[str],
         produced: dict[str, int],
         stored: dict[str, int],
+        filtered: set[str],
     ) -> list[str]:
         """The actions whose missing verdict would mean something went unchecked.
 
@@ -270,9 +278,11 @@ class ExpectReportCommand:
                 continue
             if name not in operational:
                 continue
-            # Records reached it and it ran for none of them: every one was
-            # skipped before it, so its missing verdict is not an omission.
-            # No records at all is the opposite — that is a run that never happened.
+            # A run reached it and it ran for no record — every one was skipped
+            # or filtered before it — so its missing verdict is not an omission.
+            # No rows and no disposition is the opposite: a run that never happened.
+            if name in filtered:
+                continue
             if stored.get(name, 0) > 0 and produced.get(name, 0) == 0:
                 continue
             gatable.append(name)
@@ -304,8 +314,19 @@ class ExpectReportCommand:
                 f"checked: no action declares an expect: block."
             )
 
-        # Both arms below are scoped to gatable, so a scope whose declaring
-        # actions were all excluded reports nothing rather than failing.
+        # Excluded for reasons no threshold can address. Nothing to gate is not a
+        # failure, but it must be said: the exit code alone reads as "checked and
+        # passed" to whoever wired it into CI.
+        if not gatable:
+            excluded = [name for name in declared if name not in gatable]
+            click.echo(
+                f"Nothing gated in {scope}: {_named(excluded)} "
+                f"{'was' if len(excluded) == 1 else 'were'} excluded — switched off, "
+                f"processed by a strategy that never evaluates rules, or run for no record.",
+                err=True,
+            )
+            return
+
         rated = {tally.action for tally in tallies}
         unchecked = [name for name in gatable if name not in rated]
         if unchecked:
@@ -472,7 +493,8 @@ def _shortfall_rate(passed: int, total: int, threshold: float) -> str:
         text = f"{percent:.{places}f}"
         if float(text) < threshold:
             return f"{text}%"
-    return f"{percent:.6f}%"
+    # Below any precision that would still read as under the bar.
+    return f"<{threshold:g}%"
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
