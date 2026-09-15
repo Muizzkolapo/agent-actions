@@ -123,8 +123,10 @@ def test_a_pass_rate_exactly_at_the_threshold_is_not_under_it(gate):
 
 
 def test_the_failure_names_the_rate_that_fell_short(gate):
+    """On stderr and in full: the report table prints the same percentage to
+    stdout, so a substring check there passes whatever the gate computed."""
     result = gate([True, False, False], "--fail-under", "90")
-    assert "33" in result.output, result.output
+    assert "summarize 33% (1/3)" in result.stderr, result.stderr
 
 
 def test_a_store_with_no_verdicts_fails_the_gate(gate):
@@ -518,3 +520,22 @@ def test_the_gate_message_states_the_actions_own_rate(multi_gate):
     )
     assert result.exit_code != 0
     assert "summarize 33% (1/3)" in result.stderr, result.stderr
+
+
+def test_a_scope_with_nothing_to_gate_says_so_rather_than_exiting_quietly(tmp_path, monkeypatch):
+    """Exit 0 alone reads as "checked and passed" to whoever wired it into CI."""
+    root = _store(tmp_path, "quiet", [("summarize", [_record(True)] * 2)], mutate=_both_disabled)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "50"])
+    assert result.exit_code == 0, result.stderr
+    assert "Nothing gated" in result.stderr, result.stderr
+    assert "summarize" in result.stderr
+
+
+def test_a_shortfall_too_small_to_print_still_reads_as_under_the_bar():
+    """The fallback must not print the very number it failed against."""
+    from agent_actions.cli.expect import _shortfall_rate
+
+    text = _shortfall_rate(999999999, 1000000000, 100)
+    assert text != "100%", text
+    assert float(text.strip("<%")) <= 100
