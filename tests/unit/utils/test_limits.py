@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_actions.utils.limits import effective_record_limit
+from agent_actions.utils.limits import MAX_RECORDS_KEY, effective_record_limit
 
 
 class TestEffectiveRecordLimit:
@@ -58,3 +58,55 @@ class TestTheEnvironmentCeiling:
         assert any("AGAC_MAX_RECORDS" in r.message for r in caplog.records), (
             "a truncated run must announce itself"
         )
+
+
+class TestTheRunCeiling:
+    """A cap asked for on the command line, carried on the action's config."""
+
+    def test_it_caps_a_larger_configured_limit(self):
+        assert effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: 2}) == 2
+
+    def test_it_does_not_raise_a_smaller_configured_limit(self):
+        assert effective_record_limit({"record_limit": 3, MAX_RECORDS_KEY: 50}) == 3
+
+    def test_it_applies_where_the_config_sets_no_limit(self):
+        assert effective_record_limit({MAX_RECORDS_KEY: 2}) == 2
+
+    def test_it_wins_over_the_environment_variable(self, monkeypatch):
+        """Typed for this run, so more specific than ambient configuration."""
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "50")
+
+        assert effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: 2}) == 2
+
+    def test_it_wins_even_when_the_variable_is_stricter(self, monkeypatch):
+        """Precedence is by source, not by which number is smaller — otherwise
+        ambient state could silently overrule what was asked for."""
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
+
+        assert effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: 10}) == 10
+
+    def test_an_absent_run_ceiling_leaves_the_variable_in_charge(self, monkeypatch):
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
+
+        assert effective_record_limit({"record_limit": 23}) == 2
+
+    @pytest.mark.parametrize("value", [0, -1, "2", 2.5, True])
+    def test_a_value_that_cannot_be_a_ceiling_is_refused_loudly(self, value):
+        with pytest.raises(ValueError, match="max-records"):
+            effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: value})
+
+    def test_a_null_cap_reads_as_no_cap(self, monkeypatch):
+        """An absent key and an explicit None are the same lookup, so a null
+        cannot be refused without also refusing every run that asked for none."""
+        monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+
+        assert effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: None}) == 23
+
+    def test_an_active_ceiling_names_the_flag_not_the_variable(self, caplog):
+        """The message has to name what actually capped the run."""
+        with caplog.at_level("WARNING"):
+            effective_record_limit({"record_limit": 23, MAX_RECORDS_KEY: 2})
+
+        said = " ".join(r.message for r in caplog.records)
+        assert "--max-records" in said, said
+        assert "AGAC_MAX_RECORDS" not in said, said
