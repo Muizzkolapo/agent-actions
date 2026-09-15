@@ -4,6 +4,7 @@ Exercised through the loader the run command uses, so what is asserted is the
 config the workflow engine actually receives.
 """
 
+import json
 import shutil
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from click.testing import CliRunner
 from agent_actions.cli.main import cli
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.storage import get_storage_backend
 from agent_actions.utils.limits import MAX_RECORDS_KEY, effective_record_limit
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -80,3 +82,67 @@ class TestTheFlag:
         result = CliRunner().invoke(cli, ["run", "--help"])
         assert "--max-records" in result.output
         assert "[required]" not in result.output.split("--max-records")[1][:120]
+
+
+TOOL_WORKFLOW = "tool_action"
+
+
+def _stage(project, count):
+    """Put *count* records where the tool workflow will read them."""
+    staging = project / "agent_workflow" / TOOL_WORKFLOW / "agent_io" / "staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    (staging / "pages.json").write_text(
+        json.dumps([{"page_content": f"page number {i}"} for i in range(count)])
+    )
+
+
+def _processed(project):
+    """How many records the action actually produced, read from the store."""
+    paths = ProjectPathsFactory.create_project_paths(
+        TOOL_WORKFLOW, TOOL_WORKFLOW, auto_create=False, project_root=project
+    )
+    backend = get_storage_backend(
+        workflow_path=str(paths.io_dir.parent), workflow_name=TOOL_WORKFLOW
+    )
+    backend.initialize()
+    try:
+        return sum(
+            len(backend.read_target("flatten", path))
+            for path in backend.list_target_files("flatten")
+        )
+    finally:
+        backend.close()
+
+
+class TestItActuallyCapsARun:
+    """Driven through the command, on a workflow whose action is a local tool —
+    a config key that is set but never reaches the run would pass everything else.
+    """
+
+    def test_the_cap_reduces_the_records_processed(self, project):
+        _stage(project, 6)
+
+        result = CliRunner().invoke(
+            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert _processed(project) == 2
+
+    def test_without_the_cap_every_record_is_processed(self, project):
+        """The control: otherwise a cap that did nothing would look the same."""
+        _stage(project, 6)
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert _processed(project) == 6
+
+    def test_the_capped_run_says_so(self, project):
+        _stage(project, 6)
+
+        result = CliRunner().invoke(
+            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+        )
+
+        assert "--max-records" in result.output, result.output
