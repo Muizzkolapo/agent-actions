@@ -40,8 +40,28 @@ agac run -a my_workflow --execution-mode parallel
 | `--use-tools` | Enable tool usage for actions |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
+| `--max-records N` | Cap every action at N records, whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_MAX_RECORDS`. Each capped action says so, since a truncated run otherwise looks complete |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
+
+## Running a project smaller than it is
+
+A workflow's record limits live in the project's config, per action. To run it cheaply from
+outside — a smoke check, a quick pass over a real dataset, one action under a debugger —
+cap the whole run from the command line:
+
+```bash
+agac run -a my_workflow --max-records 2
+```
+
+The cap applies to **every** action, including those that configure no `record_limit`, which
+matters more than it sounds: a workflow that fans out across dozens of actions with repair
+loops turns a small configured limit into a very large number of model calls.
+
+Each action it caps logs a line naming the flag. `AGAC_MAX_RECORDS` does the same job from
+the environment; when both are set the flag wins, because it was typed for this run.
+
+[`agac retry`](./retry) takes the same flag.
 
 ## Parallel Execution
 
