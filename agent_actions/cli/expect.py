@@ -18,10 +18,13 @@ from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.inspect_base import render_title_row
+from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.expectations.report import ActionTally, tally_action
 from agent_actions.expectations.service import create_expectation_service_from_config
 from agent_actions.expectations.types import Expectation
 from agent_actions.processing.helpers import bypasses_expectations
 from agent_actions.services.workflow_inspector import WorkflowInspector
+from agent_actions.storage import get_storage_backend
 
 _INERT_REASON = (
     "these rules will not run: a tool or HITL action at file granularity is "
@@ -173,6 +176,187 @@ def _params_cell(params: dict[str, Any]) -> Text:
     return Text(", ".join(f"{key}={value!r}" for key, value in sorted(params.items())))
 
 
+class ExpectReportCommand:
+    """Aggregate the verdicts a run stored, per action and per rule."""
+
+    def __init__(self, agent: str, action: str | None, as_json: bool) -> None:
+        self.agent_name = Path(agent).stem
+        self.action_filter = action
+        self.as_json = as_json
+        self.console = Console()
+
+    def execute(self, project_root: Path | None = None) -> list[ActionTally]:
+        inspector = WorkflowInspector(self.agent_name, project_root=project_root)
+        # Deliberately load() rather than validate(): a report reads what has
+        # already run, and a config that no longer passes preflight is a reason
+        # to want the report, not a reason to refuse it.
+        inspector.load()
+
+        actions = self._actions_to_report(inspector)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.agent_name, self.agent_name, auto_create=False, project_root=project_root
+        )
+        # Reading must not write: initializing a backend creates the database and
+        # migrates its schema, so a question about a workflow that never ran would
+        # leave a store behind.
+        store = paths.io_dir / "store" / f"{self.agent_name}.db"
+        tallies: list[ActionTally] = []
+        if store.exists():
+            backend = get_storage_backend(
+                workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
+            )
+            backend.initialize()
+            try:
+                tallies = [
+                    t for t in (self._tally(backend, name) for name in actions) if t is not None
+                ]
+            finally:
+                backend.close()
+
+        if self.as_json:
+            click.echo(
+                json.dumps(
+                    {"workflow": self.agent_name, "actions": [_tally_row(t) for t in tallies]},
+                    indent=2,
+                )
+            )
+        else:
+            self._render(tallies, actions)
+        return tallies
+
+    def _actions_to_report(self, inspector: WorkflowInspector) -> list[str]:
+        configured = inspector.action_configs
+        if self.action_filter is None:
+            # execution_order holds only operational actions. A report reads what
+            # already ran, so disabling an action must not hide the verdicts it
+            # already wrote.
+            ordered = [name for name in inspector.execution_order if name in configured]
+            return list(dict.fromkeys(ordered + list(configured)))
+        if self.action_filter not in configured:
+            raise click.ClickException(
+                f"Action '{self.action_filter}' is not in workflow '{self.agent_name}'. "
+                f"Actions: {', '.join(sorted(configured))}"
+            )
+        return [self.action_filter]
+
+    @staticmethod
+    def _tally(backend: Any, action: str) -> ActionTally | None:
+        records: list[dict[str, Any]] = []
+        for relative_path in backend.list_target_files(action):
+            records.extend(backend.read_target(action, relative_path))
+        return tally_action(action, records)
+
+    def _render(self, tallies: list[ActionTally], asked_for: list[str]) -> None:
+        self.console.print()
+        records = sum(t.records for t in tallies)
+        render_title_row(
+            self.console,
+            self.agent_name,
+            section="expectation verdicts",
+            right_meta=f"{records} record{'s' if records != 1 else ''}"
+            f" across {len(tallies)} action{'s' if len(tallies) != 1 else ''}",
+        )
+
+        if not tallies:
+            named = ", ".join(asked_for) if len(asked_for) <= 4 else f"{len(asked_for)} actions"
+            self.console.print(
+                f"\n[dim]No stored verdict for {named}. "
+                f"Expectations are written by a run; run the workflow first.[/dim]"
+            )
+            return
+
+        for tally in tallies:
+            self.console.print()
+            if not tally.rules:
+                # A rule-free expect: block still gates on the schema, so its
+                # records have a verdict but nothing per-rule to tabulate.
+                self.console.print(
+                    _report_heading(tally, suffix="no rules — the schema is the contract")
+                )
+                continue
+
+            table = Table(title=_report_heading(tally), title_justify="left")
+            table.add_column("Rule", style="cyan")
+            table.add_column("Type")
+            table.add_column("Severity", justify="center")
+            table.add_column("Passed", justify="right", style="green")
+            table.add_column("Failed", justify="right", style="red")
+            table.add_column("Skipped", justify="right", style="yellow")
+            table.add_column("Pass rate", justify="right")
+
+            for rule in tally.rules:
+                table.add_row(
+                    Text(rule.id),
+                    Text(rule.type),
+                    _severity_cell(rule.severity),
+                    Text(str(rule.passed)),
+                    Text(str(rule.failed)),
+                    Text(str(rule.skipped)),
+                    Text(_rate(rule.pass_rate)),
+                )
+
+            self.console.print(table)
+
+
+def _format_percent(percent: float) -> str:
+    """Render a percentage, never showing an imperfect result as 0% or 100%.
+
+    Widens precision until the rendered value differs from the perfect one it
+    is near; `.1f` cannot represent 99.96, and a rate that reads 100% when four
+    records in ten thousand failed is the reading this report exists to prevent.
+    """
+    if percent in (0.0, 100.0):
+        return f"{percent:.0f}%"
+    for places in range(7):
+        text = f"{percent:.{places}f}"
+        if float(text) not in (0.0, 100.0):
+            return f"{text}%"
+    return "<100%" if percent > 50 else ">0%"
+
+
+def _rate(value: float | None) -> str:
+    return "—" if value is None else _format_percent(value * 100)
+
+
+def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
+    heading = Text(tally.action, style="bold cyan")
+    detail = f"{tally.records_passed}/{tally.records} records passed · {_rate(tally.pass_rate)}"
+    if suffix:
+        detail = f"{detail} · {suffix}"
+    heading.append(f"  {detail}", style="dim")
+    if tally.unverified:
+        # The rate above is over rated records only; without this the survivors
+        # of a run that tombstoned records would read as full health.
+        heading.append(
+            f"  ⚠ {tally.unverified} record{'s' if tally.unverified != 1 else ''} carried no verdict",
+            style="yellow",
+        )
+    return heading
+
+
+def _tally_row(tally: ActionTally) -> dict[str, Any]:
+    return {
+        "action": tally.action,
+        "records": tally.records,
+        "records_passed": tally.records_passed,
+        "records_total": tally.records_total,
+        "unverified": tally.unverified,
+        "pass_rate": tally.pass_rate,
+        "rules": [
+            {
+                "id": rule.id,
+                "type": rule.type,
+                "severity": rule.severity,
+                "passed": rule.passed,
+                "failed": rule.failed,
+                "skipped": rule.skipped,
+                "pass_rate": rule.pass_rate,
+            }
+            for rule in tally.rules
+        ],
+    }
+
+
 @click.group(invoke_without_command=False)
 def expect() -> None:
     """Inspect expectation rules and verdicts.
@@ -182,6 +366,7 @@ def expect() -> None:
         agac expect list -a my_workflow
         agac expect list -a my_workflow --action extract_facts
         agac expect list -a my_workflow --json
+        agac expect report -a my_workflow
     """
 
 
@@ -208,4 +393,26 @@ def list_rules(
     )
 
 
-__all__ = ["expect", "ExpectListCommand"]
+@expect.command("report")
+@click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
+@click.option("--action", default=None, help="Limit the report to one action.")
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+@requires_project
+@handles_user_errors("expect report")
+def report(
+    agent_opt: str,
+    action: str | None,
+    as_json: bool,
+    project_root: Path | None = None,
+) -> None:
+    """Report the expectation verdicts a run stored.
+
+    Rules are ordered by how often they failed, so the rule costing the most
+    records is the first one listed for its action.
+    """
+    ExpectReportCommand(agent=agent_opt, action=action, as_json=as_json).execute(
+        project_root=project_root
+    )
+
+
+__all__ = ["expect", "ExpectListCommand", "ExpectReportCommand"]

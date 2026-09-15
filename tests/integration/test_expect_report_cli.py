@@ -1,0 +1,352 @@
+"""`agac expect report` reads back the verdicts a run wrote.
+
+Answers the question that otherwise means opening SQLite by hand: which rule
+fails most often, and on which action.
+"""
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from agent_actions.cli.main import cli
+from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.expectations.report import RuleTally, tally_action
+from agent_actions.storage import get_storage_backend
+
+SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
+WORKFLOW = "inline_rules"
+
+
+def _verdict(*outcomes):
+    """A record's ``expect`` block, shaped as ``SuiteResult.to_record_dict`` writes it."""
+    return {
+        "overall_pass": not any(o["severity"] == "error" and not o["passed"] for o in outcomes),
+        "failed": [o["id"] for o in outcomes if not o["passed"] and o["severity"] == "error"],
+        "skipped": [
+            o["id"]
+            for o in outcomes
+            if o.get("skipped") and not o["passed"] and o["severity"] == "error"
+        ],
+        "outcomes": list(outcomes),
+    }
+
+
+def _stored(action, fields, verdict):
+    """A record as target storage holds it: the action's output under its namespace."""
+    return {
+        "_state": "processed",
+        "source_guid": "guid",
+        "content": {action: {**fields, "expect": verdict}},
+    }
+
+
+def _outcome(rule_id, passed, severity="error", skipped=False, rule_type="not_null"):
+    return {
+        "id": rule_id,
+        "type": rule_type,
+        "severity": severity,
+        "passed": passed,
+        "detail": "",
+        "definition_hash": "hash",
+        "skipped": skipped,
+    }
+
+
+class TestTally:
+    """The aggregation, independent of where the records came from."""
+
+    def test_a_rule_is_counted_once_per_record_it_ran_on(self):
+        records = [
+            _stored("summarize", {}, _verdict(_outcome("len", passed=True))),
+            _stored("summarize", {}, _verdict(_outcome("len", passed=False))),
+            _stored("summarize", {}, _verdict(_outcome("len", passed=False))),
+        ]
+        tally = tally_action("summarize", records)
+        assert tally.records == 3
+        assert tally.records_passed == 1
+        assert tally.rules == (
+            RuleTally(id="len", type="not_null", severity="error", passed=1, failed=2, skipped=0),
+        )
+
+    def test_a_skipped_outcome_counts_as_neither_pass_nor_fail(self):
+        records = [_stored("summarize", {}, _verdict(_outcome("tone", passed=False, skipped=True)))]
+        rule = tally_action("summarize", records).rules[0]
+        assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
+        assert rule.checked == 0
+        assert rule.pass_rate is None, "a rule that never ran has no pass rate"
+
+    def test_a_warn_failure_does_not_fail_the_record(self):
+        records = [
+            _stored("summarize", {}, _verdict(_outcome("tone", passed=False, severity="warn")))
+        ]
+        tally = tally_action("summarize", records)
+        assert tally.records_passed == 1
+        assert tally.rules[0].failed == 1
+
+    def test_records_without_a_verdict_are_not_counted(self):
+        tally = tally_action(
+            "summarize", [{"_state": "processed", "content": {"summarize": {"summary": "x"}}}]
+        )
+        assert tally is None, "an action that never ran expectations has nothing to report"
+
+    def test_rules_are_ordered_by_how_often_they_fail(self):
+        records = [
+            _stored(
+                "s", {}, _verdict(_outcome("rare", passed=True), _outcome("common", passed=False))
+            ),
+            _stored(
+                "s", {}, _verdict(_outcome("rare", passed=False), _outcome("common", passed=False))
+            ),
+        ]
+        assert [r.id for r in tally_action("s", records).rules] == ["common", "rare"]
+
+    def test_the_action_pass_rate_is_over_records_not_rules(self):
+        records = [
+            _stored("s", {}, _verdict(_outcome("a", passed=True), _outcome("b", passed=True))),
+            _stored("s", {}, _verdict(_outcome("a", passed=False), _outcome("b", passed=True))),
+        ]
+        assert tally_action("s", records).pass_rate == 0.5
+
+    def test_an_empty_action_has_nothing_to_report(self):
+        assert tally_action("s", []) is None
+
+
+@pytest.fixture(scope="module")
+def project(tmp_path_factory):
+    """A copy of the author fixtures with verdicts already in the store."""
+    root = tmp_path_factory.mktemp("expect_report") / "project"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+
+    paths = ProjectPathsFactory.create_project_paths(
+        WORKFLOW, WORKFLOW, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=WORKFLOW)
+    backend.initialize()
+    backend.write_target(
+        "summarize",
+        "verdicts.json",
+        [
+            _stored(
+                "summarize",
+                {"summary": "one"},
+                _verdict(
+                    _outcome("len", passed=True), _outcome("tone", passed=True, severity="warn")
+                ),
+            ),
+            _stored(
+                "summarize",
+                {"summary": "two"},
+                _verdict(
+                    _outcome("len", passed=False), _outcome("tone", passed=False, severity="warn")
+                ),
+            ),
+            _stored(
+                "summarize",
+                {"summary": "three"},
+                _verdict(
+                    _outcome("len", passed=False), _outcome("tone", passed=True, severity="warn")
+                ),
+            ),
+        ],
+        force_full=True,
+    )
+    backend.close()
+    return root
+
+
+@pytest.fixture
+def run(project, monkeypatch):
+    monkeypatch.chdir(project)
+
+    def _run(*args):
+        return CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW, *args])
+
+    return _run
+
+
+def test_the_report_counts_every_stored_verdict(run):
+    result = run("--json")
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.stdout)
+    summarize = next(a for a in payload["actions"] if a["action"] == "summarize")
+    assert summarize["records"] == 3
+    assert summarize["records_passed"] == 1
+
+    by_id = {rule["id"]: rule for rule in summarize["rules"]}
+    assert (by_id["len"]["passed"], by_id["len"]["failed"]) == (1, 2)
+    assert (by_id["tone"]["passed"], by_id["tone"]["failed"]) == (2, 1)
+
+
+def test_the_rendered_report_names_the_rule_that_fails_most(run):
+    result = run()
+    assert result.exit_code == 0, result.output
+    assert "len" in result.stdout
+
+
+def test_an_unknown_action_is_refused_by_name(run):
+    result = run("--action", "flatten")
+    assert result.exit_code != 0
+    assert "not in workflow" in result.output
+
+
+def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(tmp_path, monkeypatch):
+    root = tmp_path / "empty"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW])
+    assert result.exit_code == 0, result.output
+    assert "no verdict" in result.output.lower() or "no stored" in result.output.lower()
+
+
+OTHER = "shared_suite"
+
+
+def _two_action_project(tmp_path, stored):
+    root = tmp_path / "two"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    paths = ProjectPathsFactory.create_project_paths(
+        OTHER, OTHER, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=OTHER)
+    backend.initialize()
+    for action, records in stored.items():
+        backend.write_target(action, "verdicts.json", records, force_full=True)
+    backend.close()
+    return root
+
+
+def test_a_verdict_is_read_from_its_own_action_namespace(tmp_path, monkeypatch):
+    """Content is additive, so a record carries every upstream action's namespace."""
+    shared = {
+        "_state": "processed",
+        "source_guid": "guid",
+        "content": {
+            "resummarize": {"summary": "up", "expect": _verdict(_outcome("upstream", passed=True))},
+            "summarize": {"summary": "own", "expect": _verdict(_outcome("own_rule", passed=False))},
+        },
+    }
+    tally = tally_action("summarize", [shared])
+    assert [r.id for r in tally.rules] == ["own_rule"], "read another action's verdict"
+    assert tally.records_passed == 0
+
+    upstream = tally_action("resummarize", [shared])
+    assert [r.id for r in upstream.rules] == ["upstream"]
+    assert upstream.records_passed == 1
+
+
+def test_a_rule_waived_by_its_row_condition_counts_as_not_run(tmp_path):
+    """A waived rule is stored passed=True, skipped=True. It did not run, so it
+    must not inflate a pass rate over records it never applied to."""
+    waived = _outcome("only_when_quoted", passed=True, skipped=True)
+    tally = tally_action("summarize", [_stored("summarize", {}, _verdict(waived))])
+    rule = tally.rules[0]
+    assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
+    assert rule.pass_rate is None
+
+
+def test_records_that_produced_output_without_a_verdict_are_counted_apart():
+    """A record tombstoned for failing expectations carries output but no verdict."""
+    records = [
+        _stored("summarize", {"summary": "ok"}, _verdict(_outcome("len", passed=True))),
+        {
+            "_state": "exhausted",
+            "source_guid": "g2",
+            "content": {"summarize": {"summary": "gone"}},
+        },
+    ]
+    tally = tally_action("summarize", records)
+    assert tally.records == 1, "only the record carrying a verdict is rated"
+    assert tally.records_total == 2
+    assert tally.unverified == 1
+
+
+def test_a_guard_skipped_record_is_not_counted_as_unverified():
+    """A null namespace means the action was skipped for that record, not that
+    it ran and produced no verdict."""
+    records = [
+        _stored("summarize", {"summary": "ok"}, _verdict(_outcome("len", passed=True))),
+        {"_state": "guard_skipped", "source_guid": "g2", "content": {"summarize": None}},
+    ]
+    tally = tally_action("summarize", records)
+    assert tally.records_total == 1
+    assert tally.unverified == 0
+
+
+def test_an_action_with_no_stored_verdicts_reports_that_it_has_none(tmp_path, monkeypatch):
+    stored = {"summarize": [_stored("summarize", {}, _verdict(_outcome("len", passed=True)))]}
+    monkeypatch.chdir(_two_action_project(tmp_path, stored))
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", OTHER, "--action", "resummarize"])
+    assert result.exit_code == 0, result.output
+    assert "no stored verdict" in result.output.lower()
+
+
+def test_a_report_does_not_create_a_store_for_a_workflow_that_never_ran(tmp_path, monkeypatch):
+    """A read-only question must not write to the project."""
+    root = tmp_path / "untouched"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", WORKFLOW])
+    assert result.exit_code == 0, result.output
+    assert not store.exists(), (
+        f"a read-only report created {sorted(p.name for p in store.iterdir())}"
+    )
+
+
+def test_an_imperfect_rate_is_not_rendered_as_a_perfect_one(tmp_path, monkeypatch):
+    records = [
+        _stored("summarize", {}, _verdict(_outcome("len", passed=i > 0))) for i in range(200)
+    ]
+    monkeypatch.chdir(_two_action_project(tmp_path, {"summarize": records}))
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", OTHER])
+    assert "100%" not in result.output, "199/200 rendered as a perfect rate"
+
+
+def test_output_record_count_separates_a_skipped_action_from_one_that_never_ran():
+    """A guard-skipped record carries a null namespace; the action ran for none."""
+    from agent_actions.expectations.report import output_record_count
+
+    skipped = {"_state": "guard_skipped", "content": {"summarize": None}}
+    ran = _stored("summarize", {}, _verdict(_outcome("len", passed=True)))
+    assert output_record_count([skipped, skipped], "summarize") == 0
+    assert output_record_count([skipped, ran], "summarize") == 1
+    assert output_record_count([], "summarize") == 0
+
+
+def _failed_record(action):
+    """A record the action ran on and failed: no output, and a state saying why.
+
+    Built through the framework's own tombstone path so the shape is the one a
+    run actually persists rather than one this test invented.
+    """
+    from agent_actions.processing.record_helpers import build_tombstone
+    from agent_actions.record.envelope import RecordEnvelope
+    from agent_actions.record.state import RecordState
+
+    record = build_tombstone(action, {"content": {}, "source_guid": "g"}, "LLM call failed: 500")
+    RecordEnvelope.transition(record, RecordState.FAILED, action, "LLM call failed: 500")
+    return record
+
+
+def test_a_record_the_action_ran_on_and_failed_counts_as_produced():
+    """It has no output, like a guard-skipped record, but it did run. Dropping it
+    rates an action over its survivors, which reads as full health."""
+    from agent_actions.expectations.report import output_record_count
+
+    failed = _failed_record("summarize")
+    assert failed["content"]["summarize"] is None, "shape changed; revisit this test"
+    assert output_record_count([failed], "summarize") == 1
+
+
+def test_a_failing_run_is_not_rated_over_its_survivors():
+    records = [_stored("summarize", {}, _verdict(_outcome("len", passed=True)))]
+    records += [_failed_record("summarize") for _ in range(9)]
+    tally = tally_action("summarize", records)
+    assert tally.records == 1, "only one record carried a verdict"
+    assert tally.records_total == 10, "the nine that failed still ran"
+    assert tally.unverified == 9
