@@ -46,10 +46,13 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
     which number is smaller — otherwise ambient configuration could quietly
     overrule what was asked for.
     """
+    # Read the variable whichever source wins: its guarantee is that an unusable
+    # value fails the run, and being outranked is not the same as going unread.
+    environment = _environment_ceiling()
     asked = _run_ceiling(action_config)
     if asked is not None:
         return asked, "--max-records"
-    return _environment_ceiling(), MAX_RECORDS_ENV
+    return environment, MAX_RECORDS_ENV
 
 
 def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:

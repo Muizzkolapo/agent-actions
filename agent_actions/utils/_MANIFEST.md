@@ -24,7 +24,7 @@ pathways.
 | `constants.py` | Module | Shared configuration key constants and reserved names used across CLI/workflows. | `configuration`, `validation` |
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
 | `graph_utils.py` | Module | Graph algorithms for dependency resolution (`topological_sort`). | `errors` |
-| `limits.py` | Module | Resolves the effective per-action record limit, including the `AGAC_MAX_RECORDS` environment ceiling. | `config` |
+| `limits.py` | Module | Resolves the effective per-action record limit from two ceilings: a cap carried on the action config for this run, and the `AGAC_MAX_RECORDS` environment variable. The run cap wins by source rather than by which number is smaller, the variable is validated either way, and whichever ceiling truncates says so. | `config` |
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
 | `correlation.py` | Module | `VersionIdGenerator`: deterministic version correlation IDs for versioned-agent workflows. | `versioning` |
 | `field_management.py` | Module | `FieldManager`: ensures processed items always expose the required metadata/IDs. | `metadata` |
