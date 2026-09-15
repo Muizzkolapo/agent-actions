@@ -76,6 +76,11 @@ class RunCommandArgs(BaseModel):
         ge=1,
         le=50,
     )
+    max_records: int | None = Field(
+        None,
+        description="Cap every action at this many records, whatever the config sets",
+        ge=1,
+    )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
