@@ -375,5 +375,98 @@ def test_a_long_list_of_failing_actions_is_truncated_with_its_count():
     command = ExpectReportCommand(agent="w", action=None, as_json=True, fail_under=50)
     tallies = [_tally(f"action_{i}", 0, 10) for i in range(30)]
     with pytest.raises(click.ClickException) as exc:
-        command._gate(tallies, 50.0, [t.action for t in tallies])
+        names = [t.action for t in tallies]
+        command._gate(tallies, 50.0, names, names)
     assert "and 25 more" in str(exc.value), str(exc.value)
+
+
+def _skipped_record(action):
+    """A record the action was skipped for: its namespace is null."""
+    return {"_state": "guard_skipped", "source_guid": "guid", "content": {action: None}}
+
+
+def _store(tmp_path, name, writes, mutate=None):
+    root = tmp_path / name
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    if mutate:
+        cfg = root / "agent_workflow" / MULTI / "agent_config" / f"{MULTI}.yml"
+        cfg.write_text(mutate(cfg.read_text()))
+    paths = ProjectPathsFactory.create_project_paths(
+        MULTI, MULTI, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=MULTI)
+    backend.initialize()
+    for action, records in writes:
+        backend.write_target(action, "verdicts.json", records, force_full=True)
+    backend.close()
+    return root
+
+
+def _both_disabled(text):
+    return text.replace(
+        "  - name: resummarize\n", "  - name: resummarize\n    is_operational: false\n"
+    ).replace("  - name: summarize\n", "  - name: summarize\n    is_operational: false\n")
+
+
+def test_gating_one_action_that_was_skipped_for_every_record_passes(tmp_path, monkeypatch):
+    """It declares expectations and a run reached it, but it ran for no record.
+    That is the same benign exclusion the workflow-wide gate already makes."""
+    root = _store(
+        tmp_path,
+        "skipped",
+        [
+            ("summarize", [_record(True), _record(True)]),
+            ("resummarize", [_skipped_record("resummarize")] * 2),
+        ],
+    )
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(
+        cli, ["expect", "report", "-a", MULTI, "--action", "resummarize", "--fail-under", "50"]
+    )
+    assert result.exit_code == 0, result.stderr
+
+
+def test_a_workflow_whose_every_action_is_disabled_can_still_pass(tmp_path, monkeypatch):
+    """Excluding every action leaves nothing to gate, not something to fail."""
+    root = _store(tmp_path, "alloff", [("summarize", [_record(True)] * 2)], mutate=_both_disabled)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "50"])
+    assert result.exit_code == 0, result.stderr
+
+
+def test_a_disabled_action_does_not_gate_on_verdicts_it_left_behind(tmp_path, monkeypatch):
+    """Switching an action off must not leave CI green only by deleting the store."""
+    root = _store(
+        tmp_path,
+        "stale",
+        [
+            ("summarize", [_record(True), _record(True)]),
+            ("resummarize", [_record(False, action="resummarize")] * 2),
+        ],
+        mutate=_as_disabled,
+    )
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "50"])
+    assert result.exit_code == 0, result.stderr
+
+
+def test_a_scope_that_truly_declares_nothing_is_still_refused(tmp_path, monkeypatch):
+    """verdict_guard's publish declares no expect: block at all."""
+    root = tmp_path / "nodecl"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(
+        cli,
+        ["expect", "report", "-a", "verdict_guard", "--action", "publish", "--fail-under", "50"],
+    )
+    assert result.exit_code != 0, result.output
+    assert "declares" in result.stderr
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "-inf"])
+def test_a_threshold_that_is_not_a_number_is_a_usage_error(tmp_path, monkeypatch, bad):
+    root = _store(tmp_path, f"bad{bad}", [("summarize", [_record(True)] * 2)])
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", bad])
+    assert result.exit_code == 2, result.output
+    assert "ValueError" not in result.output, result.output
