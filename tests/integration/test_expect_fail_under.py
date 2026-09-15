@@ -470,3 +470,51 @@ def test_a_threshold_that_is_not_a_number_is_a_usage_error(tmp_path, monkeypatch
     result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", bad])
     assert result.exit_code == 2, result.output
     assert "ValueError" not in result.output, result.output
+
+
+def test_an_action_whose_guard_filtered_every_record_does_not_fail_the_gate(tmp_path, monkeypatch):
+    """`on_false: filter` drops the record rather than writing a null namespace,
+    so the action stores no target row at all — only a disposition saying why."""
+    root = tmp_path / "filtered"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    paths = ProjectPathsFactory.create_project_paths(
+        MULTI, MULTI, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=MULTI)
+    backend.initialize()
+    backend.write_target("summarize", "verdicts.json", [_record(True)] * 2, force_full=True)
+    for i in range(2):
+        backend.set_disposition("resummarize", f"guid{i}", "filtered", reason="guard")
+    backend.close()
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "50"])
+    assert result.exit_code == 0, result.stderr
+
+
+def test_an_action_that_simply_never_ran_still_fails_the_gate(tmp_path, monkeypatch):
+    """No target rows and no disposition either: the run never reached it."""
+    root = tmp_path / "neverran"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    paths = ProjectPathsFactory.create_project_paths(
+        MULTI, MULTI, auto_create=True, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=MULTI)
+    backend.initialize()
+    backend.write_target("summarize", "verdicts.json", [_record(True)] * 2, force_full=True)
+    backend.close()
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(cli, ["expect", "report", "-a", MULTI, "--fail-under", "50"])
+    assert result.exit_code != 0, result.output
+    assert "resummarize" in result.stderr
+
+
+def test_the_gate_message_states_the_actions_own_rate(multi_gate):
+    """Asserted on stderr and in full: the report table on stdout prints the same
+    percentage, so a substring check there passes whatever the gate computed."""
+    result = multi_gate(
+        {"summarize": [True, False, False], "resummarize": [True]}, "--fail-under", "90"
+    )
+    assert result.exit_code != 0
+    assert "summarize 33% (1/3)" in result.stderr, result.stderr
