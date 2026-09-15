@@ -39,14 +39,14 @@
 | `example` | Function | Example command group. | - |
 | `example_list` | Function | List available example projects from GitHub. | - |
 | `example_install` | Function | Install an example project. | - |
-| `expect.py` | Module | Inspect the expectation rules an action would run. | `cli`, `expectations`, `validation` |
+| `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. | `cli`, `expectations`, `storage`, `validation` |
 | `ExpectListCommand` | Class | Implementation of the expect list command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Resolve each action's suite through the runner's own loader and print it. | - |
 | `expect` | Function | Expect command group. | - |
 | `list_rules` | Function | List the rules each action would run, as a table or JSON. Marks an action whose strategy never evaluates expectations, so inert rules are shown without being claimed to execute. | - |
 | `ExpectReportCommand` | Class | Implementation of the expect report command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Aggregate the verdicts stored for each action and render or emit them. | - |
-| `report` | Function | Report stored expectation verdicts, as a table or JSON. | - |
+| `report` | Function | Report stored expectation verdicts, as a table or JSON; `--fail-under` rates each action separately and exits non-zero when any falls short, or when no verdict was stored at all. | - |
 | `init.py` | Module | Initialize command for the Agent Actions CLI. | `cli`, `configuration`, `errors`, `validation` |
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
@@ -108,6 +108,9 @@
 |--------|------|-------------|------------|
 | `main_entrypoint()` | `.env` | Reads | — |
 | `requires_project()` | `agent_actions.yml` | Reads | — |
+| `ExpectListCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
+| `ExpectListCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema` |
+| `ExpectReportCommand.execute()` | `agent_io/store/` | Reads | — |
 | `RunCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `RunCommand.execute()` | `prompt_store/{workflow}.md` | Validates | — |
 | `RunCommand.execute()` | `agent_io/target/{action}/` | Writes | — |
@@ -138,6 +141,6 @@
 | `prompt` | outbound | Renders Jinja2 templates and validates prompt files |
 | `models` | outbound | Uses ActionSchema for inspect and schema display |
 | `errors` | outbound | Catches and formats AgentActionsError for CLI output |
-| `storage` | outbound | Reads SQLite backend for preview command |
+| `storage` | outbound | Reads the SQLite backend for the preview, dispositions and expect report commands |
 | `llm` | outbound | Invokes Cleaner for clean command and batch CLI |
 | `tooling` | outbound | Generates docs and tracks run results |

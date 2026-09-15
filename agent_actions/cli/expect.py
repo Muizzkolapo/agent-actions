@@ -8,6 +8,8 @@ Surface:
 from __future__ import annotations
 
 import json
+import math
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +21,17 @@ from rich.text import Text
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.inspect_base import render_title_row
 from agent_actions.config.project_paths import ProjectPathsFactory
-from agent_actions.expectations.report import ActionTally, tally_action
+from agent_actions.expectations.report import (
+    ActionTally,
+    output_record_count,
+    tally_action,
+)
 from agent_actions.expectations.service import create_expectation_service_from_config
 from agent_actions.expectations.types import Expectation
 from agent_actions.processing.helpers import bypasses_expectations
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.storage import get_storage_backend
+from agent_actions.storage.backend import DISPOSITION_FILTERED
 
 _INERT_REASON = (
     "these rules will not run: a tool or HITL action at file granularity is "
@@ -179,10 +186,17 @@ def _params_cell(params: dict[str, Any]) -> Text:
 class ExpectReportCommand:
     """Aggregate the verdicts a run stored, per action and per rule."""
 
-    def __init__(self, agent: str, action: str | None, as_json: bool) -> None:
+    def __init__(
+        self,
+        agent: str,
+        action: str | None,
+        as_json: bool,
+        fail_under: float | None = None,
+    ) -> None:
         self.agent_name = Path(agent).stem
         self.action_filter = action
         self.as_json = as_json
+        self.fail_under = fail_under
         self.console = Console()
 
     def execute(self, project_root: Path | None = None) -> list[ActionTally]:
@@ -201,15 +215,27 @@ class ExpectReportCommand:
         # leave a store behind.
         store = paths.io_dir / "store" / f"{self.agent_name}.db"
         tallies: list[ActionTally] = []
+        produced: dict[str, int] = {}
+        stored: dict[str, int] = {}
+        filtered: set[str] = set()
         if store.exists():
             backend = get_storage_backend(
                 workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
             )
             backend.initialize()
             try:
-                tallies = [
-                    t for t in (self._tally(backend, name) for name in actions) if t is not None
-                ]
+                for name in actions:
+                    records = self._read(backend, name)
+                    stored[name] = len(records)
+                    produced[name] = output_record_count(records, name)
+                    # on_false: filter drops the record rather than storing a null
+                    # namespace, so a fully filtered action leaves no row at all —
+                    # only the disposition says a run reached it.
+                    if not records and backend.has_disposition(name, DISPOSITION_FILTERED):
+                        filtered.add(name)
+                    tally = tally_action(name, records)
+                    if tally is not None:
+                        tallies.append(tally)
             finally:
                 backend.close()
 
@@ -222,7 +248,113 @@ class ExpectReportCommand:
             )
         else:
             self._render(tallies, actions)
+
+        if self.fail_under is not None:
+            declared = [a for a in actions if inspector.action_configs[a].get("expect") is not None]
+            gatable = self._gatable(inspector, actions, produced, stored, filtered)
+            self._gate(tallies, self.fail_under, gatable, declared)
         return tallies
+
+    def _gatable(
+        self,
+        inspector: WorkflowInspector,
+        actions: list[str],
+        produced: dict[str, int],
+        stored: dict[str, int],
+        filtered: set[str],
+    ) -> list[str]:
+        """The actions whose missing verdict would mean something went unchecked.
+
+        An action is excluded when no run could ever have written one: it
+        declares nothing, its strategy never evaluates expectations, it is
+        switched off, or it was skipped for every record that reached it.
+        Gating on those leaves a workflow with no passing configuration.
+        """
+        operational = set(inspector.execution_order)
+        gatable = []
+        for name in actions:
+            config = inspector.action_configs[name]
+            if config.get("expect") is None or bypasses_expectations(config):
+                continue
+            if name not in operational:
+                continue
+            # A run reached it and it ran for no record — every one was skipped
+            # or filtered before it — so its missing verdict is not an omission.
+            # No rows and no disposition is the opposite: a run that never happened.
+            if name in filtered:
+                continue
+            if stored.get(name, 0) > 0 and produced.get(name, 0) == 0:
+                continue
+            gatable.append(name)
+        return gatable
+
+    def _gate(
+        self,
+        tallies: list[ActionTally],
+        threshold: float,
+        gatable: list[str],
+        declared: list[str],
+    ) -> None:
+        """Exit non-zero unless every gatable action cleared the bar.
+
+        An action is gated on having been checked as well as on its rate: a run
+        that stopped writing verdicts is the regression a gate is for, and it
+        reaches this function as an absence rather than a low number.
+        """
+        problems: list[str] = []
+        scope = (
+            f"action '{self.action_filter}' of workflow '{self.agent_name}'"
+            if self.action_filter
+            else f"workflow '{self.agent_name}'"
+        )
+
+        if not declared:
+            raise click.ClickException(
+                f"--fail-under {threshold:g} was asked for, but nothing in {scope} can be "
+                f"checked: no action declares an expect: block."
+            )
+
+        # Excluded for reasons no threshold can address. Nothing to gate is not a
+        # failure, but it must be said: the exit code alone reads as "checked and
+        # passed" to whoever wired it into CI.
+        if not gatable:
+            excluded = [name for name in declared if name not in gatable]
+            click.echo(
+                f"Nothing gated in {scope}: {_named(excluded)} "
+                f"{'was' if len(excluded) == 1 else 'were'} excluded — switched off, "
+                f"processed by a strategy that never evaluates rules, or run for no record.",
+                err=True,
+            )
+            return
+
+        rated = {tally.action for tally in tallies}
+        unchecked = [name for name in gatable if name not in rated]
+        if unchecked:
+            problems.append(
+                f"{len(unchecked)} of {len(gatable)} actions whose rules a run would "
+                f"evaluate stored no verdict: {_named(unchecked)}"
+            )
+
+        # Per action, over every record produced, and exact — 86.4 * 375 is
+        # 32400.000000000004. Gatable only: verdicts an excluded action left
+        # behind are stale, and gating on them makes the store the only remedy.
+        bar = Fraction(str(threshold))
+        gated = set(gatable)
+        under = [t for t in tallies if t.action in gated and _rate_of(t) < bar]
+        if under:
+            named = _named(
+                [
+                    f"{t.action} {_shortfall_rate(t.records_passed, _denominator(t), threshold)}"
+                    f" ({t.records_passed}/{_denominator(t)})"
+                    for t in under
+                ]
+            )
+            problems.append(f"pass rate under {threshold:g}%: {named}")
+
+        if problems:
+            raise click.ClickException(
+                f"Expectation gate failed for {scope}: " + "; ".join(problems)
+            )
 
     def _actions_to_report(self, inspector: WorkflowInspector) -> list[str]:
         configured = inspector.action_configs
@@ -240,11 +372,11 @@ class ExpectReportCommand:
         return [self.action_filter]
 
     @staticmethod
-    def _tally(backend: Any, action: str) -> ActionTally | None:
+    def _read(backend: Any, action: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for relative_path in backend.list_target_files(action):
             records.extend(backend.read_target(action, relative_path))
-        return tally_action(action, records)
+        return records
 
     def _render(self, tallies: list[ActionTally], asked_for: list[str]) -> None:
         self.console.print()
@@ -318,6 +450,53 @@ def _rate(value: float | None) -> str:
     return "—" if value is None else _format_percent(value * 100)
 
 
+def _finite_threshold(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Reject a threshold that is not a real number.
+
+    ``FloatRange`` admits NaN — every comparison against its bounds is false —
+    and it reaches the exact comparison as an unrepresentable Fraction.
+    """
+    if value is not None and not math.isfinite(value):
+        raise click.BadParameter("must be a number between 0 and 100")
+    return value
+
+
+def _named(names: list[str], limit: int = 5) -> str:
+    """Name the first few and count the rest; never truncate without saying so."""
+    if len(names) <= limit:
+        return ", ".join(names)
+    return f"{', '.join(names[:limit])} and {len(names) - limit} more"
+
+
+def _denominator(tally: ActionTally) -> int:
+    """Every record the action produced, rated or not."""
+    return max(tally.records_total, tally.records)
+
+
+def _rate_of(tally: ActionTally) -> Fraction:
+    total = _denominator(tally)
+    return Fraction(tally.records_passed * 100, total) if total else Fraction(0)
+
+
+def _shortfall_rate(passed: int, total: int, threshold: float) -> str:
+    """A failing rate, rendered precisely enough to read as under the bar it missed.
+
+    94.9% shown as "95%" makes "pass rate under 95%: summarize 95%" contradict
+    itself, so precision widens until the printed value is below the threshold.
+    """
+    if not total:
+        return "—"
+    percent = passed * 100 / total
+    for places in range(7):
+        text = f"{percent:.{places}f}"
+        if float(text) < threshold:
+            return f"{text}%"
+    # Below any precision that would still read as under the bar.
+    return f"<{threshold:g}%"
+
+
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
     heading = Text(tally.action, style="bold cyan")
     detail = f"{tally.records_passed}/{tally.records} records passed · {_rate(tally.pass_rate)}"
@@ -367,6 +546,7 @@ def expect() -> None:
         agac expect list -a my_workflow --action extract_facts
         agac expect list -a my_workflow --json
         agac expect report -a my_workflow
+        agac expect report -a my_workflow --fail-under 95
     """
 
 
@@ -397,22 +577,34 @@ def list_rules(
 @click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
 @click.option("--action", default=None, help="Limit the report to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+@click.option(
+    "--fail-under",
+    type=click.FloatRange(0, 100),
+    default=None,
+    callback=_finite_threshold,
+    help="Exit non-zero if any action's record pass rate is under this percentage.",
+)
 @requires_project
 @handles_user_errors("expect report")
 def report(
     agent_opt: str,
     action: str | None,
     as_json: bool,
+    fail_under: float | None,
     project_root: Path | None = None,
 ) -> None:
     """Report the expectation verdicts a run stored.
 
     Rules are ordered by how often they failed, so the rule costing the most
     records is the first one listed for its action.
+
+    With --fail-under, the report becomes a CI gate: every action is rated
+    separately, and a store holding no verdict at all fails rather than
+    passing on the strength of having checked nothing.
     """
-    ExpectReportCommand(agent=agent_opt, action=action, as_json=as_json).execute(
-        project_root=project_root
-    )
+    ExpectReportCommand(
+        agent=agent_opt, action=action, as_json=as_json, fail_under=fail_under
+    ).execute(project_root=project_root)
 
 
 __all__ = ["expect", "ExpectListCommand", "ExpectReportCommand"]

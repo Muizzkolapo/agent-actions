@@ -414,6 +414,8 @@ To read the verdicts back across a whole run — which rule fails most often, an
 agac expect report -a my_workflow
 ```
 
+To make CI fail when quality regresses, give it a threshold — [`--fail-under`](../cli/expect.md#gating-ci-with-a-threshold) exits non-zero when an action falls short, or when its expectations were never checked at all.
+
 To act on the verdict inside the workflow, read it from a downstream [guard](../execution/guards.md):
 
 ```yaml

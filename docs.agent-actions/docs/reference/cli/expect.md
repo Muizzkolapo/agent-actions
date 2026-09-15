@@ -132,6 +132,7 @@ Rules are ordered by how often they failed, so the rule costing an action the mo
 | `-a`, `--agent` | Workflow name (required) |
 | `--action` | Limit the report to one action |
 | `--json` | Emit the report as JSON on stdout |
+| `--fail-under` | Exit non-zero if any action falls short of this pass percentage |
 
 ### How the counts are arrived at
 
@@ -151,6 +152,64 @@ agac expect report -a my_workflow --json | jq '.actions[] | {action, pass_rate}'
 ```
 
 Each action carries `records`, `records_passed`, `records_total`, `unverified` and `pass_rate`, and each rule its `passed` / `failed` / `skipped` counts.
+
+### Gating CI with a threshold
+
+Without a threshold the report annotates. With one it gates:
+
+```bash
+agac expect report -a my_workflow --fail-under 95
+```
+
+```
+Error: Expectation gate failed for workflow 'my_workflow': pass rate under 95%:
+summarize 82% (412/500)
+```
+
+Exit code 0 when every action clears the bar, non-zero otherwise. A rate exactly *at* the threshold passes — it is `fail-under`, not fail-at-or-under.
+
+**Each action is rated separately.** A pooled average would let a healthy action carry a broken one over the line, which is the reading a gate exists to prevent.
+
+**Three states fail closed**, because a gate that reports success having verified nothing is worse than no gate:
+
+| State | Why it fails |
+|-------|--------------|
+| An action's pass rate is under the threshold | The thing you asked about |
+| An action whose rules a run would evaluate stored no verdict | They were never checked, so nothing can be gated on them |
+| An action produced records carrying no verdict | Rating only the survivors of a run reports them at full health. A record the action ran on and failed carries no output, like a skipped one, and is told apart by its state |
+
+### What the gate leaves alone
+
+An action is excluded when no run could have written a verdict for it, because no threshold could ever fix that:
+
+| Excluded | Why |
+|----------|-----|
+| `is_operational: false` | Switching an action off is routine config; it must not make CI unpassable |
+| A tool or HITL action at file granularity | Its [rules never run](#rules-that-will-not-run) |
+| Skipped or filtered for every record that reached it | The action did not run, so its missing verdict is not an omission. A guard's `on_false: filter` drops the record outright, leaving the action no stored row at all; the disposition is what says a run reached it |
+
+An excluded action is also not gated on verdicts a previous run left behind — otherwise deleting the store would be the only way back to green.
+
+If every declaring action is excluded there is nothing to gate, and the command exits 0 — saying so on stderr, because an exit code alone reads as "checked and passed". A scope where no action declares an `expect:` block at all is refused outright — nothing there can ever be checked.
+
+A threshold that is not a real number is a usage error.
+
+The message names the scope it gated, leads with how many actions went unchecked, and states the count when it truncates a list:
+
+```
+Error: Expectation gate failed for workflow 'my_workflow': 20 of 30 actions
+whose rules a run would evaluate stored no verdict: author, contract, rewrite,
+ground, verify_1 and 15 more
+```
+
+In CI:
+
+```yaml
+- name: Check output quality
+  run: agac expect report -a my_workflow --fail-under 95
+```
+
+The report still prints (or emits JSON) before the gate fails, so the failing run leaves the detail behind in the log.
 
 ## See also
 
