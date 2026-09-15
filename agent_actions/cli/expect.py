@@ -304,11 +304,8 @@ class ExpectReportCommand:
                 f"checked: no action declares an expect: block."
             )
 
-        # Everything declaring was excluded for a reason no threshold can address.
-        # Nothing to gate is not the same as something failing.
-        if not gatable:
-            return
-
+        # Both arms below are scoped to gatable, so a scope whose declaring
+        # actions were all excluded reports nothing rather than failing.
         rated = {tally.action for tally in tallies}
         unchecked = [name for name in gatable if name not in rated]
         if unchecked:
