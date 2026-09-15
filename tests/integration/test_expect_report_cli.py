@@ -316,3 +316,37 @@ def test_output_record_count_separates_a_skipped_action_from_one_that_never_ran(
     assert output_record_count([skipped, skipped], "summarize") == 0
     assert output_record_count([skipped, ran], "summarize") == 1
     assert output_record_count([], "summarize") == 0
+
+
+def _failed_record(action):
+    """A record the action ran on and failed: no output, and a state saying why.
+
+    Built through the framework's own tombstone path so the shape is the one a
+    run actually persists rather than one this test invented.
+    """
+    from agent_actions.processing.record_helpers import build_tombstone
+    from agent_actions.record.envelope import RecordEnvelope
+    from agent_actions.record.state import RecordState
+
+    record = build_tombstone(action, {"content": {}, "source_guid": "g"}, "LLM call failed: 500")
+    RecordEnvelope.transition(record, RecordState.FAILED, action, "LLM call failed: 500")
+    return record
+
+
+def test_a_record_the_action_ran_on_and_failed_counts_as_produced():
+    """It has no output, like a guard-skipped record, but it did run. Dropping it
+    rates an action over its survivors, which reads as full health."""
+    from agent_actions.expectations.report import output_record_count
+
+    failed = _failed_record("summarize")
+    assert failed["content"]["summarize"] is None, "shape changed; revisit this test"
+    assert output_record_count([failed], "summarize") == 1
+
+
+def test_a_failing_run_is_not_rated_over_its_survivors():
+    records = [_stored("summarize", {}, _verdict(_outcome("len", passed=True)))]
+    records += [_failed_record("summarize") for _ in range(9)]
+    tally = tally_action("summarize", records)
+    assert tally.records == 1, "only one record carried a verdict"
+    assert tally.records_total == 10, "the nine that failed still ran"
+    assert tally.unverified == 9
