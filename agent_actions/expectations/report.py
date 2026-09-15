@@ -54,11 +54,9 @@ class ActionTally:
         return max(self.records_total - self.records, 0)
 
 
-# A record that ran and failed is stored exactly like one that was skipped
-# before the action — a null namespace — and only its state tells them apart.
-# Reading the shape alone drops failures out of the denominator, which rates an
-# action over its survivors. Guard skips are reset to `active` on read, so these
-# two are the whole of "ran, produced nothing".
+# A failed record is stored like a skipped one — a null namespace — and only its
+# state tells them apart. Guard skips read back as `active`, so these two states
+# are the whole of "ran and produced nothing".
 _RAN_WITHOUT_OUTPUT = frozenset({"failed", "exhausted"})
 
 
