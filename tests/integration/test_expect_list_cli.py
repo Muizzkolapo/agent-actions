@@ -5,6 +5,7 @@ listing that re-derives rules from YAML diverges here rather than in a run.
 """
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -69,9 +70,18 @@ def _runner_rules(author):
     return resolved
 
 
+@pytest.fixture(scope="module")
+def project(tmp_path_factory):
+    """A copy, not the fixture itself: a CLI run writes a logs/ directory into
+    whatever project it runs in, and the source tree is not ours to grow."""
+    root = tmp_path_factory.mktemp("expect_list") / "project"
+    shutil.copytree(PROJECT, root, ignore=shutil.ignore_patterns("logs"))
+    return root
+
+
 @pytest.fixture(autouse=True)
-def _in_project(monkeypatch):
-    monkeypatch.chdir(PROJECT)
+def _in_project(project, monkeypatch):
+    monkeypatch.chdir(project)
 
 
 @pytest.mark.parametrize("author", ACCEPTED)
