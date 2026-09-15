@@ -8,6 +8,7 @@ Surface:
 from __future__ import annotations
 
 import json
+import math
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -242,9 +243,9 @@ class ExpectReportCommand:
             self._render(tallies, actions)
 
         if self.fail_under is not None:
-            self._gate(
-                tallies, self.fail_under, self._gatable(inspector, actions, produced, stored)
-            )
+            declared = [a for a in actions if inspector.action_configs[a].get("expect") is not None]
+            gatable = self._gatable(inspector, actions, produced, stored)
+            self._gate(tallies, self.fail_under, gatable, declared)
         return tallies
 
     def _gatable(
@@ -277,8 +278,14 @@ class ExpectReportCommand:
             gatable.append(name)
         return gatable
 
-    def _gate(self, tallies: list[ActionTally], threshold: float, declaring: list[str]) -> None:
-        """Exit non-zero unless every action that declares expectations cleared the bar.
+    def _gate(
+        self,
+        tallies: list[ActionTally],
+        threshold: float,
+        gatable: list[str],
+        declared: list[str],
+    ) -> None:
+        """Exit non-zero unless every gatable action cleared the bar.
 
         An action is gated on having been checked as well as on its rate: a run
         that stopped writing verdicts is the regression a gate is for, and it
@@ -291,25 +298,31 @@ class ExpectReportCommand:
             else f"workflow '{self.agent_name}'"
         )
 
-        if not declaring:
+        if not declared:
             raise click.ClickException(
                 f"--fail-under {threshold:g} was asked for, but nothing in {scope} can be "
-                f"checked: no action declares an expect: block whose rules a run would evaluate."
+                f"checked: no action declares an expect: block."
             )
 
+        # Everything declaring was excluded for a reason no threshold can address.
+        # Nothing to gate is not the same as something failing.
+        if not gatable:
+            return
+
         rated = {tally.action for tally in tallies}
-        unchecked = [name for name in declaring if name not in rated]
+        unchecked = [name for name in gatable if name not in rated]
         if unchecked:
             problems.append(
-                f"{len(unchecked)} of {len(declaring)} actions whose rules a run would "
+                f"{len(unchecked)} of {len(gatable)} actions whose rules a run would "
                 f"evaluate stored no verdict: {_named(unchecked)}"
             )
 
-        # Per action, not pooled, and over every record produced so a tombstoned
-        # one counts against the rate. Exact: 86.4 * 375 is 32400.000000000004,
-        # which fails a run sitting on its bar.
+        # Per action, over every record produced, and exact — 86.4 * 375 is
+        # 32400.000000000004. Gatable only: verdicts an excluded action left
+        # behind are stale, and gating on them makes the store the only remedy.
         bar = Fraction(str(threshold))
-        under = [t for t in tallies if _rate_of(t) < bar]
+        gated = set(gatable)
+        under = [t for t in tallies if t.action in gated and _rate_of(t) < bar]
         if under:
             named = _named(
                 [
@@ -417,6 +430,19 @@ def _format_percent(percent: float) -> str:
 
 def _rate(value: float | None) -> str:
     return "—" if value is None else _format_percent(value * 100)
+
+
+def _finite_threshold(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Reject a threshold that is not a real number.
+
+    ``FloatRange`` admits NaN — every comparison against its bounds is false —
+    and it reaches the exact comparison as an unrepresentable Fraction.
+    """
+    if value is not None and not math.isfinite(value):
+        raise click.BadParameter("must be a number between 0 and 100")
+    return value
 
 
 def _named(names: list[str], limit: int = 5) -> str:
@@ -536,6 +562,7 @@ def list_rules(
     "--fail-under",
     type=click.FloatRange(0, 100),
     default=None,
+    callback=_finite_threshold,
     help="Exit non-zero if any action's record pass rate is under this percentage.",
 )
 @requires_project

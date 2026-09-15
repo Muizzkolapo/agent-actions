@@ -175,17 +175,31 @@ Exit code 0 when every action clears the bar, non-zero otherwise. A rate exactly
 | State | Why it fails |
 |-------|--------------|
 | An action's pass rate is under the threshold | The thing you asked about |
-| An action declares `expect:` and stored no verdict | Its rules were never checked, so nothing can be gated on them |
+| An action whose rules a run would evaluate stored no verdict | They were never checked, so nothing can be gated on them |
 | An action produced records carrying no verdict | Rating only the survivors of a run that tombstoned records reports them at full health |
 
-A workflow where no action declares an `expect:` block is refused outright — nothing there can ever be checked.
+### What the gate leaves alone
+
+An action is excluded when no run could have written a verdict for it, because no threshold could ever fix that:
+
+| Excluded | Why |
+|----------|-----|
+| `is_operational: false` | Switching an action off is routine config; it must not make CI unpassable |
+| A tool or HITL action at file granularity | Its [rules never run](#rules-that-will-not-run) |
+| Skipped for every record that reached it | The action did not run, so its missing verdict is not an omission |
+
+An excluded action is also not gated on verdicts a previous run left behind — otherwise deleting the store would be the only way back to green.
+
+If every declaring action is excluded there is nothing to gate, and the command exits 0. A scope where no action declares an `expect:` block at all is refused outright — nothing there can ever be checked.
+
+A threshold that is not a real number is a usage error.
 
 The message names the scope it gated, leads with how many actions went unchecked, and states the count when it truncates a list:
 
 ```
 Error: Expectation gate failed for workflow 'my_workflow': 20 of 30 actions
-declaring expectations stored no verdict: author, contract, rewrite, ground,
-verify_1 and 15 more
+whose rules a run would evaluate stored no verdict: author, contract, rewrite,
+ground, verify_1 and 15 more
 ```
 
 In CI:
