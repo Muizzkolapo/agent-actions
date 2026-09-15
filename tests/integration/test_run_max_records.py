@@ -60,12 +60,56 @@ def test_no_cap_leaves_the_config_untouched(project):
         assert MAX_RECORDS_KEY not in config, f"{name} carries a cap nobody asked for"
 
 
-def test_a_cap_does_not_raise_a_smaller_configured_limit(project):
-    configs = _configs(project, max_records=50)
+MULTI = "shared_suite"
 
-    for config in configs.values():
-        config["record_limit"] = 3
-        assert effective_record_limit(config) == 3
+
+def _multi_action_project(tmp_path, monkeypatch):
+    """Two actions, one configuring a limit below the cap and one above it.
+
+    A single-action fixture with no configured limit cannot tell a cap that
+    reaches every action from one that reaches the first, nor one that respects
+    a configured limit from one that overwrites it.
+    """
+    root = tmp_path / "multi"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    config = root / "agent_workflow" / MULTI / "agent_config" / f"{MULTI}.yml"
+    config.write_text(
+        config.read_text()
+        .replace("  - name: summarize\n", "  - name: summarize\n    record_limit: 1\n")
+        .replace("  - name: resummarize\n", "  - name: resummarize\n    record_limit: 100\n")
+    )
+    monkeypatch.chdir(root)
+    paths = ProjectPathsFactory.create_project_paths(
+        MULTI, MULTI, auto_create=True, project_root=root
+    )
+    return load_workflow(MULTI, paths, root, read_only=True, max_records=5).action_configs
+
+
+def test_a_cap_does_not_raise_an_action_configured_lower(tmp_path, monkeypatch):
+    configs = _multi_action_project(tmp_path, monkeypatch)
+
+    assert effective_record_limit(configs["summarize"]) == 1, "the cap raised a smaller limit"
+
+
+def test_a_cap_lowers_an_action_configured_higher(tmp_path, monkeypatch):
+    configs = _multi_action_project(tmp_path, monkeypatch)
+
+    assert effective_record_limit(configs["resummarize"]) == 5
+
+
+def test_an_action_that_configures_a_limit_still_carries_the_cap(tmp_path, monkeypatch):
+    """Otherwise an action could escape the cap by configuring anything at all."""
+    configs = _multi_action_project(tmp_path, monkeypatch)
+
+    for name, config in configs.items():
+        assert config[MAX_RECORDS_KEY] == 5, f"{name} escaped the cap"
+
+
+def test_the_cap_does_not_overwrite_a_configured_limit(tmp_path, monkeypatch):
+    configs = _multi_action_project(tmp_path, monkeypatch)
+
+    assert configs["summarize"]["record_limit"] == 1
+    assert configs["resummarize"]["record_limit"] == 100
 
 
 class TestTheFlag:
@@ -146,3 +190,37 @@ class TestItActuallyCapsARun:
         )
 
         assert "--max-records" in result.output, result.output
+
+
+class TestARunThatAlreadyCompleted:
+    """A completed action is skipped unless something it depends on changed.
+
+    The codebase already treats a changed limit as such a change; a cap is a
+    changed limit, and the project this feature exists for is one you have
+    already run at least once.
+    """
+
+    def test_capping_a_completed_run_reprocesses_it(self, project):
+        _stage(project, 6)
+        first = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+        assert first.exit_code == 0, first.output
+        assert _processed(project) == 6
+
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2"])
+
+        assert second.exit_code == 0, second.output
+        assert _processed(project) == 2, "the cap was ignored on an already-completed action"
+
+    def test_lifting_a_cap_reprocesses_what_it_truncated(self, project):
+        """Otherwise a truncated run is served as a complete one indefinitely."""
+        _stage(project, 6)
+        first = CliRunner().invoke(
+            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+        )
+        assert first.exit_code == 0, first.output
+        assert _processed(project) == 2
+
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW])
+
+        assert second.exit_code == 0, second.output
+        assert _processed(project) == 6, "a truncated run was served as a complete one"
