@@ -215,8 +215,8 @@ class RunCommand:
     type=click.IntRange(min=1),
     default=None,
     help=(
-        "Cap every action at this many records, whatever the workflow config sets. "
-        "Takes precedence over AGAC_MAX_RECORDS."
+        "Cap each action at this many records per input file, whatever the workflow "
+        "config sets. Takes precedence over AGAC_MAX_RECORDS."
     ),
 )
 @click.option(

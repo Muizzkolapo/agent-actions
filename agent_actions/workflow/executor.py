@@ -40,6 +40,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.utils.limits import MAX_RECORDS_KEY
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -226,6 +227,7 @@ class ActionExecutor:
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
             "record_limit": cfg.get("record_limit"),
+            "max_records": cfg.get(MAX_RECORDS_KEY),
             "file_limit": cfg.get("file_limit"),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
@@ -240,9 +242,14 @@ class ActionExecutor:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
-        limits_changed = details.get("record_limit") != action_config.get(
-            "record_limit"
-        ) or details.get("file_limit") != action_config.get("file_limit")
+        # The cap is a limit change like any other: without it, capping a
+        # workflow you have already run skips every action as complete, and
+        # lifting a cap serves the truncated output as a finished run.
+        limits_changed = (
+            details.get("record_limit") != action_config.get("record_limit")
+            or details.get("file_limit") != action_config.get("file_limit")
+            or details.get("max_records") != action_config.get(MAX_RECORDS_KEY)
+        )
 
         # The hash cannot cover the model: it reads a "model" key, and configs
         # write model_name/model_vendor. Adding them to the hash input would
