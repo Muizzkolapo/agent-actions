@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "agac run --max-records caps each action at N records per input file regardless of the workflow config, taking precedence over AGAC_MAX_RECORDS"
+time: 2026-09-15T12:01:00Z

@@ -76,6 +76,7 @@ class RunCommand:
             use_tools=self.args.use_tools,
             fresh=self.args.fresh,
             verify_keys=self.args.verify_keys,
+            max_records=self.args.max_records,
         )
 
         tracker = RunTracker(project_root=project_root)
@@ -210,6 +211,15 @@ class RunCommand:
     help="Maximum number of actions to run concurrently (default: 5, range: 1-50)",
 )
 @click.option(
+    "--max-records",
+    type=click.IntRange(min=1),
+    default=None,
+    help=(
+        "Cap each action at this many records per input file, whatever the workflow "
+        "config sets. Takes precedence over AGAC_MAX_RECORDS."
+    ),
+)
+@click.option(
     "--fresh",
     is_flag=True,
     default=False,
@@ -229,6 +239,7 @@ def run(
     use_tools: bool,
     execution_mode: str = "auto",
     concurrency_limit: int = 5,
+    max_records: int | None = None,
     fresh: bool = False,
     verify_keys: bool = False,
     project_root: Path | None = None,
@@ -236,14 +247,12 @@ def run(
     """
     Run agents with a specified agent configuration.
 
-    The run command executes agent workflows based on the specified configuration.
-    It handles the entire lifecycle from loading configuration to executing
-    the workflow and processing results.
-
+    \b
     Examples:
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --max-records 2
     """
     args = RunCommandArgs(
         agent=agent,
@@ -251,6 +260,7 @@ def run(
         use_tools=use_tools,
         execution_mode=cast(Literal["auto", "parallel", "sequential"], execution_mode),
         concurrency_limit=concurrency_limit,
+        max_records=max_records,
         fresh=fresh,
         verify_keys=verify_keys,
     )

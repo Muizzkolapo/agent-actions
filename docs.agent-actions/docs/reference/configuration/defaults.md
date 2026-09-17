@@ -330,7 +330,7 @@ defaults:
   # record_limit and file_limit omitted = unlimited
 ```
 
-To cap a run without editing the project, set `AGAC_MAX_RECORDS`. It applies to
+To cap a run without editing the project, pass [`--max-records`](../cli/run#running-a-project-smaller-than-it-is) to `agac run`, or set `AGAC_MAX_RECORDS` where a variable suits better — the flag wins if both are set. Both count per input file, as `record_limit` does. It applies to
 every action, including those that configure no limit, which is what makes it
 usable against a project you do not own:
 
@@ -338,7 +338,7 @@ usable against a project you do not own:
 AGAC_MAX_RECORDS=2 agac run -a my_workflow
 ```
 
-`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. If you change limits between runs, actions automatically re-execute instead of being skipped.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. If you change a limit in the config between runs, actions automatically re-execute instead of being skipped; the same holds for `--max-records`.
 
 ### 7. Environment-Specific Defaults
 
