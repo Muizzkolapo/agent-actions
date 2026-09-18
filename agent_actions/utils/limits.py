@@ -73,7 +73,10 @@ def records_kept_by_limit(
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
     retried = action_config.get(RETRY_RECORD_IDS_KEY)
-    if not retried:
+    # Only what retry stamped. A workflow's `default_agent_config` accepts
+    # unknown keys and spreads them into every action, and YAML cannot express a
+    # frozenset — so this is a handoff between commands, not a config surface.
+    if not isinstance(retried, frozenset) or not retried:
         return kept
 
     seen = {

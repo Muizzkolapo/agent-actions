@@ -236,3 +236,13 @@ class TestARecordIsAdmittedOnlyOnce:
         assert records_kept_by_limit(records, -1, {}) == []
         # r4 is last, so a range starting at -1 reaches it twice.
         assert records_kept_by_limit(records, -1, {RETRY_RECORD_IDS_KEY: frozenset({"r4"})}) == [4]
+
+
+class TestTheKeyIsNotAConfigSurface:
+    """A workflow's `default_agent_config` accepts unknown keys and spreads them
+    into every action, so a limit must not answer to one written in YAML."""
+
+    @pytest.mark.parametrize("value", [["r4"], ("r4",), {"r4"}, "r4", {"r4": True}])
+    def test_only_a_frozenset_admits_anything(self, value):
+        records = [{"source_guid": f"r{i}"} for i in range(6)]
+        assert records_kept_by_limit(records, 2, {RETRY_RECORD_IDS_KEY: value}) == [0, 1]
