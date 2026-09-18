@@ -126,3 +126,48 @@ class TestABulkRetryIsNotTruncated:
 
         assert result.exit_code == 0, result.output
         assert [_disposition(project, r) for r in ids[-3:]] == ["success"] * 3
+
+
+def _stored_records(project):
+    backend = _backend(project)
+    try:
+        return sum(len(backend.read_target(ACTION, f)) for f in backend.list_target_files(ACTION))
+    finally:
+        backend.close()
+
+
+class TestRetryTouchesOnlyWhatWasTried:
+    """Retry repairs records that ran and failed. A record the cap kept out of
+    the original run was never tried, so retry has no business processing it."""
+
+    def test_records_never_tried_are_left_alone(self, project, monkeypatch):
+        # A capped run tries two of the six staged records.
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--max-records", "2", "--fresh"])
+        assert result.exit_code == 0, result.output
+        assert _stored_records(project) == 2
+        tried = _record_ids(project)
+        assert len(tried) == 2
+        _fail(project, tried[-1])
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", tried[-1]])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, tried[-1]) == "success"
+        assert _stored_records(project) == 2, "retry processed records that were never tried"
+
+    def test_a_configured_record_limit_does_not_truncate_a_retry(self, project, monkeypatch):
+        """record_limit: lives in the project's own config and slices through the
+        same statement the cap does, so it drops the record retry was given."""
+        config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "  - name: flatten\n", "  - name: flatten\n    record_limit: 1\n"
+            )
+        )
+        late = _record_ids(project)[-1]
+        _fail(project, late)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, late) == "success", "a configured limit truncated the retry"
