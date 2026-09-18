@@ -259,6 +259,7 @@ RetryCommand.execute()
   ├─ (dry_run? → stop here)
   │
   ├─ Snapshot dispositions → _write_manifest()      ← crash-safe: written BEFORE clearing
+  ├─ Stamp _retry_no_limits on every downstream action  ← limits cut by position; retry selects by id
   ├─ clear_disposition() per record per downstream action
   ├─ clear_disposition(NODE_LEVEL_RECORD_ID)        ← clear action-level FAILED/SKIPPED
   ├─ clear_checkpoint_records()                     ← clear stale partial output
