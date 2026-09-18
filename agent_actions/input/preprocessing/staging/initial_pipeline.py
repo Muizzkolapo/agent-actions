@@ -22,7 +22,7 @@ from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.limits import effective_record_limit, selected_records
+from agent_actions.utils.limits import effective_record_limit, limits_declined
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -197,10 +197,10 @@ def process_initial_stage(ctx: InitialStageContext):
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
-    # Slice BEFORE source save to prevent dedup poisoning. A named selection
-    # replaces the limit: a limit cuts by position and would drop what it names.
-    selected = selected_records(ctx.agent_config)
-    record_limit = None if selected is not None else effective_record_limit(ctx.agent_config)
+    # Slice BEFORE source save to prevent dedup poisoning
+    record_limit = (
+        None if limits_declined(ctx.agent_config) else effective_record_limit(ctx.agent_config)
+    )
     if record_limit is not None and isinstance(data_chunk, list) and len(data_chunk) > 0:
         total = len(data_chunk)
         data_chunk = data_chunk[:record_limit]
@@ -662,10 +662,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory(ctx.storage_backend)
 
-    disposition_gate = DispositionGate(
-        storage_backend=ctx.storage_backend,
-        selected=selected_records(ctx.agent_config),
-    )
+    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
     submission_service = BatchSubmissionService(
         task_preparator=task_preparator,
         client_resolver=client_resolver,
@@ -713,10 +710,7 @@ def _process_online_mode_with_record_processor(
     from agent_actions.processing.disposition_gate import DispositionGate
 
     strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
-    disposition_gate = DispositionGate(
-        storage_backend=ctx.storage_backend,
-        selected=selected_records(ctx.agent_config),
-    )
+    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
     processor = UnifiedProcessor(disposition_gate=disposition_gate)
 
     processing_context = ProcessingContext(

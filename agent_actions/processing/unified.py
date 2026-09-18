@@ -167,7 +167,7 @@ class UnifiedProcessor:
                                 )
                             )
                 else:
-                    to_process.extend(r for r in passing if r.get("source_guid") in carry_ids)
+                    to_process = passing
             passing = to_process
 
         # Cascade filter — quarantine upstream-failed records before strategy
