@@ -20,7 +20,6 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.limits import limits_declined
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -199,10 +198,6 @@ def _raise_action_fatal(
 
 def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
     """Return True (and log) if file_limit has been reached."""
-    if limits_declined(action_config):
-        # A retried record lives in whichever file it lives in; stopping early
-        # would hide it after its disposition was already cleared.
-        return False
     file_limit = action_config.get("file_limit")
     if file_limit is not None and count >= file_limit:
         logger.info("file_limit=%d reached for %s", count, action_name)

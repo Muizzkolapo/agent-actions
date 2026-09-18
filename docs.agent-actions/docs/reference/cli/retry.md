@@ -53,16 +53,22 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 `--record` takes the identifier shown in the **Record ID** column of [`dispositions --quarantined`](./dispositions) — retry matches against exactly that value.
 
-## Limits do not apply
+## Record limits never exclude a retried record
 
-`record_limit`, `file_limit`, `AGAC_MAX_RECORDS` and `--max-records` all cut by
-position — they keep the first N records or files. `retry` works on records
-chosen by id, so a cut would drop the very records it was given. It ignores all
-four, at every action it re-runs.
+A record limit — [`record_limit`](../configuration/defaults) or
+[`AGAC_MAX_RECORDS`](../configuration/) — keeps the first N records of an input
+file. `retry` selects records by id, so it is given the records it needs
+regardless of where they sit, at every action it re-runs.
+
+The limit still applies to everything else. A retry takes on no work the limit
+was holding back; it only adds the records it was asked to repair.
 
 This matters because `retry` clears a record's disposition before re-running it.
-A retry that skipped the record would not leave it failed; it would leave no
+A retry that skipped the record would not leave it failed — it would leave no
 record of the failure at all.
+
+`file_limit` is not covered: a retry still stops at N input files, so a record in
+a later file is not reached.
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.

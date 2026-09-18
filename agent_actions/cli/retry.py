@@ -28,7 +28,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.limits import RETRY_NO_LIMITS_KEY
+from agent_actions.utils.limits import RETRY_RECORD_IDS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class RetryCommand:
         for action in downstream_actions:
             action_config = workflow.action_configs.get(action)
             if action_config is not None:
-                action_config[RETRY_NO_LIMITS_KEY] = True
+                action_config[RETRY_RECORD_IDS_KEY] = frozenset(record_ids)
 
         cleared = 0
         for action in downstream_actions:

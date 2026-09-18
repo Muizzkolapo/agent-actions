@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -14,10 +14,10 @@ MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
 # Stamped onto every action config when the run was asked for a cap.
 MAX_RECORDS_KEY = "_max_records"
 
-# Stamped on the actions a retry is about to re-run. Every limit here counts
-# records or files and cuts by position; a retry works on records chosen by id,
-# so a cut would drop the ones it was given and erase the failure it cleared.
-RETRY_NO_LIMITS_KEY = "_retry_no_limits"
+# Stamped with the source_guids a retry is re-running. A limit keeps the first N
+# by position and would cut these loose; a retry cleared their dispositions
+# before re-running, so cutting one erases the failure instead of repairing it.
+RETRY_RECORD_IDS_KEY = "_retry_record_ids"
 
 
 def _environment_ceiling() -> int | None:
@@ -60,9 +60,23 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
     return environment, MAX_RECORDS_ENV
 
 
-def limits_declined(action_config: Mapping[str, Any]) -> bool:
-    """Whether this run refuses every limit that cuts by position."""
-    return bool(action_config.get(RETRY_NO_LIMITS_KEY))
+def records_kept_by_limit(
+    records: Sequence[Any], limit: int, action_config: Mapping[str, Any]
+) -> list[int]:
+    """Indices of the first `limit` records, plus any this retry is re-running.
+
+    A limit only ever admits more here, never fewer: it decides how much *new*
+    work to take on, and a retried record is work already taken on.
+    """
+    kept = list(range(min(limit, len(records))))
+    retried = action_config.get(RETRY_RECORD_IDS_KEY)
+    if retried:
+        kept.extend(
+            index
+            for index in range(limit, len(records))
+            if isinstance(records[index], Mapping) and records[index].get("source_guid") in retried
+        )
+    return kept
 
 
 def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:

@@ -225,7 +225,7 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 |----------|---------|-------------|
 | `AGENT_ACTIONS_LOG_LEVEL` | INFO | Log level (DEBUG, INFO, WARNING, ERROR) |
 | `AGENT_ACTIONS_DEBUG` | 0 | Enable debug mode |
-| `AGAC_MAX_RECORDS` | unset | Cap each action at this many records per input file, overriding a larger `record_limit` and applying to actions that set none. [`--max-records`](../cli/run#running-a-project-smaller-than-it-is) takes precedence when both are set, and can raise this value as well as lower it. For running a project cheaply from outside it — a smoke check, a quick sanity pass. An active cap logs a warning, since a truncated run otherwise looks complete. A value below 1, or one that is not an integer, fails the run rather than being ignored. Does not apply to [`agac retry`](../cli/retry), which selects records by id. |
+| `AGAC_MAX_RECORDS` | unset | Cap each action at this many records per input file, overriding a larger `record_limit` and applying to actions that set none. [`--max-records`](../cli/run#running-a-project-smaller-than-it-is) takes precedence when both are set, and can raise this value as well as lower it. For running a project cheaply from outside it — a smoke check, a quick sanity pass. An active cap logs a warning, since a truncated run otherwise looks complete. A value below 1, or one that is not an integer, fails the run rather than being ignored. Never excludes a record that [`agac retry`](../cli/retry) is re-running, since retry selects by id. |
 
 ## Directory Structure
 
