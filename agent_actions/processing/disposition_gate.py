@@ -33,9 +33,23 @@ class DispositionGate:
     would retain stale data from the first run.
     """
 
-    def __init__(self, storage_backend: StorageBackend | None = None) -> None:
+    def __init__(
+        self,
+        storage_backend: StorageBackend | None = None,
+        selected: frozenset[str] | None = None,
+    ) -> None:
         self._backend = storage_backend
+        self._selected = selected
         self._terminal_ids_cache: dict[str, set[str]] = {}
+
+    def _terminal_ids(self, action_name: str) -> set[str]:
+        if self._backend is None:
+            return set()
+        if action_name not in self._terminal_ids_cache:
+            self._terminal_ids_cache[action_name] = self._backend.get_terminal_record_ids(
+                action_name
+            )
+        return self._terminal_ids_cache[action_name]
 
     def filter(
         self,
@@ -44,32 +58,26 @@ class DispositionGate:
     ) -> tuple[list[dict[str, Any]], set[str]]:
         """Partition records into (to_process, carry_ids).
 
-        Returns:
-            to_process: records with no terminal disposition.
-            carry_ids: source_guids with terminal dispositions.
+        A run that named its records takes only those. The rest are carried if
+        they have output to carry and dropped otherwise — a record that was
+        never tried is not this run's to process.
         """
-        if self._backend is None:
-            return records, set()
-
-        if action_name not in self._terminal_ids_cache:
-            self._terminal_ids_cache[action_name] = self._backend.get_terminal_record_ids(
-                action_name
-            )
-
-        terminal_ids = self._terminal_ids_cache[action_name]
-        if not terminal_ids:
+        terminal_ids = self._terminal_ids(action_name)
+        if self._selected is None and not terminal_ids:
             return records, set()
 
         to_process: list[dict[str, Any]] = []
         carry_ids: set[str] = set()
         for record in records:
             rid = record.get("source_guid")
-            if rid is None or rid not in terminal_ids:
+            if self._selected is not None and rid in self._selected:
                 to_process.append(record)
-            else:
+            elif rid is not None and rid in terminal_ids:
                 carry_ids.add(rid)
+            elif self._selected is None:
+                to_process.append(record)
 
-        if carry_ids:
+        if carry_ids or self._selected is not None:
             logger.info(
                 "Action '%s': %d record(s) carried forward, %d to process",
                 action_name,

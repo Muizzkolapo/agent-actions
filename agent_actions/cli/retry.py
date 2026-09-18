@@ -28,6 +28,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.limits import RETRY_RECORD_IDS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,7 @@ class RetryCommand:
         # read_only in BOTH modes: _find_failures below reads the disposition
         # rows the startup reset would have cleared, and the non-dry-run path
         # makes its own status transitions once it knows what to retry.
-        workflow = load_workflow(
-            self.agent_name, paths, project_root, read_only=True, no_record_cap=True
-        )
+        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
         execution_order = list(workflow.execution_order)
 
         failures = self._find_failures(backend, execution_order)
@@ -199,6 +198,14 @@ class RetryCommand:
             downstream_actions,
             snapshot_dispositions,
         )
+
+        # Name the records on every action about to re-run, so each processes
+        # exactly these and no limit slices them away. Actions upstream of
+        # from_action keep their completed status and are skipped regardless.
+        for action in downstream_actions:
+            action_config = workflow.action_configs.get(action)
+            if action_config is not None:
+                action_config[RETRY_RECORD_IDS_KEY] = frozenset(record_ids)
 
         cleared = 0
         for action in downstream_actions:

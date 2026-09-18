@@ -14,10 +14,9 @@ MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
 # Stamped onto every action config when the run was asked for a cap.
 MAX_RECORDS_KEY = "_max_records"
 
-# Stamped when the run takes no record cap at all. A cap truncates by position;
-# a command that selects records by identity — retry — would lose the ones it was
-# asked for, so it declines the cap rather than competing with it.
-NO_RECORD_CAP_KEY = "_no_record_cap"
+# Stamped with the source_guids a run was asked to process. A limit cuts by
+# position, so it cannot coexist with a selection that names its records.
+RETRY_RECORD_IDS_KEY = "_retry_record_ids"
 
 
 def _environment_ceiling() -> int | None:
@@ -54,12 +53,16 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
     environment = _environment_ceiling()
-    if action_config.get(NO_RECORD_CAP_KEY):
-        return None, ""
     asked = _run_ceiling(action_config)
     if asked is not None:
         return asked, "--max-records"
     return environment, MAX_RECORDS_ENV
+
+
+def selected_records(action_config: Mapping[str, Any]) -> frozenset[str] | None:
+    """The records this run was asked to process, or None when it takes all of them."""
+    selected = action_config.get(RETRY_RECORD_IDS_KEY)
+    return frozenset(selected) if selected else None
 
 
 def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:

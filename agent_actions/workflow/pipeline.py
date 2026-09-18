@@ -27,7 +27,7 @@ from agent_actions.storage.backend import (
     DispositionRow,
 )
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
-from agent_actions.utils.limits import effective_record_limit
+from agent_actions.utils.limits import effective_record_limit, selected_records
 from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
@@ -152,6 +152,7 @@ class ProcessingPipeline:
 
         self._disposition_gate = DispositionGate(
             storage_backend=config.storage_backend,
+            selected=selected_records(config.action_config),
         )
         self._unified_processor = UnifiedProcessor(
             disposition_gate=self._disposition_gate,
@@ -208,7 +209,10 @@ class ProcessingPipeline:
         if disposition_gate is None and params.storage_backend is not None:
             from agent_actions.processing.disposition_gate import DispositionGate
 
-            disposition_gate = DispositionGate(storage_backend=params.storage_backend)
+            disposition_gate = DispositionGate(
+                storage_backend=params.storage_backend,
+                selected=selected_records(params.pipeline_action_config),
+            )
 
         task_preparator = BatchTaskPreparator(
             action_indices=params.agent_indices,
@@ -488,7 +492,12 @@ class ProcessingPipeline:
                 )
 
         # ── per-action record_limit ──────────────────────────────────────
-        record_limit = effective_record_limit(self.config.action_config)
+        # A named selection replaces the limit: a limit cuts by position and
+        # would drop the very records it names.
+        selected = selected_records(self.config.action_config)
+        record_limit = (
+            None if selected is not None else effective_record_limit(self.config.action_config)
+        )
         if record_limit is not None and isinstance(data, list) and len(data) > record_limit:
             total = len(data)
             data = data[:record_limit]
