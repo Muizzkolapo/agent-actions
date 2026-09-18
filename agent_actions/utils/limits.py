@@ -66,16 +66,27 @@ def records_kept_by_limit(
     """Indices of the first `limit` records, plus any this retry is re-running.
 
     A limit only ever admits more here, never fewer: it decides how much *new*
-    work to take on, and a retried record is work already taken on.
+    work to take on, and a retried record is work already taken on. An identity
+    is admitted once — source_guid is a content hash, so byte-identical rows
+    share one, and admitting each position would store the record twice.
     """
+    limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
     retried = action_config.get(RETRY_RECORD_IDS_KEY)
-    if retried:
-        kept.extend(
-            index
-            for index in range(limit, len(records))
-            if isinstance(records[index], Mapping) and records[index].get("source_guid") in retried
-        )
+    if not retried:
+        return kept
+
+    seen = {
+        records[index].get("source_guid") for index in kept if isinstance(records[index], Mapping)
+    }
+    for index in range(limit, len(records)):
+        record = records[index]
+        if not isinstance(record, Mapping):
+            continue
+        guid = record.get("source_guid")
+        if guid in retried and guid not in seen:
+            kept.append(index)
+            seen.add(guid)
     return kept
 
 

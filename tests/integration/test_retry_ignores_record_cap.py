@@ -63,6 +63,11 @@ def project(tmp_path, monkeypatch):
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
     assert result.exit_code == 0, result.output
+    # A limit slices in staging order and the store keeps it. Pinned here so a
+    # test asking for "a record past the cap" cannot quietly get one inside it.
+    assert [r["content"]["source"]["page_content"] for r in _read_first_file(root, ACTION)] == [
+        f"page {i}" for i in range(RECORDS)
+    ]
     return root
 
 
@@ -139,6 +144,11 @@ def _stored_guids(project, action=ACTION):
         backend.close()
 
 
+def _guid_at(project, index, action=ACTION):
+    """The guid at `index` in the order the limit slices."""
+    return [r["source_guid"] for r in _read_first_file(project, action)][index]
+
+
 def _a_record_the_cap_would_cut(project, cap, action=ACTION):
     """A record that sits past `cap` in the order the limit slices."""
     guids = [r["source_guid"] for r in _read_first_file(project, action)]
@@ -188,6 +198,21 @@ class TestARecordNamedByIdIsAlwaysRetried:
         CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
         assert sorted(_record_ids(project)) == before
+
+
+class TestTheFirstRecordTheLimitExcludes:
+    """Index == limit is the boundary. A range that starts one late admits every
+    other retried record and silently drops this one."""
+
+    def test_the_record_immediately_past_the_cap_is_repaired(self, project, monkeypatch):
+        boundary = _guid_at(project, 1)
+        _fail(project, boundary)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", boundary])
+
+        assert result.exit_code == 0, result.output
+        assert _disposition(project, boundary) == "success"
 
 
 class TestABulkRetryIsNotTruncated:
@@ -262,6 +287,21 @@ class TestEveryActionTheRetryRerunsAdmitsTheRecord:
     """A retry re-runs its starting action and everything below it. A limit left
     standing on any one of them cuts the record there instead."""
 
+    def test_two_records_both_survive_the_action_below(self, chained, monkeypatch):
+        """Two, not one. With a single record the action below can keep it by
+        the luck of its input order, whether or not the limit was told about it.
+        A cap of one cannot keep two by luck."""
+        late = [_guid_at(chained, -2), _guid_at(chained, -1)]
+        for guid in late:
+            _fail(chained, guid, ACTION)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+        assert retry.exit_code == 0, retry.output
+        assert [_disposition(chained, g, SECOND) for g in late] == ["success", "success"]
+        assert [_disposition(chained, g, ACTION) for g in late] == ["success", "success"]
+
     def test_an_action_below_the_retry_point_still_gets_the_record(self, chained, monkeypatch):
         late = _a_record_the_cap_would_cut(chained, cap=1)
         _fail(chained, late, ACTION)
@@ -277,7 +317,7 @@ class TestEveryActionTheRetryRerunsAdmitsTheRecord:
 class TestTheRetriedRecordKeepsItsOutput:
     """Dispositions say what a retry did; output rows say what it wrote."""
 
-    def test_the_record_has_a_row_at_every_action_the_retry_reran(self, chained, monkeypatch):
+    def test_the_record_has_a_row_at_the_action_that_reran(self, chained, monkeypatch):
         late = _a_record_the_cap_would_cut(chained, cap=1)
         _fail(chained, late, SECOND)
         monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
@@ -286,7 +326,6 @@ class TestTheRetriedRecordKeepsItsOutput:
 
         assert retry.exit_code == 0, retry.output
         assert _disposition(chained, late, SECOND) == "success"
-        assert late in _stored_guids(chained, ACTION)
         assert late in _stored_guids(chained, SECOND)
 
     def test_an_exhausted_record_is_not_erased_by_a_capped_retry(self, chained, monkeypatch):

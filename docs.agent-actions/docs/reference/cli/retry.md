@@ -57,18 +57,27 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 A record limit — [`record_limit`](../configuration/defaults) or
 [`AGAC_MAX_RECORDS`](../configuration/) — keeps the first N records of an input
-file. `retry` selects records by id, so it is given the records it needs
-regardless of where they sit, at every action it re-runs.
+file. `retry` selects records by id, so the records it is repairing are admitted
+on top of that N rather than cut loose by it.
 
-The limit still applies to everything else. A retry takes on no work the limit
-was holding back; it only adds the records it was asked to repair.
+A retry takes on no work the limit was holding back: it adds the records it was
+asked to repair, and nothing else.
 
 This matters because `retry` clears a record's disposition before re-running it.
 A retry that skipped the record would not leave it failed — it would leave no
 record of the failure at all.
 
-`file_limit` is not covered: a retry still stops at N input files, so a record in
-a later file is not reached.
+Two limits of the current behaviour:
+
+- `file_limit` is not covered. A retry still stops at N input files, so a record
+  in a later file is not reached.
+- An action that turns one record into several gives the new records fresh
+  identifiers, so a retry's ids do not match them at actions below that point.
+  `retry` already clears dispositions by the same ids, so this is not new.
+
+A capped retry also rewrites an action's output with only the records it
+processed, so records it did not name lose their stored rows while keeping their
+`success` dispositions. That predates this behaviour and is unchanged by it.
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.
