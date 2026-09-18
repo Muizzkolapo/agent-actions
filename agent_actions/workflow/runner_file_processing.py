@@ -29,6 +29,8 @@ if TYPE_CHECKING:
         SingleFileProcessParams,
     )
 
+from agent_actions.utils.limits import selected_records
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,6 +200,10 @@ def _raise_action_fatal(
 
 def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
     """Return True (and log) if file_limit has been reached."""
+    if selected_records(action_config) is not None:
+        # A named record lives in whichever file it lives in; stopping early
+        # would hide it after its disposition was already cleared.
+        return False
     file_limit = action_config.get("file_limit")
     if file_limit is not None and count >= file_limit:
         logger.info("file_limit=%d reached for %s", count, action_name)

@@ -232,9 +232,8 @@ class BatchSubmissionService:
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
-            if carry_ids:
-                carry_forward_guids = sorted(carry_ids)
-                data = to_process
+            carry_forward_guids = sorted(carry_ids)
+            data = to_process
 
         # Carry-forward GUIDs are tracked via dispositions in the storage
         # backend — no filesystem artifact needed.
