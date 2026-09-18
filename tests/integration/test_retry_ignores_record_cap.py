@@ -297,3 +297,36 @@ class TestRetryRepairsWhatWasTried:
         assert retry.exit_code == 0, retry.output
         assert _stored_records(chained, SECOND) == RECORDS
         assert _disposition(chained, second[0], SECOND) is not None
+
+
+class TestAFileLimitDoesNotTruncateARetry:
+    """`file_limit:` stops the run at N input files. A retry names a record, and
+    that record lives in whichever file it lives in."""
+
+    def test_a_record_in_a_later_file_is_still_repaired(self, project):
+        staging = project / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        staging.joinpath("zz_extra.json").write_text(
+            json.dumps([{"page_content": f"extra {i}"} for i in range(2)])
+        )
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+        assert result.exit_code == 0, result.output
+
+        backend = _backend(project)
+        try:
+            last_file = sorted(backend.list_target_files(ACTION))[-1]
+            late = [r["source_guid"] for r in backend.read_target(ACTION, last_file)][-1]
+        finally:
+            backend.close()
+        _fail(project, late)
+
+        config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "  - name: flatten\n", "  - name: flatten\n    file_limit: 1\n"
+            )
+        )
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, late) == "success", "the file limit hid the record's file"
