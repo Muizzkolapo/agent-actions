@@ -14,6 +14,11 @@ MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
 # Stamped onto every action config when the run was asked for a cap.
 MAX_RECORDS_KEY = "_max_records"
 
+# Stamped when the run takes no record cap at all. A cap truncates by position;
+# a command that selects records by identity — retry — would lose the ones it was
+# asked for, so it declines the cap rather than competing with it.
+NO_RECORD_CAP_KEY = "_no_record_cap"
+
 
 def _environment_ceiling() -> int | None:
     """Read the environment ceiling, refusing a value that cannot cap anything."""
@@ -49,6 +54,8 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
     environment = _environment_ceiling()
+    if action_config.get(NO_RECORD_CAP_KEY):
+        return None, ""
     asked = _run_ceiling(action_config)
     if asked is not None:
         return asked, "--max-records"
