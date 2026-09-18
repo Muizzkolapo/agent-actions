@@ -1,0 +1,128 @@
+"""A record cap must not reach `agac retry`.
+
+A cap truncates by position; retry selects by identity. Applied to a retry, the
+cap drops records the command was asked to repair — and because retry clears a
+record's disposition before re-running, the failure is erased rather than fixed.
+"""
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from agent_actions.cli.main import cli
+from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.storage import get_storage_backend
+
+SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
+WORKFLOW = "tool_action"
+ACTION = "flatten"
+RECORDS = 6
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    """A run of six records through a local tool — no network."""
+    root = tmp_path / "project"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    staging.joinpath("pages.json").write_text(
+        json.dumps([{"page_content": f"page {i}"} for i in range(RECORDS)])
+    )
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    return root
+
+
+def _backend(project):
+    paths = ProjectPathsFactory.create_project_paths(
+        WORKFLOW, WORKFLOW, auto_create=False, project_root=project
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=WORKFLOW)
+    backend.initialize()
+    return backend
+
+
+def _record_ids(project):
+    backend = _backend(project)
+    try:
+        rows = [r for r in backend.get_disposition(ACTION) if r.get("record_id") != "__node__"]
+        return [r["record_id"] for r in rows]
+    finally:
+        backend.close()
+
+
+def _disposition(project, record_id):
+    backend = _backend(project)
+    try:
+        rows = [r for r in backend.get_disposition(ACTION) if r.get("record_id") == record_id]
+        return rows[0]["disposition"] if rows else None
+    finally:
+        backend.close()
+
+
+def _fail(project, record_id):
+    backend = _backend(project)
+    try:
+        backend.set_disposition(ACTION, record_id, "failed", reason="constructed for this test")
+    finally:
+        backend.close()
+
+
+class TestARecordNamedByIdIsAlwaysRetried:
+    def test_a_late_record_is_repaired_under_a_cap(self, project, monkeypatch):
+        """The cap would keep only the first record; this one is the last."""
+        late = _record_ids(project)[-1]
+        _fail(project, late)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert result.exit_code == 0, result.output
+        assert _disposition(project, late) == "success"
+
+    def test_the_failure_is_never_left_erased(self, project, monkeypatch):
+        """Retry clears the disposition before re-running. If the record is then
+        dropped, the failure is gone and nothing records that it happened."""
+        late = _record_ids(project)[-1]
+        _fail(project, late)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert _disposition(project, late) is not None, "the failure row was erased"
+
+    def test_the_action_keeps_a_row_for_every_record(self, project, monkeypatch):
+        """A retry may repair a record or leave it failed; it may not lose it.
+
+        Asserted on the row count, because "nothing to retry" reads the same
+        whether the record was repaired or its failure was erased.
+        """
+        before = len(_record_ids(project))
+        late = _record_ids(project)[-1]
+        _fail(project, late)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert len(_record_ids(project)) == before, "a record lost its disposition row"
+
+
+class TestABulkRetryIsNotTruncated:
+    def test_every_failed_record_is_retried_under_a_cap(self, project, monkeypatch):
+        ids = _record_ids(project)
+        for record_id in ids[-3:]:
+            _fail(project, record_id)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+        assert result.exit_code == 0, result.output
+        assert [_disposition(project, r) for r in ids[-3:]] == ["success"] * 3
