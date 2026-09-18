@@ -265,3 +265,35 @@ class TestACappedRetryKeepsEveryOutputRow:
         assert retry.exit_code == 0, retry.output
         assert _disposition(chained, ids[0], SECOND) == "exhausted"
         assert _stored_records(chained, SECOND) == RECORDS
+
+
+class TestRetryRepairsWhatWasTried:
+    """ "Tried" is having a disposition row, not having a terminal one.
+
+    A record that ran and failed at a later action is not named by a retry that
+    started earlier, and it holds no terminal disposition. It was still tried,
+    so it is retry's to repair — and its stored output is not retry's to drop.
+    """
+
+    def test_a_failure_below_the_retry_point_is_still_repaired(self, chained):
+        first = _record_ids(chained, ACTION)
+        second = _record_ids(chained, SECOND)
+        _fail(chained, first[-1], ACTION)
+        _fail(chained, second[0], SECOND)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, second[0], SECOND) == "success"
+        assert _stored_records(chained, SECOND) == RECORDS
+
+    def test_a_second_failure_keeps_its_row_when_one_record_is_named(self, chained):
+        second = _record_ids(chained, SECOND)
+        _fail(chained, second[-1], SECOND)
+        _fail(chained, second[0], SECOND)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", second[-1]])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_records(chained, SECOND) == RECORDS
+        assert _disposition(chained, second[0], SECOND) is not None
