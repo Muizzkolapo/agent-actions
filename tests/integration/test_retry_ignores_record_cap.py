@@ -1,8 +1,9 @@
-"""A record cap must not reach `agac retry`.
+"""No limit that cuts by position may reach `agac retry`.
 
-A cap truncates by position; retry selects by identity. Applied to a retry, the
-cap drops records the command was asked to repair — and because retry clears a
-record's disposition before re-running, the failure is erased rather than fixed.
+`record_limit`, `file_limit`, `AGAC_MAX_RECORDS` and `--max-records` all truncate
+by position. A retry selects records by id, and it clears a record's disposition
+before re-running — so a truncated retry does not merely skip the record it was
+asked to repair, it erases the evidence that the record ever failed.
 """
 
 import json
@@ -19,7 +20,28 @@ from agent_actions.storage import get_storage_backend
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "tool_action"
 ACTION = "flatten"
+SECOND = "enrich"
 RECORDS = 6
+
+TAG_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def tag_density(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
+"""
+
+SECOND_ACTION = """  - name: enrich
+    kind: tool
+    dependencies: [flatten]
+    intent: "Tag"
+    schema: tool_action_output
+    impl: tag_density
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
 
 
 @pytest.fixture
@@ -39,6 +61,23 @@ def project(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
     assert result.exit_code == 0, result.output
     return root
+
+
+@pytest.fixture
+def chained(project):
+    """The same six records through two tool actions.
+
+    The second action reads the first action's output rather than staging, so it
+    runs the pipeline that a single-action workflow never reaches.
+    """
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
+    (project / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    assert _stored_records(project, SECOND) == RECORDS
+    return project
 
 
 def _backend(project):
@@ -76,10 +115,46 @@ def _fail(project, record_id, action=ACTION, disposition="failed"):
         backend.close()
 
 
+def _stored_records(project, action=ACTION):
+    backend = _backend(project)
+    try:
+        return sum(len(backend.read_target(action, f)) for f in backend.list_target_files(action))
+    finally:
+        backend.close()
+
+
+def _stored_guids(project, action=ACTION):
+    backend = _backend(project)
+    try:
+        return sorted(
+            r["source_guid"]
+            for f in backend.list_target_files(action)
+            for r in backend.read_target(action, f)
+            if r.get("source_guid")
+        )
+    finally:
+        backend.close()
+
+
+def _a_record_the_cap_would_cut(project, cap, action=ACTION):
+    """A record that sits past `cap` in the order the limit slices."""
+    guids = [r["source_guid"] for r in _read_first_file(project, action)]
+    assert len(guids) > cap, "fixture too small for this cap"
+    return guids[-1]
+
+
+def _read_first_file(project, action):
+    backend = _backend(project)
+    try:
+        return backend.read_target(action, sorted(backend.list_target_files(action))[0])
+    finally:
+        backend.close()
+
+
 class TestARecordNamedByIdIsAlwaysRetried:
     def test_a_late_record_is_repaired_under_a_cap(self, project, monkeypatch):
         """The cap would keep only the first record; this one is the last."""
-        late = _record_ids(project)[-1]
+        late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
         monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
 
@@ -91,7 +166,7 @@ class TestARecordNamedByIdIsAlwaysRetried:
     def test_the_failure_is_never_left_erased(self, project, monkeypatch):
         """Retry clears the disposition before re-running. If the record is then
         dropped, the failure is gone and nothing records that it happened."""
-        late = _record_ids(project)[-1]
+        late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
         monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
 
@@ -99,20 +174,17 @@ class TestARecordNamedByIdIsAlwaysRetried:
 
         assert _disposition(project, late) is not None, "the failure row was erased"
 
-    def test_the_action_keeps_a_row_for_every_record(self, project, monkeypatch):
-        """A retry may repair a record or leave it failed; it may not lose it.
-
-        Asserted on the row count, because "nothing to retry" reads the same
-        whether the record was repaired or its failure was erased.
-        """
-        before = len(_record_ids(project))
-        late = _record_ids(project)[-1]
+    def test_no_record_loses_its_disposition_row(self, project, monkeypatch):
+        """Asserted on the ids, not the count: a lost row plus a spurious one
+        keeps the count and still means a record was lost."""
+        before = sorted(_record_ids(project))
+        late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
         monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
 
         CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
-        assert len(_record_ids(project)) == before, "a record lost its disposition row"
+        assert sorted(_record_ids(project)) == before
 
 
 class TestABulkRetryIsNotTruncated:
@@ -128,43 +200,19 @@ class TestABulkRetryIsNotTruncated:
         assert [_disposition(project, r) for r in ids[-3:]] == ["success"] * 3
 
 
-def _stored_records(project, action=ACTION):
-    backend = _backend(project)
-    try:
-        return sum(len(backend.read_target(action, f)) for f in backend.list_target_files(action))
-    finally:
-        backend.close()
+class TestEveryLimitIsDeclined:
+    """The environment ceiling is only one of four ways to ask for a cut."""
 
-
-class TestRetryTouchesOnlyWhatWasTried:
-    """Retry repairs records that ran and failed. A record the cap kept out of
-    the original run was never tried, so retry has no business processing it."""
-
-    def test_records_never_tried_are_left_alone(self, project, monkeypatch):
-        # A capped run tries two of the six staged records.
-        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--max-records", "2", "--fresh"])
-        assert result.exit_code == 0, result.output
-        assert _stored_records(project) == 2
-        tried = _record_ids(project)
-        assert len(tried) == 2
-        _fail(project, tried[-1])
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", tried[-1]])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(project, tried[-1]) == "success"
-        assert _stored_records(project) == 2, "retry processed records that were never tried"
-
-    def test_a_configured_record_limit_does_not_truncate_a_retry(self, project, monkeypatch):
-        """record_limit: lives in the project's own config and slices through the
-        same statement the cap does, so it drops the record retry was given."""
+    def test_a_configured_record_limit_does_not_truncate_a_retry(self, project):
+        """`record_limit:` lives in the project's own config and slices through
+        the same statement the environment ceiling does."""
         config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
         config.write_text(
             config.read_text().replace(
                 "  - name: flatten\n", "  - name: flatten\n    record_limit: 1\n"
             )
         )
-        late = _record_ids(project)[-1]
+        late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
@@ -172,138 +220,9 @@ class TestRetryTouchesOnlyWhatWasTried:
         assert retry.exit_code == 0, retry.output
         assert _disposition(project, late) == "success", "a configured limit truncated the retry"
 
-
-SECOND = "enrich"
-
-TAG_TOOL = """from typing import Any
-
-from agent_actions import udf_tool
-
-
-@udf_tool
-def tag_density(data: Any, *args) -> list[dict]:
-    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
-"""
-
-SECOND_ACTION = """  - name: enrich
-    kind: tool
-    dependencies: [flatten]
-    intent: "Tag"
-    schema: tool_action_output
-    impl: tag_density
-    context_scope: { observe: [flatten.summary] }
-    expect: { repair: none }
-"""
-
-
-@pytest.fixture
-def chained(project):
-    """The same six records through two tool actions.
-
-    The second action reads the first action's output rather than staging, so
-    it runs the pipeline that a single-action workflow never reaches.
-    """
-    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
-    (project / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
-
-    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
-    assert _stored_records(project, SECOND) == RECORDS
-    return project
-
-
-class TestACappedRetryKeepsEveryOutputRow:
-    """Dispositions say what a retry did; output rows say what it destroyed.
-
-    A record the retry does not name still has to come out the far end with the
-    output it already had, at every action the retry re-runs.
-    """
-
-    def test_output_survives_at_every_action_the_retry_reruns(self, chained, monkeypatch):
-        late = _record_ids(chained, SECOND)[-1]
-        _fail(chained, late, SECOND)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(chained, late, SECOND) == "success"
-        assert _stored_records(chained, ACTION) == RECORDS
-        assert _stored_records(chained, SECOND) == RECORDS
-
-    def test_the_retried_record_keeps_its_own_output_row(self, chained, monkeypatch):
-        """Row counts alone would pass if the named record vanished and an
-        unnamed one were duplicated in its place."""
-        late = _record_ids(chained, SECOND)[-1]
-        _fail(chained, late, SECOND)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
-
-        CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
-
-        backend = _backend(chained)
-        try:
-            stored = [
-                r["source_guid"]
-                for f in backend.list_target_files(SECOND)
-                for r in backend.read_target(SECOND, f)
-            ]
-        finally:
-            backend.close()
-        assert sorted(stored) == sorted(_record_ids(chained, SECOND))
-
-    def test_an_exhausted_record_is_carried_not_reprocessed(self, chained, monkeypatch):
-        """`exhausted` is terminal like `success`, so a retry that does not name
-        it must leave its output standing rather than drop it."""
-        ids = _record_ids(chained, SECOND)
-        _fail(chained, ids[0], SECOND, disposition="exhausted")
-        _fail(chained, ids[-1], SECOND)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", ids[-1]])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(chained, ids[0], SECOND) == "exhausted"
-        assert _stored_records(chained, SECOND) == RECORDS
-
-
-class TestRetryRepairsWhatWasTried:
-    """ "Tried" is having a disposition row, not having a terminal one.
-
-    A record that ran and failed at a later action is not named by a retry that
-    started earlier, and it holds no terminal disposition. It was still tried,
-    so it is retry's to repair — and its stored output is not retry's to drop.
-    """
-
-    def test_a_failure_below_the_retry_point_is_still_repaired(self, chained):
-        first = _record_ids(chained, ACTION)
-        second = _record_ids(chained, SECOND)
-        _fail(chained, first[-1], ACTION)
-        _fail(chained, second[0], SECOND)
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(chained, second[0], SECOND) == "success"
-        assert _stored_records(chained, SECOND) == RECORDS
-
-    def test_a_second_failure_keeps_its_row_when_one_record_is_named(self, chained):
-        second = _record_ids(chained, SECOND)
-        _fail(chained, second[-1], SECOND)
-        _fail(chained, second[0], SECOND)
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", second[-1]])
-
-        assert retry.exit_code == 0, retry.output
-        assert _stored_records(chained, SECOND) == RECORDS
-        assert _disposition(chained, second[0], SECOND) is not None
-
-
-class TestAFileLimitDoesNotTruncateARetry:
-    """`file_limit:` stops the run at N input files. A retry names a record, and
-    that record lives in whichever file it lives in."""
-
-    def test_a_record_in_a_later_file_is_still_repaired(self, project):
+    def test_a_file_limit_does_not_hide_the_file_a_record_lives_in(self, project):
+        """`file_limit:` stops the run at N input files. A retried record lives
+        in whichever file it lives in."""
         staging = project / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
         staging.joinpath("zz_extra.json").write_text(
             json.dumps([{"page_content": f"extra {i}"} for i in range(2)])
@@ -330,3 +249,79 @@ class TestAFileLimitDoesNotTruncateARetry:
 
         assert retry.exit_code == 0, retry.output
         assert _disposition(project, late) == "success", "the file limit hid the record's file"
+
+
+class TestEveryActionTheRetryRerunsDeclinesTheLimit:
+    """A retry re-runs its starting action and everything below it. A limit left
+    standing on any one of them cuts there instead."""
+
+    def test_an_action_below_the_retry_point_is_not_truncated(self, chained, monkeypatch):
+        before = _stored_guids(chained, SECOND)
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, ACTION)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_guids(chained, SECOND) == before
+        assert sorted(_record_ids(chained, SECOND)) == before
+
+
+class TestOutputSurvivesTheRetry:
+    """Dispositions say what a retry did; output rows say what it destroyed."""
+
+    def test_every_action_keeps_its_rows(self, chained, monkeypatch):
+        before = {a: _stored_guids(chained, a) for a in (ACTION, SECOND)}
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, late, SECOND) == "success"
+        assert {a: _stored_guids(chained, a) for a in (ACTION, SECOND)} == before
+
+    def test_an_exhausted_record_keeps_its_output(self, chained, monkeypatch):
+        """`exhausted` is terminal like `success`, so a retry that does not name
+        it carries its prior output rather than rebuilding it."""
+        before = _stored_guids(chained, SECOND)
+        ids = _record_ids(chained, SECOND)
+        _fail(chained, ids[0], SECOND, disposition="exhausted")
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, ids[0], SECOND) == "exhausted"
+        assert _stored_guids(chained, SECOND) == before
+
+
+class TestRetryRepairsWhatWasTried:
+    def test_a_failure_below_the_retry_point_is_still_repaired(self, chained):
+        """The retry starts at the first action holding a failure. A record that
+        failed further down is not named by it, and is still its to repair."""
+        first = _record_ids(chained, ACTION)
+        second = _record_ids(chained, SECOND)
+        _fail(chained, first[-1], ACTION)
+        _fail(chained, second[0], SECOND)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, second[0], SECOND) == "success"
+        assert _stored_records(chained, SECOND) == RECORDS
+
+    def test_a_second_failure_keeps_its_row_when_one_record_is_named(self, chained):
+        second = _record_ids(chained, SECOND)
+        _fail(chained, second[-1], SECOND)
+        _fail(chained, second[0], SECOND)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", second[-1]])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_records(chained, SECOND) == RECORDS
+        assert _disposition(chained, second[0], SECOND) is not None

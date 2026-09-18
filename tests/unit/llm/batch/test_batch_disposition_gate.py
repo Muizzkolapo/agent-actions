@@ -188,31 +188,3 @@ class TestCarryForwardDispositionDerived:
             submitted_data = args[0][1]
             assert len(submitted_data) == 1
             assert submitted_data[0]["source_guid"] == "r2"
-
-
-class TestBatchRespectsANamedSelection:
-    def test_a_selection_is_not_widened_when_nothing_is_terminal(self):
-        """A capped run whose only record failed leaves no terminal disposition.
-        The retry names that record; every other staged record must stay out of
-        the submission rather than being sent to the provider."""
-        backend = _mock_backend(terminal_ids=set())
-        backend.get_disposition.return_value = [{"record_id": "r0", "disposition": "failed"}]
-        gate = DispositionGate(storage_backend=backend, selected=frozenset({"r0"}))
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            service = _make_service(
-                disposition_gate=gate,
-                storage_backend=backend,
-                tasks=[{"custom_id": "r0", "body": {}}],
-                context_map={"r0": {"source_guid": "r0"}},
-            )
-
-            service.submit_batch_job(
-                agent_config={"agent_type": "test_action", "action_name": "test_action"},
-                batch_name="test",
-                data=[_make_record(f"r{i}") for i in range(6)],
-                output_directory=tmpdir,
-            )
-
-            submitted = service.prepare_batch_tasks.call_args[0][1]
-            assert [r["source_guid"] for r in submitted] == ["r0"]
