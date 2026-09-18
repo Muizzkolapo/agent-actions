@@ -125,9 +125,6 @@ class RetryCommand:
         # read_only in BOTH modes: _find_failures below reads the disposition
         # rows the startup reset would have cleared, and the non-dry-run path
         # makes its own status transitions once it knows what to retry.
-        #
-        # no_record_cap: a cap truncates by position and retry selects by id, so
-        # it would drop the records being repaired and erase their failures.
         workflow = load_workflow(
             self.agent_name, paths, project_root, read_only=True, no_record_cap=True
         )
