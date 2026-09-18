@@ -20,6 +20,7 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.limits import limits_declined
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -28,8 +29,6 @@ if TYPE_CHECKING:
         FileProcessParams,
         SingleFileProcessParams,
     )
-
-from agent_actions.utils.limits import limits_declined
 
 logger = logging.getLogger(__name__)
 
