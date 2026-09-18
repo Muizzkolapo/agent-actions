@@ -50,28 +50,28 @@ def _backend(project):
     return backend
 
 
-def _record_ids(project):
+def _record_ids(project, action=ACTION):
     backend = _backend(project)
     try:
-        rows = [r for r in backend.get_disposition(ACTION) if r.get("record_id") != "__node__"]
+        rows = [r for r in backend.get_disposition(action) if r.get("record_id") != "__node__"]
         return [r["record_id"] for r in rows]
     finally:
         backend.close()
 
 
-def _disposition(project, record_id):
+def _disposition(project, record_id, action=ACTION):
     backend = _backend(project)
     try:
-        rows = [r for r in backend.get_disposition(ACTION) if r.get("record_id") == record_id]
+        rows = [r for r in backend.get_disposition(action) if r.get("record_id") == record_id]
         return rows[0]["disposition"] if rows else None
     finally:
         backend.close()
 
 
-def _fail(project, record_id):
+def _fail(project, record_id, action=ACTION, disposition="failed"):
     backend = _backend(project)
     try:
-        backend.set_disposition(ACTION, record_id, "failed", reason="constructed for this test")
+        backend.set_disposition(action, record_id, disposition, reason="constructed for this test")
     finally:
         backend.close()
 
@@ -128,10 +128,10 @@ class TestABulkRetryIsNotTruncated:
         assert [_disposition(project, r) for r in ids[-3:]] == ["success"] * 3
 
 
-def _stored_records(project):
+def _stored_records(project, action=ACTION):
     backend = _backend(project)
     try:
-        return sum(len(backend.read_target(ACTION, f)) for f in backend.list_target_files(ACTION))
+        return sum(len(backend.read_target(action, f)) for f in backend.list_target_files(action))
     finally:
         backend.close()
 
@@ -171,3 +171,97 @@ class TestRetryTouchesOnlyWhatWasTried:
 
         assert retry.exit_code == 0, retry.output
         assert _disposition(project, late) == "success", "a configured limit truncated the retry"
+
+
+SECOND = "enrich"
+
+TAG_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def tag_density(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
+"""
+
+SECOND_ACTION = """  - name: enrich
+    kind: tool
+    dependencies: [flatten]
+    intent: "Tag"
+    schema: tool_action_output
+    impl: tag_density
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+@pytest.fixture
+def chained(project):
+    """The same six records through two tool actions.
+
+    The second action reads the first action's output rather than staging, so
+    it runs the pipeline that a single-action workflow never reaches.
+    """
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
+    (project / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    assert _stored_records(project, SECOND) == RECORDS
+    return project
+
+
+class TestACappedRetryKeepsEveryOutputRow:
+    """Dispositions say what a retry did; output rows say what it destroyed.
+
+    A record the retry does not name still has to come out the far end with the
+    output it already had, at every action the retry re-runs.
+    """
+
+    def test_output_survives_at_every_action_the_retry_reruns(self, chained, monkeypatch):
+        late = _record_ids(chained, SECOND)[-1]
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, late, SECOND) == "success"
+        assert _stored_records(chained, ACTION) == RECORDS
+        assert _stored_records(chained, SECOND) == RECORDS
+
+    def test_the_retried_record_keeps_its_own_output_row(self, chained, monkeypatch):
+        """Row counts alone would pass if the named record vanished and an
+        unnamed one were duplicated in its place."""
+        late = _record_ids(chained, SECOND)[-1]
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        backend = _backend(chained)
+        try:
+            stored = [
+                r["source_guid"]
+                for f in backend.list_target_files(SECOND)
+                for r in backend.read_target(SECOND, f)
+            ]
+        finally:
+            backend.close()
+        assert sorted(stored) == sorted(_record_ids(chained, SECOND))
+
+    def test_an_exhausted_record_is_carried_not_reprocessed(self, chained, monkeypatch):
+        """`exhausted` is terminal like `success`, so a retry that does not name
+        it must leave its output standing rather than drop it."""
+        ids = _record_ids(chained, SECOND)
+        _fail(chained, ids[0], SECOND, disposition="exhausted")
+        _fail(chained, ids[-1], SECOND)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", ids[-1]])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, ids[0], SECOND) == "exhausted"
+        assert _stored_records(chained, SECOND) == RECORDS
