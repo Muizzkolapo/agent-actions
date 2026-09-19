@@ -98,6 +98,7 @@ class ProcessParams:
     action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
+    retried_records: frozenset[str] = frozenset()
 
 
 class ProcessingPipeline:
@@ -330,6 +331,7 @@ class ProcessingPipeline:
             idx=params.idx,
             action_configs=params.action_configs,
             storage_backend=params.storage_backend,
+            retried_records=params.retried_records,
         )
         return pipeline.process(
             params.paths.file_path, params.paths.base_directory, params.paths.output_directory

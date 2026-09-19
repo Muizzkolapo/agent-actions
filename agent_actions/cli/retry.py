@@ -198,7 +198,7 @@ class RetryCommand:
             snapshot_dispositions,
         )
 
-        workflow.restrict_to_records(record_ids)
+        workflow.set_retried_records(record_ids)
 
         cleared = 0
         for action in downstream_actions:

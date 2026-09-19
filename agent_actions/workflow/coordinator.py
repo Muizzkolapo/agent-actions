@@ -367,11 +367,13 @@ class AgentWorkflow:
                 self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
                 raise
 
-    def restrict_to_records(self, record_ids: Iterable[str]) -> None:
-        """Tell this run it is repairing these records, named by id.
+    def set_retried_records(self, record_ids: Iterable[str]) -> None:
+        """Tell this run which records it is repairing, by id.
 
-        A record limit keeps the first N by position, which would cut a named
-        record loose. Naming them makes the limit admit them on top of its N.
+        This widens rather than narrows: a record limit keeps the first N by
+        position and would cut a named record loose, so naming them makes the
+        limit admit them on top of its N. The run still processes everything it
+        would otherwise have processed.
         """
         self.services.core.action_runner.retried_records = frozenset(record_ids)
 

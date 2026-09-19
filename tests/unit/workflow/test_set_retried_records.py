@@ -14,24 +14,24 @@ def _workflow_with_runner():
     return workflow, runner
 
 
-class TestRestrictToRecords:
+class TestSetRetriedRecords:
     def test_the_named_records_reach_the_runner(self):
         workflow, runner = _workflow_with_runner()
 
-        workflow.restrict_to_records(["a", "b"])
+        workflow.set_retried_records(["a", "b"])
 
         assert runner.retried_records == frozenset({"a", "b"})
 
     def test_any_iterable_is_accepted(self):
         workflow, runner = _workflow_with_runner()
 
-        workflow.restrict_to_records(iter(["a", "a", "b"]))
+        workflow.set_retried_records(iter(["a", "a", "b"]))
 
         assert runner.retried_records == frozenset({"a", "b"})
 
     def test_a_run_that_names_nothing_leaves_the_runner_empty(self):
         workflow, runner = _workflow_with_runner()
 
-        workflow.restrict_to_records([])
+        workflow.set_retried_records([])
 
         assert runner.retried_records == frozenset()

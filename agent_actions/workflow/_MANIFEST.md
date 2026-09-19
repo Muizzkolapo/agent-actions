@@ -19,7 +19,7 @@ Agent Actions.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `config_pipeline.py` | Module | Config loading and UDF discovery extracted from coordinator. Schema validation is handled by `WorkflowSchemaService` via static analysis. | `config` |
-| `coordinator.py` | Module | Orchestration-only facade: delegates config, services, and events to extracted modules. Stores `schema_service` for reuse by callers. Raises `ConfigurationError` when `storage_backend` is `None` after service init. `restrict_to_records()` names the records a run is repairing, which the record limits admit on top of their own. | `workflow` |
+| `coordinator.py` | Module | Orchestration-only facade: delegates config, services, and events to extracted modules. Stores `schema_service` for reuse by callers. Raises `ConfigurationError` when `storage_backend` is `None` after service init. `set_retried_records()` names the records a run is repairing, which the record limits admit on top of their own N. It widens, never narrows. | `workflow` |
 | `execution_events.py` | Module | `WorkflowEventLogger` class encapsulating all workflow/action event firing, plus `fire_step_start`/`fire_step_complete` shared by the sequential and parallel run paths. | `logging`, `events` |
 | `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. `merge_branch_records()` is the unified primitive for version merge and fan-in (each branch contributes only its own namespace). | `workflow`, `processing` |
