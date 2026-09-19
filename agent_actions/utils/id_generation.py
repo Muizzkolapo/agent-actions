@@ -41,6 +41,26 @@ class IDGenerator:
         return IDGenerator.generate_content_hash(content)
 
     @staticmethod
+    def derive_repeat_source_guid(base_source_guid: str, occurrence: int) -> str:
+        """Deterministic identity for the *occurrence*-th repeat of one content.
+
+        Identity is derived from content, so a record staged twice lands on one
+        guid — and the store is keyed on it, so the second would be dropped. A
+        repeat is a record the user staged; it gets an identity of its own here,
+        derived from the one it repeats so it is stable across runs, and keeps
+        that one as ``parent_source_guid``.
+
+        Derived over the base guid rather than the payload, so it cannot collide
+        with the hash of any real record: the payload hash covers the record's own
+        fields, this covers a two-key shape that is not a record.
+        """
+        if occurrence < 1:
+            raise ValueError(f"occurrence must be at least 1, got {occurrence}")
+        return IDGenerator.generate_content_hash(
+            {"repeat_of": base_source_guid, "occurrence": occurrence}
+        )
+
+    @staticmethod
     def _require_string_keys(obj: Any) -> None:
         """Reject non-string dict keys before hashing.
 

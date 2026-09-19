@@ -535,17 +535,11 @@ class TestIdenticalStagedRecords:
         assert retry.exit_code == 0, retry.output
         assert "processing" not in retry.output, retry.output
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Carry-forward rebuilds an action's output keyed by identity, so several "
-            "rows sharing a source_guid collapse to one — with or without a limit, "
-            "and with the limit slice not running at all. A separate defect on a "
-            "separate path; asserting it here keeps it visible rather than letting a "
-            "relative yardstick certify the loss."
-        ),
-    )
     def test_a_retry_keeps_every_row_of_a_repeated_identity(self, duplicated, monkeypatch):
+        """Was an xfail: carry-forward rebuilds an action keyed by identity, so
+        rows sharing one collapsed. They no longer share one — a record staged
+        twice is two records with two identities — so there is nothing to
+        collapse."""
         failed = _record_ids(duplicated)[-1]
         _fail(duplicated, failed)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
