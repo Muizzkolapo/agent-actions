@@ -379,3 +379,39 @@ class TestRecordsThisActionHasOutputFor:
         records_this_action_has_output_for(first, "act")
 
         assert records_this_action_has_output_for(second, "act") == frozenset({"g1", "g2"})
+
+
+class TestRepairingWithoutAStore:
+    """Without a backend only the named records can be spared, which is the
+    behaviour the stored-row rule replaces. It must not happen quietly."""
+
+    def test_it_says_so(self, caplog):
+        records = [{"source_guid": f"r{i}"} for i in range(6)]
+
+        with caplog.at_level("WARNING", logger="agent_actions.utils.limits"):
+            record_indices_to_process(
+                records, {"record_limit": 1}, "flatten", retried=frozenset({"r5"})
+            )
+
+        said = " ".join(r.getMessage() for r in caplog.records)
+        assert "flatten" in said, said
+        assert "storage backend" in said, said
+
+    def test_it_still_spares_the_named_records(self, caplog):
+        records = [{"source_guid": f"r{i}"} for i in range(6)]
+
+        with caplog.at_level("WARNING", logger="agent_actions.utils.limits"):
+            kept = record_indices_to_process(
+                records, {"record_limit": 1}, "flatten", retried=frozenset({"r5"})
+            )
+
+        assert kept == [0, 5]
+
+    def test_a_run_that_is_not_repairing_says_nothing(self, caplog):
+        """The control: a normal run has no backend to miss."""
+        records = [{"source_guid": f"r{i}"} for i in range(6)]
+
+        with caplog.at_level("WARNING", logger="agent_actions.utils.limits"):
+            record_indices_to_process(records, {"record_limit": 1}, "flatten")
+
+        assert [r.getMessage() for r in caplog.records if "storage backend" in r.getMessage()] == []
