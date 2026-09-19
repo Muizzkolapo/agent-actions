@@ -18,7 +18,6 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.record.envelope import first_record_per_identity
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
@@ -212,12 +211,6 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk = [data_chunk[i] for i in kept]
         if isinstance(src_text, list):
             src_text = [src_text[i] for i in kept if i < len(src_text)]
-
-    # What is saved and what is processed have to be the same records: the store
-    # keeps one row per identity, so a list carrying two of one identity into
-    # processing writes more output rows than the action has records.
-    if isinstance(data_chunk, list):
-        data_chunk, src_text = first_record_per_identity(data_chunk, src_text)
 
     _save_source_data(
         src_text,
