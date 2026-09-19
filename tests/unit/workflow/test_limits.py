@@ -344,6 +344,49 @@ class TestRecordLimitInitialStage:
 # ── Status invalidation when limits change ────────────────────────────
 
 
+class TestRecordLimitInitialStageUnderBatch:
+    """Batch takes a different preparation path to online, and it is the path
+    immediately before the batch/online fork that slices."""
+
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_batch_data")
+    @patch("agent_actions.input.loaders.file_reader.FileReader")
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._process_batch_mode")
+    def test_a_held_record_beyond_the_limit_is_kept(
+        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
+    ):
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
+            InitialStageContext,
+            process_initial_stage,
+        )
+
+        rows = [{"source_guid": f"g{i}", "content": str(i)} for i in range(6)]
+        mock_prep.return_value = (rows, [])
+        reader_instance = MagicMock()
+        reader_instance.read.return_value = "raw"
+        reader_instance.file_type = ".json"
+        mock_reader.return_value = reader_instance
+        mock_process.return_value = "/output/file.json"
+        backend = MagicMock()
+        backend.target_rows_per_source_guid.return_value = {"g5": 1}
+
+        process_initial_stage(
+            InitialStageContext(
+                agent_config={"record_limit": 2, "run_mode": "batch"},
+                agent_name="test",
+                file_path="/input/data.json",
+                base_directory="/input",
+                output_directory="/output",
+                storage_backend=backend,
+                retried_records=frozenset({"g5"}),
+            )
+        )
+
+        saved_data = mock_save.call_args[0][1]
+        assert [r["source_guid"] for r in saved_data] == ["g0", "g1", "g5"]
+
+
 class TestLimitStatusInvalidation:
     @pytest.fixture
     def mock_deps(self):

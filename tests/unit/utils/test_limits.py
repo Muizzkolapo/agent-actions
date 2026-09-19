@@ -346,15 +346,25 @@ class TestRowsThisActionHoldsPerRecord:
         assert rows_this_action_holds_per_record(None, "act") == {}
 
     def test_an_action_is_asked_once_however_many_files_ask(self):
-        """The caller asks per input file. Asking the store each time is quadratic
-        in files, and every read after the first is of a store this run has already
-        begun writing to."""
+        """A cost guard, not a correctness one: the caller asks per input file, and
+        reading the store each time is quadratic in files. Counting the asking is
+        the only way to see that, since the answer is the same either way."""
         backend = _Backend({"act": {"g0": 1}})
 
         for _ in range(5):
             rows_this_action_holds_per_record(backend, "act")
 
         assert backend.calls == 1
+
+    def test_the_answer_does_not_change_when_the_store_does(self):
+        """What the cache is for: the answer wanted is what the action held before
+        this run, and the run writes to that store as it goes."""
+        backend = _Backend({"act": {"g0": 1}})
+        first = rows_this_action_holds_per_record(backend, "act")
+
+        backend._rows["act"] = {"g0": 1, "written_during_the_run": 1}
+
+        assert rows_this_action_holds_per_record(backend, "act") == first
 
     def test_each_action_is_asked_for_separately(self):
         backend = _Backend({"a": {"g0": 1}, "b": {"g1": 1}})

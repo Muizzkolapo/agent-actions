@@ -24,7 +24,7 @@ pathways.
 | `constants.py` | Module | Shared configuration key constants and reserved names used across CLI/workflows. | `configuration`, `validation` |
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
 | `graph_utils.py` | Module | Graph algorithms for dependency resolution (`topological_sort`). | `errors` |
-| `limits.py` | Module | Resolves the per-action record limit from three sources: the workflow config, a limit carried on the action config for this run, and the `AGAC_RECORD_LIMIT` environment variable. A limit asked for on the run wins by source rather than by which number is smaller, the variable is validated either way, and the retired `AGAC_MAX_RECORDS` name is rejected rather than ignored. Resolving is silent — only a slice site knows whether records were actually dropped, so it owns the announcement. Also decides which records a limit keeps, admitting the ones a run is repairing on top of its own N rather than cutting them loose. | `config` |
+| `limits.py` | Module | Resolves the per-action record limit from three sources: the workflow config, a limit carried on the action config for this run, and the `AGAC_RECORD_LIMIT` environment variable. A limit asked for on the run wins by source rather than by which number is smaller, the variable is validated either way, and the retired `AGAC_MAX_RECORDS` name is rejected rather than ignored. Resolving is silent — only a slice site knows whether records were actually dropped, so it owns the announcement. Also decides which records a limit keeps: the first N by position, plus as many positions carrying an identity as the action already holds stored rows for, so a run repairing records cannot delete rows it is not rewriting nor backfill past a limit. | `config`, `storage` |
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
 | `correlation.py` | Module | `VersionIdGenerator`: deterministic version correlation IDs for versioned-agent workflows. | `versioning` |
 | `field_management.py` | Module | `FieldManager`: ensures processed items always expose the required metadata/IDs. | `metadata` |
@@ -69,6 +69,7 @@ pathways.
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `config` | outbound | PathManager, project root resolution, and path configuration |
+| `storage` | outbound | The record limit asks a backend how many rows an action already holds per identity |
 | `errors` | outbound | Error types for validation, filesystem, and configuration errors |
 | `logging` | outbound | Event firing for cache hits/misses and error formatting |
 | `input` | inbound | Preprocessing uses dict helpers, field resolution, and UDF execution |

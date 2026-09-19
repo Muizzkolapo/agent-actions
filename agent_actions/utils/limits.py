@@ -165,10 +165,17 @@ def records_kept_by_limit(
     """Indices of the first `limit` records, plus enough beyond it to cover `rows_held`.
 
     `rows_held` says how many rows the action already holds for each identity, and
-    that many positions carrying it are kept — no more, no fewer. Fewer would write
-    one row where three stood; more would write three where one did, backfilling
-    past a limit that was deliberately holding records back. Positions the limit
-    keeps by count spend from the same budget, since they cover those rows too.
+    that many positions carrying it are kept — no more, no fewer. Fewer offers the
+    write fewer rows than stood there; more offers it three where one did,
+    backfilling past a limit that was deliberately holding records back. Positions
+    the limit keeps by count spend from the same budget, since they cover those
+    rows too.
+
+    Offers, not guarantees: what is finally written also passes through
+    carry-forward, which rebuilds an action's output keyed by identity and so
+    collapses several rows of one identity into a single row regardless of what is
+    kept here. That collapse is a separate defect on a separate path; this decides
+    only what the limit hands on.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
@@ -202,11 +209,11 @@ def rows_this_action_holds_per_record(storage_backend: Any, action_name: str) ->
     its dispositions cleared wholesale, so in both of the cases this exists to
     serve the disposition table is already empty. The rows outlive both.
 
-    Answered once per action per backend. The caller asks per input file, and the
-    answer wanted is what the action held *before* this run — so a later file must
-    not see the rows an earlier one has just written. Keyed weakly so it lives and
-    dies with the backend; a module-level cache would outlive it, and `agac retry`
-    runs a workflow in the process that just finished one.
+    Answered once per action per backend, because the caller asks per input file and
+    reading the store each time is quadratic in files. Keyed weakly so an entry
+    cannot outlive the backend it describes — object identity is what separates one
+    run from the next here, since each is built its own backend, and a plain
+    module-level dict would hold every backend alive besides.
     """
     if storage_backend is None:
         return {}
