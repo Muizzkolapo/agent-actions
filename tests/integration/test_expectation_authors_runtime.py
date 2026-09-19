@@ -240,19 +240,20 @@ def test_the_batch_author_submits_and_is_collected(run):
     assert set(second.verdicts) == {"summarize"}, second.output
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "The batch path never produces the fields its schema declares: this "
-        "provider writes a task flat with the schema at the top level, while the "
-        "generator reads an OpenAI-shaped `body`, so it answers with its generic "
-        "shape and every field rule fails on a field that is not there. A separate "
-        "defect from the one this fixture was skipped for; asserted here so the "
-        "gap stays visible rather than being pinned as the expected verdict."
-    ),
-)
-def test_the_batch_author_reaches_a_verdict_on_its_own_fields(run):
+def test_the_batch_author_reaches_the_verdict_its_online_twin_does(run):
+    """`field_scoped_rules` is this fixture online: rules declared on the fields
+    they test, nothing judged. Its `accepted_values` rule fails against
+    schema-shaped noise and its `not_null` rule passes, and the batch half has
+    to land in the same place. A batch answering with none of its schema's
+    fields fails both instead, on fields that were never generated — a verdict
+    about the provider rather than about what an author wrote.
+    """
     run(BATCH_ONLY)
     verdict = run(BATCH_ONLY, again=True).verdicts["summarize"]
 
-    assert verdict["failed"] == []
+    assert verdict["failed"] == ["density_is_known"]
+    outcomes = {o["id"]: o for o in verdict["outcomes"]}
+    assert outcomes["summary_present"]["passed"] is True
+    assert "is not one of" in outcomes["density_is_known"]["detail"], (
+        "the density rule reported an absent field, not a value it rejected"
+    )
