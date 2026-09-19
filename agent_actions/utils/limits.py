@@ -9,50 +9,56 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
+RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 
-# Stamped onto every action config when the run was asked for a cap.
-MAX_RECORDS_KEY = "_max_records"
+# Stamped onto every action config when the run was asked for a limit.
+RECORD_LIMIT_KEY = "_record_limit"
+
+# Renamed. Read only to reject it: a run that believes it is capped and is not
+# spends against a provider with no limit at all.
+_RETIRED_ENV = "AGAC_MAX_RECORDS"
 
 
-def _environment_ceiling() -> int | None:
-    """Read the environment ceiling, refusing a value that cannot cap anything."""
-    raw = os.environ.get(MAX_RECORDS_ENV)
+def _from_environment() -> int | None:
+    """Read the limit the environment asks for, refusing one that cannot limit anything."""
+    if os.environ.get(_RETIRED_ENV) is not None:
+        raise ValueError(f"{_RETIRED_ENV} is no longer read — use {RECORD_LIMIT_ENV}")
+    raw = os.environ.get(RECORD_LIMIT_ENV)
     if raw is None:
         return None
     try:
-        ceiling = int(raw)
+        limit = int(raw)
     except ValueError:
-        raise ValueError(f"{MAX_RECORDS_ENV}={raw!r} is not an integer") from None
-    if ceiling < 1:
-        raise ValueError(f"{MAX_RECORDS_ENV}={raw!r} must be at least 1")
-    return ceiling
+        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} is not an integer") from None
+    if limit < 1:
+        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} must be at least 1")
+    return limit
 
 
-def _run_ceiling(action_config: Mapping[str, Any]) -> int | None:
-    """Read the cap this run was asked for, refusing one that cannot cap anything."""
-    ceiling = action_config.get(MAX_RECORDS_KEY)
-    if ceiling is None:
+def _from_run(action_config: Mapping[str, Any]) -> int | None:
+    """Read the limit this run was asked for, refusing one that cannot limit anything."""
+    limit = action_config.get(RECORD_LIMIT_KEY)
+    if limit is None:
         return None
-    if isinstance(ceiling, bool) or not isinstance(ceiling, int) or ceiling < 1:
-        raise ValueError(f"--max-records={ceiling!r} must be an integer of at least 1")
-    return int(ceiling)
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError(f"--record-limit={limit!r} must be an integer of at least 1")
+    return int(limit)
 
 
-def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
-    """The ceiling in force and the name of what set it.
+def _override(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """The limit asked for outside the workflow config, and the name of what asked.
 
-    A cap typed for this run outranks the environment variable by source, not by
+    A limit typed for this run outranks the environment variable by source, not by
     which number is smaller — otherwise ambient configuration could quietly
     overrule what was asked for.
     """
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
-    environment = _environment_ceiling()
-    asked = _run_ceiling(action_config)
+    environment = _from_environment()
+    asked = _from_run(action_config)
     if asked is not None:
-        return asked, "--max-records"
-    return environment, MAX_RECORDS_ENV
+        return asked, "--record-limit"
+    return environment, RECORD_LIMIT_ENV
 
 
 def records_kept_by_limit(
@@ -94,16 +100,16 @@ def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         limit = None
 
-    ceiling, source = _ceiling(action_config)
-    if ceiling is None or (limit is not None and limit <= ceiling):
+    override, source = _override(action_config)
+    if override is None or (limit is not None and limit <= override):
         return limit
 
     # A truncated run that says nothing looks like a complete one.
     logger.warning(
         "%s=%d caps this action at %d of %s configured records",
         source,
-        ceiling,
-        ceiling,
+        override,
+        override,
         limit if limit is not None else "unlimited",
     )
-    return ceiling
+    return override

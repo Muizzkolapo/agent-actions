@@ -27,7 +27,7 @@ def load_workflow(
     fresh: bool = False,
     verify_keys: bool = False,
     read_only: bool = False,
-    max_records: int | None = None,
+    record_limit: int | None = None,
 ) -> AgentWorkflow:
     """Load and return an initialized AgentWorkflow.
 
@@ -69,7 +69,7 @@ def load_workflow(
             fresh=fresh,
             verify_keys=verify_keys,
             project_root=project_root,
-            max_records=max_records,
+            record_limit=record_limit,
         ),
         read_only=read_only,
     )

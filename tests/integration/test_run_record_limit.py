@@ -1,4 +1,4 @@
-"""`--max-records` caps every action from the command line.
+"""`--record-limit` caps every action from the command line.
 
 Exercised through the loader the run command uses, so what is asserted is the
 config the workflow engine actually receives.
@@ -15,7 +15,7 @@ from agent_actions.cli.main import cli
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
-from agent_actions.utils.limits import MAX_RECORDS_KEY, effective_record_limit
+from agent_actions.utils.limits import RECORD_LIMIT_KEY, effective_record_limit
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "inline_rules"
@@ -38,16 +38,16 @@ def _configs(project, **kwargs):
 
 
 def test_the_cap_reaches_every_action(project):
-    configs = _configs(project, max_records=2)
+    configs = _configs(project, record_limit=2)
 
     assert configs, "no actions loaded; the fixture changed"
     for name, config in configs.items():
-        assert config[MAX_RECORDS_KEY] == 2, f"{name} did not carry the cap"
+        assert config[RECORD_LIMIT_KEY] == 2, f"{name} did not carry the cap"
 
 
 def test_the_cap_is_what_the_resolver_then_applies(project):
     """The stamped value has to be the one effective_record_limit reads."""
-    configs = _configs(project, max_records=2)
+    configs = _configs(project, record_limit=2)
 
     for config in configs.values():
         assert effective_record_limit(config) == 2
@@ -57,7 +57,7 @@ def test_no_cap_leaves_the_config_untouched(project):
     configs = _configs(project)
 
     for name, config in configs.items():
-        assert MAX_RECORDS_KEY not in config, f"{name} carries a cap nobody asked for"
+        assert RECORD_LIMIT_KEY not in config, f"{name} carries a cap nobody asked for"
 
 
 MULTI = "shared_suite"
@@ -82,7 +82,7 @@ def _multi_action_project(tmp_path, monkeypatch):
     paths = ProjectPathsFactory.create_project_paths(
         MULTI, MULTI, auto_create=True, project_root=root
     )
-    return load_workflow(MULTI, paths, root, read_only=True, max_records=5).action_configs
+    return load_workflow(MULTI, paths, root, read_only=True, record_limit=5).action_configs
 
 
 def test_a_cap_does_not_raise_an_action_configured_lower(tmp_path, monkeypatch):
@@ -102,7 +102,7 @@ def test_an_action_that_configures_a_limit_still_carries_the_cap(tmp_path, monke
     configs = _multi_action_project(tmp_path, monkeypatch)
 
     for name, config in configs.items():
-        assert config[MAX_RECORDS_KEY] == 5, f"{name} escaped the cap"
+        assert config[RECORD_LIMIT_KEY] == 5, f"{name} escaped the cap"
 
 
 def test_the_cap_does_not_overwrite_a_configured_limit(tmp_path, monkeypatch):
@@ -121,20 +121,20 @@ class TestTheFlag:
     def test_it_is_offered_on_run(self):
         result = CliRunner().invoke(cli, ["run", "--help"])
 
-        assert "--max-records" in _options_section(result.output), result.output
+        assert "--record-limit" in _options_section(result.output), result.output
 
     @pytest.mark.parametrize("value", ["0", "-1", "nonsense", "2.5"])
     def test_a_value_that_cannot_cap_anything_is_refused(self, project, value):
         """Refused for being out of range, not for the option being unknown —
         click answers both with exit 2 and a message naming the flag."""
-        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--max-records", value])
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--record-limit", value])
 
         assert result.exit_code == 2, result.output
         assert "No such option" not in result.output, result.output
 
     def test_it_is_not_required(self):
         result = CliRunner().invoke(cli, ["run", "--help"])
-        after = _options_section(result.output).split("--max-records")[1][:160]
+        after = _options_section(result.output).split("--record-limit")[1][:160]
 
         assert "[required]" not in after
 
@@ -178,7 +178,7 @@ class TestItActuallyCapsARun:
         _stage(project, 6)
 
         result = CliRunner().invoke(
-            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+            cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "2", "--fresh"]
         )
 
         assert result.exit_code == 0, result.output
@@ -199,11 +199,11 @@ class TestItActuallyCapsARun:
         _stage(project, 6)
 
         result = CliRunner().invoke(
-            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+            cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "2", "--fresh"]
         )
 
         assert result.exit_code == 0, result.output
-        assert "--max-records=2 caps this action" in result.output, result.output
+        assert "--record-limit=2 caps this action" in result.output, result.output
 
     def test_the_cap_counts_per_input_file(self, project):
         """The same unit record_limit uses. Two files of six under a cap of two
@@ -217,7 +217,7 @@ class TestItActuallyCapsARun:
             )
 
         result = CliRunner().invoke(
-            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+            cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "2", "--fresh"]
         )
 
         assert result.exit_code == 0, result.output
@@ -238,7 +238,7 @@ class TestARunThatAlreadyCompleted:
         assert first.exit_code == 0, first.output
         assert _processed(project) == 6
 
-        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2"])
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "2"])
 
         assert second.exit_code == 0, second.output
         assert _processed(project) == 2, "the cap was ignored on an already-completed action"
@@ -247,7 +247,7 @@ class TestARunThatAlreadyCompleted:
         """Otherwise a truncated run is served as a complete one indefinitely."""
         _stage(project, 6)
         first = CliRunner().invoke(
-            cli, ["run", "-a", TOOL_WORKFLOW, "--max-records", "2", "--fresh"]
+            cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "2", "--fresh"]
         )
         assert first.exit_code == 0, first.output
         assert _processed(project) == 2

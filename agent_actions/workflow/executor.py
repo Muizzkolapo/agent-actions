@@ -40,7 +40,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import MAX_RECORDS_KEY
+from agent_actions.utils.limits import RECORD_LIMIT_KEY
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -227,7 +227,7 @@ class ActionExecutor:
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
             "record_limit": cfg.get("record_limit"),
-            "max_records": cfg.get(MAX_RECORDS_KEY),
+            "max_records": cfg.get(RECORD_LIMIT_KEY),
             "file_limit": cfg.get("file_limit"),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
@@ -248,7 +248,7 @@ class ActionExecutor:
         limits_changed = (
             details.get("record_limit") != action_config.get("record_limit")
             or details.get("file_limit") != action_config.get("file_limit")
-            or details.get("max_records") != action_config.get(MAX_RECORDS_KEY)
+            or details.get("max_records") != action_config.get(RECORD_LIMIT_KEY)
         )
 
         # The hash cannot cover the model: it reads a "model" key, and configs

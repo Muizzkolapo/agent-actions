@@ -59,7 +59,7 @@ def project(tmp_path, monkeypatch):
         json.dumps([{"page_content": f"page {i}"} for i in range(RECORDS)])
     )
     monkeypatch.chdir(root)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+    monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
     assert result.exit_code == 0, result.output
@@ -169,7 +169,7 @@ class TestARecordNamedByIdIsAlwaysRetried:
         """The cap would keep only the first record; this one is the last."""
         late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
@@ -181,7 +181,7 @@ class TestARecordNamedByIdIsAlwaysRetried:
         dropped, the failure is gone and nothing records that it happened."""
         late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
@@ -193,7 +193,7 @@ class TestARecordNamedByIdIsAlwaysRetried:
         before = sorted(_record_ids(project))
         late = _a_record_the_cap_would_cut(project, cap=1)
         _fail(project, late)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
@@ -207,7 +207,7 @@ class TestTheFirstRecordTheLimitExcludes:
     def test_the_record_immediately_past_the_cap_is_repaired(self, project, monkeypatch):
         boundary = _guid_at(project, 1)
         _fail(project, boundary)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", boundary])
 
@@ -220,7 +220,7 @@ class TestABulkRetryIsNotTruncated:
         ids = _record_ids(project)
         for record_id in ids[-3:]:
             _fail(project, record_id)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
 
@@ -231,7 +231,7 @@ class TestABulkRetryIsNotTruncated:
 class TestAConfiguredLimitDoesNotCutARetriedRecord:
     def test_a_record_limit_does_not_truncate_a_retry(self, project):
         """`record_limit:` lives in the project's own config and slices through
-        the same statement the environment ceiling does."""
+        the same statement the environment limit does."""
         config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
         config.write_text(
             config.read_text().replace(
@@ -268,7 +268,7 @@ class TestALimitOnlyEverAdmitsMore:
             )
         )
         monkeypatch.chdir(root)
-        monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
         assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
 
         attempted = _record_ids(root)
@@ -294,7 +294,7 @@ class TestEveryActionTheRetryRerunsAdmitsTheRecord:
         late = [_guid_at(chained, -2), _guid_at(chained, -1)]
         for guid in late:
             _fail(chained, guid, ACTION)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
 
@@ -305,7 +305,7 @@ class TestEveryActionTheRetryRerunsAdmitsTheRecord:
     def test_an_action_below_the_retry_point_still_gets_the_record(self, chained, monkeypatch):
         late = _a_record_the_cap_would_cut(chained, cap=1)
         _fail(chained, late, ACTION)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
@@ -320,7 +320,7 @@ class TestTheRetriedRecordKeepsItsOutput:
     def test_the_record_has_a_row_at_the_action_that_reran(self, chained, monkeypatch):
         late = _a_record_the_cap_would_cut(chained, cap=1)
         _fail(chained, late, SECOND)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
@@ -335,7 +335,7 @@ class TestTheRetriedRecordKeepsItsOutput:
         other = next(r for r in _record_ids(chained, SECOND) if r != late)
         _fail(chained, other, SECOND, disposition="exhausted")
         _fail(chained, late, SECOND)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
