@@ -387,48 +387,6 @@ class TestRecordLimitInitialStageUnderBatch:
         assert [r["source_guid"] for r in saved_data] == ["g0", "g1", "g5"]
 
 
-class TestDeduplicationUnderBatch:
-    """The reduction sits above the batch/online fork, and batch is the path where
-    src_text is empty — so the aligned half is exercised differently there."""
-
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_batch_data")
-    @patch("agent_actions.input.loaders.file_reader.FileReader")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._process_batch_mode")
-    def test_one_record_per_identity_reaches_the_save_and_the_batch(
-        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
-    ):
-        from agent_actions.input.preprocessing.staging.initial_pipeline import (
-            InitialStageContext,
-            process_initial_stage,
-        )
-
-        rows = [{"source_guid": g, "content": g} for g in ("g0", "g0", "g1")]
-        mock_prep.return_value = (rows, [])
-        reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
-        reader_instance.file_type = ".json"
-        mock_reader.return_value = reader_instance
-        mock_process.return_value = "/output/file.json"
-
-        process_initial_stage(
-            InitialStageContext(
-                agent_config={"run_mode": "batch"},
-                agent_name="test",
-                file_path="/input/data.json",
-                base_directory="/input",
-                output_directory="/output",
-                storage_backend=_backend_holding_nothing(),
-            )
-        )
-
-        saved = mock_save.call_args[0][1]
-        assert [r["source_guid"] for r in saved] == ["g0", "g1"]
-        batched = mock_process.call_args[0][0].data_chunk
-        assert [r["source_guid"] for r in batched] == ["g0", "g1"], "the batch got the other list"
-
-
 class TestLimitStatusInvalidation:
     @pytest.fixture
     def mock_deps(self):

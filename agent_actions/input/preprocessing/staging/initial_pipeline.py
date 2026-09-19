@@ -18,11 +18,12 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.record.envelope import first_record_per_identity
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.limits import first_record_per_identity, record_indices_to_process
+from agent_actions.utils.limits import record_indices_to_process
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -199,26 +200,6 @@ def process_initial_stage(ctx: InitialStageContext):
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
-    # Before the limit, not after: the store keeps one row per identity, so a
-    # list carrying two of one identity would write more output rows than the
-    # action has records. A limit chooses positions, so reducing afterwards
-    # spends it on positions that then collapse — `record_limit: 2` would
-    # process one record while announcing two.
-    if isinstance(data_chunk, list):
-        before = len(data_chunk)
-        data_chunk, src_text = first_record_per_identity(data_chunk, src_text)
-        if len(data_chunk) < before:
-            # Loud because it is invisible in the input: two rows a reader would
-            # call different records are one identity if their content matches.
-            logger.warning(
-                "%s: %d of %d staged records in %s repeat content already staged and are "
-                "processed once — identity is the record's content",
-                ctx.agent_name,
-                before - len(data_chunk),
-                before,
-                Path(ctx.file_path).name,
-            )
-
     # Slice BEFORE source save to prevent dedup poisoning
     kept = record_indices_to_process(
         data_chunk,
@@ -231,6 +212,12 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk = [data_chunk[i] for i in kept]
         if isinstance(src_text, list):
             src_text = [src_text[i] for i in kept if i < len(src_text)]
+
+    # What is saved and what is processed have to be the same records: the store
+    # keeps one row per identity, so a list carrying two of one identity into
+    # processing writes more output rows than the action has records.
+    if isinstance(data_chunk, list):
+        data_chunk, src_text = first_record_per_identity(data_chunk, src_text)
 
     _save_source_data(
         src_text,
