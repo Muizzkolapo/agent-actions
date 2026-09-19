@@ -135,9 +135,8 @@ def record_indices_to_process(
         return None
     already: Collection[str] = ()
     if retried:
-        already = records_this_action_has_output_for(storage_backend, action_name) | frozenset(
-            retried
-        )
+        stored = records_this_action_has_output_for(storage_backend, action_name)
+        already = stored | frozenset(retried)
     kept = records_kept_by_limit(records, limit, already)
     if len(kept) == len(records):
         return None

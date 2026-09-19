@@ -115,6 +115,25 @@ def _disposition(project, record_id, action=ACTION):
         backend.close()
 
 
+def _drop_stored_row(project, record_id, action=ACTION):
+    """Leave *record_id* with a disposition but no stored row.
+
+    What a record that genuinely failed at this action looks like: it ran, it is
+    named in the disposition table, and it produced no output. Constructed here
+    because the fixture's tool succeeds for every record, so the suite otherwise
+    only ever sees failures that already have a row.
+    """
+    backend = _backend(project)
+    try:
+        for path in backend.list_target_files(action):
+            rows = backend.read_target(action, path)
+            kept = [r for r in rows if r.get("source_guid") != record_id]
+            if len(kept) != len(rows):
+                backend.write_target(action, path, kept)
+    finally:
+        backend.close()
+
+
 def _fail(project, record_id, action=ACTION, disposition="failed"):
     backend = _backend(project)
     try:
@@ -449,3 +468,33 @@ class TestALimitDoesNotTruncateWhatARetryReruns:
 
         assert retry.exit_code == 0, retry.output
         assert _disposition(chained, late, SECOND) == "success"
+
+
+class TestARepairedRecordWithNoStoredRow:
+    """A record that failed without producing output is not in the action's
+    stored rows, so the set read from them cannot admit it. It is the one record
+    the repair exists to rewrite, and a limit dropping it leaves its cleared
+    disposition unwritten — the failure erased rather than repaired."""
+
+    def test_it_is_still_repaired_under_a_limit_that_excludes_it(self, project, monkeypatch):
+        late = _a_record_the_cap_would_cut(project, cap=1)
+        _fail(project, late)
+        _drop_stored_row(project, late)
+        assert late not in _stored_guids(project), "the fixture did not reach the state under test"
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, late) == "success"
+
+    def test_its_row_comes_back(self, project, monkeypatch):
+        late = _a_record_the_cap_would_cut(project, cap=1)
+        _fail(project, late)
+        _drop_stored_row(project, late)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert late in _stored_guids(project)

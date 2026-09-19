@@ -8,6 +8,7 @@ from agent_actions.utils.limits import (
     RECORD_LIMIT_KEY,
     record_indices_to_process,
     records_kept_by_limit,
+    records_this_action_has_output_for,
     resolve_record_limit,
 )
 
@@ -318,3 +319,57 @@ class TestARecordIsAdmittedOnlyOnce:
         assert records_kept_by_limit(records, -1) == []
         # r4 is last, so a range starting at -1 reaches it twice.
         assert records_kept_by_limit(records, -1, frozenset({"r4"})) == [4]
+
+
+class _Backend:
+    """The two calls the lookup makes, and nothing else."""
+
+    def __init__(self, files):
+        self._files = files
+
+    def list_target_files(self, action_name):
+        return list(self._files)
+
+    def read_target(self, action_name, path):
+        return self._files[path]
+
+
+class TestRecordsThisActionHasOutputFor:
+    """Read from the stored rows, because the disposition table is already empty
+    in both cases this serves."""
+
+    def test_it_collects_guids_across_every_target_file(self):
+        backend = _Backend(
+            {
+                "a.json": [{"source_guid": "g0"}, {"source_guid": "g1"}],
+                "b.json": [{"source_guid": "g2"}],
+            }
+        )
+
+        assert records_this_action_has_output_for(backend, "act") == frozenset({"g0", "g1", "g2"})
+
+    def test_a_guid_stored_twice_is_one_identity(self):
+        """source_guid is a content hash, so byte-identical rows share one."""
+        backend = _Backend({"a.json": [{"source_guid": "g0"}], "b.json": [{"source_guid": "g0"}]})
+
+        assert records_this_action_has_output_for(backend, "act") == frozenset({"g0"})
+
+    def test_rows_carrying_no_guid_are_not_an_identity(self):
+        """Admitting on a missing guid would admit every guid-less record at once,
+        on the strength of one stored row that identifies nothing."""
+        backend = _Backend(
+            {"a.json": [{"summary": "x"}, {"source_guid": None}, {"source_guid": "g1"}]}
+        )
+
+        assert records_this_action_has_output_for(backend, "act") == frozenset({"g1"})
+
+    def test_rows_that_are_not_mappings_are_skipped(self):
+        backend = _Backend({"a.json": ["not a row", {"source_guid": "g1"}]})
+
+        assert records_this_action_has_output_for(backend, "act") == frozenset({"g1"})
+
+    def test_no_backend_means_nothing_is_known_to_be_stored(self):
+        assert records_this_action_has_output_for(None, "act") == frozenset()
+
+    def test_an_action_with_no_files_has_nothing_stored(self):
+        assert records_this_action_has_output_for(_Backend({}), "act") == frozenset()
