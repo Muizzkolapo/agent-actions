@@ -191,7 +191,21 @@ class TestStandardStrategy:
             workflow_metadata=None,
             storage_backend=backend,
             source_relative_path="rel/path.json",
+            retried_records=frozenset(),
         )
+
+    @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
+    def test_execute_forwards_the_records_the_run_is_repairing(self, mock_create):
+        """A record limit at this action admits them on top of its own N."""
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.return_value = "/out/file.json"
+        mock_create.return_value = mock_pipeline
+
+        params = _make_params(retried_records=frozenset({"a", "b"}))
+
+        StandardStrategy().execute(params)
+
+        assert mock_create.call_args.kwargs["retried_records"] == frozenset({"a", "b"})
 
     @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
     def test_execute_passes_data_to_pipeline_process(self, mock_create):

@@ -31,6 +31,8 @@ class StrategyExecutionParams:
     # Populates the runtime `workflow` namespace (`{{ workflow.name }}`, etc.).
     # Runner injects this from its own `workflow_metadata` field.
     workflow_metadata: dict[str, Any] | None = None
+    # Records this run is repairing; a record limit admits them on top of its N.
+    retried_records: frozenset[str] = frozenset()
 
 
 class ActionStrategy(ABC):
@@ -57,6 +59,7 @@ class ActionStrategy(ABC):
             workflow_metadata=params.workflow_metadata,
             storage_backend=params.storage_backend,
             source_relative_path=params.source_relative_path,
+            retried_records=params.retried_records,
         )
         return pipeline.process(
             params.file_path,
@@ -87,6 +90,7 @@ class InitialStrategy(ActionStrategy):
                     storage_backend=params.storage_backend,
                     action_configs=params.action_configs,
                     workflow_metadata=params.workflow_metadata,
+                    retried_records=params.retried_records,
                 )
             ),
         )

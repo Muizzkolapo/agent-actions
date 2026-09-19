@@ -259,6 +259,7 @@ RetryCommand.execute()
   ├─ (dry_run? → stop here)
   │
   ├─ Snapshot dispositions → _write_manifest()      ← crash-safe: written BEFORE clearing
+  ├─ workflow.set_retried_records(record_ids)           ← a record limit admits these on top of its N
   ├─ clear_disposition() per record per downstream action
   ├─ clear_disposition(NODE_LEVEL_RECORD_ID)        ← clear action-level FAILED/SKIPPED
   ├─ clear_checkpoint_records()                     ← clear stale partial output

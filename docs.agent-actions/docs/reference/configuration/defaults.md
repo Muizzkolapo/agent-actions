@@ -53,7 +53,7 @@ actions:
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
 | `record_limit` | integer | Max records per file (default: unlimited). `AGAC_MAX_RECORDS` caps this from the environment |
-| `file_limit` | integer | Max files to walk per action (default: unlimited) |
+| `file_limit` | integer | Max files to walk per action (default: unlimited). Still applies to [`agac retry`](../cli/retry), which cannot reach a retried record in a later file |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
 :::note Schema vs Runtime
@@ -338,7 +338,7 @@ usable against a project you do not own:
 AGAC_MAX_RECORDS=2 agac run -a my_workflow
 ```
 
-`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. If you change a limit in the config between runs, actions automatically re-execute instead of being skipped; the same holds for `--max-records`.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. `record_limit` never excludes a record that [`agac retry`](../cli/retry) is re-running, since retry selects by id rather than by position; `file_limit` still does, so a retried record in a later file is not reached. If you change a limit in the config between runs, actions automatically re-execute instead of being skipped; the same holds for `--max-records`.
 
 ### 7. Environment-Specific Defaults
 

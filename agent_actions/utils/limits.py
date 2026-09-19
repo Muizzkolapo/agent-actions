@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,35 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
     if asked is not None:
         return asked, "--max-records"
     return environment, MAX_RECORDS_ENV
+
+
+def records_kept_by_limit(
+    records: Sequence[Any], limit: int, retried: Collection[str] = ()
+) -> list[int]:
+    """Indices of the first `limit` records, plus any of `retried` beyond them.
+
+    A limit only ever admits more here, never fewer: it decides how much *new*
+    work to take on, and a record being repaired is work already taken on. An
+    identity is admitted once — source_guid is a content hash, so byte-identical
+    rows share one, and admitting each position would store the record twice.
+    """
+    limit = max(limit, 0)
+    kept = list(range(min(limit, len(records))))
+    if not retried:
+        return kept
+
+    seen = {
+        records[index].get("source_guid") for index in kept if isinstance(records[index], Mapping)
+    }
+    for index in range(limit, len(records)):
+        record = records[index]
+        if not isinstance(record, Mapping):
+            continue
+        guid = record.get("source_guid")
+        if guid in retried and guid not in seen:
+            kept.append(index)
+            seen.add(guid)
+    return kept
 
 
 def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:

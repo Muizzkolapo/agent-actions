@@ -96,6 +96,9 @@ class ActionRunner:
         # a run_id exists. Threaded into StrategyExecutionParams so the runtime
         # `workflow` namespace matches the schema inspect/static-analyzer promise.
         self.workflow_metadata: dict[str, Any] | None = None
+        # Records this run is repairing, named by id. A record limit admits them
+        # on top of its own N rather than cutting them loose.
+        self.retried_records: frozenset[str] = frozenset()
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
         self.project_root: Path | None = None  # Set by service_init.initialize_services
@@ -279,6 +282,7 @@ class ActionRunner:
                 source_relative_path=params.source_relative_path,
                 data=params.data,
                 workflow_metadata=self.workflow_metadata,
+                retried_records=self.retried_records,
             )
         )
 

@@ -75,7 +75,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
 | `run` | Function | Run agents with a specified agent configuration. | - |
-| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. | `cli`, `storage`, `validation` |
+| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose. | `cli`, `storage`, `validation` |
 | `RetryCommand` | Class | Implementation of the retry command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the retry command. | - |
 | `retry` | Function | Retry failed/exhausted records from a specific action. | - |
