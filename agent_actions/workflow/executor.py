@@ -40,7 +40,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import RECORD_LIMIT_KEY
+from agent_actions.utils.limits import resolve_record_limit
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -226,8 +226,7 @@ class ActionExecutor:
         """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
-            "record_limit": cfg.get("record_limit"),
-            "max_records": cfg.get(RECORD_LIMIT_KEY),
+            "record_limit": resolve_record_limit(action_config)[0],
             "file_limit": cfg.get("file_limit"),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
@@ -242,13 +241,12 @@ class ActionExecutor:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
-        # The cap is a limit change like any other: without it, capping a
-        # workflow you have already run skips every action as complete, and
-        # lifting a cap serves the truncated output as a finished run.
+        # The limit that applied, not the one the config asked for: stamping the
+        # config serves a run truncated elsewhere as a finished one, forever.
+        record_limit, _ = resolve_record_limit(action_config)
+        file_limit = action_config.get("file_limit")
         limits_changed = (
-            details.get("record_limit") != action_config.get("record_limit")
-            or details.get("file_limit") != action_config.get("file_limit")
-            or details.get("max_records") != action_config.get(RECORD_LIMIT_KEY)
+            details.get("record_limit") != record_limit or details.get("file_limit") != file_limit
         )
 
         # The hash cannot cover the model: it reads a "model" key, and configs

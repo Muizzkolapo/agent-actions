@@ -15,7 +15,7 @@ from agent_actions.cli.main import cli
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
-from agent_actions.utils.limits import RECORD_LIMIT_KEY, effective_record_limit
+from agent_actions.utils.limits import RECORD_LIMIT_KEY, resolve_record_limit
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "inline_rules"
@@ -46,11 +46,11 @@ def test_the_cap_reaches_every_action(project):
 
 
 def test_the_cap_is_what_the_resolver_then_applies(project):
-    """The stamped value has to be the one effective_record_limit reads."""
+    """The stamped value has to be the one the resolver reads."""
     configs = _configs(project, record_limit=2)
 
     for config in configs.values():
-        assert effective_record_limit(config) == 2
+        assert resolve_record_limit(config)[0] == 2
 
 
 def test_no_cap_leaves_the_config_untouched(project):
@@ -88,13 +88,13 @@ def _multi_action_project(tmp_path, monkeypatch):
 def test_a_cap_does_not_raise_an_action_configured_lower(tmp_path, monkeypatch):
     configs = _multi_action_project(tmp_path, monkeypatch)
 
-    assert effective_record_limit(configs["summarize"]) == 1, "the cap raised a smaller limit"
+    assert resolve_record_limit(configs["summarize"])[0] == 1, "the cap raised a smaller limit"
 
 
 def test_a_cap_lowers_an_action_configured_higher(tmp_path, monkeypatch):
     configs = _multi_action_project(tmp_path, monkeypatch)
 
-    assert effective_record_limit(configs["resummarize"]) == 5
+    assert resolve_record_limit(configs["resummarize"])[0] == 5
 
 
 def test_an_action_that_configures_a_limit_still_carries_the_cap(tmp_path, monkeypatch):
@@ -201,8 +201,8 @@ class TestItActuallyCapsARun:
         assert result.exit_code == 0, result.output
         assert _processed(project) == 6
 
-    def test_the_capped_run_says_so(self, project):
-        """The phrase, not just the flag name — an error message mentioning the
+    def test_the_capped_run_says_what_it_dropped(self, project):
+        """The counts, not just the flag name — an error message mentioning the
         flag would otherwise satisfy this."""
         _stage(project, 6)
 
@@ -211,7 +211,17 @@ class TestItActuallyCapsARun:
         )
 
         assert result.exit_code == 0, result.output
-        assert "--record-limit=2 caps this action" in result.output, result.output
+        assert "--record-limit=2: processing 2 of 6 records" in result.output, result.output
+
+    def test_an_uncapped_run_says_nothing_about_a_limit(self, project):
+        """The announcement exists because a truncated run looks complete. One
+        that fires when nothing was dropped spends that signal."""
+        _stage(project, 6)
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert "record-limit" not in result.output, result.output
 
     def test_the_cap_counts_per_input_file(self, project):
         """The same unit record_limit uses. Two files of six under a cap of two

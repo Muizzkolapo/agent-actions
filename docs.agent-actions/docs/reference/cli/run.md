@@ -40,7 +40,7 @@ agac run -a my_workflow --execution-mode parallel
 | `--use-tools` | Enable tool usage for actions |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
-| `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. Each capped action says so, since a truncated run otherwise looks complete |
+| `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
 
@@ -62,8 +62,11 @@ It counts **per input file**, the same unit [`record_limit`](../configuration/de
 so a staging directory holding five files and `--record-limit 2` processes up to ten records per
 action, not two. Stage fewer files if you need a harder ceiling.
 
-Each action it caps logs a line naming the flag. `AGAC_RECORD_LIMIT` does the same job from
-the environment; when both are set the flag wins, because it was typed for this run.
+Each action that actually drops records logs a line naming the flag and the counts; an action
+with fewer records than the limit stays quiet. `AGAC_RECORD_LIMIT` does the same job from the
+environment; when both are set the flag wins, because it was typed for this run. Either way the
+limit that applied is stored with the action, so lifting it re-runs what it truncated instead of
+serving a short run as a finished one.
 
 
 ## Parallel Execution

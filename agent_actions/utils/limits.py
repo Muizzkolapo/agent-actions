@@ -45,20 +45,53 @@ def _from_run(action_config: Mapping[str, Any]) -> int | None:
     return int(limit)
 
 
-def _override(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
-    """The limit asked for outside the workflow config, and the name of what asked.
+def resolve_record_limit(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """The record limit in force for an action, and the name of what set it.
 
-    A limit typed for this run outranks the environment variable by source, not by
-    which number is smaller — otherwise ambient configuration could quietly
-    overrule what was asked for.
+    Silent by design. Whether anything was actually dropped depends on how many
+    records there are, which only a slice site knows; announcing from here
+    describes a truncation that may not happen.
+
+    ``bool`` is rejected rather than treated as an int: ``record_limit: true``
+    in YAML would otherwise silently cap a run at one record.
     """
+    configured = action_config.get("record_limit")
+    if isinstance(configured, bool) or not isinstance(configured, int) or configured < 1:
+        configured = None
+
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
     environment = _from_environment()
     asked = _from_run(action_config)
-    if asked is not None:
-        return asked, "--record-limit"
-    return environment, RECORD_LIMIT_ENV
+    # A limit typed for this run outranks the environment by source, not by which
+    # number is smaller — otherwise ambient configuration could quietly overrule
+    # what was asked for.
+    override, source = (
+        (asked, "--record-limit") if asked is not None else (environment, RECORD_LIMIT_ENV)
+    )
+
+    if override is None or (configured is not None and configured <= override):
+        return configured, "record_limit"
+    return override, source
+
+
+def announce_truncation(source: str, limit: int, kept: int, total: int, action_name: str) -> None:
+    """Say that records were dropped, loudly when something outside the config did it.
+
+    A limit the workflow asks for is the run behaving as written; one asked for
+    elsewhere may be a variable the caller has forgotten is set, and a truncated
+    run that stays quiet looks like a complete one.
+    """
+    level = logging.INFO if source == "record_limit" else logging.WARNING
+    logger.log(
+        level,
+        "%s=%d: processing %d of %d records for %s",
+        source,
+        limit,
+        kept,
+        total,
+        action_name,
+    )
 
 
 def records_kept_by_limit(
@@ -88,28 +121,3 @@ def records_kept_by_limit(
             kept.append(index)
             seen.add(guid)
     return kept
-
-
-def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:
-    """Return the record limit for an action, or None when it is unlimited.
-
-    ``bool`` is rejected rather than treated as an int: ``record_limit: true``
-    in YAML would otherwise silently cap a run at one record.
-    """
-    limit = action_config.get("record_limit")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        limit = None
-
-    override, source = _override(action_config)
-    if override is None or (limit is not None and limit <= override):
-        return limit
-
-    # A truncated run that says nothing looks like a complete one.
-    logger.warning(
-        "%s=%d caps this action at %d of %s configured records",
-        source,
-        override,
-        override,
-        limit if limit is not None else "unlimited",
-    )
-    return override
