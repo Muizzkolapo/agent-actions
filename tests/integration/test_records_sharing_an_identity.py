@@ -1,14 +1,19 @@
-"""Byte-identical records are one record, and every table has to say so.
+"""A record staged twice is two records, and every table has to say so.
 
-`source_guid` is a content hash and the store is built around that: `source_data`
-is unique on (path, guid) and `record_disposition` on (action, record_id), so
-three byte-identical staged records are one source row and one disposition.
+`source_guid` is derived from a record's content, so two byte-identical staged
+records land on one identity. The store is keyed on it — `source_data` is unique
+on (path, guid), `record_disposition` on (action, record_id) — so the second
+record is dropped on write and never gets a disposition, while the output blob,
+which has no such constraint, keeps both.
 
-`target_data` is a JSON blob with no such constraint, and the list handed to
-processing is not deduplicated, so a run writes one output row per *staged
-record* while every other table counts one per *identity*. The tables disagree,
-and the identity-keyed paths — carry-forward, retry — then rewrite the action to
-what they believe, which looks like rows being deleted.
+The tables then disagree about how many records exist, and the identity-keyed
+paths rewrite the action to what they believe: carry-forward emits one row per
+identity, so a retry drops the extra rows.
+
+What the user staged is what they get back. Repeating content is not an error to
+correct on their behalf, so a repeat is given its own identity, keeping the
+content hash as its parent — the same move an expansion makes for its children,
+for the same reason.
 """
 
 import glob
@@ -63,16 +68,39 @@ def _counts(project):
     return {"source": source, "dispositions": dispositions, "target": target}
 
 
-class TestARunStoresOneRowPerIdentity:
-    def test_the_target_holds_one_row_per_identity(self, duplicated):
-        assert _counts(duplicated)["target"] == 4
+class TestARunKeepsEveryStagedRecord:
+    def test_the_source_holds_every_staged_record(self, duplicated):
+        """The one the store dropped. Six staged, six kept."""
+        assert _counts(duplicated)["source"] == 6
+
+    def test_every_staged_record_gets_a_disposition(self, duplicated):
+        assert _counts(duplicated)["dispositions"] == 6
+
+    def test_the_target_holds_every_staged_record(self, duplicated):
+        assert _counts(duplicated)["target"] == 6
 
     def test_every_table_agrees_how_many_records_there_are(self, duplicated):
-        """The tables that constrain identity already say four. The one that
-        cannot constrain it must not say something else."""
+        """Six, on every side. A table that cannot hold a repeat is the reason
+        the repeat needs an identity of its own, not a reason to drop it."""
         counts = _counts(duplicated)
 
-        assert counts["target"] == counts["source"] == counts["dispositions"], counts
+        assert counts == {"source": 6, "dispositions": 6, "target": 6}, counts
+
+    def test_a_repeat_keeps_the_content_hash_as_its_parent(self, duplicated):
+        """Lineage, so the repeat is still resolvable to the content it repeats."""
+        db = glob.glob(
+            str(duplicated / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
+        )[0]
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = [json.loads(d) for (d,) in con.execute("select data from source_data")]
+        finally:
+            con.close()
+
+        parents = [r.get("parent_source_guid") for r in rows if r.get("parent_source_guid")]
+        assert len(parents) == 2, "two of the three identical records are repeats"
+        assert len(set(parents)) == 1, "both point at the identity they repeat"
+        assert set(parents) <= {r["source_guid"] for r in rows}, "the parent is a real record"
 
 
 class TestARetryChangesNothing:
