@@ -502,8 +502,9 @@ class TestARepairedRecordWithNoStoredRow:
 
 
 class TestIdenticalStagedRecords:
-    """Byte-identical records share a source_guid, so the store holds several rows
-    under one identity."""
+    """Byte-identical records derive one identity, so each repeat is re-stamped
+    with its own at staging — the store is keyed on identity and would otherwise
+    keep one row for what the user staged as several."""
 
     @pytest.fixture
     def duplicated(self, tmp_path, monkeypatch):

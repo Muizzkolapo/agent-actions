@@ -36,11 +36,20 @@ def test_byte_identical_records_are_still_two_records():
     assert built[0]["source_guid"] != built[1]["source_guid"]
 
 
+def test_a_repeat_does_not_claim_its_guid_is_unresolvable():
+    """parent_source_guid means "my own guid matches nothing in the source pool".
+    A repeat's guid is in the pool, so it must not set that field — consumers
+    treat its presence as "I am an expansion child"."""
+    rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
+    built = _add_batch_metadata([dict(r) for r in rows], batch_id="run", node_id="n")
+    assert not any("parent_source_guid" in r for r in built)
+
+
 def test_a_repeat_points_at_the_identity_it_repeats():
     rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
     built = _add_batch_metadata([dict(r) for r in rows], batch_id="run", node_id="n")
-    assert built[1]["parent_source_guid"] == built[0]["source_guid"]
-    assert "parent_source_guid" not in built[0], "the first of a content is not a repeat"
+    assert built[1]["repeat_of_source_guid"] == built[0]["source_guid"]
+    assert "repeat_of_source_guid" not in built[0], "the first of a content is not a repeat"
 
 
 def test_a_repeats_identity_is_the_same_across_runs():

@@ -360,6 +360,41 @@ def _envelope_row(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _give_repeats_their_own_identity(rows: list[Any]) -> list[Any]:
+    """Re-stamp a record whose identity another row in the file already took.
+
+    Identity is derived from content, so staging the same record twice lands both
+    on one guid — and the store is keyed on it, so the second is dropped on write
+    and never gets a disposition while the output blob keeps both. What the user
+    staged is what they get back, so the repeat is given its own identity and
+    records the one it repeats as ``repeat_of_source_guid``.
+
+    The same move an expansion makes for its children, and for the same reason:
+    several rows that would otherwise collide on one guid. Not the same field,
+    though — ``parent_source_guid`` means "my own guid matches nothing in the
+    source pool, look here instead", and a repeat's guid *is* in the pool. Using
+    it would tell every consumer the opposite of the truth, and would attribute a
+    repeat's own expansion children to the record it repeats.
+    """
+    occurrences: dict[str, int] = {}
+    repeats = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        guid = row.get("source_guid")
+        if not guid:
+            continue
+        seen = occurrences.get(guid, 0)
+        occurrences[guid] = seen + 1
+        if seen:
+            row["repeat_of_source_guid"] = guid
+            row["source_guid"] = IDGenerator.derive_repeat_source_guid(guid, seen)
+            repeats += 1
+    if repeats:
+        logger.info("%d staged record(s) repeat content and were given their own identity", repeats)
+    return rows
+
+
 def _wrap_online_rows(payloads: list[Any]) -> list[Any]:
     """Envelope and stamp online first-stage rows through the single authority.
 
@@ -373,7 +408,7 @@ def _wrap_online_rows(payloads: list[Any]) -> list[Any]:
             wrapped.append(payload)
             continue
         wrapped.append(_envelope_row(payload))
-    return wrapped
+    return _give_repeats_their_own_identity(wrapped)
 
 
 def _prepare_text_chunks_batch(
@@ -422,7 +457,7 @@ def _add_batch_metadata(
             "node_id": node_id,
         }
         result.append(record)
-    return result
+    return _give_repeats_their_own_identity(result)
 
 
 def _prepare_batch_data(ctx: DataPreparationContext):

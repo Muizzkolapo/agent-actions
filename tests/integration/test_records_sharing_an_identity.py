@@ -86,7 +86,7 @@ class TestARunKeepsEveryStagedRecord:
 
         assert counts == {"source": 6, "dispositions": 6, "target": 6}, counts
 
-    def test_a_repeat_keeps_the_content_hash_as_its_parent(self, duplicated):
+    def test_a_repeat_records_the_identity_it_repeats(self, duplicated):
         """Lineage, so the repeat is still resolvable to the content it repeats."""
         db = glob.glob(
             str(duplicated / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
@@ -97,7 +97,7 @@ class TestARunKeepsEveryStagedRecord:
         finally:
             con.close()
 
-        parents = [r.get("parent_source_guid") for r in rows if r.get("parent_source_guid")]
+        parents = [r.get("repeat_of_source_guid") for r in rows if r.get("repeat_of_source_guid")]
         assert len(parents) == 2, "two of the three identical records are repeats"
         assert len(set(parents)) == 1, "both point at the identity they repeat"
         assert set(parents) <= {r["source_guid"] for r in rows}, "the parent is a real record"
