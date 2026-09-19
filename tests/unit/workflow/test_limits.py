@@ -209,6 +209,51 @@ class TestRecordLimitInitialStage:
         "agent_actions.input.preprocessing.staging.initial_pipeline"
         "._process_online_mode_with_record_processor"
     )
+    def test_a_retried_record_keeps_its_source_row(
+        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
+    ):
+        """The source text is positionally aligned with the records, so both are
+        kept by the same indices. Slicing it by the limit alone would save the
+        first N rows while the records saved are the first N plus the retried."""
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
+            InitialStageContext,
+            process_initial_stage,
+        )
+
+        # Online mode returns one list under both names, as production does.
+        rows = [{"source_guid": f"g{i}", "content": str(i)} for i in range(6)]
+        mock_prep.return_value = (rows, rows)
+
+        reader_instance = MagicMock()
+        reader_instance.read.return_value = "raw"
+        reader_instance.file_type = ".json"
+        mock_reader.return_value = reader_instance
+        mock_process.return_value = "/output/file.json"
+
+        process_initial_stage(
+            InitialStageContext(
+                agent_config={"record_limit": 2, "run_mode": "online"},
+                agent_name="test",
+                file_path="/input/data.json",
+                base_directory="/input",
+                output_directory="/output",
+                storage_backend=MagicMock(),
+                retried_records=frozenset({"g5"}),
+            )
+        )
+
+        saved_src, saved_data = mock_save.call_args[0][0], mock_save.call_args[0][1]
+        assert [r["source_guid"] for r in saved_data] == ["g0", "g1", "g5"]
+        assert [r["source_guid"] for r in saved_src] == ["g0", "g1", "g5"]
+
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
+    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_online_data")
+    @patch("agent_actions.input.loaders.file_reader.FileReader")
+    @patch(
+        "agent_actions.input.preprocessing.staging.initial_pipeline"
+        "._process_online_mode_with_record_processor"
+    )
     def test_record_limit_none_passes_all(
         self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
     ):

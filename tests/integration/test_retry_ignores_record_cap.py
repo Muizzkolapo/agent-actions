@@ -331,16 +331,16 @@ class TestTheRetriedRecordKeepsItsOutput:
     def test_an_exhausted_record_is_not_erased_by_a_capped_retry(self, chained, monkeypatch):
         """`exhausted` is terminal like `success`. A retry that does not name it
         must not take its disposition away."""
-        ids = _record_ids(chained, SECOND)
-        _fail(chained, ids[0], SECOND, disposition="exhausted")
         late = _a_record_the_cap_would_cut(chained, cap=1)
+        other = next(r for r in _record_ids(chained, SECOND) if r != late)
+        _fail(chained, other, SECOND, disposition="exhausted")
         _fail(chained, late, SECOND)
         monkeypatch.setenv("AGAC_MAX_RECORDS", "1")
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
         assert retry.exit_code == 0, retry.output
-        assert _disposition(chained, ids[0], SECOND) == "exhausted"
+        assert _disposition(chained, other, SECOND) == "exhausted"
 
 
 class TestRetryRepairsWhatWasTried:
