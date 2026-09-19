@@ -368,3 +368,32 @@ class TestRetryRepairsWhatWasTried:
         assert retry.exit_code == 0, retry.output
         assert _stored_records(chained, SECOND) == RECORDS
         assert _disposition(chained, second[0], SECOND) is not None
+
+
+class TestARetryLeavesTheActionsAboveItAlone:
+    """A retry is a record-set operation. A limit in force during one was not
+    asked for by the retry, and must not reset a completed action above its
+    starting point — that resets the action to pending, clears its dispositions
+    and re-runs it truncated, destroying records the retry never named."""
+
+    def test_an_upstream_action_keeps_every_record(self, chained, monkeypatch):
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_stored_guids(chained, ACTION))
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(chained, ACTION)) == before
+
+    def test_an_upstream_action_keeps_every_disposition(self, chained, monkeypatch):
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_record_ids(chained, ACTION))
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_record_ids(chained, ACTION)) == before

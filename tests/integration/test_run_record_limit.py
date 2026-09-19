@@ -213,6 +213,20 @@ class TestItActuallyCapsARun:
         assert result.exit_code == 0, result.output
         assert "--record-limit=2: processing 2 of 6 records" in result.output, result.output
 
+    def test_a_limit_larger_than_the_input_says_nothing(self, project):
+        """The limit resolves and the slice runs; nothing is dropped, so there is
+        nothing to announce. This is the noisy case — a limit that never bites
+        still fires once per action per input file."""
+        _stage(project, 6)
+
+        result = CliRunner().invoke(
+            cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "10", "--fresh"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert _processed(project) == 6
+        assert "processing" not in result.output, result.output
+
     def test_an_uncapped_run_says_nothing_about_a_limit(self, project):
         """The announcement exists because a truncated run looks complete. One
         that fires when nothing was dropped spends that signal."""
@@ -327,3 +341,87 @@ class TestARunCappedByTheEnvironment:
 
         assert result.exit_code == 0, result.output
         assert _stamp(project, "flatten")["record_limit"] is None
+
+
+class TestTheRetiredEnvironmentName:
+    """Rejected end to end, before any action runs — not only in the resolver."""
+
+    def test_the_run_fails_and_names_the_replacement(self, project, monkeypatch):
+        """Asserted on the exception, not the console: the runner invokes the
+        command group directly, below the entrypoint that renders errors."""
+        _stage(project, 6)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code != 0
+        assert "AGAC_RECORD_LIMIT" in str(result.exception), result.exception
+
+    def test_nothing_is_processed(self, project, monkeypatch):
+        """Refused while the run is assembled, so no action gets as far as
+        completing and then failing to record that it did."""
+        _stage(project, 6)
+        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
+
+        CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert _processed(project) == 0
+
+
+TAG_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def tag_density(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
+"""
+
+SECOND_ACTION = """  - name: enrich
+    kind: tool
+    dependencies: [flatten]
+    intent: "Tag"
+    schema: tool_action_output
+    impl: tag_density
+    record_limit: 2
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+class TestALimitOnAnActionBelowTheFirst:
+    """An action reading another action's output is sliced on a different path
+    from one reading staging, and only a limit it alone carries reaches it."""
+
+    @pytest.fixture
+    def chained(self, project):
+        _stage(project, 6)
+        config = (
+            project / "agent_workflow" / TOOL_WORKFLOW / "agent_config" / f"{TOOL_WORKFLOW}.yml"
+        )
+        config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
+        (project / "tools" / TOOL_WORKFLOW / "tag.py").write_text(TAG_TOOL)
+        return project
+
+    def _rows(self, project, action):
+        paths = ProjectPathsFactory.create_project_paths(
+            TOOL_WORKFLOW, TOOL_WORKFLOW, auto_create=False, project_root=project
+        )
+        backend = get_storage_backend(
+            workflow_path=str(paths.io_dir.parent), workflow_name=TOOL_WORKFLOW
+        )
+        backend.initialize()
+        try:
+            return sum(
+                len(backend.read_target(action, path)) for path in backend.list_target_files(action)
+            )
+        finally:
+            backend.close()
+
+    def test_it_truncates_that_action_and_not_the_one_above(self, chained):
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert self._rows(chained, "flatten") == 6, "the limit reached the wrong action"
+        assert self._rows(chained, "enrich") == 2

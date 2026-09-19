@@ -82,6 +82,7 @@ class TestConfigChangeInvalidation:
 
     def _make_executor(self, state_mgr):
         action_runner = MagicMock()
+        action_runner.retried_records = frozenset()
         action_runner.storage_backend = MagicMock()
         deps = ExecutorDependencies(
             action_runner=action_runner,

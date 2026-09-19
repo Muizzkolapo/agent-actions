@@ -75,6 +75,7 @@ class TestClearDispositionErrorPropagation:
         storage.clear_disposition.side_effect = sqlite3.OperationalError("database is locked")
 
         action_runner = MagicMock()
+        action_runner.retried_records = frozenset()
         action_runner.storage_backend = storage
         deps = ExecutorDependencies(
             action_runner=action_runner,

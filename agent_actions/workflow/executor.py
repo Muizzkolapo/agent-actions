@@ -241,11 +241,19 @@ class ActionExecutor:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
-        # The limit that applied, not the one the config asked for: stamping the
+        # The limit in force, not the one the config asked for: stamping the
         # config serves a run truncated elsewhere as a finished one, forever.
+        # Coarse on purpose — nothing here knows the record count, so a limit
+        # too large to have dropped anything still counts as a change.
         record_limit, _ = resolve_record_limit(action_config)
         file_limit = action_config.get("file_limit")
-        limits_changed = (
+        # A retry asks for named records, not for a different amount of work, so
+        # a limit standing during one is incidental. Resetting a completed action
+        # on it clears that action's dispositions and re-runs it truncated —
+        # destroying records the retry never named, at actions it never started
+        # from.
+        repairing_records = bool(self.deps.action_runner.retried_records)
+        limits_changed = not repairing_records and (
             details.get("record_limit") != record_limit or details.get("file_limit") != file_limit
         )
 

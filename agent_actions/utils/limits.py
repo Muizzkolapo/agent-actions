@@ -19,10 +19,20 @@ RECORD_LIMIT_KEY = "_record_limit"
 _RETIRED_ENV = "AGAC_MAX_RECORDS"
 
 
-def _from_environment() -> int | None:
-    """Read the limit the environment asks for, refusing one that cannot limit anything."""
+def check_environment() -> None:
+    """Refuse a retired variable name before a run starts.
+
+    Resolving refuses it too, but the first resolve of a run can happen after an
+    action's work is done — a batch resume never slices — and failing there
+    leaves that action unstamped. Called once while the run is being assembled.
+    """
     if os.environ.get(_RETIRED_ENV) is not None:
         raise ValueError(f"{_RETIRED_ENV} is no longer read — use {RECORD_LIMIT_ENV}")
+
+
+def _from_environment() -> int | None:
+    """Read the limit the environment asks for, refusing one that cannot limit anything."""
+    check_environment()
     raw = os.environ.get(RECORD_LIMIT_ENV)
     if raw is None:
         return None
@@ -75,8 +85,8 @@ def resolve_record_limit(action_config: Mapping[str, Any]) -> tuple[int | None, 
     return override, source
 
 
-def announce_truncation(source: str, limit: int, kept: int, total: int, action_name: str) -> None:
-    """Say that records were dropped, loudly when something outside the config did it.
+def _announce_truncation(source: str, limit: int, kept: int, total: int, action_name: str) -> None:
+    """Loudly when something outside the config dropped the records.
 
     A limit the workflow asks for is the run behaving as written; one asked for
     elsewhere may be a variable the caller has forgotten is set, and a truncated
@@ -92,6 +102,26 @@ def announce_truncation(source: str, limit: int, kept: int, total: int, action_n
         total,
         action_name,
     )
+
+
+def record_indices_to_process(
+    records: Any, action_config: Mapping[str, Any], action_name: str, retried: Collection[str] = ()
+) -> list[int] | None:
+    """Which indices of *records* the limit admits, or None when it admits all.
+
+    None rather than every index, so a caller neither re-slices nor announces
+    when nothing was dropped: what makes a truncation worth saying is that it
+    happened, which needs the record count and so cannot be decided where the
+    limit is resolved.
+    """
+    limit, source = resolve_record_limit(action_config)
+    if limit is None or not isinstance(records, list):
+        return None
+    kept = records_kept_by_limit(records, limit, retried)
+    if len(kept) == len(records):
+        return None
+    _announce_truncation(source, limit, len(kept), len(records), action_name)
+    return kept
 
 
 def records_kept_by_limit(

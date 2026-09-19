@@ -65,8 +65,10 @@ action, not two. Stage fewer files if you need a harder ceiling.
 Each action that actually drops records logs a line naming the flag and the counts; an action
 with fewer records than the limit stays quiet. `AGAC_RECORD_LIMIT` does the same job from the
 environment; when both are set the flag wins, because it was typed for this run. Either way the
-limit that applied is stored with the action, so lifting it re-runs what it truncated instead of
-serving a short run as a finished one.
+limit in force is stored with the action, so lifting it re-runs what it truncated instead of
+serving a short run as a finished one. Changing it to any other value re-runs the action too,
+including to one larger than the input — the stored limit records what was set, not whether it
+dropped anything.
 
 
 ## Parallel Execution

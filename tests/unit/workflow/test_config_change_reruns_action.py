@@ -41,6 +41,7 @@ def _executor(state_manager, action_config: dict, *, has_output: bool = True) ->
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = state_manager
     deps.action_runner = MagicMock()
+    deps.action_runner.retried_records = frozenset()
     deps.action_runner.action_configs = {ACTION: action_config}
     backend = MagicMock()
     # No blocking disposition: the prior-output check treats FAILED/SKIPPED at

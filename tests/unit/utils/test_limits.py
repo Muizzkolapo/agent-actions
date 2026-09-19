@@ -6,7 +6,7 @@ import pytest
 
 from agent_actions.utils.limits import (
     RECORD_LIMIT_KEY,
-    announce_truncation,
+    record_indices_to_process,
     records_kept_by_limit,
     resolve_record_limit,
 )
@@ -172,12 +172,46 @@ class TestTheResolverIsSilent:
         assert caplog.records == [], [r.message for r in caplog.records]
 
 
-class TestAnnounceTruncation:
-    """The announcement a slice site makes once it knows records were dropped."""
+class TestRecordIndicesToProcess:
+    """The one place a limit both slices and announces, so the two cannot drift."""
 
-    def test_a_limit_from_outside_the_config_warns(self, caplog):
+    def test_a_limit_that_drops_records_returns_their_indices(self):
+        assert record_indices_to_process(_records(6), {"record_limit": 2}, "flatten") == [0, 1]
+
+    def test_a_limit_that_drops_nothing_returns_none(self):
+        """None rather than every index: the caller then neither re-slices nor
+        announces a truncation that did not happen."""
+        assert record_indices_to_process(_records(6), {"record_limit": 10}, "flatten") is None
+
+    def test_a_limit_exactly_the_record_count_returns_none(self):
+        assert record_indices_to_process(_records(6), {"record_limit": 6}, "flatten") is None
+
+    def test_no_limit_at_all_returns_none(self):
+        assert record_indices_to_process(_records(6), {}, "flatten") is None
+
+    def test_records_that_are_not_a_list_are_left_alone(self):
+        assert record_indices_to_process("not a list", {"record_limit": 2}, "flatten") is None
+
+    def test_a_retried_record_beyond_the_limit_is_admitted(self):
+        kept = record_indices_to_process(
+            _records(6), {"record_limit": 2}, "flatten", frozenset({"r4"})
+        )
+        assert kept == [0, 1, 4]
+
+    def test_a_retry_that_admits_everything_returns_none(self):
+        """Nothing was dropped, so there is nothing to announce."""
+        retried = frozenset({f"r{i}" for i in range(6)})
+        assert record_indices_to_process(_records(6), {"record_limit": 2}, "flatten", retried) is (
+            None
+        )
+
+
+class TestWhatATruncationAnnounces:
+    def test_a_limit_from_the_environment_warns(self, monkeypatch, caplog):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+
         with caplog.at_level("DEBUG", logger="agent_actions.utils.limits"):
-            announce_truncation("AGAC_RECORD_LIMIT", 2, 2, 6, "flatten")
+            record_indices_to_process(_records(6), {}, "flatten")
 
         (record,) = caplog.records
         assert record.levelname == "WARNING"
@@ -185,9 +219,9 @@ class TestAnnounceTruncation:
         assert "2 of 6" in record.message
         assert "flatten" in record.message
 
-    def test_the_flag_warns_and_names_itself(self, caplog):
+    def test_a_limit_from_the_flag_warns_and_names_itself(self, caplog):
         with caplog.at_level("DEBUG", logger="agent_actions.utils.limits"):
-            announce_truncation("--record-limit", 2, 2, 6, "flatten")
+            record_indices_to_process(_records(6), {RECORD_LIMIT_KEY: 2}, "flatten")
 
         (record,) = caplog.records
         assert record.levelname == "WARNING"
@@ -197,10 +231,21 @@ class TestAnnounceTruncation:
     def test_the_config_own_limit_is_not_a_warning(self, caplog):
         """The run behaving as written is not news."""
         with caplog.at_level("DEBUG", logger="agent_actions.utils.limits"):
-            announce_truncation("record_limit", 23, 23, 40, "flatten")
+            record_indices_to_process(_records(6), {"record_limit": 2}, "flatten")
 
         (record,) = caplog.records
         assert record.levelname == "INFO"
+
+    @pytest.mark.parametrize("config", [{"record_limit": 10}, {"record_limit": 6}, {}])
+    def test_dropping_nothing_says_nothing(self, monkeypatch, caplog, config):
+        """The announcement exists because a truncated run looks complete. One
+        that fires when nothing was dropped spends that signal."""
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+        with caplog.at_level("DEBUG", logger="agent_actions.utils.limits"):
+            record_indices_to_process(_records(6), config, "flatten")
+
+        assert caplog.records == [], [r.message for r in caplog.records]
 
 
 def _records(count):

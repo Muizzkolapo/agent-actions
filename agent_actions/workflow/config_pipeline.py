@@ -15,7 +15,7 @@ from agent_actions.logging.events import (
     UDFDiscoveryStartEvent,
     WorkflowInitializationStartEvent,
 )
-from agent_actions.utils.limits import RECORD_LIMIT_KEY
+from agent_actions.utils.limits import RECORD_LIMIT_KEY, check_environment
 from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,8 @@ def load_workflow_configs(
         "determine_execution_order",
         manager,
     )
+
+    check_environment()
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()
