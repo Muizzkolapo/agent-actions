@@ -49,6 +49,9 @@ MagicMock/
 .agent_status.json
 **/agent_io/target/
 **/agent_io/store/
+# Batch state for the offline provider: carries the batch's whole payload,
+# and is deleted once its results are collected.
+.agac/
 *.db
 *.db-shm
 *.db-wal

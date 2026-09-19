@@ -19,7 +19,6 @@ from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
     BatchTask,
-    resolve_project_root,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,61 +118,86 @@ class AgacBatchClient(BaseBatchClient):
         The resume path is given a batch id and nothing else — it never asks for
         a batch directory — so the location cannot depend on the output directory
         the submit happened to use.
-        """
-        from agent_actions.utils.path_utils import ensure_directory_exists
 
-        state_dir = resolve_project_root(None) / "agent_io" / "batch_state"
+        From the project root the CLI resolved, not the working directory: `agac`
+        supports being run from a subdirectory and does not chdir, so a cwd-derived
+        path would lose the batch exactly as this exists to prevent. Not under
+        `agent_io/`, which is per-workflow and which the docs scanner treats as
+        marking one — a copy at the project root would make it report a workflow
+        named after the project.
+        """
+        from agent_actions.utils.path_utils import ensure_directory_exists, get_path_manager
+
+        state_dir = get_path_manager().get_project_root() / ".agac" / "batch_state"
         ensure_directory_exists(state_dir)
         return state_dir
 
     @classmethod
     def _write_state(cls, state: MockBatchState, tasks: list[dict[str, Any]]) -> None:
-        """Record a submitted batch where the next run can find it."""
-        path = cls._state_dir() / f"{state.batch_id}.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "batch_id": state.batch_id,
-                    "status": state.status,
-                    "poll_count": state.poll_count,
-                    "polls_until_complete": state.polls_until_complete,
-                    "created_at": state.created_at,
-                    "complete_after_seconds": state.complete_after_seconds,
-                    "tasks": tasks,
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        """Record a submitted batch where the next run can find it.
+
+        Written atomically: a truncated file reads back as no batch at all, which
+        is the failure this exists to prevent, arrived at silently.
+        """
+        from agent_actions.utils.atomic_write import atomic_json_write
+
+        atomic_json_write(
+            cls._state_dir() / f"{state.batch_id}.json",
+            {
+                "batch_id": state.batch_id,
+                "status": state.status,
+                "poll_count": state.poll_count,
+                "polls_until_complete": state.polls_until_complete,
+                "created_at": state.created_at,
+                "complete_after_seconds": state.complete_after_seconds,
+                "tasks": tasks,
+            },
         )
+
+    @classmethod
+    def _forget_state(cls, batch_id: str) -> None:
+        """Drop a batch once its results have been handed over.
+
+        The submit and result files are deleted the same way. A record carrying
+        the batch's whole payload is not something to leave in a user's project.
+        """
+        (cls._state_dir() / f"{batch_id}.json").unlink(missing_ok=True)
+        cls._batches.pop(batch_id, None)
+        cls._tasks_by_batch.pop(batch_id, None)
 
     @classmethod
     def _load_state(cls, batch_id: str) -> MockBatchState | None:
         """Read a batch this process did not submit. None when there is no such batch.
 
-        Not a fallback that invents one: a batch id with no record is genuinely
-        unknown, and saying so is what lets the caller report it.
+        Not a fallback that invents one: a batch id with no readable record is
+        genuinely unknown, and saying so is what lets the caller report it. A
+        record missing a field is unreadable in the same sense — it says nothing
+        about a batch — rather than an error to raise from a status check.
         """
         path = cls._state_dir() / f"{batch_id}.json"
         try:
             stored = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            state = MockBatchState(
+                batch_id=stored["batch_id"],
+                status=stored["status"],
+                poll_count=stored["poll_count"],
+                polls_until_complete=stored["polls_until_complete"],
+                created_at=stored["created_at"],
+                complete_after_seconds=stored["complete_after_seconds"],
+            )
+            tasks = stored["tasks"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            logger.debug("No readable batch record for %s", batch_id)
             return None
-        state = MockBatchState(
-            batch_id=stored["batch_id"],
-            status=stored["status"],
-            poll_count=stored["poll_count"],
-            polls_until_complete=stored["polls_until_complete"],
-            created_at=stored["created_at"],
-            complete_after_seconds=stored["complete_after_seconds"],
-        )
         cls._batches[batch_id] = state
-        cls._tasks_by_batch[batch_id] = stored["tasks"]
+        cls._tasks_by_batch[batch_id] = tasks
         return state
 
     @classmethod
     def _state_for(cls, batch_id: str) -> MockBatchState | None:
         """The batch, from this process or from the run that submitted it."""
-        return cls._batches.get(batch_id) or cls._load_state(batch_id)
+        cached = cls._batches.get(batch_id)
+        return cached if cached is not None else cls._load_state(batch_id)
 
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from mock state with time-based auto-completion."""
@@ -208,6 +232,12 @@ class AgacBatchClient(BaseBatchClient):
                 remaining,
             )
 
+        # A poll is state: `polls_until_complete` counts them, and a run that
+        # started its count from the submitted value would never reach the
+        # threshold — each run polls once and there are two runs by design.
+        tasks = self._tasks_by_batch.get(batch_id)
+        if tasks is not None:
+            self._write_state(state, tasks)
         return state.status
 
     def _normalize_status(self, raw_status: str) -> str:
@@ -252,6 +282,10 @@ class AgacBatchClient(BaseBatchClient):
             len(lines),
         )
 
+        # Handed over, so the record goes the way the submit and result files go.
+        # It carries the batch's whole payload; leaving it in a user's project is
+        # not something a test double should do.
+        self._forget_state(batch_id)
         return "\n".join(lines).encode("utf-8")
 
     def _get_attempt_for_custom_id(self, custom_id: str) -> int:
@@ -367,4 +401,4 @@ class AgacBatchClient(BaseBatchClient):
     @classmethod
     def get_batch_state(cls, batch_id: str) -> MockBatchState | None:
         """Get internal state of a batch (for testing/debugging)."""
-        return cls._batches.get(batch_id)
+        return cls._state_for(batch_id)
