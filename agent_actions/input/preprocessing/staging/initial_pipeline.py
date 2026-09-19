@@ -201,7 +201,11 @@ def process_initial_stage(ctx: InitialStageContext):
 
     # Slice BEFORE source save to prevent dedup poisoning
     kept = record_indices_to_process(
-        data_chunk, ctx.agent_config, ctx.agent_name, ctx.retried_records
+        data_chunk,
+        ctx.agent_config,
+        ctx.agent_name,
+        retried=ctx.retried_records,
+        storage_backend=ctx.storage_backend,
     )
     if kept is not None:
         data_chunk = [data_chunk[i] for i in kept]

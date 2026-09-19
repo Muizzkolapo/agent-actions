@@ -105,7 +105,11 @@ def _announce_truncation(source: str, limit: int, kept: int, total: int, action_
 
 
 def record_indices_to_process(
-    records: Any, action_config: Mapping[str, Any], action_name: str, retried: Collection[str] = ()
+    records: Any,
+    action_config: Mapping[str, Any],
+    action_name: str,
+    retried: Collection[str] = (),
+    storage_backend: Any = None,
 ) -> list[int] | None:
     """Which indices of *records* the limit admits, or None when it admits all.
 
@@ -113,11 +117,28 @@ def record_indices_to_process(
     when nothing was dropped: what makes a truncation worth saying is that it
     happened, which needs the record count and so cannot be decided where the
     limit is resolved.
+
+    A limit bounds how much *new* work a run takes on. While a run is repairing
+    records it may still drop one the action has never processed — that is new
+    work, and a configured limit is entitled to hold it back. What it may not do
+    is drop a record this action already has a row for: the action's stored
+    output is replaced whole, so leaving that record out of processing deletes
+    the row rather than saving the work of making it.
+
+    The records being repaired are added to that set rather than read from it:
+    a retry clears their dispositions before re-running, so at this point they
+    look like records the action never processed, and reading alone would drop
+    exactly the records the repair exists to rewrite.
     """
     limit, source = resolve_record_limit(action_config)
     if limit is None or not isinstance(records, list):
         return None
-    kept = records_kept_by_limit(records, limit, retried)
+    already: Collection[str] = ()
+    if retried:
+        already = records_this_action_has_output_for(storage_backend, action_name) | frozenset(
+            retried
+        )
+    kept = records_kept_by_limit(records, limit, already)
     if len(kept) == len(records):
         return None
     _announce_truncation(source, limit, len(kept), len(records), action_name)
@@ -125,18 +146,16 @@ def record_indices_to_process(
 
 
 def records_kept_by_limit(
-    records: Sequence[Any], limit: int, retried: Collection[str] = ()
+    records: Sequence[Any], limit: int, also_keep: Collection[str] = ()
 ) -> list[int]:
-    """Indices of the first `limit` records, plus any of `retried` beyond them.
+    """Indices of the first `limit` records, plus any of `also_keep` beyond them.
 
-    A limit only ever admits more here, never fewer: it decides how much *new*
-    work to take on, and a record being repaired is work already taken on. An
-    identity is admitted once — source_guid is a content hash, so byte-identical
+    An identity is admitted once — source_guid is a content hash, so byte-identical
     rows share one, and admitting each position would store the record twice.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
-    if not retried:
+    if not also_keep:
         return kept
 
     seen = {
@@ -147,7 +166,30 @@ def records_kept_by_limit(
         if not isinstance(record, Mapping):
             continue
         guid = record.get("source_guid")
-        if guid in retried and guid not in seen:
+        if guid in also_keep and guid not in seen:
             kept.append(index)
             seen.add(guid)
     return kept
+
+
+def records_this_action_has_output_for(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """Ids this action already holds a stored row for.
+
+    Read from the output rather than from dispositions: a retry clears the
+    dispositions of what it repairs, and an action reset for a changed config has
+    its dispositions cleared wholesale, so in both of the cases this exists to
+    serve the disposition table is already empty. The rows outlive both.
+
+    Duck-typed rather than imported: the resolver has no business depending on a
+    storage implementation, and both slice sites already hold a backend.
+    """
+    if storage_backend is None:
+        return frozenset()
+    stored: set[str] = set()
+    for path in storage_backend.list_target_files(action_name) or []:
+        for row in storage_backend.read_target(action_name, path) or []:
+            if isinstance(row, Mapping):
+                guid = row.get("source_guid")
+                if guid:
+                    stored.add(guid)
+    return frozenset(stored)
