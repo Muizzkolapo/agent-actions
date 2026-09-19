@@ -298,19 +298,26 @@ class TestRecordsKeptByLimit:
         assert records_kept_by_limit(records, 2, retried) == [0, 1, 3]
 
 
-class TestARecordIsAdmittedOnlyOnce:
-    """`source_guid` is a content hash, so byte-identical rows share one. A retry
-    names an identity; admitting it once per position would write it twice."""
+class TestEveryRowOfAnIdentityIsAdmitted:
+    """`source_guid` is a content hash, so byte-identical records share one — and
+    three identical staged records really are three stored rows, measured. Keeping
+    a single position for them writes one row where three stood."""
 
-    def test_a_duplicate_of_a_kept_record_is_not_admitted_again(self):
+    def test_a_second_row_of_a_kept_identity_is_still_admitted(self):
         records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {"source_guid": "r1"}]
-        retried = frozenset({"r1"})
-        assert records_kept_by_limit(records, 2, retried) == [0, 1]
 
-    def test_two_copies_past_the_limit_are_admitted_once(self):
+        assert records_kept_by_limit(records, 2, frozenset({"r1"})) == [0, 1, 2]
+
+    def test_every_copy_past_the_limit_is_admitted(self):
         records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {"source_guid": "r1"}]
-        retried = frozenset({"r1"})
-        assert records_kept_by_limit(records, 1, retried) == [0, 1]
+
+        assert records_kept_by_limit(records, 1, frozenset({"r1"})) == [0, 1, 2]
+
+    def test_an_identity_not_in_the_set_is_still_dropped(self):
+        """The control: admitting every copy must not become admitting everything."""
+        records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {"source_guid": "r1"}]
+
+        assert records_kept_by_limit(records, 1, frozenset({"absent"})) == [0]
 
     def test_a_limit_below_one_keeps_nothing_by_position(self):
         """The resolver never returns one, but the helper is shared
@@ -322,54 +329,53 @@ class TestARecordIsAdmittedOnlyOnce:
 
 
 class _Backend:
-    """The two calls the lookup makes, and nothing else."""
+    """Only what the lookup asks of a backend, plus a count of the asking."""
 
-    def __init__(self, files):
-        self._files = files
+    def __init__(self, guids_by_action):
+        self._guids = guids_by_action
+        self.calls = 0
 
-    def list_target_files(self, action_name):
-        return list(self._files)
-
-    def read_target(self, action_name, path):
-        return self._files[path]
+    def target_source_guids(self, action_name):
+        self.calls += 1
+        return frozenset(self._guids.get(action_name, ()))
 
 
 class TestRecordsThisActionHasOutputFor:
-    """Read from the stored rows, because the disposition table is already empty
-    in both cases this serves."""
+    """Collection itself belongs to the backend and is tested there. What lives
+    here is that the answer is asked for once and survives a missing backend."""
 
-    def test_it_collects_guids_across_every_target_file(self):
-        backend = _Backend(
-            {
-                "a.json": [{"source_guid": "g0"}, {"source_guid": "g1"}],
-                "b.json": [{"source_guid": "g2"}],
-            }
-        )
-
-        assert records_this_action_has_output_for(backend, "act") == frozenset({"g0", "g1", "g2"})
-
-    def test_a_guid_stored_twice_is_one_identity(self):
-        """source_guid is a content hash, so byte-identical rows share one."""
-        backend = _Backend({"a.json": [{"source_guid": "g0"}], "b.json": [{"source_guid": "g0"}]})
-
-        assert records_this_action_has_output_for(backend, "act") == frozenset({"g0"})
-
-    def test_rows_carrying_no_guid_are_not_an_identity(self):
-        """Admitting on a missing guid would admit every guid-less record at once,
-        on the strength of one stored row that identifies nothing."""
-        backend = _Backend(
-            {"a.json": [{"summary": "x"}, {"source_guid": None}, {"source_guid": "g1"}]}
-        )
-
-        assert records_this_action_has_output_for(backend, "act") == frozenset({"g1"})
-
-    def test_rows_that_are_not_mappings_are_skipped(self):
-        backend = _Backend({"a.json": ["not a row", {"source_guid": "g1"}]})
-
-        assert records_this_action_has_output_for(backend, "act") == frozenset({"g1"})
+    def test_it_returns_what_the_action_holds(self):
+        assert records_this_action_has_output_for(
+            _Backend({"act": ["g0", "g1"]}), "act"
+        ) == frozenset({"g0", "g1"})
 
     def test_no_backend_means_nothing_is_known_to_be_stored(self):
         assert records_this_action_has_output_for(None, "act") == frozenset()
 
-    def test_an_action_with_no_files_has_nothing_stored(self):
-        assert records_this_action_has_output_for(_Backend({}), "act") == frozenset()
+    def test_an_action_is_asked_once_however_many_files_ask(self):
+        """The caller asks per input file. Asking the store each time is
+        quadratic in files, and every read after the first is of a store this
+        run has already begun writing to."""
+        backend = _Backend({"act": ["g0"]})
+
+        for _ in range(5):
+            records_this_action_has_output_for(backend, "act")
+
+        assert backend.calls == 1
+
+    def test_each_action_is_asked_for_separately(self):
+        backend = _Backend({"a": ["g0"], "b": ["g1"]})
+
+        assert records_this_action_has_output_for(backend, "a") == frozenset({"g0"})
+        assert records_this_action_has_output_for(backend, "b") == frozenset({"g1"})
+        assert backend.calls == 2
+
+    def test_two_backends_do_not_share_an_answer(self):
+        """The cache is keyed on the backend, so a second run in the same
+        process reads its own store rather than the previous one's."""
+        first = _Backend({"act": ["g0"]})
+        second = _Backend({"act": ["g1", "g2"]})
+
+        records_this_action_has_output_for(first, "act")
+
+        assert records_this_action_has_output_for(second, "act") == frozenset({"g1", "g2"})

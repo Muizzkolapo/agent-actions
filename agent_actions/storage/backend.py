@@ -250,6 +250,28 @@ class StorageBackend(ABC):
         self._reconstruction_cache[cache_key] = result
         return copy.deepcopy(result)
 
+    def target_source_guids(self, action_name: str) -> frozenset[str]:
+        """Identities this action holds a stored row for.
+
+        Reads the rows as stored. Reconstruction from deltas, lifecycle
+        validation and the downstream reset that :meth:`read_target` performs
+        are all irrelevant to an identity, and expensive enough to matter to a
+        caller asking this per input file — one of them also raises on a store
+        that a plain read would only have complained about later.
+        """
+        guids: set[str] = set()
+        for relative_path in self.list_target_files(action_name):
+            try:
+                rows = self._read_target_raw(action_name, relative_path)
+            except FileNotFoundError:
+                continue
+            for row in rows:
+                if isinstance(row, dict):
+                    guid = row.get("source_guid")
+                    if guid:
+                        guids.add(guid)
+        return frozenset(guids)
+
     @abstractmethod
     def _write_target_raw(
         self, action_name: str, relative_path: str, data: list[dict[str, Any]]

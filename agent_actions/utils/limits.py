@@ -6,8 +6,13 @@ import logging
 import os
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
+from weakref import WeakKeyDictionary
 
 logger = logging.getLogger(__name__)
+
+# Per-backend, per-action. Weak so it dies with the backend rather than outliving
+# it: `agac retry` runs a workflow in the process that just finished one.
+_STORED_GUIDS: WeakKeyDictionary[Any, dict[str, frozenset[str]]] = WeakKeyDictionary()
 
 RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 
@@ -125,16 +130,25 @@ def record_indices_to_process(
     output is replaced whole, so leaving that record out of processing deletes
     the row rather than saving the work of making it.
 
-    The records being repaired are added to that set rather than read from it:
-    a retry clears their dispositions before re-running, so at this point they
-    look like records the action never processed, and reading alone would drop
-    exactly the records the repair exists to rewrite.
+    The records being repaired are added to that set rather than read from it: a
+    record may have no row at all at this action — it failed before writing one,
+    or the action never ran for it — and it is the one record the repair exists
+    to rewrite, so reading alone would drop exactly that.
     """
     limit, source = resolve_record_limit(action_config)
     if limit is None or not isinstance(records, list):
         return None
     already: Collection[str] = ()
     if retried:
+        if storage_backend is None:
+            # Without it only the named records can be spared, which is the
+            # behaviour this rule exists to replace — say so rather than quietly
+            # deleting the rows of everything else the action had.
+            logger.warning(
+                "No storage backend while repairing records: %s can only spare the records "
+                "named, and a limit may delete rows it already held",
+                action_name,
+            )
         stored = records_this_action_has_output_for(storage_backend, action_name)
         already = stored | frozenset(retried)
     kept = records_kept_by_limit(records, limit, already)
@@ -147,27 +161,22 @@ def record_indices_to_process(
 def records_kept_by_limit(
     records: Sequence[Any], limit: int, also_keep: Collection[str] = ()
 ) -> list[int]:
-    """Indices of the first `limit` records, plus any of `also_keep` beyond them.
+    """Indices of the first `limit` records, plus every one carrying an id in `also_keep`.
 
-    An identity is admitted once — source_guid is a content hash, so byte-identical
-    rows share one, and admitting each position would store the record twice.
+    Every one, not one per identity: source_guid is a content hash, so byte-identical
+    rows share it, and three identical staged records really are three stored rows.
+    Admitting a single position for them would write one row where three stood, which
+    is the deletion this exists to prevent rather than a duplicate avoided.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
     if not also_keep:
         return kept
 
-    seen = {
-        records[index].get("source_guid") for index in kept if isinstance(records[index], Mapping)
-    }
     for index in range(limit, len(records)):
         record = records[index]
-        if not isinstance(record, Mapping):
-            continue
-        guid = record.get("source_guid")
-        if guid in also_keep and guid not in seen:
+        if isinstance(record, Mapping) and record.get("source_guid") in also_keep:
             kept.append(index)
-            seen.add(guid)
     return kept
 
 
@@ -179,16 +188,15 @@ def records_this_action_has_output_for(storage_backend: Any, action_name: str) -
     its dispositions cleared wholesale, so in both of the cases this exists to
     serve the disposition table is already empty. The rows outlive both.
 
-    Duck-typed rather than imported: the resolver has no business depending on a
-    storage implementation, and both slice sites already hold a backend.
+    Answered once per action per backend. The caller asks per input file, and the
+    answer wanted is what the action held *before* this run — so a later file must
+    not see the rows an earlier one has just written. Keyed weakly so it lives and
+    dies with the backend; a module-level cache would outlive it, and `agac retry`
+    runs a workflow in the process that just finished one.
     """
     if storage_backend is None:
         return frozenset()
-    stored: set[str] = set()
-    for path in storage_backend.list_target_files(action_name) or []:
-        for row in storage_backend.read_target(action_name, path) or []:
-            if isinstance(row, Mapping):
-                guid = row.get("source_guid")
-                if guid:
-                    stored.add(guid)
-    return frozenset(stored)
+    per_action = _STORED_GUIDS.setdefault(storage_backend, {})
+    if action_name not in per_action:
+        per_action[action_name] = storage_backend.target_source_guids(action_name)
+    return per_action[action_name]

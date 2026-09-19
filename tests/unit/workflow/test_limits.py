@@ -24,6 +24,18 @@ from agent_actions.workflow.runner_file_processing import (
 # ── _file_limit_reached helper ────────────────────────────────────────
 
 
+def _backend_holding_nothing():
+    """A backend for an action with no stored rows yet.
+
+    A bare MagicMock answers `target_source_guids` with another mock, whose union
+    and membership tests both quietly do nothing — so a test double has to state
+    the empty set the real backend would return.
+    """
+    backend = MagicMock()
+    backend.target_source_guids.return_value = frozenset()
+    return backend
+
+
 class TestFileLimitReached:
     def test_none_means_no_limit(self):
         assert _file_limit_reached({}, 100, "act") is False
@@ -184,7 +196,7 @@ class TestRecordLimitInitialStage:
             file_path="/input/data.json",
             base_directory="/input",
             output_directory="/output",
-            storage_backend=MagicMock(),
+            storage_backend=_backend_holding_nothing(),
         )
 
         process_initial_stage(ctx)
@@ -237,7 +249,7 @@ class TestRecordLimitInitialStage:
                 file_path="/input/data.json",
                 base_directory="/input",
                 output_directory="/output",
-                storage_backend=MagicMock(),
+                storage_backend=_backend_holding_nothing(),
                 retried_records=frozenset({"g5"}),
             )
         )
@@ -278,7 +290,7 @@ class TestRecordLimitInitialStage:
             file_path="/input/data.json",
             base_directory="/input",
             output_directory="/output",
-            storage_backend=MagicMock(),
+            storage_backend=_backend_holding_nothing(),
         )
 
         process_initial_stage(ctx)
@@ -319,7 +331,7 @@ class TestRecordLimitInitialStage:
             file_path="/input/data.json",
             base_directory="/input",
             output_directory="/output",
-            storage_backend=MagicMock(),
+            storage_backend=_backend_holding_nothing(),
         )
 
         process_initial_stage(ctx)
