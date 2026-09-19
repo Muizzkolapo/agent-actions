@@ -7,6 +7,7 @@ test can see, because the state is still there.
 """
 
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -33,13 +34,19 @@ def project(tmp_path):
 
 
 def _run(project, *args):
-    """One `agac run`, in its own process — the boundary under test."""
+    """One `agac run`, in its own process — the boundary under test.
+
+    The mock completes a batch after a delay, which is a separate question from
+    whether it still knows about one. Set to zero so a paused run is a run that
+    lost its batch, not one that asked too early.
+    """
     result = subprocess.run(
         [str(Path(sys.executable).parent / "agac"), "run", "-a", WORKFLOW, "-u", "tools", *args],
         cwd=project,
         capture_output=True,
         text=True,
         timeout=300,
+        env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     return result.returncode, result.stdout + result.stderr
 
