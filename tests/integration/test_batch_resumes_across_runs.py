@@ -68,6 +68,23 @@ def _records(project):
     return out
 
 
+@pytest.fixture
+def scoped_to(project):
+    """Point the framework at this project, and put back what was there.
+
+    `set_path_manager` installs a global. A test that leaves its own behind
+    sends every later test's writes wherever this project was — which is how
+    three batch records ended up at the repo root while this was being built.
+    """
+    from agent_actions.config.paths import PathManager
+    from agent_actions.utils import path_utils
+
+    previous = path_utils._global_path_manager
+    path_utils.set_path_manager(PathManager(project_root=project))
+    yield project
+    path_utils._global_path_manager = previous
+
+
 class TestASubmittedBatchIsCollectableByTheNextRun:
     def test_the_second_run_does_not_report_an_unknown_batch(self, project):
         """The symptom: the provider is asked about a batch it no longer holds,
@@ -119,29 +136,21 @@ class TestTheRecordIsFoundFromAnywhereInTheProject:
     location derived from the working directory would lose the batch exactly as
     this exists to prevent."""
 
-    def test_a_different_working_directory_finds_the_same_batch(self, project, monkeypatch):
-        from agent_actions.config.paths import PathManager
+    def test_a_different_working_directory_finds_the_same_batch(self, scoped_to, monkeypatch):
         from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
-        from agent_actions.utils.path_utils import set_path_manager
 
-        set_path_manager(PathManager(project_root=project))
         submitted = AgacBatchClient()._state_dir()
 
         # a second run standing somewhere else in the same project
-        monkeypatch.chdir(project / "agent_workflow")
-        set_path_manager(PathManager(project_root=project))
+        monkeypatch.chdir(scoped_to / "agent_workflow")
 
         assert AgacBatchClient()._state_dir() == submitted
 
-    def test_the_record_does_not_sit_where_a_workflow_would_be_looked_for(self, project):
+    def test_the_record_does_not_sit_where_a_workflow_would_be_looked_for(self, scoped_to):
         """`agent_io/` marks a workflow to the docs scanner, which keys a run by
         the directory above it. A copy at the project root would report a
         workflow named after the project."""
-        from agent_actions.config.paths import PathManager
         from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
-        from agent_actions.utils.path_utils import set_path_manager
-
-        set_path_manager(PathManager(project_root=project))
 
         assert "agent_io" not in AgacBatchClient()._state_dir().parts
 
@@ -151,12 +160,9 @@ class TestARecordThatSaysNothingAboutABatch:
     caller report it. Raising from a status check instead would end the run."""
 
     @pytest.fixture
-    def client(self, project):
-        from agent_actions.config.paths import PathManager
+    def client(self, scoped_to):
         from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
-        from agent_actions.utils.path_utils import set_path_manager
 
-        set_path_manager(PathManager(project_root=project))
         AgacBatchClient._batches.clear()
         AgacBatchClient._tasks_by_batch.clear()
         return AgacBatchClient()
@@ -176,12 +182,9 @@ class TestARecordThatSaysNothingAboutABatch:
 
 
 class TestTwoBatchesInFlight:
-    def test_each_is_recorded_under_its_own_id(self, project):
-        from agent_actions.config.paths import PathManager
+    def test_each_is_recorded_under_its_own_id(self, scoped_to):
         from agent_actions.llm.providers.agac.batch_client import AgacBatchClient, MockBatchState
-        from agent_actions.utils.path_utils import set_path_manager
 
-        set_path_manager(PathManager(project_root=project))
         client = AgacBatchClient()
         for batch_id, task in (("mock_a", {"custom_id": "a"}), ("mock_b", {"custom_id": "b"})):
             client._write_state(MockBatchState(batch_id=batch_id), [task])
