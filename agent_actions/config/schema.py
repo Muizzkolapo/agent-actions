@@ -363,7 +363,7 @@ class ActionConfig(_RetryValidators):
 
     # --- Limit controls ---
     record_limit: int | None = Field(
-        default=None, ge=1, description="Max records per file (start nodes only)"
+        default=None, ge=1, description="Max records per file, at any action"
     )
     file_limit: int | None = Field(default=None, ge=1, description="Max files to walk per action")
 

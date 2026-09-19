@@ -28,6 +28,7 @@ def mock_deps():
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.retried_records = frozenset()
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)
     deps.action_runner.execution_order = ["agent_a", "agent_b", "agent_c"]

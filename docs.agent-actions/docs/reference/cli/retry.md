@@ -56,7 +56,7 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 ## Record limits never exclude a retried record
 
 A record limit — [`record_limit`](../configuration/defaults) or
-[`AGAC_MAX_RECORDS`](../configuration/) — keeps the first N records of an input
+[`AGAC_RECORD_LIMIT`](../configuration/) — keeps the first N records of an input
 file. `retry` selects records by id, so the records it is repairing are admitted
 on top of that N rather than cut loose by it.
 

@@ -27,7 +27,7 @@ from agent_actions.storage.backend import (
     DispositionRow,
 )
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
-from agent_actions.utils.limits import effective_record_limit, records_kept_by_limit
+from agent_actions.utils.limits import record_indices_to_process
 from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
@@ -492,18 +492,11 @@ class ProcessingPipeline:
                 )
 
         # ── per-action record_limit ──────────────────────────────────────
-        record_limit = effective_record_limit(self.config.action_config)
-        if record_limit is not None and isinstance(data, list) and len(data) > record_limit:
-            total = len(data)
-            kept = records_kept_by_limit(data, record_limit, self.config.retried_records)
+        kept = record_indices_to_process(
+            data, self.config.action_config, self.config.action_name, self.config.retried_records
+        )
+        if kept is not None:
             data = [data[i] for i in kept]
-            logger.info(
-                "record_limit=%d: processing %d of %d records for %s",
-                record_limit,
-                len(data),
-                total,
-                self.config.action_name,
-            )
 
         # Build shared pipeline context BEFORE the batch/online fork.
         # See _build_pipeline_context() docstring for the architecture invariant.

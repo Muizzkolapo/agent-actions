@@ -76,7 +76,7 @@ class RunCommandArgs(BaseModel):
         ge=1,
         le=50,
     )
-    max_records: int | None = Field(
+    record_limit: int | None = Field(
         None,
         description="Cap each action at this many records per input file, whatever the config sets",
         ge=1,

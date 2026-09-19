@@ -40,7 +40,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import MAX_RECORDS_KEY
+from agent_actions.utils.limits import resolve_record_limit
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -221,13 +221,30 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
-    @staticmethod
-    def _completion_metadata(action_config: ActionConfigDict) -> dict[str, Any]:
+    def _stamped_record_limit(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> int | None:
+        """The limit in force, unless this run is only repairing records.
+
+        A retry says nothing about how much work the action represents, so the
+        limit it happened to run under must not replace the stored one — the
+        next ordinary run would read a change, clear the action's dispositions
+        and re-run it. The same reason the comparison ignores a limit here.
+        """
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            stored: int | None = self.deps.state_manager.get_status_details(action_name).get(
+                "record_limit"
+            )
+            return stored
+        return resolve_record_limit(action_config)[0]
+
+    def _completion_metadata(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> dict[str, Any]:
         """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
-            "record_limit": cfg.get("record_limit"),
-            "max_records": cfg.get(MAX_RECORDS_KEY),
+            "record_limit": self._stamped_record_limit(action_name, action_config),
             "file_limit": cfg.get("file_limit"),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
@@ -242,13 +259,20 @@ class ActionExecutor:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
-        # The cap is a limit change like any other: without it, capping a
-        # workflow you have already run skips every action as complete, and
-        # lifting a cap serves the truncated output as a finished run.
-        limits_changed = (
-            details.get("record_limit") != action_config.get("record_limit")
-            or details.get("file_limit") != action_config.get("file_limit")
-            or details.get("max_records") != action_config.get(MAX_RECORDS_KEY)
+        # The limit in force, not the one the config asked for: stamping the
+        # config serves a run truncated elsewhere as a finished one, forever.
+        # Coarse on purpose — nothing here knows the record count, so a limit
+        # too large to have dropped anything still counts as a change.
+        record_limit, _ = resolve_record_limit(action_config)
+        file_limit = action_config.get("file_limit")
+        # A retry asks for named records, not for a different amount of work, so
+        # neither limit standing during one is something it asked for. Resetting
+        # a completed action on one clears that action's dispositions and re-runs
+        # it truncated — destroying records the retry never named, at actions it
+        # never started from.
+        repairing_records = bool(getattr(self.deps.action_runner, "retried_records", ()))
+        limits_changed = not repairing_records and (
+            details.get("record_limit") != record_limit or details.get("file_limit") != file_limit
         )
 
         # The hash cannot cover the model: it reads a "model" key, and configs
@@ -416,7 +440,9 @@ class ActionExecutor:
         # No disposition written: the record is unchanged, downstream
         # proceeds normally reading existing namespaces.
         self.deps.state_manager.update_status(
-            action_name, ActionStatus.COMPLETED, **self._completion_metadata(action_config)
+            action_name,
+            ActionStatus.COMPLETED,
+            **self._completion_metadata(action_name, action_config),
         )
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -520,7 +546,7 @@ class ActionExecutor:
             self.deps.state_manager.update_status(
                 params.action_name,
                 final_status,
-                **self._completion_metadata(params.action_config),
+                **self._completion_metadata(params.action_name, params.action_config),
             )
             logger.info(
                 "Action completed (passthrough)",
@@ -540,7 +566,7 @@ class ActionExecutor:
             params.action_name,
             final_status,
             execution_time=duration,
-            **self._completion_metadata(params.action_config),
+            **self._completion_metadata(params.action_name, params.action_config),
         )
         tokens = get_last_usage()
         self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
@@ -1370,7 +1396,7 @@ class ActionExecutor:
                 final_status,
                 execution_time=wall_clock,
                 execution_mode="batch",
-                **self._completion_metadata(action_config),
+                **self._completion_metadata(action_name, action_config),
             )
             # No BatchCompleteEvent here either: finalize_batch_output fired one
             # per input file with the real ids and counts. The no_batches

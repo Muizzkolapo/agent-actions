@@ -82,6 +82,7 @@ class TestConfigChangeInvalidation:
 
     def _make_executor(self, state_mgr):
         action_runner = MagicMock()
+        action_runner.retried_records = frozenset()
         action_runner.storage_backend = MagicMock()
         deps = ExecutorDependencies(
             action_runner=action_runner,
@@ -188,12 +189,26 @@ class TestConfigChangeInvalidation:
         )
 
 
+def _executor_for_stamp():
+    action_runner = MagicMock()
+    action_runner.retried_records = frozenset()
+    return ActionExecutor(
+        ExecutorDependencies(
+            action_runner=action_runner,
+            state_manager=MagicMock(),
+            skip_evaluator=MagicMock(),
+            batch_manager=MagicMock(),
+            output_manager=MagicMock(),
+        )
+    )
+
+
 class TestCompletionMetadata:
     """_completion_metadata must include config_hash alongside limits."""
 
     def test_includes_config_hash(self):
         config = {"prompt": "X", "model": "m", "record_limit": 5, "file_limit": 10}
-        meta = ActionExecutor._completion_metadata(config)
+        meta = _executor_for_stamp()._completion_metadata("action_a", config)
         assert "config_hash" in meta
         assert meta["config_hash"] == _compute_action_config_hash(config)
         assert meta["record_limit"] == 5

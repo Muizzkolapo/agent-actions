@@ -9,50 +9,119 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
+RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 
-# Stamped onto every action config when the run was asked for a cap.
-MAX_RECORDS_KEY = "_max_records"
+# Stamped onto every action config when the run was asked for a limit.
+RECORD_LIMIT_KEY = "_record_limit"
+
+# Renamed. Read only to reject it: a run that believes it is capped and is not
+# spends against a provider with no limit at all.
+_RETIRED_ENV = "AGAC_MAX_RECORDS"
 
 
-def _environment_ceiling() -> int | None:
-    """Read the environment ceiling, refusing a value that cannot cap anything."""
-    raw = os.environ.get(MAX_RECORDS_ENV)
+def check_environment() -> None:
+    """Refuse a retired variable name before a run starts.
+
+    Resolving refuses it too, but the first resolve of a run can happen after an
+    action's work is done — a batch resume never slices — and failing there
+    leaves that action unstamped. Called once while the run is being assembled.
+    """
+    if os.environ.get(_RETIRED_ENV) is not None:
+        raise ValueError(f"{_RETIRED_ENV} is no longer read — use {RECORD_LIMIT_ENV}")
+
+
+def _from_environment() -> int | None:
+    """Read the limit the environment asks for, refusing one that cannot limit anything."""
+    check_environment()
+    raw = os.environ.get(RECORD_LIMIT_ENV)
     if raw is None:
         return None
     try:
-        ceiling = int(raw)
+        limit = int(raw)
     except ValueError:
-        raise ValueError(f"{MAX_RECORDS_ENV}={raw!r} is not an integer") from None
-    if ceiling < 1:
-        raise ValueError(f"{MAX_RECORDS_ENV}={raw!r} must be at least 1")
-    return ceiling
+        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} is not an integer") from None
+    if limit < 1:
+        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} must be at least 1")
+    return limit
 
 
-def _run_ceiling(action_config: Mapping[str, Any]) -> int | None:
-    """Read the cap this run was asked for, refusing one that cannot cap anything."""
-    ceiling = action_config.get(MAX_RECORDS_KEY)
-    if ceiling is None:
+def _from_run(action_config: Mapping[str, Any]) -> int | None:
+    """Read the limit this run was asked for, refusing one that cannot limit anything."""
+    limit = action_config.get(RECORD_LIMIT_KEY)
+    if limit is None:
         return None
-    if isinstance(ceiling, bool) or not isinstance(ceiling, int) or ceiling < 1:
-        raise ValueError(f"--max-records={ceiling!r} must be an integer of at least 1")
-    return int(ceiling)
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError(f"--record-limit={limit!r} must be an integer of at least 1")
+    return int(limit)
 
 
-def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
-    """The ceiling in force and the name of what set it.
+def resolve_record_limit(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """The record limit in force for an action, and the name of what set it.
 
-    A cap typed for this run outranks the environment variable by source, not by
-    which number is smaller — otherwise ambient configuration could quietly
-    overrule what was asked for.
+    Silent by design. Whether anything was actually dropped depends on how many
+    records there are, which only a slice site knows; announcing from here
+    describes a truncation that may not happen.
+
+    ``bool`` is rejected rather than treated as an int: ``record_limit: true``
+    in YAML would otherwise silently cap a run at one record.
     """
+    configured = action_config.get("record_limit")
+    if isinstance(configured, bool) or not isinstance(configured, int) or configured < 1:
+        configured = None
+
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
-    environment = _environment_ceiling()
-    asked = _run_ceiling(action_config)
-    if asked is not None:
-        return asked, "--max-records"
-    return environment, MAX_RECORDS_ENV
+    environment = _from_environment()
+    asked = _from_run(action_config)
+    # A limit typed for this run outranks the environment by source, not by which
+    # number is smaller — otherwise ambient configuration could quietly overrule
+    # what was asked for.
+    override, source = (
+        (asked, "--record-limit") if asked is not None else (environment, RECORD_LIMIT_ENV)
+    )
+
+    if override is None or (configured is not None and configured <= override):
+        return configured, "record_limit"
+    return override, source
+
+
+def _announce_truncation(source: str, limit: int, kept: int, total: int, action_name: str) -> None:
+    """Loudly when something outside the config dropped the records.
+
+    A limit the workflow asks for is the run behaving as written; one asked for
+    elsewhere may be a variable the caller has forgotten is set, and a truncated
+    run that stays quiet looks like a complete one.
+    """
+    level = logging.INFO if source == "record_limit" else logging.WARNING
+    logger.log(
+        level,
+        "%s=%d: processing %d of %d records for %s",
+        source,
+        limit,
+        kept,
+        total,
+        action_name,
+    )
+
+
+def record_indices_to_process(
+    records: Any, action_config: Mapping[str, Any], action_name: str, retried: Collection[str] = ()
+) -> list[int] | None:
+    """Which indices of *records* the limit admits, or None when it admits all.
+
+    None rather than every index, so a caller neither re-slices nor announces
+    when nothing was dropped: what makes a truncation worth saying is that it
+    happened, which needs the record count and so cannot be decided where the
+    limit is resolved.
+    """
+    limit, source = resolve_record_limit(action_config)
+    if limit is None or not isinstance(records, list):
+        return None
+    kept = records_kept_by_limit(records, limit, retried)
+    if len(kept) == len(records):
+        return None
+    _announce_truncation(source, limit, len(kept), len(records), action_name)
+    return kept
 
 
 def records_kept_by_limit(
@@ -82,28 +151,3 @@ def records_kept_by_limit(
             kept.append(index)
             seen.add(guid)
     return kept
-
-
-def effective_record_limit(action_config: Mapping[str, Any]) -> int | None:
-    """Return the record limit for an action, or None when it is unlimited.
-
-    ``bool`` is rejected rather than treated as an int: ``record_limit: true``
-    in YAML would otherwise silently cap a run at one record.
-    """
-    limit = action_config.get("record_limit")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        limit = None
-
-    ceiling, source = _ceiling(action_config)
-    if ceiling is None or (limit is not None and limit <= ceiling):
-        return limit
-
-    # A truncated run that says nothing looks like a complete one.
-    logger.warning(
-        "%s=%d caps this action at %d of %s configured records",
-        source,
-        ceiling,
-        ceiling,
-        limit if limit is not None else "unlimited",
-    )
-    return ceiling

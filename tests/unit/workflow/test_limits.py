@@ -338,6 +338,7 @@ class TestLimitStatusInvalidation:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock(spec=ActionStateManager)
         deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
         deps.action_runner.workflow_name = "test"
         deps.action_runner.get_action_folder.return_value = "/tmp/io"
         deps.action_runner.execution_order = ["act_a"]
@@ -467,6 +468,102 @@ class TestLimitStatusInvalidation:
 
 
 # ── Schema validation ─────────────────────────────────────────────────
+
+
+class TestTheCompletionStamp:
+    """What a completed action stores, and which parts of it are compared."""
+
+    @pytest.fixture
+    def executor(self):
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = MagicMock(spec=ActionStateManager)
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        return ActionExecutor(deps)
+
+    def test_it_stores_exactly_these_keys(self, executor):
+        """Pinned as a set: a slot that silently reappears is how one limit
+        source came to be recorded in a place nothing read."""
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
+
+        assert set(stamp) == {
+            "record_limit",
+            "file_limit",
+            "model_name",
+            "model_vendor",
+            "config_hash",
+        }
+
+    def test_a_changed_file_limit_invalidates(self, executor):
+        """Its own term in the comparison, not carried by record_limit."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 10,
+            "file_limit": 2,
+        }
+
+        status = executor._maybe_invalidate_completed_status(
+            "act", {"record_limit": 10, "file_limit": 5}, ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.PENDING
+
+    def test_unchanged_limits_leave_the_action_completed(self, executor):
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 10,
+            "file_limit": 2,
+        }
+
+        status = executor._maybe_invalidate_completed_status(
+            "act", {"record_limit": 10, "file_limit": 2}, ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.COMPLETED
+
+    def test_a_retry_lets_a_changed_limit_stand(self, executor):
+        """A retry asks for named records, not for a different amount of work.
+        Invalidating here clears the action's dispositions and re-runs it
+        truncated, losing records the retry never named."""
+        executor.deps.action_runner.retried_records = frozenset({"some-record"})
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 10,
+            "file_limit": None,
+        }
+
+        status = executor._maybe_invalidate_completed_status(
+            "act", {"record_limit": 2}, ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.COMPLETED
+
+    def test_a_retry_leaves_the_stored_limit_where_it_found_it(self, executor):
+        """The other half of suppressing the limit: recording the one a retry
+        ran under would make the next ordinary run read a change, clear the
+        action's dispositions and re-run it."""
+        executor.deps.action_runner.retried_records = frozenset({"some-record"})
+        executor.deps.state_manager.get_status_details.return_value = {"record_limit": None}
+
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
+
+        assert stamp["record_limit"] is None
+
+    def test_an_ordinary_run_stores_the_limit_in_force(self, executor):
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
+
+        assert stamp["record_limit"] == 2
+
+    def test_a_limit_that_could_not_truncate_still_invalidates(self, monkeypatch, executor):
+        """Deliberate and coarse: the comparison never sees how many records
+        exist, so it cannot tell a limit that bit from one that did not. The
+        action re-runs and reproduces its full output; the cost is the work."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": None,
+        }
+
+        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.PENDING
 
 
 class TestLimitSchemaValidation:
