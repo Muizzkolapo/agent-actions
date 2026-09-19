@@ -6,8 +6,13 @@ import logging
 import os
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
+from weakref import WeakKeyDictionary
 
 logger = logging.getLogger(__name__)
+
+# Per-backend, per-action. Weak so it dies with the backend rather than outliving
+# it: `agac retry` runs a workflow in the process that just finished one.
+_STORED_ROWS: WeakKeyDictionary[Any, dict[str, dict[str, int]]] = WeakKeyDictionary()
 
 RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 
@@ -105,7 +110,11 @@ def _announce_truncation(source: str, limit: int, kept: int, total: int, action_
 
 
 def record_indices_to_process(
-    records: Any, action_config: Mapping[str, Any], action_name: str, retried: Collection[str] = ()
+    records: Any,
+    action_config: Mapping[str, Any],
+    action_name: str,
+    retried: Collection[str] = (),
+    storage_backend: Any = None,
 ) -> list[int] | None:
     """Which indices of *records* the limit admits, or None when it admits all.
 
@@ -113,41 +122,102 @@ def record_indices_to_process(
     when nothing was dropped: what makes a truncation worth saying is that it
     happened, which needs the record count and so cannot be decided where the
     limit is resolved.
+
+    A limit bounds how much *new* work a run takes on. While a run is repairing
+    records it may still drop one the action has never processed — that is new
+    work, and a configured limit is entitled to hold it back. What it may not do
+    is drop a record this action already has a row for: the action's stored
+    output is replaced whole, so leaving that record out of processing deletes
+    the row rather than saving the work of making it.
+
+    The records being repaired are added to that set rather than read from it: a
+    record may have no row at all at this action — it failed before writing one,
+    or the action never ran for it — and it is the one record the repair exists
+    to rewrite, so reading alone would drop exactly that.
     """
     limit, source = resolve_record_limit(action_config)
     if limit is None or not isinstance(records, list):
         return None
-    kept = records_kept_by_limit(records, limit, retried)
+    rows_held: dict[str, int] = {}
+    if retried:
+        rows_held = dict(rows_this_action_holds_per_record(storage_backend, action_name))
+        for guid in retried:
+            rows_held.setdefault(guid, 1)
+    kept = records_kept_by_limit(records, limit, rows_held)
     if len(kept) == len(records):
         return None
+    if retried and storage_backend is None:
+        # Only the named records could be spared, which is the behaviour this
+        # rule exists to replace. Said where records were actually dropped, so
+        # it names a loss rather than a possibility.
+        logger.warning(
+            "No storage backend while repairing records: %s kept only the records named, "
+            "and rows it already held have been dropped",
+            action_name,
+        )
     _announce_truncation(source, limit, len(kept), len(records), action_name)
     return kept
 
 
 def records_kept_by_limit(
-    records: Sequence[Any], limit: int, retried: Collection[str] = ()
+    records: Sequence[Any], limit: int, rows_held: Mapping[str, int] | None = None
 ) -> list[int]:
-    """Indices of the first `limit` records, plus any of `retried` beyond them.
+    """Indices of the first `limit` records, plus enough beyond it to cover `rows_held`.
 
-    A limit only ever admits more here, never fewer: it decides how much *new*
-    work to take on, and a record being repaired is work already taken on. An
-    identity is admitted once — source_guid is a content hash, so byte-identical
-    rows share one, and admitting each position would store the record twice.
+    `rows_held` says how many rows the action already holds for each identity, and
+    that many positions carrying it are kept — no more, no fewer. Fewer offers the
+    write fewer rows than stood there; more offers it three where one did,
+    backfilling past a limit that was deliberately holding records back. Positions
+    the limit keeps by count spend from the same budget, since they cover those
+    rows too.
+
+    Offers, not guarantees: what is finally written also passes through
+    carry-forward, which rebuilds an action's output keyed by identity and so
+    collapses several rows of one identity into a single row regardless of what is
+    kept here. That collapse is a separate defect on a separate path; this decides
+    only what the limit hands on.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
-    if not retried:
+    if not rows_held:
         return kept
 
-    seen = {
-        records[index].get("source_guid") for index in kept if isinstance(records[index], Mapping)
-    }
+    budget = dict(rows_held)
+    for index in kept:
+        record = records[index]
+        if isinstance(record, Mapping):
+            guid = record.get("source_guid")
+            if guid in budget:
+                budget[guid] -= 1
+
     for index in range(limit, len(records)):
         record = records[index]
         if not isinstance(record, Mapping):
             continue
         guid = record.get("source_guid")
-        if guid in retried and guid not in seen:
+        if guid is not None and budget.get(guid, 0) > 0:
             kept.append(index)
-            seen.add(guid)
+            budget[guid] -= 1
     return kept
+
+
+def rows_this_action_holds_per_record(storage_backend: Any, action_name: str) -> dict[str, int]:
+    """How many stored rows this action holds for each identity.
+
+    Read from the output rather than from dispositions: a retry clears the
+    dispositions of what it repairs, and an action reset for a changed config has
+    its dispositions cleared wholesale, so in both of the cases this exists to
+    serve the disposition table is already empty. The rows outlive both.
+
+    Answered once per action per backend, because the caller asks per input file and
+    reading the store each time is quadratic in files. Keyed weakly so an entry
+    cannot outlive the backend it describes — object identity is what separates one
+    run from the next here, since each is built its own backend, and a plain
+    module-level dict would hold every backend alive besides.
+    """
+    if storage_backend is None:
+        return {}
+    per_action = _STORED_ROWS.setdefault(storage_backend, {})
+    if action_name not in per_action:
+        per_action[action_name] = storage_backend.target_rows_per_source_guid(action_name)
+    return per_action[action_name]

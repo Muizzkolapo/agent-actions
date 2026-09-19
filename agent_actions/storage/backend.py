@@ -250,6 +250,38 @@ class StorageBackend(ABC):
         self._reconstruction_cache[cache_key] = result
         return copy.deepcopy(result)
 
+    def target_rows_per_source_guid(self, action_name: str) -> dict[str, int]:
+        """How many stored rows this action holds for each identity.
+
+        A count, not a set: source_guid is a content hash, so byte-identical
+        records share one and an action can hold several rows under it. A caller
+        deciding which rows must survive needs to know how many stood there —
+        a set would let it write three where one did, or keep one where three did.
+
+        Reads the rows as stored. Reconstruction from deltas, lifecycle
+        validation and the downstream reset that :meth:`read_target` performs
+        are all irrelevant to an identity, and expensive enough to matter to a
+        caller asking this per input file — one of them also raises on a store
+        that a plain read would only have complained about later.
+        """
+        counts: dict[str, int] = {}
+        for relative_path in self.list_target_files(action_name):
+            try:
+                rows = self._read_target_raw(action_name, relative_path)
+            except FileNotFoundError:
+                logger.debug(
+                    "Target file listed but unreadable while counting rows: %s/%s",
+                    action_name,
+                    relative_path,
+                )
+                continue
+            for row in rows:
+                if isinstance(row, dict):
+                    guid = row.get("source_guid")
+                    if guid:
+                        counts[guid] = counts.get(guid, 0) + 1
+        return counts
+
     @abstractmethod
     def _write_target_raw(
         self, action_name: str, relative_path: str, data: list[dict[str, Any]]

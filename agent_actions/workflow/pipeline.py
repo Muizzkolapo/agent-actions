@@ -493,7 +493,11 @@ class ProcessingPipeline:
 
         # ── per-action record_limit ──────────────────────────────────────
         kept = record_indices_to_process(
-            data, self.config.action_config, self.config.action_name, self.config.retried_records
+            data,
+            self.config.action_config,
+            self.config.action_name,
+            retried=self.config.retried_records,
+            storage_backend=self.config.storage_backend,
         )
         if kept is not None:
             data = [data[i] for i in kept]

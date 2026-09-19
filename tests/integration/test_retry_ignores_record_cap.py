@@ -115,6 +115,25 @@ def _disposition(project, record_id, action=ACTION):
         backend.close()
 
 
+def _drop_stored_row(project, record_id, action=ACTION):
+    """Leave *record_id* with a disposition but no stored row.
+
+    What a record that genuinely failed at this action looks like: it ran, it is
+    named in the disposition table, and it produced no output. Constructed here
+    because the fixture's tool succeeds for every record, so the suite otherwise
+    only ever sees failures that already have a row.
+    """
+    backend = _backend(project)
+    try:
+        for path in backend.list_target_files(action):
+            rows = backend._read_target_raw(action, path)
+            kept = [r for r in rows if r.get("source_guid") != record_id]
+            if len(kept) != len(rows):
+                backend._write_target_raw(action, path, kept)
+    finally:
+        backend.close()
+
+
 def _fail(project, record_id, action=ACTION, disposition="failed"):
     backend = _backend(project)
     try:
@@ -397,3 +416,243 @@ class TestARetryLeavesTheActionsAboveItAlone:
 
         assert retry.exit_code == 0, retry.output
         assert set(_record_ids(chained, ACTION)) == before
+
+
+class TestALimitDoesNotTruncateWhatARetryReruns:
+    """A limit bounds how much *new* work a run takes on. A retry takes on none:
+    every record at the actions it re-runs was already processed, and the target
+    blob is rewritten whole, so a record dropped from processing loses its stored
+    row. Bounding a repair therefore does not save work, it destroys output.
+    """
+
+    def test_the_action_the_retry_starts_from_keeps_every_identity(self, chained, monkeypatch):
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_stored_guids(chained, SECOND))
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(chained, SECOND)) == before
+
+    def test_an_upstream_action_that_reruns_keeps_every_identity(self, chained, monkeypatch):
+        """An action above the retry point re-runs when its own config changed —
+        correctly, its behaviour did change. It must not also be truncated."""
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_stored_guids(chained, ACTION))
+        config = chained / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "    impl: flatten_pages\n",
+                "    impl: flatten_pages\n"
+                '    guard: { condition: \'source.page_content != ""\', on_false: "filter" }\n',
+                1,
+            )
+        )
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(chained, ACTION)) == before
+
+    def test_the_retried_record_is_still_repaired(self, chained, monkeypatch):
+        """The control: keeping every row must not come from the retry doing nothing."""
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, late, SECOND) == "success"
+
+
+class TestARepairedRecordWithNoStoredRow:
+    """A record that failed without producing output is not in the action's
+    stored rows, so the set read from them cannot admit it. It is the one record
+    the repair exists to rewrite, and a limit dropping it leaves its cleared
+    disposition unwritten — the failure erased rather than repaired."""
+
+    def test_it_is_still_repaired_under_a_limit_that_excludes_it(self, project, monkeypatch):
+        late = _a_record_the_cap_would_cut(project, cap=1)
+        _fail(project, late)
+        _drop_stored_row(project, late)
+        assert late not in _stored_guids(project), "the fixture did not reach the state under test"
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, late) == "success"
+
+    def test_its_row_comes_back(self, project, monkeypatch):
+        late = _a_record_the_cap_would_cut(project, cap=1)
+        _fail(project, late)
+        _drop_stored_row(project, late)
+        assert late not in _stored_guids(project), "the fixture did not reach the state under test"
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert late in _stored_guids(project)
+
+
+class TestIdenticalStagedRecords:
+    """Byte-identical records share a source_guid, so the store holds several rows
+    under one identity."""
+
+    @pytest.fixture
+    def duplicated(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        staging.joinpath("pages.json").write_text(
+            json.dumps(
+                [{"page_content": "same"}] * 3 + [{"page_content": c} for c in ("a", "b", "c")]
+            )
+        )
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
+        assert _stored_records(root) == 6, "the fixture did not store a row per staged record"
+        return root
+
+    def test_the_limit_offers_every_copy_to_the_write(self, duplicated, monkeypatch):
+        """What this change controls. The limit must hand on all six records; what
+        is finally stored is decided further down."""
+        failed = _record_ids(duplicated)[-1]
+        _fail(duplicated, failed)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert "processing" not in retry.output, retry.output
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Carry-forward rebuilds an action's output keyed by identity, so several "
+            "rows sharing a source_guid collapse to one — with or without a limit, "
+            "and with the limit slice not running at all. A separate defect on a "
+            "separate path; asserting it here keeps it visible rather than letting a "
+            "relative yardstick certify the loss."
+        ),
+    )
+    def test_a_retry_keeps_every_row_of_a_repeated_identity(self, duplicated, monkeypatch):
+        failed = _record_ids(duplicated)[-1]
+        _fail(duplicated, failed)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_records(duplicated) == 6
+
+
+class TestARetryDoesNotBackfillARepeatedIdentity:
+    """The mirror of keeping every held row: an input carrying more copies of an
+    identity than the action stored must not gain rows at a retry. A limit that
+    held records back is not undone by repairing one of them."""
+
+    @pytest.fixture
+    def capped(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        staging.joinpath("pages.json").write_text(
+            json.dumps([{"page_content": "unique"}] + [{"page_content": "dup"}] * 3)
+        )
+        config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "  - name: flatten\n", "  - name: flatten\n    record_limit: 2\n"
+            )
+        )
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
+        assert _stored_records(root) == 2, "the limit should have held the run to two records"
+        return root
+
+    def test_the_row_count_does_not_grow(self, capped):
+        failed = _record_ids(capped)[-1]
+        _fail(capped, failed)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_records(capped) == 2, "the retry backfilled past the configured limit"
+
+    def test_the_named_record_is_still_repaired(self, capped):
+        failed = _record_ids(capped)[-1]
+        _fail(capped, failed)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(capped, failed) == "success"
+
+
+class TestMoreThanOneInputFile:
+    """The limit counts per input file, so a retry across several files re-runs the
+    slice once per file. Each file's rows have to survive its own slice."""
+
+    @pytest.fixture
+    def two_files(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        for name in ("a_pages.json", "b_pages.json"):
+            staging.joinpath(name).write_text(
+                json.dumps([{"page_content": f"{name} page {i}"} for i in range(4)])
+            )
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
+        assert _stored_records(root) == 8, "two files of four records"
+        return root
+
+    def _rows_per_file(self, project):
+        backend = _backend(project)
+        try:
+            return {
+                path: len(backend.read_target(ACTION, path))
+                for path in backend.list_target_files(ACTION)
+            }
+        finally:
+            backend.close()
+
+    def test_every_file_keeps_its_rows(self, two_files, monkeypatch):
+        before = self._rows_per_file(two_files)
+        failed = _record_ids(two_files)[-1]
+        _fail(two_files, failed)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert self._rows_per_file(two_files) == before
+
+    def test_the_file_holding_no_retried_record_is_untouched(self, two_files, monkeypatch):
+        """The limit is per file, so the file the retry does not name still runs its
+        own slice — and a record it never attempted must not pay for that."""
+        failed = _record_ids(two_files)[-1]
+        _fail(two_files, failed)
+        before = set(_stored_guids(two_files))
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(two_files)) == before
