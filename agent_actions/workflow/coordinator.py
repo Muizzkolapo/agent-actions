@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from uuid import uuid4
 
@@ -365,6 +366,14 @@ class AgentWorkflow:
                 self.state.failed = True
                 self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
                 raise
+
+    def restrict_to_records(self, record_ids: Iterable[str]) -> None:
+        """Tell this run it is repairing these records, named by id.
+
+        A record limit keeps the first N by position, which would cut a named
+        record loose. Naming them makes the limit admit them on top of its N.
+        """
+        self.services.core.action_runner.retried_records = frozenset(record_ids)
 
     def run(self):
         """Execute workflow sequentially."""

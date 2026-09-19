@@ -6,7 +6,6 @@ import pytest
 
 from agent_actions.utils.limits import (
     MAX_RECORDS_KEY,
-    RETRY_RECORD_IDS_KEY,
     effective_record_limit,
     records_kept_by_limit,
 )
@@ -175,44 +174,44 @@ class TestRecordsKeptByLimit:
     never in place of them."""
 
     def test_the_first_n_are_kept(self):
-        assert records_kept_by_limit(_records(6), 2, {}) == [0, 1]
+        assert records_kept_by_limit(_records(6), 2) == [0, 1]
 
     def test_a_limit_past_the_end_keeps_everything(self):
-        assert records_kept_by_limit(_records(3), 10, {}) == [0, 1, 2]
+        assert records_kept_by_limit(_records(3), 10) == [0, 1, 2]
 
     def test_a_retried_record_beyond_the_limit_is_admitted(self):
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r4"})}
-        assert records_kept_by_limit(_records(6), 2, config) == [0, 1, 4]
+        retried = frozenset({"r4"})
+        assert records_kept_by_limit(_records(6), 2, retried) == [0, 1, 4]
 
     def test_the_first_record_the_limit_excludes_is_admitted(self):
         """Index == limit is the boundary: the first record cut, and the one a
         range that starts too late would silently leave out."""
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r2"})}
-        assert records_kept_by_limit(_records(6), 2, config) == [0, 1, 2]
+        retried = frozenset({"r2"})
+        assert records_kept_by_limit(_records(6), 2, retried) == [0, 1, 2]
 
     def test_a_retried_record_inside_the_limit_is_not_duplicated(self):
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r0"})}
-        assert records_kept_by_limit(_records(6), 2, config) == [0, 1]
+        retried = frozenset({"r0"})
+        assert records_kept_by_limit(_records(6), 2, retried) == [0, 1]
 
     def test_indices_come_back_in_order(self):
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r5", "r3"})}
-        assert records_kept_by_limit(_records(6), 2, config) == [0, 1, 3, 5]
+        retried = frozenset({"r5", "r3"})
+        assert records_kept_by_limit(_records(6), 2, retried) == [0, 1, 3, 5]
 
     def test_a_retry_that_names_nothing_takes_only_the_first_n(self):
-        assert records_kept_by_limit(_records(6), 2, {RETRY_RECORD_IDS_KEY: frozenset()}) == [0, 1]
+        assert records_kept_by_limit(_records(6), 2, frozenset()) == [0, 1]
 
     def test_an_unknown_id_admits_nothing(self):
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"absent"})}
-        assert records_kept_by_limit(_records(6), 2, config) == [0, 1]
+        retried = frozenset({"absent"})
+        assert records_kept_by_limit(_records(6), 2, retried) == [0, 1]
 
     def test_records_that_are_not_mappings_are_not_admitted(self):
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r4"})}
-        assert records_kept_by_limit(["a", "b", "c", "d", "e"], 2, config) == [0, 1]
+        retried = frozenset({"r4"})
+        assert records_kept_by_limit(["a", "b", "c", "d", "e"], 2, retried) == [0, 1]
 
     def test_a_record_with_no_guid_is_not_admitted(self):
         records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {}, {"source_guid": "r3"}]
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r3"})}
-        assert records_kept_by_limit(records, 2, config) == [0, 1, 3]
+        retried = frozenset({"r3"})
+        assert records_kept_by_limit(records, 2, retried) == [0, 1, 3]
 
 
 class TestARecordIsAdmittedOnlyOnce:
@@ -221,28 +220,18 @@ class TestARecordIsAdmittedOnlyOnce:
 
     def test_a_duplicate_of_a_kept_record_is_not_admitted_again(self):
         records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {"source_guid": "r1"}]
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r1"})}
-        assert records_kept_by_limit(records, 2, config) == [0, 1]
+        retried = frozenset({"r1"})
+        assert records_kept_by_limit(records, 2, retried) == [0, 1]
 
     def test_two_copies_past_the_limit_are_admitted_once(self):
         records = [{"source_guid": "r0"}, {"source_guid": "r1"}, {"source_guid": "r1"}]
-        config = {RETRY_RECORD_IDS_KEY: frozenset({"r1"})}
-        assert records_kept_by_limit(records, 1, config) == [0, 1]
+        retried = frozenset({"r1"})
+        assert records_kept_by_limit(records, 1, retried) == [0, 1]
 
     def test_a_limit_below_one_keeps_nothing_by_position(self):
         """`effective_record_limit` never returns one, but the helper is shared
         and a negative would index from the end."""
         records = [{"source_guid": f"r{i}"} for i in range(5)]
-        assert records_kept_by_limit(records, -1, {}) == []
+        assert records_kept_by_limit(records, -1) == []
         # r4 is last, so a range starting at -1 reaches it twice.
-        assert records_kept_by_limit(records, -1, {RETRY_RECORD_IDS_KEY: frozenset({"r4"})}) == [4]
-
-
-class TestTheKeyIsNotAConfigSurface:
-    """A workflow's `default_agent_config` accepts unknown keys and spreads them
-    into every action, so a limit must not answer to one written in YAML."""
-
-    @pytest.mark.parametrize("value", [["r4"], ("r4",), {"r4"}, "r4", {"r4": True}])
-    def test_only_a_frozenset_admits_anything(self, value):
-        records = [{"source_guid": f"r{i}"} for i in range(6)]
-        assert records_kept_by_limit(records, 2, {RETRY_RECORD_IDS_KEY: value}) == [0, 1]
+        assert records_kept_by_limit(records, -1, frozenset({"r4"})) == [4]

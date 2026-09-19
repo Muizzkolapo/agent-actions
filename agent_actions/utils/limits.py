@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -13,11 +13,6 @@ MAX_RECORDS_ENV = "AGAC_MAX_RECORDS"
 
 # Stamped onto every action config when the run was asked for a cap.
 MAX_RECORDS_KEY = "_max_records"
-
-# Stamped with the source_guids a retry is re-running. A limit keeps the first N
-# by position and would cut these loose; a retry cleared their dispositions
-# before re-running, so cutting one erases the failure instead of repairing it.
-RETRY_RECORD_IDS_KEY = "_retry_record_ids"
 
 
 def _environment_ceiling() -> int | None:
@@ -61,22 +56,18 @@ def _ceiling(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
 
 
 def records_kept_by_limit(
-    records: Sequence[Any], limit: int, action_config: Mapping[str, Any]
+    records: Sequence[Any], limit: int, retried: Collection[str] = ()
 ) -> list[int]:
-    """Indices of the first `limit` records, plus any this retry is re-running.
+    """Indices of the first `limit` records, plus any of `retried` beyond them.
 
     A limit only ever admits more here, never fewer: it decides how much *new*
-    work to take on, and a retried record is work already taken on. An identity
-    is admitted once — source_guid is a content hash, so byte-identical rows
-    share one, and admitting each position would store the record twice.
+    work to take on, and a record being repaired is work already taken on. An
+    identity is admitted once — source_guid is a content hash, so byte-identical
+    rows share one, and admitting each position would store the record twice.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
-    retried = action_config.get(RETRY_RECORD_IDS_KEY)
-    # Only what retry stamped. A workflow's `default_agent_config` accepts
-    # unknown keys and spreads them into every action, and YAML cannot express a
-    # frozenset — so this is a handoff between commands, not a config surface.
-    if not isinstance(retried, frozenset) or not retried:
+    if not retried:
         return kept
 
     seen = {

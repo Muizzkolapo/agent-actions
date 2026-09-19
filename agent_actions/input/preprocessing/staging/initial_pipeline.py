@@ -43,6 +43,8 @@ class InitialStageContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
     action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
+    # Records this run is repairing; a record limit admits them on top of its N.
+    retried_records: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -201,7 +203,7 @@ def process_initial_stage(ctx: InitialStageContext):
     record_limit = effective_record_limit(ctx.agent_config)
     if record_limit is not None and isinstance(data_chunk, list) and len(data_chunk) > 0:
         total = len(data_chunk)
-        kept = records_kept_by_limit(data_chunk, record_limit, ctx.agent_config)
+        kept = records_kept_by_limit(data_chunk, record_limit, ctx.retried_records)
         data_chunk = [data_chunk[i] for i in kept]
         if isinstance(src_text, list):
             src_text = [src_text[i] for i in kept if i < len(src_text)]

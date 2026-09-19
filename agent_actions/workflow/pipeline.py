@@ -51,6 +51,8 @@ class PipelineConfig:
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     source_relative_path: str | None = None  # For storage backend source lookups
+    # Records this run is repairing; a record limit admits them on top of its N.
+    retried_records: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -491,7 +493,7 @@ class ProcessingPipeline:
         record_limit = effective_record_limit(self.config.action_config)
         if record_limit is not None and isinstance(data, list) and len(data) > record_limit:
             total = len(data)
-            kept = records_kept_by_limit(data, record_limit, self.config.action_config)
+            kept = records_kept_by_limit(data, record_limit, self.config.retried_records)
             data = [data[i] for i in kept]
             logger.info(
                 "record_limit=%d: processing %d of %d records for %s",
@@ -614,6 +616,7 @@ def create_processing_pipeline_from_params(
     workflow_metadata: dict[str, Any] | None = None,
     storage_backend: Optional["StorageBackend"] = None,
     source_relative_path: str | None = None,
+    retried_records: frozenset[str] = frozenset(),
 ) -> ProcessingPipeline:
     """
     Factory function for creating a ProcessingPipeline instance from individual parameters.
@@ -638,5 +641,6 @@ def create_processing_pipeline_from_params(
         workflow_metadata=workflow_metadata,
         storage_backend=storage_backend,
         source_relative_path=source_relative_path,
+        retried_records=retried_records,
     )
     return ProcessingPipeline(config)
