@@ -839,65 +839,33 @@ class FakeDataGenerator:
             return cls._generate_string(attempt, field_name=field_id)
 
     @staticmethod
-    def extract_schema_from_openai_request(body: dict[str, Any]) -> dict[str, Any] | None:
-        """Extract JSON schema from OpenAI-format request body."""
-        if not isinstance(body, dict):
-            return None  # type: ignore[unreachable]
+    def unwrap_schema(schema: dict[str, Any]) -> dict[str, Any]:
+        """The JSON Schema a compiled schema carries, or the schema itself.
 
-        # Check response_format.json_schema.schema
-        response_format = body.get("response_format", {})
-        if isinstance(response_format, dict):
-            json_schema = response_format.get("json_schema", {})
-            if isinstance(json_schema, dict):
-                schema = json_schema.get("schema")
-                if schema:
-                    return schema  # type: ignore[no-any-return]
-            schema = response_format.get("schema")
-            if schema:
-                return schema  # type: ignore[no-any-return]
-
-        # Check tools[0].function.parameters
-        tools = body.get("tools", [])
-        if tools and isinstance(tools, list):
-            for tool in tools:
-                if isinstance(tool, dict):
-                    function = tool.get("function", {})
-                    if isinstance(function, dict):
-                        parameters = function.get("parameters")
-                        if parameters:
-                            return parameters  # type: ignore[no-any-return]
-
-        if "schema" in body:
-            return body["schema"]  # type: ignore[no-any-return]
-
-        return None
-
-    @staticmethod
-    def extract_prompt_from_openai_request(body: dict[str, Any]) -> str | None:
-        """Extract prompt/user message from OpenAI-format request body."""
-        if not isinstance(body, dict):
-            return None  # type: ignore[unreachable]
-
-        messages = body.get("messages", [])
-        if messages and isinstance(messages, list):
-            # Get the last user message or system message
-            for msg in reversed(messages):
-                if isinstance(msg, dict):
-                    role = msg.get("role", "")
-                    content = msg.get("content", "")
-                    if role in ("user", "system") and content:
-                        return content if isinstance(content, str) else str(content)
-
-        return None
+        A compiled schema reaches a provider wrapped as ``{"name": ..., "schema":
+        {...}}``. The wrapper declares no fields of its own, so generating from it
+        rather than from what it carries yields a single value where a record was
+        asked for.
+        """
+        inner = schema.get("schema")
+        return inner if isinstance(inner, dict) else schema
 
     @classmethod
     def generate_openai_response(
-        cls, custom_id: str, body: dict[str, Any], attempt: int = 1
+        cls,
+        custom_id: str,
+        schema: dict[str, Any] | None,
+        prompt: str | None = None,
+        attempt: int = 1,
     ) -> dict[str, Any]:
-        """Generate a complete OpenAI API response with fake data."""
-        # Extract schema and prompt from request
-        schema = cls.extract_schema_from_openai_request(body)
-        prompt = cls.extract_prompt_from_openai_request(body)
+        """An OpenAI-shaped response carrying data generated from *schema*.
+
+        Takes the schema and prompt rather than a request to read them out of:
+        the only caller is the fake batch provider answering a task it wrote
+        itself, and re-reading its own task as another vendor's wire format is
+        how both went missing.
+        """
+        schema = cls.unwrap_schema(schema) if schema else None
 
         # Set context with prompt for reproducible, prompt-aware generation
         seed = int(hashlib.md5(f"{custom_id}:{attempt}".encode()).hexdigest()[:8], 16)

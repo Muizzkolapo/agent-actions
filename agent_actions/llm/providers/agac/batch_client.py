@@ -263,13 +263,14 @@ class AgacBatchClient(BaseBatchClient):
 
         for task in tasks:
             custom_id = task.get("custom_id", "unknown")
-            body = task.get("body", {})
 
             # Track attempt for this custom_id (for recovery testing)
             attempt = self._get_attempt_for_custom_id(custom_id)
 
-            # Generate fake data using schema from request
-            openai_response = FakeDataGenerator.generate_openai_response(custom_id, body, attempt)
+            # Straight off the task this client wrote, which holds both.
+            openai_response = FakeDataGenerator.generate_openai_response(
+                custom_id, task.get("schema"), task.get("prompt"), attempt
+            )
 
             # Wrap in batch result format
             result = {
