@@ -47,8 +47,10 @@ class IDGenerator:
         Identity is derived from content, so a record staged twice lands on one
         guid — and the store is keyed on it, so the second would be dropped. A
         repeat is a record the user staged; it gets an identity of its own here,
-        derived from the one it repeats so it is stable across runs, and keeps
-        that one as ``parent_source_guid``.
+        derived from the one it repeats so it is stable across runs, and records
+        that one as ``repeat_of_source_guid`` — not ``parent_source_guid``, which
+        means the record's own guid matches nothing in the source pool. A repeat's
+        does.
 
         Hashed in a different UUID namespace from record content, so no payload
         can produce one of these however it is shaped. Deriving it in the content

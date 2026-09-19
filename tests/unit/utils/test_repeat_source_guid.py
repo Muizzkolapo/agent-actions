@@ -56,3 +56,37 @@ class TestNoRecordCanBeGivenOne:
         assert IDGenerator.derive_repeat_source_guid(BASE, 1) != (
             IDGenerator.generate_content_hash({"repeat_of": BASE, "occurrence": 1})
         )
+
+
+class TestTheFieldIsDeclared:
+    """Not merely absent from user content by luck. A repeat always carries a
+    content dict today, which is what keeps the breadcrumb out of a synthesized
+    first-stage source — declaring it makes that structural instead."""
+
+    def test_it_is_a_framework_field(self):
+        from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+
+        assert "repeat_of_source_guid" in RECORD_FRAMEWORK_FIELDS
+
+    def test_it_is_not_offered_to_a_prompt_as_record_content(self):
+        from agent_actions.prompt.context.scope_namespace import _RECORD_METADATA_KEYS
+
+        assert "repeat_of_source_guid" in _RECORD_METADATA_KEYS
+
+    def test_a_synthesized_first_stage_source_leaves_it_out(self):
+        """The path the declaration protects: a record with no content dict."""
+        from agent_actions.utils.content import get_existing_content
+
+        content = get_existing_content(
+            {"source_guid": "g", "repeat_of_source_guid": "b", "title": "kept"},
+            is_first_stage=True,
+        )
+
+        assert content == {"source": {"title": "kept"}}
+
+    def test_it_is_not_carried_to_the_next_action(self):
+        """A staging fact, recorded on the source row. Downstream records that
+        carried it would be claiming something about their own origin."""
+        from agent_actions.record.envelope import RECORD_TRACKING_FIELDS
+
+        assert "repeat_of_source_guid" not in RECORD_TRACKING_FIELDS
