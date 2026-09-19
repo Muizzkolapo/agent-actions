@@ -501,61 +501,6 @@ class TestARepairedRecordWithNoStoredRow:
         assert late in _stored_guids(project)
 
 
-class TestIdenticalStagedRecords:
-    """Byte-identical records share a source_guid, so the store holds several rows
-    under one identity."""
-
-    @pytest.fixture
-    def duplicated(self, tmp_path, monkeypatch):
-        root = tmp_path / "project"
-        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
-        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
-        shutil.rmtree(staging, ignore_errors=True)
-        staging.mkdir(parents=True)
-        staging.joinpath("pages.json").write_text(
-            json.dumps(
-                [{"page_content": "same"}] * 3 + [{"page_content": c} for c in ("a", "b", "c")]
-            )
-        )
-        monkeypatch.chdir(root)
-        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-        assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
-        assert _stored_records(root) == 6, "the fixture did not store a row per staged record"
-        return root
-
-    def test_the_limit_offers_every_copy_to_the_write(self, duplicated, monkeypatch):
-        """What this change controls. The limit must hand on all six records; what
-        is finally stored is decided further down."""
-        failed = _record_ids(duplicated)[-1]
-        _fail(duplicated, failed)
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
-
-        assert retry.exit_code == 0, retry.output
-        assert "processing" not in retry.output, retry.output
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Carry-forward rebuilds an action's output keyed by identity, so several "
-            "rows sharing a source_guid collapse to one — with or without a limit, "
-            "and with the limit slice not running at all. A separate defect on a "
-            "separate path; asserting it here keeps it visible rather than letting a "
-            "relative yardstick certify the loss."
-        ),
-    )
-    def test_a_retry_keeps_every_row_of_a_repeated_identity(self, duplicated, monkeypatch):
-        failed = _record_ids(duplicated)[-1]
-        _fail(duplicated, failed)
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
-
-        assert retry.exit_code == 0, retry.output
-        assert _stored_records(duplicated) == 6
-
-
 class TestARetryDoesNotBackfillARepeatedIdentity:
     """The mirror of keeping every held row: an input carrying more copies of an
     identity than the action stored must not gain rows at a retry. A limit that

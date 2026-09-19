@@ -101,6 +101,41 @@ _PERSISTENT_FIELDS: frozenset[str] = RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_F
 RECORD_FRAMEWORK_FIELDS: frozenset[str] = _PERSISTENT_FIELDS | RECORD_STAGE_FIELDS
 
 
+def first_record_per_identity(
+    records: list[dict[str, Any]], aligned: list[Any] | None = None
+) -> tuple[list[dict[str, Any]], list[Any] | None]:
+    """The first record carrying each ``source_guid``, and *aligned* kept in step.
+
+    Mirrors what the store does to the same list: source rows are unique on
+    (path, guid) and are written with INSERT OR IGNORE, so the first record of an
+    identity is the one kept. A list that is processed after being saved has to
+    agree with what was saved, or the action writes more output rows than it has
+    records and every identity-keyed path afterwards — dispositions,
+    carry-forward, retry — reads a different count than the output shows.
+
+    A record with no ``source_guid`` is passed through rather than dropped or
+    merged: identity is not ours to invent here, and the storage boundary already
+    refuses such a record loudly.
+    """
+    seen: set[str] = set()
+    kept_indices: list[int] = []
+    for index, record in enumerate(records):
+        guid = record.get("source_guid") if isinstance(record, dict) else None
+        if guid:
+            if guid in seen:
+                continue
+            seen.add(guid)
+        kept_indices.append(index)
+
+    if len(kept_indices) == len(records):
+        return records, aligned
+
+    deduped = [records[i] for i in kept_indices]
+    if aligned is None or not isinstance(aligned, list):
+        return deduped, aligned
+    return deduped, [aligned[i] for i in kept_indices if i < len(aligned)]
+
+
 class RecordEnvelopeError(Exception):
     """Raised when a record envelope contract is violated."""
 
