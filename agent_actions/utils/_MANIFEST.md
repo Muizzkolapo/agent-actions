@@ -28,7 +28,7 @@ pathways.
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
 | `correlation.py` | Module | `VersionIdGenerator`: deterministic version correlation IDs for versioned-agent workflows. | `versioning` |
 | `field_management.py` | Module | `FieldManager`: ensures processed items always expose the required metadata/IDs. | `metadata` |
-| `id_generation.py` | Module | `IDGenerator`: UUID/deterministic ID helpers for target/node/source GUIDs. | `identity` |
+| `id_generation.py` | Module | `IDGenerator`: UUID/deterministic ID helpers for target/node/source GUIDs. A staged record whose content another row in the same file already took is given a derived identity of its own (`derive_repeat_source_guid`), hashed in a separate UUID namespace so no record's content can produce one. | `identity` |
 | `lineage.py` | Module | `LineageBuilder`: lineage chain building and ancestry propagation. | `lineage` |
 | `passthrough_builder.py` | Module | `PassthroughItemBuilder` that creates normalized passthrough objects with metadata and lineage for batch/online modes. | `preprocessing`, `lineage`, `id_generation` |
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. Thread-safe global singleton with double-checked locking. `set_path_manager()` allows explicit DI of a scoped instance. `derive_workflow_root()` safely finds the workflow root from a path inside a workflow (agent_io fast-path + agent_config walk-up + safe fallback). | `config.paths`, `file_io` |

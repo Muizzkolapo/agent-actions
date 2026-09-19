@@ -41,6 +41,27 @@ class IDGenerator:
         return IDGenerator.generate_content_hash(content)
 
     @staticmethod
+    def derive_repeat_source_guid(base_source_guid: str, occurrence: int) -> str:
+        """Deterministic identity for the *occurrence*-th repeat of one content.
+
+        Identity is derived from content, so a record staged twice lands on one
+        guid — and the store is keyed on it, so the second would be dropped. A
+        repeat is a record the user staged; it gets an identity of its own here,
+        derived from the one it repeats so it is stable across runs, and records
+        that one as ``repeat_of_source_guid`` — not ``parent_source_guid``, which
+        means the record's own guid matches nothing in the source pool. A repeat's
+        does.
+
+        Hashed in a different UUID namespace from record content, so no payload
+        can produce one of these however it is shaped. Deriving it in the content
+        namespace over ``{"repeat_of": ..., "occurrence": ...}`` would be reachable
+        by a record whose fields happen to be exactly that.
+        """
+        if occurrence < 1:
+            raise ValueError(f"occurrence must be at least 1, got {occurrence}")
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agac:repeat:{base_source_guid}:{occurrence}"))
+
+    @staticmethod
     def _require_string_keys(obj: Any) -> None:
         """Reject non-string dict keys before hashing.
 

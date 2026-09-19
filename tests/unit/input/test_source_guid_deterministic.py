@@ -26,8 +26,36 @@ def test_batch_first_stage_guid_is_distinct_per_record():
     assert built[0]["source_guid"] != built[1]["source_guid"]
 
 
-def test_byte_identical_records_share_identity():
-    # Two byte-identical records are the same source → same guid (dedup-correct).
+def test_byte_identical_records_are_still_two_records():
+    # They derive one identity — content is all identity is made of — but the
+    # store is keyed on it, so sharing it means the second record is dropped on
+    # write and never gets a disposition. A record the user staged is a record
+    # they get back, so the repeat is re-stamped.
     rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
     built = _add_batch_metadata([dict(r) for r in rows], batch_id="run", node_id="n")
-    assert built[0]["source_guid"] == built[1]["source_guid"]
+    assert built[0]["source_guid"] != built[1]["source_guid"]
+
+
+def test_a_repeat_does_not_claim_its_guid_is_unresolvable():
+    """parent_source_guid means "my own guid matches nothing in the source pool".
+    A repeat's guid is in the pool, so it must not set that field — consumers
+    treat its presence as "I am an expansion child"."""
+    rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
+    built = _add_batch_metadata([dict(r) for r in rows], batch_id="run", node_id="n")
+    assert not any("parent_source_guid" in r for r in built)
+
+
+def test_a_repeat_points_at_the_identity_it_repeats():
+    rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
+    built = _add_batch_metadata([dict(r) for r in rows], batch_id="run", node_id="n")
+    assert built[1]["repeat_of_source_guid"] == built[0]["source_guid"]
+    assert "repeat_of_source_guid" not in built[0], "the first of a content is not a repeat"
+
+
+def test_a_repeats_identity_is_the_same_across_runs():
+    # The reason it is derived rather than minted: the disposition and checkpoint
+    # gates match on it across runs, and a batch resume is a different process.
+    rows = [{"id": "dup", "page_content": "same"}, {"id": "dup", "page_content": "same"}]
+    a = _add_batch_metadata([dict(r) for r in rows], batch_id="run-A", node_id="n1")
+    b = _add_batch_metadata([dict(r) for r in rows], batch_id="run-B", node_id="n2")
+    assert [r["source_guid"] for r in a] == [r["source_guid"] for r in b]

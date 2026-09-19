@@ -89,6 +89,10 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         "root_target_id",
         "chunk_info",
         "_state",
+        # Staged-record breadcrumb: the identity this record repeats. Declared so
+        # it is excluded from a synthesized first-stage source alongside the rest,
+        # rather than relying on such a record always carrying a content dict.
+        "repeat_of_source_guid",
     }
 )
 
