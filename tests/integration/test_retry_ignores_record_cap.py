@@ -541,3 +541,49 @@ class TestIdenticalStagedRecords:
 
         assert retry.exit_code == 0, retry.output
         assert _stored_records(duplicated) == uncapped
+
+
+class TestARetryDoesNotBackfillARepeatedIdentity:
+    """The mirror of keeping every held row: an input carrying more copies of an
+    identity than the action stored must not gain rows at a retry. A limit that
+    held records back is not undone by repairing one of them."""
+
+    @pytest.fixture
+    def capped(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        staging.joinpath("pages.json").write_text(
+            json.dumps([{"page_content": "unique"}] + [{"page_content": "dup"}] * 3)
+        )
+        config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "  - name: flatten\n", "  - name: flatten\n    record_limit: 2\n"
+            )
+        )
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
+        assert _stored_records(root) == 2, "the limit should have held the run to two records"
+        return root
+
+    def test_the_row_count_does_not_grow(self, capped):
+        failed = _record_ids(capped)[-1]
+        _fail(capped, failed)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert _stored_records(capped) == 2, "the retry backfilled past the configured limit"
+
+    def test_the_named_record_is_still_repaired(self, capped):
+        failed = _record_ids(capped)[-1]
+        _fail(capped, failed)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", failed])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(capped, failed) == "success"

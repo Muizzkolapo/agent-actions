@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Per-backend, per-action. Weak so it dies with the backend rather than outliving
 # it: `agac retry` runs a workflow in the process that just finished one.
-_STORED_GUIDS: WeakKeyDictionary[Any, dict[str, frozenset[str]]] = WeakKeyDictionary()
+_STORED_ROWS: WeakKeyDictionary[Any, dict[str, dict[str, int]]] = WeakKeyDictionary()
 
 RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 
@@ -138,50 +138,64 @@ def record_indices_to_process(
     limit, source = resolve_record_limit(action_config)
     if limit is None or not isinstance(records, list):
         return None
-    already: Collection[str] = ()
+    rows_held: dict[str, int] = {}
     if retried:
-        if storage_backend is None:
-            # Without it only the named records can be spared, which is the
-            # behaviour this rule exists to replace — say so rather than quietly
-            # deleting the rows of everything else the action had.
-            logger.warning(
-                "No storage backend while repairing records: %s can only spare the records "
-                "named, and a limit may delete rows it already held",
-                action_name,
-            )
-        stored = records_this_action_has_output_for(storage_backend, action_name)
-        already = stored | frozenset(retried)
-    kept = records_kept_by_limit(records, limit, already)
+        rows_held = dict(rows_this_action_holds_per_record(storage_backend, action_name))
+        for guid in retried:
+            rows_held.setdefault(guid, 1)
+    kept = records_kept_by_limit(records, limit, rows_held)
     if len(kept) == len(records):
         return None
+    if retried and storage_backend is None:
+        # Only the named records could be spared, which is the behaviour this
+        # rule exists to replace. Said where records were actually dropped, so
+        # it names a loss rather than a possibility.
+        logger.warning(
+            "No storage backend while repairing records: %s kept only the records named, "
+            "and rows it already held have been dropped",
+            action_name,
+        )
     _announce_truncation(source, limit, len(kept), len(records), action_name)
     return kept
 
 
 def records_kept_by_limit(
-    records: Sequence[Any], limit: int, also_keep: Collection[str] = ()
+    records: Sequence[Any], limit: int, rows_held: Mapping[str, int] | None = None
 ) -> list[int]:
-    """Indices of the first `limit` records, plus every one carrying an id in `also_keep`.
+    """Indices of the first `limit` records, plus enough beyond it to cover `rows_held`.
 
-    Every one, not one per identity: source_guid is a content hash, so byte-identical
-    rows share it, and three identical staged records really are three stored rows.
-    Admitting a single position for them would write one row where three stood, which
-    is the deletion this exists to prevent rather than a duplicate avoided.
+    `rows_held` says how many rows the action already holds for each identity, and
+    that many positions carrying it are kept — no more, no fewer. Fewer would write
+    one row where three stood; more would write three where one did, backfilling
+    past a limit that was deliberately holding records back. Positions the limit
+    keeps by count spend from the same budget, since they cover those rows too.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))
-    if not also_keep:
+    if not rows_held:
         return kept
+
+    budget = dict(rows_held)
+    for index in kept:
+        record = records[index]
+        if isinstance(record, Mapping):
+            guid = record.get("source_guid")
+            if guid in budget:
+                budget[guid] -= 1
 
     for index in range(limit, len(records)):
         record = records[index]
-        if isinstance(record, Mapping) and record.get("source_guid") in also_keep:
+        if not isinstance(record, Mapping):
+            continue
+        guid = record.get("source_guid")
+        if guid is not None and budget.get(guid, 0) > 0:
             kept.append(index)
+            budget[guid] -= 1
     return kept
 
 
-def records_this_action_has_output_for(storage_backend: Any, action_name: str) -> frozenset[str]:
-    """Ids this action already holds a stored row for.
+def rows_this_action_holds_per_record(storage_backend: Any, action_name: str) -> dict[str, int]:
+    """How many stored rows this action holds for each identity.
 
     Read from the output rather than from dispositions: a retry clears the
     dispositions of what it repairs, and an action reset for a changed config has
@@ -195,8 +209,8 @@ def records_this_action_has_output_for(storage_backend: Any, action_name: str) -
     runs a workflow in the process that just finished one.
     """
     if storage_backend is None:
-        return frozenset()
-    per_action = _STORED_GUIDS.setdefault(storage_backend, {})
+        return {}
+    per_action = _STORED_ROWS.setdefault(storage_backend, {})
     if action_name not in per_action:
-        per_action[action_name] = storage_backend.target_source_guids(action_name)
+        per_action[action_name] = storage_backend.target_rows_per_source_guid(action_name)
     return per_action[action_name]

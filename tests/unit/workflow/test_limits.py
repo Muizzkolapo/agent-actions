@@ -27,12 +27,12 @@ from agent_actions.workflow.runner_file_processing import (
 def _backend_holding_nothing():
     """A backend for an action with no stored rows yet.
 
-    A bare MagicMock answers `target_source_guids` with another mock, whose union
+    A bare MagicMock answers `target_rows_per_source_guid` with another mock, whose union
     and membership tests both quietly do nothing — so a test double has to state
     the empty set the real backend would return.
     """
     backend = MagicMock()
-    backend.target_source_guids.return_value = frozenset()
+    backend.target_rows_per_source_guid.return_value = {}
     return backend
 
 
