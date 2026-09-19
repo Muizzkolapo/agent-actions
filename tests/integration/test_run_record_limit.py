@@ -151,6 +151,14 @@ def _stage(project, count):
     )
 
 
+def _stamp(project, action):
+    """The completion metadata stored for *action*."""
+    paths = ProjectPathsFactory.create_project_paths(
+        TOOL_WORKFLOW, TOOL_WORKFLOW, auto_create=False, project_root=project
+    )
+    return json.loads((paths.io_dir / ".agent_status.json").read_text())[action]
+
+
 def _processed(project):
     """How many records the action actually produced, read from the store."""
     paths = ProjectPathsFactory.create_project_paths(
@@ -256,3 +264,56 @@ class TestARunThatAlreadyCompleted:
 
         assert second.exit_code == 0, second.output
         assert _processed(project) == 6, "a truncated run was served as a complete one"
+
+
+class TestARunCappedByTheEnvironment:
+    """The variable and the flag are one knob, so a completed run must treat
+    them the same. Only what reaches the completion stamp gets that treatment.
+    """
+
+    def test_lifting_the_variable_reprocesses_what_it_truncated(self, project, monkeypatch):
+        _stage(project, 6)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+        first = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+        assert first.exit_code == 0, first.output
+        assert _processed(project) == 2
+
+        monkeypatch.delenv("AGAC_RECORD_LIMIT")
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW])
+
+        assert second.exit_code == 0, second.output
+        assert _processed(project) == 6, "a truncated run was served as a complete one"
+
+    def test_the_variable_still_set_does_not_reprocess(self, project, monkeypatch):
+        """The control: invalidating on every run would satisfy the test above."""
+        _stage(project, 6)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+        first = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+        assert first.exit_code == 0, first.output
+
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW])
+
+        assert second.exit_code == 0, second.output
+        assert "already complete" in second.output, second.output
+
+    def test_the_stamp_records_the_limit_that_applied(self, project, monkeypatch):
+        """Whichever door set it. A stamp of what was configured describes a run
+        that did not happen."""
+        _stage(project, 6)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert _stamp(project, "flatten")["record_limit"] == 2
+
+    def test_an_uncapped_run_stamps_no_limit(self, project, monkeypatch):
+        """The other half: a resolved stamp must not invent a limit, or every
+        completed action re-runs once on upgrade."""
+        _stage(project, 6)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert _stamp(project, "flatten")["record_limit"] is None
