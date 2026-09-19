@@ -57,7 +57,7 @@ def _complete_with(state_manager, action_config: dict) -> None:
     state_manager.update_status(
         ACTION,
         ActionStatus.COMPLETED,
-        **ActionExecutor._completion_metadata(action_config),
+        **_executor(state_manager, action_config)._completion_metadata(ACTION, action_config),
     )
 
 
@@ -154,7 +154,7 @@ class TestAnUnchangedConfigIsStillSkipped:
         config = dict(
             _config('density == "high"'), model_name="gpt-oss:120b", model_vendor="ollama"
         )
-        legacy = ActionExecutor._completion_metadata(config)
+        legacy = _executor(state_manager, config)._completion_metadata(ACTION, config)
         del legacy["model_name"]
         del legacy["model_vendor"]
         state_manager.update_status(ACTION, ActionStatus.COMPLETED, **legacy)

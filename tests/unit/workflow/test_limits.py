@@ -481,10 +481,10 @@ class TestTheCompletionStamp:
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
-    def test_it_stores_exactly_these_keys(self):
+    def test_it_stores_exactly_these_keys(self, executor):
         """Pinned as a set: a slot that silently reappears is how one limit
         source came to be recorded in a place nothing read."""
-        stamp = ActionExecutor._completion_metadata({"record_limit": 2})
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
 
         assert set(stamp) == {
             "record_limit",
@@ -534,6 +534,22 @@ class TestTheCompletionStamp:
         )
 
         assert status == ActionStatus.COMPLETED
+
+    def test_a_retry_leaves_the_stored_limit_where_it_found_it(self, executor):
+        """The other half of suppressing the limit: recording the one a retry
+        ran under would make the next ordinary run read a change, clear the
+        action's dispositions and re-run it."""
+        executor.deps.action_runner.retried_records = frozenset({"some-record"})
+        executor.deps.state_manager.get_status_details.return_value = {"record_limit": None}
+
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
+
+        assert stamp["record_limit"] is None
+
+    def test_an_ordinary_run_stores_the_limit_in_force(self, executor):
+        stamp = executor._completion_metadata("act", {"record_limit": 2})
+
+        assert stamp["record_limit"] == 2
 
     def test_a_limit_that_could_not_truncate_still_invalidates(self, monkeypatch, executor):
         """Deliberate and coarse: the comparison never sees how many records
