@@ -397,3 +397,55 @@ class TestARetryLeavesTheActionsAboveItAlone:
 
         assert retry.exit_code == 0, retry.output
         assert set(_record_ids(chained, ACTION)) == before
+
+
+class TestALimitDoesNotTruncateWhatARetryReruns:
+    """A limit bounds how much *new* work a run takes on. A retry takes on none:
+    every record at the actions it re-runs was already processed, and the target
+    blob is rewritten whole, so a record dropped from processing loses its stored
+    row. Bounding a repair therefore does not save work, it destroys output.
+    """
+
+    def test_the_action_the_retry_starts_from_keeps_every_row(self, chained, monkeypatch):
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_stored_guids(chained, SECOND))
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(chained, SECOND)) == before
+
+    def test_an_upstream_action_that_reruns_keeps_every_row(self, chained, monkeypatch):
+        """An action above the retry point re-runs when its own config changed —
+        correctly, its behaviour did change. It must not also be truncated."""
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        before = set(_stored_guids(chained, ACTION))
+        config = chained / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        config.write_text(
+            config.read_text().replace(
+                "    impl: flatten_pages\n",
+                "    impl: flatten_pages\n"
+                '    guard: { condition: \'source.page_content != ""\', on_false: "filter" }\n',
+                1,
+            )
+        )
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert set(_stored_guids(chained, ACTION)) == before
+
+    def test_the_retried_record_is_still_repaired(self, chained, monkeypatch):
+        """The control: keeping every row must not come from the retry doing nothing."""
+        late = _a_record_the_cap_would_cut(chained, cap=1)
+        _fail(chained, late, SECOND)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(chained, late, SECOND) == "success"
