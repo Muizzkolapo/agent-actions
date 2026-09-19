@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.paths import PathManagerError
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
@@ -143,6 +144,8 @@ class AgacBatchClient(BaseBatchClient):
 
         atomic_json_write(
             cls._state_dir() / f"{state.batch_id}.json",
+            # Reconstructible by definition, and rewritten on every poll: durability
+            # here would buy nothing and cost an fsync per status check.
             {
                 "batch_id": state.batch_id,
                 "status": state.status,
@@ -152,14 +155,19 @@ class AgacBatchClient(BaseBatchClient):
                 "complete_after_seconds": state.complete_after_seconds,
                 "tasks": tasks,
             },
+            fsync=False,
         )
 
     @classmethod
     def _forget_state(cls, batch_id: str) -> None:
-        """Drop a batch once its results have been handed over.
+        """Drop a batch's record.
 
-        The submit and result files are deleted the same way. A record carrying
-        the batch's whole payload is not something to leave in a user's project.
+        Deliberately not called when results are read. A read hands bytes to a
+        caller that still has to write, parse, reconcile and evaluate them, and
+        any of that can fail with the entry already marked done — so a re-run
+        comes back for the same batch. Forgetting it there turns a repeatable
+        read into `Batch not found`, which is worse than the status this exists
+        to fix. Whose job it is to end the record's life is open.
         """
         (cls._state_dir() / f"{batch_id}.json").unlink(missing_ok=True)
         cls._batches.pop(batch_id, None)
@@ -174,8 +182,8 @@ class AgacBatchClient(BaseBatchClient):
         record missing a field is unreadable in the same sense — it says nothing
         about a batch — rather than an error to raise from a status check.
         """
-        path = cls._state_dir() / f"{batch_id}.json"
         try:
+            path = cls._state_dir() / f"{batch_id}.json"
             stored = json.loads(path.read_text(encoding="utf-8"))
             state = MockBatchState(
                 batch_id=stored["batch_id"],
@@ -186,7 +194,7 @@ class AgacBatchClient(BaseBatchClient):
                 complete_after_seconds=stored["complete_after_seconds"],
             )
             tasks = stored["tasks"]
-        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, PathManagerError):
             logger.debug("No readable batch record for %s", batch_id)
             return None
         cls._batches[batch_id] = state
@@ -282,10 +290,6 @@ class AgacBatchClient(BaseBatchClient):
             len(lines),
         )
 
-        # Handed over, so the record goes the way the submit and result files go.
-        # It carries the batch's whole payload; leaving it in a user's project is
-        # not something a test double should do.
-        self._forget_state(batch_id)
         return "\n".join(lines).encode("utf-8")
 
     def _get_attempt_for_custom_id(self, custom_id: str) -> int:

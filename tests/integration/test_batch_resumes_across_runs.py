@@ -196,3 +196,44 @@ class TestTwoBatchesInFlight:
         assert AgacBatchClient._load_state("mock_b") is not None
         assert AgacBatchClient._tasks_by_batch["mock_a"] == [{"custom_id": "a"}]
         assert AgacBatchClient._tasks_by_batch["mock_b"] == [{"custom_id": "b"}]
+
+
+class TestTheRecordOutlivesTheRead:
+    """Reading results hands bytes to a caller that still has to write, parse,
+    reconcile and evaluate them. Any of that can fail with the batch already
+    marked done, and the next run comes back for the same batch — so the record
+    cannot be spent by the read."""
+
+    @pytest.fixture
+    def submitted(self, scoped_to):
+        from agent_actions.llm.providers.agac.batch_client import AgacBatchClient, MockBatchState
+
+        client = AgacBatchClient()
+        client._write_state(
+            MockBatchState(batch_id="b1", status="completed"),
+            [{"custom_id": "x", "schema": None}],
+        )
+        return client
+
+    @staticmethod
+    def _as_a_new_process():
+        from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
+
+        AgacBatchClient._batches.clear()
+        AgacBatchClient._tasks_by_batch.clear()
+
+    def test_a_second_run_can_still_collect_it(self, submitted):
+        self._as_a_new_process()
+        submitted._fetch_raw_results("b1")
+
+        self._as_a_new_process()
+
+        assert submitted._fetch_raw_results("b1"), "the read spent the record"
+
+    def test_it_is_still_reported_as_a_batch_afterwards(self, submitted):
+        self._as_a_new_process()
+        submitted._fetch_raw_results("b1")
+
+        self._as_a_new_process()
+
+        assert submitted._fetch_status("b1") != "unknown"
