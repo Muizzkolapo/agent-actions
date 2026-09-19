@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.paths import PathManagerError
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
@@ -53,7 +54,9 @@ class AgacBatchClient(BaseBatchClient):
         agac run my_workflow.yaml --run-mode batch
     """
 
-    # Class-level storage for batch state (persists across CLI runs via disk)
+    # In-process cache. The durable copy is on disk, because a batch workflow
+    # spans two runs by design: submitting pauses and asks to be run again, and
+    # that is a new process with an empty cache.
     _batches: dict[str, MockBatchState] = {}
     _tasks_by_batch: dict[str, list[dict[str, Any]]] = {}
 
@@ -109,9 +112,104 @@ class AgacBatchClient(BaseBatchClient):
             "schema": schema,
         }
 
+    @staticmethod
+    def _state_dir() -> Path:
+        """Where a submitted batch is recorded, derivable without any argument.
+
+        The resume path is given a batch id and nothing else — it never asks for
+        a batch directory — so the location cannot depend on the output directory
+        the submit happened to use.
+
+        From the project root the CLI resolved, not the working directory: `agac`
+        supports being run from a subdirectory and does not chdir, so a cwd-derived
+        path would lose the batch exactly as this exists to prevent. Not under
+        `agent_io/`, which is per-workflow and which the docs scanner treats as
+        marking one — a copy at the project root would make it report a workflow
+        named after the project.
+        """
+        from agent_actions.utils.path_utils import ensure_directory_exists, get_path_manager
+
+        state_dir = get_path_manager().get_project_root() / ".agac" / "batch_state"
+        ensure_directory_exists(state_dir)
+        return state_dir
+
+    @classmethod
+    def _write_state(cls, state: MockBatchState, tasks: list[dict[str, Any]]) -> None:
+        """Record a submitted batch where the next run can find it.
+
+        Written atomically: a truncated file reads back as no batch at all, which
+        is the failure this exists to prevent, arrived at silently.
+        """
+        from agent_actions.utils.atomic_write import atomic_json_write
+
+        atomic_json_write(
+            cls._state_dir() / f"{state.batch_id}.json",
+            # Reconstructible by definition, and rewritten on every poll: durability
+            # here would buy nothing and cost an fsync per status check.
+            {
+                "batch_id": state.batch_id,
+                "status": state.status,
+                "poll_count": state.poll_count,
+                "polls_until_complete": state.polls_until_complete,
+                "created_at": state.created_at,
+                "complete_after_seconds": state.complete_after_seconds,
+                "tasks": tasks,
+            },
+            fsync=False,
+        )
+
+    @classmethod
+    def _forget_state(cls, batch_id: str) -> None:
+        """Drop a batch's record.
+
+        Deliberately not called when results are read. A read hands bytes to a
+        caller that still has to write, parse, reconcile and evaluate them, and
+        any of that can fail with the entry already marked done — so a re-run
+        comes back for the same batch. Forgetting it there turns a repeatable
+        read into `Batch not found`, which is worse than the status this exists
+        to fix. Whose job it is to end the record's life is open.
+        """
+        (cls._state_dir() / f"{batch_id}.json").unlink(missing_ok=True)
+        cls._batches.pop(batch_id, None)
+        cls._tasks_by_batch.pop(batch_id, None)
+
+    @classmethod
+    def _load_state(cls, batch_id: str) -> MockBatchState | None:
+        """Read a batch this process did not submit. None when there is no such batch.
+
+        Not a fallback that invents one: a batch id with no readable record is
+        genuinely unknown, and saying so is what lets the caller report it. A
+        record missing a field is unreadable in the same sense — it says nothing
+        about a batch — rather than an error to raise from a status check.
+        """
+        try:
+            path = cls._state_dir() / f"{batch_id}.json"
+            stored = json.loads(path.read_text(encoding="utf-8"))
+            state = MockBatchState(
+                batch_id=stored["batch_id"],
+                status=stored["status"],
+                poll_count=stored["poll_count"],
+                polls_until_complete=stored["polls_until_complete"],
+                created_at=stored["created_at"],
+                complete_after_seconds=stored["complete_after_seconds"],
+            )
+            tasks = stored["tasks"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, PathManagerError):
+            logger.debug("No readable batch record for %s", batch_id)
+            return None
+        cls._batches[batch_id] = state
+        cls._tasks_by_batch[batch_id] = tasks
+        return state
+
+    @classmethod
+    def _state_for(cls, batch_id: str) -> MockBatchState | None:
+        """The batch, from this process or from the run that submitted it."""
+        cached = cls._batches.get(batch_id)
+        return cached if cached is not None else cls._load_state(batch_id)
+
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from mock state with time-based auto-completion."""
-        state = self._batches.get(batch_id)
+        state = self._state_for(batch_id)
         if not state:
             return "unknown"
 
@@ -142,6 +240,12 @@ class AgacBatchClient(BaseBatchClient):
                 remaining,
             )
 
+        # A poll is state: `polls_until_complete` counts them, and a run that
+        # started its count from the submitted value would never reach the
+        # threshold — each run polls once and there are two runs by design.
+        tasks = self._tasks_by_batch.get(batch_id)
+        if tasks is not None:
+            self._write_state(state, tasks)
         return state.status
 
     def _normalize_status(self, raw_status: str) -> str:
@@ -150,7 +254,7 @@ class AgacBatchClient(BaseBatchClient):
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Generate mock results as JSONL bytes using schema-based fake data."""
-        state = self._batches.get(batch_id)
+        state = self._state_for(batch_id)
         if not state:
             raise ValueError(f"Batch {batch_id} not found")
 
@@ -238,6 +342,7 @@ class AgacBatchClient(BaseBatchClient):
         )
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
+        self._write_state(state, tasks)
 
         logger.info(
             "Mock batch %s submitted: %d tasks",
@@ -293,9 +398,11 @@ class AgacBatchClient(BaseBatchClient):
         """Reset all mock batch state. Useful between tests."""
         cls._batches.clear()
         cls._tasks_by_batch.clear()
+        for stale in cls._state_dir().glob("*.json"):
+            stale.unlink(missing_ok=True)
         logger.debug("AgacBatchClient state reset")
 
     @classmethod
     def get_batch_state(cls, batch_id: str) -> MockBatchState | None:
         """Get internal state of a batch (for testing/debugging)."""
-        return cls._batches.get(batch_id)
+        return cls._state_for(batch_id)

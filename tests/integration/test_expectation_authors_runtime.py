@@ -16,6 +16,7 @@ needs no credentials and no network.
 
 import glob
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -102,21 +103,24 @@ def run(tmp_path_factory):
     """
     done: dict[str, Run] = {}
 
-    def _run(workflow: str) -> Run:
-        if workflow in done:
+    def _run(workflow: str, again: bool = False) -> Run:
+        """*again* re-runs an already-run workflow in its own project, which a
+        batch author needs: submitting pauses and the collect is a second run."""
+        if workflow in done and not again:
             return done[workflow]
-        project = tmp_path_factory.mktemp("authors") / workflow
-        shutil.copytree(FIXTURE, project)
-        # Only the vendor moves. The model name is carried through to the fake
-        # provider, which ignores it, so leaving it alone keeps the fixtures
-        # readable as the thing an author would have written.
-        for config in project.glob("agent_workflow/*/agent_config/*.yml"):
-            config.write_text(
-                config.read_text().replace(
-                    "model_vendor: ollama_cloud", "model_vendor: agac-provider"
+        project = done[workflow].project if again else tmp_path_factory.mktemp("authors") / workflow
+        if not again:
+            shutil.copytree(FIXTURE, project)
+            # Only the vendor moves. The model name is carried through to the fake
+            # provider, which ignores it, so leaving it alone keeps the fixtures
+            # readable as the thing an author would have written.
+            for config in project.glob("agent_workflow/*/agent_config/*.yml"):
+                config.write_text(
+                    config.read_text().replace(
+                        "model_vendor: ollama_cloud", "model_vendor: agac-provider"
+                    )
                 )
-            )
-        (project / ".env").write_text("OLLAMA_API_KEY=not-used\nOPENAI_API_KEY=sk-not-used\n")
+            (project / ".env").write_text("OLLAMA_API_KEY=not-used\nOPENAI_API_KEY=sk-not-used\n")
         result = subprocess.run(
             [
                 str(Path(sys.executable).parent / "agac"),
@@ -125,15 +129,23 @@ def run(tmp_path_factory):
                 workflow,
                 "-u",
                 "tools",
-                "--fresh",
+                *([] if again else ["--fresh"]),
             ],
             cwd=project,
             capture_output=True,
             text=True,
             timeout=300,
+            # The fake batch provider completes after a delay by default; a
+            # collect run that asked too early would look like a lost batch.
+            env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
-        done[workflow] = Run(workflow, project, result.returncode, result.stdout + result.stderr)
-        return done[workflow]
+        run_result = Run(workflow, project, result.returncode, result.stdout + result.stderr)
+        if not again:
+            # A resumed run must not replace the cached first one: a later test
+            # asking for this workflow would silently get the collect run, and
+            # the suite would depend on the order it happened to execute in.
+            done[workflow] = run_result
+        return run_result
 
     return _run
 
@@ -210,13 +222,37 @@ class TestTheTwoSuitesAgree:
 BATCH_ONLY = "batch_field_rules"
 
 
-@pytest.mark.skip(
+def test_the_batch_author_submits_and_is_collected(run):
+    """The half this fixture can now prove: a batch survives the run boundary.
+
+    Submitting pauses and asks to be run again; the second run collects it. That
+    used to be impossible — the provider forgot the batch between processes — and
+    this fixture was skipped for it.
+    """
+    first = run(BATCH_ONLY)
+    assert first.returncode == 0, first.output
+    assert "run again" in first.output, "the fixture did not pause on submission"
+
+    second = run(BATCH_ONLY, again=True)
+
+    assert second.returncode == 0, second.output
+    assert "Unrecognized batch status" not in second.output, second.output
+    assert set(second.verdicts) == {"summarize"}, second.output
+
+
+@pytest.mark.xfail(
+    strict=True,
     reason=(
-        "run_mode: batch cannot complete offline — the fake provider keeps batch "
-        "state in a per-process attribute, so a resuming run reports status "
-        "'unknown' and the workflow pauses forever. Tracked separately; this is "
-        "skipped rather than omitted so the gap stays visible."
-    )
+        "The batch path never produces the fields its schema declares: this "
+        "provider writes a task flat with the schema at the top level, while the "
+        "generator reads an OpenAI-shaped `body`, so it answers with its generic "
+        "shape and every field rule fails on a field that is not there. A separate "
+        "defect from the one this fixture was skipped for; asserted here so the "
+        "gap stays visible rather than being pinned as the expected verdict."
+    ),
 )
-def test_the_batch_author_runs_end_to_end():
-    raise AssertionError("unreachable while batch state does not survive the process")
+def test_the_batch_author_reaches_a_verdict_on_its_own_fields(run):
+    run(BATCH_ONLY)
+    verdict = run(BATCH_ONLY, again=True).verdicts["summarize"]
+
+    assert verdict["failed"] == []

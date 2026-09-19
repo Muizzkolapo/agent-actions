@@ -12,7 +12,7 @@ from agent_actions.config.path_config import resolve_project_root
 logger = logging.getLogger(__name__)
 
 # Directory names that never hold a user's workflow, prompt or config.
-_NON_PROJECT_DIRS = frozenset({".git", "node_modules", "__pycache__"})
+_NON_PROJECT_DIRS = frozenset({".git", ".agac", "node_modules", "__pycache__"})
 
 
 def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> None:
