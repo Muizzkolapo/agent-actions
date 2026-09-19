@@ -126,3 +126,42 @@ class TestARetryChangesNothing:
 
         assert retry.exit_code == 0, retry.output
         assert _counts(duplicated) == before
+
+
+class TestTheSameContentInTwoFiles:
+    """A limit this does not lift. Identity is derived from content and carries no
+    path, and `record_disposition` is unique on (action, record_id) with no path
+    either — so a record staged in two files is two source rows and two target
+    rows but one disposition. Repeats are numbered per file, so the second copy
+    in each file lands on the same identity as the second copy in the other.
+
+    Pinned rather than fixed: making identity path-aware would move every guid in
+    every existing store."""
+
+    @pytest.fixture
+    def across_files(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        for name in ("a_pages.json", "b_pages.json"):
+            staging.joinpath(name).write_text(json.dumps([{"page_content": "shared"}] * 2))
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+        assert result.exit_code == 0, result.output
+        return root
+
+    def test_every_staged_record_is_stored(self, across_files):
+        """Four staged across two files, four stored — the half this does fix."""
+        counts = _counts(across_files)
+
+        assert counts["source"] == 4, counts
+        assert counts["target"] == 4, counts
+
+    def test_dispositions_cannot_tell_the_two_files_apart(self, across_files):
+        """The half it does not. Two identities, used in both files."""
+        counts = _counts(across_files)
+
+        assert counts["dispositions"] == 2, counts
