@@ -253,10 +253,12 @@ class StorageBackend(ABC):
     def target_rows_per_source_guid(self, action_name: str) -> dict[str, int]:
         """How many stored rows this action holds for each identity.
 
-        A count, not a set: source_guid is a content hash, so byte-identical
-        records share one and an action can hold several rows under it. A caller
-        deciding which rows must survive needs to know how many stood there —
-        a set would let it write three where one did, or keep one where three did.
+        A count, not a set: an action that expanded its input can hold several
+        rows under one identity, because a file-mode tool reattaches the parent's
+        guid to each row it produces. A caller deciding which rows must survive
+        needs to know how many stood there — a set would let it write three where
+        one did, or keep one where three did. Staged records cannot reach that
+        state: they are reduced to one record per identity before they are saved.
 
         Reads the rows as stored. Reconstruction from deltas, lifecycle
         validation and the downstream reset that :meth:`read_target` performs

@@ -109,6 +109,43 @@ def _announce_truncation(source: str, limit: int, kept: int, total: int, action_
     )
 
 
+def first_record_per_identity(
+    records: list[dict[str, Any]], aligned: list[Any] | None = None
+) -> tuple[list[dict[str, Any]], list[Any] | None]:
+    """The first record carrying each ``source_guid``, and *aligned* kept in step.
+
+    Mirrors what the store does to the same list when it is asked to deduplicate,
+    which is how staging saves: source rows are unique on (path, guid) and are
+    written INSERT OR IGNORE, so the first record of an identity is the one kept.
+    Asked not to deduplicate the store writes INSERT OR REPLACE and the last wins
+    instead — a configuration no caller uses, and one this would not match. A list that is processed after being saved has to
+    agree with what was saved, or the action writes more output rows than it has
+    records and every identity-keyed path afterwards — dispositions,
+    carry-forward, retry — reads a different count than the output shows.
+
+    A record with no ``source_guid`` is passed through rather than dropped or
+    merged: identity is not ours to invent here, and the storage boundary already
+    refuses such a record loudly.
+    """
+    seen: set[str] = set()
+    kept_indices: list[int] = []
+    for index, record in enumerate(records):
+        guid = record.get("source_guid") if isinstance(record, dict) else None
+        if guid:
+            if guid in seen:
+                continue
+            seen.add(guid)
+        kept_indices.append(index)
+
+    if len(kept_indices) == len(records):
+        return records, aligned
+
+    deduped = [records[i] for i in kept_indices]
+    if aligned is None or not isinstance(aligned, list):
+        return deduped, aligned
+    return deduped, [aligned[i] for i in kept_indices if i < len(aligned)]
+
+
 def record_indices_to_process(
     records: Any,
     action_config: Mapping[str, Any],
@@ -122,6 +159,11 @@ def record_indices_to_process(
     when nothing was dropped: what makes a truncation worth saying is that it
     happened, which needs the record count and so cannot be decided where the
     limit is resolved.
+
+    Expects one record per identity already — :func:`first_record_per_identity`
+    runs first at the staging site. A limit chooses *positions*, so reducing the
+    list afterwards would spend the limit on positions that then collapse, and
+    the count this announces would describe a list that no longer exists.
 
     A limit bounds how much *new* work a run takes on. While a run is repairing
     records it may still drop one the action has never processed — that is new
@@ -171,11 +213,11 @@ def records_kept_by_limit(
     the limit keeps by count spend from the same budget, since they cover those
     rows too.
 
-    Offers, not guarantees: what is finally written also passes through
-    carry-forward, which rebuilds an action's output keyed by identity and so
-    collapses several rows of one identity into a single row regardless of what is
-    kept here. That collapse is a separate defect on a separate path; this decides
-    only what the limit hands on.
+    Several rows can share an identity at an action that expanded its input —
+    file-mode tools reattach a parent's guid to each row they produce — so the
+    count matters there. It cannot arise from staged records: those are reduced
+    to one record per identity before this runs, because the source store keeps
+    one row per identity and the two have to agree.
     """
     limit = max(limit, 0)
     kept = list(range(min(limit, len(records))))

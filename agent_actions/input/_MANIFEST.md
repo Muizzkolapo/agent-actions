@@ -29,6 +29,7 @@ and chunking/lineage support).
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
+| `process_initial_stage()` | `agent_io/source/` | Writes | One row per `source_guid`; the list it then processes is reduced the same way, so source, dispositions and target agree on the record count |
 | `GuardFilter.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 
