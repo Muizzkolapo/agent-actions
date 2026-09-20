@@ -31,6 +31,9 @@ def pipeline_and_mocks(tmp_path):
     config.idx = 0
     config.action_configs = {}
     config.source_relative_path = None
+    # A spec'd MagicMock answers `retried_records` with a truthy mock, which would
+    # read as a repair and narrow every record out of the run.
+    config.retried_records = frozenset()
 
     pipeline = ProcessingPipeline.__new__(ProcessingPipeline)
     pipeline.config = config

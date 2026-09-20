@@ -13,6 +13,7 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
+from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -206,16 +207,11 @@ def process_initial_stage(ctx: InitialStageContext):
     # above the source save: anything still in the chunk becomes a stored input
     # row, and a file edited since the run being repaired would otherwise enter
     # the store as new input on the strength of a repair that never named it.
-    if ctx.retried_records and isinstance(data_chunk, list):
-        admitted = [
-            index
-            for index, row in enumerate(data_chunk)
-            if isinstance(row, dict) and row.get("source_guid") in ctx.retried_records
-        ]
-        if len(admitted) != len(data_chunk):
-            data_chunk = [data_chunk[i] for i in admitted]
-            if isinstance(src_text, list):
-                src_text = [src_text[i] for i in admitted if i < len(src_text)]
+    admitted = positions_named_by_repair(data_chunk, ctx.retried_records)
+    if admitted is not None:
+        data_chunk = [data_chunk[i] for i in admitted]
+        if isinstance(src_text, list):
+            src_text = [src_text[i] for i in admitted if i < len(src_text)]
 
     # Slice BEFORE source save to prevent dedup poisoning
     kept = record_indices_to_process(

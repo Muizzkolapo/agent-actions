@@ -117,14 +117,22 @@ class UnifiedProcessor:
         # both terminal, so a record still in the input when the guard runs is a
         # record a repair has already decided the fate of.
         repair_carry_ids: set[str] = set()
-        if self._disposition_gate is not None:
-            kept, repair_carry_ids = self._disposition_gate.narrow_to_repair(
-                records, context.action_name, self._get_carry_forward_path(context)
-            )
+        if self._disposition_gate is not None and self._disposition_gate.repairing:
+            from agent_actions.processing.disposition_gate import positions_named_by_repair
+
+            repairing = self._disposition_gate.repairing
+            # raw_records is asked separately rather than sliced by the same
+            # positions: a context-scope skip drops records from `records` and not
+            # from `raw_records`, so the two are not always position-for-position.
+            kept = positions_named_by_repair(records, repairing)
             if kept is not None:
                 records = [records[i] for i in kept]
-                if raw_records is not None:
-                    raw_records = [raw_records[i] for i in kept]
+            raw_kept = positions_named_by_repair(raw_records, repairing)
+            if raw_kept is not None and raw_records is not None:
+                raw_records = [raw_records[i] for i in raw_kept]
+            repair_carry_ids = self._disposition_gate.carried_past_repair(
+                context.action_name, self._get_carry_forward_path(context)
+            )
 
         if raw_records is not None:
             # FILE mode: guard needs original_data for pre-observe alignment

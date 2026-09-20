@@ -333,3 +333,64 @@ class TestCarryForwardDoesNotMaskFailure:
         assert stats.carry_forward == 9
         # All 10 records still in output
         assert len(output) == 10
+
+
+class TestRepairNarrowsAboveTheGuard:
+    """A repair's selection is applied before the guard, which writes terminal rows."""
+
+    def test_only_the_named_record_reaches_the_guard(self):
+        backend = _mock_backend(terminal_ids=set())
+        gate = DispositionGate(storage_backend=backend, repairing={"r1"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        strategy = _TrackingStrategy()
+        records = [_make_record(f"r{i}") for i in range(3)]
+
+        seen: list[list[dict]] = []
+
+        def _guard(recs, _context):
+            seen.append(list(recs))
+            return recs, []
+
+        with patch.object(processor, "_guard_filter", side_effect=_guard):
+            processor.process(records, _make_context(storage_backend=backend), strategy)
+
+        assert [r["source_guid"] for r in seen[0]] == ["r1"]
+        assert [r["source_guid"] for r in strategy.received] == ["r1"]
+
+    def test_rows_the_repair_did_not_name_are_carried_not_dropped(self):
+        prior = [{"source_guid": f"r{i}", "content": {}} for i in range(3)]
+        backend = _mock_backend(terminal_ids=set(), prior_output=prior)
+        gate = DispositionGate(storage_backend=backend, repairing={"r1"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        records = [_make_record(f"r{i}") for i in range(3)]
+
+        with patch.object(processor, "_guard_filter", side_effect=lambda r, _c: (r, [])):
+            output, _stats = processor.process(
+                records, _make_context(storage_backend=backend), _TrackingStrategy()
+            )
+
+        assert sorted(r["source_guid"] for r in output) == ["r0", "r1", "r2"]
+
+    def test_raw_records_are_narrowed_independently_of_records(self):
+        """A context-scope skip drops a record from `records` and not from
+        `raw_records`, so the two are not position-for-position and slicing both
+        by one set of positions would pair a record with another record's original."""
+        backend = _mock_backend(terminal_ids=set())
+        gate = DispositionGate(storage_backend=backend, repairing={"r2"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        scoped = [_make_record("r1"), _make_record("r2")]
+        raw = [_make_record("r0"), _make_record("r1"), _make_record("r2")]
+
+        seen: dict[str, list[dict]] = {}
+
+        def _guard_file_mode(recs, _context, originals):
+            seen["records"], seen["raw"] = list(recs), list(originals)
+            return recs, [], originals
+
+        with patch.object(processor, "_guard_filter_file_mode", side_effect=_guard_file_mode):
+            processor.process(
+                scoped, _make_context(storage_backend=backend), _TrackingStrategy(), raw_records=raw
+            )
+
+        assert [r["source_guid"] for r in seen["records"]] == ["r2"]
+        assert [r["source_guid"] for r in seen["raw"]] == ["r2"]

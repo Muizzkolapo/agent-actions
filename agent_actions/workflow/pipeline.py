@@ -15,6 +15,7 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
+from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -508,6 +509,12 @@ class ProcessingPipeline:
         )
         if kept is not None:
             data = [data[i] for i in kept]
+
+        # Above the context scope, which writes `skipped` for every record it drops:
+        # a repair must not disposition a record it never named.
+        repair_kept = positions_named_by_repair(data, self.config.retried_records)
+        if repair_kept is not None:
+            data = [data[i] for i in repair_kept]
 
         # Build shared pipeline context BEFORE the batch/online fork.
         # See _build_pipeline_context() docstring for the architecture invariant.

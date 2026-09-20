@@ -43,40 +43,28 @@ class DispositionGate:
         self._repairing = frozenset(repairing)
         self._terminal_ids_cache: dict[str, set[str]] = {}
 
-    def narrow_to_repair(
-        self,
-        records: list[dict[str, Any]],
-        action_name: str,
-        relative_path: str | None,
-    ) -> tuple[list[int] | None, set[str]]:
-        """Which positions of *records* a repair admits, and which stored ids to carry.
+    @property
+    def repairing(self) -> frozenset[str]:
+        """The records this run is repairing; empty when it is an ordinary run."""
+        return self._repairing
 
-        None rather than every position when nothing is being repaired, so a caller
-        holding index-aligned lists neither re-slices nor re-pairs them.
+    def carried_past_repair(self, action_name: str, relative_path: str | None) -> set[str]:
+        """Identities this action holds a row for that the repair did not name.
 
-        A repair names records; everything else in the input is work it was not asked
-        to do, including records this action has never seen — which is how a repair
-        comes to admit newly staged input as if it were a run. Those are dropped
-        rather than processed, and the rows the action already holds for them are
-        returned to be carried forward, because the action's output is replaced whole
-        and dropping them from the input would otherwise delete their rows.
+        A repair processes only the records it named; the action's output is replaced
+        whole, so every other row it holds has to be handed back to the write or
+        narrowing the input would delete it.
         """
         if not self._repairing:
-            return None, set()
-        kept = [
-            index
-            for index, record in enumerate(records)
-            if record.get("source_guid") in self._repairing
-        ]
+            return set()
         if not relative_path or self._backend is None:
-            if records:
-                logger.warning(
-                    "Repairing '%s' without a stored path for its output: rows held for "
-                    "records the repair did not name cannot be carried and will be lost",
-                    action_name,
-                )
-            return kept, set()
-        return kept, self._stored_guids(action_name, relative_path) - self._repairing
+            logger.warning(
+                "Repairing '%s' without a stored path for its output: rows held for "
+                "records the repair did not name cannot be carried and will be lost",
+                action_name,
+            )
+            return set()
+        return self._stored_guids(action_name, relative_path) - self._repairing
 
     def _stored_guids(self, action_name: str, relative_path: str) -> set[str]:
         """Identities this action already holds a row for in *relative_path*."""
@@ -129,6 +117,26 @@ class DispositionGate:
             )
 
         return to_process, carry_ids
+
+
+def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[int] | None:
+    """Positions of the records a repair named, or None when nothing is being repaired.
+
+    None rather than every position so a caller neither re-slices nor re-pairs the
+    positionally-matched lists it holds when there is nothing to narrow.
+
+    Positions rather than records because the callers hold more than one list per
+    input — staged text beside staged records, pre-observe records beside scoped
+    ones — and a repair has to take the same slice out of each. Lists that are not
+    matched position-for-position are each asked separately.
+    """
+    if not repairing or not isinstance(records, list):
+        return None
+    return [
+        index
+        for index, record in enumerate(records)
+        if isinstance(record, dict) and record.get("source_guid") in repairing
+    ]
 
 
 def build_carry_forward(
