@@ -26,6 +26,13 @@ from agent_actions.workflow.runner_file_processing import (
 # ── _file_limit_reached helper ────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_limits(monkeypatch):
+    """A developer shell exporting either variable must not decide these tests."""
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _backend_holding_nothing():
     """A backend for an action with no stored rows yet.
 
@@ -38,73 +45,108 @@ def _backend_holding_nothing():
     return backend
 
 
-def _walk(action_config, retried=frozenset()):
-    """A runner and params carrying just what the file-limit check reads."""
+def _stops(action_config, count, retried=frozenset(), more_remain=True, probe=None):
+    """Ask the file-limit check, over a runner and params carrying just what it reads."""
     runner = MagicMock()
     runner.retried_records = retried
     params = MagicMock()
     params.action_config = action_config
     params.action_name = "act"
-    return runner, params
+    return _file_limit_reached(runner, params, count, probe or (lambda: more_remain))
+
+
+_WALK_LOG = "agent_actions.workflow.runner_file_processing"
 
 
 class TestFileLimitReached:
     def test_none_means_no_limit(self):
-        assert _file_limit_reached(*_walk({}), 100) is False
+        assert _stops({}, 100) is False
 
     def test_below_limit(self):
-        assert _file_limit_reached(*_walk({"file_limit": 5}), 3) is False
+        assert _stops({"file_limit": 5}, 3) is False
 
     def test_at_limit(self):
-        assert _file_limit_reached(*_walk({"file_limit": 5}), 5) is True
+        assert _stops({"file_limit": 5}, 5) is True
 
     def test_above_limit(self):
-        assert _file_limit_reached(*_walk({"file_limit": 5}), 10) is True
+        assert _stops({"file_limit": 5}, 10) is True
 
     def test_a_run_level_limit_applies_where_the_config_sets_none(self):
-        assert _file_limit_reached(*_walk({FILE_LIMIT_KEY: 2}), 2) is True
+        assert _stops({FILE_LIMIT_KEY: 2}, 2) is True
 
     def test_a_run_level_limit_does_not_raise_a_smaller_configured_one(self):
-        assert _file_limit_reached(*_walk({"file_limit": 1, FILE_LIMIT_KEY: 5}), 1) is True
+        assert _stops({"file_limit": 1, FILE_LIMIT_KEY: 5}, 1) is True
 
     def test_the_environment_applies_where_the_config_sets_none(self, monkeypatch):
         monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
 
-        assert _file_limit_reached(*_walk({}), 2) is True
+        assert _stops({}, 2) is True
 
     def test_a_repair_is_never_held_back(self):
         """It walks the files holding the records it named; stopping short of one
         leaves that record's cleared disposition unwritten."""
-        assert _file_limit_reached(*_walk({"file_limit": 1}, frozenset({"r1"})), 5) is False
+        assert _stops({"file_limit": 1}, 5, retried=frozenset({"r1"})) is False
 
     def test_a_repair_is_not_held_back_by_the_environment_either(self, monkeypatch):
         monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
 
-        assert _file_limit_reached(*_walk({}, frozenset({"r1"})), 5) is False
+        assert _stops({}, 5, retried=frozenset({"r1"})) is False
 
     def test_a_limit_from_outside_the_config_is_announced_loudly(self, monkeypatch, caplog):
         """A shortened walk looks like a complete one, and a variable the caller
         has forgotten is set is the case that needs saying."""
         monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
 
-        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
-            _file_limit_reached(*_walk({}), 2)
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            _stops({}, 2)
 
         assert [r.levelname for r in caplog.records] == ["WARNING"]
         assert "AGAC_FILE_LIMIT=2" in caplog.records[0].message
 
     def test_a_configured_limit_is_announced_quietly(self, caplog):
         """The run behaving as the project wrote it."""
-        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
-            _file_limit_reached(*_walk({"file_limit": 2}), 2)
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            _stops({"file_limit": 2}, 2)
 
         assert [r.levelname for r in caplog.records] == ["INFO"]
 
     def test_a_walk_that_was_not_stopped_says_nothing(self, caplog):
-        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
-            _file_limit_reached(*_walk({"file_limit": 5}), 3)
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            _stops({"file_limit": 5}, 3)
 
         assert caplog.records == [], [r.message for r in caplog.records]
+
+    def test_a_limit_that_equalled_the_input_says_nothing(self, monkeypatch, caplog):
+        """Reaching a limit is not the same as being held back by one. A walk that
+        took every file there was is a complete run, and announcing it as a
+        shortened one spends the signal that exists to flag a truncation."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            stopped = _stops({}, 2, more_remain=False)
+
+        assert stopped is True
+        assert caplog.records == [], [r.message for r in caplog.records]
+
+    def test_the_remainder_is_not_asked_for_when_the_limit_does_not_bite(self):
+        """Answering it can cost a filesystem sweep, so a walk the limit never
+        bounds must not pay for one."""
+        asked = []
+
+        _stops({"file_limit": 5}, 3, probe=lambda: bool(asked.append(1)))
+
+        assert asked == []
+
+    def test_a_repair_does_not_ask_for_the_remainder_either(self):
+        asked = []
+
+        assert (
+            _stops(
+                {"file_limit": 1}, 5, retried=frozenset({"r1"}), probe=lambda: bool(asked.append(1))
+            )
+            is False
+        )
+        assert asked == []
 
 
 # ── file_limit in process_directory_files ─────────────────────────────
@@ -188,6 +230,46 @@ class TestFileLimitDirectoryFiles:
             runner, input_dir, output, str(input_dir), params, set()
         )
         assert processed == 3
+
+
+class TestWhatTheFileLimitCounts:
+    def test_a_file_that_fails_does_not_spend_the_budget(self, tmp_path):
+        """The limit counts files an action got through, not files it opened, so
+        a directory of unreadable files is attempted in full under a limit of one.
+        Pinned because it is the difference between the limit bounding work and
+        bounding output, and nothing else in the suite says which it is."""
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        for i in range(3):
+            (input_dir / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+        output = tmp_path / "output"
+        output.mkdir()
+
+        attempted = []
+
+        def fail_then_succeed(params):
+            attempted.append(params.locations.item.name)
+            if len(attempted) < 3:
+                raise RuntimeError("unreadable")
+
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner._process_single_file = fail_then_succeed
+
+        params = MagicMock()
+        params.action_config = {"file_limit": 1}
+        params.action_name = "act"
+        params.strategy = MagicMock()
+        params.idx = 0
+        params.file_type_filter = None
+
+        _found, processed, errors = process_directory_files(
+            runner, input_dir, output, str(input_dir), params, set()
+        )
+
+        assert attempted == ["file_0.json", "file_1.json", "file_2.json"]
+        assert processed == 1
+        assert len(errors.messages) == 2
 
 
 # ── file_limit in process_merged_files ────────────────────────────────
@@ -780,6 +862,21 @@ class TestTheCompletionStamp:
 
         assert stamp["record_limit"] is None
 
+    def test_a_retry_keeps_each_axis_stored_limit(self, executor):
+        """Distinct non-null values on purpose: stubbing both axes to None lets
+        the stamp read either key and still look right, so a swapped key — the
+        likeliest slip once the key is a string argument — would pass."""
+        executor.deps.action_runner.retried_records = frozenset({"r1"})
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 7,
+            "file_limit": 3,
+        }
+
+        stamp = executor._completion_metadata("act", {"record_limit": 2, "file_limit": 1})
+
+        assert stamp["record_limit"] == 7
+        assert stamp["file_limit"] == 3
+
     def test_an_ordinary_run_stores_the_limit_in_force(self, executor):
         stamp = executor._completion_metadata("act", {"record_limit": 2})
 
@@ -798,6 +895,82 @@ class TestTheCompletionStamp:
         status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
 
         assert status == ActionStatus.PENDING
+
+
+class TestALimitAcrossTheBatchPause:
+    """The run that walks the files submits them; a later run collects them.
+
+    The stamp has to describe the run that did the work. Resolving the
+    collecting run's own doors records a full pass over work never attempted,
+    and the action is then skipped as complete for good.
+    """
+
+    @pytest.fixture
+    def executor(self):
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = MagicMock(spec=ActionStateManager)
+        deps.state_manager.adopt_truncation_marker.return_value = False
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        return ActionExecutor(deps)
+
+    def test_the_submitting_run_reports_what_it_applied(self, executor, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        assert executor.limits_in_force({"record_limit": 4}) == {
+            "record_limit": 4,
+            "file_limit": 1,
+        }
+
+    def test_the_collecting_run_keeps_the_submitted_limits(self, executor, monkeypatch):
+        """The collecting run was asked for nothing; resolving its own doors
+        would stamp a full pass over files it never walked."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 4,
+            "file_limit": 1,
+        }
+        monkeypatch.delenv("AGAC_FILE_LIMIT", raising=False)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+        stamp = executor._completion_metadata("act", {}, keep_stored=True)
+
+        assert stamp["file_limit"] == 1
+        assert stamp["record_limit"] == 4
+
+    def test_a_collecting_run_with_its_own_doors_still_keeps_the_submitted_ones(
+        self, executor, monkeypatch
+    ):
+        """The control: it is the work that was bounded, not this run."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": 4,
+            "file_limit": 1,
+        }
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "9")
+
+        stamp = executor._completion_metadata("act", {}, keep_stored=True)
+
+        assert stamp["file_limit"] == 1
+
+    def test_an_ordinary_completion_still_records_the_limit_in_force(self, executor, monkeypatch):
+        """The other control: keeping the stored limit is for runs that did not
+        do the work, not for every completion."""
+        executor.deps.state_manager.get_status_details.return_value = {"file_limit": 1}
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "9")
+
+        stamp = executor._completion_metadata("act", {})
+
+        assert stamp["file_limit"] == 9
+
+    def test_a_batch_submitted_before_the_limits_were_stamped_reads_as_unbounded(self, executor):
+        """State written by an earlier version carries no limits; the collection
+        stamps what it finds rather than inventing one."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "batch_submitted_at": "2026-01-01T00:00:00"
+        }
+
+        stamp = executor._completion_metadata("act", {"file_limit": 2}, keep_stored=True)
+
+        assert stamp["file_limit"] is None
 
 
 class TestLimitSchemaValidation:

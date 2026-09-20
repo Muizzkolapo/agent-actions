@@ -122,6 +122,9 @@ class TestStorageBackendMerge:
         runner = ActionRunner.__new__(ActionRunner)
         runner.storage_backend = MagicMock()
         runner.console = MagicMock()
+        # __new__ skips __init__, so the attributes the walk reads have to be
+        # stated: a runner that is not repairing carries an empty set.
+        runner.retried_records = frozenset()
         return runner
 
     def test_merges_data_from_parallel_branches(self, runner):
@@ -150,8 +153,8 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 
@@ -191,8 +194,8 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 
@@ -224,8 +227,8 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 

@@ -16,6 +16,13 @@ from agent_actions.utils.limits import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_limits(monkeypatch):
+    """A developer shell exporting either variable must not decide these tests."""
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+        monkeypatch.delenv(name, raising=False)
+
+
 class TestResolveRecordLimit:
     def test_a_configured_limit_is_returned(self):
         assert resolve_record_limit({"record_limit": 23})[0] == 23

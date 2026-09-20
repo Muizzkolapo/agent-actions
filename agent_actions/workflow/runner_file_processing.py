@@ -12,6 +12,7 @@ import json
 import logging
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -197,29 +198,35 @@ def _raise_action_fatal(
     )
 
 
-def _file_limit_reached(runner: ActionRunner, params: FileProcessParams, count: int) -> bool:
+def _file_limit_reached(
+    runner: ActionRunner,
+    params: FileProcessParams,
+    count: int,
+    more_remain: Callable[[], bool],
+) -> bool:
     """Whether the walk has taken as many files as the limit in force allows.
 
     A repair is never held back: it walks the files holding the records it named,
     and stopping short of one leaves that record's cleared disposition unwritten.
 
-    Announced here rather than where the limit resolves, because only the walk
-    knows whether it stopped — loudly when something outside the config stopped
-    it, since a shortened run looks like a complete one.
+    Announced here because only the walk knows whether anything was left unread —
+    reaching a limit that equalled the input is not a shortened run. *more_remain*
+    is asked only once the limit is reached, so a walk it never bounds pays nothing.
     """
     if runner.retried_records:
         return False
     limit, source = resolve_file_limit(params.action_config)
     if limit is None or count < limit:
         return False
-    logger.log(
-        logging.INFO if source == "file_limit" else logging.WARNING,
-        "%s=%d: %s stopped after %d file(s)",
-        source,
-        limit,
-        params.action_name,
-        count,
-    )
+    if more_remain():
+        logger.log(
+            logging.INFO if source == "file_limit" else logging.WARNING,
+            "%s=%d: %s stopped after %d file(s)",
+            source,
+            limit,
+            params.action_name,
+            count,
+        )
     return True
 
 
@@ -277,7 +284,13 @@ def _build_file_params(
 
 
 def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, list[Path]]:
-    """Collect files from upstream directories, grouped by relative path."""
+    """Collect files from upstream directories, grouped by relative path.
+
+    Returned in sorted key order, not raw rglob order: a file limit truncates this
+    mapping, so an unordered walk makes "the first N" mean whatever the filesystem
+    happened to enumerate first — a different subset on the next run of the same
+    command, and interleaved by first-seen when several upstreams contribute.
+    """
     files_by_relative_path: dict[Path, list[Path]] = {}
 
     for input_directory in upstream_data_dirs:
@@ -298,7 +311,7 @@ def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, lis
                 files_by_relative_path[relative_path] = []
             files_by_relative_path[relative_path].append(item)
 
-    return files_by_relative_path
+    return {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
 
 
 def warn_no_files_found(params: FileProcessParams) -> None:
@@ -339,7 +352,7 @@ def process_directory_files(
     # unordered walk makes "the first N files" mean whatever the filesystem
     # happened to enumerate first.
     items = _files_holding_retried_records(runner, sorted(input_path.rglob("*")), input_path)
-    for item in items:
+    for position, item in enumerate(items):
         if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
             continue
 
@@ -361,7 +374,14 @@ def process_directory_files(
                 exc_info=True,
             )
 
-        if _file_limit_reached(runner, params, count):
+        def _unread(position: int = position) -> bool:
+            """Whether any entry past *position* would have been processed."""
+            return any(
+                not should_skip_item(later, input_path, processed_paths, params.file_type_filter)
+                for later in items[position + 1 :]
+            )
+
+        if _file_limit_reached(runner, params, count, _unread):
             break
 
     _log_processing_errors(
@@ -465,7 +485,11 @@ def process_merged_files(
                 exc_info=True,
             )
 
-        if _file_limit_reached(runner, params, files_processed_count):
+        def _unread(seen: int = files_seen, total: int = len(files_by_path)) -> bool:
+            """Whether any group past this one is still to be merged."""
+            return seen < total
+
+        if _file_limit_reached(runner, params, files_processed_count, _unread):
             break
 
     _log_processing_errors(
@@ -610,7 +634,7 @@ def process_from_storage_backend(
         runner.storage_backend, params.action_name, params.upstream_data_dirs
     )
 
-    for relative_path, data_sources in data_by_path.items():
+    for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
         try:
             if len(data_sources) == 1:
                 _, data = data_sources[0]
@@ -660,8 +684,6 @@ def process_from_storage_backend(
                 )
             )
             files_processed += 1
-            if _file_limit_reached(runner, params, files_processed):
-                break
 
         except Exception as e:
             errors.record(relative_path, e)
@@ -671,6 +693,13 @@ def process_from_storage_backend(
                 e,
                 exc_info=True,
             )
+
+        def _unread(taken: int = seen, total: int = len(data_by_path)) -> bool:
+            """Whether any stored entry past this one is still to be read."""
+            return taken < total
+
+        if _file_limit_reached(runner, params, files_processed, _unread):
+            break
 
     _log_processing_errors(
         errors.messages,

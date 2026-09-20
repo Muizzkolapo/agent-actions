@@ -221,30 +221,45 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
-    def _stamped_limit(self, action_name: str, key: str, in_force: int | None) -> int | None:
-        """*in_force*, unless this run is only repairing records — then the stored one.
+    def limits_in_force(self, action_config: ActionConfigDict) -> dict[str, int | None]:
+        """The limits this run would apply, for a stamp written before the work ends."""
+        return {
+            "record_limit": resolve_record_limit(action_config)[0],
+            "file_limit": resolve_file_limit(action_config)[0],
+        }
+
+    def _stamped_limit(
+        self, action_name: str, key: str, in_force: int | None, keep_stored: bool
+    ) -> int | None:
+        """*in_force*, or the stored limit when this run did not do the work.
 
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
         next ordinary run would read a change, clear the action's dispositions
         and re-run it. The same reason the comparison ignores a limit here.
+
+        Collecting a batch is the other case. The run that walked the files
+        submitted them and stamped what it applied; the run that collects may
+        have been asked for different limits, or none, and resolving its own
+        would record a full pass over work that was never attempted.
         """
-        if getattr(self.deps.action_runner, "retried_records", ()):
+        repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
+        if keep_stored or repairing:
             stored: int | None = self.deps.state_manager.get_status_details(action_name).get(key)
             return stored
         return in_force
 
     def _completion_metadata(
-        self, action_name: str, action_config: ActionConfigDict
+        self, action_name: str, action_config: ActionConfigDict, keep_stored: bool = False
     ) -> dict[str, Any]:
         """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
             "record_limit": self._stamped_limit(
-                action_name, "record_limit", resolve_record_limit(action_config)[0]
+                action_name, "record_limit", resolve_record_limit(action_config)[0], keep_stored
             ),
             "file_limit": self._stamped_limit(
-                action_name, "file_limit", resolve_file_limit(action_config)[0]
+                action_name, "file_limit", resolve_file_limit(action_config)[0], keep_stored
             ),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
@@ -524,6 +539,7 @@ class ActionExecutor:
                 params.action_name,
                 ActionStatus.BATCH_SUBMITTED,
                 batch_submitted_at=datetime.now().isoformat(),
+                **self.limits_in_force(params.action_config),
             )
             return ActionExecutionResult(
                 success=True,
@@ -1404,7 +1420,7 @@ class ActionExecutor:
                 final_status,
                 execution_time=wall_clock,
                 execution_mode="batch",
-                **self._completion_metadata(action_name, action_config),
+                **self._completion_metadata(action_name, action_config, keep_stored=True),
             )
             # No BatchCompleteEvent here either: finalize_batch_output fired one
             # per input file with the real ids and counts. The no_batches

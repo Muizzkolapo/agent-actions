@@ -83,7 +83,7 @@ class RunCommandArgs(BaseModel):
     )
     file_limit: int | None = Field(
         None,
-        description="Walk at most this many input files per action, whatever the config sets",
+        description="Stop each action after this many input files, whatever the config sets",
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")

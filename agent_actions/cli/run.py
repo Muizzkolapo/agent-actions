@@ -225,8 +225,9 @@ class RunCommand:
     type=click.IntRange(min=1),
     default=None,
     help=(
-        "Walk at most this many input files per action, whatever the workflow "
-        "config sets. Takes precedence over AGAC_FILE_LIMIT."
+        "Stop each action after this many input files, whatever the workflow "
+        "config sets. Counts files the action got through, so one that fails "
+        "does not spend the budget. Takes precedence over AGAC_FILE_LIMIT."
     ),
 )
 @click.option(

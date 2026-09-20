@@ -41,7 +41,7 @@ agac run -a my_workflow --execution-mode parallel
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
-| `--file-limit N` | Walk at most N input files per action — the same unit `file_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
+| `--file-limit N` | Stop each action after N input files — the same unit `file_limit` uses — whatever the workflow config sets. It counts files the action got through, so a file that fails does not spend the budget and a directory of unreadable files is attempted in full. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
 
@@ -75,9 +75,19 @@ action starts.
 Either way the limits in force are stored with the action, so lifting one re-runs what it held
 back instead of serving a short run as a finished one. Changing one to any other value re-runs the
 action too, including to one larger than the input — the stored limit records what was set, not
-whether it held anything back.
+whether it held anything back. A batch action stores what the run that *submitted* it applied, not
+what the later run that collects it was asked for.
 
-Neither flag holds back [`agac retry`](retry): a repair walks every file holding a record it
+The two limits leave different traces. `--record-limit` rewrites every file it walks, so the
+surplus records are dropped and what remains is that limit's work. `--file-limit` bounds which
+files are opened at all, and a file it does not reach keeps the output the previous run wrote
+there — the point of not walking it. So a bounded run over a project that has already been run is
+not a fresh smaller copy of it: it is the earlier output with the walked files replaced. That is
+usually what you want for a quick pass, and it is not what you want if the workflow's prompts or
+schema also changed, since the files outside the walk keep their older answers while the action
+reads as complete. Pass `--fresh` when the whole output has to come from one version.
+
+Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
 named. Stopping short of one would leave that record's cleared disposition unwritten, which is
 the erasure a limit exists to avoid.
 
