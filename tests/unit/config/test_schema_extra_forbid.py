@@ -191,8 +191,11 @@ class TestDefaultsConfigValidation:
 
     def test_unknown_key_refused(self):
         data = {"model_vendor": "openai", "totally_bogus": True}
-        with pytest.raises(ValidationError, match="totally_bogus"):
+        with pytest.raises(ValidationError) as excinfo:
             DefaultsConfig.model_validate(data)
+
+        # not `match=`: that reads str(ValidationError), which echoes the input
+        assert "unknown defaults key 'totally_bogus'" in excinfo.value.errors()[0]["msg"]
 
     def test_provider_specific_params_accepted(self):
         """frequency_penalty, presence_penalty are valid vendor-specific defaults."""

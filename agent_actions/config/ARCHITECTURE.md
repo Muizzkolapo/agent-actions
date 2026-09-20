@@ -65,7 +65,6 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  ┌────────────────────────────────────────────────────────┐     │
 │  │  Load project defaults (agent_actions.yml)              │     │
 │  │  WorkflowConfig.model_validate() ← Pydantic stage 1    │     │
-│  │  Warn on unknown defaults keys                          │     │
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
 │  │  ActionExpander.expand_actions_to_agents()              │     │
@@ -111,7 +110,7 @@ Stage 1: WorkflowConfig (pre-expansion)
   ├── DefaultsConfig  → extra="forbid"
   │   Every key a defaults block takes is a declared field,
   │   generation params included. An undeclared key names the
-  │   field it resembles, or the keys the block does take.
+  │   field it resembles and the keys the block does take.
   │
   └── WorkflowConfig  → model_validator checks:
       ├── Duplicate action names
@@ -285,7 +284,7 @@ These are the non-obvious behaviors, edge cases, and invariants that will bite y
 
 ### 1. ActionConfig uses `extra="forbid"`
 
-Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. The refusal names the declared key a stray one resembles, or lists the keys an action accepts. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
+Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. Pydantic raises it per key, naming the key and its location. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
 
 ### 2. DefaultsConfig uses `extra="forbid"`
 

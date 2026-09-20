@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.config.schema import DefaultsConfig, WorkflowConfig
+from agent_actions.config.schema import ActionConfig, DefaultsConfig, WorkflowConfig
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS
 from agent_actions.output.response.expander import ActionExpander
@@ -20,6 +20,16 @@ def refusal(**defaults) -> str:
     """
     with pytest.raises(ValidationError) as excinfo:
         DefaultsConfig.model_validate({**BASE, **defaults})
+    return "; ".join(error["msg"] for error in excinfo.value.errors())
+
+
+def bounds_refusal(model, **fields) -> str:
+    """What either config surface says about a value outside a field's range."""
+    payload = (
+        {"name": "a", "intent": "i", **fields} if model is ActionConfig else {**BASE, **fields}
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        model.model_validate(payload)
     return "; ".join(error["msg"] for error in excinfo.value.errors())
 
 
@@ -105,6 +115,18 @@ class TestASupersededSpellingKeepsBeingRefused:
 
 
 class TestWhatTheFrameworkReadsFromADefaultsBlock:
+    def test_no_field_is_aliased(self):
+        """The refusal reads accepted keys off field names. An aliased field
+        validates from its alias instead, so one added here would be listed
+        under a spelling the block rejects, and its real spelling refused."""
+        aliased = [
+            name
+            for name, field in DefaultsConfig.model_fields.items()
+            if field.alias or field.validation_alias
+        ]
+
+        assert aliased == []
+
     def test_every_inherited_field_can_be_written_there(self):
         """Field inheritance reads each of these out of `defaults:`, so refusing
         one would refuse a key the framework itself goes looking for."""
@@ -164,17 +186,28 @@ class TestTheParamsTheProvidersActuallySend:
 
         assert agent["frequency_penalty"] == 1.5
 
-    @pytest.mark.parametrize("value,bound", [(-2.5, "greater than"), (2.5, "less than")])
-    def test_a_value_the_api_rejects_is_refused_here(self, value, bound):
+    @pytest.mark.parametrize("model", [ActionConfig, DefaultsConfig])
+    @pytest.mark.parametrize(
+        "field,value,bound",
+        [
+            ("temperature", -0.1, "greater than"),
+            ("temperature", 2.1, "less than"),
+            ("top_p", -0.1, "greater than"),
+            ("top_p", 1.1, "less than"),
+            ("frequency_penalty", -2.5, "greater than"),
+            ("frequency_penalty", 2.5, "less than"),
+            ("presence_penalty", -2.5, "greater than"),
+            ("presence_penalty", 2.5, "less than"),
+        ],
+    )
+    def test_a_value_outside_its_range_is_refused_on_both_surfaces(
+        self, model, field, value, bound
+    ):
         """By the range, not by the field name: an undeclared field is refused
-        with its name in the message too."""
-        assert bound in refusal(frequency_penalty=value)
-
-    @pytest.mark.parametrize("value,bound", [(-0.1, "greater than"), (1.1, "less than")])
-    def test_a_top_p_outside_its_range_is_refused(self, value, bound):
-        """A near match points here from `top_k`, and an unbounded value would
-        travel to the provider verbatim."""
-        assert bound in refusal(top_p=value)
+        with its name in the message too. `top_p` matters most — a near match
+        points there from `top_k` — but a range is only a guard where something
+        checks it, so each surface is asserted."""
+        assert bound in bounds_refusal(model, **{field: value})
 
 
 class TestADeclaredKeyIsUntouched:

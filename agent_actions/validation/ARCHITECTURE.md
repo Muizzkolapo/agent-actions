@@ -83,7 +83,7 @@ ActionEntryValidationOrchestrator
   3. ActionTypeSpecificValidator      Type-specific rules (tool needs impl, etc.)
   4. VendorCompatibilityValidator     Vendor string valid, features supported
   5. OptionalFieldTypeValidator       Optional fields have correct types
-  6. GranularityAndOutputFieldValidator  Granularity + output_field + on_schema_mismatch
+  6. GranularityAndOutputFieldValidator  Granularity + output_field
   7. InlineSchemaValidator            Complex inline schema notation (array[object:...])
   8. UnknownKeysDetector              Typo detection (warnings only)
 ```
@@ -322,7 +322,7 @@ schema is never valid output.
 | `action_validators/action_type_specific_validator.py` | Type-specific rules (tool needs impl) |
 | `action_validators/vendor_compatibility_validator.py` | Vendor string valid, features supported |
 | `action_validators/optional_field_type_validator.py` | Optional field type correctness |
-| `action_validators/granularity_output_field_validator.py` | Granularity + output_field + on_schema_mismatch |
+| `action_validators/granularity_output_field_validator.py` | Granularity + output_field |
 | `action_validators/inline_schema_validator.py` | array[object:...] notation validation |
 | `action_validators/unknown_keys_detector.py` | Typo detection via edit distance (warnings) |
 

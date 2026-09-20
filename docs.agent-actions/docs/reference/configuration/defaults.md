@@ -43,6 +43,8 @@ actions:
 |-------|------|-------------|
 | `model_vendor` | string | LLM provider (openai, anthropic, etc.) |
 | `model_name` | string | Model identifier |
+| `frequency_penalty` | float | Penalise repeated tokens, -2.0 to 2.0 (OpenAI and Groq) |
+| `presence_penalty` | float | Penalise tokens already present, -2.0 to 2.0 (OpenAI and Groq) |
 | `json_mode` | boolean | Enable JSON output mode (see [Non-JSON Mode](../../guides/non-json-mode.md)) |
 | `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
 | `granularity` | string | `record` or `file` processing |
@@ -57,7 +59,7 @@ actions:
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
 :::note Every defaultable key is declared
-`DefaultsConfig` declares every key a `defaults:` block accepts, and a key it does not declare is refused at load rather than dropped. The refusal names the declared key a stray one resembles, or lists the keys the block takes. Anything the framework reads out of `defaults:` is therefore also writable there — if a key is worth inheriting, it is declared.
+`DefaultsConfig` declares every key a `defaults:` block accepts, and a key it does not declare is refused at load rather than dropped. The refusal names the declared key a stray one resembles and always lists the keys the block takes. Anything the framework reads out of `defaults:` is therefore also writable there — if a key is worth inheriting, it is declared.
 :::
 
 ## Example
@@ -368,8 +370,11 @@ defaults:
 
 ```
 ConfigurationError: Workflow configuration is invalid
-  defaults: unknown defaults key 'temperture' — did you mean 'temperature'?
+  defaults: unknown defaults key 'temperture' — did you mean 'temperature'?; valid defaults keys are anthropic_version, api_key, base_url, ...
 ```
+
+The list is always present: a suggestion is a closest-spelling match, so it can point at the
+wrong field, and the list is what you fall back to.
 
 ### Missing Required Field
 
