@@ -62,6 +62,13 @@ MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
 )
 
 
+def _as_count(value: Any) -> int | None:
+    """*value* as a record count, or None if it is not one."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return int(value)
+
+
 class ActionStateManager:
     """Manages action execution state persistence and queries."""
 
@@ -138,6 +145,10 @@ class ActionStateManager:
         through a moment where it is completed, carries the config's limit, and
         no longer records the cap — the unrepairable shape this exists to
         remove — which a crash or a failed write would make permanent.
+
+        That holds because the only caller reads this while deciding whether to
+        reopen, and reopens in the same breath. A caller that read it while some
+        other action could write the file would lose the marker for good.
         """
         with self._lock:
             details = self.action_status.get(action_name)
@@ -145,11 +156,13 @@ class ActionStateManager:
                 return False
 
             cap = details.pop("max_records")
-            configured = details.get("record_limit")
             # A cap is a count, on the terms the limit resolver already sets: a
             # bool or a number below one never capped anything, and reopening an
-            # action on one would re-run finished work for no reason.
-            usable = isinstance(cap, int) and not isinstance(cap, bool) and cap >= 1
+            # action on one would re-run finished work for no reason. The same
+            # test reads the stored limit, which is compared and so must be one
+            # too — a stamp holding anything else reads as no limit at all.
+            usable = _as_count(cap) is not None
+            configured = _as_count(details.get("record_limit"))
             truncated = (
                 ActionStatus(details.get("status", ActionStatus.PENDING)) in COMPLETED_STATUSES
                 and usable

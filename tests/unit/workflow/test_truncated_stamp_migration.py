@@ -6,10 +6,11 @@ The cap it ran under was written beside it under a key nothing reads.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
@@ -152,6 +153,42 @@ class TestTheMarkerOutlivesTheReadThatReportsIt:
         assert "max_records" not in written(tmp_path)
 
 
+class TestTheReopenIsWhatMakesTheRemovalDurable:
+    """The claim the deferred write rests on. Driven through the real state
+    manager: a mocked one answers about the call, not about the file."""
+
+    def executor(self, state):
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = state
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        deps.action_runner.storage_backend = MagicMock()
+        return ActionExecutor(deps)
+
+    def test_reopening_clears_the_marker_from_the_file(self, tmp_path):
+        state = manager(tmp_path, record_limit=8, max_records=2)
+
+        result = self.executor(state)._maybe_invalidate_completed_status(
+            "act", {"record_limit": 8}, ActionStatus.COMPLETED
+        )
+
+        assert result == ActionStatus.PENDING
+        assert "max_records" not in written(tmp_path)
+        assert written(tmp_path)["status"] == "pending"
+
+    def test_the_stale_rows_go_with_it(self, tmp_path):
+        """The action re-runs in full, so the rows it wrote while cut short
+        must not read as already done."""
+        state = manager(tmp_path, record_limit=8, max_records=2)
+        executor = self.executor(state)
+
+        executor._maybe_invalidate_completed_status(
+            "act", {"record_limit": 8}, ActionStatus.COMPLETED
+        )
+
+        executor.deps.action_runner.storage_backend.clear_disposition.assert_called_once_with("act")
+
+
 class TestAnActionThatWasNeverCapped:
     def test_an_unknown_action_reports_nothing(self, tmp_path):
         state = manager(tmp_path, record_limit=8, max_records=2)
@@ -165,4 +202,5 @@ class TestAnActionThatWasNeverCapped:
         state = ActionStateManager(path, ["act"])
 
         assert state.adopt_truncation_marker("act") is False
-        assert state.get_status("act") == ActionStatus.PENDING
+        # Nothing is at stake in a marker on an action that will run anyway.
+        assert "max_records" not in written(tmp_path)
