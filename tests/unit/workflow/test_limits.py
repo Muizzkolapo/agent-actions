@@ -637,6 +637,22 @@ class TestTheCompletionStamp:
 
         assert status == ActionStatus.PENDING
 
+    def test_a_boolean_where_the_count_should_be_is_not_a_count(self, monkeypatch, executor):
+        """``True`` compares equal to 1, so reading it as a count would serve any
+        limit as one that cannot bite. Status details are persisted JSON, so the
+        value arrives from outside the process."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": None,
+            "records_processed": True,
+            "truncated": False,
+        }
+
+        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.PENDING
+
 
 class TestLimitSchemaValidation:
     def test_record_limit_rejects_zero(self):
