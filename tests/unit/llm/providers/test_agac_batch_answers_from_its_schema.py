@@ -31,6 +31,25 @@ FIELDS = {
 
 DECLARED = {"summary", "exam_density"}
 
+# Other names, and four declared types. Every case above declares the same two
+# string fields, which an answer hardcoded to them would satisfy without ever
+# reading a schema.
+OTHER = {
+    "name": "page_stats",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "headline": {"type": "string"},
+            "page_count": {"type": "integer"},
+            "is_final": {"type": "boolean"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["headline", "page_count", "is_final", "tags"],
+        "additionalProperties": False,
+    },
+}
+OTHER_TYPES = {"headline": str, "page_count": int, "is_final": bool, "tags": list}
+
 
 @pytest.fixture
 def answer():
@@ -85,10 +104,17 @@ class TestTheRecordCarriesTheSchemasFields:
 
         assert set(content) == DECLARED
 
-    def test_each_field_is_answered_by_a_value_of_its_declared_type(self, answer):
-        content, _ = answer(ENVELOPE)
+    def test_a_schema_naming_other_fields_is_answered_by_those(self, answer):
+        content, _ = answer(OTHER)
 
-        assert all(isinstance(value, str) and value for value in content.values())
+        assert set(content) == set(OTHER_TYPES)
+
+    def test_each_field_is_answered_by_a_value_of_its_declared_type(self, answer):
+        """By type, not by `isinstance`: a bool satisfies `isinstance(x, int)`,
+        so an integer field would accept one."""
+        content, _ = answer(OTHER)
+
+        assert {field: type(value) for field, value in content.items()} == OTHER_TYPES
 
     def test_two_records_of_one_schema_are_answered_separately(self, answer):
         """Seeded per record, so a batch is not one answer repeated down the file."""
