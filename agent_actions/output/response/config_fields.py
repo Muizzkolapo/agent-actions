@@ -35,6 +35,8 @@ SIMPLE_CONFIG_FIELDS = {
     "temperature": None,  # Default: None (use provider default)
     "max_tokens": None,  # Default: None (use provider default)
     "top_p": None,  # Default: None (use provider default)
+    "frequency_penalty": None,  # Default: None (OpenAI and Groq only)
+    "presence_penalty": None,  # Default: None (OpenAI and Groq only)
     "stop": None,  # Default: None (no stop sequences)
     "constraints": (),  # Default: empty tuple (immutable — no cross-agent mutation)
     # Retry configuration (transport-layer failure handling)

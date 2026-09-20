@@ -305,8 +305,6 @@ def _compile_workflow_schemas(
     """
     Compile all schemas in a workflow configuration.
 
-    Processes both top-level actions and actions within defaults.
-
     Args:
         data: Workflow configuration dict (modified in place)
         schema_dir: Optional schema directory
@@ -323,13 +321,6 @@ def _compile_workflow_schemas(
     for action in actions:
         _compile_action_schemas(
             action, schema_dir, strict=strict, errors=errors, project_root=project_root
-        )
-
-    # Compile schemas in defaults if present
-    defaults = data.get("defaults", {})
-    if defaults:
-        _compile_action_schemas(
-            defaults, schema_dir, strict=strict, errors=errors, project_root=project_root
         )
 
     # Raise aggregated errors in strict mode (after all schemas processed)

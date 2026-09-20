@@ -1,6 +1,5 @@
-"""Tests for config UX improvements: unknown defaults warning, fuzzy match, validation errors."""
+"""Tests for config UX: undeclared defaults keys, fuzzy match, validation errors."""
 
-import logging
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -39,71 +38,42 @@ def _call_get_user_agents(cm, tmp_path):
         return cm.get_user_agents()
 
 
-@pytest.fixture
-def _enable_propagation():
-    """Temporarily enable propagation on agent_actions logger so caplog captures records."""
-    aa_logger = logging.getLogger("agent_actions")
-    original = aa_logger.propagate
-    aa_logger.propagate = True
-    yield
-    aa_logger.propagate = original
+class TestAnUndeclaredDefaultsKey:
+    """A key the schema does not declare stops the load rather than being dropped."""
 
-
-class TestUnknownDefaultsKeysWarning:
-    """Issue 1: Unknown keys in defaults config should produce a warning."""
-
-    @pytest.mark.usefixtures("_enable_propagation")
-    def test_unknown_defaults_key_logs_warning(self, tmp_path, caplog):
-        """Typo like 'modle_name' in defaults triggers a warning."""
-        cm = _make_manager(
-            tmp_path,
-            _WORKFLOW_HEADER
-            + _ACTIONS_BLOCK
-            + "defaults:\n  modle_name: gpt-4\n  model_vendor: openai\n",
-        )
-        with caplog.at_level(logging.WARNING):
+    def _refusal(self, tmp_path, defaults: str) -> str:
+        cm = _make_manager(tmp_path, _WORKFLOW_HEADER + _ACTIONS_BLOCK + defaults)
+        with pytest.raises(ConfigurationError) as excinfo:
             _call_get_user_agents(cm, tmp_path)
+        return " ".join(e["message"] for e in excinfo.value.context["validation_errors"])
 
-        assert any("Unknown keys in defaults config" in r.message for r in caplog.records)
-        assert any("modle_name" in r.message for r in caplog.records)
+    def test_a_mistyped_key_names_the_key_it_resembles(self, tmp_path):
+        message = self._refusal(
+            tmp_path, "defaults:\n  modle_name: gpt-4\n  model_vendor: openai\n"
+        )
 
-    @pytest.mark.usefixtures("_enable_propagation")
-    def test_no_warning_when_no_unknown_keys(self, tmp_path, caplog):
-        """Valid defaults keys produce no warning."""
+        assert "did you mean 'model_name'?" in message
+
+    def test_a_key_resembling_nothing_names_the_keys_the_block_takes(self, tmp_path):
+        message = self._refusal(tmp_path, "defaults:\n  bogus_key: value\n")
+
+        assert "bogus_key" in message
+        assert "model_name" in message and "model_vendor" in message
+
+    def test_declared_keys_do_not_refuse_the_load(self, tmp_path):
         cm = _make_manager(
             tmp_path,
             _WORKFLOW_HEADER
             + _ACTIONS_BLOCK
             + "defaults:\n  model_vendor: openai\n  model_name: gpt-4\n",
         )
-        with caplog.at_level(logging.WARNING):
-            _call_get_user_agents(cm, tmp_path)
 
-        assert not any("Unknown keys in defaults config" in r.message for r in caplog.records)
+        assert _call_get_user_agents(cm, tmp_path) == [{"agent_type": "extract"}]
 
-    @pytest.mark.usefixtures("_enable_propagation")
-    def test_no_warning_when_no_defaults(self, tmp_path, caplog):
-        """No defaults section produces no warning."""
+    def test_no_defaults_block_does_not_refuse_the_load(self, tmp_path):
         cm = _make_manager(tmp_path, _WORKFLOW_HEADER + _ACTIONS_BLOCK)
-        with caplog.at_level(logging.WARNING):
-            _call_get_user_agents(cm, tmp_path)
 
-        assert not any("Unknown keys in defaults config" in r.message for r in caplog.records)
-
-    @pytest.mark.usefixtures("_enable_propagation")
-    def test_warning_lists_known_keys(self, tmp_path, caplog):
-        """Warning message includes the list of known keys for reference."""
-        cm = _make_manager(
-            tmp_path,
-            _WORKFLOW_HEADER + _ACTIONS_BLOCK + "defaults:\n  bogus_key: value\n",
-        )
-        with caplog.at_level(logging.WARNING):
-            _call_get_user_agents(cm, tmp_path)
-
-        warning_msgs = [r.message for r in caplog.records if "Unknown keys" in r.message]
-        assert len(warning_msgs) == 1
-        assert "model_name" in warning_msgs[0]
-        assert "model_vendor" in warning_msgs[0]
+        assert _call_get_user_agents(cm, tmp_path) == [{"agent_type": "extract"}]
 
 
 class TestFuzzyMatchSuggestions:

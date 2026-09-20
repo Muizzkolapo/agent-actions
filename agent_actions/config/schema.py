@@ -1,5 +1,6 @@
 """Schema definitions for the new workflow format."""
 
+import difflib
 from enum import Enum
 from typing import Any, Literal
 
@@ -7,6 +8,37 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
+
+# Measured: a transposition or a dropped letter scores 0.667 and above, a
+# spelling belonging to no field 0.600 and below. Distinct names still collide,
+# so a suggestion is a guess offered beside the full list, not a diagnosis.
+_NEAR_MISS_CUTOFF = 0.65
+
+
+def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
+    """Name every undeclared key, what each resembles, and the keys *surface* takes.
+
+    The list is unconditional: a guess is a string-distance match, so it lands on
+    a real field often enough that a reader given only the guess is left with
+    nothing when it is wrong.
+    """
+    if not isinstance(data, dict):
+        return data
+    accepted = sorted(model.model_fields)
+    stray = sorted(str(key) for key in data if str(key) not in accepted)
+    if not stray:
+        return data
+
+    problems = []
+    for key in stray:
+        near = difflib.get_close_matches(key, accepted, n=1, cutoff=_NEAR_MISS_CUTOFF)
+        problems.append(
+            f"unknown {surface} key '{key}' — did you mean '{near[0]}'?"
+            if near
+            else f"unknown {surface} key '{key}'"
+        )
+    problems.append(f"valid {surface} keys are " + ", ".join(accepted))
+    raise ValueError("; ".join(problems))
 
 
 def _validate_bool_or_mapping(v: Any, field_name: str, usage_hint: str) -> Any:
@@ -232,38 +264,10 @@ class ExpectConfig(BaseModel):
         return self
 
 
-_RETIRED_KEYS = {
-    "reprompt": (
-        "reprompt: has been replaced by expect:. A block that only checked the "
-        "schema becomes expect: {repair: auto}; one with validation: becomes a "
-        "rule under expect: {expectations: [...]}."
-    ),
-    "on_schema_mismatch": (
-        "on_schema_mismatch: has been replaced by expect:. Schema conformance is "
-        "enforced by expect: {repair: auto}, which regenerates a response the "
-        "schema rejects."
-    ),
-}
-
-
-def _refuse_retired_keys(data: Any) -> Any:
-    """Name the replacement for a key that used to configure the reprompt loop."""
-    if isinstance(data, dict):
-        for key, guidance in _RETIRED_KEYS.items():
-            if key in data:
-                raise ValueError(guidance)
-    return data
-
-
 class ActionConfig(_RetryValidators):
     """Configuration for a workflow action."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _no_retired_keys(cls, data: Any) -> Any:
-        return _refuse_retired_keys(data)
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -340,9 +344,19 @@ class ActionConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
     output_field: str | None = Field(default=None, description="Output field name")
-    temperature: float | None = Field(default=None, description="Generation temperature")
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Generation temperature"
+    )
     max_tokens: int | None = Field(default=None, description="Maximum tokens")
-    top_p: float | None = Field(default=None, description="Top-p sampling parameter")
+    top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
+    )
+    frequency_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Frequency penalty (OpenAI, Groq)"
+    )
+    presence_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Presence penalty (OpenAI, Groq)"
+    )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
     constraints: Any | None = Field(default=None, description="Generation constraints")
 
@@ -415,15 +429,12 @@ class ActionConfig(_RetryValidators):
 class DefaultsConfig(_RetryValidators):
     """Default configuration applied to all actions."""
 
+    model_config = ConfigDict(extra="forbid")
+
     @model_validator(mode="before")
     @classmethod
-    def _no_retired_keys(cls, data: Any) -> Any:
-        return _refuse_retired_keys(data)
-
-    # extra="ignore" (not "forbid"): workflow defaults may contain vendor-specific
-    # params like frequency_penalty, presence_penalty that vary by provider and are
-    # consumed by extract_generation_params(). Typed fields still validate known keys.
-    model_config = ConfigDict(extra="ignore")
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "defaults")
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")
@@ -456,9 +467,17 @@ class DefaultsConfig(_RetryValidators):
     is_operational: bool | None = Field(default=None, description="Default operational flag")
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
-    temperature: float | None = Field(default=None, description="Default temperature")
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Default temperature"
+    )
     max_tokens: int | None = Field(default=None, description="Default max tokens")
-    top_p: float | None = Field(default=None, description="Default top-p")
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
+    frequency_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Default frequency penalty (OpenAI, Groq)"
+    )
+    presence_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Default presence penalty (OpenAI, Groq)"
+    )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
     constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
@@ -475,6 +494,23 @@ class DefaultsConfig(_RetryValidators):
     )
     chunk_size: int | None = Field(default=None, description="Default chunk size")
     chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
+
+    # --- Read out of defaults by field inheritance ---
+    where_clause: dict[str, Any] | None = Field(
+        default=None, description="Default WHERE clause configuration for filtering"
+    )
+    anthropic_version: str | None = Field(
+        default=None, description="Default API version header for Anthropic requests"
+    )
+    enable_prompt_caching: bool | None = Field(
+        default=None, description="Default Anthropic prompt caching setting"
+    )
+    max_execution_time: int | None = Field(
+        default=None, description="Default maximum execution time in seconds"
+    )
+    enable_caching: bool | None = Field(default=None, description="Default caching setting")
+    tokenizer_model: str | None = Field(default=None, description="Default tokenizer model")
+    split_method: str | None = Field(default=None, description="Default chunk split method")
 
     # --- Limit controls ---
     record_limit: int | None = Field(default=None, ge=1, description="Default record limit")

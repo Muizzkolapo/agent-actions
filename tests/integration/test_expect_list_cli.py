@@ -36,7 +36,7 @@ REFUSED = {
     "array_member_rule": "a selector reaches top-level fields only",
     "judged_context_under_batch": "not available under batch run_mode",
     "many_mistakes": "field 'no_such_field' is not produced by this action",
-    "old_flat_shape": "severity 'fail' is now 'error'",
+    "old_flat_shape": "unknown severity 'fail'",
     "repair_auto_at_file_granularity": "use repair: none or record granularity",
 }
 

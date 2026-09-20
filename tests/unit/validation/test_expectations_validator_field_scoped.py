@@ -59,7 +59,7 @@ def test_an_inline_rule_written_with_flat_arguments_names_the_params_block():
     assert "params" in defects["summarize"][0]
 
 
-def test_an_inline_rule_using_the_old_severity_word_names_its_replacement():
+def test_an_inline_rule_using_a_severity_that_is_not_a_level_is_refused():
     configs = {
         "summarize": {
             "name": "summarize",
@@ -70,7 +70,7 @@ def test_an_inline_rule_using_the_old_severity_word_names_its_replacement():
             },
         }
     }
-    assert "is now 'error'" in defects_for(configs)
+    assert "unknown severity 'fail'" in defects_for(configs)
 
 
 def defects_for(configs):

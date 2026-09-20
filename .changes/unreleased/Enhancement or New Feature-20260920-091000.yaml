@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "An expectation rule's `severity:` is now checked against the levels themselves rather than a table of renamed spellings, so any value that is not `error`, `warn` or `info` is refused by naming the three levels. Previously only `fail` was caught by name and every other wrong level fell through to a generic type error. The refusal no longer says which spelling replaced which; the expectations reference carries the migration."
+time: 2026-09-20T09:10:00Z

@@ -43,13 +43,13 @@ REFUSED = {
         "field 'no_such_field' is not produced by this action",
         "arguments belong under params:",
         "unknown rule key 'sevrity' — did you mean 'severity'?",
-        "severity 'fail' is now 'error'",
+        "unknown severity 'fail'",
         "unknown type 'vibe_check'",
     ],
     "old_flat_shape": [
         "type 'accepted_values' requires parameter 'values'",
         "move values there",
-        "severity 'fail' is now 'error'",
+        "unknown severity 'fail'; the levels are error, warn and info",
     ],
     "repair_auto_at_file_granularity": [
         "cannot run at file granularity",

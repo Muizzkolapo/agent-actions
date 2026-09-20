@@ -65,7 +65,6 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  ┌────────────────────────────────────────────────────────┐     │
 │  │  Load project defaults (agent_actions.yml)              │     │
 │  │  WorkflowConfig.model_validate() ← Pydantic stage 1    │     │
-│  │  Warn on unknown defaults keys                          │     │
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
 │  │  ActionExpander.expand_actions_to_agents()              │     │
@@ -108,11 +107,10 @@ Stage 1: WorkflowConfig (pre-expansion)
   │   Typos in YAML action fields raise immediately.
   │   e.g. "temperture" instead of "temperature" → ValidationError
   │
-  ├── DefaultsConfig  → extra="ignore"
-  │   Workflow defaults may contain vendor-specific params
-  │   (frequency_penalty, presence_penalty) that vary by provider.
-  │   These are consumed by extract_generation_params(), not by
-  │   the Pydantic model. Known fields still validate.
+  ├── DefaultsConfig  → extra="forbid"
+  │   Every key a defaults block takes is a declared field,
+  │   generation params included. An undeclared key names the
+  │   field it resembles and the keys the block does take.
   │
   └── WorkflowConfig  → model_validator checks:
       ├── Duplicate action names
@@ -250,7 +248,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 ### Schema & Validation
 | File | Role |
 |------|------|
-| `schema.py` | `WorkflowConfig`, `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=ignore), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
+| `schema.py` | `WorkflowConfig`, `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=forbid), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
 | `types.py` | `Granularity`, `RunMode` enums; `ActionConfigDict`, `ActionEntryDict`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict` typed dicts |
 | `environment.py` | `EnvironmentConfig` (pydantic-settings), API key validation, environment detection helpers |
 
@@ -286,11 +284,15 @@ These are the non-obvious behaviors, edge cases, and invariants that will bite y
 
 ### 1. ActionConfig uses `extra="forbid"`
 
-Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
+Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. Pydantic raises it per key, naming the key and its location. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
 
-### 2. DefaultsConfig uses `extra="ignore"`
+### 2. DefaultsConfig uses `extra="forbid"`
 
-Unlike `ActionConfig`, the defaults section silently ignores unknown keys. This is because vendor-specific generation parameters (`frequency_penalty`, `presence_penalty`, `top_k`, etc.) flow through defaults and are consumed by `extract_generation_params()` at LLM call time, not by the Pydantic model. A warning is logged for unknown keys, but validation does not fail.
+Unlike `ActionConfig`, which leaves the refusal to Pydantic, the defaults section raises its own: it names every undeclared key, what each resembles, and then the keys the block takes. The list is unconditional — a suggestion is a string-distance match, so it lands on a real field often enough that a reader given only the guess is left with nothing when it is wrong.
+
+The invariant that makes the strictness safe runs one way: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins that containment; add to both when you add an inheritable field.
+
+The converse does not hold and is not claimed. `drops` and `observe` are declared here and read from nowhere — a defaults-level value for either is accepted and never reaches an agent, which is the pre-existing shape this strictness cannot detect, because a declared key passes by definition. Generation parameters avoid it by being inherited as well as declared, `frequency_penalty` and `presence_penalty` included; declaring one without adding it to `SIMPLE_CONFIG_FIELDS` accepts it and then drops it.
 
 ### 3. AgentConfig uses `extra="allow"`
 

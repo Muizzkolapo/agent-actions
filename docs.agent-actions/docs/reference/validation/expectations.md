@@ -309,7 +309,8 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 
 ### Migrating from `reprompt:`
 
-`reprompt:` has been removed. A config carrying it is refused at load, naming its replacement.
+`reprompt:` has been removed. A config carrying it is refused at load as a key the schema does not
+declare, and the migration is below.
 
 **A block that only checked the schema** — the common case — becomes a rule-free `expect:`. Set it
 once for the workflow:
@@ -348,8 +349,8 @@ prompt instead of only the log.
 **`on_schema_mismatch:` is gone too.** `reprompt` mode is what `expect: {repair: auto}` does.
 `reject` — halt rather than regenerate — becomes `max_iterations: 1` with `on_exhausted: raise`.
 
-**A run deferred mid-reprompt** cannot resume: its stored state names a recovery phase that no
-longer exists, and it is refused rather than reinterpreted. Re-run the action with `--fresh`; the
+**A run deferred mid-reprompt** cannot resume: its stored state names a recovery phase this
+version does not run, and it is refused rather than reinterpreted. Re-run the action with `--fresh`; the
 records it had already completed are in the store.
 
 ## Setting it once for a workflow
@@ -535,7 +536,7 @@ A record without `question_type` waives the rule; one that has it is checked. Wr
 - Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
 - Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not, and rules declared on a field, which already have one.
 - `expression` conditions and `row_condition` arguments are parsed and checked in full (syntax, blocklist, field references, constant conditions) — see [Expressions](#expressions).
-- Superseded spellings are named, not merely rejected: arguments written flat instead of under `params:`, and `severity: fail` for `severity: error`. A key that merely *resembles* a rule key (`sevrity:`) is reported as that key rather than sent to `params:`.
+- A refusal names what is valid rather than what was replaced: arguments written flat are told to move under `params:`, and a `severity:` that is not a level is refused by naming the levels. A key that merely *resembles* a rule key (`sevrity:`) is reported as that key rather than sent to `params:`.
 - Rules a selector could never reach — declared on a nested member of a field rather than on the field itself — are refused rather than ignored, as is a record-scoped `expression` rule declared under a field.
 - Preflight builds each suite the way the runner does, so rules declared on a schema's fields are checked too.
 

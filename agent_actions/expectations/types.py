@@ -5,7 +5,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -13,7 +13,8 @@ Severity = Literal["error", "warn", "info"]
 
 _RULE_KEYS = frozenset({"id", "type", "field", "params", "severity", "hint"})
 
-_RENAMED_SEVERITIES = {"fail": "error"}
+_SEVERITIES = get_args(Severity)
+_SEVERITY_LEVELS = ", ".join(_SEVERITIES[:-1]) + f" and {_SEVERITIES[-1]}"
 
 
 # Measured against every argument name the registered types accept: the closest
@@ -52,8 +53,8 @@ class Expectation(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _refuse_superseded_spellings(cls, data: Any) -> Any:
-        """Name the replacement for every shape in this rule that used to be legal."""
+    def _refuse_unknown_shapes(cls, data: Any) -> Any:
+        """Refuse a key this rule does not take, and a severity that is not a level."""
         if not isinstance(data, dict):
             return data
         problems: list[str] = []
@@ -72,11 +73,8 @@ class Expectation(BaseModel):
             )
 
         severity = data.get("severity")
-        if isinstance(severity, str) and severity in _RENAMED_SEVERITIES:
-            problems.append(
-                f"severity '{severity}' is now '{_RENAMED_SEVERITIES[severity]}'; "
-                f"the levels are error, warn and info"
-            )
+        if isinstance(severity, str) and severity not in _SEVERITIES:
+            problems.append(f"unknown severity '{severity}'; the levels are {_SEVERITY_LEVELS}")
 
         if problems:
             raise ValueError("; ".join(problems))
