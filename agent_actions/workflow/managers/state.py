@@ -131,8 +131,13 @@ class ActionStateManager:
         A run capped from outside its own config used to stamp the limit the
         config asked for, which reads as a full run for ever after. The cap it
         ran under was written beside it under a key nothing reads; this is the
-        one read of it. The key is removed as it is read, so a stamp reports a
-        truncation once and an action re-run because of it is not re-run again.
+        one read of it, and the key does not survive being read.
+
+        When it reports a truncation the removal is left unsaved: the write that
+        reopens the action carries it. Persisting here would put the stamp
+        through a moment where it is completed, carries the config's limit, and
+        no longer records the cap — the unrepairable shape this exists to
+        remove — which a crash or a failed write would make permanent.
         """
         with self._lock:
             details = self.action_status.get(action_name)
@@ -141,12 +146,17 @@ class ActionStateManager:
 
             cap = details.pop("max_records")
             configured = details.get("record_limit")
+            # A cap is a count, on the terms the limit resolver already sets: a
+            # bool or a number below one never capped anything, and reopening an
+            # action on one would re-run finished work for no reason.
+            usable = isinstance(cap, int) and not isinstance(cap, bool) and cap >= 1
             truncated = (
                 ActionStatus(details.get("status", ActionStatus.PENDING)) in COMPLETED_STATUSES
-                and isinstance(cap, int)
+                and usable
                 and (configured is None or cap < configured)
             )
-            self._save_status()
+            if not truncated:
+                self._save_status()
             return truncated
 
     def is_completed(self, action_name: str) -> bool:

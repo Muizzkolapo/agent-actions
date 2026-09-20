@@ -6,6 +6,7 @@ The cap it ran under was written beside it under a key nothing reads.
 """
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -51,33 +52,84 @@ class TestAStampThatRecordedACap:
         assert state.adopt_truncation_marker("act") is False
 
 
-class TestTheMarkerIsRemovedAsItIsRead:
-    @pytest.mark.parametrize("cap", [2, None])
-    def test_the_key_does_not_survive_the_read(self, tmp_path, cap):
+class TestACapThatNeverCappedAnything:
+    """A count, on the terms the limit resolver already sets."""
+
+    @pytest.mark.parametrize("cap", [True, False, 0, -1, "2"])
+    def test_it_reports_nothing(self, tmp_path, cap):
+        state = manager(tmp_path, record_limit=8, max_records=cap)
+
+        assert state.adopt_truncation_marker("act") is False
+
+    @pytest.mark.parametrize("cap", [True, False, 0, -1, "2"])
+    def test_the_key_still_goes(self, tmp_path, cap):
         state = manager(tmp_path, record_limit=8, max_records=cap)
 
         state.adopt_truncation_marker("act")
 
-        assert "max_records" not in state.get_status_details("act")
         assert "max_records" not in written(tmp_path)
 
-    def test_a_second_read_reports_nothing(self, tmp_path):
-        """One-way: the stamp cannot invalidate the same action twice, so an
-        action re-run once is not re-run again on every later run."""
+
+class TestTheMarkerOutlivesTheReadThatReportsIt:
+    """Removing it is the reopening write's job. Saving the removal here puts
+    the stamp through a moment where it is completed, carries the configured
+    limit, and no longer records the cap — the shape this exists to remove."""
+
+    def test_the_file_still_holds_it_until_the_action_is_reopened(self, tmp_path):
         state = manager(tmp_path, record_limit=8, max_records=2)
 
-        first = state.adopt_truncation_marker("act")
-        second = state.adopt_truncation_marker("act")
+        assert state.adopt_truncation_marker("act") is True
+        assert "max_records" in written(tmp_path)
 
-        assert (first, second) == (True, False)
+    def test_a_crash_before_the_reopen_leaves_it_readable(self, tmp_path):
+        """What a later run sees if the process dies in between."""
+        manager(tmp_path, record_limit=8, max_records=2).adopt_truncation_marker("act")
+
+        reloaded = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
+
+        assert reloaded.adopt_truncation_marker("act") is True
+
+    def test_a_failed_write_leaves_it_readable(self, tmp_path):
+        """The repo already models this: a save can raise, and every other
+        invalidation reason survives it by being re-derived next run."""
+        state = manager(tmp_path, record_limit=8, max_records=2)
+        state.adopt_truncation_marker("act")
+        with (
+            patch.object(state, "_save_status", side_effect=OSError("disk full")),
+            pytest.raises(OSError),
+        ):
+            state.update_status("act", ActionStatus.PENDING)
+
+        reloaded = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
+        assert reloaded.adopt_truncation_marker("act") is True
+
+    def test_the_reopening_write_carries_the_removal(self, tmp_path):
+        state = manager(tmp_path, record_limit=8, max_records=2)
+        state.adopt_truncation_marker("act")
+
+        state.update_status("act", ActionStatus.PENDING)
+
+        assert "max_records" not in written(tmp_path)
+
+    def test_a_second_read_after_that_reports_nothing(self, tmp_path):
+        """One-way: an action reopened once is not reopened again on every
+        later run."""
+        state = manager(tmp_path, record_limit=8, max_records=2)
+        first = state.adopt_truncation_marker("act")
+        state.update_status("act", ActionStatus.PENDING)
+
+        reloaded = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
+
+        assert (first, reloaded.adopt_truncation_marker("act")) == (True, False)
 
     def test_nothing_else_in_the_stamp_moves(self, tmp_path):
         state = manager(tmp_path, record_limit=8, max_records=2, config_hash="abc", file_limit=3)
-
         state.adopt_truncation_marker("act")
 
+        state.update_status("act", ActionStatus.PENDING)
+
         assert written(tmp_path) == {
-            "status": "completed",
+            "status": "pending",
             "record_limit": 8,
             "config_hash": "abc",
             "file_limit": 3,
@@ -90,6 +142,14 @@ class TestTheMarkerIsRemovedAsItIsRead:
         state.adopt_truncation_marker("act")
 
         assert (tmp_path / ".agent_status.json").read_text() == before
+
+    def test_a_marker_that_reports_nothing_is_cleared_at_once(self, tmp_path):
+        """Nothing is at stake in it, so it does not need a later write."""
+        state = manager(tmp_path, record_limit=8, max_records=None)
+
+        state.adopt_truncation_marker("act")
+
+        assert "max_records" not in written(tmp_path)
 
 
 class TestAnActionThatWasNeverCapped:
