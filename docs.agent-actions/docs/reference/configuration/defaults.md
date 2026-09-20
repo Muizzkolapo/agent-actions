@@ -53,7 +53,7 @@ actions:
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
 | `record_limit` | integer | Max records per file (default: unlimited). `AGAC_RECORD_LIMIT` caps this from the environment |
-| `file_limit` | integer | Max files to walk per action (default: unlimited). Still applies to [`agac retry`](../cli/retry), which cannot reach a retried record in a later file |
+| `file_limit` | integer | Max files to walk per action (default: unlimited). Does not hold back [`agac retry`](../cli/retry), which resolves the files holding the records it named rather than walking to N |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
 :::note Schema vs Runtime
@@ -338,7 +338,7 @@ usable against a project you do not own:
 AGAC_RECORD_LIMIT=2 agac run -a my_workflow
 ```
 
-`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. `record_limit` never excludes a record that [`agac retry`](../cli/retry) is re-running, since retry selects by id rather than by position; `file_limit` still does, so a retried record in a later file is not reached. If the limit that applies changes between runs, actions automatically re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. Neither limit holds back [`agac retry`](../cli/retry): it selects records by id and processes those alone, and it resolves the files holding them rather than walking to `file_limit`. If the limit that applies changes between runs, actions automatically re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for.
 
 ### 7. Environment-Specific Defaults
 

@@ -53,31 +53,36 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 `--record` takes the identifier shown in the **Record ID** column of [`dispositions --quarantined`](./dispositions) — retry matches against exactly that value.
 
-## Record limits never exclude a retried record
+## A retry runs the records it named, and only those
 
-A record limit — [`record_limit`](../configuration/defaults) or
+`retry` selects records by id — the ones that failed, or the single one given to
+`--record`. Those are the records it processes at every action it re-runs, and
+they are the only ones.
+
+Nothing else in the input joins them. A record limit —
+[`record_limit`](../configuration/defaults) or
 [`AGAC_RECORD_LIMIT`](../configuration/) — keeps the first N records of an input
-file. `retry` selects records by id, so the records it is repairing are admitted
-on top of that N rather than cut loose by it.
+file, but deciding how much new work to take on is what a limit is for, and a
+repair takes on none. A record the retry did not name is not work this run was
+asked to do, however far inside the limit it sits.
 
-A retry takes on no work the limit was holding back: it adds the records it was
-asked to repair, and nothing else.
+[`file_limit`](../configuration/defaults) does not hold a retry back either. A
+retry resolves which staged files hold the records it named and visits those,
+instead of walking the directory and stopping at N.
+
+Records the retry did not name keep what they already had. Their stored output
+rows are carried into the rewritten file, and their dispositions are left alone —
+a record that failed at an action the retry re-runs is still failed afterwards
+unless the retry named it too.
 
 This matters because `retry` clears a record's disposition before re-running it.
-A retry that skipped the record would not leave it failed — it would leave no
-record of the failure at all.
+A retry that never reached the record would not leave it failed — it would leave
+no record of the failure at all.
 
-Two limits of the current behaviour:
-
-- `file_limit` is not covered. A retry still stops at N input files, so a record
-  in a later file is not reached.
-- An action that turns one record into several gives the new records fresh
-  identifiers, so a retry's ids do not match them at actions below that point.
-  `retry` already clears dispositions by the same ids, so this is not new.
-
-A capped retry also rewrites an action's output with only the records it
-processed, so records it did not name lose their stored rows while keeping their
-`success` dispositions. That predates this behaviour and is unchanged by it.
+One limit remains: an action that turns one record into several gives the new
+records fresh identifiers, so a retry's ids do not match them at actions below
+that point. `retry` already clears dispositions by the same ids, so this is not
+new.
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.

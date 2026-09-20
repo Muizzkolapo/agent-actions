@@ -15,6 +15,7 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
+from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -51,7 +52,7 @@ class PipelineConfig:
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     source_relative_path: str | None = None  # For storage backend source lookups
-    # Records this run is repairing; a record limit admits them on top of its N.
+    # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
 
 
@@ -76,6 +77,8 @@ class BatchPipelineParams:
     dependency_configs: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
     disposition_gate: Optional["DispositionGate"] = field(default=None)
+    # Only used when no gate is injected; a gate built without it never narrows.
+    retried_records: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -155,6 +158,7 @@ class ProcessingPipeline:
 
         self._disposition_gate = DispositionGate(
             storage_backend=config.storage_backend,
+            repairing=config.retried_records,
         )
         self._unified_processor = UnifiedProcessor(
             disposition_gate=self._disposition_gate,
@@ -211,7 +215,10 @@ class ProcessingPipeline:
         if disposition_gate is None and params.storage_backend is not None:
             from agent_actions.processing.disposition_gate import DispositionGate
 
-            disposition_gate = DispositionGate(storage_backend=params.storage_backend)
+            disposition_gate = DispositionGate(
+                storage_backend=params.storage_backend,
+                repairing=params.retried_records,
+            )
 
         task_preparator = BatchTaskPreparator(
             action_indices=params.agent_indices,
@@ -316,6 +323,7 @@ class ProcessingPipeline:
                     agent_indices=agent_indices,
                     dependency_configs=dependency_configs,
                     version_context=version_context,
+                    retried_records=params.retried_records,
                 )
             )
         if run_mode == RunMode.BATCH and is_synchronous:
@@ -501,6 +509,12 @@ class ProcessingPipeline:
         )
         if kept is not None:
             data = [data[i] for i in kept]
+
+        # Above the context scope, which writes `skipped` for every record it drops:
+        # a repair must not disposition a record it never named.
+        repair_kept = positions_named_by_repair(data, self.config.retried_records)
+        if repair_kept is not None:
+            data = [data[i] for i in repair_kept]
 
         # Build shared pipeline context BEFORE the batch/online fork.
         # See _build_pipeline_context() docstring for the architecture invariant.

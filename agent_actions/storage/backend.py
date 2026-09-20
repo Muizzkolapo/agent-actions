@@ -4,6 +4,7 @@ import copy
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -239,16 +240,33 @@ class StorageBackend(ABC):
                     )
             self._format_version_checked = True
 
-        cache_key = (action_name, relative_path)
-        if cache_key in self._reconstruction_cache:
-            return copy.deepcopy(self._reconstruction_cache[cache_key])
-
-        result = self._read_target_raw(action_name, relative_path)
-        result = self._reconstruct_from_deltas(action_name, relative_path, result)
-        validate_lifecycle_batch(result, action_name=action_name)
+        result = self._reconstructed_target(action_name, relative_path)
         reset_for_downstream(result, action_name=action_name)
-        self._reconstruction_cache[cache_key] = result
-        return copy.deepcopy(result)
+        return result
+
+    def read_target_for_rewrite(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+        """Reconstructed rows of an action's own output, without the downstream reset.
+
+        For a caller writing these rows back where they came from — carry-forward
+        rebuilds the whole file, so a record it does not reprocess still has to be
+        handed back to the write. :meth:`read_target` would hand it back as ACTIVE,
+        which is the truth for a consumer reading forward and a lie about an action
+        whose output for that record already exists.
+
+        Raises:
+            FileNotFoundError: If the target data doesn't exist.
+        """
+        return self._reconstructed_target(action_name, relative_path)
+
+    def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+        """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""
+        cache_key = (action_name, relative_path)
+        if cache_key not in self._reconstruction_cache:
+            result = self._read_target_raw(action_name, relative_path)
+            result = self._reconstruct_from_deltas(action_name, relative_path, result)
+            validate_lifecycle_batch(result, action_name=action_name)
+            self._reconstruction_cache[cache_key] = result
+        return copy.deepcopy(self._reconstruction_cache[cache_key])
 
     def target_rows_per_source_guid(self, action_name: str) -> dict[str, int]:
         """How many stored rows this action holds for each identity.
@@ -614,6 +632,15 @@ class StorageBackend(ABC):
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
         """Return record_ids with any gate-terminal disposition for an action."""
+        return set()
+
+    def source_files_for_records(self, record_ids: Iterable[str]) -> set[str]:
+        """Staging paths, suffix stripped, of the files holding *record_ids*.
+
+        Empty when nothing is known: a caller narrowing a walk to these files must
+        treat that as "cannot resolve" and walk everything, or a retry whose source
+        rows were pruned would process no file at all.
+        """
         return set()
 
     def clear_disposition(

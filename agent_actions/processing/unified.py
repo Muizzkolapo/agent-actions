@@ -113,6 +113,27 @@ class UnifiedProcessor:
                 if isinstance(record, dict) and not record.get("source_guid"):
                     record["source_guid"] = IDGenerator.derive_source_guid(record)
 
+        # Above the guard, not below it: the guard writes passthrough and skipped,
+        # both terminal, so a record still in the input when the guard runs is a
+        # record a repair has already decided the fate of.
+        repair_carry_ids: set[str] = set()
+        if self._disposition_gate is not None and self._disposition_gate.repairing:
+            from agent_actions.processing.disposition_gate import positions_named_by_repair
+
+            repairing = self._disposition_gate.repairing
+            # raw_records is asked separately rather than sliced by the same
+            # positions: a context-scope skip drops records from `records` and not
+            # from `raw_records`, so the two are not always position-for-position.
+            kept = positions_named_by_repair(records, repairing)
+            if kept is not None:
+                records = [records[i] for i in kept]
+            raw_kept = positions_named_by_repair(raw_records, repairing)
+            if raw_kept is not None and raw_records is not None:
+                raw_records = [raw_records[i] for i in raw_kept]
+            repair_carry_ids = self._disposition_gate.carried_past_repair(
+                context.action_name, self._get_carry_forward_path(context)
+            )
+
         if raw_records is not None:
             # FILE mode: guard needs original_data for pre-observe alignment
             passing, guard_results, original_passing = self._guard_filter_file_mode(
@@ -130,8 +151,14 @@ class UnifiedProcessor:
             source_by_record = {}
 
         carry_results: list[ProcessingResult] = []
-        if self._disposition_gate is not None and passing:
-            to_process, carry_ids = self._disposition_gate.filter(passing, context.action_name)
+        to_process = passing
+        carry_ids: set[str] = set(repair_carry_ids)
+        if self._disposition_gate is not None:
+            if passing:
+                to_process, gate_carry_ids = self._disposition_gate.filter(
+                    passing, context.action_name
+                )
+                carry_ids |= gate_carry_ids
             if carry_ids:
                 relative_path = self._get_carry_forward_path(context)
                 if relative_path and context.storage_backend:
@@ -146,6 +173,10 @@ class UnifiedProcessor:
                         relative_path,
                         context.storage_backend,
                     )
+                    # A repair's carried records are not re-queued when their row is
+                    # missing: re-queueing would process a record the repair did not
+                    # name, which is the widening this narrowing exists to stop.
+                    missing_ids -= repair_carry_ids
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
                     for record in carry_data:

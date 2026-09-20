@@ -47,7 +47,7 @@ def _mock_backend(
             return prior_output[rel_path]
         raise FileNotFoundError(f"No file: {rel_path}")
 
-    backend.read_target.side_effect = read_target
+    backend.read_target_for_rewrite.side_effect = read_target
     return backend
 
 

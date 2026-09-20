@@ -370,10 +370,13 @@ class AgentWorkflow:
     def set_retried_records(self, record_ids: Iterable[str]) -> None:
         """Tell this run which records it is repairing, by id.
 
-        This widens rather than narrows: a record limit keeps the first N by
-        position and would cut a named record loose, so naming them makes the
-        limit admit them on top of its N. The run still processes everything it
-        would otherwise have processed.
+        A repair processes these and no others. The selection is applied above
+        every stage that writes before the disposition gate — the source save,
+        the context scope and the guard — and the file walk resolves to the
+        staged files holding them rather than walking to `file_limit`.
+
+        Record limits still admit them on top of their own N, at the actions
+        where the limit runs before the narrowing.
         """
         self.services.core.action_runner.retried_records = frozenset(record_ids)
 

@@ -5,6 +5,7 @@ import logging
 import sqlite3
 import string
 import threading
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,9 @@ from agent_actions.storage.backend import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SQL_MAX_PARAMS = 900
+"""Below SQLite's 999-parameter default, so an IN (...) list is chunked rather than rejected."""
 
 
 class SQLiteBackend(StorageBackend):
@@ -985,6 +989,25 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             cursor.execute(sql, (action_name, *terminal, NODE_LEVEL_RECORD_ID))
             return {row["record_id"] for row in cursor.fetchall()}
+
+    def source_files_for_records(self, record_ids: Iterable[str]) -> set[str]:
+        """Staging paths, suffix stripped, of the files holding *record_ids*."""
+        ids = tuple(dict.fromkeys(record_ids))
+        if not ids:
+            return set()
+        found: set[str] = set()
+        with self._lock:
+            cursor = self.connection.cursor()
+            for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                chunk = ids[start : start + _SQL_MAX_PARAMS]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT DISTINCT relative_path FROM source_data "
+                    f"WHERE source_guid IN ({placeholders})",
+                    chunk,
+                )
+                found.update(row["relative_path"] for row in cursor.fetchall())
+        return found
 
     def clear_disposition(
         self,
