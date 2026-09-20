@@ -5,6 +5,7 @@ import json
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     SECOND,
@@ -105,5 +106,55 @@ def test_retry_resolves_only_selected_file_past_file_limit(project):  # noqa: F8
     backend = _backend(project)
     try:
         assert backend._read_target_raw(ACTION, "pages.json") == before
+    finally:
+        backend.close()
+
+
+def test_retry_writes_no_node_level_disposition_for_a_file_it_never_opens(project):  # noqa: F811
+    """The node-level half of the same property, where it can actually fail.
+
+    A file whose records are all guard-filtered produces no output and only guard
+    outcomes, so processing it writes a node-level `skipped` — the vacuous
+    `only_guard_outcomes` that cascade-skips everything downstream. The original
+    run writes one here; `agac retry` clears it, and a repair that never opens
+    that file must not put it back. Break both the file walk and the source-save
+    narrowing and it does.
+    """
+    staging = project / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    (staging / "pages.json").unlink()
+    (staging / "a_pages.json").write_text(
+        json.dumps([{"page_content": f"keep {i}"} for i in range(3)])
+    )
+    (staging / "b_pages.json").write_text(json.dumps([{"page_content": "drop me"}] * 2))
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(
+        config.read_text().replace(
+            "    impl: flatten_pages\n",
+            "    impl: flatten_pages\n"
+            '    guard: { condition: \'source.page_content != "drop me"\', on_false: "filter" }\n',
+        )
+    )
+    assert CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"]).exit_code == 0
+    backend = _backend(project)
+    try:
+        selected = backend.read_target(ACTION, "a_pages.json")[0]["source_guid"]
+    finally:
+        backend.close()
+    assert _node_dispositions(project), "the fixture did not reach the state under test"
+    _fail(project, selected)
+
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(project, selected) == "success"
+    assert _node_dispositions(project) == []
+
+
+def _node_dispositions(root, action=ACTION):
+    backend = _backend(root)
+    try:
+        return [
+            r for r in backend.get_disposition(action) if r["record_id"] == NODE_LEVEL_RECORD_ID
+        ]
     finally:
         backend.close()
