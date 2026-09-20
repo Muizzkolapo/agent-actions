@@ -294,6 +294,11 @@ class VersionOutputCorrelator:
                     filename,
                 )
             except Exception as e:
+                # The correlated target lands only in the store on this branch,
+                # so a swallowed write leaves the file simply absent. The
+                # consumer's listing reads that as nothing to do rather than as
+                # an error, and slices a short input with nothing raised.
+                forget_slice_observation(self.storage_backend, action_name)
                 logger.warning(
                     "Failed to write correlated data to storage backend for %s: %s",
                     action_name,

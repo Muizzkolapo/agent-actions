@@ -33,11 +33,30 @@ class _Backend:
     """Enough storage backend for the walk; a real class so the observation
     registry can hold it weakly and so no attribute answers truthy by accident."""
 
-    def __init__(self, by_action, *, list_errors=(), read_errors=(), read_exception=None):
+    def __init__(
+        self,
+        by_action,
+        *,
+        list_errors=(),
+        read_errors=(),
+        read_exception=None,
+        write_errors=(),
+    ):
         self._by_action = by_action
         self._list_errors = set(list_errors)
         self._read_errors = set(read_errors)
         self._read_exception = read_exception
+        self._write_errors = set(write_errors)
+        self.written: list[tuple[str, str, int]] = []
+
+    def write_target(self, action_name, relative_path, data):
+        """Production calls this on the correlator's write path. A stub without
+        it is swallowed by that path's `except Exception`, which silently turns
+        every write into a failure — and hides the very loss under test."""
+        if relative_path in self._write_errors:
+            raise OSError("database is locked")
+        self.written.append((action_name, relative_path, len(data)))
+        self._by_action.setdefault(action_name, {})[relative_path] = data
 
     def list_target_files(self, action_name):
         if action_name in self._list_errors:
@@ -246,6 +265,27 @@ class TestTheVersionCorrelator:
 
         assert slice_observation(backend, "consumer") is None
 
+    def test_a_correlated_file_that_fails_to_write_poisons_the_count(self, tmp_path):
+        """The correlated target lands only in the store here, so a swallowed
+        write leaves it absent rather than erroring. The consumer lists what
+        was written, slices it, and nothing raises — the short count would
+        otherwise be stamped as a complete run."""
+        backend = _Backend(
+            {
+                "train_1": {"a.json": self._correlated(4, "train_1")},
+                "train_2": {"b.json": self._correlated(4, "train_2")},
+            },
+            write_errors={"b.json"},
+        )
+        record_indices_to_process(_records(4), {}, "consumer", storage_backend=backend)
+
+        self._correlate(tmp_path, backend)
+
+        assert any(name == "a.json" for _, name, _ in backend.written), (
+            "the surviving correlated file must still be written, or the test proves nothing"
+        )
+        assert slice_observation(backend, "consumer") is None
+
     def test_a_clean_correlation_leaves_the_count_alone(self, tmp_path):
         backend = _Backend(
             {
@@ -257,6 +297,7 @@ class TestTheVersionCorrelator:
 
         self._correlate(tmp_path, backend)
 
+        assert backend.written, "the correlated write must actually happen here"
         assert slice_observation(backend, "consumer") == (8, False)
 
 

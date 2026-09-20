@@ -70,8 +70,9 @@ the limit dropped any — so lifting a limit that truncated re-runs what it cut,
 serving a short run as a finished one. A limit that could not have dropped anything is not a
 change: raising it, or lifting one that never bit, leaves the action completed and its
 per-record dispositions intact. An action whose run cannot say what it processed — one that
-completed before these fields existed, or one that lost a file to an error — re-runs on any
-changed limit, as it always did.
+completed before these fields existed, one that lost a file to an error, one that ran with no
+storage backend, or a batch action resumed in a later process — re-runs on any changed limit,
+as it always did.
 
 
 ## Parallel Execution

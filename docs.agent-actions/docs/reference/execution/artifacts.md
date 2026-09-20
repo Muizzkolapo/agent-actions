@@ -109,8 +109,10 @@ change: a run that was not truncated took in everything available to it, so a
 later limit at or above `records_processed` leaves the record set whole and the
 action stays completed. A run that *was* truncated re-runs on any different
 limit, and so does a stamp that cannot say — one written before these fields
-existed, or one whose run lost a file to an error. `file_limit` is still compared
-as a bare value, so changing it re-runs the action either way.
+existed, one whose run lost a file to an error, one from a run with no storage
+backend, and one from a batch action resumed in a later process, which never
+slices and so has nothing to report. `file_limit` is still compared as a bare
+value, so changing it re-runs the action either way.
 
 | Status | Description |
 |--------|-------------|
