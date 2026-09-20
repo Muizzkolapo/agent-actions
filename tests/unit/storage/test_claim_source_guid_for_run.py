@@ -1,10 +1,10 @@
 """claim_source_guid_for_run: an in-memory, per-process claim, never persisted.
 
-The identity-assignment step (staging) uses this to find the next free
-occurrence when the same content is staged twice. It must never be backed by
-`source_data`: a persisted check can't tell a still-live duplicate file apart
-from this file's own row from before it was renamed, and would wrongly bump a
-renamed file's identity on every re-stage (614).
+Finds the next free occurrence when content is staged under a different
+relative_path. Never backed by `source_data`: a persisted check can't tell a
+still-live duplicate from this file's own row from before it was renamed.
+Scoped by relative_path, not just the guid: independent actions can share one
+staging file, and re-claiming it under the SAME path is not a collision.
 """
 
 import pytest
@@ -23,20 +23,26 @@ def backend(tmp_path):
 
 class TestClaimingWithinOneBackend:
     def test_the_first_claim_succeeds(self, backend):
-        assert backend.claim_source_guid_for_run("g1") is False
+        assert backend.claim_source_guid_for_run("g1", "a") is False
 
-    def test_a_second_claim_of_the_same_guid_is_reported_taken(self, backend):
-        backend.claim_source_guid_for_run("g1")
-        assert backend.claim_source_guid_for_run("g1") is True
+    def test_a_second_claim_under_a_different_path_is_reported_taken(self, backend):
+        backend.claim_source_guid_for_run("g1", "a")
+        assert backend.claim_source_guid_for_run("g1", "b") is True
+
+    def test_a_second_claim_under_the_same_path_is_not_a_collision(self, backend):
+        """Two independent actions reading the same staged file legitimately
+        claim the same guid under the same relative_path — not a duplicate."""
+        backend.claim_source_guid_for_run("g1", "a")
+        assert backend.claim_source_guid_for_run("g1", "a") is False
 
     def test_different_guids_do_not_collide(self, backend):
-        assert backend.claim_source_guid_for_run("g1") is False
-        assert backend.claim_source_guid_for_run("g2") is False
+        assert backend.claim_source_guid_for_run("g1", "a") is False
+        assert backend.claim_source_guid_for_run("g2", "a") is False
 
 
 class TestClaimsDoNotPersist:
     def test_a_claim_is_not_written_to_source_data(self, backend):
-        backend.claim_source_guid_for_run("g1")
+        backend.claim_source_guid_for_run("g1", "a")
 
         with backend._lock:
             cursor = backend.connection.cursor()
@@ -53,12 +59,12 @@ class TestClaimsDoNotPersist:
 
         first = SQLiteBackend(str(db_path), "test_workflow")
         first.initialize()
-        first.claim_source_guid_for_run("g1")
+        first.claim_source_guid_for_run("g1", "a")
         first.close()
 
         second = SQLiteBackend(str(db_path), "test_workflow")
         second.initialize()
         try:
-            assert second.claim_source_guid_for_run("g1") is False
+            assert second.claim_source_guid_for_run("g1", "renamed") is False
         finally:
             second.close()

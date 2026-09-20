@@ -547,13 +547,15 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def claim_source_guid_for_run(self, source_guid: str) -> bool:
-        """Claim source_guid for this run; True if it was already claimed.
+    def claim_source_guid_for_run(self, source_guid: str, relative_path: str) -> bool:
+        """Claim source_guid for this run under relative_path; True if taken elsewhere.
 
-        In-memory, scoped to this backend instance's process — never persisted.
-        Deliberately not backed by ``source_data``: a persisted check can't tell
-        a still-live duplicate from this file's own row before it was renamed,
-        and would wrongly bump a renamed file's identity on every re-stage.
+        In-memory, never persisted — a persisted check can't tell a still-live
+        duplicate from this file's own row before it was renamed. Scoped by
+        relative_path, not action_name: independent start-node actions share one
+        staging directory by default, so the same file is legitimately claimed
+        more than once per run — only a DIFFERENT relative_path claiming the
+        same guid is the real duplicate-content case.
         """
         ...
 

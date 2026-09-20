@@ -200,7 +200,7 @@ class SQLiteBackend(StorageBackend):
         self._lock = (
             threading.RLock()
         )  # Serialize write operations; RLock allows re-entry from connection property
-        self._claimed_source_guids_this_run: set[str] = set()
+        self._claimed_source_guids_this_run: dict[str, str] = {}
 
     @classmethod
     def create(cls, **kwargs) -> "SQLiteBackend":
@@ -601,13 +601,14 @@ class SQLiteBackend(StorageBackend):
 
         return [json.loads(row["data"]) for row in rows]
 
-    def claim_source_guid_for_run(self, source_guid: str) -> bool:
-        """Claim source_guid for this run; True if it was already claimed."""
+    def claim_source_guid_for_run(self, source_guid: str, relative_path: str) -> bool:
+        """Claim source_guid for this run under relative_path; True if taken elsewhere."""
         with self._lock:
-            if source_guid in self._claimed_source_guids_this_run:
-                return True
-            self._claimed_source_guids_this_run.add(source_guid)
-            return False
+            claimant = self._claimed_source_guids_this_run.get(source_guid)
+            if claimant is None:
+                self._claimed_source_guids_this_run[source_guid] = relative_path
+                return False
+            return claimant != relative_path
 
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
@@ -1023,22 +1024,21 @@ class SQLiteBackend(StorageBackend):
         ids = tuple(dict.fromkeys(record_ids))
         if not ids:
             return False
+        # Each id is bound twice in the combined predicate below, so chunk at
+        # half the param cap to stay under it.
+        chunk_size = _SQL_MAX_PARAMS // 2
         with self._lock:
             cursor = self.connection.cursor()
-            for start in range(0, len(ids), _SQL_MAX_PARAMS):
-                chunk = ids[start : start + _SQL_MAX_PARAMS]
+            for start in range(0, len(ids), chunk_size):
+                chunk = ids[start : start + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE source_guid IN ({placeholders}) "
-                    f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL LIMIT 1",
-                    chunk,
-                )
-                if cursor.fetchone() is not None:
-                    return True
-                cursor.execute(
-                    f"SELECT 1 FROM source_data "
-                    f"WHERE json_extract(data, '$.repeat_of_source_guid') IN ({placeholders}) LIMIT 1",
-                    chunk,
+                    f"SELECT 1 FROM source_data WHERE "
+                    f"(source_guid IN ({placeholders}) "
+                    f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
+                    f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders}) "
+                    f"LIMIT 1",
+                    chunk + chunk,
                 )
                 if cursor.fetchone() is not None:
                     return True

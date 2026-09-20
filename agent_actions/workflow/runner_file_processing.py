@@ -362,7 +362,7 @@ def _files_holding_retried_records(
     walking everything when the selection is unresolvable, or when a named
     record shares a repeat chain with another file: re-deriving identity needs
     every sibling file present, and a narrowed walk missing one re-derives a
-    colliding identity instead (614).
+    colliding identity instead.
     """
     if not runner.retried_records or runner.storage_backend is None:
         return items
