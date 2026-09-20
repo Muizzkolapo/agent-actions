@@ -558,6 +558,8 @@ class TestTheCompletionStamp:
             "model_name",
             "model_vendor",
             "config_hash",
+            "records_processed",
+            "truncated",
         }
 
     def test_a_changed_file_limit_invalidates(self, executor):
@@ -617,10 +619,14 @@ class TestTheCompletionStamp:
 
         assert stamp["record_limit"] == 2
 
-    def test_a_limit_that_could_not_truncate_still_invalidates(self, monkeypatch, executor):
-        """Deliberate and coarse: the comparison never sees how many records
-        exist, so it cannot tell a limit that bit from one that did not. The
-        action re-runs and reproduces its full output; the cost is the work."""
+    def test_a_stamp_that_cannot_say_what_it_processed_still_invalidates(
+        self, monkeypatch, executor
+    ):
+        """Grandfathered: a stamp written before the count was recorded cannot
+        tell a limit that bit from one that did not, and unknown has to keep
+        re-running rather than skip an action it has no grounds to vouch for.
+        What a stamp that *can* say does instead is in
+        tests/unit/workflow/test_limit_that_drops_nothing.py."""
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
         executor.deps.state_manager.get_status_details.return_value = {
             "record_limit": None,

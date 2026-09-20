@@ -107,6 +107,38 @@ class TestTheStampCarriesTheOutcome:
 
         assert stamp["records_processed"] is None
 
+    def test_an_uncountable_chunk_poisons_the_files_after_it_too(self, executor):
+        """Order must not matter: once unknown, a later countable chunk cannot
+        restore a total that is missing a file's worth of records."""
+        backend = _Backend()
+        executor.deps.action_runner.storage_backend = backend
+        record_indices_to_process("not a list", {}, "act", storage_backend=backend)
+        record_indices_to_process(_records(4), {}, "act", storage_backend=backend)
+
+        stamp = executor._completion_metadata("act", {})
+
+        assert stamp["records_processed"] is None
+
+    def test_a_repair_leaves_the_stored_count_where_it_found_it(self, executor):
+        """A repair processes the records it names and no others. Storing its
+        count would leave a smaller number than the action actually processed,
+        and the next run would read a limit above that as one which cannot
+        truncate — skipping an action it would in fact cut down."""
+        backend = _Backend()
+        executor.deps.action_runner.storage_backend = backend
+        executor.deps.action_runner.retried_records = frozenset({"g1"})
+        executor.deps.state_manager.get_status_details.return_value = _stamp(
+            records_processed=6, truncated=False
+        )
+        record_indices_to_process(
+            _records(1), {}, "act", retried=frozenset({"g1"}), storage_backend=backend
+        )
+
+        stamp = executor._completion_metadata("act", {})
+
+        assert stamp["records_processed"] == 6
+        assert stamp["truncated"] is False
+
     def test_actions_are_counted_separately(self, executor):
         backend = _Backend()
         executor.deps.action_runner.storage_backend = backend
