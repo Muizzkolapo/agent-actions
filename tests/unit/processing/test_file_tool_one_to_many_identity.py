@@ -72,7 +72,11 @@ class TestSeveralOutputsFromOneInput:
 
 
 class TestTheRowsSurviveBeingStored:
-    def test_carry_forward_returns_every_row(self):
+    def test_carry_forward_returns_every_row_it_is_asked_for(self):
+        """Asked for the stored rows' own identities, which is the shape a
+        repair passes. A retry asks with the *input* identities instead, and
+        the parent is legitimately absent from them — it is re-queued, loudly.
+        """
         rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = rows
@@ -106,8 +110,6 @@ class TestAMintedRowIsStillWholeWhenReadBack:
             "a2",
             [{"source_guid": g, "content": dict(UPSTREAM)} for g in ("G0", "G1", "G2")],
         )
-        for row in rows:
-            row.setdefault("content", {}).update(UPSTREAM)
 
         with tempfile.TemporaryDirectory() as directory:
             backend = SQLiteBackend(str(pathlib.Path(directory) / "s.db"), "wf")
