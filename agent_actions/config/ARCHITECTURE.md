@@ -285,11 +285,15 @@ These are the non-obvious behaviors, edge cases, and invariants that will bite y
 
 ### 1. ActionConfig uses `extra="forbid"`
 
-Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
+Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. The refusal names the declared key a stray one resembles, or lists the keys an action accepts. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
 
 ### 2. DefaultsConfig uses `extra="forbid"`
 
-Like `ActionConfig`, the defaults section refuses any key it does not declare, and the refusal names the declared key the stray one resembles. Generation parameters are declared fields — an extra never survived validation to reach `extract_generation_params()`, so a key the model does not know is a key nothing reads.
+The defaults section refuses undeclared keys the same way, through the same validator. Accepted spellings are read off the fields' aliases, because an aliased field validates from its alias and not from its own name.
+
+The invariant that makes the strictness safe: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins the containment; add to both when you add an inheritable field.
+
+Generation parameters are declared and inherited, `frequency_penalty` and `presence_penalty` included. An extra never survived validation to reach `extract_generation_params()`, so declaring a key without adding it to `SIMPLE_CONFIG_FIELDS` would accept it and then drop it — the failure this strictness exists to prevent.
 
 ### 3. AgentConfig uses `extra="allow"`
 

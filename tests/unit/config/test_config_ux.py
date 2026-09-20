@@ -52,8 +52,8 @@ class TestAnUndeclaredDefaultsKey:
             tmp_path, "defaults:\n  modle_name: gpt-4\n  model_vendor: openai\n"
         )
 
-        assert "modle_name" in message
-        assert "model_name" in message
+        assert "did you mean 'model_name'?" in message
+        assert "valid defaults keys are" not in message
 
     def test_a_key_resembling_nothing_names_the_keys_the_block_takes(self, tmp_path):
         message = self._refusal(tmp_path, "defaults:\n  bogus_key: value\n")
@@ -61,7 +61,7 @@ class TestAnUndeclaredDefaultsKey:
         assert "bogus_key" in message
         assert "model_name" in message and "model_vendor" in message
 
-    def test_declared_keys_load(self, tmp_path):
+    def test_declared_keys_reach_expansion(self, tmp_path):
         cm = _make_manager(
             tmp_path,
             _WORKFLOW_HEADER
@@ -69,12 +69,12 @@ class TestAnUndeclaredDefaultsKey:
             + "defaults:\n  model_vendor: openai\n  model_name: gpt-4\n",
         )
 
-        assert _call_get_user_agents(cm, tmp_path) is not None
+        assert _call_get_user_agents(cm, tmp_path) == [{"agent_type": "extract"}]
 
-    def test_no_defaults_block_loads(self, tmp_path):
+    def test_no_defaults_block_reaches_expansion(self, tmp_path):
         cm = _make_manager(tmp_path, _WORKFLOW_HEADER + _ACTIONS_BLOCK)
 
-        assert _call_get_user_agents(cm, tmp_path) is not None
+        assert _call_get_user_agents(cm, tmp_path) == [{"agent_type": "extract"}]
 
 
 class TestFuzzyMatchSuggestions:

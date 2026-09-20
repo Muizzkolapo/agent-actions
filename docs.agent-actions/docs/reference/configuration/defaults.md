@@ -56,8 +56,8 @@ actions:
 | `file_limit` | integer | Max files to walk per action (default: unlimited). Still applies to [`agac retry`](../cli/retry), which cannot reach a retried record in a later file |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
-:::note Schema vs Runtime
-The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
+:::note Every defaultable key is declared
+`DefaultsConfig` declares every key a `defaults:` block accepts, and a key it does not declare is refused at load rather than dropped. The refusal names the declared key a stray one resembles, or lists the keys the block takes. Anything the framework reads out of `defaults:` is therefore also writable there — if a key is worth inheriting, it is declared.
 :::
 
 ## Example
@@ -360,9 +360,16 @@ defaults:
 
 **How does Agent Actions catch configuration errors?** It validates that:
 
-1. Default field names are recognized
-2. Default values are valid types
+1. Default field names are declared — an undeclared key is refused, not ignored
+2. Default values are valid types and within range
 3. Required fields are present (either in defaults or actions)
+
+### Unrecognized Default Key
+
+```
+ConfigurationError: Workflow configuration is invalid
+  defaults: unknown defaults key 'temperture' — did you mean 'temperature'?
+```
 
 ### Missing Required Field
 

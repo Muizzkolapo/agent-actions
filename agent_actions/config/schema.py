@@ -9,16 +9,41 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
 
-# Measured against the keys a defaults block declares: a transposition or a
-# dropped letter sits at 0.667 and above, while a key that belongs to no field
-# at all — a superseded spelling, a project's own annotation — reaches 0.600.
+# Measured: a transposition or a dropped letter scores 0.667 and above, a
+# spelling belonging to no field 0.600 and below. Distinct names still collide,
+# so a suggestion is a guess offered beside the full list, not a diagnosis.
 _NEAR_MISS_CUTOFF = 0.65
 
 
-def _nearest_defaults_key(key: str, declared: list[str]) -> str | None:
-    """The key *key* was probably meant to be, or None if it resembles none of them."""
-    matches = difflib.get_close_matches(key, declared, n=1, cutoff=_NEAR_MISS_CUTOFF)
-    return matches[0] if matches else None
+def _accepted_keys(model: type[BaseModel]) -> list[str]:
+    """The key spellings *model* validates from, which is the alias where one is set."""
+    return sorted(
+        (field.validation_alias if isinstance(field.validation_alias, str) else field.alias) or name
+        for name, field in model.model_fields.items()
+    )
+
+
+def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
+    """Name what an undeclared key resembles, or the keys *surface* accepts."""
+    if not isinstance(data, dict):
+        return data
+    accepted = _accepted_keys(model)
+    stray = sorted(str(key) for key in data if str(key) not in accepted)
+    if not stray:
+        return data
+
+    problems: list[str] = []
+    unguessed = False
+    for key in stray:
+        near = difflib.get_close_matches(key, accepted, n=1, cutoff=_NEAR_MISS_CUTOFF)
+        if near:
+            problems.append(f"unknown {surface} key '{key}' — did you mean '{near[0]}'?")
+        else:
+            problems.append(f"unknown {surface} key '{key}'")
+            unguessed = True
+    if unguessed:
+        problems.append(f"valid {surface} keys are " + ", ".join(accepted))
+    raise ValueError("; ".join(problems))
 
 
 def _validate_bool_or_mapping(v: Any, field_name: str, usage_hint: str) -> Any:
@@ -249,6 +274,11 @@ class ActionConfig(_RetryValidators):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "action")
+
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
     kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
@@ -326,7 +356,15 @@ class ActionConfig(_RetryValidators):
     output_field: str | None = Field(default=None, description="Output field name")
     temperature: float | None = Field(default=None, description="Generation temperature")
     max_tokens: int | None = Field(default=None, description="Maximum tokens")
-    top_p: float | None = Field(default=None, description="Top-p sampling parameter")
+    top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
+    )
+    frequency_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Frequency penalty"
+    )
+    presence_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Presence penalty"
+    )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
     constraints: Any | None = Field(default=None, description="Generation constraints")
 
@@ -403,30 +441,8 @@ class DefaultsConfig(_RetryValidators):
 
     @model_validator(mode="before")
     @classmethod
-    def _refuse_undeclared_keys(cls, data: Any) -> Any:
-        """Name what an undeclared key resembles, or what the block does take.
-
-        Pydantic refuses it either way; this names the near match first, and
-        covers every undeclared key rather than the ones a table remembers.
-        """
-        if not isinstance(data, dict):
-            return data
-        declared = sorted(cls.model_fields)
-        stray = sorted(str(key) for key in data if key not in cls.model_fields)
-        if not stray:
-            return data
-
-        problems = []
-        for key in stray:
-            near = _nearest_defaults_key(key, declared)
-            problems.append(
-                f"unknown defaults key '{key}' — did you mean '{near}'?"
-                if near
-                else f"unknown defaults key '{key}'"
-            )
-        if any(_nearest_defaults_key(key, declared) is None for key in stray):
-            problems.append("the keys a defaults block takes are " + ", ".join(declared))
-        raise ValueError("; ".join(problems))
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "defaults")
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")
@@ -461,7 +477,7 @@ class DefaultsConfig(_RetryValidators):
     output_field: str | None = Field(default=None, description="Default output field name")
     temperature: float | None = Field(default=None, description="Default temperature")
     max_tokens: int | None = Field(default=None, description="Default max tokens")
-    top_p: float | None = Field(default=None, description="Default top-p")
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(
         default=None, ge=-2.0, le=2.0, description="Default frequency penalty"
     )
@@ -484,6 +500,23 @@ class DefaultsConfig(_RetryValidators):
     )
     chunk_size: int | None = Field(default=None, description="Default chunk size")
     chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
+
+    # --- Read out of defaults by field inheritance ---
+    where_clause: dict[str, Any] | None = Field(
+        default=None, description="Default WHERE clause configuration for filtering"
+    )
+    anthropic_version: str | None = Field(
+        default=None, description="Default API version header for Anthropic requests"
+    )
+    enable_prompt_caching: bool | None = Field(
+        default=None, description="Default Anthropic prompt caching setting"
+    )
+    max_execution_time: int | None = Field(
+        default=None, ge=1, description="Default maximum execution time in seconds"
+    )
+    enable_caching: bool | None = Field(default=None, description="Default caching setting")
+    tokenizer_model: str | None = Field(default=None, description="Default tokenizer model")
+    split_method: str | None = Field(default=None, description="Default chunk split method")
 
     # --- Limit controls ---
     record_limit: int | None = Field(default=None, ge=1, description="Default record limit")
