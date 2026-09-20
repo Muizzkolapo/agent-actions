@@ -129,21 +129,14 @@ class TestARetryChangesNothing:
 
 
 class TestTheSameContentInTwoFiles:
-    """Identity is derived from content and carries no path, so the same content
-    staged in two files used to land both on one guid — same collision
-    `TestARunKeepsEveryStagedRecord` covers within one file, just spread across
-    two. Giving a same-file repeat its own identity was not enough, because the
-    occurrence count reset for every new file: the second copy in `a.json` and
-    the second copy in `b.json` both asked "have I seen this guid in THIS file
-    before?" and both got the same answer.
+    """The same collision `TestARunKeepsEveryStagedRecord` covers within one file, spread across two.
 
-    The fix asks the store instead of just the file being read: a candidate guid
-    is taken if it is already sitting in `source_data`, from this file, an
-    earlier file in the same run, or an earlier run entirely — not just from
-    rows seen so far in this loop. That makes every staged occurrence's identity
-    unique without moving anything already stored: an existing guid is never
-    recomputed, only a new write that collides with one picks the next free
-    occurrence."""
+    Content-derived identity has no path, and the same-file fix's occurrence
+    counter reset for every new file, so identical content in two files still
+    collided. The fix checks the store instead of just the file being read,
+    scoped to exclude the file's own path so a retry still reuses its own
+    prior identity.
+    """
 
     @pytest.fixture
     def across_files(self, tmp_path, monkeypatch):

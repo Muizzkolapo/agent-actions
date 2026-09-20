@@ -547,6 +547,18 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    def source_guid_claimed_elsewhere(self, source_guid: str, relative_path: str) -> bool:
+        """Whether a DIFFERENT file already has a source_data row with this source_guid.
+
+        The identity-assignment step (staging) uses this to find the next free
+        occurrence for content that collides with something staged under a
+        different relative_path — possibly in an earlier run. Excludes
+        ``relative_path`` itself so re-staging the same file (a retry or resume)
+        reuses its own prior identities instead of colliding with them.
+        """
+        ...
+
+    @abstractmethod
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         ...

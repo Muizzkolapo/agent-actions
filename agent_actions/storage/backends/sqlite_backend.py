@@ -600,6 +600,21 @@ class SQLiteBackend(StorageBackend):
 
         return [json.loads(row["data"]) for row in rows]
 
+    def source_guid_claimed_elsewhere(self, source_guid: str, relative_path: str) -> bool:
+        """Whether a DIFFERENT file already has a source_data row with this source_guid.
+
+        Scoped to exclude ``relative_path`` itself so re-staging the same file (a retry
+        or resume, reading identical rows in the same order) reuses its own prior
+        identities instead of colliding with them.
+        """
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT 1 FROM source_data WHERE source_guid = ? AND relative_path != ? LIMIT 1",
+                (source_guid, relative_path),
+            )
+            return cursor.fetchone() is not None
+
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
