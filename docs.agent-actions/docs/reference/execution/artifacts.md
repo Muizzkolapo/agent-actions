@@ -100,8 +100,14 @@ the limit that was **in force** — from the workflow config, `--record-limit`, 
 `records_processed` and `truncated` record what the run actually did: how many
 records it took in, and whether the limit dropped any. Alongside those are
 `file_limit`, `model_name`, `model_vendor` and a `config_hash` over the prompt,
-model, schema and guard. If any of them differs on a later run, the action is
-reset to `pending` and re-executed rather than skipped.
+schema and guard. The model is deliberately outside that hash — it is compared
+from `model_name`/`model_vendor` instead, so that adding it could not rotate
+every stored digest at once and re-run every workflow. If one of them differs on
+a later run the action is reset to `pending` and re-executed rather than
+skipped, with two qualifications: the model and hash comparisons only fire when
+the stamp actually recorded a value, so state predating them is grandfathered
+rather than mass-invalidated, and a run that is only repairing named records
+compares none of it and re-stamps nothing.
 
 A changed `record_limit` is the exception. Because the stamp says what the run
 processed, a limit that could not have dropped anything is not treated as a

@@ -475,3 +475,6 @@ class TestARunThatLostAFile:
         assert "already complete" not in second.output, (
             "the action was skipped on a limit that only looked harmless"
         )
+        # Not just "it re-ran for some reason": 4 from the file that always
+        # read, plus 6 of the recovered 9 — the limit applies per file.
+        assert _processed(project) == 10
