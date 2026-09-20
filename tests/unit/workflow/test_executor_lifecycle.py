@@ -318,6 +318,8 @@ class TestHandleRunSuccess:
             model_name=None,
             model_vendor=None,
             config_hash=ANY,
+            records_processed=None,
+            truncated=None,
         )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
@@ -588,6 +590,9 @@ class TestHandleAgentSkip:
             model_name=None,
             model_vendor=None,
             config_hash=ANY,
+            # A WHERE-skip never slices, so it has no count to report.
+            records_processed=None,
+            truncated=None,
         )
         mock_fire.assert_called_once()
 
