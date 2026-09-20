@@ -175,9 +175,7 @@ class AgacClient(BaseClient):
         FakeDataGenerator.set_context(prompt=seed_key)
 
         if schema:
-            # Extract the actual schema structure
-            # Schema can be: {"name": "...", "schema": {...}} or just {...}
-            actual_schema = schema.get("schema", schema)
+            actual_schema = FakeDataGenerator.unwrap_schema(schema)
             fake_data = FakeDataGenerator.generate_from_schema(
                 actual_schema, attempt, prompt=seed_key
             )
