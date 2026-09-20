@@ -35,18 +35,18 @@ def _collapse_contributor_guids(
     source_mapping: dict[int, int | list[int] | None] | None,
     records: list[dict[str, Any]],
 ) -> list[str]:
-    """Guids a many-to-one output consumed but does not carry.
+    """Guids an output consumed but does not carry.
 
-    A collapsed output inherits only its first parent's guid; without these,
-    the remaining contributors leave no disposition row at the consuming
-    action.
+    A collapsed output inherits only its first parent's guid, and a parent that
+    produced several rows is carried by none of them — each was minted its own
+    identity. Without these, such a parent leaves no disposition row at the
+    consuming action and is reprocessed on every retry.
     """
     carried = {item.get("source_guid") for item in structured_data}
     contributors: set[str] = set()
     for src in (source_mapping or {}).values():
-        if not isinstance(src, list):
-            continue
-        for idx in src:
+        indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
+        for idx in indices:
             if isinstance(idx, int) and 0 <= idx < len(records):
                 guid = records[idx].get("source_guid")
                 if guid and guid not in carried:
