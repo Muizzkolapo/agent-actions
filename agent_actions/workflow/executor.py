@@ -40,7 +40,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import resolve_record_limit
+from agent_actions.utils.limits import resolve_file_limit, resolve_record_limit
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -221,10 +221,8 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
-    def _stamped_record_limit(
-        self, action_name: str, action_config: ActionConfigDict
-    ) -> int | None:
-        """The limit in force, unless this run is only repairing records.
+    def _stamped_limit(self, action_name: str, key: str, in_force: int | None) -> int | None:
+        """*in_force*, unless this run is only repairing records — then the stored one.
 
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
@@ -232,11 +230,9 @@ class ActionExecutor:
         and re-run it. The same reason the comparison ignores a limit here.
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
-            stored: int | None = self.deps.state_manager.get_status_details(action_name).get(
-                "record_limit"
-            )
+            stored: int | None = self.deps.state_manager.get_status_details(action_name).get(key)
             return stored
-        return resolve_record_limit(action_config)[0]
+        return in_force
 
     def _completion_metadata(
         self, action_name: str, action_config: ActionConfigDict
@@ -244,8 +240,12 @@ class ActionExecutor:
         """Build metadata dict for completed action status."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
-            "record_limit": self._stamped_record_limit(action_name, action_config),
-            "file_limit": cfg.get("file_limit"),
+            "record_limit": self._stamped_limit(
+                action_name, "record_limit", resolve_record_limit(action_config)[0]
+            ),
+            "file_limit": self._stamped_limit(
+                action_name, "file_limit", resolve_file_limit(action_config)[0]
+            ),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
@@ -264,7 +264,7 @@ class ActionExecutor:
         # Coarse on purpose — nothing here knows the record count, so a limit
         # too large to have dropped anything still counts as a change.
         record_limit, _ = resolve_record_limit(action_config)
-        file_limit = action_config.get("file_limit")
+        file_limit, _ = resolve_file_limit(action_config)
         # A retry asks for named records, not for a different amount of work, so
         # neither limit standing during one is something it asked for. Resetting
         # a completed action on one clears that action's dispositions and re-runs

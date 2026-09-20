@@ -20,6 +20,7 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.limits import resolve_file_limit
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -196,13 +197,30 @@ def _raise_action_fatal(
     )
 
 
-def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
-    """Return True (and log) if file_limit has been reached."""
-    file_limit = action_config.get("file_limit")
-    if file_limit is not None and count >= file_limit:
-        logger.info("file_limit=%d reached for %s", count, action_name)
-        return True
-    return False
+def _file_limit_reached(runner: ActionRunner, params: FileProcessParams, count: int) -> bool:
+    """Whether the walk has taken as many files as the limit in force allows.
+
+    A repair is never held back: it walks the files holding the records it named,
+    and stopping short of one leaves that record's cleared disposition unwritten.
+
+    Announced here rather than where the limit resolves, because only the walk
+    knows whether it stopped — loudly when something outside the config stopped
+    it, since a shortened run looks like a complete one.
+    """
+    if runner.retried_records:
+        return False
+    limit, source = resolve_file_limit(params.action_config)
+    if limit is None or count < limit:
+        return False
+    logger.log(
+        logging.INFO if source == "file_limit" else logging.WARNING,
+        "%s=%d: %s stopped after %d file(s)",
+        source,
+        limit,
+        params.action_name,
+        count,
+    )
+    return True
 
 
 def should_skip_item(
@@ -343,7 +361,7 @@ def process_directory_files(
                 exc_info=True,
             )
 
-        if _file_limit_reached(params.action_config, count, params.action_name):
+        if _file_limit_reached(runner, params, count):
             break
 
     _log_processing_errors(
@@ -447,7 +465,7 @@ def process_merged_files(
                 exc_info=True,
             )
 
-        if _file_limit_reached(params.action_config, files_processed_count, params.action_name):
+        if _file_limit_reached(runner, params, files_processed_count):
             break
 
     _log_processing_errors(
@@ -642,7 +660,7 @@ def process_from_storage_backend(
                 )
             )
             files_processed += 1
-            if _file_limit_reached(params.action_config, files_processed, params.action_name):
+            if _file_limit_reached(runner, params, files_processed):
                 break
 
         except Exception as e:

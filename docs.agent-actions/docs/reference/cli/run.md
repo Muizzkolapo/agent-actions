@@ -41,34 +41,45 @@ agac run -a my_workflow --execution-mode parallel
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
+| `--file-limit N` | Walk at most N input files per action — the same unit `file_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
 
 ## Running a project smaller than it is
 
-A workflow's record limits live in the project's config, per action. To run it cheaply from
+A workflow's limits live in the project's config, per action. To run it cheaply from
 outside — a smoke check, a quick pass over a real dataset, one action under a debugger —
-cap the whole run from the command line:
+bound the whole run from the command line:
 
 ```bash
-agac run -a my_workflow --record-limit 2
+agac run -a my_workflow --record-limit 2 --file-limit 1
 ```
 
-The cap applies to **every** action, including those that configure no `record_limit`, which
-matters more than it sounds: a workflow that fans out across dozens of actions with repair
+The bound applies to **every** action, including those that configure no limit of their own,
+which matters more than it sounds: a workflow that fans out across dozens of actions with repair
 loops turns a small configured limit into a very large number of model calls.
 
-It counts **per input file**, the same unit [`record_limit`](../configuration/defaults) uses —
-so a staging directory holding five files and `--record-limit 2` processes up to ten records per
-action, not two. Stage fewer files if you need a harder ceiling.
+The two flags bound different axes, and a run is proportional to both. `--record-limit` counts
+**per input file**, the same unit [`record_limit`](../configuration/defaults) uses — so a staging
+directory holding five files and `--record-limit 2` processes up to ten records per action, not
+two. `--file-limit` bounds the walk itself, so `--file-limit 1` reaches one of those five files
+whatever the record limit is.
 
-Each action that actually drops records logs a line naming the flag and the counts; an action
-with fewer records than the limit stays quiet. `AGAC_RECORD_LIMIT` does the same job from the
-environment; when both are set the flag wins, because it was typed for this run. Either way the
-limit in force is stored with the action, so lifting it re-runs what it truncated instead of
-serving a short run as a finished one. Changing it to any other value re-runs the action too,
-including to one larger than the input — the stored limit records what was set, not whether it
-dropped anything.
+Each action that actually drops records logs a line naming the flag and the counts, and each
+action whose walk actually stops logs one naming the flag that stopped it; an action smaller than
+its limit stays quiet. `AGAC_RECORD_LIMIT` and `AGAC_FILE_LIMIT` do the same job from the
+environment; when both doors are used the flag wins, because it was typed for this run. A value
+that cannot bound anything fails the run rather than being ignored, and fails it before any
+action starts.
+
+Either way the limits in force are stored with the action, so lifting one re-runs what it held
+back instead of serving a short run as a finished one. Changing one to any other value re-runs the
+action too, including to one larger than the input — the stored limit records what was set, not
+whether it held anything back.
+
+Neither flag holds back [`agac retry`](retry): a repair walks every file holding a record it
+named. Stopping short of one would leave that record's cleared disposition unwritten, which is
+the erasure a limit exists to avoid.
 
 
 ## Parallel Execution

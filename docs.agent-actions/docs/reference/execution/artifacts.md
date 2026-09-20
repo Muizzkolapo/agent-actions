@@ -92,13 +92,13 @@ Persists per-action execution state for resumable runs:
 ```
 
 A completed action also stores what it ran under, so the next run can tell an
-action that is genuinely finished from one that was cut short. `record_limit` is
-the limit that was **in force** — from the workflow config, `--record-limit`, or
-`AGAC_RECORD_LIMIT`, whichever won — not the one the config asks for. It records
-what the limit was, not whether it dropped anything, so a limit larger than the
-input still counts as a change and re-runs the action. Alongside
-it are `file_limit`, `model_name`, `model_vendor` and a `config_hash` over the
-prompt, model, schema and guard. If any of them differs on a later run, the
+action that is genuinely finished from one that was cut short. `record_limit` and
+`file_limit` are the limits that were **in force** — from the workflow config,
+the flag, or the environment variable, whichever won — not the ones the config
+asks for. They record what the limits were, not whether either held anything
+back, so a limit larger than the input still counts as a change and re-runs the
+action. Alongside them are `model_name`, `model_vendor` and a `config_hash` over
+the prompt, model, schema and guard. If any of them differs on a later run, the
 action is reset to `pending` and re-executed rather than skipped.
 
 | Status | Description |

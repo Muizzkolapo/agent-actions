@@ -1,4 +1,4 @@
-"""Resolution of the per-action record limit."""
+"""Resolution of the per-action record and file limits."""
 
 from __future__ import annotations
 
@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 _STORED_ROWS: WeakKeyDictionary[Any, dict[str, dict[str, int]]] = WeakKeyDictionary()
 
 RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
+FILE_LIMIT_ENV = "AGAC_FILE_LIMIT"
 
 # Stamped onto every action config when the run was asked for a limit.
 RECORD_LIMIT_KEY = "_record_limit"
+FILE_LIMIT_KEY = "_file_limit"
 
 # Renamed. Read only to reject it: a run that believes it is capped and is not
 # spends against a provider with no limit at all.
@@ -25,69 +27,88 @@ _RETIRED_ENV = "AGAC_MAX_RECORDS"
 
 
 def check_environment() -> None:
-    """Refuse a retired variable name before a run starts.
+    """Refuse an environment the run cannot honour before it starts.
 
-    Resolving refuses it too, but the first resolve of a run can happen after an
-    action's work is done — a batch resume never slices — and failing there
+    Resolving refuses the same values, but the first resolve of a run can happen
+    after an action's work is done — a batch resume never slices, and a file
+    limit is not consulted until a file has been walked — and failing there
     leaves that action unstamped. Called once while the run is being assembled.
     """
+    _refuse_retired_name()
+    _from_environment(RECORD_LIMIT_ENV)
+    _from_environment(FILE_LIMIT_ENV)
+
+
+def _refuse_retired_name() -> None:
     if os.environ.get(_RETIRED_ENV) is not None:
         raise ValueError(f"{_RETIRED_ENV} is not read; set {RECORD_LIMIT_ENV} instead")
 
 
-def _from_environment() -> int | None:
-    """Read the limit the environment asks for, refusing one that cannot limit anything."""
-    check_environment()
-    raw = os.environ.get(RECORD_LIMIT_ENV)
+def _from_environment(name: str) -> int | None:
+    """Read the limit *name* asks for, refusing one that cannot limit anything."""
+    raw = os.environ.get(name)
     if raw is None:
         return None
     try:
         limit = int(raw)
     except ValueError:
-        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} is not an integer") from None
+        raise ValueError(f"{name}={raw!r} is not an integer") from None
     if limit < 1:
-        raise ValueError(f"{RECORD_LIMIT_ENV}={raw!r} must be at least 1")
+        raise ValueError(f"{name}={raw!r} must be at least 1")
     return limit
 
 
-def _from_run(action_config: Mapping[str, Any]) -> int | None:
+def _from_run(action_config: Mapping[str, Any], key: str, flag: str) -> int | None:
     """Read the limit this run was asked for, refusing one that cannot limit anything."""
-    limit = action_config.get(RECORD_LIMIT_KEY)
+    limit = action_config.get(key)
     if limit is None:
         return None
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ValueError(f"--record-limit={limit!r} must be an integer of at least 1")
+        raise ValueError(f"{flag}={limit!r} must be an integer of at least 1")
     return int(limit)
 
 
-def resolve_record_limit(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
-    """The record limit in force for an action, and the name of what set it.
+def _resolve(
+    action_config: Mapping[str, Any], config_key: str, run_key: str, env: str, flag: str
+) -> tuple[int | None, str]:
+    """The limit in force for an action, and the name of what set it.
 
-    Silent by design. Whether anything was actually dropped depends on how many
-    records there are, which only a slice site knows; announcing from here
-    describes a truncation that may not happen.
+    Silent by design. Whether anything was actually held back depends on how much
+    there is to hold back, which only the site applying the limit knows;
+    announcing from here describes a truncation that may not happen.
 
     ``bool`` is rejected rather than treated as an int: ``record_limit: true``
     in YAML would otherwise silently cap a run at one record.
     """
-    configured = action_config.get("record_limit")
-    if isinstance(configured, bool) or not isinstance(configured, int) or configured < 1:
-        configured = None
+    _refuse_retired_name()
+    in_config = action_config.get(config_key)
+    if isinstance(in_config, bool) or not isinstance(in_config, int) or in_config < 1:
+        in_config = None
 
     # Read the variable whichever source wins: its guarantee is that an unusable
     # value fails the run, and being outranked is not the same as going unread.
-    environment = _from_environment()
-    asked = _from_run(action_config)
+    environment = _from_environment(env)
+    asked = _from_run(action_config, run_key, flag)
     # A limit typed for this run outranks the environment by source, not by which
     # number is smaller — otherwise ambient configuration could quietly overrule
     # what was asked for.
-    override, source = (
-        (asked, "--record-limit") if asked is not None else (environment, RECORD_LIMIT_ENV)
+    override, source = (asked, flag) if asked is not None else (environment, env)
+
+    if override is None or (in_config is not None and in_config <= override):
+        return in_config, config_key
+    return override, source
+
+
+def resolve_record_limit(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """How many records of an input file an action may process, and what set it."""
+    return _resolve(
+        action_config, "record_limit", RECORD_LIMIT_KEY, RECORD_LIMIT_ENV, "--record-limit"
     )
 
-    if override is None or (configured is not None and configured <= override):
-        return configured, "record_limit"
-    return override, source
+
+def resolve_file_limit(action_config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """How many input files an action may walk, and what set it."""
+    return _resolve(action_config, "file_limit", FILE_LIMIT_KEY, FILE_LIMIT_ENV, "--file-limit")
 
 
 def _announce_truncation(source: str, limit: int, kept: int, total: int, action_name: str) -> None:

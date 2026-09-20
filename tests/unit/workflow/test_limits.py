@@ -13,11 +13,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.utils.limits import FILE_LIMIT_KEY
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
     _file_limit_reached,
     process_directory_files,
+    process_from_storage_backend,
     process_merged_files,
 )
 
@@ -36,18 +38,73 @@ def _backend_holding_nothing():
     return backend
 
 
+def _walk(action_config, retried=frozenset()):
+    """A runner and params carrying just what the file-limit check reads."""
+    runner = MagicMock()
+    runner.retried_records = retried
+    params = MagicMock()
+    params.action_config = action_config
+    params.action_name = "act"
+    return runner, params
+
+
 class TestFileLimitReached:
     def test_none_means_no_limit(self):
-        assert _file_limit_reached({}, 100, "act") is False
+        assert _file_limit_reached(*_walk({}), 100) is False
 
     def test_below_limit(self):
-        assert _file_limit_reached({"file_limit": 5}, 3, "act") is False
+        assert _file_limit_reached(*_walk({"file_limit": 5}), 3) is False
 
     def test_at_limit(self):
-        assert _file_limit_reached({"file_limit": 5}, 5, "act") is True
+        assert _file_limit_reached(*_walk({"file_limit": 5}), 5) is True
 
     def test_above_limit(self):
-        assert _file_limit_reached({"file_limit": 5}, 10, "act") is True
+        assert _file_limit_reached(*_walk({"file_limit": 5}), 10) is True
+
+    def test_a_run_level_limit_applies_where_the_config_sets_none(self):
+        assert _file_limit_reached(*_walk({FILE_LIMIT_KEY: 2}), 2) is True
+
+    def test_a_run_level_limit_does_not_raise_a_smaller_configured_one(self):
+        assert _file_limit_reached(*_walk({"file_limit": 1, FILE_LIMIT_KEY: 5}), 1) is True
+
+    def test_the_environment_applies_where_the_config_sets_none(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        assert _file_limit_reached(*_walk({}), 2) is True
+
+    def test_a_repair_is_never_held_back(self):
+        """It walks the files holding the records it named; stopping short of one
+        leaves that record's cleared disposition unwritten."""
+        assert _file_limit_reached(*_walk({"file_limit": 1}, frozenset({"r1"})), 5) is False
+
+    def test_a_repair_is_not_held_back_by_the_environment_either(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        assert _file_limit_reached(*_walk({}, frozenset({"r1"})), 5) is False
+
+    def test_a_limit_from_outside_the_config_is_announced_loudly(self, monkeypatch, caplog):
+        """A shortened walk looks like a complete one, and a variable the caller
+        has forgotten is set is the case that needs saying."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
+            _file_limit_reached(*_walk({}), 2)
+
+        assert [r.levelname for r in caplog.records] == ["WARNING"]
+        assert "AGAC_FILE_LIMIT=2" in caplog.records[0].message
+
+    def test_a_configured_limit_is_announced_quietly(self, caplog):
+        """The run behaving as the project wrote it."""
+        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
+            _file_limit_reached(*_walk({"file_limit": 2}), 2)
+
+        assert [r.levelname for r in caplog.records] == ["INFO"]
+
+    def test_a_walk_that_was_not_stopped_says_nothing(self, caplog):
+        with caplog.at_level("INFO", logger="agent_actions.workflow.runner_file_processing"):
+            _file_limit_reached(*_walk({"file_limit": 5}), 3)
+
+        assert caplog.records == [], [r.message for r in caplog.records]
 
 
 # ── file_limit in process_directory_files ─────────────────────────────
@@ -164,6 +221,67 @@ class TestFileLimitMergedFiles:
         _found, processed, _errors = process_merged_files(runner, params)
         assert processed == 2
         assert runner._process_single_file.call_count == 2
+
+    def test_a_repair_merges_every_group(self, tmp_path):
+        upstream = tmp_path / "upstream"
+        output = tmp_path / "output"
+        upstream.mkdir()
+        output.mkdir()
+
+        for i in range(4):
+            (upstream / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+
+        runner = MagicMock()
+        runner.retried_records = frozenset({"r1"})
+        runner._collect_files_from_upstream.return_value = {
+            Path(f"file_{i}.json"): [upstream / f"file_{i}.json"] for i in range(4)
+        }
+
+        params = MagicMock()
+        params.upstream_data_dirs = [str(upstream)]
+        params.output_directory = str(output)
+        params.action_config = {"file_limit": 2}
+        params.action_name = "test"
+        params.strategy = MagicMock()
+        params.idx = 0
+
+        _found, processed, _errors = process_merged_files(runner, params)
+        assert processed == 4
+
+
+class TestFileLimitBackendEntries:
+    """A downstream action reads its input from the store rather than the
+    filesystem — the walk a repair's file narrowing never reached."""
+
+    def _walk(self, tmp_path, retried=frozenset()):
+        backend = MagicMock()
+        backend.list_target_files.return_value = ["a.json", "b.json"]
+        backend.read_target.side_effect = lambda action, path: [{"source_guid": path}]
+        backend.load_metadata.return_value = None
+        backend.get_disposition.return_value = []
+        runner = MagicMock()
+        runner.retried_records = retried
+        runner.storage_backend = backend
+        params = MagicMock()
+        params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.output_directory = str(tmp_path / "out")
+        params.action_config = {"file_limit": 1}
+        params.action_name = "act"
+        return runner, params
+
+    def test_the_limit_caps_the_entries_walked(self, tmp_path):
+        runner, params = self._walk(tmp_path)
+
+        _found, processed, _errors = process_from_storage_backend(runner, params)
+
+        assert processed == 1
+
+    def test_a_repair_walks_every_entry(self, tmp_path):
+        runner, params = self._walk(tmp_path, frozenset({"r1"}))
+
+        _found, processed, _errors = process_from_storage_backend(runner, params)
+
+        assert processed == 2
 
 
 # ── record_limit in process_initial_stage ─────────────────────────────

@@ -34,6 +34,7 @@ class WorkflowRuntimeConfig:
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
     record_limit: int | None = None
+    file_limit: int | None = None
 
     def resolve_project_root(self) -> Path:
         """Resolve effective project root from manager, config, or cwd."""

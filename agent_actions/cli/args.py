@@ -81,6 +81,11 @@ class RunCommandArgs(BaseModel):
         description="Cap each action at this many records per input file, whatever the config sets",
         ge=1,
     )
+    file_limit: int | None = Field(
+        None,
+        description="Walk at most this many input files per action, whatever the config sets",
+        ge=1,
+    )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
