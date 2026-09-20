@@ -654,6 +654,15 @@ class StorageBackend(ABC):
         """
         return set()
 
+    def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
+        """Whether any of record_ids is a repeat, or is repeated by another row.
+
+        A repair narrowed to just the file(s) naming record_ids would then lack
+        the sibling file(s) identity re-derivation needs to reproduce the same
+        guid — the caller falls back to an unnarrowed walk when this is True.
+        """
+        return False
+
     def clear_disposition(
         self,
         action_name: str,

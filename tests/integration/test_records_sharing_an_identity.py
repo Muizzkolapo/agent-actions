@@ -187,3 +187,44 @@ class TestTheSameContentInTwoFiles:
         parents = {r.get("repeat_of_source_guid") for r in rows if r.get("repeat_of_source_guid")}
         assert len(parents) == 1, "all three repeats point at the one identity they repeat"
         assert parents <= guids, "the identity they repeat is itself a real stored record"
+
+
+class TestRetryingTheRepeatSideOfACollision:
+    """A repair narrows its walk to the file(s) naming the retried record — but a
+    record sharing identity with content in another file needs that sibling
+    file re-derived too, or the narrowed walk recomputes a colliding identity
+    and silently drops the record it was asked to repair."""
+
+    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
+        root = tmp_path / "project"
+        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        for name in ("a_pages.json", "b_pages.json"):
+            staging.joinpath(name).write_text(json.dumps([{"page_content": "shared"}]))
+        monkeypatch.chdir(root)
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+        assert result.exit_code == 0, result.output
+        before = _counts(root)
+        assert before == {"source": 2, "dispositions": 2, "target": 2}, before
+
+        db = glob.glob(str(root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
+        con = sqlite3.connect(db)
+        rows = con.execute("select relative_path, source_guid from source_data").fetchall()
+        repeat_side = next(guid for rp, guid in rows if rp.startswith("b_pages"))
+        # retry only acts on non-terminal dispositions — mark it failed first,
+        # the same way TestARetryChangesNothing does.
+        con.execute(
+            "update record_disposition set disposition = 'failed' where record_id = ?",
+            (repeat_side,),
+        )
+        con.commit()
+        con.close()
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", repeat_side])
+
+        assert retry.exit_code == 0, retry.output
+        assert _counts(root) == before, "retrying the repeat side dropped the other file's record"

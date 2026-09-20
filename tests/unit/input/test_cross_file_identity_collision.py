@@ -59,3 +59,32 @@ def test_a_fresh_backend_does_not_remember_the_prior_ones_claims(tmp_path):
         assert "repeat_of_source_guid" not in row[0]
     finally:
         second_run.close()
+
+
+def test_a_fresh_backend_reproduces_a_multi_occurrence_repeat_chain(tmp_path):
+    """The single-guid case above could pass by accident (nothing to bump past).
+    A file with several repeats of the same content must re-derive the exact
+    same chain of occurrence guids on a second, independent run — not just the
+    first, unrepeated one."""
+    base = IDGenerator.derive_source_guid({"page_content": "same"})
+
+    def _rows():
+        return [{"source_guid": base} for _ in range(3)]
+
+    first_run = _backend(tmp_path)
+    try:
+        rows = _rows()
+        _give_repeats_their_own_identity(rows, first_run)
+        first_guids = [r["source_guid"] for r in rows]
+        assert len(set(first_guids)) == 3
+    finally:
+        first_run.close()
+
+    second_run = _backend(tmp_path)
+    try:
+        rows = _rows()
+        _give_repeats_their_own_identity(rows, second_run)
+        second_guids = [r["source_guid"] for r in rows]
+        assert second_guids == first_guids, "the repeat chain moved across a fresh run"
+    finally:
+        second_run.close()

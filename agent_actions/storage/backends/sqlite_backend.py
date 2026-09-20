@@ -1018,6 +1018,32 @@ class SQLiteBackend(StorageBackend):
                 found.update(row["relative_path"] for row in cursor.fetchall())
         return found
 
+    def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
+        """Whether any of record_ids is a repeat, or is repeated by another row."""
+        ids = tuple(dict.fromkeys(record_ids))
+        if not ids:
+            return False
+        with self._lock:
+            cursor = self.connection.cursor()
+            for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                chunk = ids[start : start + _SQL_MAX_PARAMS]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT 1 FROM source_data WHERE source_guid IN ({placeholders}) "
+                    f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL LIMIT 1",
+                    chunk,
+                )
+                if cursor.fetchone() is not None:
+                    return True
+                cursor.execute(
+                    f"SELECT 1 FROM source_data "
+                    f"WHERE json_extract(data, '$.repeat_of_source_guid') IN ({placeholders}) LIMIT 1",
+                    chunk,
+                )
+                if cursor.fetchone() is not None:
+                    return True
+        return False
+
     def clear_disposition(
         self,
         action_name: str,
