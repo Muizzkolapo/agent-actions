@@ -274,6 +274,12 @@ class ActionExecutor:
         limits_changed = not repairing_records and (
             details.get("record_limit") != record_limit or details.get("file_limit") != file_limit
         )
+        # Read only outside a repair, and the read consumes it: a repair that
+        # declined to act on the marker would otherwise erase the one record of
+        # a truncation, leaving the action skipped for good.
+        was_truncated = not repairing_records and self.deps.state_manager.adopt_truncation_marker(
+            action_name
+        )
 
         # The hash cannot cover the model: it reads a "model" key, and configs
         # write model_name/model_vendor. Adding them to the hash input would
@@ -289,12 +295,14 @@ class ActionExecutor:
         stored_hash = details.get("config_hash")
         config_changed = stored_hash is not None and stored_hash != config_hash
 
-        if limits_changed or config_changed or model_changed:
+        if limits_changed or config_changed or model_changed or was_truncated:
             reason = (
                 "limit config"
                 if limits_changed
                 else "model"
                 if model_changed
+                else "a cap recorded by the run that completed it"
+                if was_truncated
                 else "action config (prompt/schema/guard)"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
