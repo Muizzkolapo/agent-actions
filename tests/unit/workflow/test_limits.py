@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.utils.limits import FILE_LIMIT_KEY
+from agent_actions.utils.limits import FILE_LIMIT_KEY, record_indices_to_process
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
@@ -985,6 +985,8 @@ class TestTheCompletionStamp:
             "model_name",
             "model_vendor",
             "config_hash",
+            "records_processed",
+            "truncated",
         }
 
     def test_a_changed_file_limit_invalidates(self, executor):
@@ -1063,14 +1065,34 @@ class TestTheCompletionStamp:
 
         assert stamp["record_limit"] == 2
 
-    def test_a_limit_that_could_not_truncate_still_invalidates(self, monkeypatch, executor):
-        """Deliberate and coarse: the comparison never sees how many records
-        exist, so it cannot tell a limit that bit from one that did not. The
-        action re-runs and reproduces its full output; the cost is the work."""
+    def test_a_stamp_that_cannot_say_what_it_processed_still_invalidates(
+        self, monkeypatch, executor
+    ):
+        """Grandfathered: a stamp written before the count was recorded cannot
+        tell a limit that bit from one that did not, and unknown has to keep
+        re-running rather than skip an action it has no grounds to vouch for.
+        What a stamp that *can* say does instead is in
+        tests/unit/workflow/test_limit_that_drops_nothing.py."""
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
         executor.deps.state_manager.get_status_details.return_value = {
             "record_limit": None,
             "file_limit": None,
+        }
+
+        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.PENDING
+
+    def test_a_boolean_where_the_count_should_be_is_not_a_count(self, monkeypatch, executor):
+        """``True`` compares equal to 1, so reading it as a count would serve any
+        limit as one that cannot bite. Status details are persisted JSON, so the
+        value arrives from outside the process."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": None,
+            "records_processed": True,
+            "truncated": False,
         }
 
         status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
@@ -1117,6 +1139,8 @@ class TestALimitAcrossTheBatchPause:
             "model_name",
             "model_vendor",
             "config_hash",
+            "records_processed",
+            "truncated",
         }
 
     def test_the_collecting_run_keeps_the_submitted_config_hash(self, executor):
@@ -1393,6 +1417,30 @@ class TestTheBatchPauseWiring:
         assert stored["file_limit"] == 1, "the collecting run's own doors overwrote the stamp"
         assert stored["model_name"] == "model-at-submission"
         assert stored["status"] == ActionStatus.COMPLETED
+
+    def test_the_collection_keeps_what_the_submitting_run_observed(self, executor, monkeypatch):
+        """The count and the truncation flag are observed while slicing, which
+        only the submitting run does. The collecting process slices nothing, so
+        resolving them there records the action as uncountable and throws away
+        the one thing that can tell a short run from a complete one."""
+        backend = executor.deps.action_runner.storage_backend
+        record_indices_to_process(
+            [{"source_guid": f"r{i}"} for i in range(5)],
+            {"record_limit": 2},
+            "act",
+            storage_backend=backend,
+        )
+        self._submit(executor, {"record_limit": 2})
+        assert executor.deps.state_manager.get_status_details("act")["records_processed"] == 2
+
+        executor._compute_batch_wall_clock = MagicMock(return_value=1.0)
+        executor._resolve_completion_status = MagicMock(return_value=ActionStatus.COMPLETED)
+        executor._emit_action_complete = MagicMock()
+        executor._resolve_batch_outcome("act", 0, {"record_limit": 2}, "/out", "completed", 1.0, 0)
+        stored = executor.deps.state_manager.get_status_details("act")
+
+        assert stored["records_processed"] == 2, "the collecting run overwrote the observation"
+        assert stored["truncated"] is True
 
     def test_a_collected_batch_still_reopens_when_the_limit_is_lifted(self, executor, monkeypatch):
         """What the stamp is for: the next ordinary run must see the change."""

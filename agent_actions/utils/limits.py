@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 # it: `agac retry` runs a workflow in the process that just finished one.
 _STORED_ROWS: WeakKeyDictionary[Any, dict[str, dict[str, int]]] = WeakKeyDictionary()
 
+# What each slice admitted, keyed the same way and for the same reason: a run is
+# separated from the next by the backend it was built. ``None`` means a chunk
+# could not be counted, and once unknown an action stays unknown.
+_SLICE_OBSERVED: WeakKeyDictionary[Any, dict[str, tuple[int, bool] | None]] = WeakKeyDictionary()
+
 RECORD_LIMIT_ENV = "AGAC_RECORD_LIMIT"
 FILE_LIMIT_ENV = "AGAC_FILE_LIMIT"
 
@@ -135,6 +140,43 @@ def _announce_truncation(source: str, limit: int, kept: int, total: int, action_
     )
 
 
+def _observe_slice(
+    storage_backend: Any, action_name: str, *, processed: int, truncated: bool
+) -> None:
+    """Add what one slice admitted to the action's running total."""
+    if storage_backend is None:
+        return
+    per_action = _SLICE_OBSERVED.setdefault(storage_backend, {})
+    if action_name in per_action and per_action[action_name] is None:
+        return
+    seen, dropped = per_action.get(action_name) or (0, False)
+    per_action[action_name] = (seen + processed, dropped or truncated)
+
+
+def _forget_slice(storage_backend: Any, action_name: str) -> None:
+    """Mark the action's count unknowable, permanently for this run.
+
+    Leaving an uncountable chunk out of the sum would under-count instead, and
+    an under-count is the one error that reads as "a smaller limit could not
+    have bitten" — which skips an action that limit would in fact cut down.
+    """
+    if storage_backend is None:
+        return
+    _SLICE_OBSERVED.setdefault(storage_backend, {})[action_name] = None
+
+
+def slice_observation(storage_backend: Any, action_name: str) -> tuple[int, bool] | None:
+    """How many records the slices admitted for *action_name*, and whether any were dropped.
+
+    ``None`` when nothing was observed — an action that never sliced, because it
+    was skipped or resumed — or when a chunk could not be counted. Both read as
+    unknown, which must keep the coarse behaviour rather than vouch for a limit.
+    """
+    if storage_backend is None:
+        return None
+    return _SLICE_OBSERVED.get(storage_backend, {}).get(action_name)
+
+
 def record_indices_to_process(
     records: Any,
     action_config: Mapping[str, Any],
@@ -149,6 +191,10 @@ def record_indices_to_process(
     happened, which needs the record count and so cannot be decided where the
     limit is resolved.
 
+    Records what it admitted as it goes, for ``slice_observation``: this is the
+    only place that knows both the count and whether anything was dropped, the
+    same reason the announcement lives here.
+
     A limit bounds how much *new* work a run takes on. While a run is repairing
     records it may still drop one the action has never processed — that is new
     work, and a configured limit is entitled to hold it back. What it may not do
@@ -162,7 +208,11 @@ def record_indices_to_process(
     to rewrite, so reading alone would drop exactly that.
     """
     limit, source = resolve_record_limit(action_config)
-    if limit is None or not isinstance(records, list):
+    if not isinstance(records, list):
+        _forget_slice(storage_backend, action_name)
+        return None
+    if limit is None:
+        _observe_slice(storage_backend, action_name, processed=len(records), truncated=False)
         return None
     rows_held: dict[str, int] = {}
     if retried:
@@ -170,6 +220,9 @@ def record_indices_to_process(
         for guid in retried:
             rows_held.setdefault(guid, 1)
     kept = records_kept_by_limit(records, limit, rows_held)
+    _observe_slice(
+        storage_backend, action_name, processed=len(kept), truncated=len(kept) < len(records)
+    )
     if len(kept) == len(records):
         return None
     if retried and storage_backend is None:

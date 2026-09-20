@@ -40,7 +40,11 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import resolve_file_limit, resolve_record_limit
+from agent_actions.utils.limits import (
+    resolve_file_limit,
+    resolve_record_limit,
+    slice_observation,
+)
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -83,6 +87,25 @@ def _compute_action_config_hash(
 
     serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+
+
+def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
+    """True when the stamp proves *record_limit* leaves the stored record set whole.
+
+    Only an untruncated run proves it: it processed everything available, so a
+    limit at or above that count drops nothing either. A stamp that cannot say
+    reads as unknown and keeps the coarse behaviour.
+
+    The count is summed across the action's files while the limit applies to
+    each file separately, so a limit at or above the total is at or above every
+    file's share — erring only towards re-running, never towards skipping.
+    """
+    if details.get("truncated") is not False:
+        return False
+    processed = details.get("records_processed")
+    if not isinstance(processed, int) or isinstance(processed, bool):
+        return False
+    return record_limit is None or record_limit >= processed
 
 
 @dataclass
@@ -234,6 +257,25 @@ class ActionExecutor:
             return stored
         return in_force
 
+    def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
+        """What the slices admitted, unless this run is only repairing records.
+
+        A repair processes the records it names and no others, so its count is
+        not what the action represents. Storing it would leave a smaller number
+        than the action actually processed, and the next run would read a limit
+        above that number as one which cannot truncate — skipping an action that
+        limit would in fact cut down. The same reason the stored limit stands.
+        """
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            details = self.deps.state_manager.get_status_details(action_name)
+            stored = details.get("records_processed")
+            return (stored if isinstance(stored, int) else None, details.get("truncated"))
+
+        observed = slice_observation(
+            getattr(self.deps.action_runner, "storage_backend", None), action_name
+        )
+        return observed if observed is not None else (None, None)
+
     def _completion_metadata(
         self, action_name: str, action_config: ActionConfigDict, keep_stored: bool = False
     ) -> dict[str, Any]:
@@ -250,6 +292,7 @@ class ActionExecutor:
         instead of reading it as an absent value.
         """
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+        records_processed, truncated = self._stamped_slice_outcome(action_name)
         did_the_work = {
             "record_limit": self._stamped_limit(
                 action_name, "record_limit", resolve_record_limit(action_config)[0]
@@ -260,6 +303,10 @@ class ActionExecutor:
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
+            # What the run did, not what it was asked for: the limit alone
+            # cannot tell one that truncated from one too large to have bitten.
+            "records_processed": records_processed,
+            "truncated": truncated,
         }
         if not keep_stored:
             return did_the_work
@@ -276,10 +323,13 @@ class ActionExecutor:
 
         # The limit in force, not the one the config asked for: stamping the
         # config serves a run truncated elsewhere as a finished one, forever.
-        # Coarse on purpose — nothing here knows the record count, so a limit
-        # too large to have dropped anything still counts as a change.
+        # Still coarse for file_limit, which has no count to reason from.
         record_limit, _ = resolve_record_limit(action_config)
         file_limit, _ = resolve_file_limit(action_config)
+        stored_limit = details.get("record_limit")
+        record_limit_changed = stored_limit != record_limit and not _limit_cannot_reach_the_records(
+            details, record_limit
+        )
         # A retry asks for named records, not for a different amount of work, so
         # neither limit standing during one is something it asked for. Resetting
         # a completed action on one clears that action's dispositions and re-runs
@@ -287,7 +337,7 @@ class ActionExecutor:
         # never started from.
         repairing_records = bool(getattr(self.deps.action_runner, "retried_records", ()))
         limits_changed = not repairing_records and (
-            details.get("record_limit") != record_limit or details.get("file_limit") != file_limit
+            record_limit_changed or details.get("file_limit") != file_limit
         )
         # Read only outside a repair, and the read consumes it: a repair that
         # declined to act on the marker would otherwise erase the one record of
