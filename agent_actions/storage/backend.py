@@ -547,14 +547,13 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def source_guid_claimed_elsewhere(self, source_guid: str, relative_path: str) -> bool:
-        """Whether a DIFFERENT file already has a source_data row with this source_guid.
+    def claim_source_guid_for_run(self, source_guid: str) -> bool:
+        """Claim source_guid for this run; True if it was already claimed.
 
-        The identity-assignment step (staging) uses this to find the next free
-        occurrence for content that collides with something staged under a
-        different relative_path — possibly in an earlier run. Excludes
-        ``relative_path`` itself so re-staging the same file (a retry or resume)
-        reuses its own prior identities instead of colliding with them.
+        In-memory, scoped to this backend instance's process — never persisted.
+        Deliberately not backed by ``source_data``: a persisted check can't tell
+        a still-live duplicate from this file's own row before it was renamed,
+        and would wrongly bump a renamed file's identity on every re-stage.
         """
         ...
 

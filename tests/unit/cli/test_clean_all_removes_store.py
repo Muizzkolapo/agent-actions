@@ -149,7 +149,7 @@ def test_all_ignores_backend_that_owns_no_paths(tmp_path, monkeypatch):
         def read_source(self, *_a, **_kw):
             return []
 
-        def source_guid_claimed_elsewhere(self, *_a, **_kw) -> bool:
+        def claim_source_guid_for_run(self, *_a, **_kw) -> bool:
             return False
 
         def list_target_files(self, *_a, **_kw):
@@ -208,7 +208,7 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
         def read_source(self, *_a, **_kw):
             return []
 
-        def source_guid_claimed_elsewhere(self, *_a, **_kw) -> bool:
+        def claim_source_guid_for_run(self, *_a, **_kw) -> bool:
             return False
 
         def list_target_files(self, *_a, **_kw):

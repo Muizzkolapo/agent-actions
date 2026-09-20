@@ -133,9 +133,11 @@ class TestTheSameContentInTwoFiles:
 
     Content-derived identity has no path, and the same-file fix's occurrence
     counter reset for every new file, so identical content in two files still
-    collided. The fix checks the store instead of just the file being read,
-    scoped to exclude the file's own path so a retry still reuses its own
-    prior identity.
+    collided. The fix tracks what's been claimed across the whole run, not
+    just the file being read — in memory only, so a fresh run (a retry or
+    resume) starts over and reuses its own prior identity rather than
+    colliding with it (see test_cross_file_identity_collision.py for that
+    guarantee in isolation).
     """
 
     @pytest.fixture
