@@ -232,6 +232,154 @@ class TestFileLimitDirectoryFiles:
         assert processed == 3
 
 
+class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
+    """Driven through the real walks, not an injected probe.
+
+    Each walk builds its own answer to "was anything left unread", and a test
+    that supplies that answer proves the helper's contract while leaving the
+    three production closures free to say whatever they like.
+    """
+
+    def _quiet(self, caplog):
+        return [r for r in caplog.records if "stopped after" in r.message]
+
+    def test_the_directory_walk_is_silent_when_it_took_every_file(self, tmp_path, caplog):
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        for i in range(2):
+            (input_dir / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+        output = tmp_path / "output"
+        output.mkdir()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        params = MagicMock()
+        params.action_config = {"file_limit": 2}
+        params.action_name = "act"
+        params.strategy = MagicMock()
+        params.idx = 0
+        params.file_type_filter = None
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            _found, processed, _errors = process_directory_files(
+                runner, input_dir, output, str(input_dir), params, set()
+            )
+
+        assert processed == 2
+        assert self._quiet(caplog) == []
+
+    def test_the_directory_walk_speaks_when_a_file_was_left(self, tmp_path, caplog):
+        """The control for the test above, through the same closure."""
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        for i in range(3):
+            (input_dir / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+        output = tmp_path / "output"
+        output.mkdir()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        params = MagicMock()
+        params.action_config = {"file_limit": 2}
+        params.action_name = "act"
+        params.strategy = MagicMock()
+        params.idx = 0
+        params.file_type_filter = None
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_directory_files(runner, input_dir, output, str(input_dir), params, set())
+
+        assert len(self._quiet(caplog)) == 1
+
+    def test_the_directory_walk_is_silent_when_only_skippable_entries_remain(
+        self, tmp_path, caplog
+    ):
+        """A trailing directory is not a file left unread."""
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        (input_dir / "a.json").write_text(json.dumps([{"id": 1}]))
+        (input_dir / "zzz_subdir").mkdir()
+        output = tmp_path / "output"
+        output.mkdir()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        params = MagicMock()
+        params.action_config = {"file_limit": 1}
+        params.action_name = "act"
+        params.strategy = MagicMock()
+        params.idx = 0
+        params.file_type_filter = None
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_directory_files(runner, input_dir, output, str(input_dir), params, set())
+
+        assert self._quiet(caplog) == []
+
+    def _merged(self, tmp_path, count, limit):
+        upstream = tmp_path / "upstream"
+        output = tmp_path / "output"
+        upstream.mkdir()
+        output.mkdir()
+        for i in range(count):
+            (upstream / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        params = MagicMock()
+        params.upstream_data_dirs = [str(upstream)]
+        params.output_directory = str(output)
+        params.action_config = {"file_limit": limit}
+        params.action_name = "act"
+        params.strategy = MagicMock()
+        params.idx = 0
+        return runner, params
+
+    def test_the_merged_walk_is_silent_when_it_took_every_group(self, tmp_path, caplog):
+        runner, params = self._merged(tmp_path, count=2, limit=2)
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_merged_files(runner, params)
+
+        assert self._quiet(caplog) == []
+
+    def test_the_merged_walk_speaks_when_a_group_was_left(self, tmp_path, caplog):
+        runner, params = self._merged(tmp_path, count=3, limit=2)
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_merged_files(runner, params)
+
+        assert len(self._quiet(caplog)) == 1
+
+    def _stored(self, tmp_path, names, limit):
+        backend = MagicMock()
+        backend.list_target_files.return_value = list(names)
+        backend.read_target.side_effect = lambda action, path: [{"source_guid": path}]
+        backend.load_metadata.return_value = None
+        backend.get_disposition.return_value = []
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        params = MagicMock()
+        params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.output_directory = str(tmp_path / "out")
+        params.action_config = {"file_limit": limit}
+        params.action_name = "act"
+        return runner, params
+
+    def test_the_stored_walk_is_silent_when_it_took_every_entry(self, tmp_path, caplog):
+        runner, params = self._stored(tmp_path, ["a.json", "b.json"], limit=2)
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_from_storage_backend(runner, params)
+
+        assert self._quiet(caplog) == []
+
+    def test_the_stored_walk_speaks_when_an_entry_was_left(self, tmp_path, caplog):
+        runner, params = self._stored(tmp_path, ["a.json", "b.json", "c.json"], limit=2)
+
+        with caplog.at_level("INFO", logger=_WALK_LOG):
+            process_from_storage_backend(runner, params)
+
+        assert len(self._quiet(caplog)) == 1
+
+
 class TestWhatTheFileLimitCounts:
     def test_a_file_that_fails_does_not_spend_the_budget(self, tmp_path):
         """The limit counts files an action got through, not files it opened, so
@@ -885,11 +1033,15 @@ class TestTheCompletionStamp:
         ran under would make the next ordinary run read a change, clear the
         action's dispositions and re-run it."""
         executor.deps.action_runner.retried_records = frozenset({"some-record"})
-        executor.deps.state_manager.get_status_details.return_value = {"record_limit": None}
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": 4,
+        }
 
-        stamp = executor._completion_metadata("act", {"record_limit": 2})
+        stamp = executor._completion_metadata("act", {"record_limit": 2, "file_limit": 1})
 
         assert stamp["record_limit"] is None
+        assert stamp["file_limit"] == 4
 
     def test_a_retry_keeps_each_axis_stored_limit(self, executor):
         """Distinct non-null values on purpose: stubbing both axes to None lets
@@ -1164,6 +1316,97 @@ class TestAFileLimitMeetingAConfigChange:
         )
 
         assert said == []
+
+
+class TestTheBatchPauseWiring:
+    """The call sites, not just the helper they call.
+
+    A stamp helper that behaves perfectly is worth nothing if the submission
+    never writes it or the collection never asks to keep it, and both of those
+    are one keyword argument.
+    """
+
+    @pytest.fixture
+    def executor(self, tmp_path):
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        backend = MagicMock()
+        backend.count_records_for_action.return_value = 0
+        backend.get_storage_stats.return_value = {"total_records": 0}
+        deps.action_runner.storage_backend = backend
+        deps.output_manager = MagicMock()
+        deps.batch_manager = MagicMock()
+        executor = ActionExecutor(deps)
+        executor._record_action_start = MagicMock()
+        return executor
+
+    def _submit(self, executor, action_config):
+        params = MagicMock()
+        params.action_name = "act"
+        params.action_config = action_config
+        executor._handle_run_success(
+            params,
+            output_folder="/out",
+            duration=0.1,
+            batch_status="batch_submitted",
+            pre_run_count=0,
+        )
+        return executor.deps.state_manager.get_status_details("act")
+
+    def test_the_submission_records_the_limits_it_walked_under(self, executor, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        stored = self._submit(executor, {})
+
+        assert stored["file_limit"] == 1
+        assert stored["status"] == ActionStatus.BATCH_SUBMITTED
+
+    def test_the_submission_records_the_config_it_walked_under(self, executor):
+        stored = self._submit(executor, {"model_name": "model-at-submission"})
+
+        assert stored["model_name"] == "model-at-submission"
+        assert stored["config_hash"]
+
+    def test_the_collection_keeps_what_the_submission_recorded(self, executor, monkeypatch):
+        """The whole point of the pause: a run that collects work it did not do
+        must not describe it from its own configuration."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+        self._submit(executor, {"model_name": "model-at-submission"})
+        monkeypatch.delenv("AGAC_FILE_LIMIT")
+        executor._compute_batch_wall_clock = MagicMock(return_value=1.0)
+        executor._resolve_completion_status = MagicMock(return_value=ActionStatus.COMPLETED)
+        executor._emit_action_complete = MagicMock()
+
+        executor._resolve_batch_outcome(
+            "act",
+            0,
+            {"model_name": "model-now"},
+            "/out",
+            "completed",
+            1.0,
+            0,
+        )
+        stored = executor.deps.state_manager.get_status_details("act")
+
+        assert stored["file_limit"] == 1, "the collecting run's own doors overwrote the stamp"
+        assert stored["model_name"] == "model-at-submission"
+        assert stored["status"] == ActionStatus.COMPLETED
+
+    def test_a_collected_batch_still_reopens_when_the_limit_is_lifted(self, executor, monkeypatch):
+        """What the stamp is for: the next ordinary run must see the change."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+        self._submit(executor, {})
+        monkeypatch.delenv("AGAC_FILE_LIMIT")
+        executor._compute_batch_wall_clock = MagicMock(return_value=1.0)
+        executor._resolve_completion_status = MagicMock(return_value=ActionStatus.COMPLETED)
+        executor._emit_action_complete = MagicMock()
+        executor._resolve_batch_outcome("act", 0, {}, "/out", "completed", 1.0, 0)
+
+        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.PENDING
 
 
 class TestLimitSchemaValidation:

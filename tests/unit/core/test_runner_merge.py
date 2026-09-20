@@ -159,9 +159,10 @@ class TestStorageBackendMerge:
         params.idx = 0
 
         # Execute
-        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
+        files_found, files_processed, errors = process_from_storage_backend(runner, params)
 
         # Verify merge happened
+        assert errors.messages == [], "the walk swallowed a per-file failure"
         assert files_found == 1  # One unique path
         assert files_processed == 1
         assert len(processed_data) == 1
@@ -199,9 +200,10 @@ class TestStorageBackendMerge:
         params.strategy = MagicMock()
         params.idx = 0
 
-        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
+        files_found, files_processed, errors = process_from_storage_backend(runner, params)
 
         # Two unique files processed
+        assert errors.messages == [], "the walk swallowed a per-file failure"
         assert files_found == 2
         assert files_processed == 2
         assert len(processed_data) == 2
@@ -232,7 +234,9 @@ class TestStorageBackendMerge:
         params.strategy = MagicMock()
         params.idx = 0
 
-        process_from_storage_backend(runner, params)
+        _found, _processed, errors = process_from_storage_backend(runner, params)
+
+        assert errors.messages == [], "the walk swallowed a per-file failure"
 
         # Verify source_relative_path preserves full path without extension
         assert len(captured_params) == 1

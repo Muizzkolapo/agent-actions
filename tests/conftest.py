@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -149,3 +150,26 @@ def _reset_global_singletons():
     reset_path_manager()
     LoggerFactory.reset()  # cascades to EventManager.reset()
     VersionIdGenerator.clear()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _limit_variables_do_not_leak_in():
+    """No test inherits a limit from the shell that ran pytest.
+
+    Both variables apply to every action of every run, so one exported in a
+    developer's environment silently truncates fixtures across the suite —
+    dozens of unrelated tests fail, and the ones that pass do so for a reason
+    nobody chose.
+
+    Session-scoped and removed from ``os.environ`` rather than monkeypatched
+    per test: several fixtures here are module-scoped and spawn a real ``agac``
+    subprocess, which is set up before any per-test scrubbing could run and
+    inherits whatever the shell exported.
+    """
+    saved = {
+        name: os.environ.pop(name)
+        for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS")
+        if name in os.environ
+    }
+    yield
+    os.environ.update(saved)
