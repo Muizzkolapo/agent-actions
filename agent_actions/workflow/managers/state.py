@@ -125,6 +125,30 @@ class ActionStateManager:
         """Return full status details for an action."""
         return self.action_status.get(action_name, {"status": ActionStatus.PENDING})
 
+    def adopt_truncation_marker(self, action_name: str) -> bool:
+        """Whether this completion stamp was left by a run capped below its config.
+
+        A run capped from outside its own config used to stamp the limit the
+        config asked for, which reads as a full run for ever after. The cap it
+        ran under was written beside it under a key nothing reads; this is the
+        one read of it. The key is removed as it is read, so a stamp reports a
+        truncation once and an action re-run because of it is not re-run again.
+        """
+        with self._lock:
+            details = self.action_status.get(action_name)
+            if not isinstance(details, dict) or "max_records" not in details:
+                return False
+
+            cap = details.pop("max_records")
+            configured = details.get("record_limit")
+            truncated = (
+                ActionStatus(details.get("status", ActionStatus.PENDING)) in COMPLETED_STATUSES
+                and isinstance(cap, int)
+                and (configured is None or cap < configured)
+            )
+            self._save_status()
+            return truncated
+
     def is_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
         return self.get_status(action_name) in COMPLETED_STATUSES
