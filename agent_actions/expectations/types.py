@@ -53,7 +53,7 @@ class Expectation(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _refuse_superseded_spellings(cls, data: Any) -> Any:
+    def _refuse_unknown_shapes(cls, data: Any) -> Any:
         """Refuse a key this rule does not take, and a severity that is not a level."""
         if not isinstance(data, dict):
             return data

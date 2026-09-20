@@ -15,34 +15,29 @@ from agent_actions.guards import GuardParser, parse_guard_config
 _NEAR_MISS_CUTOFF = 0.65
 
 
-def _accepted_keys(model: type[BaseModel]) -> list[str]:
-    """The key spellings *model* validates from, which is the alias where one is set."""
-    return sorted(
-        (field.validation_alias if isinstance(field.validation_alias, str) else field.alias) or name
-        for name, field in model.model_fields.items()
-    )
-
-
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
-    """Name what an undeclared key resembles, or the keys *surface* accepts."""
+    """Name every undeclared key, what each resembles, and the keys *surface* takes.
+
+    The list is unconditional: a guess is a string-distance match, so it lands on
+    a real field often enough that a reader given only the guess is left with
+    nothing when it is wrong.
+    """
     if not isinstance(data, dict):
         return data
-    accepted = _accepted_keys(model)
+    accepted = sorted(model.model_fields)
     stray = sorted(str(key) for key in data if str(key) not in accepted)
     if not stray:
         return data
 
-    problems: list[str] = []
-    unguessed = False
+    problems = []
     for key in stray:
         near = difflib.get_close_matches(key, accepted, n=1, cutoff=_NEAR_MISS_CUTOFF)
-        if near:
-            problems.append(f"unknown {surface} key '{key}' — did you mean '{near[0]}'?")
-        else:
-            problems.append(f"unknown {surface} key '{key}'")
-            unguessed = True
-    if unguessed:
-        problems.append(f"valid {surface} keys are " + ", ".join(accepted))
+        problems.append(
+            f"unknown {surface} key '{key}' — did you mean '{near[0]}'?"
+            if near
+            else f"unknown {surface} key '{key}'"
+        )
+    problems.append(f"valid {surface} keys are " + ", ".join(accepted))
     raise ValueError("; ".join(problems))
 
 
@@ -274,11 +269,6 @@ class ActionConfig(_RetryValidators):
 
     model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="before")
-    @classmethod
-    def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(data, cls, "action")
-
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
     kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
@@ -354,16 +344,18 @@ class ActionConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
     output_field: str | None = Field(default=None, description="Output field name")
-    temperature: float | None = Field(default=None, description="Generation temperature")
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Generation temperature"
+    )
     max_tokens: int | None = Field(default=None, description="Maximum tokens")
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
     )
     frequency_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0, description="Frequency penalty"
+        default=None, ge=-2.0, le=2.0, description="Frequency penalty (OpenAI, Groq)"
     )
     presence_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0, description="Presence penalty"
+        default=None, ge=-2.0, le=2.0, description="Presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
     constraints: Any | None = Field(default=None, description="Generation constraints")
@@ -475,14 +467,16 @@ class DefaultsConfig(_RetryValidators):
     is_operational: bool | None = Field(default=None, description="Default operational flag")
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
-    temperature: float | None = Field(default=None, description="Default temperature")
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Default temperature"
+    )
     max_tokens: int | None = Field(default=None, description="Default max tokens")
     top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0, description="Default frequency penalty"
+        default=None, ge=-2.0, le=2.0, description="Default frequency penalty (OpenAI, Groq)"
     )
     presence_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0, description="Default presence penalty"
+        default=None, ge=-2.0, le=2.0, description="Default presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
     constraints: Any | None = Field(default=None, description="Default constraints")
@@ -512,7 +506,7 @@ class DefaultsConfig(_RetryValidators):
         default=None, description="Default Anthropic prompt caching setting"
     )
     max_execution_time: int | None = Field(
-        default=None, ge=1, description="Default maximum execution time in seconds"
+        default=None, description="Default maximum execution time in seconds"
     )
     enable_caching: bool | None = Field(default=None, description="Default caching setting")
     tokenizer_model: str | None = Field(default=None, description="Default tokenizer model")

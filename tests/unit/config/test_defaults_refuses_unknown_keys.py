@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.config.schema import ActionConfig, DefaultsConfig, WorkflowConfig
+from agent_actions.config.schema import DefaultsConfig, WorkflowConfig
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS
 from agent_actions.output.response.expander import ActionExpander
@@ -12,9 +12,15 @@ BASE = {"model_vendor": "openai", "model_name": "gpt-4o-mini", "api_key": "KEY"}
 
 
 def refusal(**defaults) -> str:
+    """Only what validation said, without pydantic's echo of the input.
+
+    `str(ValidationError)` repeats the whole input dict under `input_value=`,
+    so asserting a bare key name against it matches the echo rather than the
+    message the refusal built.
+    """
     with pytest.raises(ValidationError) as excinfo:
         DefaultsConfig.model_validate({**BASE, **defaults})
-    return str(excinfo.value)
+    return "; ".join(error["msg"] for error in excinfo.value.errors())
 
 
 def agent_for(**defaults) -> dict:
@@ -44,14 +50,13 @@ class TestAKeyTheSchemaDoesNotDeclare:
             temperture=0.7
         )
 
-    def test_a_named_near_match_replaces_the_list_rather_than_joining_it(self):
-        """Asserted by the list's absence, because the list holds every declared
-        key — so a refusal that only ever lists them satisfies any test looking
-        for the resembled key by name."""
+    def test_the_keys_it_takes_are_listed_even_when_one_is_guessed(self):
+        """A guess is a string-distance match and lands on a real field often
+        enough to be wrong; the list is what the reader falls back to."""
         message = refusal(temperture=0.7)
 
-        assert "valid defaults keys are" not in message
-        assert "record_limit" not in message
+        assert "valid defaults keys are" in message
+        assert "record_limit" in message
 
     def test_a_key_with_no_near_match_is_refused_naming_the_valid_ones(self):
         message = refusal(few_shot=0)
@@ -70,8 +75,14 @@ class TestAKeyTheSchemaDoesNotDeclare:
     def test_every_unknown_key_is_named_not_only_the_first(self):
         message = refusal(few_shot=0, totally_bogus=True)
 
-        assert "few_shot" in message
-        assert "totally_bogus" in message
+        assert "unknown defaults key 'few_shot'" in message
+        assert "unknown defaults key 'totally_bogus'" in message
+
+    def test_a_typo_the_cutoff_barely_admits_is_still_named(self):
+        """`top_k` scores 0.800 against `top_p`, the lowest-scoring near miss
+        the framework should still name. Pins the cutoff from above; the
+        superseded spellings pin it from below."""
+        assert "did you mean 'top_p'?" in refusal(top_k=40)
 
 
 class TestASupersededSpellingKeepsBeingRefused:
@@ -93,22 +104,6 @@ class TestASupersededSpellingKeepsBeingRefused:
         assert "expect:" not in message
 
 
-class TestAnActionIsRefusedTheSameWay:
-    def test_a_mistyped_action_key_names_the_key_it_resembles(self):
-        with pytest.raises(ValidationError) as excinfo:
-            ActionConfig.model_validate({"name": "a", "intent": "i", "temperture": 0.7})
-
-        assert "unknown action key 'temperture' — did you mean 'temperature'?" in str(excinfo.value)
-
-    def test_a_key_spelled_as_its_alias_is_accepted(self):
-        """`schema:` is the spelling the field validates from; the field's own
-        name is not, so accepted keys have to be read off the aliases."""
-        assert (
-            ActionConfig.model_validate({"name": "a", "intent": "i", "schema": "s"}).output_schema
-            == "s"
-        )
-
-
 class TestWhatTheFrameworkReadsFromADefaultsBlock:
     def test_every_inherited_field_can_be_written_there(self):
         """Field inheritance reads each of these out of `defaults:`, so refusing
@@ -122,8 +117,8 @@ class TestWhatTheFrameworkReadsFromADefaultsBlock:
             ("anthropic_version", "2023-06-01"),
             ("max_execution_time", 30),
             ("enable_caching", False),
-            ("tokenizer_model", "cl100k_base"),
-            ("split_method", "tiktoken"),
+            ("tokenizer_model", "gpt2"),
+            ("split_method", "sentence"),
             ("where_clause", {"field": "x"}),
         ],
     )
@@ -169,15 +164,17 @@ class TestTheParamsTheProvidersActuallySend:
 
         assert agent["frequency_penalty"] == 1.5
 
-    @pytest.mark.parametrize("value", [-2.5, 2.5])
-    def test_a_value_the_api_rejects_is_refused_here(self, value):
-        assert "frequency_penalty" in refusal(frequency_penalty=value)
+    @pytest.mark.parametrize("value,bound", [(-2.5, "greater than"), (2.5, "less than")])
+    def test_a_value_the_api_rejects_is_refused_here(self, value, bound):
+        """By the range, not by the field name: an undeclared field is refused
+        with its name in the message too."""
+        assert bound in refusal(frequency_penalty=value)
 
-    @pytest.mark.parametrize("value", [-0.1, 1.1])
-    def test_a_top_p_outside_its_range_is_refused(self, value):
+    @pytest.mark.parametrize("value,bound", [(-0.1, "greater than"), (1.1, "less than")])
+    def test_a_top_p_outside_its_range_is_refused(self, value, bound):
         """A near match points here from `top_k`, and an unbounded value would
         travel to the provider verbatim."""
-        assert "top_p" in refusal(top_p=value)
+        assert bound in refusal(top_p=value)
 
 
 class TestADeclaredKeyIsUntouched:

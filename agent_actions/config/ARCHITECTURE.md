@@ -289,11 +289,11 @@ Any unknown key in an action definition raises a `ValidationError`. This is inte
 
 ### 2. DefaultsConfig uses `extra="forbid"`
 
-The defaults section refuses undeclared keys the same way, through the same validator. Accepted spellings are read off the fields' aliases, because an aliased field validates from its alias and not from its own name.
+Unlike `ActionConfig`, which leaves the refusal to Pydantic, the defaults section raises its own: it names every undeclared key, what each resembles, and then the keys the block takes. The list is unconditional — a suggestion is a string-distance match, so it lands on a real field often enough that a reader given only the guess is left with nothing when it is wrong.
 
-The invariant that makes the strictness safe: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins the containment; add to both when you add an inheritable field.
+The invariant that makes the strictness safe runs one way: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins that containment; add to both when you add an inheritable field.
 
-Generation parameters are declared and inherited, `frequency_penalty` and `presence_penalty` included. An extra never survived validation to reach `extract_generation_params()`, so declaring a key without adding it to `SIMPLE_CONFIG_FIELDS` would accept it and then drop it — the failure this strictness exists to prevent.
+The converse does not hold and is not claimed. `drops` and `observe` are declared here and read from nowhere — a defaults-level value for either is accepted and never reaches an agent, which is the pre-existing shape this strictness cannot detect, because a declared key passes by definition. Generation parameters avoid it by being inherited as well as declared, `frequency_penalty` and `presence_penalty` included; declaring one without adding it to `SIMPLE_CONFIG_FIELDS` accepts it and then drops it.
 
 ### 3. AgentConfig uses `extra="allow"`
 
