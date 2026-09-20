@@ -1175,6 +1175,20 @@ class TestALimitAcrossTheBatchPause:
 
         assert executor._completion_metadata("act", {})["file_limit"] == 3
 
+    def test_a_bool_in_the_stored_count_is_not_carried_forward(self, executor):
+        """A bool is an int to isinstance, so a stamped True would re-stamp as
+        one record processed. The side that reads the count already rejects it;
+        the side that writes it has to agree, or the junk survives every repair."""
+        executor.deps.action_runner.retried_records = frozenset({"r1"})
+        executor.deps.state_manager.get_status_details.return_value = {
+            "records_processed": True,
+            "truncated": False,
+        }
+
+        stamp = executor._completion_metadata("act", {})
+
+        assert stamp["records_processed"] is None
+
     def test_a_repair_resubmitting_a_batch_keeps_the_stored_limits(self, executor, monkeypatch):
         """A repair re-runs a batch action by submitting it again. Recording what
         the repair happened to run under erases the cap the original submission

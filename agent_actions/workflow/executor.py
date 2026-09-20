@@ -89,6 +89,17 @@ def _compute_action_config_hash(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
+def _as_record_count(value: Any) -> int | None:
+    """*value* as a count of records, or None if it is not one.
+
+    ``bool`` is not a count: it is an ``int`` to ``isinstance``, and a stamped
+    ``True`` would otherwise read as one record processed.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return int(value)
+
+
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
     """True when the stamp proves *record_limit* leaves the stored record set whole.
 
@@ -102,8 +113,8 @@ def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int |
     """
     if details.get("truncated") is not False:
         return False
-    processed = details.get("records_processed")
-    if not isinstance(processed, int) or isinstance(processed, bool):
+    processed = _as_record_count(details.get("records_processed"))
+    if processed is None:
         return False
     return record_limit is None or record_limit >= processed
 
@@ -268,8 +279,8 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             details = self.deps.state_manager.get_status_details(action_name)
-            stored = details.get("records_processed")
-            return (stored if isinstance(stored, int) else None, details.get("truncated"))
+            stored = _as_record_count(details.get("records_processed"))
+            return (stored, details.get("truncated"))
 
         observed = slice_observation(
             getattr(self.deps.action_runner, "storage_backend", None), action_name

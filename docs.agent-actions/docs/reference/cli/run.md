@@ -73,9 +73,11 @@ that cannot bound anything fails the run rather than being ignored, and fails it
 action starts.
 
 Either way the limits in force are stored with the action, so lifting one re-runs what it held
-back instead of serving a short run as a finished one. Changing one to any other value re-runs the
-action too, including to one larger than the input — the stored limit records what was set, not
-whether it held anything back. A batch action stores what the run that *submitted* it applied, not
+back instead of serving a short run as a finished one. Changing `--record-limit` to another value
+re-runs the action when the new limit could have held something back; raising it above what an
+untruncated run already processed changes nothing, because a limit that cannot bite is not a
+different amount of work. `--file-limit` has no such count behind it, so any change to it re-runs
+the action, including a change to a value larger than the number of staged files. A batch action stores what the run that *submitted* it applied, not
 what the later run that collects it was asked for.
 
 The two limits leave different traces. `--record-limit` rewrites every file it walks, so the
