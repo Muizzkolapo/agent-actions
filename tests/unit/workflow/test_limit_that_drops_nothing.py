@@ -35,6 +35,9 @@ def _no_ambient_limit(monkeypatch):
 def executor():
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock(spec=ActionStateManager)
+    # No marker in the stamp is the ordinary case; a mock would
+    # otherwise answer with something truthy.
+    deps.state_manager.adopt_truncation_marker.return_value = False
     deps.action_runner = MagicMock()
     deps.action_runner.retried_records = frozenset()
     return ActionExecutor(deps)
@@ -243,6 +246,22 @@ class TestALimitThatCouldNotHaveDroppedAnything:
         executor.deps.state_manager.get_status_details.return_value = _stamp(truncated=False)
 
         status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.PENDING
+
+    def test_a_recorded_cap_reopens_it_even_when_the_new_limit_could_not_bite(self, executor):
+        """609's marker answers a different question than this check does. It
+        says the run that wrote the stamp was itself capped below its config, so
+        that run's output is short whatever the new limit could do — precision
+        about the new limit must not suppress it."""
+        executor.deps.state_manager.adopt_truncation_marker.return_value = True
+        executor.deps.state_manager.get_status_details.return_value = _stamp(
+            records_processed=6, truncated=False
+        )
+
+        status = executor._maybe_invalidate_completed_status(
+            "act", {"record_limit": 1000}, ActionStatus.COMPLETED
+        )
 
         assert status == ActionStatus.PENDING
 
