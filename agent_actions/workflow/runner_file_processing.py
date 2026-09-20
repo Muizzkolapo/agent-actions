@@ -625,6 +625,10 @@ def process_from_storage_backend(
                     exc_info=True,
                 )
 
+    # Sorted, not upstream-major: a file limit truncates this mapping, and the
+    # union of several upstreams is otherwise ordered by which one was read first.
+    data_by_path = {path: data_by_path[path] for path in sorted(data_by_path)}
+
     files_found = len(data_by_path)
     files_processed = 0
 

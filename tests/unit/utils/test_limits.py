@@ -64,7 +64,7 @@ class TestResolveFileLimit:
 
         assert resolve_file_limit({})[0] == 2
 
-    @pytest.mark.parametrize("value", ["nonsense", "", "0", "-1", "2.5"])
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
     def test_a_variable_that_cannot_bound_anything_is_refused_loudly(self, monkeypatch, value):
         monkeypatch.setenv("AGAC_FILE_LIMIT", value)
 
@@ -111,6 +111,40 @@ class TestResolveFileLimit:
 
         assert resolve_file_limit({})[0] is None
         assert resolve_record_limit({})[0] == 2
+
+
+class TestAnEmptyVariable:
+    """`FOO=` is how a shell says a variable is not in use, not a malformed value.
+
+    It matters because the check now runs while any workflow is assembled, so
+    refusing the spelling would fail read-only commands over a variable nobody
+    meant to set.
+    """
+
+    @pytest.mark.parametrize("value", ["", " ", "\t"])
+    def test_it_reads_as_unset_on_the_record_axis(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", value)
+
+        assert resolve_record_limit({"record_limit": 5})[0] == 5
+
+    @pytest.mark.parametrize("value", ["", " ", "\t"])
+    def test_it_reads_as_unset_on_the_file_axis(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", value)
+
+        assert resolve_file_limit({"file_limit": 5})[0] == 5
+
+    def test_it_does_not_stop_a_workflow_being_assembled(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "")
+
+        check_environment()
+
+    def test_a_genuinely_malformed_value_still_fails(self, monkeypatch):
+        """The control: reading blank as unset must not make anything else pass."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", " x ")
+
+        with pytest.raises(ValueError, match="AGAC_FILE_LIMIT"):
+            check_environment()
 
 
 class TestTheEnvironmentIsCheckedBeforeTheRunStarts:
@@ -185,7 +219,7 @@ class TestTheEnvironmentLimit:
 
         assert resolve_record_limit({"record_limit": 23})[0] == 23
 
-    @pytest.mark.parametrize("value", ["nonsense", "", "0", "-1", "2.5"])
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
     def test_a_value_that_cannot_be_a_limit_is_refused_loudly(self, monkeypatch, value):
         monkeypatch.setenv("AGAC_RECORD_LIMIT", value)
 

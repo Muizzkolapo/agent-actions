@@ -45,9 +45,14 @@ def _refuse_retired_name() -> None:
 
 
 def _from_environment(name: str) -> int | None:
-    """Read the limit *name* asks for, refusing one that cannot limit anything."""
+    """Read the limit *name* asks for, refusing one that cannot limit anything.
+
+    An empty value reads as unset: ``AGAC_FILE_LIMIT= agac run`` is how a shell
+    says the variable is not being used, and failing a run over it would refuse
+    the spelling rather than the intent.
+    """
     raw = os.environ.get(name)
-    if raw is None:
+    if raw is None or not raw.strip():
         return None
     try:
         limit = int(raw)

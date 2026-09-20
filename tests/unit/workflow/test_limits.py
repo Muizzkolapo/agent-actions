@@ -8,7 +8,6 @@ Covers:
 """
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,6 +17,7 @@ from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
     _file_limit_reached,
+    collect_files_from_upstream,
     process_directory_files,
     process_from_storage_backend,
     process_merged_files,
@@ -288,9 +288,6 @@ class TestFileLimitMergedFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path(f"file_{i}.json"): [upstream / f"file_{i}.json"] for i in range(4)
-        }
 
         params = MagicMock()
         params.upstream_data_dirs = [str(upstream)]
@@ -315,9 +312,6 @@ class TestFileLimitMergedFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset({"r1"})
-        runner._collect_files_from_upstream.return_value = {
-            Path(f"file_{i}.json"): [upstream / f"file_{i}.json"] for i in range(4)
-        }
 
         params = MagicMock()
         params.upstream_data_dirs = [str(upstream)]
@@ -329,6 +323,24 @@ class TestFileLimitMergedFiles:
 
         _found, processed, _errors = process_merged_files(runner, params)
         assert processed == 4
+
+
+class TestTheMergedWalkOrder:
+    def test_files_come_back_in_sorted_order(self, tmp_path):
+        """A file limit truncates this mapping, so raw filesystem order makes
+        "the first N" mean whatever the directory happened to enumerate, and the
+        union of several upstreams order by whichever was read first."""
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
+        for name in ("z.json", "m.json"):
+            (first / name).write_text(json.dumps([{"id": name}]))
+        (second / "a.json").write_text(json.dumps([{"id": "a"}]))
+
+        collected = collect_files_from_upstream([str(first), str(second)])
+
+        assert [str(path) for path in collected] == ["a.json", "m.json", "z.json"]
 
 
 class TestFileLimitBackendEntries:
@@ -357,6 +369,23 @@ class TestFileLimitBackendEntries:
         _found, processed, _errors = process_from_storage_backend(runner, params)
 
         assert processed == 1
+
+    def test_the_entries_are_taken_in_sorted_order(self, tmp_path):
+        """A limit truncates this mapping, and the union of several upstreams is
+        otherwise ordered by whichever was read first."""
+        runner, params = self._walk(tmp_path)
+        runner.storage_backend.list_target_files.side_effect = [["m.json", "n.json"], ["a.json"]]
+        params.upstream_data_dirs = [
+            str(tmp_path / "target" / "first"),
+            str(tmp_path / "target" / "second"),
+        ]
+        params.action_config = {"file_limit": 2}
+        taken = []
+        runner._process_single_file = lambda p: taken.append(p.locations.item.name)
+
+        process_from_storage_backend(runner, params)
+
+        assert taken == ["a.json", "m.json"]
 
     def test_a_repair_walks_every_entry(self, tmp_path):
         runner, params = self._walk(tmp_path, frozenset({"r1"}))
@@ -914,13 +943,93 @@ class TestALimitAcrossTheBatchPause:
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
-    def test_the_submitting_run_reports_what_it_applied(self, executor, monkeypatch):
+    def test_the_submitting_run_records_what_it_applied(self, executor, monkeypatch):
         monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+        executor.deps.state_manager.get_status_details.return_value = {}
 
-        assert executor.limits_in_force({"record_limit": 4}) == {
-            "record_limit": 4,
+        stamp = executor._completion_metadata("act", {"record_limit": 4})
+
+        assert stamp["record_limit"] == 4
+        assert stamp["file_limit"] == 1
+
+    def test_the_submission_records_the_whole_stamp_not_just_the_limits(self, executor):
+        """A prompt edited between submitting and collecting would otherwise be
+        stamped by the collecting run, and the action never re-runs under it."""
+        executor.deps.state_manager.get_status_details.return_value = {}
+
+        stamp = executor._completion_metadata("act", {"model_name": "m", "prompt": "p"})
+
+        assert set(stamp) == {
+            "record_limit",
+            "file_limit",
+            "model_name",
+            "model_vendor",
+            "config_hash",
+        }
+
+    def test_the_collecting_run_keeps_the_submitted_config_hash(self, executor):
+        """The config the collecting run holds describes a different run. Stamping
+        its hash marks the action complete against a prompt it never used, and the
+        comparison is skipped while a batch is in flight, so it never re-runs."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": 1,
+            "model_name": "model-at-submission",
+            "model_vendor": "vendor-at-submission",
+            "config_hash": "hash-at-submission",
+        }
+
+        stamp = executor._completion_metadata(
+            "act", {"model_name": "model-now", "prompt": "edited"}, keep_stored=True
+        )
+
+        assert stamp["config_hash"] == "hash-at-submission"
+        assert stamp["model_name"] == "model-at-submission"
+        assert stamp["model_vendor"] == "vendor-at-submission"
+
+    def test_an_ordinary_resubmission_records_the_new_limit(self, executor, monkeypatch):
+        """An earlier submission's stamp is still there, but this run is the one
+        walking the files, so what it applied is what the stamp has to say. Only
+        a repair and a collection defer to the stored value."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
             "file_limit": 1,
         }
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "3")
+
+        assert executor._completion_metadata("act", {})["file_limit"] == 3
+
+    def test_a_repair_resubmitting_a_batch_keeps_the_stored_limits(self, executor, monkeypatch):
+        """A repair re-runs a batch action by submitting it again. Recording what
+        the repair happened to run under erases the cap the original submission
+        was made under, and the collection reads that back as the completion
+        stamp — turning a truncated action into a finished one for good."""
+        executor.deps.action_runner.retried_records = frozenset({"r1"})
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": 1,
+        }
+        monkeypatch.delenv("AGAC_FILE_LIMIT", raising=False)
+
+        stamp = executor._completion_metadata("act", {})
+
+        assert stamp["file_limit"] == 1
+        assert stamp["record_limit"] is None
+
+    def test_a_repair_under_a_limit_does_not_stamp_it_on_the_submission(
+        self, executor, monkeypatch
+    ):
+        """The other direction: stamping the repair's own limit makes the next
+        ordinary run read a change, clear the action's dispositions and
+        re-submit the whole batch."""
+        executor.deps.action_runner.retried_records = frozenset({"r1"})
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": None,
+        }
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        assert executor._completion_metadata("act", {})["file_limit"] is None
 
     def test_the_collecting_run_keeps_the_submitted_limits(self, executor, monkeypatch):
         """The collecting run was asked for nothing; resolving its own doors
@@ -961,16 +1070,100 @@ class TestALimitAcrossTheBatchPause:
 
         assert stamp["file_limit"] == 9
 
-    def test_a_batch_submitted_before_the_limits_were_stamped_reads_as_unbounded(self, executor):
-        """State written by an earlier version carries no limits; the collection
-        stamps what it finds rather than inventing one."""
+    def test_a_batch_submitted_before_the_limits_were_stamped_is_grandfathered(self, executor):
+        """State written by an earlier version carries no limit key at all.
+        Reading its absence as 'no limit' would make the next run see a change
+        and re-submit the whole batch, so an absent key is answered from this
+        run instead — the same grandfathering the model keys get."""
         executor.deps.state_manager.get_status_details.return_value = {
             "batch_submitted_at": "2026-01-01T00:00:00"
         }
 
         stamp = executor._completion_metadata("act", {"file_limit": 2}, keep_stored=True)
 
+        assert stamp["file_limit"] == 2
+
+    def test_a_submission_that_stamped_no_limit_is_not_grandfathered(self, executor):
+        """The control: a present key holding None is a real answer from a run
+        that was bounded by nothing, not missing state."""
+        executor.deps.state_manager.get_status_details.return_value = {
+            "record_limit": None,
+            "file_limit": None,
+        }
+
+        stamp = executor._completion_metadata("act", {"file_limit": 2}, keep_stored=True)
+
         assert stamp["file_limit"] is None
+
+
+class TestAFileLimitMeetingAConfigChange:
+    """A file limit bounds which files are opened, so one it never reaches keeps
+    what the previous run wrote. That is what not walking a file means — but
+    when the reset came from a changed prompt or model, the untouched files hold
+    answers from the configuration being replaced, under a stamp saying complete.
+    """
+
+    @pytest.fixture
+    def executor(self):
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = MagicMock(spec=ActionStateManager)
+        deps.state_manager.adopt_truncation_marker.return_value = False
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        return ActionExecutor(deps)
+
+    def _reset_under(self, executor, caplog, action_config, stored):
+        executor.deps.state_manager.get_status_details.return_value = stored
+        with caplog.at_level("WARNING", logger="agent_actions.workflow.executor"):
+            status = executor._maybe_invalidate_completed_status(
+                "act", action_config, ActionStatus.COMPLETED
+            )
+        assert status == ActionStatus.PENDING
+        return [r.message for r in caplog.records if "file limit" in r.message]
+
+    def test_a_config_change_under_a_file_limit_is_announced(self, executor, caplog):
+        said = self._reset_under(
+            executor,
+            caplog,
+            {"file_limit": 1, "prompt": "new"},
+            {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
+        )
+
+        assert len(said) == 1
+        assert "previous configuration" in said[0]
+
+    def test_a_model_change_under_a_file_limit_is_announced(self, executor, caplog):
+        said = self._reset_under(
+            executor,
+            caplog,
+            {"file_limit": 2, "model_name": "new-model"},
+            {"record_limit": None, "file_limit": 2, "model_name": "old-model"},
+        )
+
+        assert len(said) == 1
+
+    def test_a_config_change_without_a_file_limit_says_nothing(self, executor, caplog):
+        """The control: every file is walked, so the whole output is rebuilt."""
+        said = self._reset_under(
+            executor,
+            caplog,
+            {"prompt": "new"},
+            {"record_limit": None, "file_limit": None, "config_hash": "stale"},
+        )
+
+        assert said == []
+
+    def test_a_limit_change_alone_says_nothing(self, executor, caplog):
+        """The control: nothing semantic changed, so the untouched files still
+        hold answers this configuration would produce."""
+        said = self._reset_under(
+            executor,
+            caplog,
+            {"file_limit": 1},
+            {"record_limit": None, "file_limit": 5},
+        )
+
+        assert said == []
 
 
 class TestLimitSchemaValidation:

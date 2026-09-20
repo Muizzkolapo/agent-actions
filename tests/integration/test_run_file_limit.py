@@ -277,12 +277,18 @@ class TestARepairIsNotHeldBack:
         return named
 
     def _configure_file_limit(self, project, limit):
+        """Edit the fixture's YAML, and prove the edit landed.
+
+        A string replacement that quietly stops matching would leave the tests
+        using it asserting against a workflow with no limit configured at all —
+        passing for the absence of the thing they exist to exercise.
+        """
         config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-        config.write_text(
-            config.read_text().replace(
-                f"  - name: {ACTION}\n", f"  - name: {ACTION}\n    file_limit: {limit}\n"
-            )
+        edited = config.read_text().replace(
+            f"  - name: {ACTION}\n", f"  - name: {ACTION}\n    file_limit: {limit}\n"
         )
+        assert f"file_limit: {limit}" in edited, "the fixture no longer has the action to edit"
+        config.write_text(edited)
 
     def test_a_configured_file_limit_does_not_strand_a_named_record(self, project):
         named = self._two_failures_in_two_files(project)

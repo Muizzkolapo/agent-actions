@@ -221,30 +221,15 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
-    def limits_in_force(self, action_config: ActionConfigDict) -> dict[str, int | None]:
-        """The limits this run would apply, for a stamp written before the work ends."""
-        return {
-            "record_limit": resolve_record_limit(action_config)[0],
-            "file_limit": resolve_file_limit(action_config)[0],
-        }
-
-    def _stamped_limit(
-        self, action_name: str, key: str, in_force: int | None, keep_stored: bool
-    ) -> int | None:
-        """*in_force*, or the stored limit when this run did not do the work.
+    def _stamped_limit(self, action_name: str, key: str, in_force: int | None) -> int | None:
+        """*in_force*, unless this run is only repairing records — then the stored one.
 
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
         next ordinary run would read a change, clear the action's dispositions
         and re-run it. The same reason the comparison ignores a limit here.
-
-        Collecting a batch is the other case. The run that walked the files
-        submitted them and stamped what it applied; the run that collects may
-        have been asked for different limits, or none, and resolving its own
-        would record a full pass over work that was never attempted.
         """
-        repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
-        if keep_stored or repairing:
+        if getattr(self.deps.action_runner, "retried_records", ()):
             stored: int | None = self.deps.state_manager.get_status_details(action_name).get(key)
             return stored
         return in_force
@@ -252,19 +237,34 @@ class ActionExecutor:
     def _completion_metadata(
         self, action_name: str, action_config: ActionConfigDict, keep_stored: bool = False
     ) -> dict[str, Any]:
-        """Build metadata dict for completed action status."""
+        """What an action records about the run that did its work.
+
+        Written when a batch is submitted as well as when an action completes:
+        the run that walks the files is the one that can describe them, and a
+        batch is collected by a later, separate run.
+
+        *keep_stored* is that collecting run. Its own config describes a
+        different run — other limits, another prompt, another model — so every
+        key the submission wrote stands, and only a key it did not write is
+        answered from here, which grandfathers state predating this stamp
+        instead of reading it as an absent value.
+        """
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
-        return {
+        did_the_work = {
             "record_limit": self._stamped_limit(
-                action_name, "record_limit", resolve_record_limit(action_config)[0], keep_stored
+                action_name, "record_limit", resolve_record_limit(action_config)[0]
             ),
             "file_limit": self._stamped_limit(
-                action_name, "file_limit", resolve_file_limit(action_config)[0], keep_stored
+                action_name, "file_limit", resolve_file_limit(action_config)[0]
             ),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
         }
+        if not keep_stored:
+            return did_the_work
+        submitted = self.deps.state_manager.get_status_details(action_name)
+        return {key: submitted.get(key, value) for key, value in did_the_work.items()}
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
@@ -321,6 +321,21 @@ class ActionExecutor:
                 else "action config (prompt/schema/guard)"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
+            if file_limit is not None and (config_changed or model_changed):
+                # A record limit rewrites every file it walks; a file limit stops
+                # the walk, and a file it never opens keeps what the last run put
+                # there. Harmless on its own, but the answers under it were
+                # produced by the configuration this reset is replacing, and the
+                # action reads as complete either way.
+                logger.warning(
+                    "%s is re-running under a file limit of %d after a %s change: files the "
+                    "walk does not reach keep output produced by the previous configuration, "
+                    "and the action will still be recorded as complete. Use --fresh for an "
+                    "output that comes from one configuration throughout",
+                    action_name,
+                    file_limit,
+                    reason,
+                )
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
@@ -539,7 +554,7 @@ class ActionExecutor:
                 params.action_name,
                 ActionStatus.BATCH_SUBMITTED,
                 batch_submitted_at=datetime.now().isoformat(),
-                **self.limits_in_force(params.action_config),
+                **self._completion_metadata(params.action_name, params.action_config),
             )
             return ActionExecutionResult(
                 success=True,
