@@ -1,5 +1,6 @@
 """Identity of rows a FILE tool produced several of from one input."""
 
+import json
 import pathlib
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,7 @@ from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.reasons import TOOL_MISSING_RECORD
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
+from agent_actions.workflow.merge import merge_records_by_key
 from agent_actions.workflow.pipeline_file_mode import reconcile_outputs
 
 
@@ -43,6 +45,8 @@ def invoke(records_in, raw):
 # Two outputs from input 0, one from input 1, and input 2 dropped. The counts
 # match, so a rule comparing lengths sees no expansion.
 SPLIT = ((0, "alpha-1"), (0, "alpha-2"), (1, "beta"))
+
+UPSTREAM = {"source": {"t": "alpha"}, "a1": {"v": 1}}
 
 
 class TestSeveralOutputsFromOneInput:
@@ -90,6 +94,60 @@ class TestTheRowsSurviveBeingStored:
             backend.save_checkpoint_records("split_tool", "f.json", stored(rows))
 
             assert len(backend.read_checkpoint_records("split_tool", "f.json")) == 3
+
+
+class TestAMintedRowIsStillWholeWhenReadBack:
+    """A minted guid joins nothing upstream, so the row has to be stored whole
+    rather than as a delta the reader cannot rejoin."""
+
+    def test_it_keeps_the_namespaces_its_parent_carried(self):
+        rows, _ = reconcile_outputs(
+            outputs(*SPLIT),
+            "a2",
+            [{"source_guid": g, "content": dict(UPSTREAM)} for g in ("G0", "G1", "G2")],
+        )
+        for row in rows:
+            row.setdefault("content", {}).update(UPSTREAM)
+
+        with tempfile.TemporaryDirectory() as directory:
+            backend = SQLiteBackend(str(pathlib.Path(directory) / "s.db"), "wf")
+            backend.initialize()
+            backend.save_metadata("execution_order", json.dumps(["a1", "a2"]))
+            backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": ["a1"]}))
+            backend.write_target(
+                "a1",
+                "f.json",
+                [
+                    {
+                        "source_guid": "G0",
+                        "_state": "processed",
+                        "_schema_version": 1,
+                        "content": dict(UPSTREAM),
+                    }
+                ],
+            )
+            backend.write_target("a2", "f.json", stored(rows))
+
+            read_back = backend.read_target("a2", "f.json")
+
+        assert [sorted(r.get("content", {})) for r in read_back[:2]] == [
+            ["a1", "a2", "source"],
+            ["a1", "a2", "source"],
+        ]
+
+
+class TestAMintedRowIsNotFannedBackIn:
+    def test_a_merge_keeps_them_apart(self):
+        """They share the parent's correlation id until it is dropped, and a
+        merge groups on that before anything else — collapsing the rows the
+        identity was just minted to separate."""
+        parents = [
+            {"source_guid": "G0", "version_correlation_id": "V0"},
+            {"source_guid": "G1", "version_correlation_id": "V1"},
+        ]
+        rows, _ = reconcile_outputs(outputs(*SPLIT), "t", parents)
+
+        assert len(merge_records_by_key(rows)) == 3
 
 
 class TestWhatTheStrategyStillReports:

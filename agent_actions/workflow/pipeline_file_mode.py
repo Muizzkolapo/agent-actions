@@ -82,6 +82,12 @@ def _reattach_source_guid(
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
             item["source_guid"] = IDGenerator.generate_source_guid()
+            # A minted guid joins nothing upstream, so the row has to carry its
+            # whole content rather than be stored as a delta against it.
+            item["_delta_mode"] = "full"
+            # The parent's correlation id would fan these back into one row at a
+            # merge, undoing the identity they were just given.
+            item.pop("version_correlation_id", None)
             continue
 
         if parent is not None:
