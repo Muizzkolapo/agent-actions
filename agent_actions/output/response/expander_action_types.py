@@ -104,10 +104,7 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
             context={
                 "action": action_name,
                 "kind": "tool",
-                "hint": (
-                    "Add schema: in YAML to declare the tool's output fields. "
-                    "(output_type on @udf_tool was removed in this version)"
-                ),
+                "hint": "Add schema: in YAML to declare the tool's output fields.",
             },
         )
 

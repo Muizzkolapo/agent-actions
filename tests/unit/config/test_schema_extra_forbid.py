@@ -187,13 +187,12 @@ class TestActionConfigForbidsUnknownKeys:
 
 
 class TestDefaultsConfigValidation:
-    """DefaultsConfig with extra='ignore' validates known keys, ignores vendor-specific."""
+    """DefaultsConfig with extra='forbid' refuses a key it does not declare."""
 
-    def test_unknown_key_silently_ignored(self):
-        """Vendor-specific params like frequency_penalty are silently ignored."""
+    def test_unknown_key_refused(self):
         data = {"model_vendor": "openai", "totally_bogus": True}
-        config = DefaultsConfig.model_validate(data)
-        assert config.model_vendor == "openai"
+        with pytest.raises(ValidationError, match="totally_bogus"):
+            DefaultsConfig.model_validate(data)
 
     def test_provider_specific_params_accepted(self):
         """frequency_penalty, presence_penalty are valid vendor-specific defaults."""
@@ -206,6 +205,8 @@ class TestDefaultsConfigValidation:
         config = DefaultsConfig.model_validate(data)
         assert config.model_vendor == "openai"
         assert config.temperature == 0.7
+        assert config.frequency_penalty == 0.2
+        assert config.presence_penalty == 0.1
 
     def test_empty_defaults_accepted(self):
         config = DefaultsConfig.model_validate({})

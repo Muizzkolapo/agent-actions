@@ -32,7 +32,7 @@ def check_environment() -> None:
     leaves that action unstamped. Called once while the run is being assembled.
     """
     if os.environ.get(_RETIRED_ENV) is not None:
-        raise ValueError(f"{_RETIRED_ENV} is no longer read — use {RECORD_LIMIT_ENV}")
+        raise ValueError(f"{_RETIRED_ENV} is not read; set {RECORD_LIMIT_ENV} instead")
 
 
 def _from_environment() -> int | None:

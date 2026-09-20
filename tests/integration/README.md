@@ -81,7 +81,7 @@ to do the thing they had already done.
 | `array_member_rule` | A whole-list rule on the field and a per-item rule under `items` | refused — a selector reaches top-level fields only |
 | `many_mistakes` | Five different mistakes in one block | refused — all five, each naming its own correction |
 | `judged_context_under_batch` | A judged rule reading another action, under `run_mode: batch` | refused — no context source exists in batch |
-| `old_flat_shape` | A whole file still written with flat arguments and `severity: fail` | refused — arguments under `params:`, `fail` is now `error` |
+| `old_flat_shape` | A whole file still written with flat arguments and `severity: fail` | refused — arguments under `params:`, and `fail` is not one of the levels |
 | `repair_auto_at_file_granularity` | `repair: auto` where one call produces the whole file | refused — one failing record would regenerate all of them |
 
 No provider is called: preflight is the deterministic half, and it is the half

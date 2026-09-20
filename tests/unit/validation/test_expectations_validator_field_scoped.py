@@ -70,7 +70,7 @@ def test_an_inline_rule_using_the_old_severity_word_names_its_replacement():
             },
         }
     }
-    assert "is now 'error'" in defects_for(configs)
+    assert "unknown severity 'fail'" in defects_for(configs)
 
 
 def defects_for(configs):

@@ -73,18 +73,18 @@ class RetiredRecoveryState(RuntimeError):
     """Persisted state names a recovery mechanism this version cannot act on."""
 
 
-# State written before the reprompt phase was removed still names it, as a
-# RecoveryState phase or a registry entry's recovery_type. Dropping such an entry
-# makes its parent batch look unsubmitted, so the next run pays for it again.
+# A phase this version does not run reaches here as a RecoveryState phase or as
+# a registry entry's recovery_type. Dropping such an entry makes its parent batch
+# look unsubmitted, so the next run pays for it again.
 _RETIRED_NAMES = frozenset({"reprompt"})
 
 
 def _refuse_if_retired(value: str) -> None:
     if value in _RETIRED_NAMES:
         raise RetiredRecoveryState(
-            f"This run was deferred mid-{value}, a recovery phase that no longer exists. "
-            f"Its stored state cannot be resumed. Re-run the action with --fresh to start "
-            f"it again; the records it had already completed are in the store."
+            f"This run was deferred mid-{value}, a recovery phase this version does not "
+            f"run. Its stored state cannot be resumed. Re-run the action with --fresh to "
+            f"start it again; the records it had already completed are in the store."
         )
 
 

@@ -1,5 +1,6 @@
 """Schema definitions for the new workflow format."""
 
+import difflib
 from enum import Enum
 from typing import Any, Literal
 
@@ -7,6 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
+
+# Measured against the keys a defaults block declares: a transposition or a
+# dropped letter sits at 0.667 and above, while a key that belongs to no field
+# at all — a superseded spelling, a project's own annotation — reaches 0.600.
+_NEAR_MISS_CUTOFF = 0.65
+
+
+def _nearest_defaults_key(key: str, declared: list[str]) -> str | None:
+    """The key *key* was probably meant to be, or None if it resembles none of them."""
+    matches = difflib.get_close_matches(key, declared, n=1, cutoff=_NEAR_MISS_CUTOFF)
+    return matches[0] if matches else None
 
 
 def _validate_bool_or_mapping(v: Any, field_name: str, usage_hint: str) -> Any:
@@ -232,38 +244,10 @@ class ExpectConfig(BaseModel):
         return self
 
 
-_RETIRED_KEYS = {
-    "reprompt": (
-        "reprompt: has been replaced by expect:. A block that only checked the "
-        "schema becomes expect: {repair: auto}; one with validation: becomes a "
-        "rule under expect: {expectations: [...]}."
-    ),
-    "on_schema_mismatch": (
-        "on_schema_mismatch: has been replaced by expect:. Schema conformance is "
-        "enforced by expect: {repair: auto}, which regenerates a response the "
-        "schema rejects."
-    ),
-}
-
-
-def _refuse_retired_keys(data: Any) -> Any:
-    """Name the replacement for a key that used to configure the reprompt loop."""
-    if isinstance(data, dict):
-        for key, guidance in _RETIRED_KEYS.items():
-            if key in data:
-                raise ValueError(guidance)
-    return data
-
-
 class ActionConfig(_RetryValidators):
     """Configuration for a workflow action."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _no_retired_keys(cls, data: Any) -> Any:
-        return _refuse_retired_keys(data)
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -415,15 +399,34 @@ class ActionConfig(_RetryValidators):
 class DefaultsConfig(_RetryValidators):
     """Default configuration applied to all actions."""
 
+    model_config = ConfigDict(extra="forbid")
+
     @model_validator(mode="before")
     @classmethod
-    def _no_retired_keys(cls, data: Any) -> Any:
-        return _refuse_retired_keys(data)
+    def _refuse_undeclared_keys(cls, data: Any) -> Any:
+        """Name what an undeclared key resembles, or what the block does take.
 
-    # extra="ignore" (not "forbid"): workflow defaults may contain vendor-specific
-    # params like frequency_penalty, presence_penalty that vary by provider and are
-    # consumed by extract_generation_params(). Typed fields still validate known keys.
-    model_config = ConfigDict(extra="ignore")
+        Pydantic refuses it either way; this names the near match first, and
+        covers every undeclared key rather than the ones a table remembers.
+        """
+        if not isinstance(data, dict):
+            return data
+        declared = sorted(cls.model_fields)
+        stray = sorted(str(key) for key in data if key not in cls.model_fields)
+        if not stray:
+            return data
+
+        problems = []
+        for key in stray:
+            near = _nearest_defaults_key(key, declared)
+            problems.append(
+                f"unknown defaults key '{key}' — did you mean '{near}'?"
+                if near
+                else f"unknown defaults key '{key}'"
+            )
+        if any(_nearest_defaults_key(key, declared) is None for key in stray):
+            problems.append("the keys a defaults block takes are " + ", ".join(declared))
+        raise ValueError("; ".join(problems))
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")
@@ -459,6 +462,12 @@ class DefaultsConfig(_RetryValidators):
     temperature: float | None = Field(default=None, description="Default temperature")
     max_tokens: int | None = Field(default=None, description="Default max tokens")
     top_p: float | None = Field(default=None, description="Default top-p")
+    frequency_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Default frequency penalty"
+    )
+    presence_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0, description="Default presence penalty"
+    )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
     constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")

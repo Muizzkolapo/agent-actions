@@ -309,7 +309,8 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 
 ### Migrating from `reprompt:`
 
-`reprompt:` has been removed. A config carrying it is refused at load, naming its replacement.
+`reprompt:` has been removed. A config carrying it is refused at load as a key the schema does not
+declare, and the migration is below.
 
 **A block that only checked the schema** — the common case — becomes a rule-free `expect:`. Set it
 once for the workflow:

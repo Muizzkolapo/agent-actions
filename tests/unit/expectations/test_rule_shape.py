@@ -49,10 +49,18 @@ def test_definition_hash_is_independent_of_argument_order():
     assert a.definition_hash() == b.definition_hash()
 
 
-def test_severity_fail_is_refused_by_naming_the_replacement_not_the_literal_set():
+def test_an_unknown_severity_is_refused_by_naming_the_levels():
     with pytest.raises(ValidationError) as excinfo:
         Expectation(type="not_null", field="answer", severity="fail")
-    assert "is now 'error'" in str(excinfo.value)
+    assert "the levels are error, warn and info" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("severity", ["fail", "critical", "ERROR"])
+def test_any_severity_that_is_not_a_level_is_refused_the_same_way(severity):
+    """Derived from the levels, so a spelling nobody thought to list is covered."""
+    with pytest.raises(ValidationError) as excinfo:
+        Expectation(type="not_null", field="answer", severity=severity)
+    assert f"unknown severity '{severity}'" in str(excinfo.value)
 
 
 def test_a_mistyped_rule_key_is_not_sent_to_the_params_block():
@@ -70,12 +78,12 @@ def test_a_genuine_argument_is_still_sent_to_the_params_block():
     assert "did you mean" not in str(excinfo.value)
 
 
-def test_a_stray_key_and_a_superseded_severity_are_reported_together():
+def test_a_stray_key_and_an_unknown_severity_are_reported_together():
     with pytest.raises(ValidationError) as excinfo:
         Expectation(type="item_count", field="options", equals=4, severity="fail")
     message = str(excinfo.value)
     assert "params" in message
-    assert "is now 'error'" in message
+    assert "unknown severity 'fail'" in message
 
 
 @pytest.mark.parametrize(
