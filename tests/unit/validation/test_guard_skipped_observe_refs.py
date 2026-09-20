@@ -15,7 +15,7 @@ def _make_workflow(*actions):
     return {"actions": list(actions)}
 
 
-def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observe=None):
+def _llm_action(name, *, schema_fields=None, guard=None, dependencies=None, observe=None):
     """Build an LLM action config."""
     action = {"name": name, "prompt": f"Process {name}"}
     if schema_fields:
@@ -25,8 +25,8 @@ def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observ
         }
     if guard:
         action["guard"] = guard
-    if depends_on:
-        action["depends_on"] = depends_on
+    if dependencies:
+        action["dependencies"] = dependencies
     if observe:
         action["context_scope"] = {"observe": observe}
     return action
@@ -45,7 +45,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -67,7 +67,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.*"],
             ),
         )
@@ -94,7 +94,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -114,7 +114,7 @@ class TestGuardSkippedObserveRefs:
             _llm_action("review", schema_fields=["hitl_status"]),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -138,7 +138,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -162,7 +162,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status", "review.reviewer_notes"],
             ),
         )
@@ -188,7 +188,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -214,7 +214,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -244,7 +244,7 @@ class TestGuardSkippedObserveRefs:
             _llm_action(
                 "summarizer",
                 schema_fields=["summary"],
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
@@ -268,7 +268,7 @@ class TestGuardSkippedObserveRefs:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.*", "review.hitl_status"],
             ),
         )

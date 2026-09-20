@@ -33,7 +33,7 @@ def _make_action(
     schema_name: str | None = None,
     output_schema: dict | None = None,
     kind: str = "llm",
-    depends_on: list[str] | None = None,
+    dependencies: list[str] | None = None,
 ) -> dict[str, Any]:
     action: dict[str, Any] = {
         "name": name,
@@ -49,8 +49,8 @@ def _make_action(
         action["schema_name"] = schema_name
     if output_schema is not None:
         action["output_schema"] = output_schema
-    if depends_on is not None:
-        action["depends_on"] = depends_on
+    if dependencies is not None:
+        action["dependencies"] = dependencies
     return action
 
 

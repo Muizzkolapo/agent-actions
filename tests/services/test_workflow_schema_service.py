@@ -70,7 +70,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "consumer",
                     "model_vendor": "openai",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "prompt": "{{ action.extractor.nonexistent }}",
                 },
             ]
@@ -90,7 +90,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "second",
                     "model_vendor": "openai",
-                    "depends_on": ["first"],
+                    "dependencies": ["first"],
                 },
             ]
         )
@@ -196,7 +196,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "downstream",
                     "model_vendor": "openai",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                 },
             ]
         )
@@ -453,7 +453,7 @@ class TestFromActionConfigs:
 
     SAMPLE_ACTIONS = {
         "extract": {"model_vendor": "openai", "schema": {"text": "str"}},
-        "summarize": {"model_vendor": "openai", "depends_on": ["extract"]},
+        "summarize": {"model_vendor": "openai", "dependencies": ["extract"]},
     }
 
     def test_returns_service_instance(self):

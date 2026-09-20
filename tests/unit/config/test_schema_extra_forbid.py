@@ -185,6 +185,18 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.version_consumption.pattern.value == "merge"
 
+    def test_skip_if_legacy_spelling_rejected(self):
+        """skip_if (old spelling of skip_condition) is an unknown key here too."""
+        data = {"name": "a", "intent": "i", "skip_if": "x > 1"}
+        with pytest.raises(ValidationError, match="skip_if"):
+            ActionConfig.model_validate(data)
+
+    def test_depends_on_legacy_spelling_rejected(self):
+        """depends_on (old spelling of dependencies) is an unknown key here too."""
+        data = {"name": "a", "intent": "i", "depends_on": ["other"]}
+        with pytest.raises(ValidationError, match="depends_on"):
+            ActionConfig.model_validate(data)
+
 
 class TestDefaultsConfigValidation:
     """DefaultsConfig with extra='forbid' refuses a key it does not declare."""

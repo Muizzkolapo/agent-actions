@@ -147,8 +147,7 @@ class ActionConfigDict(TypedDict, total=False):
     # Guard / skip
     guard: GuardConfigDict
     conditional_clause: str
-    skip_if: str
-    skip_condition: str  # alternative to skip_if
+    skip_condition: str
     where_clause: WhereClauseDict
 
     # Optional features
@@ -214,7 +213,6 @@ class ActionEntryDict(TypedDict, total=False):
     is_operational: bool
     conditional_clause: str | None
     where_clause: WhereClauseDict | None
-    skip_if: str | None
     add_dispatch: bool | None
     # Anthropic-specific configuration options
     # API version header for Anthropic requests (e.g., "2023-06-01")

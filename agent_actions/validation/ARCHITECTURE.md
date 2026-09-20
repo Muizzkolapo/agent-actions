@@ -121,7 +121,7 @@ WorkflowStaticAnalyzer.analyze()
   |
   Step 3:  StaticTypeChecker.check_all()
   |          - referenced actions exist
-  |          - referenced actions are in depends_on
+  |          - referenced actions are in dependencies
   |          - referenced fields exist in upstream output schema
   |          - fields not dropped from output
   |          - unused dependency warnings

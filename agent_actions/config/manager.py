@@ -27,6 +27,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Legacy top-level `agents:` configs are validated against AgentConfig
+# (extra="allow", since the expander also uses it for post-expansion dicts)
+# rather than the strict ActionConfig, so a removed spelling would
+# otherwise pass through silently instead of being refused.
+_REMOVED_AGENT_SPELLINGS = {
+    "depends_on": "dependencies",
+    "skip_if": "skip_condition",
+}
+
 
 class ConfigManager:
     def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
@@ -254,6 +263,16 @@ class ConfigManager:
         )
         default_agent_config = default_model.model_dump()
         for agent in user_agents:
+            removed = _REMOVED_AGENT_SPELLINGS.keys() & agent.keys()
+            if removed:
+                raise ConfigurationError(
+                    "Agent configuration uses a removed field spelling",
+                    context={
+                        "agent_type": agent.get("agent_type") or "NOT_SET",
+                        "replacements": {k: _REMOVED_AGENT_SPELLINGS[k] for k in sorted(removed)},
+                        "operation": "merge_agent_configs",
+                    },
+                )
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:

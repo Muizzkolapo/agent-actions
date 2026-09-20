@@ -228,7 +228,7 @@ class ActionCommand(BaseInspectCommand):
 
         for name in inspector.execution_order:
             cfg = inspector.action_configs.get(name, {})
-            deps = cfg.get("dependencies") or cfg.get("depends_on") or []
+            deps = cfg.get("dependencies") or []
             if isinstance(deps, str):
                 deps = [deps]
             if target in deps:

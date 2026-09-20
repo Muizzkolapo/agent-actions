@@ -128,7 +128,7 @@ class TestGuardValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["scorer"],
+                    "dependencies": ["scorer"],
                     "guard": {"condition": "nonexistent_field > 5", "on_false": "filter"},
                     "context_scope": {"observe": ["scorer.score"]},
                     "schema": {
@@ -217,7 +217,7 @@ class TestContextScopeValidation:
             [
                 {
                     "name": "consumer",
-                    "depends_on": ["ghost"],
+                    "dependencies": ["ghost"],
                     "context_scope": {"observe": ["ghost.field"]},
                     "schema": {
                         "type": "object",
@@ -242,7 +242,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {"observe": ["extractor.nonexistent"]},
                     "schema": {
                         "type": "object",
@@ -430,7 +430,7 @@ class TestActionableErrors:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {"observe": ["extractor.nonexistent"]},
                     "schema": {
                         "type": "object",
@@ -487,7 +487,7 @@ def _consumer(prompt: str) -> dict:
         "agent_type": "llm",
         "kind": "llm",
         "model_name": "gpt-4o-mini",
-        "depends_on": ["producer"],
+        "dependencies": ["producer"],
         "prompt": prompt,
         "context_scope": {"observe": ["producer.a", "producer.b"]},
         "schema": {"fields": [{"id": "out", "type": "string", "required": True}]},

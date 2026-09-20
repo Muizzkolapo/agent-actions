@@ -116,9 +116,8 @@ class WorkflowInspector:
         operational_order = [n for n in self.execution_order if n in self.action_configs]
         full_order = list(dict.fromkeys(operational_order + list(self.action_configs.keys())))
 
-        # Normalize: codebase carries both `dependencies` and `depends_on`.
         normalized = {
-            name: {**cfg, "dependencies": cfg.get("dependencies") or cfg.get("depends_on") or []}
+            name: {**cfg, "dependencies": cfg.get("dependencies") or []}
             for name, cfg in self.action_configs.items()
         }
 

@@ -21,7 +21,7 @@ def _make_workflow(*actions):
     return {"actions": list(actions)}
 
 
-def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observe=None):
+def _llm_action(name, *, schema_fields=None, guard=None, dependencies=None, observe=None):
     """Build an LLM action config."""
     action = {"name": name, "prompt": f"Process {name}"}
     if schema_fields:
@@ -31,20 +31,20 @@ def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observ
         }
     if guard:
         action["guard"] = guard
-    if depends_on:
-        action["depends_on"] = depends_on
+    if dependencies:
+        action["dependencies"] = dependencies
     if observe:
         action["context_scope"] = {"observe": observe}
     return action
 
 
-def _tool_action(name, *, schema_fields, depends_on=None, observe=None):
+def _tool_action(name, *, schema_fields, dependencies=None, observe=None):
     """Build a tool action config with a list-style output schema."""
     action = {
         "name": name,
         "kind": "tool",
         "impl": f"{name}_impl",
-        "depends_on": depends_on or [],
+        "dependencies": dependencies or [],
         "schema": [{"id": f, "type": t} for f, t in schema_fields.items()],
     }
     if observe:
@@ -66,7 +66,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "format_output",
                 schema_fields={"insights": "object", "summary": "string"},
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -86,7 +86,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "format_output",
                 schema_fields={"insights": "object"},
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -107,7 +107,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "format_output",
                 schema_fields={"insights": "object"},
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -128,7 +128,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "format_output",
                 schema_fields={"summary": "string"},  # insights NOT in schema
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -154,7 +154,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "consumer",
                 schema_fields={"field_a": "object", "field_b": "array"},
-                depends_on=["action_a", "action_b"],
+                dependencies=["action_a", "action_b"],
                 observe=["action_a.field_a", "action_b.field_b"],
             ),
         )
@@ -177,7 +177,7 @@ class TestGuardNullableFields:
             _llm_action(
                 "summarizer",
                 schema_fields=["summary"],
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -198,7 +198,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "format_output",
                 schema_fields={"insights": "object"},
-                depends_on=["extract_insights"],
+                dependencies=["extract_insights"],
                 observe=["extract_insights.insights"],
             ),
         )
@@ -219,13 +219,13 @@ class TestGuardNullableFields:
             _llm_action(
                 "intermediate",
                 schema_fields=["extra"],
-                depends_on=["guarded_action"],
+                dependencies=["guarded_action"],
                 observe=["guarded_action.insights"],
             ),
             _tool_action(
                 "final_tool",
                 schema_fields={"insights": "object"},
-                depends_on=["intermediate"],
+                dependencies=["intermediate"],
                 observe=["intermediate.insights"],
             ),
         )
@@ -251,13 +251,13 @@ class TestGuardNullableFields:
             _llm_action(
                 "middle",
                 schema_fields=["other"],
-                depends_on=["guarded_action"],
+                dependencies=["guarded_action"],
                 observe=["guarded_action.data"],
             ),
             _tool_action(
                 "consumer",
                 schema_fields={"data": "object"},
-                depends_on=["middle"],
+                dependencies=["middle"],
                 observe=["middle.data"],
             ),
         )
@@ -281,7 +281,7 @@ class TestGuardNullableFields:
                 "name": "tool",
                 "kind": "tool",
                 "impl": "tool_impl",
-                "depends_on": ["guarded"],
+                "dependencies": ["guarded"],
                 "context_scope": {"observe": ["guarded.data"]},
                 "schema": [{"id": "data", "type": ["object", "null"]}],
             },
@@ -303,7 +303,7 @@ class TestGuardNullableFields:
             _tool_action(
                 "tool",
                 schema_fields={"data": "object"},
-                depends_on=["guarded"],
+                dependencies=["guarded"],
                 observe=["guarded.data"],
             ),
         )

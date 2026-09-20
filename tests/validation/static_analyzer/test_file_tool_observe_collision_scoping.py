@@ -19,7 +19,7 @@ def test_tool_declared_via_model_vendor_is_flagged():
                 "name": "dedup_by_concept",
                 "model_vendor": "tool",
                 "granularity": "file",
-                "depends_on": ["tag_concept", "dedup"],
+                "dependencies": ["tag_concept", "dedup"],
                 "context_scope": {"observe": ["tag_concept.*", "dedup.*"]},
             },
         ]
@@ -39,7 +39,7 @@ def test_file_tool_without_observe_no_warning():
                 "name": "flatten",
                 "kind": "tool",
                 "granularity": "file",
-                "depends_on": ["producer"],
+                "dependencies": ["producer"],
                 "context_scope": {"drop": ["producer.debug"]},
             },
         ]
@@ -58,7 +58,7 @@ def test_duplicate_wildcard_same_namespace_no_warning():
                 "name": "flatten",
                 "kind": "tool",
                 "granularity": "file",
-                "depends_on": ["producer"],
+                "dependencies": ["producer"],
                 "context_scope": {"observe": ["producer.*", "producer.*"]},
             },
         ]

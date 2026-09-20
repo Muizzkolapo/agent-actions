@@ -27,7 +27,7 @@ class TestWorkflowStaticAnalyzer:
                 },
                 {
                     "name": "summarizer",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "prompt": "Use: {{ action.extractor.nonexistent_field }}",
                     "schema": {
                         "type": "object",
@@ -61,7 +61,7 @@ class TestWorkflowStaticAnalyzer:
                 },
                 {
                     "name": "summarizer",
-                    # No explicit depends_on - implicit via reference
+                    # No explicit dependencies - implicit via reference
                     "prompt": "Use: {{ action.extractor.text }}",
                     "schema": {
                         "type": "object",
@@ -85,7 +85,7 @@ class TestWorkflowStaticAnalyzer:
             "actions": [
                 {
                     "name": "summarizer",
-                    "depends_on": ["nonexistent"],
+                    "dependencies": ["nonexistent"],
                     "prompt": "Use: {{ action.nonexistent.text }}",
                 },
             ]
@@ -136,32 +136,6 @@ class TestWorkflowStaticAnalyzer:
         assert schema is not None
         assert "text" in schema.available_fields
         assert "score" in schema.available_fields
-
-    def test_dependencies_field_alias(self):
-        """Test 'dependencies' field works as alias for 'depends_on'."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "upstream",
-                    "schema": {
-                        "type": "object",
-                        "properties": {"data": {"type": "string"}},
-                    },
-                },
-                {
-                    "name": "downstream",
-                    "dependencies": ["upstream"],  # Using 'dependencies' instead of 'depends_on'
-                    "prompt": "{{ action.upstream.data }}",
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
-
-        # Should not report missing dependency
-        dep_errors = [e for e in result.errors if "not declared in dependencies" in e.message]
-        assert len(dep_errors) == 0
 
     def test_get_action_schemas_hitl(self):
         """Test get_action_schemas classifies HITL actions with canonical schema."""
@@ -250,7 +224,7 @@ class TestAnalyzeWorkflowFunction:
                 {"name": "schemaless_agent"},
                 {
                     "name": "consumer",
-                    "depends_on": ["schemaless_agent"],
+                    "dependencies": ["schemaless_agent"],
                     "prompt": "{{ action.schemaless_agent.field }}",
                 },
             ]
@@ -421,7 +395,7 @@ class TestActionSchemas:
                     "name": "tool_agent",
                     "kind": "tool",
                     "impl": "processor",
-                    "depends_on": ["llm_agent"],
+                    "dependencies": ["llm_agent"],
                 },
             ]
         }
@@ -527,7 +501,7 @@ class TestComplexWorkflows:
                 },
                 {
                     "name": "branch_a",
-                    "depends_on": ["source_agent"],
+                    "dependencies": ["source_agent"],
                     "context_scope": {"observe": ["source_agent.*"]},
                     "prompt": "{{ action.source_agent.data }}",
                     "schema": {
@@ -537,7 +511,7 @@ class TestComplexWorkflows:
                 },
                 {
                     "name": "branch_b",
-                    "depends_on": ["source_agent"],
+                    "dependencies": ["source_agent"],
                     "context_scope": {"observe": ["source_agent.*"]},
                     "prompt": "{{ action.source_agent.data }}",
                     "schema": {
@@ -547,7 +521,7 @@ class TestComplexWorkflows:
                 },
                 {
                     "name": "merger",
-                    "depends_on": ["branch_a", "branch_b"],
+                    "dependencies": ["branch_a", "branch_b"],
                     "context_scope": {"observe": ["branch_a.*", "branch_b.*"]},
                     "prompt": "Merge: {{ action.branch_a.result_a }} and {{ action.branch_b.result_b }}",
                     "schema": {
@@ -567,7 +541,7 @@ class TestComplexWorkflows:
             "actions": [
                 {
                     "name": f"agent_{i}",
-                    "depends_on": [f"agent_{i - 1}"] if i > 0 else [],
+                    "dependencies": [f"agent_{i - 1}"] if i > 0 else [],
                     "context_scope": {"observe": [f"agent_{i - 1}.*"]}
                     if i > 0
                     else {"observe": ["source.*"]},
@@ -602,7 +576,7 @@ class TestComplexWorkflows:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["data_provider"],
+                    "dependencies": ["data_provider"],
                     "context_scope": {"observe": ["data_provider.*"]},
                     "prompt": """
                         Field1: {{ action.data_provider.field1 }}
@@ -637,7 +611,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.facts", "extractor.summary"],
                     },
@@ -651,7 +625,7 @@ class TestContextScopeValidation:
         assert len(context_errors) == 0
 
     def test_context_scope_infers_dependency(self):
-        """Test that context_scope references infer dependencies (no explicit depends_on needed)."""
+        """Test that context_scope references infer dependencies (no explicit dependencies needed)."""
         workflow_config = {
             "actions": [
                 {
@@ -663,9 +637,9 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    # depends_on does NOT include 'extractor', but context_scope
+                    # dependencies does NOT include 'extractor', but context_scope
                     # references it — the runtime infers the dependency.
-                    "depends_on": [],
+                    "dependencies": [],
                     "context_scope": {
                         "observe": ["extractor.facts"],
                     },
@@ -693,7 +667,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": [],
+                    "dependencies": [],
                     "context_scope": {
                         "observe": ["extractor.nonexistent_field"],
                     },
@@ -713,7 +687,7 @@ class TestContextScopeValidation:
             "actions": [
                 {
                     "name": "processor",
-                    "depends_on": [],
+                    "dependencies": [],
                     "context_scope": {
                         "observe": ["typo_action.some_field"],
                     },
@@ -743,7 +717,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.nonexistent_field"],
                     },
@@ -773,7 +747,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.*"],
                     },
@@ -824,7 +798,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "passthrough": ["extractor.invalid_field"],
                     },
@@ -851,7 +825,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": [
                             "extractor.bad_field1",
@@ -885,7 +859,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.some_field"],
                     },
@@ -914,7 +888,7 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "route",
-                    "depends_on": ["classify"],
+                    "dependencies": ["classify"],
                     "context_scope": {"observe": ["classify.issue_type"]},
                     "prompt": "Route based on {{ action.classify.issue_type }}",
                     "schema": {
@@ -1020,7 +994,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["my_tool"],
+                    "dependencies": ["my_tool"],
                     "context_scope": {
                         "observe": ["my_tool.result_field"],
                     },
@@ -1052,7 +1026,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["my_tool"],
+                    "dependencies": ["my_tool"],
                     "context_scope": {
                         "observe": ["my_tool.*"],
                     },
@@ -1087,7 +1061,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["action_a", "action_b"],
+                    "dependencies": ["action_a", "action_b"],
                     "context_scope": {
                         "observe": [
                             "action_b.question_text",  # Wrong action!
@@ -1122,7 +1096,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.totally_bogus_field"],
                     },
@@ -1151,7 +1125,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "middle",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "schema": {
                         "type": "object",
                         "properties": {"own_field": {"type": "string"}},
@@ -1163,7 +1137,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["middle"],
+                    "dependencies": ["middle"],
                     "context_scope": {
                         "observe": ["middle.*"],
                     },
@@ -1194,7 +1168,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "context_scope": {
                         "observe": ["extractor.nonexistent_field"],
                     },
@@ -1225,7 +1199,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "processor",
-                    "depends_on": ["extractor"],
+                    "dependencies": ["extractor"],
                     "schema": {
                         "type": "object",
                         "properties": {"result": {"type": "string"}},
@@ -1267,7 +1241,7 @@ class TestPreflightFieldValidation:
                 },
                 {
                     "name": "consumer",
-                    "depends_on": ["my_tool"],
+                    "dependencies": ["my_tool"],
                     "context_scope": {
                         "observe": ["my_tool.some_field"],
                     },

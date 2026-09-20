@@ -108,7 +108,7 @@ class StaticTypeChecker:
                         referenced_agent=source_agent,
                         referenced_field=field_path,
                         hint=(
-                            f"Add '{source_agent}' to depends_on for '{node.name}' "
+                            f"Add '{source_agent}' to dependencies for '{node.name}' "
                             "or ensure it is reachable via upstream dependencies"
                         ),
                     )
@@ -229,12 +229,12 @@ class StaticTypeChecker:
                         message=f"Dependency '{dep}' is declared but never referenced",
                         location=FieldLocation(
                             agent_name=action_name,
-                            config_field="depends_on",
+                            config_field="dependencies",
                             raw_reference=dep,
                         ),
                         referenced_agent=dep,
                         referenced_field="",
-                        hint=f"Either use fields from '{dep}' or remove it from depends_on",
+                        hint=f"Either use fields from '{dep}' or remove it from dependencies",
                     )
                 )
 
@@ -260,7 +260,7 @@ class StaticTypeChecker:
                     if req.source_agent == agent:
                         warnings.append(
                             StaticTypeWarning(
-                                message=f"Implicit dependency on '{agent}' (not in depends_on)",
+                                message=f"Implicit dependency on '{agent}' (not in dependencies)",
                                 location=FieldLocation(
                                     agent_name=action_name,
                                     config_field=req.location,
@@ -268,7 +268,7 @@ class StaticTypeChecker:
                                 ),
                                 referenced_agent=agent,
                                 referenced_field=req.field_path,
-                                hint=f"Consider adding '{agent}' to depends_on for clarity",
+                                hint=f"Consider adding '{agent}' to dependencies for clarity",
                             )
                         )
                         break

@@ -65,7 +65,7 @@ class WorkflowStaticAnalyzer:
 
     What it checks:
         1. All referenced actions exist in the workflow
-        2. Referenced actions are declared in depends_on
+        2. Referenced actions are declared in dependencies
         3. Referenced fields exist in upstream action's output schema
         4. Fields haven't been dropped from output
     """
@@ -587,7 +587,7 @@ class WorkflowStaticAnalyzer:
 
             # Get action's dependencies (explicit + context_scope-inferred).
             # The runtime infers deps from context_scope refs, so validation must match.
-            deps_list = action.get("depends_on") or action.get("dependencies", [])
+            deps_list = action.get("dependencies", [])
             dependencies = set()
             if isinstance(deps_list, list):
                 for dep in deps_list:
@@ -1539,7 +1539,7 @@ class WorkflowStaticAnalyzer:
             if not isinstance(action, dict):
                 continue
             name = action.get("name", "unknown")
-            deps_list = action.get("depends_on") or action.get("dependencies", [])
+            deps_list = action.get("dependencies", [])
             deps: set[str] = set()
             if isinstance(deps_list, list):
                 for dep in deps_list:
@@ -1978,7 +1978,7 @@ class WorkflowStaticAnalyzer:
             dependencies = set(input_sources + context_sources)
         except (ConfigurationError, KeyError, ValueError) as e:
             logger.warning("Dependency inference failed for '%s': %s", name, e, exc_info=True)
-            deps_list = action_config.get("depends_on") or action_config.get("dependencies", [])
+            deps_list = action_config.get("dependencies", [])
             dependencies = set()
             if isinstance(deps_list, str):
                 dependencies.add(deps_list)
