@@ -79,3 +79,4 @@ pathways.
 | `tooling` | inbound | Code scanner and LSP use path_utils, file_utils, project_root, and constants |
 | `guards` | inbound | Guard parser uses dangerous pattern constants |
 | `prompt` | inbound | Context scope strategies use transformation utilities |
+| `workflow` | inbound | The executor stamps the record limit and what a run processed; the file walk and the version correlator mark that count unknown for a file they lose |

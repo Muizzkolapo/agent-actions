@@ -436,7 +436,15 @@ def process_merged_files(
                     relative_path,
                     reduce_key or "auto",
                 )
-                merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
+                unreadable: list[Path] = []
+                merged_data = merge_json_files(
+                    file_paths, reduce_key=reduce_key, unreadable=unreadable
+                )
+                if unreadable:
+                    # The merge reads fail-open, so a corrupt branch arrives as
+                    # a short result rather than an exception the handler below
+                    # could catch. Those records never reach a slice either.
+                    _lose_file(runner, params.action_name)
                 # Guard-`filter` subtraction lives only in the storage-backend
                 # fan-in (where FILTERED dispositions exist); this filesystem path
                 # is unreachable whenever they do. Add it here if that changes.

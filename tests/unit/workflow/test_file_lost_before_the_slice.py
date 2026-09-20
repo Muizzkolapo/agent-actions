@@ -15,7 +15,6 @@ only error that reads as "a smaller limit is safe".
 """
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,10 +33,11 @@ class _Backend:
     """Enough storage backend for the walk; a real class so the observation
     registry can hold it weakly and so no attribute answers truthy by accident."""
 
-    def __init__(self, by_action, *, list_errors=(), read_errors=()):
+    def __init__(self, by_action, *, list_errors=(), read_errors=(), read_exception=None):
         self._by_action = by_action
         self._list_errors = set(list_errors)
         self._read_errors = set(read_errors)
+        self._read_exception = read_exception
 
     def list_target_files(self, action_name):
         if action_name in self._list_errors:
@@ -46,7 +46,7 @@ class _Backend:
 
     def read_target(self, action_name, relative_path):
         if (action_name, relative_path) in self._read_errors:
-            raise json.JSONDecodeError("bad blob", "", 0)
+            raise self._read_exception or json.JSONDecodeError("bad blob", "", 0)
         return self._by_action[action_name][relative_path]
 
     def load_metadata(self, _key):
@@ -147,35 +147,49 @@ class TestTheStagingWalk:
 
 
 class TestTheMergedWalk:
-    """process_merged_files — the fan-in path."""
+    """process_merged_files — the fan-in path. Two upstreams holding the same
+    relative filename form a group of two, which is the branch that merges."""
 
-    def _walk(self, tmp_path, backend, per_file):
-        upstream = tmp_path / "upstream"
-        upstream.mkdir()
+    def _walk(self, tmp_path, backend, per_file, corrupt=()):
         output = tmp_path / "output"
         output.mkdir()
-        for i in range(2):
-            (upstream / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
+        dirs = []
+        for up_name in ("up_a", "up_b"):
+            upstream = tmp_path / up_name
+            upstream.mkdir()
+            for stem in ("f", "g"):
+                broken = (up_name, stem) in corrupt
+                (upstream / f"{stem}.json").write_text(
+                    "{not json at all" if broken else json.dumps([{"id": f"{up_name}-{stem}"}])
+                )
+            dirs.append(str(upstream))
 
         runner = MagicMock()
         runner.retried_records = frozenset()
         runner.storage_backend = backend
-        runner._collect_files_from_upstream.return_value = {
-            Path(f"file_{i}.json"): [upstream / f"file_{i}.json"] for i in range(2)
-        }
         runner._process_single_file.side_effect = per_file
 
-        params = _params(tmp_path, [str(upstream)])
-        return process_merged_files(runner, params)
+        return process_merged_files(runner, _params(tmp_path, dirs))
 
-    def test_a_merged_file_that_fails_leaves_the_action_count_unknown(self, tmp_path):
+    def test_a_branch_that_will_not_parse_leaves_the_action_count_unknown(self, tmp_path):
+        """merge_json_files reads fail-open, so a corrupt branch arrives as a
+        short merge rather than an exception the walk could catch. The other
+        group merges and slices, so without the guard the action would carry a
+        count that silently omits the corrupt branch's records."""
+        backend = _Backend({})
+
+        self._walk(tmp_path, backend, _slices(backend), corrupt={("up_b", "f")})
+
+        assert slice_observation(backend, ACTION) is None
+
+    def test_a_merged_group_that_fails_to_process_leaves_the_count_unknown(self, tmp_path):
         backend = _Backend({})
         calls = {"n": 0}
 
         def per_file(params):
             calls["n"] += 1
             if calls["n"] == 1:
-                raise ValueError("unreadable merge input")
+                raise ValueError("processing blew up")
             _slices(backend)(params)
 
         self._walk(tmp_path, backend, per_file)
@@ -188,6 +202,62 @@ class TestTheMergedWalk:
         self._walk(tmp_path, backend, _slices(backend, 3))
 
         assert slice_observation(backend, ACTION) == (6, False)
+
+
+class TestTheVersionCorrelator:
+    """A version consumer's input is assembled before its walk begins, so a
+    source lost there is lost before any slice can count it."""
+
+    def _correlate(self, tmp_path, backend):
+        from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+
+        correlator = VersionOutputCorrelator(tmp_path / "agent_io", storage_backend=backend)
+        return correlator.prepare_correlated_input("consumer", ["train_1", "train_2"], 0)
+
+    @staticmethod
+    def _correlated(count, agent):
+        """Branches must share a correlation id to group, and each record must
+        carry its own agent's namespace for the version merge to accept it."""
+        return [
+            {
+                "source_guid": f"g{i}",
+                "version_correlation_id": f"c{i}",
+                "content": {agent: {"value": i}},
+            }
+            for i in range(count)
+        ]
+
+    def test_a_source_that_vanishes_between_listing_and_reading_poisons_the_count(self, tmp_path):
+        """Listed, then gone: skipped rather than raised, so the correlated
+        input is already short by the time the consumer walks it. The consumer
+        still ran and sliced, so without the guard it would carry a count
+        covering only the branch that survived."""
+        backend = _Backend(
+            {
+                "train_1": {"a.json": self._correlated(4, "train_1")},
+                "train_2": {"b.json": self._correlated(4, "train_2")},
+            },
+            read_errors={("train_2", "b.json")},
+            read_exception=FileNotFoundError("listed but gone"),
+        )
+        record_indices_to_process(_records(4), {}, "consumer", storage_backend=backend)
+
+        self._correlate(tmp_path, backend)
+
+        assert slice_observation(backend, "consumer") is None
+
+    def test_a_clean_correlation_leaves_the_count_alone(self, tmp_path):
+        backend = _Backend(
+            {
+                "train_1": {"a.json": self._correlated(4, "train_1")},
+                "train_2": {"b.json": self._correlated(4, "train_2")},
+            }
+        )
+        record_indices_to_process(_records(8), {}, "consumer", storage_backend=backend)
+
+        self._correlate(tmp_path, backend)
+
+        assert slice_observation(backend, "consumer") == (8, False)
 
 
 class TestTheStorageBackendWalk:
