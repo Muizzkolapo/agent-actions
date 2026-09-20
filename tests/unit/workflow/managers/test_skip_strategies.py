@@ -7,7 +7,6 @@ import pytest
 
 from agent_actions.workflow.managers.skip import (
     GuardStrategy,
-    LegacySkipIfStrategy,
     SkipConditionStrategy,
     SkipEvaluator,
 )
@@ -420,51 +419,6 @@ class TestGuardStrategy:
         mock_fire.assert_called_once()
 
 
-# ── LegacySkipIfStrategy ──────────────────────────────────────────────
-
-
-class TestLegacySkipIfStrategy:
-    """Tests for LegacySkipIfStrategy (direct logic: matched → skip)."""
-
-    @pytest.fixture
-    def strategy(self):
-        return LegacySkipIfStrategy()
-
-    def test_no_skip_if_returns_false(self, strategy):
-        assert strategy.should_skip({}, {}) is False
-
-    def test_matched_skips(self, strategy):
-        """When filter matches, skip (direct logic) and fire AgentSkipEvent."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
-            result = strategy.should_skip({"skip_if": "x > 1", "agent_type": "a"}, {})
-        assert result is True
-        mock_fire.assert_called_once()
-        event = mock_fire.call_args[0][0]
-        assert event.action_name == "a"
-        assert "skip_if" in event.skip_reason
-
-    def test_not_matched_does_not_skip(self, strategy):
-        filt = _make_filter(FakeFilterResult(success=True, matched=False))
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            result = strategy.should_skip({"skip_if": "x > 1", "agent_type": "a"}, {})
-        assert result is False
-
-    def test_filter_failure_returns_false(self, strategy):
-        """When filter evaluation fails (success=False), fail-open (don't skip)."""
-        filt = _make_filter(FakeFilterResult(success=False, error="parse error"))
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            result = strategy.should_skip({"skip_if": "bad expr", "agent_type": "a"}, {})
-        assert result is False
-
-    def test_exception_returns_false(self, strategy):
-        filt = MagicMock()
-        filt.filter_item.side_effect = ValueError("boom")
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            result = strategy.should_skip({"skip_if": "x > 1", "agent_type": "a"}, {})
-        assert result is False
-
-
 # ── SkipEvaluator ──────────────────────────────────────────────────────
 
 
@@ -473,7 +427,7 @@ class TestSkipEvaluator:
 
     def test_no_conditions_returns_false(self):
         evaluator = SkipEvaluator()
-        # No skip_condition, guard, or skip_if → not skipped
+        # No skip_condition or guard → not skipped
         with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
             assert evaluator.should_skip_action({"agent_type": "a"}) is False
 
@@ -489,18 +443,13 @@ class TestSkipEvaluator:
     def test_strategy_exception_continues(self):
         """If one strategy raises, evaluator continues to the next."""
         evaluator = SkipEvaluator()
-        # Make first strategy raise, but set up config for legacy to match
         evaluator.strategies[0] = MagicMock()
         evaluator.strategies[0].should_skip.side_effect = ValueError("first broke")
         evaluator.strategies[0].get_strategy_name.return_value = "broken"
 
         evaluator.strategies[1] = MagicMock()
-        evaluator.strategies[1].should_skip.return_value = False
+        evaluator.strategies[1].should_skip.return_value = True
         evaluator.strategies[1].get_strategy_name.return_value = "guard"
-
-        evaluator.strategies[2] = MagicMock()
-        evaluator.strategies[2].should_skip.return_value = True
-        evaluator.strategies[2].get_strategy_name.return_value = "skip_if"
 
         result = evaluator.should_skip_action({"agent_type": "a"}, {})
         assert result is True
@@ -514,4 +463,4 @@ class TestSkipEvaluator:
 
     def test_repr(self):
         evaluator = SkipEvaluator()
-        assert "3" in repr(evaluator)
+        assert "2" in repr(evaluator)

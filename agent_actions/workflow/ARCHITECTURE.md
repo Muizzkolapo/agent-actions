@@ -591,6 +591,6 @@ If you change this to SKIPPED:
 | `managers/state.py` | `ActionStateManager` — status persistence, status sets |
 | `managers/batch.py` | `BatchLifecycleManager` — polling, result processing |
 | `managers/output.py` | `ActionOutputManager` — previous output, version correlation |
-| `managers/skip.py` | `SkipEvaluator` — WHERE clause, guard, legacy skip_if |
+| `managers/skip.py` | `SkipEvaluator` — WHERE clause, guard |
 | `managers/manifest.py` | `ManifestManager` — .manifest.json for external tools |
 | `parallel/action_executor.py` | `ActionLevelOrchestrator` — topological sort, parallel dispatch |

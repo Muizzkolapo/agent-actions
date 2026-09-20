@@ -273,7 +273,7 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │       → chunk_config block OR legacy chunk_size/overlap      │
 │                                                              │
 │  16.  initialize_optional_fields()                           │
-│       → skip_if, add_dispatch, conditional_clause, guard     │
+│       → add_dispatch, conditional_clause, guard              │
 │                                                              │
 │  17.  Process version_consumption + interceptors             │
 └─────────────────────────────────────────────────────────────┘

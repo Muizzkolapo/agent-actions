@@ -96,7 +96,7 @@ class WhereClauseConfig(BaseModel):
 
 
 class SkipConditionConfig(BaseModel):
-    """Configuration for action skip conditions (safe replacement for eval-based skip_if)."""
+    """Configuration for action skip conditions."""
 
     condition_type: Literal[
         "previous_outputs_empty", "previous_outputs_count", "field_condition", "custom"
@@ -213,9 +213,6 @@ class AgentConfig(BaseModel):
     )
     conditional_clause: str | None = Field(
         default=None, description="Legacy conditional clause (deprecated, use where_clause instead)"
-    )
-    skip_if: str | None = Field(
-        default=None, description="Legacy skip condition (deprecated, use skip_condition instead)"
     )
     where_clause: WhereClauseConfig | None = Field(
         default=None, description="WHERE clause configuration for advanced filtering"

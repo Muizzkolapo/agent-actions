@@ -185,6 +185,12 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.version_consumption.pattern.value == "merge"
 
+    def test_skip_if_removed_spelling_refused_not_ignored(self):
+        """A removed legacy spelling must fail loud, not pass through silently."""
+        data = {"name": "a", "intent": "i", "skip_if": "x > 1"}
+        with pytest.raises(ValidationError, match="skip_if"):
+            ActionConfig.model_validate(data)
+
 
 class TestDefaultsConfigValidation:
     """DefaultsConfig with extra='forbid' refuses a key it does not declare."""

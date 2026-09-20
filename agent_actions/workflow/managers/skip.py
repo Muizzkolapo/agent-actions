@@ -246,62 +246,6 @@ class GuardStrategy(SkipStrategy):
             return self._handle_filter_error(agent_name, str(e), passthrough_on_error)
 
 
-class LegacySkipIfStrategy(SkipStrategy):
-    """Strategy for evaluating legacy 'skip_if' field."""
-
-    def get_strategy_name(self) -> str:
-        return "skip_if (legacy)"
-
-    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
-        """Evaluate legacy skip_if condition using modern WHERE filter."""
-        skip_if = agent_config.get("skip_if")
-        if not skip_if:
-            return False
-
-        agent_name = agent_config["agent_type"]
-
-        try:
-            context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
-
-            # Use modern guard filter - skip_if expression evaluated as guard condition
-            filter_service = get_global_guard_filter()
-            request = FilterItemRequest(data=context, condition=skip_if)
-            filter_result = filter_service.filter_item(request)
-
-            # If evaluation failed, don't skip (fail-open)
-            if not filter_result.success:
-                logger.debug(
-                    "Legacy skip_if evaluation failed for %s: %s", agent_name, filter_result.error
-                )
-                return False
-
-            # Skip if expression matched (direct logic - different from skip_condition)
-            should_skip = filter_result.matched
-
-            if should_skip:
-                fire_event(
-                    ActionSkipEvent(
-                        action_name=agent_name, skip_reason="legacy skip_if condition matched"
-                    )
-                )
-
-            return should_skip
-
-        except (ValueError, KeyError, TypeError, AttributeError) as e:
-            logger.warning(
-                "Error evaluating legacy skip_if condition for %s: %s",
-                agent_name,
-                e,
-                exc_info=True,
-                extra={
-                    "action_name": agent_name,
-                    "skip_if": skip_if,
-                    "operation": "legacy_skip_if_evaluation",
-                },
-            )
-            return False  # Don't skip on error
-
-
 class SkipEvaluator:
     """Orchestrates skip condition evaluation in precedence order."""
 
@@ -311,7 +255,6 @@ class SkipEvaluator:
         self.strategies = [
             SkipConditionStrategy(self.console),
             GuardStrategy(self.console),
-            LegacySkipIfStrategy(self.console),
         ]
 
     def __repr__(self):
