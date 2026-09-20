@@ -20,6 +20,7 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.limits import forget_slice_observation
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -89,6 +90,19 @@ _ERROR_SAMPLE_SIZE = 3
 def _format_error_sample(messages: list[str]) -> str:
     """Join the first few per-file errors for display."""
     return "; ".join(messages[:_ERROR_SAMPLE_SIZE])
+
+
+def _lose_file(runner: Any, action_name: str) -> None:
+    """Take the action's record count out of service: a file went uncounted.
+
+    The failure is not fatal to the action — the walk records it and carries on
+    — so the run completes holding fewer records than its input offered. A count
+    missing them would let a later limit read as one that could not have bitten,
+    and the action would be skipped rather than re-run. Said for any per-file
+    failure, including one raised after that file was sliced: over-reporting
+    costs a re-run, and under-reporting costs the records.
+    """
+    forget_slice_observation(getattr(runner, "storage_backend", None), action_name)
 
 
 def _log_processing_errors(
@@ -336,6 +350,7 @@ def process_directory_files(
             count += 1
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process file %s: %s",
                 relative_path,
@@ -440,6 +455,7 @@ def process_merged_files(
             files_processed_count += 1
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process merged file %s: %s",
                 relative_path,
@@ -647,6 +663,7 @@ def process_from_storage_backend(
 
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process backend entry %s: %s",
                 relative_path,

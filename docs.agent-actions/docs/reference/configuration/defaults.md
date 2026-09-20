@@ -340,7 +340,7 @@ usable against a project you do not own:
 AGAC_RECORD_LIMIT=2 agac run -a my_workflow
 ```
 
-`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. Neither limit holds back [`agac retry`](../cli/retry): it selects records by id and processes those alone, and it resolves the files holding them rather than walking to `file_limit`. If the limit that applies changes between runs, actions automatically re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. Neither limit holds back [`agac retry`](../cli/retry): it selects records by id and processes those alone, and it resolves the files holding them rather than walking to `file_limit`. If the limit that applies changes between runs, actions re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for. A change that could not have altered what the action processed is the exception: the action also stores how many records it took in and whether the limit dropped any, so raising a limit that never bit, or lifting it entirely, leaves the action completed. A `file_limit` change always re-executes.
 
 ### 7. Environment-Specific Defaults
 

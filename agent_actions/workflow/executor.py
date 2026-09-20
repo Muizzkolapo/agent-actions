@@ -304,7 +304,8 @@ class ActionExecutor:
 
         # The limit in force, not the one the config asked for: stamping the
         # config serves a run truncated elsewhere as a finished one, forever.
-        # Still coarse for file_limit, which has no count to reason from.
+        # Still coarse for file_limit: the walk counts files, but nothing
+        # reports that count to the stamp, so there is nothing here to read.
         record_limit, _ = resolve_record_limit(action_config)
         file_limit = action_config.get("file_limit")
         stored_limit = details.get("record_limit")

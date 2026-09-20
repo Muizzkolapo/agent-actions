@@ -85,8 +85,10 @@ Persists per-action execution state for resumable runs:
 
 ```json
 {
-  "extract_data": {"status": "completed", "record_limit": 2, "file_limit": null},
-  "generate_content": {"status": "completed", "record_limit": null, "file_limit": null},
+  "extract_data": {"status": "completed", "record_limit": 2, "file_limit": null,
+                   "records_processed": 2, "truncated": true},
+  "generate_content": {"status": "completed", "record_limit": null, "file_limit": null,
+                       "records_processed": 6, "truncated": false},
   "validate_output": {"status": "pending"}
 }
 ```
@@ -94,12 +96,21 @@ Persists per-action execution state for resumable runs:
 A completed action also stores what it ran under, so the next run can tell an
 action that is genuinely finished from one that was cut short. `record_limit` is
 the limit that was **in force** — from the workflow config, `--record-limit`, or
-`AGAC_RECORD_LIMIT`, whichever won — not the one the config asks for. It records
-what the limit was, not whether it dropped anything, so a limit larger than the
-input still counts as a change and re-runs the action. Alongside
-it are `file_limit`, `model_name`, `model_vendor` and a `config_hash` over the
-prompt, model, schema and guard. If any of them differs on a later run, the
-action is reset to `pending` and re-executed rather than skipped.
+`AGAC_RECORD_LIMIT`, whichever won — not the one the config asks for. Beside it,
+`records_processed` and `truncated` record what the run actually did: how many
+records it took in, and whether the limit dropped any. Alongside those are
+`file_limit`, `model_name`, `model_vendor` and a `config_hash` over the prompt,
+model, schema and guard. If any of them differs on a later run, the action is
+reset to `pending` and re-executed rather than skipped.
+
+A changed `record_limit` is the exception. Because the stamp says what the run
+processed, a limit that could not have dropped anything is not treated as a
+change: a run that was not truncated took in everything available to it, so a
+later limit at or above `records_processed` leaves the record set whole and the
+action stays completed. A run that *was* truncated re-runs on any different
+limit, and so does a stamp that cannot say — one written before these fields
+existed, or one whose run lost a file to an error. `file_limit` is still compared
+as a bare value, so changing it re-runs the action either way.
 
 | Status | Description |
 |--------|-------------|
