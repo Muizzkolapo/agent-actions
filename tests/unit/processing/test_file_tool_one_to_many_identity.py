@@ -53,9 +53,11 @@ class TestSeveralOutputsFromOneInput:
         assert len(set(guids)) == 3
 
     def test_each_keeps_the_parent_it_came_from(self):
+        """Only the re-minted rows carry one. The lone child still *is* its
+        parent's row, so naming itself as its own parent would be noise."""
         rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
 
-        assert [r.get("parent_source_guid") for r in rows] == ["G0", "G0", "G1"]
+        assert [r.get("parent_source_guid") for r in rows] == ["G0", "G0", None]
 
     def test_a_row_that_is_the_only_child_is_not_re_minted(self):
         """Nothing is ambiguous about a lone child, and re-minting it would
