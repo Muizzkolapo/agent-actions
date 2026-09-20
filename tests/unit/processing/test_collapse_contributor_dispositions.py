@@ -55,6 +55,43 @@ def _rows(backend) -> dict[str, dict]:
     return {r["record_id"]: r for r in backend.get_disposition(ACTION)}
 
 
+class TestAParentThatProducedSeveralRows:
+    """The mirror of a collapse: each row is minted its own identity, so none
+    of them carries the parent's, and without a row the parent is reprocessed
+    on every retry. Counts match here, which is what keeps the result off the
+    expansion branch and on the one that accounts for contributors."""
+
+    def test_it_still_gets_a_row(self, backend):
+        _run_pipeline(
+            _records("r0", "r1", "r2"),
+            FileUDFResult(
+                outputs=[
+                    {"source_index": 0, "data": {"part": 1}},
+                    {"source_index": 0, "data": {"part": 2}},
+                    {"source_index": 1, "data": {"part": 3}},
+                ]
+            ),
+            backend,
+        )
+
+        assert "r0" in _rows(backend)
+
+    def test_the_row_says_it_was_consumed_not_dropped(self, backend):
+        _run_pipeline(
+            _records("r0", "r1", "r2"),
+            FileUDFResult(
+                outputs=[
+                    {"source_index": 0, "data": {"part": 1}},
+                    {"source_index": 0, "data": {"part": 2}},
+                    {"source_index": 1, "data": {"part": 3}},
+                ]
+            ),
+            backend,
+        )
+
+        assert _rows(backend)["r0"]["disposition"] == "success"
+
+
 class TestEveryContributorHasARow:
     def test_ten_into_one_accounts_for_all_ten(self, backend):
         """The live shape: 10 authored records fold into one written file."""
