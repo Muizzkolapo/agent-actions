@@ -23,7 +23,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). | `workflow` |
 | `BACKENDS` | Dict | Registry mapping backend type names to their implementation classes. | `config` |
 | `backend.py` | Module | Abstract `StorageBackend` interface defining the contract for all backends. | `abc`, `typing` |
-| `StorageBackend` | ABC | Abstract base class. `read_target()` is a template method: calls `_read_target_raw()` (abstract), then validates lifecycle and resets for downstream. `target_rows_per_source_guid()` is a second template method over the same primitive, answering how many rows an action holds per identity without reconstructing, validating or resetting — none of which an identity needs. Subclasses implement `_read_target_raw()` only. | `abc` |
+| `StorageBackend` | ABC | Abstract base class. `read_target()` is a template method: calls `_read_target_raw()` (abstract), then validates lifecycle and resets for downstream. `read_target_for_rewrite()` shares that reconstruction but skips the downstream reset, for a caller writing an action's rows back where they came from — the reset is the truth for a consumer reading forward and a lie about an action whose output already exists. `target_rows_per_source_guid()` is a third template method over the same primitive, answering how many rows an action holds per identity without reconstructing, validating or resetting — none of which an identity needs. `source_files_for_records()` resolves stored input rows back to the staged files holding them. Subclasses implement `_read_target_raw()` only. | `abc` |
 
 ## Integration Points
 
@@ -43,9 +43,11 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `get_storage_backend()` | `agent_io/store/{workflow_name}.db` | Writes | `storage_backend` |
 | `StorageBackend.write_target()` | `agent_io/target/{action}/` | Writes | — |
 | `StorageBackend.read_target()` | `agent_io/target/{action}/` | Reads | — |
+| `StorageBackend.read_target_for_rewrite()` | `agent_io/target/{action}/` | Reads | — |
 | `StorageBackend.write_source()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.read_source()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.list_target_files()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.source_files_for_records()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.target_rows_per_source_guid()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.get_disposition()` | `agent_io/store/{workflow_name}.db` | Reads | — |

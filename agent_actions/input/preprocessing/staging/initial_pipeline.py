@@ -44,7 +44,7 @@ class InitialStageContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
     action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
-    # Records this run is repairing; a record limit admits them on top of its N.
+    # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
 
 

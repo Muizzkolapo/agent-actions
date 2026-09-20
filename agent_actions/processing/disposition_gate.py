@@ -176,17 +176,19 @@ def build_carry_forward(
 
     # Walked in stored order rather than over `carry_ids`, which is a set: these
     # rows are written straight back into the file they came from, so iterating the
-    # set would reshuffle rows nobody asked this run to touch. One row per identity
-    # is kept, as before — several stored rows can share a source_guid, and which of
-    # them survive a rewrite is its own question.
-    found: list[dict[str, Any]] = []
-    taken: set[str] = set()
-    for record in prior_output:
+    # set would reshuffle rows nobody asked this run to touch.
+    #
+    # Still one row per identity, and still the last of them: several stored rows can
+    # share a source_guid, and the mapping this replaced kept whichever came last.
+    # Which of them ought to survive a rewrite is 615's question, not this one, so the
+    # answer is left exactly where it was.
+    chosen: dict[str, int] = {}
+    for index, record in enumerate(prior_output):
         rid = record.get("source_guid")
-        if rid in carry_ids and rid not in taken:
-            taken.add(rid)
-            found.append(record)
-    missing: set[str] = carry_ids - taken
+        if rid in carry_ids:
+            chosen[rid] = index
+    found: list[dict[str, Any]] = [prior_output[index] for index in sorted(chosen.values())]
+    missing: set[str] = carry_ids - set(chosen)
     if missing:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",

@@ -52,7 +52,7 @@ class PipelineConfig:
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     source_relative_path: str | None = None  # For storage backend source lookups
-    # Records this run is repairing; a record limit admits them on top of its N.
+    # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
 
 

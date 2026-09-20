@@ -239,6 +239,45 @@ class TestAllFailedRetryCleared:
 
 
 class TestBuildCarryForward:
+    def test_rows_come_back_in_stored_order(self):
+        """These rows are written straight back into the file they came from, so
+        their order is the file's, not the carry-id set's iteration order."""
+        prior = [{"source_guid": f"r{i}"} for i in range(6)]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r4", "r1", "r5", "r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["r0", "r1", "r4", "r5"]
+
+    def test_the_last_of_several_rows_sharing_an_identity_is_the_one_kept(self):
+        """Several stored rows can share a source_guid. Carry-forward keeps one, and
+        keeps the last — which is what the guid-keyed mapping this replaced did.
+        Whether one row is the right answer at all is 615; pinned here so that
+        question stays open rather than being closed by accident."""
+        prior = [
+            {"source_guid": "a", "row": "a-first"},
+            {"source_guid": "b", "row": "b-only"},
+            {"source_guid": "a", "row": "a-last"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"a", "b"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["row"] for r in found] == ["b-only", "a-last"]
+        assert missing == set()
+
     def test_reads_from_prior_output(self):
         """Spec test 11: carry-forward reads from action's prior output."""
         prior = [

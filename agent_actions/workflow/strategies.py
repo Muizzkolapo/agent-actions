@@ -31,7 +31,7 @@ class StrategyExecutionParams:
     # Populates the runtime `workflow` namespace (`{{ workflow.name }}`, etc.).
     # Runner injects this from its own `workflow_metadata` field.
     workflow_metadata: dict[str, Any] | None = None
-    # Records this run is repairing; a record limit admits them on top of its N.
+    # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
 
 
