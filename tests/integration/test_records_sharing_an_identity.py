@@ -129,14 +129,21 @@ class TestARetryChangesNothing:
 
 
 class TestTheSameContentInTwoFiles:
-    """A limit this does not lift. Identity is derived from content and carries no
-    path, and `record_disposition` is unique on (action, record_id) with no path
-    either — so a record staged in two files is two source rows and two target
-    rows but one disposition. Repeats are numbered per file, so the second copy
-    in each file lands on the same identity as the second copy in the other.
+    """Identity is derived from content and carries no path, so the same content
+    staged in two files used to land both on one guid — same collision
+    `TestARunKeepsEveryStagedRecord` covers within one file, just spread across
+    two. Giving a same-file repeat its own identity was not enough, because the
+    occurrence count reset for every new file: the second copy in `a.json` and
+    the second copy in `b.json` both asked "have I seen this guid in THIS file
+    before?" and both got the same answer.
 
-    Pinned rather than fixed: making identity path-aware would move every guid in
-    every existing store."""
+    The fix asks the store instead of just the file being read: a candidate guid
+    is taken if it is already sitting in `source_data`, from this file, an
+    earlier file in the same run, or an earlier run entirely — not just from
+    rows seen so far in this loop. That makes every staged occurrence's identity
+    unique without moving anything already stored: an existing guid is never
+    recomputed, only a new write that collides with one picks the next free
+    occurrence."""
 
     @pytest.fixture
     def across_files(self, tmp_path, monkeypatch):
@@ -154,14 +161,34 @@ class TestTheSameContentInTwoFiles:
         return root
 
     def test_every_staged_record_is_stored(self, across_files):
-        """Four staged across two files, four stored — the half this does fix."""
+        """Four staged across two files, four stored."""
         counts = _counts(across_files)
 
         assert counts["source"] == 4, counts
         assert counts["target"] == 4, counts
 
-    def test_dispositions_cannot_tell_the_two_files_apart(self, across_files):
-        """The half it does not. Two identities, used in both files."""
+    def test_every_staged_record_gets_its_own_disposition(self, across_files):
+        """Four staged, four tracked — a status row per record, not per content."""
         counts = _counts(across_files)
 
-        assert counts["dispositions"] == 2, counts
+        assert counts["dispositions"] == 4, counts
+
+    def test_cross_file_repeats_still_resolve_to_the_content_they_repeat(self, across_files):
+        """Every occurrence is its own identity, and every repeat is still
+        traceable to the one it repeats — the same lineage guarantee
+        `TestARunKeepsEveryStagedRecord` makes for same-file repeats."""
+        db = glob.glob(
+            str(across_files / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
+        )[0]
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = [json.loads(d) for (d,) in con.execute("select data from source_data")]
+        finally:
+            con.close()
+
+        guids = {r["source_guid"] for r in rows}
+        assert len(guids) == 4, "every staged occurrence is now its own identity"
+
+        parents = {r.get("repeat_of_source_guid") for r in rows if r.get("repeat_of_source_guid")}
+        assert len(parents) == 1, "all three repeats point at the one identity they repeat"
+        assert parents <= guids, "the identity they repeat is itself a real stored record"
