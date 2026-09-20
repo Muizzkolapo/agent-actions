@@ -246,7 +246,7 @@ class TestBuildCarryForward:
             {"source_guid": "r2", "score_quality": {"score": 0.5}},
         ]
         backend = MagicMock()
-        backend.read_target.return_value = prior
+        backend.read_target_for_rewrite.return_value = prior
 
         found, missing = build_carry_forward(
             carry_ids={"r1"},
@@ -255,7 +255,7 @@ class TestBuildCarryForward:
             storage_backend=backend,
         )
 
-        backend.read_target.assert_called_once_with("action_b", "data.json")
+        backend.read_target_for_rewrite.assert_called_once_with("action_b", "data.json")
         assert len(found) == 1
         assert found[0]["source_guid"] == "r1"
         assert found[0]["score_quality"] == {"score": 0.9}
@@ -264,7 +264,7 @@ class TestBuildCarryForward:
     def test_missing_prior_output_returns_all_as_missing(self):
         """Spec test 12: missing prior output → all carry_ids as missing."""
         backend = MagicMock()
-        backend.read_target.side_effect = FileNotFoundError("no file")
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no file")
 
         found, missing = build_carry_forward(
             carry_ids={"r1", "r2"},
@@ -280,7 +280,7 @@ class TestBuildCarryForward:
         """Records not found in prior output are returned as missing."""
         prior = [{"source_guid": "r1", "data": "ok"}]
         backend = MagicMock()
-        backend.read_target.return_value = prior
+        backend.read_target_for_rewrite.return_value = prior
 
         found, missing = build_carry_forward(
             carry_ids={"r1", "r2"},
@@ -300,7 +300,7 @@ class TestBuildCarryForward:
             {"no_guid": True},
         ]
         backend = MagicMock()
-        backend.read_target.return_value = prior
+        backend.read_target_for_rewrite.return_value = prior
 
         found, missing = build_carry_forward(
             carry_ids={"r1"},
@@ -315,7 +315,7 @@ class TestBuildCarryForward:
     def test_empty_carry_ids(self):
         """Edge case: empty carry_ids returns empty results."""
         backend = MagicMock()
-        backend.read_target.return_value = [{"source_guid": "r1"}]
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r1"}]
 
         found, missing = build_carry_forward(
             carry_ids=set(),

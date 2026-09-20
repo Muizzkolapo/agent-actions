@@ -46,6 +46,10 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         (upstream_b / "data.json").write_text(json.dumps(original_b))
 
         runner = MagicMock()
+        # A bare MagicMock answers `retried_records` with a truthy mock, which would
+        # read as a repair in progress and narrow the walk. State the empty set a
+        # runner that is not repairing actually carries.
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
         }
@@ -73,6 +77,7 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         (upstream_b / "data.json").write_text(json.dumps(original_b))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
         }
@@ -101,6 +106,7 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
         }
@@ -126,6 +132,7 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
         }
@@ -151,6 +158,7 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
         }
@@ -197,6 +205,7 @@ class TestProcessDirectoryFilesIsolation:
                 raise RuntimeError("record namespace failure on b.json")
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._process_single_file.side_effect = _process
 
         params = _make_params([str(input_dir)], output_dir)
@@ -219,6 +228,7 @@ class TestProcessDirectoryFilesIsolation:
             (input_dir / name).write_text(json.dumps([{"id": name}]))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._process_single_file = MagicMock()
 
         params = _make_params([str(input_dir)], output_dir)
@@ -249,6 +259,7 @@ class TestProcessMergedFilesIsolation:
                 raise RuntimeError("poisoned record")
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path("good.json"): [upstream / "good.json"],
             Path("bad.json"): [upstream / "bad.json"],
@@ -281,6 +292,7 @@ class TestProcessMergedFilesIsolation:
                 raise RuntimeError("merge branch failure")
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             # good.json: single-file path (len==1)
             Path("good.json"): [upstream_a / "good.json"],

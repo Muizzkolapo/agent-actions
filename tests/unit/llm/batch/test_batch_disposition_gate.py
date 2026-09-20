@@ -71,6 +71,42 @@ def _mock_backend(terminal_ids: set[str]) -> MagicMock:
 class TestBatchDispositionGate:
     """Spec test 5: records with SUCCESS disposition excluded from batch submission."""
 
+    def test_narrowed_records_reach_preparation_without_carry_forward(self, tmp_path):
+        selected = _make_record("selected")
+        gate = MagicMock(spec=DispositionGate)
+        gate.filter.return_value = ([selected], set())
+        service = _make_service(
+            disposition_gate=gate,
+            tasks=[{"custom_id": "selected"}],
+        )
+        config = {"action_name": "test_action"}
+
+        service.submit_batch_job(
+            agent_config=config,
+            batch_name="test",
+            data=[_make_record("unselected"), selected],
+            output_directory=str(tmp_path),
+        )
+
+        assert service.prepare_batch_tasks.call_args.args[1] == [selected]
+        assert service._submit_to_provider.call_args.args[2] == [{"custom_id": "selected"}]
+
+    def test_empty_selection_without_carry_forward_never_submits(self, tmp_path):
+        gate = MagicMock(spec=DispositionGate)
+        gate.filter.return_value = ([], set())
+        service = _make_service(disposition_gate=gate, tasks=[{"custom_id": "unselected"}])
+
+        result = service.submit_batch_job(
+            agent_config={"action_name": "test_action"},
+            batch_name="test",
+            data=[_make_record("unselected")],
+            output_directory=str(tmp_path),
+        )
+
+        assert result.batch_id is None
+        service.prepare_batch_tasks.assert_not_called()
+        service._submit_to_provider.assert_not_called()
+
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""
         terminal = {f"r{i}" for i in range(9)}

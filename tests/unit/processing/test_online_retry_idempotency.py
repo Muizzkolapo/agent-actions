@@ -47,9 +47,9 @@ def _mock_backend(terminal_ids: set[str], prior_output: list[dict] | None = None
     backend = MagicMock()
     backend.get_terminal_record_ids.return_value = terminal_ids
     if prior_output is not None:
-        backend.read_target.return_value = prior_output
+        backend.read_target_for_rewrite.return_value = prior_output
     else:
-        backend.read_target.return_value = []
+        backend.read_target_for_rewrite.return_value = []
     return backend
 
 

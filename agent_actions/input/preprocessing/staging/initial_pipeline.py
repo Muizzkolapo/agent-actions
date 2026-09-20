@@ -73,6 +73,9 @@ class BatchProcessingContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
     action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
+    # Records this run is repairing; carried from the initial stage so the batch
+    # path's own disposition gate narrows the same way the online path's does.
+    retried_records: frozenset[str] = frozenset()
 
 
 def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
@@ -199,6 +202,21 @@ def process_initial_stage(ctx: InitialStageContext):
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
+    # A repair re-reads the staged file whole, so narrowing has to happen here,
+    # above the source save: anything still in the chunk becomes a stored input
+    # row, and a file edited since the run being repaired would otherwise enter
+    # the store as new input on the strength of a repair that never named it.
+    if ctx.retried_records and isinstance(data_chunk, list):
+        admitted = [
+            index
+            for index, row in enumerate(data_chunk)
+            if isinstance(row, dict) and row.get("source_guid") in ctx.retried_records
+        ]
+        if len(admitted) != len(data_chunk):
+            data_chunk = [data_chunk[i] for i in admitted]
+            if isinstance(src_text, list):
+                src_text = [src_text[i] for i in admitted if i < len(src_text)]
+
     # Slice BEFORE source save to prevent dedup poisoning
     kept = record_indices_to_process(
         data_chunk,
@@ -233,6 +251,7 @@ def process_initial_stage(ctx: InitialStageContext):
             storage_backend=ctx.storage_backend,
             action_configs=ctx.action_configs,
             workflow_metadata=ctx.workflow_metadata,
+            retried_records=ctx.retried_records,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -695,7 +714,9 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     context_manager = BatchContextManager()
     registry_manager_factory = create_registry_manager_factory(ctx.storage_backend)
 
-    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
+    disposition_gate = DispositionGate(
+        storage_backend=ctx.storage_backend, repairing=ctx.retried_records
+    )
     submission_service = BatchSubmissionService(
         task_preparator=task_preparator,
         client_resolver=client_resolver,
@@ -743,7 +764,9 @@ def _process_online_mode_with_record_processor(
     from agent_actions.processing.disposition_gate import DispositionGate
 
     strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
-    disposition_gate = DispositionGate(storage_backend=ctx.storage_backend)
+    disposition_gate = DispositionGate(
+        storage_backend=ctx.storage_backend, repairing=ctx.retried_records
+    )
     processor = UnifiedProcessor(disposition_gate=disposition_gate)
 
     processing_context = ProcessingContext(

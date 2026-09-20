@@ -237,7 +237,7 @@ class TestGateCascadeInteraction:
         # Mock storage backend: R3 has terminal disposition
         mock_backend = MagicMock()
         mock_backend.get_terminal_record_ids.return_value = {"r3"}
-        mock_backend.read_target.return_value = [
+        mock_backend.read_target_for_rewrite.return_value = [
             {"source_guid": "r3", "content": {"hitl_review": {"prior": True}}}
         ]
 
@@ -277,7 +277,7 @@ class TestHITLCarryForwardAlignment:
 
         mock_backend = MagicMock()
         mock_backend.get_terminal_record_ids.return_value = {"r1"}
-        mock_backend.read_target.return_value = [
+        mock_backend.read_target_for_rewrite.return_value = [
             {
                 "source_guid": "r1",
                 "content": {"hitl_review": {"hitl_status": "approved", "user_comment": "prior"}},
@@ -332,7 +332,7 @@ class TestHITLCarryForwardAlignment:
 
         mock_backend = MagicMock()
         mock_backend.get_terminal_record_ids.return_value = {"r1", "r3"}
-        mock_backend.read_target.return_value = [
+        mock_backend.read_target_for_rewrite.return_value = [
             {
                 "source_guid": "r3",
                 "content": {"hitl_review": {"hitl_status": "approved", "user_comment": "prior"}},

@@ -76,6 +76,8 @@ class BatchPipelineParams:
     dependency_configs: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
     disposition_gate: Optional["DispositionGate"] = field(default=None)
+    # Only used when no gate is injected; a gate built without it never narrows.
+    retried_records: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -155,6 +157,7 @@ class ProcessingPipeline:
 
         self._disposition_gate = DispositionGate(
             storage_backend=config.storage_backend,
+            repairing=config.retried_records,
         )
         self._unified_processor = UnifiedProcessor(
             disposition_gate=self._disposition_gate,
@@ -211,7 +214,10 @@ class ProcessingPipeline:
         if disposition_gate is None and params.storage_backend is not None:
             from agent_actions.processing.disposition_gate import DispositionGate
 
-            disposition_gate = DispositionGate(storage_backend=params.storage_backend)
+            disposition_gate = DispositionGate(
+                storage_backend=params.storage_backend,
+                repairing=params.retried_records,
+            )
 
         task_preparator = BatchTaskPreparator(
             action_indices=params.agent_indices,
@@ -316,6 +322,7 @@ class ProcessingPipeline:
                     agent_indices=agent_indices,
                     dependency_configs=dependency_configs,
                     version_context=version_context,
+                    retried_records=params.retried_records,
                 )
             )
         if run_mode == RunMode.BATCH and is_synchronous:

@@ -317,7 +317,11 @@ def process_directory_files(
     count = 0
     errors = CollectedErrors()
     files_seen = 0
-    for item in input_path.rglob("*"):
+    # Sorted, not raw rglob order: file_limit truncates this sequence, so an
+    # unordered walk makes "the first N files" mean whatever the filesystem
+    # happened to enumerate first.
+    items = _files_holding_retried_records(runner, sorted(input_path.rglob("*")), input_path)
+    for item in items:
         if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
             continue
 
@@ -346,6 +350,39 @@ def process_directory_files(
         errors.messages, count, files_seen, params.action_name, "Directory processing"
     )
     return (files_seen, count, errors)
+
+
+def _files_holding_retried_records(
+    runner: ActionRunner, items: list[Path], input_path: Path
+) -> list[Path]:
+    """The subset of *items* a repair needs, or all of them when not repairing.
+
+    A repair names records, not files. Walking every staged file instead visits
+    files holding none of them, and `file_limit` then spends its budget on those
+    — so whether a named record is reached at all comes down to walk order.
+
+    An unresolvable selection walks everything: the store prunes source rows, and
+    a repair that resolved to no file would process nothing rather than too much.
+    """
+    if not runner.retried_records or runner.storage_backend is None:
+        return items
+    retried = runner.retried_records
+    wanted = runner.storage_backend.source_files_for_records(retried)
+    if not wanted:
+        logger.warning(
+            "Repairing %d record(s) but no source row names the file holding any of them — "
+            "walking every staged file",
+            len(retried),
+        )
+        return items
+    narrowed = [
+        item for item in items if str(item.relative_to(input_path).with_suffix("")) in wanted
+    ]
+    if len(narrowed) != len(items):
+        logger.info(
+            "Repair narrowed the walk to %d of %d staged file(s)", len(narrowed), len(items)
+        )
+    return narrowed
 
 
 def process_merged_files(

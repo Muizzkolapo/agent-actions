@@ -14,6 +14,7 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -33,9 +34,59 @@ class DispositionGate:
     would retain stale data from the first run.
     """
 
-    def __init__(self, storage_backend: StorageBackend | None = None) -> None:
+    def __init__(
+        self,
+        storage_backend: StorageBackend | None = None,
+        repairing: Collection[str] = (),
+    ) -> None:
         self._backend = storage_backend
+        self._repairing = frozenset(repairing)
         self._terminal_ids_cache: dict[str, set[str]] = {}
+
+    def narrow_to_repair(
+        self,
+        records: list[dict[str, Any]],
+        action_name: str,
+        relative_path: str | None,
+    ) -> tuple[list[int] | None, set[str]]:
+        """Which positions of *records* a repair admits, and which stored ids to carry.
+
+        None rather than every position when nothing is being repaired, so a caller
+        holding index-aligned lists neither re-slices nor re-pairs them.
+
+        A repair names records; everything else in the input is work it was not asked
+        to do, including records this action has never seen — which is how a repair
+        comes to admit newly staged input as if it were a run. Those are dropped
+        rather than processed, and the rows the action already holds for them are
+        returned to be carried forward, because the action's output is replaced whole
+        and dropping them from the input would otherwise delete their rows.
+        """
+        if not self._repairing:
+            return None, set()
+        kept = [
+            index
+            for index, record in enumerate(records)
+            if record.get("source_guid") in self._repairing
+        ]
+        if not relative_path or self._backend is None:
+            if records:
+                logger.warning(
+                    "Repairing '%s' without a stored path for its output: rows held for "
+                    "records the repair did not name cannot be carried and will be lost",
+                    action_name,
+                )
+            return kept, set()
+        return kept, self._stored_guids(action_name, relative_path) - self._repairing
+
+    def _stored_guids(self, action_name: str, relative_path: str) -> set[str]:
+        """Identities this action already holds a row for in *relative_path*."""
+        if self._backend is None:
+            return set()
+        try:
+            prior = self._backend.read_target_for_rewrite(action_name, relative_path)
+        except FileNotFoundError:
+            return set()
+        return {r["source_guid"] for r in prior if r.get("source_guid")}
 
     def filter(
         self,
@@ -95,7 +146,7 @@ def build_carry_forward(
     to ``to_process`` by the caller — never silently dropped.
     """
     try:
-        prior_output = storage_backend.read_target(action_name, relative_path)
+        prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
     except FileNotFoundError:
         # No final output yet — check for checkpointed records from an
         # interrupted run.
@@ -115,14 +166,19 @@ def build_carry_forward(
             )
             return [], carry_ids
 
-    prior_by_guid = {r["source_guid"]: r for r in prior_output if r.get("source_guid")}
+    # Walked in stored order rather than over `carry_ids`, which is a set: these
+    # rows are written straight back into the file they came from, so iterating the
+    # set would reshuffle rows nobody asked this run to touch. One row per identity
+    # is kept, as before — several stored rows can share a source_guid, and which of
+    # them survive a rewrite is its own question.
     found: list[dict[str, Any]] = []
-    missing: set[str] = set()
-    for rid in carry_ids:
-        if rid in prior_by_guid:
-            found.append(prior_by_guid[rid])
-        else:
-            missing.add(rid)
+    taken: set[str] = set()
+    for record in prior_output:
+        rid = record.get("source_guid")
+        if rid in carry_ids and rid not in taken:
+            taken.add(rid)
+            found.append(record)
+    missing: set[str] = carry_ids - taken
     if missing:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",

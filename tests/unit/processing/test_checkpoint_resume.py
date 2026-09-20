@@ -20,7 +20,7 @@ class TestCheckpointResume:
     def test_carry_forward_from_checkpoint_when_target_missing(self):
         """Checkpointed records are used when target_data raises FileNotFoundError."""
         backend = MagicMock()
-        backend.read_target.side_effect = FileNotFoundError("no target yet")
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
 
         checkpointed = [_make_record("r0"), _make_record("r1"), _make_record("r2")]
         backend.read_checkpoint_records.return_value = checkpointed
@@ -36,7 +36,7 @@ class TestCheckpointResume:
     def test_no_checkpoint_no_target_reprocesses_all(self):
         """No checkpoint and no target → all records reprocessed."""
         backend = MagicMock()
-        backend.read_target.side_effect = FileNotFoundError("no target")
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target")
         backend.read_checkpoint_records.return_value = []
 
         carry_ids = {"r0", "r1", "r2"}
@@ -48,7 +48,7 @@ class TestCheckpointResume:
     def test_target_exists_uses_target_not_checkpoint(self):
         """When target_data exists, checkpoint table is not consulted."""
         backend = MagicMock()
-        backend.read_target.return_value = [_make_record("r0"), _make_record("r1")]
+        backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
 
         carry_ids = {"r0", "r1"}
         found, missing = build_carry_forward(carry_ids, "action_a", "output.json", backend)

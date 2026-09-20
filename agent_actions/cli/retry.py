@@ -198,7 +198,9 @@ class RetryCommand:
             snapshot_dispositions,
         )
 
-        workflow.set_retried_records(record_ids)
+        workflow.set_retried_records(
+            self._records_this_repair_may_process(record_ids, downstream_actions, failures)
+        )
 
         cleared = 0
         for action in downstream_actions:
@@ -284,6 +286,35 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self.console.print("\n[green]Retry complete.[/green]")
+
+    def _records_this_repair_may_process(
+        self,
+        cleared_ids: set[str],
+        downstream_actions: list[str],
+        failures: dict[str, list[dict]],
+    ) -> set[str]:
+        """Every record this repair is entitled to re-run, at any action it re-runs.
+
+        Wider than the set whose dispositions are cleared: clearing answers "what
+        should this action forget", and only the starting action has to forget
+        anything. This answers "what is this repair for", and a record that failed
+        below the starting point is as much a part of it as one that failed at it.
+
+        Naming a record with ``--record`` answers it outright — that record and no
+        other, however many else failed.
+
+        Empty when the only failures are node-level: that sentinel is a signal about
+        an action, not a record, and a selection holding nothing else would narrow
+        every real record out of the run it is supposed to repair.
+        """
+        if self.args.record:
+            repairing = set(cleared_ids)
+        else:
+            repairing = set(cleared_ids)
+            for action in downstream_actions:
+                repairing.update(row["record_id"] for row in failures.get(action, []))
+        repairing.discard(NODE_LEVEL_RECORD_ID)
+        return repairing
 
     @staticmethod
     def _find_failures(

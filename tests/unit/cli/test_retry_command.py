@@ -143,3 +143,35 @@ class TestRetryCommandArgs:
         assert args.from_action == "classify"
         assert args.record == "r2"
         assert args.dry_run is True
+
+
+class TestRecordsThisRepairMayProcess:
+    """What a repair is allowed to re-run, which is not what it clears."""
+
+    @staticmethod
+    def _command(record=None):
+        return RetryCommand(RetryCommandArgs(agent="wf", record=record))
+
+    def test_a_failure_below_the_starting_action_joins_the_repair(self):
+        repairing = self._command()._records_this_repair_may_process(
+            {"r1"},
+            ["extract", "classify"],
+            {"extract": [{"record_id": "r1"}], "classify": [{"record_id": "r9"}]},
+        )
+        assert repairing == {"r1", "r9"}
+
+    def test_naming_a_record_excludes_every_other_failure(self):
+        repairing = self._command(record="r1")._records_this_repair_may_process(
+            {"r1"},
+            ["extract", "classify"],
+            {"extract": [{"record_id": "r1"}], "classify": [{"record_id": "r9"}]},
+        )
+        assert repairing == {"r1"}
+
+    def test_a_node_level_failure_alone_selects_nothing(self):
+        """An empty selection means "narrow nothing" — the sentinel names an action,
+        not a record, so keeping it would narrow every real record out of the run."""
+        repairing = self._command()._records_this_repair_may_process(
+            {"__node__"}, ["extract"], {"extract": [{"record_id": "__node__"}]}
+        )
+        assert repairing == set()

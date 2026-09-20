@@ -67,6 +67,10 @@ class TestFileLimitDirectoryFiles:
         output.mkdir()
 
         runner = MagicMock()
+        # A bare MagicMock answers `retried_records` with a truthy mock, which would
+        # read as a repair in progress and narrow the walk. State the empty set a
+        # runner that is not repairing actually carries.
+        runner.retried_records = frozenset()
         runner._should_skip_item.return_value = False
 
         params = MagicMock()
@@ -90,6 +94,7 @@ class TestFileLimitDirectoryFiles:
         output.mkdir()
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._should_skip_item.return_value = False
 
         params = MagicMock()
@@ -112,6 +117,7 @@ class TestFileLimitDirectoryFiles:
         output.mkdir()
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._should_skip_item.return_value = False
 
         params = MagicMock()
@@ -142,6 +148,7 @@ class TestFileLimitMergedFiles:
             (upstream / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
 
         runner = MagicMock()
+        runner.retried_records = frozenset()
         runner._collect_files_from_upstream.return_value = {
             Path(f"file_{i}.json"): [upstream / f"file_{i}.json"] for i in range(4)
         }
@@ -225,8 +232,12 @@ class TestRecordLimitInitialStage:
         self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
     ):
         """The source text is positionally aligned with the records, so both are
-        kept by the same indices. Slicing it by the limit alone would save the
-        first N rows while the records saved are the first N plus the retried."""
+        kept by the same indices — slicing one by the limit alone would misalign them.
+
+        A repair saves the records it named and no others. The limit's own N is not
+        added to them: deciding how much new work to take on is what a limit is for,
+        and a repair takes on none, so a record the repair did not name is not work
+        this run was asked to do however far inside the limit it sits."""
         from agent_actions.input.preprocessing.staging.initial_pipeline import (
             InitialStageContext,
             process_initial_stage,
@@ -255,8 +266,8 @@ class TestRecordLimitInitialStage:
         )
 
         saved_src, saved_data = mock_save.call_args[0][0], mock_save.call_args[0][1]
-        assert [r["source_guid"] for r in saved_data] == ["g0", "g1", "g5"]
-        assert [r["source_guid"] for r in saved_src] == ["g0", "g1", "g5"]
+        assert [r["source_guid"] for r in saved_data] == ["g5"]
+        assert [r["source_guid"] for r in saved_src] == ["g5"]
 
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
@@ -384,7 +395,7 @@ class TestRecordLimitInitialStageUnderBatch:
         )
 
         saved_data = mock_save.call_args[0][1]
-        assert [r["source_guid"] for r in saved_data] == ["g0", "g1", "g5"]
+        assert [r["source_guid"] for r in saved_data] == ["g5"]
 
 
 class TestLimitStatusInvalidation:
