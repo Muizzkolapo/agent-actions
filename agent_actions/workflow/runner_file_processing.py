@@ -576,6 +576,10 @@ def process_from_storage_backend(
         try:
             target_files = runner.storage_backend.list_target_files(action_name)
         except (OSError, sqlite3.Error) as e:
+            # Every file of this upstream is gone, and none of them is in
+            # data_by_path to be counted or reported. Keyed on the action being
+            # run, not the upstream being read.
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
@@ -591,6 +595,10 @@ def process_from_storage_backend(
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
             except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
+                # Dropped before the processing loop, so it never reaches the
+                # handler there, is absent from data_by_path and so from
+                # files_found, and lands in no CollectedErrors either.
+                _lose_file(runner, params.action_name)
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,
