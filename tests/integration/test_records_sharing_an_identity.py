@@ -189,6 +189,47 @@ class TestTheSameContentInTwoFiles:
         assert parents <= guids, "the identity they repeat is itself a real stored record"
 
 
+def _source_rows(project):
+    db = glob.glob(str(project / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        return con.execute("select relative_path, source_guid from source_data").fetchall()
+    finally:
+        con.close()
+
+
+def _stage_two_colliding_files(tmp_path, monkeypatch):
+    """Two files with identical content, run, source_data rows for both."""
+    root = tmp_path / "project"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    for name in ("a_pages.json", "b_pages.json"):
+        staging.joinpath(name).write_text(json.dumps([{"page_content": "shared"}]))
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    return root
+
+
+def _retry_after_marking_failed(root, record_id):
+    """retry only acts on non-terminal dispositions — mark it failed first,
+    the same way TestARetryChangesNothing does."""
+    db = glob.glob(str(root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
+    con = sqlite3.connect(db)
+    con.execute(
+        "update record_disposition set disposition = 'failed' where record_id = ?",
+        (record_id,),
+    )
+    con.commit()
+    con.close()
+
+    return CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", record_id])
+
+
 class TestRetryingTheRepeatSideOfACollision:
     """A repair narrows its walk to the file(s) naming the retried record — but a
     record sharing identity with content in another file needs that sibling
@@ -196,35 +237,33 @@ class TestRetryingTheRepeatSideOfACollision:
     and silently drops the record it was asked to repair."""
 
     def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
-        root = tmp_path / "project"
-        shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
-        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
-        shutil.rmtree(staging, ignore_errors=True)
-        staging.mkdir(parents=True)
-        for name in ("a_pages.json", "b_pages.json"):
-            staging.joinpath(name).write_text(json.dumps([{"page_content": "shared"}]))
-        monkeypatch.chdir(root)
-        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-
-        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-        assert result.exit_code == 0, result.output
+        root = _stage_two_colliding_files(tmp_path, monkeypatch)
         before = _counts(root)
         assert before == {"source": 2, "dispositions": 2, "target": 2}, before
 
-        db = glob.glob(str(root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
-        con = sqlite3.connect(db)
-        rows = con.execute("select relative_path, source_guid from source_data").fetchall()
+        rows = _source_rows(root)
         repeat_side = next(guid for rp, guid in rows if rp.startswith("b_pages"))
-        # retry only acts on non-terminal dispositions — mark it failed first,
-        # the same way TestARetryChangesNothing does.
-        con.execute(
-            "update record_disposition set disposition = 'failed' where record_id = ?",
-            (repeat_side,),
-        )
-        con.commit()
-        con.close()
 
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", repeat_side])
+        retry = _retry_after_marking_failed(root, repeat_side)
 
         assert retry.exit_code == 0, retry.output
         assert _counts(root) == before, "retrying the repeat side dropped the other file's record"
+
+
+class TestRetryingTheOriginalSideOfACollision:
+    """The base identity's own row carries no repeat_of_source_guid — only the
+    OTHER file's row points back at it — so retrying the original side needs
+    its own coverage, not just the mirror of the repeat side above."""
+
+    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
+        root = _stage_two_colliding_files(tmp_path, monkeypatch)
+        before = _counts(root)
+        assert before == {"source": 2, "dispositions": 2, "target": 2}, before
+
+        rows = _source_rows(root)
+        original_side = next(guid for rp, guid in rows if rp.startswith("a_pages"))
+
+        retry = _retry_after_marking_failed(root, original_side)
+
+        assert retry.exit_code == 0, retry.output
+        assert _counts(root) == before, "retrying the original side dropped the other file's record"

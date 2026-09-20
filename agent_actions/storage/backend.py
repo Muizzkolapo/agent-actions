@@ -660,8 +660,10 @@ class StorageBackend(ABC):
         A repair narrowed to just the file(s) naming record_ids would then lack
         the sibling file(s) identity re-derivation needs to reproduce the same
         guid — the caller falls back to an unnarrowed walk when this is True.
+        Defaults True (unknown treated as sharing) — same safe-by-default
+        posture as `source_files_for_records`'s empty-means-walk-everything.
         """
-        return False
+        return True
 
     def clear_disposition(
         self,

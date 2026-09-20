@@ -23,7 +23,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). | `workflow` |
 | `BACKENDS` | Dict | Registry mapping backend type names to their implementation classes. | `config` |
 | `backend.py` | Module | Abstract `StorageBackend` interface defining the contract for all backends. | `abc`, `typing` |
-| `StorageBackend` | ABC | Abstract base class. `read_target()` is a template method: calls `_read_target_raw()` (abstract), then validates lifecycle and resets for downstream. `read_target_for_rewrite()` shares that reconstruction but skips the downstream reset, for a caller writing an action's rows back where they came from — the reset is the truth for a consumer reading forward and a lie about an action whose output already exists. `target_rows_per_source_guid()` is a third template method over the same primitive, answering how many rows an action holds per identity without reconstructing, validating or resetting — none of which an identity needs. `source_files_for_records()` resolves stored input rows back to the staged files holding them. Subclasses implement `_read_target_raw()` only. | `abc` |
+| `StorageBackend` | ABC | Abstract base class. `read_target()` is a template method: calls `_read_target_raw()` (abstract), then validates lifecycle and resets for downstream. `read_target_for_rewrite()` shares that reconstruction but skips the downstream reset, for a caller writing an action's rows back where they came from — the reset is the truth for a consumer reading forward and a lie about an action whose output already exists. `target_rows_per_source_guid()` is a third template method over the same primitive, answering how many rows an action holds per identity without reconstructing, validating or resetting — none of which an identity needs. `source_files_for_records()` resolves stored input rows back to the staged files holding them. `claim_source_guid_for_run()` (abstract) is an in-memory, per-instance identity claim for the current run only — never persisted, so it can't collide a renamed file with its own past self. `records_share_a_repeat_chain()` (default `False`, safe-by-default like `source_files_for_records()`) tells a repair walk when narrowing to the named record's file would leave out a sibling the identity re-derivation needs. Subclasses implement `_read_target_raw()` and `claim_source_guid_for_run()`. | `abc` |
 
 ## Integration Points
 
@@ -48,6 +48,8 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `StorageBackend.read_source()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.list_target_files()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.source_files_for_records()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.records_share_a_repeat_chain()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.claim_source_guid_for_run()` | in-memory only, not persisted | — | — |
 | `StorageBackend.target_rows_per_source_guid()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.get_disposition()` | `agent_io/store/{workflow_name}.db` | Reads | — |

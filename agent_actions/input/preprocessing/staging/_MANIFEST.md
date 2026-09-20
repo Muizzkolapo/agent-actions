@@ -11,7 +11,7 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Module docstring describing the staging helpers. | `preprocessing` |
-| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, mode-specific preparation helpers, re-stamping a staged record whose content another row in the same file already took so it keeps its own identity rather than being dropped on write, and storage-backend requirements for first-stage target writes. Delegates workflow root discovery to `utils.path_utils.derive_workflow_root`. | `processing`, `output`, `logging`, `utils.path_utils` |
+| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, mode-specific preparation helpers, re-stamping a staged record whose content another row already claimed — anywhere in the run, not just the same file — so it keeps its own identity rather than being dropped on write, and storage-backend requirements for first-stage target writes. Delegates workflow root discovery to `utils.path_utils.derive_workflow_root`. | `processing`, `output`, `logging`, `utils.path_utils` |
 | `field_validation.py` | Module | `validate_staging_field_names` — rejects staging records whose field names collide with reserved prompt-context namespaces (`source`, `version`, `workflow`, etc.). Called at two points: staging file load (initial_pipeline) and prompt context build (scope_builder). | `utils.constants`, `errors` |
 
 ## Design Notes
