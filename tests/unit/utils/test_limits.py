@@ -1,16 +1,26 @@
-"""The per-action record limit is resolved in one place."""
+"""The per-action record and file limits are resolved in one place."""
 
 from __future__ import annotations
 
 import pytest
 
 from agent_actions.utils.limits import (
+    FILE_LIMIT_KEY,
     RECORD_LIMIT_KEY,
+    check_environment,
     record_indices_to_process,
     records_kept_by_limit,
+    resolve_file_limit,
     resolve_record_limit,
     rows_this_action_holds_per_record,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_limits(monkeypatch):
+    """A developer shell exporting either variable must not decide these tests."""
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+        monkeypatch.delenv(name, raising=False)
 
 
 class TestResolveRecordLimit:
@@ -23,6 +33,145 @@ class TestResolveRecordLimit:
     @pytest.mark.parametrize("value", [None, 0, -1, "23", 23.0, True])
     def test_a_value_that_cannot_cap_anything_is_unlimited(self, value):
         assert resolve_record_limit({"record_limit": value})[0] is None
+
+
+class TestResolveFileLimit:
+    """The file axis reads the same precedence rules as the record axis, so a
+    run is reachable from outside the project along both."""
+
+    def test_a_configured_limit_is_returned(self):
+        assert resolve_file_limit({"file_limit": 3})[0] == 3
+
+    def test_an_absent_limit_is_unlimited(self):
+        assert resolve_file_limit({})[0] is None
+
+    @pytest.mark.parametrize("value", [None, 0, -1, "3", 3.0, True])
+    def test_a_value_that_cannot_bound_anything_is_unlimited(self, value):
+        assert resolve_file_limit({"file_limit": value})[0] is None
+
+    def test_the_variable_bounds_a_larger_configured_limit(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        assert resolve_file_limit({"file_limit": 9})[0] == 2
+
+    def test_the_variable_does_not_raise_a_smaller_configured_limit(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "9")
+
+        assert resolve_file_limit({"file_limit": 2})[0] == 2
+
+    def test_the_variable_applies_where_the_config_sets_none(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        assert resolve_file_limit({})[0] == 2
+
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
+    def test_a_variable_that_cannot_bound_anything_is_refused_loudly(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", value)
+
+        with pytest.raises(ValueError, match="AGAC_FILE_LIMIT"):
+            resolve_file_limit({"file_limit": 9})
+
+    def test_the_flag_wins_even_when_the_variable_is_stricter(self, monkeypatch):
+        """Precedence is by source, not by which number is smaller."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        assert resolve_file_limit({"file_limit": 9, FILE_LIMIT_KEY: 4})[0] == 4
+
+    def test_an_unusable_variable_fails_the_run_even_when_a_flag_outranks_it(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "nonsense")
+
+        with pytest.raises(ValueError, match="AGAC_FILE_LIMIT"):
+            resolve_file_limit({FILE_LIMIT_KEY: 2})
+
+    @pytest.mark.parametrize("value", [0, -1, "2", 2.5, True])
+    def test_a_flag_value_that_cannot_bound_anything_is_refused_loudly(self, value):
+        with pytest.raises(ValueError, match="file-limit"):
+            resolve_file_limit({FILE_LIMIT_KEY: value})
+
+    def test_the_source_names_the_door_that_bounded_the_run(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "5")
+
+        assert resolve_file_limit({"file_limit": 9})[1] == "AGAC_FILE_LIMIT"
+        assert resolve_file_limit({"file_limit": 9, FILE_LIMIT_KEY: 2})[1] == "--file-limit"
+        assert resolve_file_limit({"file_limit": 1})[1] == "file_limit"
+
+    def test_it_never_logs(self, monkeypatch, caplog):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
+
+        with caplog.at_level("DEBUG", logger="agent_actions.utils.limits"):
+            resolve_file_limit({"file_limit": 9})
+
+        assert caplog.records == [], [r.message for r in caplog.records]
+
+    def test_the_two_axes_do_not_read_each_other(self, monkeypatch):
+        """One variable per axis; a record cap must not bound the walk, and a
+        file bound must not slice records."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+        monkeypatch.delenv("AGAC_FILE_LIMIT", raising=False)
+
+        assert resolve_file_limit({})[0] is None
+        assert resolve_record_limit({})[0] == 2
+
+
+class TestAnEmptyVariable:
+    """`FOO=` is how a shell says a variable is not in use, not a malformed value.
+
+    It matters because the check now runs while any workflow is assembled, so
+    refusing the spelling would fail read-only commands over a variable nobody
+    meant to set.
+    """
+
+    @pytest.mark.parametrize("value", ["", " ", "\t"])
+    def test_it_reads_as_unset_on_the_record_axis(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", value)
+
+        assert resolve_record_limit({"record_limit": 5})[0] == 5
+
+    @pytest.mark.parametrize("value", ["", " ", "\t"])
+    def test_it_reads_as_unset_on_the_file_axis(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", value)
+
+        assert resolve_file_limit({"file_limit": 5})[0] == 5
+
+    def test_it_does_not_stop_a_workflow_being_assembled(self, monkeypatch):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "")
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "")
+
+        check_environment()
+
+    def test_a_genuinely_malformed_value_still_fails(self, monkeypatch):
+        """The control: reading blank as unset must not make anything else pass."""
+        monkeypatch.setenv("AGAC_FILE_LIMIT", " x ")
+
+        with pytest.raises(ValueError, match="AGAC_FILE_LIMIT"):
+            check_environment()
+
+
+class TestTheEnvironmentIsCheckedBeforeTheRunStarts:
+    """The walk does not consult a file limit until a file has been processed,
+    so an unusable one found there leaves that action's work done and unstamped.
+    """
+
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1"])
+    def test_an_unusable_file_limit_is_refused(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", value)
+
+        with pytest.raises(ValueError, match="AGAC_FILE_LIMIT"):
+            check_environment()
+
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1"])
+    def test_an_unusable_record_limit_is_refused(self, monkeypatch, value):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", value)
+
+        with pytest.raises(ValueError, match="AGAC_RECORD_LIMIT"):
+            check_environment()
+
+    def test_usable_values_pass(self, monkeypatch):
+        monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+        monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
+
+        check_environment()
 
 
 class TestTheRetiredEnvironmentName:
@@ -70,7 +219,7 @@ class TestTheEnvironmentLimit:
 
         assert resolve_record_limit({"record_limit": 23})[0] == 23
 
-    @pytest.mark.parametrize("value", ["nonsense", "", "0", "-1", "2.5"])
+    @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
     def test_a_value_that_cannot_be_a_limit_is_refused_loudly(self, monkeypatch, value):
         monkeypatch.setenv("AGAC_RECORD_LIMIT", value)
 

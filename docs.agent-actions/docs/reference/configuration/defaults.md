@@ -55,7 +55,7 @@ actions:
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
 | `record_limit` | integer | Max records per file (default: unlimited). `AGAC_RECORD_LIMIT` caps this from the environment |
-| `file_limit` | integer | Max files to walk per action (default: unlimited). Does not hold back [`agac retry`](../cli/retry), which resolves the files holding the records it named rather than walking to N |
+| `file_limit` | integer | Max files to walk per action (default: unlimited). `AGAC_FILE_LIMIT` bounds this from the environment. Does not hold back [`agac retry`](../cli/retry), which walks the files holding the records it named rather than stopping at N |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
 
 :::note Every defaultable key is declared
@@ -332,15 +332,15 @@ defaults:
   # record_limit and file_limit omitted = unlimited
 ```
 
-To cap a run without editing the project, pass [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) to `agac run`, or set `AGAC_RECORD_LIMIT` where a variable suits better — the flag wins if both are set. Both count per input file, as `record_limit` does. It applies to
-every action, including those that configure no limit, which is what makes it
+To shrink a run without editing the project, pass [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) or [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) to `agac run`, or set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` where a variable suits better — the flag wins if both are set. Each bounds the axis its config key bounds: records per input file, and input files per action. Both apply to
+every action, including those that configure no limit, which is what makes them
 usable against a project you do not own:
 
 ```bash
-AGAC_RECORD_LIMIT=2 agac run -a my_workflow
+AGAC_RECORD_LIMIT=2 AGAC_FILE_LIMIT=1 agac run -a my_workflow
 ```
 
-`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. Neither limit holds back [`agac retry`](../cli/retry): it selects records by id and processes those alone, and it resolves the files holding them rather than walking to `file_limit`. If the limit that applies changes between runs, actions automatically re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for.
+`record_limit` applies at any action — start nodes, mid-pipeline, or leaf actions. Use it to test a single downstream action without re-running the full pipeline. `file_limit` applies at all stages. Neither limit holds back [`agac retry`](../cli/retry): it selects records by id and processes those alone, and it walks every file holding one of them however either limit is set. If the limit that applies changes between runs, actions re-execute instead of being skipped — whether it changed in the config, on the command line, or in the environment, since a completed action stores the limit that actually applied rather than the one the config asked for. A raised `record_limit` is the exception: an action whose last run processed everything available cannot be cut down by a larger limit, so it stays complete. `file_limit` keeps the simpler rule, since nothing counts the files a walk did not open.
 
 ### 7. Environment-Specific Defaults
 

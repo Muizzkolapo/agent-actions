@@ -77,6 +77,7 @@ class RunCommand:
             fresh=self.args.fresh,
             verify_keys=self.args.verify_keys,
             record_limit=self.args.record_limit,
+            file_limit=self.args.file_limit,
         )
 
         tracker = RunTracker(project_root=project_root)
@@ -220,6 +221,16 @@ class RunCommand:
     ),
 )
 @click.option(
+    "--file-limit",
+    type=click.IntRange(min=1),
+    default=None,
+    help=(
+        "Stop each action after this many input files, whatever the workflow "
+        "config sets. Counts files the action got through, so one that fails "
+        "does not spend the budget. Takes precedence over AGAC_FILE_LIMIT."
+    ),
+)
+@click.option(
     "--fresh",
     is_flag=True,
     default=False,
@@ -240,6 +251,7 @@ def run(
     execution_mode: str = "auto",
     concurrency_limit: int = 5,
     record_limit: int | None = None,
+    file_limit: int | None = None,
     fresh: bool = False,
     verify_keys: bool = False,
     project_root: Path | None = None,
@@ -252,7 +264,7 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
-        agac run -a my_agent --record-limit 2
+        agac run -a my_agent --record-limit 2 --file-limit 1
     """
     args = RunCommandArgs(
         agent=agent,
@@ -261,6 +273,7 @@ def run(
         execution_mode=cast(Literal["auto", "parallel", "sequential"], execution_mode),
         concurrency_limit=concurrency_limit,
         record_limit=record_limit,
+        file_limit=file_limit,
         fresh=fresh,
         verify_keys=verify_keys,
     )

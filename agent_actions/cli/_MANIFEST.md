@@ -70,12 +70,12 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
-| `run.py` | Module | Run command for the Agent Actions CLI. `--record-limit` caps every action for the run, carried on the runtime config and stamped onto each action config so the per-action limit resolver reads it. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
+| `run.py` | Module | Run command for the Agent Actions CLI. `--record-limit` and `--file-limit` bound every action for the run — records per input file and input files per action — carried on the runtime config and stamped onto each action config so the per-action limit resolver reads them. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
 | `run` | Function | Run agents with a specified agent configuration. | - |
-| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose. | `cli`, `storage`, `validation` |
+| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose and no file limit stops the walk before it reaches one. | `cli`, `storage`, `validation` |
 | `RetryCommand` | Class | Implementation of the retry command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the retry command. | - |
 | `retry` | Function | Retry failed/exhausted records from a specific action. | - |

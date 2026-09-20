@@ -122,6 +122,9 @@ class TestStorageBackendMerge:
         runner = ActionRunner.__new__(ActionRunner)
         runner.storage_backend = MagicMock()
         runner.console = MagicMock()
+        # __new__ skips __init__, so the attributes the walk reads have to be
+        # stated: a runner that is not repairing carries an empty set.
+        runner.retried_records = frozenset()
         return runner
 
     def test_merges_data_from_parallel_branches(self, runner):
@@ -150,15 +153,16 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 
         # Execute
-        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
+        files_found, files_processed, errors = process_from_storage_backend(runner, params)
 
         # Verify merge happened
+        assert errors.messages == [], "the walk swallowed a per-file failure"
         assert files_found == 1  # One unique path
         assert files_processed == 1
         assert len(processed_data) == 1
@@ -191,14 +195,15 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 
-        files_found, files_processed, _errors = process_from_storage_backend(runner, params)
+        files_found, files_processed, errors = process_from_storage_backend(runner, params)
 
         # Two unique files processed
+        assert errors.messages == [], "the walk swallowed a per-file failure"
         assert files_found == 2
         assert files_processed == 2
         assert len(processed_data) == 2
@@ -224,12 +229,14 @@ class TestStorageBackendMerge:
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1"]
         params.output_directory = "/output"
-        params.agent_config = {}
-        params.agent_name = "test_agent"
+        params.action_config = {}
+        params.action_name = "test_agent"
         params.strategy = MagicMock()
         params.idx = 0
 
-        process_from_storage_backend(runner, params)
+        _found, _processed, errors = process_from_storage_backend(runner, params)
+
+        assert errors.messages == [], "the walk swallowed a per-file failure"
 
         # Verify source_relative_path preserves full path without extension
         assert len(captured_params) == 1

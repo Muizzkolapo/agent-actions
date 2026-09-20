@@ -85,21 +85,31 @@ Persists per-action execution state for resumable runs:
 
 ```json
 {
-  "extract_data": {"status": "completed", "record_limit": 2, "file_limit": null},
-  "generate_content": {"status": "completed", "record_limit": null, "file_limit": null},
+  "extract_data": {"status": "completed", "record_limit": 2, "file_limit": null,
+                   "records_processed": 2, "truncated": true},
+  "generate_content": {"status": "completed", "record_limit": null, "file_limit": null,
+                       "records_processed": 40, "truncated": false},
   "validate_output": {"status": "pending"}
 }
 ```
 
 A completed action also stores what it ran under, so the next run can tell an
-action that is genuinely finished from one that was cut short. `record_limit` is
-the limit that was **in force** — from the workflow config, `--record-limit`, or
-`AGAC_RECORD_LIMIT`, whichever won — not the one the config asks for. It records
-what the limit was, not whether it dropped anything, so a limit larger than the
-input still counts as a change and re-runs the action. Alongside
-it are `file_limit`, `model_name`, `model_vendor` and a `config_hash` over the
-prompt, model, schema and guard. If any of them differs on a later run, the
-action is reset to `pending` and re-executed rather than skipped.
+action that is genuinely finished from one that was cut short. `record_limit` and
+`file_limit` are the limits that were **in force** — from the workflow config,
+the flag, or the environment variable, whichever won — not the ones the config
+asks for. Alongside them are `records_processed` and `truncated`, which say what
+the run actually did rather than what it was asked for, and `model_name`,
+`model_vendor` and a `config_hash` over the prompt, model, schema and guard.
+
+A changed `record_limit` re-runs the action only when it could have held
+something back. An untruncated run processed everything there was, so a limit at
+or above that count would drop nothing either and the action stays complete; a
+run that did truncate never vouches for any limit, and a stamp that cannot say —
+written before these counts existed, or by a run that never sliced — keeps the
+coarse rule and re-runs. `file_limit` has no count to reason from and stays
+coarse throughout: any change to it re-runs the action, including a change to a
+value larger than the number of files. If anything else in the stamp differs on a
+later run, the action is reset to `pending` and re-executed rather than skipped.
 
 | Status | Description |
 |--------|-------------|

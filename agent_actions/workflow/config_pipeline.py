@@ -15,7 +15,7 @@ from agent_actions.logging.events import (
     UDFDiscoveryStartEvent,
     WorkflowInitializationStartEvent,
 )
-from agent_actions.utils.limits import RECORD_LIMIT_KEY, check_environment
+from agent_actions.utils.limits import FILE_LIMIT_KEY, RECORD_LIMIT_KEY, check_environment
 from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
@@ -92,10 +92,12 @@ def load_workflow_configs(
         # which needs the project root.
         if config.project_root:
             action_config["_project_root"] = str(config.project_root)
-        # A cap asked for on this run applies to every action, including those
-        # that configure no limit of their own.
+        # A limit asked for on this run applies to every action, including those
+        # that configure none of their own.
         if config.record_limit is not None:
             action_config[RECORD_LIMIT_KEY] = config.record_limit
+        if config.file_limit is not None:
+            action_config[FILE_LIMIT_KEY] = config.file_limit
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,

@@ -40,7 +40,11 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
-from agent_actions.utils.limits import resolve_record_limit, slice_observation
+from agent_actions.utils.limits import (
+    resolve_file_limit,
+    resolve_record_limit,
+    slice_observation,
+)
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -85,6 +89,17 @@ def _compute_action_config_hash(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
+def _as_record_count(value: Any) -> int | None:
+    """*value* as a count of records, or None if it is not one.
+
+    ``bool`` is not a count: it is an ``int`` to ``isinstance``, and a stamped
+    ``True`` would otherwise read as one record processed.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return int(value)
+
+
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
     """True when the stamp proves *record_limit* leaves the stored record set whole.
 
@@ -98,8 +113,8 @@ def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int |
     """
     if details.get("truncated") is not False:
         return False
-    processed = details.get("records_processed")
-    if not isinstance(processed, int) or isinstance(processed, bool):
+    processed = _as_record_count(details.get("records_processed"))
+    if processed is None:
         return False
     return record_limit is None or record_limit >= processed
 
@@ -240,10 +255,8 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
-    def _stamped_record_limit(
-        self, action_name: str, action_config: ActionConfigDict
-    ) -> int | None:
-        """The limit in force, unless this run is only repairing records.
+    def _stamped_limit(self, action_name: str, key: str, in_force: int | None) -> int | None:
+        """*in_force*, unless this run is only repairing records — then the stored one.
 
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
@@ -251,11 +264,9 @@ class ActionExecutor:
         and re-run it. The same reason the comparison ignores a limit here.
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
-            stored: int | None = self.deps.state_manager.get_status_details(action_name).get(
-                "record_limit"
-            )
+            stored: int | None = self.deps.state_manager.get_status_details(action_name).get(key)
             return stored
-        return resolve_record_limit(action_config)[0]
+        return in_force
 
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
         """What the slices admitted, unless this run is only repairing records.
@@ -268,8 +279,8 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             details = self.deps.state_manager.get_status_details(action_name)
-            stored = details.get("records_processed")
-            return (stored if isinstance(stored, int) else None, details.get("truncated"))
+            stored = _as_record_count(details.get("records_processed"))
+            return (stored, details.get("truncated"))
 
         observed = slice_observation(
             getattr(self.deps.action_runner, "storage_backend", None), action_name
@@ -277,14 +288,29 @@ class ActionExecutor:
         return observed if observed is not None else (None, None)
 
     def _completion_metadata(
-        self, action_name: str, action_config: ActionConfigDict
+        self, action_name: str, action_config: ActionConfigDict, keep_stored: bool = False
     ) -> dict[str, Any]:
-        """Build metadata dict for completed action status."""
+        """What an action records about the run that did its work.
+
+        Written when a batch is submitted as well as when an action completes:
+        the run that walks the files is the one that can describe them, and a
+        batch is collected by a later, separate run.
+
+        *keep_stored* is that collecting run. Its own config describes a
+        different run — other limits, another prompt, another model — so every
+        key the submission wrote stands, and only a key it did not write is
+        answered from here, which grandfathers state predating this stamp
+        instead of reading it as an absent value.
+        """
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         records_processed, truncated = self._stamped_slice_outcome(action_name)
-        return {
-            "record_limit": self._stamped_record_limit(action_name, action_config),
-            "file_limit": cfg.get("file_limit"),
+        did_the_work = {
+            "record_limit": self._stamped_limit(
+                action_name, "record_limit", resolve_record_limit(action_config)[0]
+            ),
+            "file_limit": self._stamped_limit(
+                action_name, "file_limit", resolve_file_limit(action_config)[0]
+            ),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
             "config_hash": _compute_action_config_hash(action_config),
@@ -293,6 +319,10 @@ class ActionExecutor:
             "records_processed": records_processed,
             "truncated": truncated,
         }
+        if not keep_stored:
+            return did_the_work
+        submitted = self.deps.state_manager.get_status_details(action_name)
+        return {key: submitted.get(key, value) for key, value in did_the_work.items()}
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
@@ -306,7 +336,7 @@ class ActionExecutor:
         # config serves a run truncated elsewhere as a finished one, forever.
         # Still coarse for file_limit, which has no count to reason from.
         record_limit, _ = resolve_record_limit(action_config)
-        file_limit = action_config.get("file_limit")
+        file_limit, _ = resolve_file_limit(action_config)
         stored_limit = details.get("record_limit")
         record_limit_changed = stored_limit != record_limit and not _limit_cannot_reach_the_records(
             details, record_limit
@@ -352,6 +382,21 @@ class ActionExecutor:
                 else "action config (prompt/schema/guard)"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
+            if file_limit is not None and (config_changed or model_changed):
+                # A record limit rewrites every file it walks; a file limit stops
+                # the walk, and a file it never opens keeps what the last run put
+                # there. Harmless on its own, but the answers under it were
+                # produced by the configuration this reset is replacing, and the
+                # action reads as complete either way.
+                logger.warning(
+                    "%s is re-running under a file limit of %d after a %s change: files the "
+                    "walk does not reach keep output produced by the previous configuration, "
+                    "and the action will still be recorded as complete. Use --fresh for an "
+                    "output that comes from one configuration throughout",
+                    action_name,
+                    file_limit,
+                    reason,
+                )
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
@@ -570,6 +615,7 @@ class ActionExecutor:
                 params.action_name,
                 ActionStatus.BATCH_SUBMITTED,
                 batch_submitted_at=datetime.now().isoformat(),
+                **self._completion_metadata(params.action_name, params.action_config),
             )
             return ActionExecutionResult(
                 success=True,
@@ -1450,7 +1496,7 @@ class ActionExecutor:
                 final_status,
                 execution_time=wall_clock,
                 execution_mode="batch",
-                **self._completion_metadata(action_name, action_config),
+                **self._completion_metadata(action_name, action_config, keep_stored=True),
             )
             # No BatchCompleteEvent here either: finalize_batch_output fired one
             # per input file with the real ids and counts. The no_batches
