@@ -357,16 +357,24 @@ def _files_holding_retried_records(
 ) -> list[Path]:
     """The subset of *items* a repair needs, or all of them when not repairing.
 
-    A repair names records, not files. Walking every staged file instead visits
-    files holding none of them, and `file_limit` then spends its budget on those
-    — so whether a named record is reached at all comes down to walk order.
-
-    An unresolvable selection walks everything: the store prunes source rows, and
-    a repair that resolved to no file would process nothing rather than too much.
+    A repair names records, not files, and walking every staged file lets
+    `file_limit` spend its budget on ones holding none of them. Falls back to
+    walking everything when the selection is unresolvable, or when a named
+    record shares a repeat chain with another file: re-deriving identity needs
+    every sibling file present, and a narrowed walk missing one re-derives a
+    colliding identity instead.
     """
     if not runner.retried_records or runner.storage_backend is None:
         return items
     retried = runner.retried_records
+    if runner.storage_backend.records_share_a_repeat_chain(retried):
+        logger.info(
+            "Repairing %d record(s) that share identity with content staged in "
+            "another file — walking every staged file so identity re-derives "
+            "with the context it needs",
+            len(retried),
+        )
+        return items
     wanted = runner.storage_backend.source_files_for_records(retried)
     if not wanted:
         logger.warning(

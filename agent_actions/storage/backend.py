@@ -547,6 +547,19 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    def claim_source_guid_for_run(self, source_guid: str, relative_path: str) -> bool:
+        """Claim source_guid for this run under relative_path; True if taken elsewhere.
+
+        In-memory, never persisted — a persisted check can't tell a still-live
+        duplicate from this file's own row before it was renamed. Scoped by
+        relative_path, not action_name: independent start-node actions share one
+        staging directory by default, so the same file is legitimately claimed
+        more than once per run — only a DIFFERENT relative_path claiming the
+        same guid is the real duplicate-content case.
+        """
+        ...
+
+    @abstractmethod
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         ...
@@ -642,6 +655,17 @@ class StorageBackend(ABC):
         rows were pruned would process no file at all.
         """
         return set()
+
+    def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
+        """Whether any of record_ids is a repeat, or is repeated by another row.
+
+        A repair narrowed to just the file(s) naming record_ids would then lack
+        the sibling file(s) identity re-derivation needs to reproduce the same
+        guid — the caller falls back to an unnarrowed walk when this is True.
+        Defaults True (unknown treated as sharing) — same safe-by-default
+        posture as `source_files_for_records`'s empty-means-walk-everything.
+        """
+        return True
 
     def clear_disposition(
         self,

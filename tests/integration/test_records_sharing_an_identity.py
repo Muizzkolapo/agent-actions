@@ -129,14 +129,16 @@ class TestARetryChangesNothing:
 
 
 class TestTheSameContentInTwoFiles:
-    """A limit this does not lift. Identity is derived from content and carries no
-    path, and `record_disposition` is unique on (action, record_id) with no path
-    either — so a record staged in two files is two source rows and two target
-    rows but one disposition. Repeats are numbered per file, so the second copy
-    in each file lands on the same identity as the second copy in the other.
+    """The same collision `TestARunKeepsEveryStagedRecord` covers within one file, spread across two.
 
-    Pinned rather than fixed: making identity path-aware would move every guid in
-    every existing store."""
+    Content-derived identity has no path, and the same-file fix's occurrence
+    counter reset for every new file, so identical content in two files still
+    collided. The fix tracks what's been claimed across the whole run, not
+    just the file being read — in memory only, so a fresh run (a retry or
+    resume) starts over and reuses its own prior identity rather than
+    colliding with it (see test_cross_file_identity_collision.py for that
+    guarantee in isolation).
+    """
 
     @pytest.fixture
     def across_files(self, tmp_path, monkeypatch):
@@ -154,14 +156,114 @@ class TestTheSameContentInTwoFiles:
         return root
 
     def test_every_staged_record_is_stored(self, across_files):
-        """Four staged across two files, four stored — the half this does fix."""
+        """Four staged across two files, four stored."""
         counts = _counts(across_files)
 
         assert counts["source"] == 4, counts
         assert counts["target"] == 4, counts
 
-    def test_dispositions_cannot_tell_the_two_files_apart(self, across_files):
-        """The half it does not. Two identities, used in both files."""
+    def test_every_staged_record_gets_its_own_disposition(self, across_files):
+        """Four staged, four tracked — a status row per record, not per content."""
         counts = _counts(across_files)
 
-        assert counts["dispositions"] == 2, counts
+        assert counts["dispositions"] == 4, counts
+
+    def test_cross_file_repeats_still_resolve_to_the_content_they_repeat(self, across_files):
+        """Every occurrence is its own identity, and every repeat is still
+        traceable to the one it repeats — the same lineage guarantee
+        `TestARunKeepsEveryStagedRecord` makes for same-file repeats."""
+        db = glob.glob(
+            str(across_files / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
+        )[0]
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = [json.loads(d) for (d,) in con.execute("select data from source_data")]
+        finally:
+            con.close()
+
+        guids = {r["source_guid"] for r in rows}
+        assert len(guids) == 4, "every staged occurrence is now its own identity"
+
+        parents = {r.get("repeat_of_source_guid") for r in rows if r.get("repeat_of_source_guid")}
+        assert len(parents) == 1, "all three repeats point at the one identity they repeat"
+        assert parents <= guids, "the identity they repeat is itself a real stored record"
+
+
+def _source_rows(project):
+    db = glob.glob(str(project / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        return con.execute("select relative_path, source_guid from source_data").fetchall()
+    finally:
+        con.close()
+
+
+def _stage_two_colliding_files(tmp_path, monkeypatch):
+    """Two files with identical content, run, source_data rows for both."""
+    root = tmp_path / "project"
+    shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
+    staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    for name in ("a_pages.json", "b_pages.json"):
+        staging.joinpath(name).write_text(json.dumps([{"page_content": "shared"}]))
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    return root
+
+
+def _retry_after_marking_failed(root, record_id):
+    """retry only acts on non-terminal dispositions — mark it failed first,
+    the same way TestARetryChangesNothing does."""
+    db = glob.glob(str(root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db"))[0]
+    con = sqlite3.connect(db)
+    con.execute(
+        "update record_disposition set disposition = 'failed' where record_id = ?",
+        (record_id,),
+    )
+    con.commit()
+    con.close()
+
+    return CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", record_id])
+
+
+class TestRetryingTheRepeatSideOfACollision:
+    """A repair narrows its walk to the file(s) naming the retried record — but a
+    record sharing identity with content in another file needs that sibling
+    file re-derived too, or the narrowed walk recomputes a colliding identity
+    and silently drops the record it was asked to repair."""
+
+    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
+        root = _stage_two_colliding_files(tmp_path, monkeypatch)
+        before = _counts(root)
+        assert before == {"source": 2, "dispositions": 2, "target": 2}, before
+
+        rows = _source_rows(root)
+        repeat_side = next(guid for rp, guid in rows if rp.startswith("b_pages"))
+
+        retry = _retry_after_marking_failed(root, repeat_side)
+
+        assert retry.exit_code == 0, retry.output
+        assert _counts(root) == before, "retrying the repeat side dropped the other file's record"
+
+
+class TestRetryingTheOriginalSideOfACollision:
+    """The base identity's own row carries no repeat_of_source_guid — only the
+    OTHER file's row points back at it — so retrying the original side needs
+    its own coverage, not just the mirror of the repeat side above."""
+
+    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
+        root = _stage_two_colliding_files(tmp_path, monkeypatch)
+        before = _counts(root)
+        assert before == {"source": 2, "dispositions": 2, "target": 2}, before
+
+        rows = _source_rows(root)
+        original_side = next(guid for rp, guid in rows if rp.startswith("a_pages"))
+
+        retry = _retry_after_marking_failed(root, original_side)
+
+        assert retry.exit_code == 0, retry.output
+        assert _counts(root) == before, "retrying the original side dropped the other file's record"

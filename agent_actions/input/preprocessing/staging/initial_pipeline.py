@@ -58,6 +58,8 @@ class DataPreparationContext:
     file_path: str
     agent_name: str
     idx: int = 0
+    storage_backend: Any = None  # Optional StorageBackend for cross-file identity checks
+    relative_path: str = ""  # Same value source_data will store this file's rows under
 
 
 @dataclass
@@ -189,6 +191,10 @@ def process_initial_stage(ctx: InitialStageContext):
         file_path=ctx.file_path,
     )
 
+    # Same formula _save_source_items_helper uses, so the identity claim below
+    # is keyed by the relative_path this file's rows will actually be stored under.
+    relative_path = str(Path(ctx.file_path).relative_to(ctx.base_directory).with_suffix(""))
+
     prep_ctx = DataPreparationContext(
         content=content,
         file_type=file_type,
@@ -196,6 +202,8 @@ def process_initial_stage(ctx: InitialStageContext):
         file_path=ctx.file_path,
         agent_name=ctx.agent_name,
         idx=ctx.idx,
+        storage_backend=ctx.storage_backend,
+        relative_path=relative_path,
     )
 
     if run_mode == RunMode.BATCH:
@@ -375,42 +383,53 @@ def _envelope_row(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _give_repeats_their_own_identity(rows: list[Any]) -> list[Any]:
-    """Re-stamp a record whose identity another row in the file already took.
+def _give_repeats_their_own_identity(
+    rows: list[Any], storage_backend: Any = None, relative_path: str = ""
+) -> list[Any]:
+    """Re-stamp a record whose identity another row already took.
 
-    Identity is derived from content, so staging the same record twice lands both
-    on one guid — and the store is keyed on it, so the second is dropped on write
-    and never gets a disposition while the output blob keeps both. What the user
-    staged is what they get back, so the repeat is given its own identity and
-    records the one it repeats as ``repeat_of_source_guid``.
-
-    The same move an expansion makes for its children, and for the same reason:
-    several rows that would otherwise collide on one guid. Not the same field,
-    though — ``parent_source_guid`` means "my own guid matches nothing in the
-    source pool, look here instead", and a repeat's guid *is* in the pool. Using
-    it would tell every consumer the opposite of the truth, and would attribute a
-    repeat's own expansion children to the record it repeats.
+    Two rows in THIS call sharing a guid always collide — same file, back to
+    back — and bump regardless of relative_path. A guid claimed by an EARLIER
+    call collides only if that claim was under a DIFFERENT relative_path:
+    independent actions can share one staging file, and re-reading it must
+    keep one identity, not diverge per reader. The cross-call claim is
+    in-memory, scoped to this run only, never persisted — a re-staged or
+    renamed file doesn't collide with its own past self.
     """
-    occurrences: dict[str, int] = {}
+    claimed_this_file: set[str] = set()
+
+    def already_claimed(guid: str) -> bool:
+        if guid in claimed_this_file:
+            return True
+        claimed_this_file.add(guid)
+        if storage_backend is not None:
+            return bool(storage_backend.claim_source_guid_for_run(guid, relative_path))
+        return False
+
     repeats = 0
     for row in rows:
         if not isinstance(row, dict):
             continue
-        guid = row.get("source_guid")
-        if not guid:
+        base = row.get("source_guid")
+        if not base:
             continue
-        seen = occurrences.get(guid, 0)
-        occurrences[guid] = seen + 1
-        if seen:
-            row["repeat_of_source_guid"] = guid
-            row["source_guid"] = IDGenerator.derive_repeat_source_guid(guid, seen)
+        occurrence = 0
+        candidate = base
+        while already_claimed(candidate):
+            occurrence += 1
+            candidate = IDGenerator.derive_repeat_source_guid(base, occurrence)
+        if occurrence:
+            row["repeat_of_source_guid"] = base
+            row["source_guid"] = candidate
             repeats += 1
     if repeats:
         logger.info("%d staged record(s) repeat content and were given their own identity", repeats)
     return rows
 
 
-def _wrap_online_rows(payloads: list[Any]) -> list[Any]:
+def _wrap_online_rows(
+    payloads: list[Any], storage_backend: Any = None, relative_path: str = ""
+) -> list[Any]:
     """Envelope and stamp online first-stage rows through the single authority.
 
     A non-dict payload cannot be namespaced under content.source, so it passes through
@@ -423,11 +442,16 @@ def _wrap_online_rows(payloads: list[Any]) -> list[Any]:
             wrapped.append(payload)
             continue
         wrapped.append(_envelope_row(payload))
-    return _give_repeats_their_own_identity(wrapped)
+    return _give_repeats_their_own_identity(wrapped, storage_backend, relative_path)
 
 
 def _prepare_text_chunks_batch(
-    content: str, agent_config: dict[str, Any], batch_id: str, node_id: str
+    content: str,
+    agent_config: dict[str, Any],
+    batch_id: str,
+    node_id: str,
+    storage_backend: Any = None,
+    relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
@@ -442,20 +466,32 @@ def _prepare_text_chunks_batch(
         tokenizer_model=tokenizer_model,
         split_method=split_method,
     )
-    return _add_batch_metadata([{"content": chunk} for chunk in chunks], batch_id, node_id)
+    return _add_batch_metadata(
+        [{"content": chunk} for chunk in chunks], batch_id, node_id, storage_backend, relative_path
+    )
 
 
 def _prepare_json_batch(
-    content: Any, batch_id: str, node_id: str, file_path: str, agent_name: str
+    content: Any,
+    batch_id: str,
+    node_id: str,
+    file_path: str,
+    agent_name: str,
+    storage_backend: Any = None,
+    relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare pre-parsed JSON content for batch mode."""
     if isinstance(content, list):
-        return _add_batch_metadata(content, batch_id, node_id)
+        return _add_batch_metadata(content, batch_id, node_id, storage_backend, relative_path)
     return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
 def _add_batch_metadata(
-    rows: list[dict[str, Any]], batch_id: str, node_id: str
+    rows: list[dict[str, Any]],
+    batch_id: str,
+    node_id: str,
+    storage_backend: Any = None,
+    relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Add batch metadata to rows of data."""
     result = []
@@ -472,7 +508,7 @@ def _add_batch_metadata(
             "node_id": node_id,
         }
         result.append(record)
-    return _give_repeats_their_own_identity(result)
+    return _give_repeats_their_own_identity(result, storage_backend, relative_path)
 
 
 def _prepare_batch_data(ctx: DataPreparationContext):
@@ -488,13 +524,24 @@ def _prepare_batch_data(ctx: DataPreparationContext):
 
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         data_chunk = _prepare_text_chunks_batch(
-            ctx.content, ctx.agent_config, local_batch_id, node_id
+            ctx.content,
+            ctx.agent_config,
+            local_batch_id,
+            node_id,
+            ctx.storage_backend,
+            ctx.relative_path,
         )
         src_text = []
 
     elif ctx.file_type == ".json":
         data_chunk = _prepare_json_batch(
-            ctx.content, local_batch_id, node_id, ctx.file_path, ctx.agent_name
+            ctx.content,
+            local_batch_id,
+            node_id,
+            ctx.file_path,
+            ctx.agent_name,
+            ctx.storage_backend,
+            ctx.relative_path,
         )
         src_text = []
 
@@ -502,14 +549,18 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         # Tabular: let TabularLoader read the file itself (FileReader returns list[list], not str).
         # TabularLoader handles both comma- and tab-separated by routing on extension.
         rows = tabular_loader.process(content=None, file_path=ctx.file_path)
-        data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
+        data_chunk = _add_batch_metadata(
+            rows, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
+        )
         src_text = []
 
     elif ctx.file_type == ".xlsx":
         if not isinstance(ctx.content, list):
             logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
         rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
-        data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
+        data_chunk = _add_batch_metadata(
+            rows, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
+        )
         src_text = []
 
     elif ctx.file_type == ".xml":
@@ -580,7 +631,9 @@ def _prepare_online_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        data_chunk = src_text = _wrap_online_rows([{"content": text} for text in chunks])
+        data_chunk = src_text = _wrap_online_rows(
+            [{"content": text} for text in chunks], ctx.storage_backend, ctx.relative_path
+        )
 
     elif ctx.file_type == ".json":
         raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
@@ -588,15 +641,15 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(raw_items, list):
             raw_items = [raw_items]
 
-        data_chunk = src_text = _wrap_online_rows(raw_items)
+        data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type in (".csv", ".tsv"):
         rows = tabular_loader.process(content=None, file_path=ctx.file_path)
-        data_chunk = src_text = _wrap_online_rows(rows)
+        data_chunk = src_text = _wrap_online_rows(rows, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type == ".xlsx":
         rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
-        data_chunk = src_text = _wrap_online_rows(rows)
+        data_chunk = src_text = _wrap_online_rows(rows, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type == ".xml":
         raise AgentActionsError(

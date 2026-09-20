@@ -834,6 +834,9 @@ class TestGetFailedItems:
             def read_source(self, *a, **kw):
                 return []
 
+            def claim_source_guid_for_run(self, *a, **kw):
+                return False
+
             def list_target_files(self, *a, **kw):
                 return []
 
