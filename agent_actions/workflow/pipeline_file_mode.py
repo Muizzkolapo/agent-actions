@@ -7,8 +7,9 @@ record building, output reconciliation, guard pre-filtering.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from agent_actions.record.tracking import TrackedItem
 
@@ -20,6 +21,30 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _parent_index(
+    output_index: int,
+    structured_data: list[dict],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    original_data: list[dict],
+) -> int | None:
+    """The input row an output inherits from, or None if it has no single parent."""
+    source_idx: int | list[int] | None = None
+    if source_mapping is not None:
+        if output_index in source_mapping:
+            source_idx = source_mapping[output_index]
+        elif not source_mapping and len(structured_data) == len(original_data):
+            # Empty mapping + matching cardinality: 1:1 passthrough by a tool
+            # that didn't preserve node_id.
+            source_idx = output_index
+
+    if isinstance(source_idx, list):
+        source_idx = source_idx[0] if source_idx else None  # Many-to-one: first parent
+
+    if isinstance(source_idx, int) and original_data and 0 <= source_idx < len(original_data):
+        return source_idx
+    return None
+
+
 def _reattach_source_guid(
     structured_data: list[dict],
     source_mapping: dict[int, int | list[int] | None] | None,
@@ -27,37 +52,39 @@ def _reattach_source_guid(
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
-    Mutates structured_data in place. An explicit tool value wins. Otherwise the
-    item inherits its mapped parent's guid; a record with no inheritable parent
-    (synthetic, unmapped, or a parent that itself lacks one) is a new entity
-    synthesized here — it gets a fresh guid generated at the producer, mirroring
-    the 1→N expansion pattern, so it still traces to its source file and is never
-    left blank for a downstream fallback to fabricate.
+    Mutates structured_data in place; an explicit tool value wins. A row with no
+    inheritable parent — synthetic, unmapped, or a parent lacking one — is born
+    here rather than left blank for a fallback to fabricate.
+
+    So are several rows claiming one parent: one guid shared between distinct
+    entities is one row to every store keyed by identity. Each keeps the parent
+    as ``parent_source_guid``; a parent's only child inherits as before.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
-    for i, item in enumerate(structured_data):
-        if item.get("source_guid"):
-            continue  # Tool explicitly set it — respect that
+    inheriting = [i for i, item in enumerate(structured_data) if not item.get("source_guid")]
+    parents = {
+        i: _parent_index(i, structured_data, source_mapping, original_data) for i in inheriting
+    }
+    claimed: Counter[int] = Counter(idx for idx in parents.values() if idx is not None)
 
-        source_idx: int | list[int] | None = None
-        if source_mapping is not None:
-            if i in source_mapping:
-                source_idx = source_mapping[i]
-            elif not source_mapping and len(structured_data) == len(original_data):
-                # Empty mapping + matching cardinality: 1:1 passthrough by a tool
-                # that didn't preserve node_id.
-                source_idx = i
+    for i in inheriting:
+        item = structured_data[i]
+        source_idx = parents[i]
+        parent = original_data[source_idx] if source_idx is not None else None
+        parent_guid = parent.get("source_guid") if parent else None
 
-        if isinstance(source_idx, list):
-            source_idx = source_idx[0] if source_idx else None  # Many-to-one: first parent
+        if parent is not None and claimed[cast(int, source_idx)] > 1:
+            # Hand on the pool-resolvable identity, not the intermediate one: a
+            # parent that is itself an expansion child has a minted guid that
+            # matches nothing in the source pool.
+            inherited = parent.get("parent_source_guid") or parent_guid
+            if inherited and not item.get("parent_source_guid"):
+                item["parent_source_guid"] = inherited
+            item["source_guid"] = IDGenerator.generate_source_guid()
+            continue
 
-        parent_guid = None
-        if isinstance(source_idx, int) and original_data and source_idx < len(original_data):
-            parent = original_data[source_idx]
-            parent_guid = parent.get("source_guid")
-            # Hand the attribution chain on: if the parent is itself an expansion
-            # child, its minted guid matches nothing in the source pool.
+        if parent is not None:
             if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = parent["parent_source_guid"]
 
