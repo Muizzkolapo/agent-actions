@@ -93,9 +93,9 @@ class TestWorkflowInspectorGetLevels:
         inspector._config_path = Path("/fake/wf.yml")
         # Two operational, one non-operational (absent from execution_order).
         inspector.action_configs = {
-            "op_a": {"depends_on": []},
-            "op_b": {"depends_on": ["op_a"]},
-            "non_op_c": {"depends_on": ["op_b"]},
+            "op_a": {"dependencies": []},
+            "op_b": {"dependencies": ["op_a"]},
+            "non_op_c": {"dependencies": ["op_b"]},
         }
         inspector.execution_order = ["op_a", "op_b"]
         inspector._loaded = True

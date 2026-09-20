@@ -18,7 +18,7 @@ def test_file_tool_two_wildcard_observe_flags_collision():
                 "name": "dedup_by_concept",
                 "kind": "tool",
                 "granularity": "file",
-                "depends_on": ["tag_concept", "dedup"],
+                "dependencies": ["tag_concept", "dedup"],
                 "context_scope": {"observe": ["tag_concept.*", "dedup.*"]},
             },
         ]
@@ -49,7 +49,7 @@ def test_file_tool_specific_field_collision_flags_the_shared_key():
                 "name": "merge_tool",
                 "kind": "tool",
                 "granularity": "file",
-                "depends_on": ["action_a", "action_b"],
+                "dependencies": ["action_a", "action_b"],
                 "context_scope": {"observe": ["action_a.answer", "action_b.answer"]},
             },
         ]
@@ -79,7 +79,7 @@ def test_file_tool_distinct_fields_no_warning():
                 "name": "merge_tool",
                 "kind": "tool",
                 "granularity": "file",
-                "depends_on": ["action_a", "action_b"],
+                "dependencies": ["action_a", "action_b"],
                 "context_scope": {"observe": ["action_a.foo", "action_b.bar"]},
             },
         ]
@@ -98,7 +98,7 @@ def test_record_mode_tool_collision_not_flagged():
                 "name": "dedup_by_concept",
                 "kind": "tool",
                 "granularity": "record",
-                "depends_on": ["tag_concept", "dedup"],
+                "dependencies": ["tag_concept", "dedup"],
                 "context_scope": {"observe": ["tag_concept.*", "dedup.*"]},
             },
         ]
@@ -116,7 +116,7 @@ def test_llm_action_collision_not_flagged():
             {
                 "name": "writer",
                 "granularity": "file",
-                "depends_on": ["tag_concept", "dedup"],
+                "dependencies": ["tag_concept", "dedup"],
                 "prompt": "write",
                 "context_scope": {"observe": ["tag_concept.*", "dedup.*"]},
             },

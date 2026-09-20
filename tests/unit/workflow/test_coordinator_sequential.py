@@ -344,11 +344,11 @@ class TestStripUnreachableDrops:
     def test_unreachable_drops_stripped(self):
         """Drops targeting actions not in the dependency chain are removed."""
         configs = {
-            "source": {"depends_on": []},
-            "analyze_clause": {"depends_on": ["source"]},
-            "aggregate": {"depends_on": ["source"]},
+            "source": {"dependencies": []},
+            "analyze_clause": {"dependencies": ["source"]},
+            "aggregate": {"dependencies": ["source"]},
             "summary": {
-                "depends_on": ["aggregate"],
+                "dependencies": ["aggregate"],
                 "context_scope": {
                     "observe": ["aggregate.*"],
                     "drop": [
@@ -371,10 +371,10 @@ class TestStripUnreachableDrops:
     def test_reachable_drops_preserved(self):
         """Drops targeting reachable actions are kept."""
         configs = {
-            "source": {"depends_on": []},
-            "upstream": {"depends_on": ["source"]},
+            "source": {"dependencies": []},
+            "upstream": {"dependencies": ["source"]},
             "consumer": {
-                "depends_on": ["upstream"],
+                "dependencies": ["upstream"],
                 "context_scope": {
                     "drop": ["upstream.verbose_field"],
                 },
@@ -392,11 +392,11 @@ class TestStripUnreachableDrops:
     def test_transitive_dependency_reachable(self):
         """Drops on transitively reachable actions are kept."""
         configs = {
-            "source": {"depends_on": []},
-            "A": {"depends_on": ["source"]},
-            "B": {"depends_on": ["A"]},
+            "source": {"dependencies": []},
+            "A": {"dependencies": ["source"]},
+            "B": {"dependencies": ["A"]},
             "C": {
-                "depends_on": ["B"],
+                "dependencies": ["B"],
                 "context_scope": {
                     "drop": ["A.field"],
                 },
@@ -415,8 +415,8 @@ class TestStripUnreachableDrops:
     def test_no_drops_no_op(self):
         """Actions without drops are skipped without error."""
         configs = {
-            "source": {"depends_on": []},
-            "action": {"depends_on": ["source"]},
+            "source": {"dependencies": []},
+            "action": {"dependencies": ["source"]},
         }
         wf = _build_workflow(
             execution_order=["source", "action"],
@@ -428,11 +428,11 @@ class TestStripUnreachableDrops:
     def test_mixed_reachable_and_unreachable(self):
         """Reachable drops kept, unreachable drops stripped, in the same list."""
         configs = {
-            "source": {"depends_on": []},
-            "reachable": {"depends_on": ["source"]},
-            "unreachable": {"depends_on": ["source"]},
+            "source": {"dependencies": []},
+            "reachable": {"dependencies": ["source"]},
+            "unreachable": {"dependencies": ["source"]},
             "consumer": {
-                "depends_on": ["reachable"],
+                "dependencies": ["reachable"],
                 "context_scope": {
                     "drop": [
                         "reachable.field_a",

@@ -190,8 +190,7 @@ def infer_dependencies(
             (["add_answer_text"], ["suggest_distractor_counts", "write_scenario_question"])
     """
     # 1. Get explicit dependencies (input sources)
-    # Support both 'dependencies' and 'depends_on' for backward compatibility
-    deps = action_config.get("dependencies") or action_config.get("depends_on", [])
+    deps = action_config.get("dependencies", [])
     if deps is None:
         all_deps = []
     elif isinstance(deps, str):

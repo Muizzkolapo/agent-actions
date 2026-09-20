@@ -21,25 +21,25 @@ def _collision_warnings(workflow):
     return [w for w in result.warnings if _COLLISION_MARKER in w.message]
 
 
-def _llm(name, fields, depends_on=None, observe=None):
+def _llm(name, fields, dependencies=None, observe=None):
     action = {"name": name, "prompt": f"Run {name}"}
     if fields:
         action["schema"] = {
             "type": "object",
             "properties": {f: {"type": "string"} for f in fields},
         }
-    if depends_on:
-        action["depends_on"] = depends_on
+    if dependencies:
+        action["dependencies"] = dependencies
     if observe:
         action["context_scope"] = {"observe": observe}
     return action
 
 
-def _file_action(name, kind, depends_on, observe, *, granularity="file"):
+def _file_action(name, kind, dependencies, observe, *, granularity="file"):
     action = {
         "name": name,
         "kind": kind,
-        "depends_on": depends_on,
+        "dependencies": dependencies,
         "context_scope": {"observe": observe},
     }
     if granularity is not None:
@@ -228,7 +228,7 @@ class TestProductionActionShape:
                     "kind": "tool",
                     "function": "merge_fn",
                     "granularity": "File",
-                    "depends_on": ["gen_a", "gen_b"],
+                    "dependencies": ["gen_a", "gen_b"],
                     "context_scope": {"observe": ["gen_a.code", "gen_b.code"]},
                 },
             ]
@@ -246,7 +246,7 @@ class TestProductionActionShape:
                     "kind": "tool",
                     "function": "merge_fn",
                     "granularity": "Record",
-                    "depends_on": ["gen_a", "gen_b"],
+                    "dependencies": ["gen_a", "gen_b"],
                     "context_scope": {"observe": ["gen_a.code", "gen_b.code"]},
                 },
             ]

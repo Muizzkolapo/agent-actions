@@ -70,7 +70,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.summary"],
                         "observe": ["upstream.title"],
@@ -93,7 +93,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.forwarded_field"],
                     },
@@ -114,7 +114,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.nonexistent"],
                     },
@@ -136,7 +136,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.*"],
                     },
@@ -164,7 +164,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.anything"],
                     },
@@ -186,7 +186,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "downstream",
-                    "depends_on": ["upstream"],
+                    "dependencies": ["upstream"],
                     "context_scope": {
                         "drop": ["upstream.observed_field"],
                     },
@@ -228,7 +228,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "action_b",
-                    "depends_on": ["source"],
+                    "dependencies": ["source"],
                     "context_scope": {
                         "drop": ["action_a.field_x"],
                     },
@@ -274,7 +274,7 @@ class TestCheckDropDirectives:
             "actions": [
                 {
                     "name": "consumer",
-                    "depends_on": ["source"],
+                    "dependencies": ["source"],
                     "context_scope": {
                         "drop": ["unreachable.f1", "unreachable.f2", "unreachable.f3"],
                     },
@@ -512,10 +512,10 @@ class TestCheckLineageReachability:
 
         workflow_config = {
             "actions": [
-                {"name": "A", "depends_on": ["source"]},
+                {"name": "A", "dependencies": ["source"]},
                 {
                     "name": "B",
-                    "depends_on": ["A"],
+                    "dependencies": ["A"],
                     "context_scope": {"observe": ["A.field_x"]},
                 },
             ],
@@ -565,15 +565,15 @@ class TestCheckLineageReachability:
 
         workflow_config = {
             "actions": [
-                {"name": "A", "depends_on": ["source"]},
+                {"name": "A", "dependencies": ["source"]},
                 {
                     "name": "B",
-                    "depends_on": ["A"],
+                    "dependencies": ["A"],
                     "context_scope": {"passthrough": ["A.*"]},
                 },
                 {
                     "name": "C",
-                    "depends_on": ["B"],
+                    "dependencies": ["B"],
                     "context_scope": {"observe": ["A.field_x"]},
                 },
             ],
@@ -623,15 +623,15 @@ class TestCheckLineageReachability:
 
         workflow_config = {
             "actions": [
-                {"name": "A", "depends_on": ["source"]},
+                {"name": "A", "dependencies": ["source"]},
                 {
                     "name": "B",
-                    "depends_on": ["A"],
+                    "dependencies": ["A"],
                     "context_scope": {"passthrough": ["A.field_x"]},
                 },
                 {
                     "name": "C",
-                    "depends_on": ["B"],
+                    "dependencies": ["B"],
                     "context_scope": {"observe": ["A.field_x"]},
                 },
             ],
@@ -678,11 +678,11 @@ class TestCheckLineageReachability:
 
         workflow_config = {
             "actions": [
-                {"name": "A", "depends_on": ["source"]},
-                {"name": "B", "depends_on": ["A"]},
+                {"name": "A", "dependencies": ["source"]},
+                {"name": "B", "dependencies": ["A"]},
                 {
                     "name": "C",
-                    "depends_on": ["B"],
+                    "dependencies": ["B"],
                     "context_scope": {"observe": ["A.field_x"]},
                 },
             ],
@@ -731,11 +731,11 @@ class TestCheckLineageReachability:
 
         workflow_config = {
             "actions": [
-                {"name": "A", "depends_on": ["source"]},
-                {"name": "B", "depends_on": ["A"]},
+                {"name": "A", "dependencies": ["source"]},
+                {"name": "B", "dependencies": ["A"]},
                 {
                     "name": "C",
-                    "depends_on": ["B"],
+                    "dependencies": ["B"],
                     "context_scope": {"observe": ["A.field_x"]},
                 },
             ],

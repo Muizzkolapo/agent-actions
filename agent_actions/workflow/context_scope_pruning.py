@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def _action_deps(cfg: dict[str, Any]) -> list[str]:
-    """Codebase carries both `dependencies` (canonical, post-pydantic-dump)
-    and `depends_on` (legacy / pre-merge). Read both."""
-    deps = cfg.get("dependencies") or cfg.get("depends_on") or []
+    deps = cfg.get("dependencies") or []
     return list(deps) if not isinstance(deps, str) else [deps]
 
 

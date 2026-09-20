@@ -15,7 +15,7 @@ def _make_workflow(*actions):
     return {"actions": list(actions)}
 
 
-def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observe=None):
+def _llm_action(name, *, schema_fields=None, guard=None, dependencies=None, observe=None):
     """Build an LLM action config."""
     action = {"name": name, "prompt": f"Process {name}"}
     if schema_fields:
@@ -25,8 +25,8 @@ def _llm_action(name, *, schema_fields=None, guard=None, depends_on=None, observ
         }
     if guard:
         action["guard"] = guard
-    if depends_on:
-        action["depends_on"] = depends_on
+    if dependencies:
+        action["dependencies"] = dependencies
     if observe:
         action["context_scope"] = {"observe": observe}
     return action
@@ -53,18 +53,18 @@ class TestFilterFaninObserveHazard:
                 "assign_option_layout",
                 schema_fields=["answer_letter", "longest_option"],
                 guard={"condition": "approved == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "auto_review_quality",
                 schema_fields=["telegraph_score"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "write_scenario_question",
-                depends_on=["assign_option_layout", "auto_review_quality"],
+                dependencies=["assign_option_layout", "auto_review_quality"],
                 observe=[
                     "assign_option_layout.answer_letter",
                     "auto_review_quality.telegraph_score",
@@ -89,7 +89,7 @@ class TestFilterFaninObserveHazard:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.score"],
             ),
         )
@@ -106,18 +106,18 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.*", "other_dep.field_b"],
             ),
         )
@@ -134,18 +134,18 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a", "field_b", "field_c"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_x"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=[
                     "filtered_action.field_a",
                     "filtered_action.field_b",
@@ -168,18 +168,18 @@ class TestFilterFaninObserveHazard:
                 "skip_action",
                 schema_fields=["field_a"],
                 guard={"condition": "ok == true", "on_false": "skip"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["skip_action", "other_dep"],
+                dependencies=["skip_action", "other_dep"],
                 observe=["skip_action.field_a", "other_dep.field_b"],
             ),
         )
@@ -196,18 +196,18 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a"],
                 guard="score >= 6",
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.field_a", "other_dep.field_b"],
             ),
         )
@@ -225,18 +225,18 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.field_a", "other_dep.field_b"],
             ),
         )
@@ -256,18 +256,18 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.field_a", "other_dep.field_b"],
             ),
         )
@@ -288,18 +288,18 @@ class TestFilterFaninObserveHazard:
             _llm_action(
                 "dep_a",
                 schema_fields=["field_a"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "dep_b",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["dep_a", "dep_b"],
+                dependencies=["dep_a", "dep_b"],
                 observe=["dep_a.field_a", "dep_b.field_b"],
             ),
         )
@@ -316,19 +316,19 @@ class TestFilterFaninObserveHazard:
                 "filter_a",
                 schema_fields=["fa"],
                 guard={"condition": "x == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "filter_b",
                 schema_fields=["fb"],
                 guard={"condition": "y == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer",
-                depends_on=["filter_a", "filter_b"],
+                dependencies=["filter_a", "filter_b"],
                 observe=["filter_a.fa", "filter_b.fb"],
             ),
         )
@@ -348,23 +348,23 @@ class TestFilterFaninObserveHazard:
                 "filtered_action",
                 schema_fields=["field_a", "field_b"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_x"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "consumer_wildcard",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.*", "other_dep.field_x"],
             ),
             _llm_action(
                 "consumer_specific",
-                depends_on=["filtered_action", "other_dep"],
+                dependencies=["filtered_action", "other_dep"],
                 observe=["filtered_action.field_a", "other_dep.field_x"],
             ),
         )
@@ -377,23 +377,23 @@ class TestFilterFaninObserveHazard:
         assert "consumer_wildcard" not in consumer_names
 
     def test_deps_inferred_from_context_scope(self):
-        """Dependencies inferred from observe refs (no explicit depends_on) still detect fan-in."""
+        """Dependencies inferred from observe refs (no explicit dependencies) still detect fan-in."""
         workflow = _make_workflow(
             _llm_action("source_action", schema_fields=["data"]),
             _llm_action(
                 "filtered_action",
                 schema_fields=["field_a"],
                 guard={"condition": "ok == true", "on_false": "filter"},
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
             _llm_action(
                 "other_dep",
                 schema_fields=["field_b"],
-                depends_on=["source_action"],
+                dependencies=["source_action"],
                 observe=["source_action.data"],
             ),
-            # No explicit depends_on — deps inferred from observe refs
+            # No explicit dependencies — deps inferred from observe refs
             _llm_action(
                 "consumer",
                 observe=["filtered_action.field_a", "other_dep.field_b"],
@@ -415,7 +415,7 @@ class TestFilterFaninObserveHazard:
             ),
             _llm_action(
                 "downstream",
-                depends_on=["review"],
+                dependencies=["review"],
                 observe=["review.hitl_status"],
             ),
         )
