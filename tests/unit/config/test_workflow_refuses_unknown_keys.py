@@ -52,7 +52,7 @@ class TestAKeyTheWorkflowDoesNotDeclare:
         assert "unknown workflow key 'pipeline'" in message
         assert "did you mean" not in message
         assert (
-            "valid workflow keys are actions, defaults, description, name, tool_path, version"
+            "valid workflow keys are actions, defaults, description, name, storage, tool_path, version"
             in message
         )
 

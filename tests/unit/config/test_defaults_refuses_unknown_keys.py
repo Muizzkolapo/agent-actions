@@ -218,3 +218,19 @@ class TestADeclaredKeyIsUntouched:
 
     def test_an_empty_block_is_accepted(self):
         assert DefaultsConfig.model_validate({}).model_vendor is None
+
+
+class TestTheBackstopBehindTheRefusal:
+    """Both surfaces carry `extra="forbid"` as well as the before-validator.
+
+    The validator raises first, so pydantic's own refusal never fires and no
+    behavioural test can reach it — a mutation probe flipping `forbid` to
+    `ignore` survives the whole suite. Pinned here so the line is not read as
+    dead and deleted, which would leave the refusal resting on one mechanism:
+    `_refuse_undeclared_keys` returns its input untouched for anything that is
+    not a dict, and `forbid` is what covers that.
+    """
+
+    @pytest.mark.parametrize("model", [DefaultsConfig, WorkflowConfig])
+    def test_extras_are_forbidden_not_merely_refused_by_the_validator(self, model):
+        assert model.model_config.get("extra") == "forbid"

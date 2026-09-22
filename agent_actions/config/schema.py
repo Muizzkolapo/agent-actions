@@ -525,6 +525,24 @@ class DefaultsConfig(_RetryValidators):
     )
 
 
+class StorageConfig(BaseModel):
+    """Storage maintenance knobs, read off the workflow's own top-level `storage:`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "storage")
+
+    prompt_trace_retention_runs: int | None = Field(
+        default=None, ge=1, description="Calendar days of prompt traces to keep"
+    )
+    source_data_ttl_days: int | None = Field(
+        default=None, ge=1, description="Days of source data to keep"
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Pydantic schema for user-facing workflow YAML files.
 
@@ -548,6 +566,9 @@ class WorkflowConfig(BaseModel):
     tool_path: str | list[str] | None = Field(
         default=None,
         description="Where this workflow's UDFs live, ahead of the default and project config",
+    )
+    storage: StorageConfig | None = Field(
+        default=None, description="Storage maintenance settings for this workflow"
     )
 
     @model_validator(mode="after")

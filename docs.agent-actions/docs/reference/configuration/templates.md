@@ -113,11 +113,10 @@ actions:
 
   # Include macro-defined actions
 \{\{ thinkific_tools() | indent(2) \}\}
-
-# Dependency plan
-plan:
-\{\{ thinkific_plan('prepare_data') | indent(2) \}\}
 ```
+
+Dependencies come from each action's own `dependencies:` key. A top-level
+`plan:` block is not part of the schema and is refused.
 
 ## Rendered Output
 
