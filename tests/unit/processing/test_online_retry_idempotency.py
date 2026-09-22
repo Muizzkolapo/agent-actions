@@ -352,7 +352,12 @@ class TestRepairNarrowsAboveTheGuard:
             return recs, []
 
         with patch.object(processor, "_guard_filter", side_effect=_guard):
-            processor.process(records, _make_context(storage_backend=backend), strategy)
+            processor.process(
+                records,
+                _make_context(storage_backend=backend),
+                strategy,
+                repair_inputs=records,
+            )
 
         assert [r["source_guid"] for r in seen[0]] == ["r1"]
         assert [r["source_guid"] for r in strategy.received] == ["r1"]
@@ -366,7 +371,10 @@ class TestRepairNarrowsAboveTheGuard:
 
         with patch.object(processor, "_guard_filter", side_effect=lambda r, _c: (r, [])):
             output, _stats = processor.process(
-                records, _make_context(storage_backend=backend), _TrackingStrategy()
+                records,
+                _make_context(storage_backend=backend),
+                _TrackingStrategy(),
+                repair_inputs=records,
             )
 
         assert sorted(r["source_guid"] for r in output) == ["r0", "r1", "r2"]
@@ -389,7 +397,11 @@ class TestRepairNarrowsAboveTheGuard:
 
         with patch.object(processor, "_guard_filter_file_mode", side_effect=_guard_file_mode):
             processor.process(
-                scoped, _make_context(storage_backend=backend), _TrackingStrategy(), raw_records=raw
+                scoped,
+                _make_context(storage_backend=backend),
+                _TrackingStrategy(),
+                raw_records=raw,
+                repair_inputs=raw,
             )
 
         assert [r["source_guid"] for r in seen["records"]] == ["r2"]

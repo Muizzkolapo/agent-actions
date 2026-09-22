@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.processing.disposition_gate import DispositionGate
+from agent_actions.processing.disposition_gate import DispositionGate, positions_named_by_repair
 from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -31,9 +31,10 @@ AGENT_CONFIG = {"kind": "tool", "granularity": "file"}
 class _Run:
     """Drives the pipeline as a run does, keeping the output where the next run reads it.
 
-    The tool's output is derived from the records it is actually handed, the way a
-    real one's is: a repair narrows the input, so a fixed output list would either
-    address rows that are no longer there or reproduce work the run did not do.
+    The narrowing happens here, as ``pipeline.py`` does it above the context
+    scope, so the processor is handed what production hands it and the whole list
+    reaches it only as ``repair_inputs``. The tool's output is derived from the
+    records it is actually given, the way a real one's is.
     """
 
     def __init__(self, root: Path, fanout: dict[str, int] | None = None):
@@ -48,8 +49,11 @@ class _Run:
         return derive_relative_path(str(self.root / "in" / "f.json"), str(self.root / "out"))
 
     def __call__(self, records: list[dict], repairing: set[str] = frozenset()) -> list[dict]:
+        kept = positions_named_by_repair(records, repairing)
+        narrowed = records if kept is None else [records[i] for i in kept]
+
         context = ProcessingContext(agent_config=AGENT_CONFIG, agent_name=ACTION)
-        context.source_data = records
+        context.source_data = narrowed
         context.storage_backend = self.backend
         context.file_path = str(self.root / "in" / "f.json")
         context.output_directory = str(self.root / "out")
@@ -71,7 +75,11 @@ class _Run:
             "agent_actions.processing.strategies.file_tool.run_dynamic_agent", side_effect=_tool
         ):
             output, _stats = UnifiedProcessor(disposition_gate=gate).process(
-                list(records), context, FileToolStrategy(), raw_records=list(records)
+                list(narrowed),
+                context,
+                FileToolStrategy(),
+                raw_records=list(narrowed),
+                repair_inputs=list(records),
             )
         self.backend._write_target_raw(ACTION, self._relative, output)
         self.backend._reconstruction_cache.clear()

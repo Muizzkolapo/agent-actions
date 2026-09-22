@@ -510,6 +510,10 @@ class ProcessingPipeline:
         if kept is not None:
             data = [data[i] for i in kept]
 
+        # The records a repair leaves out are what let the disposition gate tell a
+        # stored row of this action's own making from one minted upstream.
+        offered_to_repair = data
+
         # Above the context scope, which writes `skipped` for every record it drops:
         # a repair must not disposition a record it never named.
         repair_kept = positions_named_by_repair(data, self.config.retried_records)
@@ -595,11 +599,13 @@ class ProcessingPipeline:
                             self.config.action_name,
                         )
             output, stats = self._unified_processor.process(
-                filtered, context, strategy, raw_records=data
+                filtered, context, strategy, raw_records=data, repair_inputs=offered_to_repair
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
-            output, stats = self._unified_processor.process(data, context, strategy)
+            output, stats = self._unified_processor.process(
+                data, context, strategy, repair_inputs=offered_to_repair
+            )
 
         stats.raise_if_terminal_failure(
             self.config.action_name, data, output, self.config.storage_backend
