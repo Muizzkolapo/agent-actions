@@ -17,6 +17,3 @@ actions:
     schema:
       processed_data: string
 
-plan:
-  - extract_data
-  - process_data <- extract_data

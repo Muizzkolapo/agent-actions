@@ -69,7 +69,3 @@ actions:
         consensus_score:
           type: number
 
-plan:
-  - extract_details
-  - classify
-  - aggregate

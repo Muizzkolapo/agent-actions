@@ -533,11 +533,22 @@ class WorkflowConfig(BaseModel):
     dependencies, circular dependencies).
     """
 
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "workflow")
+
     name: str = Field(..., description="Workflow name")
     description: str = Field(..., description="Workflow description")
     version: str | None = Field(default=None, description="Workflow version")
     defaults: DefaultsConfig | None = Field(default=None, description="Default settings")
     actions: list[ActionConfig] = Field(..., description="Workflow actions")
+    tool_path: str | list[str] | None = Field(
+        default=None,
+        description="Where this workflow's UDFs live, ahead of the default and project config",
+    )
 
     @model_validator(mode="after")
     def validate_workflow_invariants(self):

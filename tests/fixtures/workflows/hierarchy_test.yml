@@ -30,6 +30,3 @@ actions:
       processed_data: string
     # Should get: model=claude-3-sonnet, vendor=anthropic, json_mode=false
 
-plan:
-  - action_with_project_inheritance
-  - action_with_overrides <- action_with_project_inheritance
