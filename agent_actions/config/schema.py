@@ -13,6 +13,7 @@ from agent_actions.guards import GuardParser, parse_guard_config
 # spelling belonging to no field 0.600 and below. Distinct names still collide,
 # so a suggestion is a guess offered beside the full list, not a diagnosis.
 _NEAR_MISS_CUTOFF = 0.65
+_SQLITE_MAX_INT = 2**63 - 1
 
 
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
@@ -537,8 +538,8 @@ class StorageConfig(BaseModel):
         if isinstance(data, dict):
             blank = sorted(str(key) for key, value in data.items() if value is None)
             if blank:
-                # The consumer reads the raw dict, so an empty key beats the
-                # default and arrives as None at a `< 1` comparison.
+                # An empty key beats the default, because the consumer reads the
+                # raw dict; for retention that None then reaches a `< 1`.
                 raise ValueError(
                     "; ".join(
                         f"storage key '{key}' is present with no value — omit it to take "
@@ -549,15 +550,21 @@ class StorageConfig(BaseModel):
         return data
 
     # ge=0 because both enforcers open `if <value> < 1: return`; strict because the
-    # consumer reads the raw dict, so a coerced "10" would reach it as the string.
+    # consumer reads the raw dict, so a coerced "10" reaches it as the string; the
+    # ceiling is SQLite's, past which OFFSET raises an OverflowError nothing catches.
     prompt_trace_retention_runs: int | None = Field(
         default=None,
         ge=0,
+        le=_SQLITE_MAX_INT,
         strict=True,
         description="Calendar days of prompt traces to keep; 0 never prunes",
     )
     source_data_ttl_days: int | None = Field(
-        default=None, ge=0, strict=True, description="Days of source data to keep; 0 never prunes"
+        default=None,
+        ge=0,
+        le=_SQLITE_MAX_INT,
+        strict=True,
+        description="Days of source data to keep; 0 never prunes",
     )
 
 
@@ -687,6 +694,7 @@ __all__ = [
     "VersionConfig",
     "RetryConfig",
     "ActionConfig",
+    "StorageConfig",
     "DefaultsConfig",
     "WorkflowConfig",
 ]
