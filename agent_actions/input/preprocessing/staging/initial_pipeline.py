@@ -481,9 +481,26 @@ def _prepare_json_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare pre-parsed JSON content for batch mode."""
-    if isinstance(content, list):
-        return _add_batch_metadata(content, batch_id, node_id, storage_backend, relative_path)
-    return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
+    rows = content if isinstance(content, list) else [content]
+    _refuse_rows_that_are_not_records(rows, file_path, agent_name)
+    return _add_batch_metadata(rows, batch_id, node_id, storage_backend, relative_path)
+
+
+def _refuse_rows_that_are_not_records(rows: list[Any], file_path: str, agent_name: str) -> None:
+    """Stop a JSON input whose rows cannot carry a payload, before identity is derived."""
+    for index, row in enumerate(rows):
+        if isinstance(row, dict):
+            continue
+        raise AgentActionsError(
+            f"A JSON input row must be an object; found {type(row).__name__}. "
+            "Give each record its own object naming its fields.",
+            context={
+                "file_path": file_path,
+                "agent_name": agent_name,
+                "row_index": index,
+                "row_type": type(row).__name__,
+            },
+        )
 
 
 def _add_batch_metadata(

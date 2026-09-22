@@ -55,8 +55,8 @@ class TestPrepareJsonBatchWithParsedInput:
             assert row["root_target_id"] == row["target_id"]
             assert row["node_id"] == "node_0"
 
-    def test_single_dict_wrapped_in_list(self):
-        """Single dict (non-list JSON) should be wrapped in a content dict."""
+    def test_single_dict_gets_the_envelope_a_list_row_gets(self):
+        """Single dict (non-list JSON) is one record, enveloped and stamped like any other."""
         content = {"key": "value", "number": 42}
         result = _prepare_json_batch(
             content,
@@ -67,9 +67,11 @@ class TestPrepareJsonBatchWithParsedInput:
         )
 
         assert len(result) == 1
-        assert result[0]["content"] == content
+        assert result[0]["content"]["source"] == content
+        assert result[0]["source_guid"]
         assert result[0]["batch_id"] == "batch_single"
         assert result[0]["batch_uuid"] == "batch_single_0"
+        assert result[0]["node_id"] == "node_1"
 
     def test_empty_list_returns_empty(self):
         """Empty list input should return empty list."""
