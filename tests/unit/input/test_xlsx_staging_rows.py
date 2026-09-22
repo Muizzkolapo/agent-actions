@@ -43,8 +43,11 @@ class TestASheetOfRecords:
 @pytest.mark.parametrize("mode", ["batch", "online"])
 class TestContentThatIsNotRows:
     def test_a_bare_mapping_is_refused(self, mode):
-        with pytest.raises(AgentActionsError):
+        with pytest.raises(AgentActionsError) as caught:
             _staged({"id": 1, "title": "first"}, mode)
+        # Refused as content that is not rows, not as a row whose key is a string.
+        assert caught.value.context["content_type"] == "dict"
+        assert "A staged input must be rows; found dict" in str(caught.value)
 
     def test_a_row_that_is_not_a_record_is_refused(self, mode):
         with pytest.raises(AgentActionsError):
