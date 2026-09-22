@@ -103,8 +103,9 @@ class DispositionGate:
             logger.warning(
                 "Action '%s': %d stored row(s) cannot be attributed to an input of "
                 "this run, so repairing %d record(s) carries them as untouched and "
-                "duplicates any it regenerates. Rows of an action minting identities "
-                "below another that already did; see issue #1022",
+                "duplicates any it regenerates. Either an identity minted below "
+                "another mint, or an input standing beside its own ancestor; "
+                "see issue #1022",
                 action_name,
                 len(unresolved),
                 len(named),
