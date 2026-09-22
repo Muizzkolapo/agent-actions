@@ -2,11 +2,11 @@
 
 An undeclared one makes every workflow using it fail to load while the suite stays
 green, because no fixture writes it yet. Both keys this branch had to add were found
-by hand — `storage` is reached through a `getattr` rebinding, so the symbol and the
-read never share a line and a grep misses it. This walks the AST instead.
+by hand — one is reached through a `getattr` rebinding a grep misses.
 
-Known gap: it does not cross function boundaries, and collects names per file with no
-scope tracking. `test_the_shape_the_scan_admits_it_does_not_follow` pins that boundary.
+Recognises the dict by the names it is held under, so a module holding one under some
+other name, or reading it across a function boundary, is invisible. Both boundaries
+are pinned by `test_the_shape_the_scan_admits_it_does_not_follow`.
 """
 
 import ast
@@ -21,14 +21,22 @@ PACKAGE = Path(__file__).resolve().parents[3] / "agent_actions"
 
 def _workflow_dict_names(tree: ast.AST) -> set[str]:
     """Locals bound to a workflow config dict, however they were reached."""
-    bound: set[str] = set()
+    bound: set[str] = set(WHOLE_FILE_NAMES)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        elif isinstance(node, ast.NamedExpr):
+            targets, value = [node.target], node.value
+        else:
             continue
-        target = node.targets[0]
-        name = _bindable_name(target)
-        if name and _reaches_user_config(node.value):
-            bound.add(name)
+        if not _reaches_user_config(value):
+            continue
+        for target in targets:
+            name = _bindable_name(target)
+            if name:
+                bound.add(name)
     return bound
 
 
@@ -41,22 +49,35 @@ def _bindable_name(target: ast.AST) -> str | None:
     return None
 
 
+# What a whole workflow file is called where it is held. Deliberately not
+# `agent_config`, which is one action's dict — matching it would read this
+# invariant against ActionConfig's fields.
+WHOLE_FILE_NAMES = {"user_config", "workflow_config"}
+
+
 def _reaches_user_config(value: ast.AST) -> bool:
-    """Whether an expression evaluates to the workflow dict, through the shapes the
-    codebase actually uses — a plain attribute, a getattr, and either wrapped in the
-    `or {}` that a tidy-up naturally adds."""
+    """Whether an expression evaluates to the whole workflow dict.
+
+    Recognised by name: it is a plain dict everywhere it is held, so there is
+    nothing else to recognise it by. Covers an attribute, a bare name, a getattr,
+    and any of those wrapped in the `or {}` a tidy-up naturally adds.
+    """
     if isinstance(value, ast.BoolOp):
         return any(_reaches_user_config(v) for v in value.values)
     if isinstance(value, ast.Attribute):
-        return value.attr == "user_config"
-    return (
-        isinstance(value, ast.Call)
-        and isinstance(value.func, ast.Name)
-        and value.func.id == "getattr"
-        and len(value.args) >= 2
-        and isinstance(value.args[1], ast.Constant)
-        and value.args[1].value == "user_config"
-    )
+        return value.attr in WHOLE_FILE_NAMES
+    if isinstance(value, ast.Name):
+        return value.id in WHOLE_FILE_NAMES
+    if isinstance(value, ast.Call):
+        if (
+            isinstance(value.func, ast.Name)
+            and value.func.id == "getattr"
+            and len(value.args) >= 2
+            and isinstance(value.args[1], ast.Constant)
+            and value.args[1].value in WHOLE_FILE_NAMES
+        ):
+            return True
+    return False
 
 
 def _is_workflow_dict(node: ast.AST, bound: set[str]) -> bool:
@@ -123,6 +144,13 @@ def test_the_scan_finds_the_reads_it_is_supposed_to_follow(reads):
     assert "tool_path" in files_by_key, "plain `self.user_config.get(...)` read not found"
     assert "storage" in files_by_key, "`getattr(..., 'user_config', ...)` read not followed"
     assert any(f.endswith("coordinator.py") for f in files_by_key["storage"])
+    # The static analyzer loads a workflow file of its own and is the package's
+    # heaviest reader of top-level keys. An earlier version of this scan matched
+    # only the name `user_config` and was blind to all of it.
+    assert any(f.endswith("workflow_static_analyzer.py") for f in files_by_key["actions"]), (
+        "the second entry point that loads a whole workflow file is not covered"
+    )
+    assert any(f.endswith("schema_service.py") for f in files_by_key["name"])
 
 
 def test_every_key_read_off_a_workflow_file_is_declared_on_the_model(reads):
@@ -143,9 +171,15 @@ CAUGHT = {
     "inline or-default": '(getattr(m, "user_config", None) or {}).get("stray")',
     "plain attribute read": 'self.user_config.get("stray")',
     "subscript": 'self.user_config["stray"]',
+    "the analyzer's own name": 'self.workflow_config.get("stray")',
+    "parameter of that name": 'def f(workflow_config):\n    return workflow_config.get("stray")',
+    "annotated binding": 'cfg: dict = self.user_config\ncfg.get("stray")',
+    "chained binding": 'a = b = self.user_config\nb.get("stray")',
+    "walrus": 'if (cfg := self.user_config):\n    cfg.get("stray")',
 }
 MISSED = {
     "crosses a function boundary": 'def helper(cfg):\n    return cfg.get("stray")\nhelper(self.user_config)',
+    "held under some other name": 'self.raw = load()\nself.raw.get("stray")',
 }
 
 
