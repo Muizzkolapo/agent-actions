@@ -73,34 +73,40 @@ class DispositionGate:
             )
             return set()
 
-        held = {
-            record["source_guid"]
-            for record in inputs
-            if isinstance(record, dict) and record.get("source_guid")
+        records = [record for record in inputs if isinstance(record, dict)]
+        held = {record["source_guid"] for record in records if record.get("source_guid")}
+        # An ancestor standing in the input beside its own descendant no longer
+        # identifies one input: a row of the descendant names it too, and guessing
+        # hands those rows to a repair of the ancestor for the rewrite to drop.
+        ancestors = {
+            record["parent_source_guid"]
+            for record in records
+            if record.get("parent_source_guid") in held
         }
         named = held & self._repairing
+        resolvable = named - ancestors
 
         carried: set[str] = set()
-        unattributable: set[str] = set()
+        unresolved: set[str] = set()
         for row in self._stored_rows(action_name, relative_path):
             guid = row.get("source_guid")
             if not guid:
                 continue
             producer = row.get("parent_source_guid")
-            if guid in named or producer in named:
+            if guid in named or producer in resolvable:
                 continue
-            if guid not in held and producer not in held:
-                unattributable.add(guid)
+            if producer in ancestors or (guid not in held and producer not in held):
+                unresolved.add(guid)
             carried.add(guid)
 
-        if unattributable and named:
+        if unresolved and named:
             logger.warning(
-                "Action '%s': %d stored row(s) cannot be attributed to any input of "
-                "this run, so a repair of %d record(s) carries them as untouched and "
-                "will duplicate any it regenerates. This is an action minting "
-                "identities below one that already did; see issue #1022",
+                "Action '%s': %d stored row(s) cannot be attributed to an input of "
+                "this run, so repairing %d record(s) carries them as untouched and "
+                "duplicates any it regenerates. Rows of an action minting identities "
+                "below another that already did; see issue #1022",
                 action_name,
-                len(unattributable),
+                len(unresolved),
                 len(named),
             )
         return carried

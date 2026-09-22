@@ -223,3 +223,44 @@ class TestWhatAOneToOneRepairDoes:
 
         assert r.seen[1:] == [["r0"]]
         assert [row["source_guid"] for row in r.stored()] == ["r0", "r1"]
+
+
+class TestAnInputBesideItsOwnAncestor:
+    """A diamond where one branch expanded and the other did not hands an action
+    both a record and a descendant of it. Rows minted from the descendant name
+    the ancestor, which is the *other* input — so reading that field as the
+    producer gives the descendant's rows to a repair of the ancestor, and the
+    rewrite deletes them."""
+
+    @staticmethod
+    def _diamond() -> list[dict]:
+        return [
+            {"source_guid": "s0", "content": {"prev": {"id": "s0"}}},
+            {"source_guid": "m0", "parent_source_guid": "s0", "content": {"prev": {"id": "m0"}}},
+        ]
+
+    @staticmethod
+    def _descending_from(rows: list[dict], guid: str) -> set[str]:
+        return {r["source_guid"] for r in rows if r["content"]["prev"]["id"] == guid}
+
+    def test_repairing_the_ancestor_keeps_the_descendants_rows(self, run):
+        r = run({"m0": 2})
+        first = r(self._diamond())
+        assert {row.get("parent_source_guid") for row in first} == {"s0"}, (
+            "the shape under test: every row names s0, whichever input made it"
+        )
+        from_m0 = self._descending_from(first, "m0")
+        assert len(from_m0) == 2
+
+        r.repair(self._diamond(), {"s0"})
+
+        assert from_m0 <= {row["source_guid"] for row in r.stored()}
+
+    def test_the_ambiguity_is_reported(self, caplog, run):
+        r = run({"m0": 2})
+        r(self._diamond())
+
+        with caplog.at_level("WARNING"):
+            r.repair(self._diamond(), {"s0"})
+
+        assert "cannot be attributed" in caplog.text
