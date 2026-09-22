@@ -1,14 +1,12 @@
 """A repair of an action that mints identities for its output rows.
 
-``carried_past_repair`` hands back the stored rows the repair did not name, by
-subtracting the named identities from the stored ones. A repair names the
-action's *inputs*; an action that mints an identity per output row holds no row
-carrying any input's identity. So the subtraction removes nothing, the rows are
-carried as untouched, and the repair regenerates them beside the ones it kept.
+A repair names the action's *inputs*, and an action minting an identity per
+output row holds no row carrying any input's — so subtracting one set from the
+other removes nothing, and every stale row is carried beside its replacement.
 
-Driven through the real ``UnifiedProcessor``, the real ``FileToolStrategy`` and a
-real ``SQLiteBackend``: enrichment is one of the stages that mints, so a
-strategy-only or gate-only harness cannot show any of this.
+Driven through the real ``UnifiedProcessor``, ``FileToolStrategy`` and
+``SQLiteBackend``: enrichment is one of the stages that mints, so a
+strategy-only or gate-only harness shows none of this.
 """
 
 from __future__ import annotations

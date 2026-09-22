@@ -121,6 +121,10 @@ class UnifiedProcessor:
             from agent_actions.processing.disposition_gate import positions_named_by_repair
 
             repairing = self._disposition_gate.repairing
+            # Before the narrowing: the gate resolves stored rows back to inputs,
+            # and an input the repair did not name is what separates a row of this
+            # action's own making from one minted further upstream.
+            offered = records
             # raw_records is asked separately rather than sliced by the same
             # positions: a context-scope skip drops records from `records` and not
             # from `raw_records`, so the two are not always position-for-position.
@@ -131,7 +135,7 @@ class UnifiedProcessor:
             if raw_kept is not None and raw_records is not None:
                 raw_records = [raw_records[i] for i in raw_kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
-                context.action_name, self._get_carry_forward_path(context)
+                context.action_name, self._get_carry_forward_path(context), offered
             )
 
         if raw_records is not None:
