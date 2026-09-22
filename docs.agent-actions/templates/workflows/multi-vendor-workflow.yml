@@ -2,12 +2,13 @@
 # Demonstrates using multiple LLM vendors in a single workflow
 # Each action can use a different vendor based on its strengths
 
-# Workflow-level defaults (can be overridden by actions)
+# Workflow-level defaults (can be overridden by actions), under `defaults:`
 # Set a baseline for actions that don't specify a vendor
-model_vendor: openai
-model_name: gpt-4o-mini
-api_key: ${OPENAI_API_KEY}
-temperature: 0.7
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: ${OPENAI_API_KEY}
+  temperature: 0.7
 
 # Actions using different vendors for their specific strengths
 actions:

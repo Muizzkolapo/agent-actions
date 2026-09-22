@@ -76,8 +76,10 @@ class TestAKeyTheWorkflowDoesNotDeclare:
                 "version": "0.1.0",
                 "defaults": {"model_vendor": "openai"},
                 "tool_path": "tools",
+                "storage": {"prompt_trace_retention_runs": 5},
             }
         )
+        assert workflow.storage.prompt_trace_retention_runs == 5
 
         assert workflow.defaults is not None
         assert workflow.defaults.model_vendor == "openai"
@@ -103,6 +105,18 @@ class TestToolPathAtTheWorkflowTopLevel:
         assert WorkflowConfig.model_validate(VALID).tool_path is None
 
     @pytest.mark.parametrize(
+        "value", [{"primary": "mytools"}, 42, [1, 2]], ids=["mapping", "int", "list of ints"]
+    )
+    def test_a_value_the_resolver_cannot_walk_is_refused(self, value):
+        """`manager.py` does `[raw] if isinstance(raw, str) else list(raw)`, so a
+        mapping resolves to its keys — `{primary: mytools}` becomes `['primary']`,
+        a tool directory nobody named — and an int raises mid-resolution instead of
+        at the config surface. Widening this field to `Any` passes every other test
+        in the suite, so the refusal is pinned by type here."""
+        with pytest.raises(ValidationError):
+            WorkflowConfig.model_validate({**VALID, "tool_path": value})
+
+    @pytest.mark.parametrize(
         ("workflow_value", "default_value", "expected"),
         [
             ("wf_tools", "def_tools", ["wf_tools"]),
@@ -112,8 +126,12 @@ class TestToolPathAtTheWorkflowTopLevel:
         ids=["workflow wins", "default wins", "project config is the fallback"],
     )
     def test_the_resolution_order_survives(self, tmp_path, workflow_value, default_value, expected):
-        """workflow > default > project config. Asserted here because declaring the
-        key on the model must not change where the value is read from."""
+        """workflow > default > project config, through the real ConfigManager.
+
+        This pins pre-existing manager behaviour rather than anything the schema
+        does — `load_configs` never constructs `WorkflowConfig`. It is here because
+        declaring a key the resolver reads is the half of this change most likely
+        to be undone by someone tidying an unused-looking field."""
         (tmp_path / "agent_actions.yml").write_text("tool_path: proj_tools\n")
         workflow = {**VALID}
         if workflow_value:

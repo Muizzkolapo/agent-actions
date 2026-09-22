@@ -58,8 +58,35 @@ class TestTheStorageBlockIsGuardedLikeDefaults:
             in "; ".join(e["msg"] for e in excinfo.value.errors())
         )
 
-    def test_a_retention_of_zero_is_refused(self):
-        """Keeping zero days of traces is deleting all of them; a config that
-        means 'do not prune' omits the key."""
+    def test_zero_is_accepted_because_it_is_the_backend_s_own_disable_value(self):
+        """`_enforce_prompt_trace_retention` opens `if retention_runs < 1: return`,
+        so zero prunes nothing. Omitting the key is not the same thing — the
+        default is 10 days and prunes — so zero is the only way to say keep
+        everything, and a schema that refused it would take that away."""
+        workflow = WorkflowConfig.model_validate(
+            {**VALID, "storage": {"prompt_trace_retention_runs": 0, "source_data_ttl_days": 0}}
+        )
+
+        assert (
+            workflow.storage.prompt_trace_retention_runs,
+            workflow.storage.source_data_ttl_days,
+        ) == (0, 0)
+
+    def test_a_negative_retention_is_refused(self):
+        """Below zero says nothing the backend does not already read from zero."""
         with pytest.raises(ValidationError):
-            WorkflowConfig.model_validate({**VALID, "storage": {"source_data_ttl_days": 0}})
+            WorkflowConfig.model_validate({**VALID, "storage": {"source_data_ttl_days": -1}})
+
+    @pytest.mark.parametrize("key", ["prompt_trace_retention_runs", "source_data_ttl_days"])
+    def test_a_key_present_with_no_value_is_refused(self, key):
+        """The consumer reads the raw dict — `storage_config.get(key, DEFAULT)` —
+        so a key written with no value beats the default and arrives as None,
+        where `retention_runs < 1` raises TypeError inside the maintenance call
+        and a run that completed every action is reported as failed. Omitting the
+        key is what takes the default."""
+        with pytest.raises(ValidationError) as excinfo:
+            WorkflowConfig.model_validate({**VALID, "storage": {key: None}})
+
+        assert f"storage key '{key}' is present with no value" in "; ".join(
+            e["msg"] for e in excinfo.value.errors()
+        )

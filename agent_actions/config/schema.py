@@ -533,13 +533,28 @@ class StorageConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(data, cls, "storage")
+        data = _refuse_undeclared_keys(data, cls, "storage")
+        if isinstance(data, dict):
+            blank = sorted(str(key) for key, value in data.items() if value is None)
+            if blank:
+                # The consumer reads the raw dict, so an empty key beats the
+                # default and arrives as None at a `< 1` comparison.
+                raise ValueError(
+                    "; ".join(
+                        f"storage key '{key}' is present with no value — omit it to take "
+                        f"the default, or give it a number"
+                        for key in blank
+                    )
+                )
+        return data
 
+    # ge=0: both enforcers open `if <value> < 1: return`, so zero is the backend's
+    # own "never prune" — and the default prunes, so zero is the only way to say it.
     prompt_trace_retention_runs: int | None = Field(
-        default=None, ge=1, description="Calendar days of prompt traces to keep"
+        default=None, ge=0, description="Calendar days of prompt traces to keep; 0 never prunes"
     )
     source_data_ttl_days: int | None = Field(
-        default=None, ge=1, description="Days of source data to keep"
+        default=None, ge=0, description="Days of source data to keep; 0 never prunes"
     )
 
 
