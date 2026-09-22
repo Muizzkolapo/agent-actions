@@ -88,37 +88,31 @@ Persists per-action execution state for resumable runs:
   "extract_data": {"status": "completed", "record_limit": 2, "file_limit": null,
                    "records_processed": 2, "truncated": true},
   "generate_content": {"status": "completed", "record_limit": null, "file_limit": null,
-                       "records_processed": 6, "truncated": false},
+                       "records_processed": 40, "truncated": false},
   "validate_output": {"status": "pending"}
 }
 ```
 
 A completed action also stores what it ran under, so the next run can tell an
-action that is genuinely finished from one that was cut short. `record_limit` is
-the limit that was **in force** — from the workflow config, `--record-limit`, or
-`AGAC_RECORD_LIMIT`, whichever won — not the one the config asks for. Beside it,
-`records_processed` and `truncated` record what the run actually did: how many
-records it took in, and whether the limit dropped any. Alongside those are
-`file_limit`, `model_name`, `model_vendor` and a `config_hash` over the prompt,
-schema and guard. The model is deliberately outside that hash — it is compared
-from `model_name`/`model_vendor` instead, so that adding it could not rotate
-every stored digest at once and re-run every workflow. If one of them differs on
-a later run the action is reset to `pending` and re-executed rather than
-skipped, with two qualifications: the model and hash comparisons only fire when
-the stamp actually recorded a value, so state predating them is grandfathered
-rather than mass-invalidated, and a run that is only repairing named records
-compares none of it and re-stamps nothing.
+action that is genuinely finished from one that was cut short. `record_limit` and
+`file_limit` are the limits that were **in force** — from the workflow config,
+the flag, or the environment variable, whichever won — not the ones the config
+asks for. Alongside them are `records_processed` and `truncated`, which say what
+the run actually did rather than what it was asked for, and `model_name`,
+`model_vendor` and a `config_hash` over the prompt, schema and guard. The model is
+deliberately outside that hash — it is compared from `model_name`/`model_vendor`
+instead, so folding it in could not rotate every stored digest at once.
 
-A changed `record_limit` is the exception. Because the stamp says what the run
-processed, a limit that could not have dropped anything is not treated as a
-change: a run that was not truncated took in everything available to it, so a
-later limit at or above `records_processed` leaves the record set whole and the
-action stays completed. A run that *was* truncated re-runs on any different
-limit, and so does a stamp that cannot say — one written before these fields
-existed, one whose run lost a file to an error, one from a run with no storage
-backend, and one from a batch action resumed in a later process, which never
-slices and so has nothing to report. `file_limit` is still compared as a bare
-value, so changing it re-runs the action either way.
+A changed `record_limit` re-runs the action only when it could have held
+something back. An untruncated run processed everything there was, so a limit at
+or above that count would drop nothing either and the action stays complete; a
+run that did truncate never vouches for any limit, and a stamp that cannot say —
+written before these counts existed, by a run that never sliced, or by one that
+lost an input file to an error, since records it never reached were never counted
+— keeps the coarse rule and re-runs. `file_limit` has no count to reason from and stays
+coarse throughout: any change to it re-runs the action, including a change to a
+value larger than the number of files. If anything else in the stamp differs on a
+later run, the action is reset to `pending` and re-executed rather than skipped.
 
 | Status | Description |
 |--------|-------------|

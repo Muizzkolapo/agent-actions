@@ -66,9 +66,15 @@ file, but deciding how much new work to take on is what a limit is for, and a
 repair takes on none. A record the retry did not name is not work this run was
 asked to do, however far inside the limit it sits.
 
-[`file_limit`](../configuration/defaults) does not hold a retry back either. A
-retry resolves which staged files hold the records it named and visits those,
-instead of walking the directory and stopping at N.
+[`file_limit`](../configuration/defaults) — and `--file-limit` or
+`AGAC_FILE_LIMIT` — does not hold a retry back either. A retry resolves which
+staged files hold the records it named and visits every one of them, instead of
+walking the directory and stopping at N.
+
+Being exempt from a limit is not being exempt from reading it. A value that
+cannot be a limit at all — `AGAC_FILE_LIMIT=nonsense` — still fails a retry
+while the workflow is assembled, as it fails any other command. An empty
+variable is not such a value; it reads as unset.
 
 Records the retry did not name keep what they already had. Their stored output
 rows are carried into the rewritten file, and their dispositions are left alone —
