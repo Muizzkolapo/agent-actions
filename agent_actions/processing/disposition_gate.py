@@ -52,7 +52,7 @@ class DispositionGate:
         self,
         action_name: str,
         relative_path: str | None,
-        inputs: Collection[Any] = (),
+        inputs: Collection[Any],
     ) -> set[str]:
         """Identities this action holds a row for that this run will not write again.
 

@@ -137,6 +137,17 @@ class TestAnExpansionRepairedByInput:
 
         assert stale.isdisjoint({row["source_guid"] for row in r.stored()})
 
+    def test_nothing_is_reported_as_unresolved(self, run, caplog):
+        """The warning counts rows the run could not attribute. Raised on a repair
+        it resolved completely it would tell a reader nothing to act on."""
+        r = run({"r0": 2})
+        r(_records("r0", "r1"))
+
+        with caplog.at_level("WARNING"):
+            r.repair(_records("r0", "r1"), {"r0"})
+
+        assert "cannot be attributed" not in caplog.text
+
     def test_the_row_of_an_unnamed_input_keeps_its_identity(self, run):
         """The control the fix must not break: r1 was not named, so its row stands."""
         r = run({"r0": 2})
