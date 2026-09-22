@@ -199,9 +199,11 @@ In **batch mode**, every record gets `source_guid` and `target_id` assigned duri
 
 In **online mode**, `source_guid` is generated for source saving, but `target_id` assignment happens later inside `UnifiedProcessor`. The source data items get `source_guid` so the source file can be written, but the raw `data_chunk` passed to the processor is *not mutated* -- `OnlineLLMStrategy` hashes raw items independently.
 
-### Source save deduplication
+### Source save
 
-`_should_save_source_items()` compares user-payload field counts (the `content.source` keys, via `_source_payload_keys()`) between new and existing source files. If the existing source data has more fields (richer), the save is skipped. This prevents subsequent runs from overwriting enriched source data with sparser versions.
+Staging persists the rows it staged; the storage backend refuses any that carry no
+`source_guid` rather than dropping them. Repeat writes of the same row are settled by the
+backend's deduplication, which matches on identity rather than on how many fields a row has.
 
 ---
 
