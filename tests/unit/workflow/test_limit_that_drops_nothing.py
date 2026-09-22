@@ -110,6 +110,21 @@ class TestTheStampCarriesTheOutcome:
 
         assert stamp["records_processed"] is None
 
+    def test_a_truncating_slice_is_not_undone_by_a_later_clean_one(self, executor):
+        """The limit applies per file, so an action whose files differ in size
+        truncates on one and not the next. Truncation has to stick: last-slice-
+        wins would stamp `truncated: False` on a run that was cut short, and
+        every later limit at or above the short count would vouch for it."""
+        backend = _Backend()
+        executor.deps.action_runner.storage_backend = backend
+        record_indices_to_process(_records(10), {"record_limit": 5}, "act", storage_backend=backend)
+        record_indices_to_process(_records(3), {"record_limit": 5}, "act", storage_backend=backend)
+
+        stamp = executor._completion_metadata("act", {"record_limit": 5})
+
+        assert stamp["records_processed"] == 8
+        assert stamp["truncated"] is True
+
     def test_an_uncountable_chunk_poisons_the_files_after_it_too(self, executor):
         """Order must not matter: once unknown, a later countable chunk cannot
         restore a total that is missing a file's worth of records."""
@@ -159,6 +174,43 @@ class TestTheStampCarriesTheOutcome:
 
         assert stamp["records_processed"] is None
         assert stamp["truncated"] is None
+
+
+class TestTheSliceAndTheStampKeyOnOneBackend:
+    """The observation registry keys on object identity. The stamp reads
+    `action_runner.storage_backend`; the slice sites are handed
+    `params.storage_backend`. If a wrapper or proxy is introduced at either end
+    the key misses, `slice_observation` returns None, and the whole thing
+    silently reverts to the coarse behaviour — with every test that sets both
+    sides by hand still green."""
+
+    def test_the_pipeline_is_handed_the_backend_object_itself(self):
+        from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
+
+        backend = _Backend()
+
+        pipeline = create_processing_pipeline_from_params(
+            action_config={"name": "act", "intent": "i"},
+            action_name="act",
+            idx=0,
+            storage_backend=backend,
+        )
+
+        assert pipeline.config.storage_backend is backend
+
+    def test_the_stamp_reads_the_runner_s_own_backend(self, executor):
+        backend = _Backend()
+        executor.deps.action_runner.storage_backend = backend
+        record_indices_to_process(_records(5), {}, "act", storage_backend=backend)
+
+        assert executor._completion_metadata("act", {})["records_processed"] == 5
+
+    def test_a_different_backend_object_reports_nothing(self, executor):
+        """Names alone are not the key — the failure this class exists to catch."""
+        executor.deps.action_runner.storage_backend = _Backend()
+        record_indices_to_process(_records(5), {}, "act", storage_backend=_Backend())
+
+        assert executor._completion_metadata("act", {})["records_processed"] is None
 
 
 class TestALimitThatCouldNotHaveDroppedAnything:
@@ -239,9 +291,13 @@ class TestALimitThatCouldNotHaveDroppedAnything:
 
         assert status == ActionStatus.PENDING
 
-    def test_a_truncated_stamp_without_a_count_keeps_the_coarse_behaviour(
+    def test_a_stamp_that_says_untruncated_but_has_no_count_keeps_the_coarse_behaviour(
         self, monkeypatch, executor
     ):
+        """Named for the data it uses. The two guards sit on separate branches —
+        a stamp that says truncated returns at the first and never reaches the
+        missing-count one — so data matching the old name would have left this
+        guard unpinned with the test still green."""
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
         executor.deps.state_manager.get_status_details.return_value = _stamp(truncated=False)
 

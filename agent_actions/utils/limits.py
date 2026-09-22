@@ -153,12 +153,16 @@ def _observe_slice(
     per_action[action_name] = (seen + processed, dropped or truncated)
 
 
-def _forget_slice(storage_backend: Any, action_name: str) -> None:
+def forget_slice_observation(storage_backend: Any, action_name: str) -> None:
     """Mark the action's count unknowable, permanently for this run.
 
     Leaving an uncountable chunk out of the sum would under-count instead, and
     an under-count is the one error that reads as "a smaller limit could not
     have bitten" — which skips an action that limit would in fact cut down.
+
+    Called for a chunk that cannot be counted, and by the file walk for a file
+    it lost: a per-file failure is not fatal to the action, so the run finishes
+    with records that never reached a slice.
     """
     if storage_backend is None:
         return
@@ -209,7 +213,7 @@ def record_indices_to_process(
     """
     limit, source = resolve_record_limit(action_config)
     if not isinstance(records, list):
-        _forget_slice(storage_backend, action_name)
+        forget_slice_observation(storage_backend, action_name)
         return None
     if limit is None:
         _observe_slice(storage_backend, action_name, processed=len(records), truncated=False)

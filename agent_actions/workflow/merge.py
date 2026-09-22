@@ -325,8 +325,17 @@ def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, An
             return
 
 
-def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> list[Any]:
-    """Load and merge JSON records from multiple files by correlation key (MapReduce pattern)."""
+def merge_json_files(
+    file_paths: list[Path],
+    reduce_key: str | None = None,
+    unreadable: list[Path] | None = None,
+) -> list[Any]:
+    """Load and merge JSON records from multiple files by correlation key (MapReduce pattern).
+
+    Reading fails open: one corrupt file must not abort the merge. That leaves
+    the caller a short result and no exception, so ``unreadable`` collects the
+    paths that were dropped — the only way to learn that records went missing.
+    """
     all_records: list[Any] = []
     for file_path in file_paths:
         try:
@@ -337,6 +346,8 @@ def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> l
                 else:
                     all_records.append(data)
         except (json.JSONDecodeError, OSError) as e:
+            if unreadable is not None:
+                unreadable.append(file_path)
             logger.warning(
                 "Could not read JSON file for merging: %s - %s",
                 file_path,

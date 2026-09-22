@@ -99,14 +99,17 @@ action that is genuinely finished from one that was cut short. `record_limit` an
 the flag, or the environment variable, whichever won — not the ones the config
 asks for. Alongside them are `records_processed` and `truncated`, which say what
 the run actually did rather than what it was asked for, and `model_name`,
-`model_vendor` and a `config_hash` over the prompt, model, schema and guard.
+`model_vendor` and a `config_hash` over the prompt, schema and guard. The model is
+deliberately outside that hash — it is compared from `model_name`/`model_vendor`
+instead, so folding it in could not rotate every stored digest at once.
 
 A changed `record_limit` re-runs the action only when it could have held
 something back. An untruncated run processed everything there was, so a limit at
 or above that count would drop nothing either and the action stays complete; a
 run that did truncate never vouches for any limit, and a stamp that cannot say —
-written before these counts existed, or by a run that never sliced — keeps the
-coarse rule and re-runs. `file_limit` has no count to reason from and stays
+written before these counts existed, by a run that never sliced, or by one that
+lost an input file to an error, since records it never reached were never counted
+— keeps the coarse rule and re-runs. `file_limit` has no count to reason from and stays
 coarse throughout: any change to it re-runs the action, including a change to a
 value larger than the number of files. If anything else in the stamp differs on a
 later run, the action is reset to `pending` and re-executed rather than skipped.

@@ -425,3 +425,56 @@ class TestALimitOnAnActionBelowTheFirst:
         assert result.exit_code == 0, result.output
         assert self._rows(chained, "flatten") == 6, "the limit reached the wrong action"
         assert self._rows(chained, "enrich") == 2
+
+
+class TestARunThatLostAFile:
+    """A file the walk lost leaves records uncounted. The stamp must say so,
+    or a later limit sitting above the short count — but below the true total —
+    reads as one that could not have bitten, and the action is skipped with its
+    short output vouched for."""
+
+    @staticmethod
+    def _stage_one_good_one_broken(project):
+        staging = project / "agent_workflow" / TOOL_WORKFLOW / "agent_io" / "staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        for stale in staging.glob("*.json"):
+            stale.unlink()
+        (staging / "aaa_good.json").write_text(
+            json.dumps([{"page_content": f"page {i}"} for i in range(4)])
+        )
+        (staging / "zzz_lost.json").write_text("{not json at all")
+        return staging
+
+    def test_the_stamp_cannot_say_what_it_processed(self, project, monkeypatch):
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        self._stage_one_good_one_broken(project)
+
+        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        assert _stamp(project, "flatten")["records_processed"] is None
+
+    def test_a_limit_above_the_short_count_still_re_runs_it(self, project, monkeypatch):
+        """The whole chain in one assertion: loss -> count unknown -> stamp ->
+        re-run. 6 sits above the 4 records that survived and below the 13 the
+        input really held, so a short count would have served as proof the
+        limit was harmless."""
+        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
+        staging = self._stage_one_good_one_broken(project)
+
+        first = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
+        assert first.exit_code == 0, first.output
+
+        # The transient failure clears: the file reads now.
+        (staging / "zzz_lost.json").write_text(
+            json.dumps([{"page_content": f"recovered {i}"} for i in range(9)])
+        )
+        second = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--record-limit", "6"])
+
+        assert second.exit_code == 0, second.output
+        assert "already complete" not in second.output, (
+            "the action was skipped on a limit that only looked harmless"
+        )
+        # Not just "it re-ran for some reason": 4 from the file that always
+        # read, plus 6 of the recovered 9 — the limit applies per file.
+        assert _processed(project) == 10

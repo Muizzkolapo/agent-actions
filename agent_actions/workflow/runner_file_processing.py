@@ -21,7 +21,7 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.utils.limits import resolve_file_limit
+from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
@@ -91,6 +91,19 @@ _ERROR_SAMPLE_SIZE = 3
 def _format_error_sample(messages: list[str]) -> str:
     """Join the first few per-file errors for display."""
     return "; ".join(messages[:_ERROR_SAMPLE_SIZE])
+
+
+def _lose_file(runner: Any, action_name: str) -> None:
+    """Take the action's record count out of service: a file went uncounted.
+
+    The failure is not fatal to the action — the walk records it and carries on
+    — so the run completes holding fewer records than its input offered. A count
+    missing them would let a later limit read as one that could not have bitten,
+    and the action would be skipped rather than re-run. Said for any per-file
+    failure, including one raised after that file was sliced: over-reporting
+    costs a re-run, and under-reporting costs the records.
+    """
+    forget_slice_observation(getattr(runner, "storage_backend", None), action_name)
 
 
 def _log_processing_errors(
@@ -367,6 +380,7 @@ def process_directory_files(
             count += 1
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process file %s: %s",
                 relative_path,
@@ -459,7 +473,15 @@ def process_merged_files(
                     relative_path,
                     reduce_key or "auto",
                 )
-                merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
+                unreadable: list[Path] = []
+                merged_data = merge_json_files(
+                    file_paths, reduce_key=reduce_key, unreadable=unreadable
+                )
+                if unreadable:
+                    # The merge reads fail-open, so a corrupt branch arrives as
+                    # a short result rather than an exception the handler below
+                    # could catch. Those records never reach a slice either.
+                    _lose_file(runner, params.action_name)
                 # Guard-`filter` subtraction lives only in the storage-backend
                 # fan-in (where FILTERED dispositions exist); this filesystem path
                 # is unreachable whenever they do. Add it here if that changes.
@@ -478,6 +500,7 @@ def process_merged_files(
             files_processed_count += 1
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process merged file %s: %s",
                 relative_path,
@@ -602,6 +625,10 @@ def process_from_storage_backend(
         try:
             target_files = runner.storage_backend.list_target_files(action_name)
         except (OSError, sqlite3.Error) as e:
+            # Every file of this upstream is gone, and none of them is in
+            # data_by_path to be counted or reported. Keyed on the action being
+            # run, not the upstream being read.
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
@@ -617,6 +644,10 @@ def process_from_storage_backend(
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
             except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
+                # Dropped before the processing loop, so it never reaches the
+                # handler there, is absent from data_by_path and so from
+                # files_found, and lands in no CollectedErrors either.
+                _lose_file(runner, params.action_name)
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,
@@ -691,6 +722,7 @@ def process_from_storage_backend(
 
         except Exception as e:
             errors.record(relative_path, e)
+            _lose_file(runner, params.action_name)
             logger.warning(
                 "Failed to process backend entry %s: %s",
                 relative_path,

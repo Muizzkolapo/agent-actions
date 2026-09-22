@@ -76,7 +76,9 @@ Either way the limits in force are stored with the action, so lifting one re-run
 back instead of serving a short run as a finished one. Changing `--record-limit` to another value
 re-runs the action when the new limit could have held something back; raising it above what an
 untruncated run already processed changes nothing, because a limit that cannot bite is not a
-different amount of work. `--file-limit` has no such count behind it, so any change to it re-runs
+different amount of work. A run that cannot say what it processed re-runs on any change, as it
+always did: one that completed before these counts existed, or one that lost an input file to an
+error, since the records it never reached were never counted. `--file-limit` has no such count behind it, so any change to it re-runs
 the action, including a change to a value larger than the number of staged files. A batch action stores what the run that *submitted* it applied, not
 what the later run that collects it was asked for.
 

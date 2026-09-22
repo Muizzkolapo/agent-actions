@@ -12,6 +12,7 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import _should_s
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.limits import forget_slice_observation
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.merge import merge_branch_records
 
@@ -70,21 +71,23 @@ class VersionOutputCorrelator:
         return version_consumption_map
 
     def _load_version_outputs(
-        self, version_sources: list[str]
+        self, version_sources: list[str], lost: list[str] | None = None
     ) -> tuple[dict[str, list[dict[str, Any]]], set]:
         """Load outputs from all version sources, preferring storage backend over filesystem."""
         version_outputs = {}
         version_filenames = set()
 
         for version_agent in version_sources:
-            outputs, filenames = self._load_from_storage_backend(version_agent)
+            outputs, filenames = self._load_from_storage_backend(version_agent, lost)
             if outputs:
                 version_outputs[version_agent] = outputs
                 version_filenames.update(filenames)
 
         return version_outputs, version_filenames
 
-    def _load_from_storage_backend(self, version_agent: str) -> tuple[list[dict[str, Any]], set]:
+    def _load_from_storage_backend(
+        self, version_agent: str, lost: list[str] | None = None
+    ) -> tuple[list[dict[str, Any]], set]:
         """Load outputs from storage backend for a version agent."""
         if self.storage_backend is None:
             logger.warning(
@@ -116,6 +119,8 @@ class VersionOutputCorrelator:
                     outputs.append(data)
                 filenames.add(relative_path)
             except FileNotFoundError:
+                if lost is not None:
+                    lost.append(relative_path)
                 logger.warning(
                     "Target %s/%s listed but not found (possible TOCTOU race) — skipping",
                     version_agent,
@@ -165,7 +170,13 @@ class VersionOutputCorrelator:
             if self.storage_backend is None:
                 correlation_dir.mkdir(parents=True, exist_ok=True)
 
-            version_outputs, version_filenames = self._load_version_outputs(version_sources)
+            lost: list[str] = []
+            version_outputs, version_filenames = self._load_version_outputs(version_sources, lost)
+            if lost:
+                # A source that vanished between listing and reading is skipped
+                # rather than raised, so the correlated input the consumer then
+                # walks is already short and its slice never sees the records.
+                forget_slice_observation(self.storage_backend, agent_name)
             if not version_outputs:
                 raise AllVersionsFilteredError(agent_name, version_sources)
 
@@ -283,6 +294,11 @@ class VersionOutputCorrelator:
                     filename,
                 )
             except Exception as e:
+                # The correlated target lands only in the store on this branch,
+                # so a swallowed write leaves the file simply absent. The
+                # consumer's listing reads that as nothing to do rather than as
+                # an error, and slices a short input with nothing raised.
+                forget_slice_observation(self.storage_backend, action_name)
                 logger.warning(
                     "Failed to write correlated data to storage backend for %s: %s",
                     action_name,
