@@ -70,8 +70,8 @@ User data files (agent_io/staging/)
            |
            v
 +---------------------+
-| Source save          |     Deduplicated write to agent_io/source/
-| (UnifiedSource      |     via storage backend
+| Source save          |     Deduplicated write to the store's
+| (UnifiedSource      |     source table, keyed by identity
 |  DataSaver)         |
 +----------+----------+
            |

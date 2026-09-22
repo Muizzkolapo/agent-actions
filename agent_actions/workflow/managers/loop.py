@@ -313,7 +313,7 @@ class VersionOutputCorrelator:
     def _create_correlation_source_data(
         self, target_file: Path, correlated_data: list[dict[str, Any]]
     ):
-        """Create source data file for the correlation target, skipping if existing source is richer."""
+        """Write the correlation target's source file, replacing what was there."""
         try:
             parts = target_file.parts
             agent_io_index = None
