@@ -658,6 +658,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(raw_items, list):
             raw_items = [raw_items]
 
+        _refuse_rows_that_are_not_records(raw_items, ctx.file_path, ctx.agent_name)
         data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type in (".csv", ".tsv"):
