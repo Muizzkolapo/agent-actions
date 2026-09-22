@@ -37,6 +37,9 @@ Each JSON file becomes one record. A file containing an array creates multiple r
 }
 ```
 
+A record is always an object. A file whose top level is a bare value, or an array
+holding one, is refused at staging and names the row it stopped on.
+
 ## CSV/Tabular Input
 
 Each row becomes a separate record. Header row defines field names.
