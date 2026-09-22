@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "A staged record carrying no identity is no longer removed before the source save, so the store's own refusal to drop such a record silently is reachable from batch staging as it already was from online. Every staging path stamps an identity, so this changes nothing for real input; it means a producer that stops doing so fails its file loudly instead of vanishing from the store."
+time: 2026-09-22T11:01:00Z

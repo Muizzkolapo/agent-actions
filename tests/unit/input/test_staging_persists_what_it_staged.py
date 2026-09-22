@@ -50,16 +50,21 @@ def _save(rows, doc, staging, target, backend):
 class TestARecordWithNoIdentityReachesTheGuard:
     def test_it_is_not_dropped_before_the_store_sees_it(self, tmp_path):
         doc, staging, target, backend = _workflow(tmp_path)
-        with pytest.raises(DataValidationError):
+        with pytest.raises(DataValidationError) as refused:
             _save([{"content": {"source": {"a": 1}}}], doc, staging, target, backend)
         backend.close()
+        # The store is what refused, not a guard above it that raises the same class.
+        assert refused.value.context == {"relative_path": "ticket", "record_index": 0}
 
     def test_a_mixed_chunk_fails_rather_than_storing_only_the_half_that_has_one(self, tmp_path):
         doc, staging, target, backend = _workflow(tmp_path)
         rows = [_row("g1", a=1), {"content": {"source": {"b": 2}}}]
-        with pytest.raises(DataValidationError):
+        with pytest.raises(DataValidationError) as refused:
             _save(rows, doc, staging, target, backend)
+        stored = _stored(backend, "ticket")
         backend.close()
+        assert stored == []
+        assert refused.value.context["record_index"] == 1
 
     def test_rows_that_all_carry_one_are_stored(self, tmp_path):
         doc, staging, target, backend = _workflow(tmp_path)
