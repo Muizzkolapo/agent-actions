@@ -85,10 +85,24 @@ This matters because `retry` clears a record's disposition before re-running it.
 A retry that never reached the record would not leave it failed — it would leave
 no record of the failure at all.
 
-One limit remains: an action that turns one record into several gives the new
-records fresh identifiers, so a retry's ids do not match them at actions below
-that point. `retry` already clears dispositions by the same ids, so this is not
-new.
+An action that turns one record into several gives the new rows fresh
+identifiers, so a retry's ids match none of them. Those rows are resolved back
+to the record they came from instead. A row is rewritten when the retry named a
+record that is an input of that action and the row either carries that record's
+id or names it as its parent; every other row is carried. So repairing a record
+whose row was split in two replaces both halves rather than adding two more
+beside them.
+
+One limit remains. A row carries the *original* staged record it descends from,
+not the record that produced it directly, so where one such action feeds another
+the rows of the second name a record that is no longer its input. They cannot be
+attributed to anything the retry named, and are carried as they stand — the run
+reports how many, and repairing one of that action's records leaves its previous
+rows in the file beside the new ones.
+
+Dispositions are cleared by the ids the retry was given, so an id that names no
+input of an action is simply not found there — nothing at that action is
+re-run, and nothing it holds is removed.
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.

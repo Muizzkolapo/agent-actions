@@ -65,7 +65,7 @@ Input records (from staging or upstream action)
            ▼
 ┌──────────────────────────────────────────────────────┐
 │  Step 2: SOURCE_GUID ASSIGNMENT (first-stage only)   │
-│  unified.py:121-126                                  │
+│  unified.py:111-114                                  │
 │                                                      │
 │  First-stage records have no source_guid (they come  │
 │  from staging files). Assigns deterministic UUID5    │
@@ -76,7 +76,7 @@ Input records (from staging or upstream action)
            ▼
 ┌──────────────────────────────────────────────────────┐
 │  Step 3: DISPOSITION GATE                            │
-│  disposition_gate.py:67-107                          │
+│  disposition_gate.py:117-157                         │
 │                                                      │
 │  Queries SQLite for terminal dispositions (SUCCESS,  │
 │  FILTERED, SKIPPED, PASSTHROUGH, EXHAUSTED).         │
