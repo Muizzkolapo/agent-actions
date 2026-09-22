@@ -115,6 +115,7 @@ defaults:
 
 actions:
   - name: summarize_chapters
+    intent: "Summarise each chunk of a long document"
     prompt: |
       Summarize this section:
       {{ source.content }}

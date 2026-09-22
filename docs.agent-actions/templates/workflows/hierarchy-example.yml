@@ -13,12 +13,9 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: ${OPENAI_API_KEY}
+  # Applied to every action unless the action overrides it
   temperature: 0.8
   max_tokens: 2000
-
-# Set default temperature for all actions
-
-# Set default max tokens
 
 # ============================================================================
 # ACTIONS WITH DIFFERENT OVERRIDE LEVELS

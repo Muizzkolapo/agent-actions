@@ -8,9 +8,8 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: ${OPENAI_API_KEY}
+  # Applied to every action unless the action overrides it
   temperature: 0.7
-
-# Temperature setting for all actions (can be overridden per action)
 
 # Actions execute in order, building a processing pipeline
 actions:
