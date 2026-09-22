@@ -101,7 +101,13 @@ Overlap ensures context is not lost at chunk boundaries. Overlapping sections ap
 ### Large Document Processing
 
 ```yaml
-default_agent_config:
+# agent_config/{workflow}.yml — chunking belongs in the workflow's defaults block.
+# `default_agent_config:` is a key of agent_actions.yml, and a workflow file that
+# carries it is refused.
+name: chapter_summaries
+description: "Summarise a long document in chunks"
+
+defaults:
   chunk_config:
     chunk_size: 4000
     overlap: 500

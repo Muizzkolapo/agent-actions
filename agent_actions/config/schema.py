@@ -548,13 +548,16 @@ class StorageConfig(BaseModel):
                 )
         return data
 
-    # ge=0: both enforcers open `if <value> < 1: return`, so zero is the backend's
-    # own "never prune" — and the default prunes, so zero is the only way to say it.
+    # ge=0 because both enforcers open `if <value> < 1: return`; strict because the
+    # consumer reads the raw dict, so a coerced "10" would reach it as the string.
     prompt_trace_retention_runs: int | None = Field(
-        default=None, ge=0, description="Calendar days of prompt traces to keep; 0 never prunes"
+        default=None,
+        ge=0,
+        strict=True,
+        description="Calendar days of prompt traces to keep; 0 never prunes",
     )
     source_data_ttl_days: int | None = Field(
-        default=None, ge=0, description="Days of source data to keep; 0 never prunes"
+        default=None, ge=0, strict=True, description="Days of source data to keep; 0 never prunes"
     )
 
 
@@ -571,7 +574,15 @@ class WorkflowConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(data, cls, "workflow")
+        data = _refuse_undeclared_keys(data, cls, "workflow")
+        if isinstance(data, dict) and "storage" in data and data["storage"] is None:
+            # `storage:` left empty is None, not {}, and the consumer reads the raw
+            # dict — `get("storage", {})` returns that None and then `.get` on it.
+            raise ValueError(
+                "workflow key 'storage' is present with no value — remove the block, "
+                "or give it a setting"
+            )
+        return data
 
     name: str = Field(..., description="Workflow name")
     description: str = Field(..., description="Workflow description")

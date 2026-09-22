@@ -77,6 +77,33 @@ class TestTheStorageBlockIsGuardedLikeDefaults:
         with pytest.raises(ValidationError):
             WorkflowConfig.model_validate({**VALID, "storage": {"source_data_ttl_days": -1}})
 
+    def test_a_block_written_with_no_value_is_refused(self):
+        """`storage:` with the setting commented out is None, not an empty mapping,
+        and the consumer's `get("storage", {})` returns that None rather than the
+        default — then calls `.get` on it. The refusal one level down tells a user
+        to omit the key, which is exactly how they arrive here."""
+        import yaml
+
+        doc = yaml.safe_load("storage:\n  # prompt_trace_retention_runs: 5\n")
+
+        with pytest.raises(ValidationError) as excinfo:
+            WorkflowConfig.model_validate({**VALID, **doc})
+
+        assert "workflow key 'storage' is present with no value" in "; ".join(
+            e["msg"] for e in excinfo.value.errors()
+        )
+
+    @pytest.mark.parametrize("value", ["10", True, 1.5], ids=["quoted int", "bool", "float"])
+    def test_a_value_the_consumer_would_receive_unconverted_is_refused(self, value):
+        """These fields are strict because the consumer reads the raw dict. Coercing
+        `"10"` to 10 here would convert only this copy, and hand the backend the
+        string — where `retention_runs < 1` raises TypeError. `true` is worse: it
+        converts to 1 and prunes to a single day, silently."""
+        with pytest.raises(ValidationError):
+            WorkflowConfig.model_validate(
+                {**VALID, "storage": {"prompt_trace_retention_runs": value}}
+            )
+
     @pytest.mark.parametrize("key", ["prompt_trace_retention_runs", "source_data_ttl_days"])
     def test_a_key_present_with_no_value_is_refused(self, key):
         """The consumer reads the raw dict — `storage_config.get(key, DEFAULT)` —

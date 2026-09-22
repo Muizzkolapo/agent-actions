@@ -3,7 +3,12 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.config.schema import ActionConfig, DefaultsConfig, WorkflowConfig
+from agent_actions.config.schema import (
+    ActionConfig,
+    DefaultsConfig,
+    StorageConfig,
+    WorkflowConfig,
+)
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS
 from agent_actions.output.response.expander import ActionExpander
@@ -231,6 +236,6 @@ class TestTheBackstopBehindTheRefusal:
     not a dict, and `forbid` is what covers that.
     """
 
-    @pytest.mark.parametrize("model", [DefaultsConfig, WorkflowConfig])
+    @pytest.mark.parametrize("model", [DefaultsConfig, WorkflowConfig, StorageConfig])
     def test_extras_are_forbidden_not_merely_refused_by_the_validator(self, model):
         assert model.model_config.get("extra") == "forbid"

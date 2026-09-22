@@ -91,7 +91,7 @@ with it:
 | `defaults` | Settings inherited by every action |
 | `actions` | The actions themselves (required) |
 | `tool_path` | Where this workflow's UDFs live. Takes precedence over the default config and over `tool_path` in `agent_actions.yml` |
-| `storage` | Maintenance knobs: `prompt_trace_retention_runs` and `source_data_ttl_days`. `0` means never prune; omitting a key takes the framework default |
+| `storage` | Maintenance knobs: `prompt_trace_retention_runs` and `source_data_ttl_days`. Despite the first one's name its unit is **calendar days**, not runs. `0` means never prune; omitting a key takes the framework default, which for traces is 10 days and does prune |
 
 Model settings such as `model_vendor` belong under `defaults:`, not at the top level.
 

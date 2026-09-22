@@ -108,11 +108,14 @@ class TestToolPathAtTheWorkflowTopLevel:
         "value", [{"primary": "mytools"}, 42, [1, 2]], ids=["mapping", "int", "list of ints"]
     )
     def test_a_value_the_resolver_cannot_walk_is_refused(self, value):
-        """`manager.py` does `[raw] if isinstance(raw, str) else list(raw)`, so a
-        mapping resolves to its keys — `{primary: mytools}` becomes `['primary']`,
-        a tool directory nobody named — and an int raises mid-resolution instead of
-        at the config surface. Widening this field to `Any` passes every other test
-        in the suite, so the refusal is pinned by type here."""
+        """Widening this field to `Any` passes every other test in the suite, so the
+        type is pinned here.
+
+        It does not govern the live path: `load_configs` runs before validation and
+        already does `[raw] if isinstance(raw, str) else list(raw)`, so an int raises
+        there and a mapping resolves to its keys first — `{primary: mytools}` becomes
+        `['primary']`, a tool directory nobody named. The model refuses it afterwards.
+        Declaring the field is what this change needs; the type is a second line."""
         with pytest.raises(ValidationError):
             WorkflowConfig.model_validate({**VALID, "tool_path": value})
 
