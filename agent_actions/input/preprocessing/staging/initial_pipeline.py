@@ -430,18 +430,8 @@ def _give_repeats_their_own_identity(
 def _wrap_online_rows(
     payloads: list[Any], storage_backend: Any = None, relative_path: str = ""
 ) -> list[Any]:
-    """Envelope and stamp online first-stage rows through the single authority.
-
-    A non-dict payload cannot be namespaced under content.source, so it passes through
-    unchanged (preserving the prior behavior for non-record items) — hence the list may
-    contain a non-dict item, which surfaces downstream at the storage boundary.
-    """
-    wrapped: list[Any] = []
-    for payload in payloads:
-        if not isinstance(payload, dict):
-            wrapped.append(payload)
-            continue
-        wrapped.append(_envelope_row(payload))
+    """Envelope and stamp online first-stage rows through the single authority."""
+    wrapped: list[Any] = [_envelope_row(payload) for payload in payloads]
     return _give_repeats_their_own_identity(wrapped, storage_backend, relative_path)
 
 
