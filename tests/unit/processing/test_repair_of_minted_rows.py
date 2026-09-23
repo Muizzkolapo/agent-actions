@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.errors.processing import ProcessingError
 from agent_actions.processing.disposition_gate import DispositionGate, positions_named_by_repair
 from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
@@ -288,6 +289,19 @@ class TestAnInputBesideItsOwnAncestor:
 
         assert "cannot be attributed" not in caplog.text
 
+    def test_nothing_is_reported_when_no_input_of_this_action_was_named(self, caplog, run):
+        """The repair named a record further upstream. Nothing here is reprocessed,
+        so nothing here can duplicate, and a warning would be noise on a run that
+        left the file exactly as it found it."""
+        r = run({"m0": 2})
+        records = _records("m0", "m1", ancestor="s0")
+        r(records)
+
+        with caplog.at_level("WARNING"):
+            r.repair(records, {"s0"})
+
+        assert "cannot be attributed" not in caplog.text
+
     def test_the_ambiguity_is_reported(self, caplog, run):
         r = run({"m0": 2})
         r(self._diamond())
@@ -296,3 +310,28 @@ class TestAnInputBesideItsOwnAncestor:
             r.repair(self._diamond(), {"s0"})
 
         assert "cannot be attributed" in caplog.text
+
+
+class TestARepairGivenNoInput:
+    """The argument carries the whole rule. Without it the gate reads no inputs,
+    resolves nothing and carries every row — the duplication this exists to
+    remove — so a caller that forgets must not get that quietly."""
+
+    def test_the_processor_refuses(self, run):
+        r = run({"r0": 2})
+        r(_records("r0", "r1"))
+        context = ProcessingContext(agent_config=AGENT_CONFIG, agent_name=ACTION)
+        context.storage_backend = r.backend
+        gate = DispositionGate(r.backend, repairing={"r0"})
+
+        with pytest.raises(ProcessingError, match="pre-narrowing input"):
+            UnifiedProcessor(disposition_gate=gate).process(
+                _records("r0"), context, FileToolStrategy()
+            )
+
+    def test_an_ordinary_run_is_not_asked_for_it(self, run):
+        """Only a repair needs it: an ordinary run rewrites nothing it did not
+        produce, so requiring it everywhere would be a change to every caller."""
+        r = run({"r0": 2})
+
+        assert len(r(_records("r0", "r1"))) == 3

@@ -114,8 +114,9 @@ def test_the_rows_of_every_other_record_survive_untouched(expanding):
     assert len(others) == (RECORDS - 1) * 2
     _fail(expanding, selected, ACTION)
 
-    CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
+    assert result.exit_code == 0, result.output
     assert others <= {r["source_guid"] for r in _rows(expanding, "split")}
 
 
@@ -247,3 +248,87 @@ class TestARecordTheLimitDropped:
         assert untouched <= after, (
             f"rows of an untouched record deleted: {sorted(untouched - after)}"
         )
+
+
+# Deliberately not `split.py`: tool discovery imports by module name, so two
+# fixtures writing the same basename serve the second one the first one's module.
+FILE_SPLIT_TOOL = '''from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def fsplit_all(data: Any, *args) -> Any:
+    """Two rows per record, handed the whole file at once."""
+    return FileUDFResult(
+        [
+            {
+                "source_index": index,
+                "data": {
+                    "summary": f"{record.get('summary')} |{half}",
+                    "exam_density": "high",
+                },
+            }
+            for index, record in enumerate(data or [])
+            for half in (1, 2)
+        ]
+    )
+'''
+
+FILE_SPLIT_ACTION = """  - name: fsplit
+    kind: tool
+    granularity: File
+    dependencies: [flatten]
+    intent: "Split at file granularity"
+    schema: tool_action_output
+    impl: fsplit_all
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+@pytest.fixture
+def file_granularity(project):  # noqa: F811
+    """An expanding action at FILE granularity.
+
+    The pipeline forks on `granularity` and hands the two branches different
+    arguments; an action with no `granularity:` key takes the RECORD branch. So
+    a suite built only from those leaves the FILE branch's wiring unpinned, and
+    it is the branch the reported bug names.
+    """
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + FILE_SPLIT_ACTION)
+    (project / "tools" / WORKFLOW / "fsplit.py").write_text(FILE_SPLIT_TOOL)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    return project
+
+
+class TestAtFileGranularity:
+    def test_the_action_really_mints_at_this_granularity(self, file_granularity):
+        rows = _rows(file_granularity, "fsplit")
+        assert len(rows) == RECORDS * 2
+        assert {r["source_guid"] for r in rows}.isdisjoint(
+            set(_record_ids(file_granularity, ACTION))
+        )
+
+    def test_a_retry_deletes_no_row_and_does_not_grow_the_output(self, file_granularity):
+        selected = _record_ids(file_granularity, ACTION)[0]
+        before = _rows(file_granularity, "fsplit")
+        untouched = {r["source_guid"] for r in before if r.get("parent_source_guid") != selected}
+        assert len(untouched) == (RECORDS - 1) * 2
+        _fail(file_granularity, selected, ACTION)
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+        assert result.exit_code == 0, result.output
+        after = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+        assert untouched <= after, f"rows deleted at FILE granularity: {sorted(untouched - after)}"
+        assert len(_rows(file_granularity, "fsplit")) == RECORDS * 2
+        # The FILE branch hands the gate its own list, and giving it the narrowed
+        # one resolves nothing: every untouched row reads as unattributable. The
+        # rows survive either way here, so the diagnostic is what tells the two
+        # apart — and on a shape that can hold a diamond it is a deletion.
+        assert "cannot be attributed" not in result.output
