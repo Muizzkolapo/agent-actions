@@ -88,17 +88,24 @@ no record of the failure at all.
 An action that turns one record into several gives the new rows fresh
 identifiers, so a retry's ids match none of them. Those rows are resolved back
 to the record they came from instead. A row is rewritten when the retry named a
-record that is an input of that action and the row either carries that record's
-id or names it as its parent; every other row is carried. So repairing a record
-whose row was split in two replaces both halves rather than adding two more
-beside them.
+record that is an input of that action, and the row either carries that
+record's id or names it as its parent — the second only where no *other* input
+of that action names the same record as its own parent. Every other row is
+carried. So repairing a record whose row was split in two replaces both halves
+rather than adding two more beside them.
 
-One limit remains. A row carries the *original* staged record it descends from,
-not the record that produced it directly, so where one such action feeds another
-the rows of the second name a record that is no longer its input. They cannot be
-attributed to anything the retry named, and are carried as they stand — the run
-reports how many, and repairing one of that action's records leaves its previous
-rows in the file beside the new ones.
+Two shapes fall outside that, and both are carried rather than rewritten. A row
+names the *original* staged record it descends from, not the record that
+produced it directly, so where one such action feeds another the rows of the
+second name a record that is no longer its input. And where an action reads
+both a record and an expansion over that same record — `dependencies` naming
+both — a row of the expansion names the record standing beside it in the input,
+so which of the two produced it cannot be told apart.
+
+In both, repairing one of that action's records leaves its previous rows in the
+file beside the new ones. The run reports how many rows it could not place. It
+carries them rather than guessing, because guessing wrong here deletes a row
+that nothing will write again.
 
 Dispositions are cleared by the ids the retry was given, so an id that names no
 input of an action is simply not found there — nothing at that action is
