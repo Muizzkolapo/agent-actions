@@ -131,6 +131,72 @@ class TestACacheAlreadyHoldingADocument:
         assert _resolve_again(tmp_path).read_bytes() == before
 
 
+class TestEveryEntryTheWalkStages:
+    """The cache directory is the input directory; the rule must cover what is staged."""
+
+    def test_an_entry_left_by_another_action_is_brought_over(self, tmp_path):
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        sibling = cache.parent / "fetch_tickets.json"
+        sibling.write_text(json.dumps(ENVELOPE))
+        _resolve_again(tmp_path)
+        assert json.loads(sibling.read_text()) == [ENVELOPE]
+
+    def test_such_an_entry_then_stages(self, tmp_path):
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        sibling = cache.parent / "fetch_tickets.json"
+        sibling.write_text(json.dumps(ENVELOPE))
+        _resolve_again(tmp_path)
+        assert [row["content"]["source"] for row in _stage(sibling)] == [ENVELOPE]
+
+    def test_an_entry_beside_a_freshly_fetched_one_is_brought_over(self, tmp_path):
+        """A renamed action fetches under its new name; the old name still stages."""
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        legacy = cache.parent / "fetch_tickets.json"
+        legacy.write_text(json.dumps(ENVELOPE))
+        body = json.dumps([{"id": 9}]).encode()
+        with patch("urllib.request.urlopen", return_value=_Response(body)):
+            resolve_start_node_data_source(
+                Path(tmp_path), {"type": "api", "url": "https://api.example.com/items"}, "pull"
+            )
+        assert json.loads(legacy.read_text()) == [ENVELOPE]
+
+
+class TestWhatTheWalkSkipsTheRuleLeavesAlone:
+    """Reading an entry the runner never stages turns a fine run into a failed one."""
+
+    def _poison(self, cache, name):
+        target = cache.parent / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"\x00\x05\x16\x07not json at all")
+        return target
+
+    def test_a_macos_sidecar_does_not_fail_the_resolve(self, tmp_path):
+        """A Finder copy onto SMB/exFAT leaves ._name.json beside name.json."""
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        self._poison(cache, "._extract.json")
+        _resolve_again(tmp_path)
+        assert json.loads(cache.read_text()) == [{"id": 1}]
+
+    def test_an_entry_under_batch_does_not_fail_the_resolve(self, tmp_path):
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        self._poison(cache, "batch/job.json")
+        _resolve_again(tmp_path)
+        assert json.loads(cache.read_text()) == [{"id": 1}]
+
+    def test_a_directory_named_like_an_entry_does_not_fail_the_resolve(self, tmp_path):
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        (cache.parent / "weird.json").mkdir()
+        _resolve_again(tmp_path)
+        assert json.loads(cache.read_text()) == [{"id": 1}]
+
+    def test_a_sidecar_is_not_rewritten_either(self, tmp_path):
+        cache = _cache_of(tmp_path, [{"id": 1}])
+        sidecar = self._poison(cache, "._extract.json")
+        before = sidecar.read_bytes()
+        _resolve_again(tmp_path)
+        assert sidecar.read_bytes() == before
+
+
 class TestACacheThatCannotBeRead:
     def test_it_fails_naming_the_file_and_the_remedy(self, tmp_path):
         cache = _cache_of(tmp_path, ENVELOPE)
