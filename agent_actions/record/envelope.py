@@ -63,7 +63,8 @@ RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
 )
 
 # Lifecycle fields: cumulative across stages — carried forward AND appended to.
-# _state_history grows via transition(); _state_schema_version tags the format.
+# _state_history grows via transition(); _delta_mode records how the row was
+# stored, and every read path strips it.
 # Carried by _carry_persistent_fields() so tombstone builders get them automatically.
 RECORD_LIFECYCLE_FIELDS: frozenset[str] = frozenset(
     {

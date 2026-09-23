@@ -134,8 +134,8 @@ actions:
 
 After a FILE tool returns, the framework:
 
-1. **Matches outputs to inputs by `node_id`** — if an output carries a `node_id` from an input, the framework extends that input's lineage.
-2. **Treats outputs without `node_id` as new records** — they get fresh lineage (e.g., aggregation results).
+1. **Matches outputs to inputs by `source_index`** — a `TrackedItem` returned unchanged, or a `FileUDFResult` output naming the input it came from, extends that input's lineage.
+2. **Treats outputs declaring `source_index: None` as new records** — they get fresh lineage (e.g., aggregation results).
 3. **Wraps and enriches** — assigns new `target_id`, `node_id`, and extends the `lineage` chain.
 
 ```json
@@ -148,7 +148,7 @@ After a FILE tool returns, the framework:
 }
 ```
 
-To maintain lineage, copy `source_guid` from input records to output.
+Lineage follows `source_index`; the framework assigns `source_guid` itself, and a value a tool sets on a record it returns is dropped.
 
 ## See Also
 

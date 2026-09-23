@@ -58,10 +58,8 @@ def _reattach_source_guid(
     stored whole and take a correlation id derived from the one they inherited —
     distinct per row, equal across version branches.
 
-    ``parent_source_guid`` is left as the envelope carried it. A row that named no
-    parent has no producer to claim, but the FILE-mode source resolver has no rule
-    for a record's own carried ``source`` and would skip it — see #1046. The field
-    serves two readers that want different answers; #1022 owns that.
+    ``parent_source_guid`` is left as the envelope carried it: clearing it is the
+    honest answer and the FILE-mode resolver then skips the row (#1046, #1022).
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -97,6 +95,8 @@ def _reattach_source_guid(
         # Distinct per row so a merge cannot fan them back into the one identity
         # they were just given; derived, so two version branches still correlate
         # and the pool keeps a key every record shares. A bare drop loses both.
+        # Appended rather than replaced: chained aggregations grow it a segment
+        # each, where replacing would collide this stage's rows with the last's.
         inherited_correlation = item.get("version_correlation_id")
         if inherited_correlation:
             item["version_correlation_id"] = f"{inherited_correlation}#{i}"

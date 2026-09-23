@@ -78,7 +78,8 @@ RECORD_TRACKING_FIELDS (stable identity — set once, carried forward)
 RECORD_LIFECYCLE_FIELDS (cumulative — carried forward AND appended to)
 ├── _state_history
 ├── _state_schema_version
-└── _delta_mode          ← carried, so a row stored whole keeps being stored whole
+└── _delta_mode          ← how the row was stored; stripped by every read, so a
+                           rewrite re-derives it (see read_target_for_rewrite)
 
 RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
 ├── target_id
