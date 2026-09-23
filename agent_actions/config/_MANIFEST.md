@@ -23,7 +23,7 @@ orchestration, prompts, and processing to concrete implementations.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Direct import of `WorkflowConfig` from `schema` (backward-compat alias `WorkflowConfigV2`). | `configuration` |
-| `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `ActionConfig` and `DefaultsConfig`, cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). `ExpectConfig` binds an expectation suite to an action via `ActionConfig.expect`, including `judge_budget: int \| None` (caps real `llm_judge` calls per action per run; `None` is uncapped, and unlike `max_iterations`/`on_exhausted` it is allowed under `repair: none`). | `configuration`, `validation` |
+| `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `WorkflowConfig`, `ActionConfig`, `DefaultsConfig` and `StorageConfig` (the workflow's own `storage:` block, strict-typed because its consumer reads the raw dict), cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). `ExpectConfig` binds an expectation suite to an action via `ActionConfig.expect`, including `judge_budget: int \| None` (caps real `llm_judge` calls per action per run; `None` is uncapped, and unlike `max_iterations`/`on_exhausted` it is allowed under `repair: none`). | `configuration`, `validation` |
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
@@ -78,7 +78,7 @@ Key Functions
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `WorkflowConfig` | `agent_config/{workflow}.yml` | Reads | `name`, `description`, `version`, `defaults`, `actions` |
+| `WorkflowConfig` | `agent_config/{workflow}.yml` | Reads | `name`, `description`, `version`, `defaults`, `actions`, `tool_path`, `storage` (extras refused) |
 | `ActionConfig` | `agent_config/{workflow}.yml` | Validates | `name`, `intent`, `kind`, `impl`, `model_vendor`, `model_name`, `schema`, `guard`, `dependencies` |
 | `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `data_source` |
 | `EnvironmentConfig` | `.env` | Reads | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `AGENT_ACTIONS_ENV` |

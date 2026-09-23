@@ -112,7 +112,13 @@ Stage 1: WorkflowConfig (pre-expansion)
   │   generation params included. An undeclared key names the
   │   field it resembles and the keys the block does take.
   │
-  └── WorkflowConfig  → model_validator checks:
+  ├── StorageConfig   → extra="forbid"
+  │   The workflow's own storage: block. Its values are strict,
+  │   because the consumer reads the raw dict: coercing "10" here
+  │   would convert only the model's copy and hand the backend
+  │   the string.
+  │
+  └── WorkflowConfig  → extra="forbid", plus model_validator checks:
       ├── Duplicate action names
       ├── Dangling dependency references
       ├── Invalid primary_dependency references
@@ -248,7 +254,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 ### Schema & Validation
 | File | Role |
 |------|------|
-| `schema.py` | `WorkflowConfig`, `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=forbid), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
+| `schema.py` | `WorkflowConfig` (extra=forbid), `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=forbid), `StorageConfig` (extra=forbid), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
 | `types.py` | `Granularity`, `RunMode` enums; `ActionConfigDict`, `ActionEntryDict`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict` typed dicts |
 | `environment.py` | `EnvironmentConfig` (pydantic-settings), API key validation, environment detection helpers |
 
@@ -294,7 +300,41 @@ The invariant that makes the strictness safe runs one way: **every key read out 
 
 The converse does not hold and is not claimed. `drops` and `observe` are declared here and read from nowhere — a defaults-level value for either is accepted and never reaches an agent, which is the pre-existing shape this strictness cannot detect, because a declared key passes by definition. Generation parameters avoid it by being inherited as well as declared, `frequency_penalty` and `presence_penalty` included; declaring one without adding it to `SIMPLE_CONFIG_FIELDS` accepts it and then drops it.
 
-### 3. AgentConfig uses `extra="allow"`
+### 3. WorkflowConfig uses `extra="forbid"`
+
+The surface holding the blocks above. It raises the same refusal `DefaultsConfig`
+does, over the workflow's own top-level keys, because an undeclared one was dropped
+in silence — a `defaluts:` cost every setting in the block at once, and the run that
+followed looked healthy.
+
+The same invariant runs the same way, one level up: **every top-level key any
+framework code reads out of a workflow file is declared on `WorkflowConfig`**. Two
+were not when this was written — `tool_path`, read at `manager.py`, and `storage`,
+read at `coordinator.py` through a `getattr` that a grep for `user_config.get` does
+not find. `tests/unit/config/test_workflow_keys_read_are_declared.py` walks the AST
+and pins the containment; add to both when a module starts reading a new key.
+
+The converse does not hold here either. `storage` is declared and validated, but the
+coordinator reads the *raw* dict rather than the validated model, so the block's
+validation is a gate at load time and not a guarantee at read time. That is why its
+fields are strict: what the model accepts has to be exactly what the raw read
+returns. Having consumers read the validated model would remove the need.
+
+### 4. The project config has no model, and is deliberately left that way here
+
+`agent_actions.yml` is read by `load_project_config` as a plain dict, and its keys are
+taken with bare `.get()` calls from several sites. A typo there is dropped in silence —
+`tool_pth:` falls back to `["tools"]` with no error — which is the same defect the
+blocks above refuse, on the file those blocks cross-reference for `tool_path`
+precedence. `DefaultAgentConfig`, which one of its keys feeds, is `extra="allow"` and
+keeps junk keys for the same reason.
+
+Not an oversight: modelling it is a separate decision, because "declared" has to mean
+something different for a file with no model and several independent readers, and
+because the merge at `manager.py` mixes it with a block that is already strict. It is
+the last remaining instance of this class inside `config/`.
+
+### 5. AgentConfig uses `extra="allow"`
 
 The post-expansion `AgentConfig` (in `output/response/config_schema.py`, not in this module) uses `extra="allow"` because `ActionExpander` injects many runtime-only fields (`agent_type`, `code_path`, `schema_name`, `tools_path`, `is_versioned_agent`, etc.) that aren't in the original YAML. These pass through without Pydantic rejecting them.
 

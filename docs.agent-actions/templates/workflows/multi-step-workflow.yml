@@ -2,13 +2,14 @@
 # Demonstrates a pipeline with multiple sequential actions
 # Each action reads output from previous actions and adds new fields
 
-# Workflow-level configuration applies to all actions
-model_vendor: openai
-model_name: gpt-4o-mini
-api_key: ${OPENAI_API_KEY}
-
-# Temperature setting for all actions (can be overridden per action)
-temperature: 0.7
+# Workflow-level defaults apply to all actions. They live under `defaults:` —
+# the schema refuses model settings written at the top level.
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: ${OPENAI_API_KEY}
+  # Applied to every action unless the action overrides it
+  temperature: 0.7
 
 # Actions execute in order, building a processing pipeline
 actions:

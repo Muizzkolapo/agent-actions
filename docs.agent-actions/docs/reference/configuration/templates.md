@@ -82,25 +82,13 @@ Create macros that accept parameters:
 \{%- endmacro \%\}
 ```
 
-### Dependency Macros
-
-Define execution plans with dependency macros:
-
-```jinja2
-\{% macro thinkific_plan(first_dependency) -\%\}
-    format_quiz_object <- \{\{ first_dependency \}\}
-  - add_asterisk_to_correct_answer <- format_quiz_object
-  - convert_html_json_to_thinkific <- add_asterisk_to_correct_answer
-\{%- endmacro \%\}
-```
-
 ## Using Templates in Agentic Workflows
 
 Import and use macros in agentic workflow files. Consider what happens when you import a macro—you're essentially including a pre-defined set of actions:
 
 ```yaml
 # agent_config/my_workflow.yml
-\{% from 'thinkific_tools.jinja2' import thinkific_tools, thinkific_plan \%\}
+\{% from 'thinkific_tools.jinja2' import thinkific_tools \%\}
 
 name: my_workflow
 description: "Workflow using template macros"
@@ -113,11 +101,10 @@ actions:
 
   # Include macro-defined actions
 \{\{ thinkific_tools() | indent(2) \}\}
-
-# Dependency plan
-plan:
-\{\{ thinkific_plan('prepare_data') | indent(2) \}\}
 ```
+
+Dependencies come from each action's own `dependencies:` key. A top-level
+`plan:` block is not part of the schema and is refused.
 
 ## Rendered Output
 

@@ -3,21 +3,19 @@
 # Shows the complete 3-level configuration hierarchy in action
 
 # ============================================================================
-# WORKFLOW-LEVEL CONFIGURATION
+# WORKFLOW-LEVEL DEFAULTS (the `defaults:` block)
 # ============================================================================
 # These settings override project defaults from agent_actions.yml
 # and apply to all actions in this workflow (unless action overrides)
 
 # Override project's model vendor for this workflow
-model_vendor: openai
-model_name: gpt-4o-mini
-api_key: ${OPENAI_API_KEY}
-
-# Set default temperature for all actions
-temperature: 0.8
-
-# Set default max tokens
-max_tokens: 2000
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: ${OPENAI_API_KEY}
+  # Applied to every action unless the action overrides it
+  temperature: 0.8
+  max_tokens: 2000
 
 # ============================================================================
 # ACTIONS WITH DIFFERENT OVERRIDE LEVELS

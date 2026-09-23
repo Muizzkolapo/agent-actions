@@ -18,5 +18,3 @@ actions:
     schema:
       processed: string
 
-plan:
-  - chunked_action
