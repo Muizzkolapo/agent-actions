@@ -46,15 +46,15 @@ class TestARowThatCannotCarryAPayload:
             _staged(42, tmp_path)
         assert caught.value.context["file_path"] == str(tmp_path / "doc.json")
 
-    def test_it_reads_the_same_as_the_batch_refusal(self, tmp_path):
+    def test_a_bare_value_is_refused_as_a_document(self, tmp_path):
         with pytest.raises(AgentActionsError) as caught:
             _staged(42, tmp_path)
-        assert "A staged row must be an object; found int" in str(caught.value)
+        assert "A staged input must be rows; found int" in str(caught.value)
 
 
 class TestRecordsStillStage:
-    def test_an_object_document_is_one_enveloped_record(self, tmp_path):
-        rows = _staged({"a": 1}, tmp_path)
+    def test_a_one_row_document_is_one_enveloped_record(self, tmp_path):
+        rows = _staged([{"a": 1}], tmp_path)
         assert [row["content"] for row in rows] == [{"source": {"a": 1}}]
         assert rows[0]["source_guid"]
 
