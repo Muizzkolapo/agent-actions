@@ -156,11 +156,14 @@ def test_the_expectation_below_passes_on_what_it_is_handed(inventing):
     assert verdicts == [True, True]
 
 
-def test_an_invented_row_claims_no_producer(inventing):
-    """No single input produced it, and `parent_source_guid` is read as the
-    producer — by source lookup, and by the gate deciding which stored rows a
-    repair may replace. Naming the input that stood in for its namespaces would
-    answer the first at the price of misleading the second."""
+def test_an_invented_row_is_given_no_producer_of_its_own(inventing):
+    """Nothing is added here: no single input produced the row.
+
+    It ends up with none at all only because this workflow's inputs carry none to
+    inherit — the envelope hands on whatever the stand-in record had, and clearing
+    that is what #1046 blocks. So this pins "adds none", not "has none"; the
+    unit suite covers the inherited case.
+    """
     parents = {r.get("parent_source_guid") for r in _raw(inventing, "roll_up")}
 
     assert parents == {None}
