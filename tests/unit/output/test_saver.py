@@ -180,8 +180,12 @@ class TestSaverErrors:
         saver = UnifiedSourceDataSaver(
             storage_backend=None,
         )
-        with pytest.raises(ValueError, match=r"node/batch"):
+        with pytest.raises(ValueError) as exc:
             saver.save_source_items([{"x": 1}], "node/batch")
+
+        message = str(exc.value)
+        assert "node/batch" in message
+        assert ".json" not in message, f"error names a file that is never written: {message}"
 
     @patch("agent_actions.output.saver.fire_event")
     def test_backend_write_error_propagates(self, mock_fire, tmp_path):

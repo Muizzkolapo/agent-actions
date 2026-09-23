@@ -97,3 +97,17 @@ def test_command_help_does_not_promise_a_default_removal():
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def test_the_refusal_is_not_filed_as_an_unexpected_error(tmp_path, caplog):
+    """Choosing no flag is a usage error. Routed through the broad handler it
+    arrives wrapped as a failure and logs a traceback for something the user
+    simply has to retype."""
+    cleaner, _ = _make_cleaner(tmp_path, force=True)
+
+    with caplog.at_level("ERROR"), pytest.raises(click.ClickException) as exc:
+        cleaner.run()
+
+    assert str(exc.value).startswith("Nothing is cleaned by default")
+    assert "Cleaning failed" not in str(exc.value)
+    assert caplog.records == []

@@ -156,7 +156,7 @@ class TestVersionMergeLineage:
 
         source_data = _correlated_source_records(backend)
         assert len(source_data) == 1
-        assert "lineage" in source_data[0], "Source record must include lineage"
+        assert source_data[0]["lineage"] == ["node_0_root", "scorer_1_aaa", "scorer_2_bbb"]
 
         enricher = LineageEnricher()
         result = ProcessingResult.success(
@@ -202,9 +202,6 @@ class TestVersionMergeLineage:
         assert result_dir is not None
         records = backend.read_target("consumer", "data.json")
         assert records[0]["source_guid"] == "sg-abc"
-
-        source_data = _correlated_source_records(backend)
-        assert source_data[0]["source_guid"] == "sg-abc"
 
     def test_partial_merge_preserves_lineage(self, correlator, backend, agent_folder):
         """Missing versions don't break lineage on present versions."""
@@ -368,7 +365,7 @@ class TestCorrelationLeavesNoUnreadArtefact:
 
         correlator.prepare_correlated_input("consumer", ["v1"], 2)
 
-        leftovers = sorted(p.name for p in (agent_folder / "source").glob("*.json"))
+        leftovers = sorted(str(p) for p in agent_folder.rglob("source/*.json"))
         assert leftovers == [], f"correlation left unread files behind: {leftovers}"
 
     def test_the_merged_output_still_carries_identity_and_lineage(
