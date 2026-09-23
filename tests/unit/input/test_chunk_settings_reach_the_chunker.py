@@ -341,3 +341,35 @@ def test_every_chunk_setting_is_writable_as_a_loose_key(setting, level):
     agent = _expand(written, None) if level == "defaults" else _expand({}, written)
 
     assert _tokenizer_call(agent, "batch")[setting] == SETTINGS[setting]
+
+
+def test_an_action_setting_beats_a_block_written_further_out():
+    """The project file and `defaults:` both hand the expander a block, so a block
+    that only ever loses to a key beside it loses to nothing: an action asking for
+    its own overlap is overruled by a setting one or two levels further out."""
+    agent = _expand(
+        {"chunk_config": {"chunk_size": 4000, "chunk_overlap": 500}}, {"chunk_overlap": 25}
+    )
+
+    assert _tokenizer_call(agent, "batch")["chunk_overlap"] == 25
+
+
+def test_an_action_block_fills_in_over_the_workflow_block_key_by_key():
+    """Replacing the whole block drops every name the narrower one omits, which
+    is how a configured overlap becomes the hardcoded default again."""
+    agent = _expand(
+        {"chunk_config": {"chunk_size": 1000, "chunk_overlap": 200}},
+        {"chunk_config": {"chunk_size": 500}},
+    )
+
+    seen = _tokenizer_call(agent, "batch")
+
+    assert (seen["chunk_size"], seen["chunk_overlap"]) == (500, 200)
+
+
+def test_the_stored_block_carries_only_what_was_asked_for():
+    """An unset name stored as an explicit null is a value in every dump and
+    inspect view; the reader's default is the one place it should come from."""
+    agent = _expand({"chunk_config": {"chunk_size": 4000}})
+
+    assert agent["chunk_config"] == {"chunk_size": 4000}
