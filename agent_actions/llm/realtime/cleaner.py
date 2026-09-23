@@ -31,6 +31,10 @@ class Cleaner:
         """Run the cleaning workflow and surface meaningful ClickExceptions."""
         try:
             self._run()
+        except click.ClickException:
+            # Already the message the user should see; wrapping it would file a
+            # usage error as an unexpected one and log a traceback for it.
+            raise
         except AgentNotFoundError as exc:
             raise click.ClickException(f"Agent '{self.agent}' was not found.") from exc
         except AgentFileSystemError as exc:
