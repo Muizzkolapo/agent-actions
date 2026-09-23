@@ -12,6 +12,7 @@ import logging
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
+from agent_actions.errors.processing import ProcessingError
 from agent_actions.processing.cascade_filter import partition_cascade_records
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.record_helpers import build_tombstone
@@ -82,6 +83,7 @@ class UnifiedProcessor:
         strategy: ProcessingStrategy,
         *,
         raw_records: list[dict[str, Any]] | None = None,
+        repair_inputs: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Run records through the full processing pipeline.
 
@@ -101,6 +103,9 @@ class UnifiedProcessor:
                 provided, the guard filter uses these as ``original_data``
                 so that skipped/passing records reference pre-observe fields.
                 RECORD mode callers should omit this parameter.
+            repair_inputs: The action's input for this file before a repair
+                narrowed it.  Required while one is in flight, and ``records``
+                cannot serve: every caller narrows above this.
 
         Returns:
             Tuple of (output_records, stats).
@@ -121,6 +126,13 @@ class UnifiedProcessor:
             from agent_actions.processing.disposition_gate import positions_named_by_repair
 
             repairing = self._disposition_gate.repairing
+            if repair_inputs is None:
+                raise ProcessingError(
+                    f"Action '{context.action_name}' is repairing records but was given no "
+                    "pre-narrowing input. Without it the gate cannot tell a row of this "
+                    "action's own making from one minted upstream, and carries every "
+                    "stored row — the duplication that rule exists to prevent."
+                )
             # raw_records is asked separately rather than sliced by the same
             # positions: a context-scope skip drops records from `records` and not
             # from `raw_records`, so the two are not always position-for-position.
@@ -131,7 +143,7 @@ class UnifiedProcessor:
             if raw_kept is not None and raw_records is not None:
                 raw_records = [raw_records[i] for i in raw_kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
-                context.action_name, self._get_carry_forward_path(context)
+                context.action_name, self._get_carry_forward_path(context), repair_inputs
             )
 
         if raw_records is not None:

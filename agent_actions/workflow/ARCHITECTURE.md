@@ -546,7 +546,7 @@ If you add async I/O inside run_action (e.g., aiohttp calls):
 ```
 Three places reset action state. ALL THREE clear checkpoint_output:
 
-1. pipeline.py:591      — after save_main_output (normal completion)
+1. pipeline.py:618      — after save_main_output (normal completion)
 2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
 3. cli/retry.py:201     — RetryCommand.execute (retry command)
 

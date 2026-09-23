@@ -499,6 +499,14 @@ class ProcessingPipeline:
                     e,
                 )
 
+        # Above every narrowing, as staging captures it: a record the limit drops
+        # is still one of this action's inputs, and the gate reads these to tell a
+        # stored row of its own making from one minted upstream. Leave it out and
+        # a row of that record reads as one of a repaired record's, to be deleted
+        # by a rewrite that never makes it again. A limit never drops a repaired
+        # record, so the extra entries can only widen what is carried.
+        offered_to_repair = data
+
         # ── per-action record_limit ──────────────────────────────────────
         kept = record_indices_to_process(
             data,
@@ -595,11 +603,13 @@ class ProcessingPipeline:
                             self.config.action_name,
                         )
             output, stats = self._unified_processor.process(
-                filtered, context, strategy, raw_records=data
+                filtered, context, strategy, raw_records=data, repair_inputs=offered_to_repair
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
-            output, stats = self._unified_processor.process(data, context, strategy)
+            output, stats = self._unified_processor.process(
+                data, context, strategy, repair_inputs=offered_to_repair
+            )
 
         stats.raise_if_terminal_failure(
             self.config.action_name, data, output, self.config.storage_backend

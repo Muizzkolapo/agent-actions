@@ -112,7 +112,7 @@ class TestOnlineModeReturnsPath:
             )
 
             result = _process_online_mode_with_record_processor(
-                data_chunk, ctx, str(input_file), str(base), str(output)
+                data_chunk, ctx, str(input_file), str(base), str(output), data_chunk
             )
 
         assert isinstance(result, str)
@@ -153,7 +153,7 @@ class TestInitialPipelineZeroSuccessFailure:
             MockProc.return_value.process.return_value = (output, stats)
 
             return _process_online_mode_with_record_processor(
-                data_chunk, ctx, str(input_file), str(base), str(output_dir)
+                data_chunk, ctx, str(input_file), str(base), str(output_dir), data_chunk
             )
 
     def test_all_failed_raises(self, tmp_dirs):
@@ -208,7 +208,7 @@ def online_ctx(tmp_dirs):
 def _call_online(data_chunk, ctx, input_file, base, output):
     """Helper to invoke _process_online_mode_with_record_processor."""
     return _process_online_mode_with_record_processor(
-        data_chunk, ctx, str(input_file), str(base), str(output)
+        data_chunk, ctx, str(input_file), str(base), str(output), data_chunk
     )
 
 

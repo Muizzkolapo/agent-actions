@@ -48,12 +48,20 @@ class DispositionGate:
         """The records this run is repairing; empty when it is an ordinary run."""
         return self._repairing
 
-    def carried_past_repair(self, action_name: str, relative_path: str | None) -> set[str]:
-        """Identities this action holds a row for that the repair did not name.
+    def carried_past_repair(
+        self,
+        action_name: str,
+        relative_path: str | None,
+        inputs: Collection[Any],
+    ) -> set[str]:
+        """Identities this action holds a row for that this run will not write again.
 
-        A repair processes only the records it named; the action's output is replaced
-        whole, so every other row it holds has to be handed back to the write or
-        narrowing the input would delete it.
+        The output is replaced whole, so a row not produced again must be handed
+        back or narrowing the input deletes it. An action minting an identity per
+        row holds none carrying any input's, so rows are resolved to their input
+        through ``parent_source_guid`` — read as a producer only where it names one
+        of *inputs* (the action's input before narrowing), since that field is the
+        original pool ancestor once an input has itself been expanded (#1022).
         """
         if not self._repairing:
             return set()
@@ -64,17 +72,55 @@ class DispositionGate:
                 action_name,
             )
             return set()
-        return self._stored_guids(action_name, relative_path) - self._repairing
 
-    def _stored_guids(self, action_name: str, relative_path: str) -> set[str]:
-        """Identities this action already holds a row for in *relative_path*."""
+        records = [record for record in inputs if isinstance(record, dict)]
+        held = {record["source_guid"] for record in records if record.get("source_guid")}
+        # An ancestor standing in the input beside its own descendant no longer
+        # identifies one input: a row of the descendant names it too, and guessing
+        # hands those rows to a repair of the ancestor for the rewrite to drop.
+        ancestors = {
+            record["parent_source_guid"]
+            for record in records
+            if record.get("parent_source_guid") in held
+        }
+        named = held & self._repairing
+        resolvable = named - ancestors
+        blocked = named - resolvable
+
+        carried: set[str] = set()
+        unresolved: set[str] = set()
+        for row in self._stored_rows(action_name, relative_path):
+            guid = row.get("source_guid")
+            if not guid:
+                continue
+            producer = row.get("parent_source_guid")
+            if guid in named or producer in resolvable:
+                continue
+            if producer in blocked or (guid not in held and producer not in held):
+                unresolved.add(guid)
+            carried.add(guid)
+
+        if unresolved and named:
+            logger.warning(
+                "Action '%s': %d stored row(s) cannot be attributed to an input of "
+                "this run, so repairing %d record(s) carries them as untouched and "
+                "duplicates any it regenerates. Either an identity minted below "
+                "another mint, or an input standing beside its own ancestor; "
+                "see issue #1022",
+                action_name,
+                len(unresolved),
+                len(named),
+            )
+        return carried
+
+    def _stored_rows(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+        """Rows this action already holds in *relative_path*."""
         if self._backend is None:
-            return set()
+            return []
         try:
-            prior = self._backend.read_target_for_rewrite(action_name, relative_path)
+            return self._backend.read_target_for_rewrite(action_name, relative_path)
         except FileNotFoundError:
-            return set()
-        return {r["source_guid"] for r in prior if r.get("source_guid")}
+            return []
 
     def filter(
         self,

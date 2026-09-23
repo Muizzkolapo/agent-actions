@@ -215,6 +215,10 @@ def process_initial_stage(ctx: InitialStageContext):
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
+    # The records a repair leaves out are what let the disposition gate tell a
+    # stored row of this action's own making from one minted upstream.
+    offered_to_repair = data_chunk
+
     # A repair re-reads the staged file whole, so narrowing has to happen here,
     # above the source save: anything still in the chunk becomes a stored input
     # row, and a file edited since the run being repaired would otherwise enter
@@ -264,7 +268,12 @@ def process_initial_stage(ctx: InitialStageContext):
         return _process_batch_mode(batch_ctx)
 
     return _process_online_mode_with_record_processor(
-        data_chunk, ctx, ctx.file_path, ctx.base_directory, ctx.output_directory
+        data_chunk,
+        ctx,
+        ctx.file_path,
+        ctx.base_directory,
+        ctx.output_directory,
+        offered_to_repair,
     )
 
 
@@ -740,7 +749,12 @@ def _process_batch_mode(ctx: BatchProcessingContext):
 
 
 def _process_online_mode_with_record_processor(
-    data_chunk, ctx: InitialStageContext, file_path, base_directory, output_directory
+    data_chunk,
+    ctx: InitialStageContext,
+    file_path,
+    base_directory,
+    output_directory,
+    offered_to_repair,
 ):
     """Process data in online mode using UnifiedProcessor."""
     relative_path = Path(file_path).relative_to(base_directory)
@@ -765,7 +779,9 @@ def _process_online_mode_with_record_processor(
         storage_backend=ctx.storage_backend,
     )
 
-    processed_items, stats = processor.process(data_chunk, processing_context, strategy)
+    processed_items, stats = processor.process(
+        data_chunk, processing_context, strategy, repair_inputs=offered_to_repair
+    )
 
     stats.raise_if_terminal_failure(
         ctx.agent_name, data_chunk, processed_items, ctx.storage_backend
