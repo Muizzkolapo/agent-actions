@@ -288,7 +288,7 @@ flowchart LR
 The flow:
 
 1. Input data placed in `agent_io/staging/`
-2. Agent Actions creates tracking references in `source/`
+2. Agent Actions stages each record into the store under `agent_io/store/`
 3. Actions execute in dependency order (parallel where possible)
 4. Each action output is validated and written to `target/{action_name}/`
 

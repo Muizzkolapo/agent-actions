@@ -35,12 +35,3 @@ class SourceDataLoader(ISourceDataLoader):
             extra={"agent_name": self.agent_name},
         )
         return self.storage_backend.read_source(source_relative_path)
-
-    def save_source_data(self, relative_path: str, data: list[dict]) -> None:
-        """Save source data to the storage backend."""
-        logger.debug(
-            "Saving source data to backend: %s",
-            relative_path,
-            extra={"agent_name": self.agent_name},
-        )
-        self.storage_backend.write_source(relative_path, data)

@@ -1,13 +1,10 @@
 """Regression tests: lineage preservation across version merge boundaries.
 
 When version_consumption merges outputs from N version agents, the merged
-record's lineage must survive into the consuming action's output.  Before the
-fix, _create_correlation_source_data() wrote skeletal source records without
-lineage, causing the enricher to truncate to [own_node_id].
+record's lineage must survive into the consuming action's output. The merged
+records are the consuming action's previous-stage output, so the enricher
+chains from them; truncating to [own_node_id] is the regression.
 """
-
-import json
-from pathlib import Path
 
 import pytest
 
@@ -26,13 +23,9 @@ def _write_version_outputs_to_backend(backend, version_agents: dict):
         backend._write_target_raw(agent_name, "data.json", enriched)
 
 
-def _load_source_data(agent_folder: Path, filename: str = "data.json") -> list[dict]:
-    """Load source records written by _create_correlation_source_data."""
-    source_file = agent_folder / "source" / filename
-    if not source_file.exists():
-        return []
-    with open(source_file) as f:
-        return json.load(f)
+def _merged(backend, action: str, filename: str = "data.json") -> list[dict]:
+    """The merged records a consuming action receives as previous-stage output."""
+    return backend.read_target(action, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +136,9 @@ class TestVersionMergeLineage:
 
         correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
 
-        source_data = _load_source_data(agent_folder)
-        assert len(source_data) == 1
-        assert "lineage" in source_data[0], "Source record must include lineage"
+        merged = _merged(backend, "consumer")
+        assert len(merged) == 1
+        assert "lineage" in merged[0], "Merged record must include lineage"
 
         enricher = LineageEnricher()
         result = ProcessingResult.success(
@@ -156,7 +149,7 @@ class TestVersionMergeLineage:
             agent_config={"agent_type": "consumer"},
             agent_name="consumer",
             is_first_stage=False,
-            source_data=source_data,
+            parent_records=merged,
         )
 
         enriched = enricher.enrich(result, context)
@@ -191,9 +184,6 @@ class TestVersionMergeLineage:
         assert result_dir is not None
         records = backend.read_target("consumer", "data.json")
         assert records[0]["source_guid"] == "sg-abc"
-
-        source_data = _load_source_data(agent_folder)
-        assert source_data[0]["source_guid"] == "sg-abc"
 
     def test_partial_merge_preserves_lineage(self, correlator, backend, agent_folder):
         """Missing versions don't break lineage on present versions."""
@@ -247,8 +237,8 @@ class TestVersionMergeLineage:
         rec2 = next(r for r in records if r["source_guid"] == "sg-002")
         assert rec2["lineage"] == ["root_001", "v1_bbb"]
 
-    def test_source_file_lineage_enables_enricher_chain(self, correlator, backend, agent_folder):
-        """Source file with lineage lets enricher build correct chain for multiple records."""
+    def test_merged_lineage_enables_enricher_chain(self, correlator, backend, agent_folder):
+        """Merged records with lineage let the enricher chain correctly for multiple records."""
         _write_version_outputs_to_backend(
             backend,
             {
@@ -292,8 +282,8 @@ class TestVersionMergeLineage:
         )
 
         correlator.prepare_correlated_input("consumer", ["gen_1", "gen_2"], 3)
-        source_data = _load_source_data(agent_folder)
-        assert len(source_data) == 2
+        merged = _merged(backend, "consumer")
+        assert len(merged) == 2
 
         # Enrich each record — per-item parent lookup via source_guid matching
         enricher = LineageEnricher()
@@ -307,7 +297,7 @@ class TestVersionMergeLineage:
                 agent_config={"agent_type": "consumer"},
                 agent_name="consumer",
                 is_first_stage=False,
-                source_data=source_data,
+                parent_records=merged,
             )
             enriched = enricher.enrich(result, context)
             item = enriched.data[0]

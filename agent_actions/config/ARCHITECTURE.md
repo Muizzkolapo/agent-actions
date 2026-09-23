@@ -210,7 +210,6 @@ Cache invalidation rules:
 ```
 PathType.AGENT_CONFIG      → {agent_name}/agent_config
 PathType.AGENT_IO          → {agent_name}/agent_io
-PathType.SOURCE            → {agent_name}/agent_io/source
 PathType.TARGET            → {agent_name}/agent_io/target/{action_name}
 PathType.SCHEMA            → schema
 PathType.PROMPT_STORE      → prompt_store

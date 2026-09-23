@@ -1,6 +1,5 @@
 """Tests for Loop Output Correlator functionality."""
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -124,41 +123,6 @@ class TestVersionOutputCorrelator:
         assert result_dir is not None, "prepare_correlated_input returned None"
         target_files = storage_backend.list_target_files("reconstruct_options")
         assert test_filename in target_files, f"Expected {test_filename} in backend target files"
-        source_file = temp_agent_folder / "source" / test_filename
-        assert source_file.exists(), f"Source file {test_filename} not created"
-
-    def test_correlation_source_includes_lineage(
-        self, correlator, storage_backend, temp_agent_folder
-    ):
-        """Source file created by correlation must include lineage for downstream enrichment."""
-        for i in range(1, 3):
-            action_name = f"scorer_{i}"
-            test_data = [
-                {
-                    "source_guid": "guid-1",
-                    "version_correlation_id": "corr-1",
-                    "target_id": "tid-1",
-                    "node_id": f"node_{i}_abc",
-                    "lineage": ["node_0_root", f"node_{i}_abc"],
-                    "_state": "processed",
-                    "_state_schema_version": 1,
-                    "content": {action_name: {f"score_{i}": 8}},
-                }
-            ]
-            storage_backend._write_target_raw(action_name, "data.json", test_data)
-
-        correlator.prepare_correlated_input("aggregate", ["scorer_1", "scorer_2"], 3)
-
-        source_file = temp_agent_folder / "source" / "data.json"
-        assert source_file.exists()
-        with open(source_file) as f:
-            source_data = json.load(f)
-
-        assert len(source_data) == 1
-        record = source_data[0]
-        assert record["source_guid"] == "guid-1"
-        assert len(record["lineage"]) >= 2
-        assert "node_0_root" in record["lineage"]
 
     def test_partial_record_handling(self, correlator, storage_backend, temp_agent_folder):
         """Test that records missing from some loops are still included."""

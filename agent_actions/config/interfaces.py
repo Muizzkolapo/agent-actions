@@ -43,11 +43,3 @@ class ISourceDataLoader(ILoader):
     async def load_source_data_async(self, source_relative_path: str) -> list[dict]:
         """Async version of load_source_data."""
         return await asyncio.to_thread(self.load_source_data, source_relative_path)
-
-    @abstractmethod
-    def save_source_data(self, relative_path: str, data: list[dict]) -> None:
-        """Save source data to the storage backend."""
-
-    async def save_source_data_async(self, relative_path: str, data: list[dict]) -> None:
-        """Async version of save_source_data."""
-        return await asyncio.to_thread(self.save_source_data, relative_path, data)

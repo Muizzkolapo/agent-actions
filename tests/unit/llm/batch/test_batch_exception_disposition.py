@@ -59,7 +59,6 @@ def _build_service(
     svc._context_manager = MagicMock()
     svc._result_processor = MagicMock()
     svc._registry_manager_factory = MagicMock()
-    svc._source_handler = None
     svc._action_indices = {}
     svc._dependency_configs = {}
     svc._storage_backend = storage_backend
