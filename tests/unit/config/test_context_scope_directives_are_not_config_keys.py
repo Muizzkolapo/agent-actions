@@ -19,6 +19,8 @@ DIRECTIVES = ["observe", "drops", "drop", "passthrough"]
 # What each spelling should be written as once it is under `context_scope:`.
 CANONICAL = {"observe": "observe", "drops": "drop", "drop": "drop", "passthrough": "passthrough"}
 
+ARTICLE = {"action": "an", "defaults": "a", "agent": "an"}
+
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
 
 
@@ -85,7 +87,10 @@ def test_the_refusal_says_where_the_directive_belongs(directive, level, surface)
         WorkflowConfig.model_validate(config)
 
     message = str(exc.value)
-    assert f"'{directive}' is a context_scope directive, not a {surface} key" in message
+    assert (
+        f"'{directive}' is a context_scope directive, not {ARTICLE[surface]} {surface} key"
+        in message
+    )
     assert "indent under context_scope:" in message
 
 
@@ -115,16 +120,18 @@ def test_a_directive_spelling_the_framework_does_not_read_is_refused_under_conte
     assert "drop, observe, passthrough, seed" in message
 
 
-@pytest.mark.parametrize("directive", ["observe", "drops"])
-def test_the_legacy_agents_block_refuses_the_directive_too(directive):
-    """`agents:` configs validate against a model that allows extras, so a key
-    removed from the action schema passes through there untouched."""
+@pytest.mark.parametrize("directive", DIRECTIVES)
+def test_the_legacy_agents_block_refuses_every_directive_too(directive):
+    """`agents:` configs validate against a model that allows extras, so no key
+    is refused there by being absent from the model. All four spellings get the
+    same refusal they get on an action — refusing a subset leaves the rest
+    accepted and read by nothing, which is the bug itself."""
     manager = ConfigManager.__new__(ConfigManager)
     manager.default_config = {}
     manager.tool_path = None
     manager.agent_configs = {}
 
-    with pytest.raises(ConfigurationError, match="removed field spelling") as exc:
+    with pytest.raises(ConfigurationError) as exc:
         manager.merge_agent_configs(
             [
                 {
@@ -137,7 +144,20 @@ def test_the_legacy_agents_block_refuses_the_directive_too(directive):
             ]
         )
 
-    assert exc.value.context["replacements"][directive].startswith("context_scope.")
+    message = str(exc.value)
+    assert f"'{directive}' is a context_scope directive, not an agent key" in message
+    assert f"    {CANONICAL[directive]}:" in message
+
+
+def test_the_refusal_names_the_action_it_came_from():
+    """pydantic locates the error as `actions.0`; a workflow of thirty actions
+    needs the name."""
+    with pytest.raises(ValidationError) as exc:
+        WorkflowConfig.model_validate(
+            _workflow(action={"name": "review_extraction", "observe": ["src.f"]})
+        )
+
+    assert "review_extraction" in str(exc.value).split("input_value")[0]
 
 
 @pytest.mark.parametrize("level", ["defaults", "action"])
