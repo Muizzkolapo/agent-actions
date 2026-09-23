@@ -13,7 +13,6 @@ DIRECTIVE_REGISTRY = {
     "observe": {"type": "list", "expand_versions": True},
     "passthrough": {"type": "list", "expand_versions": True},
     "drop": {"type": "list", "expand_versions": True},
-    "drops": {"type": "list", "expand_versions": True},
     # Dict directives - preserve as-is (never expand)
     "seed": {"type": "dict", "expand_versions": False},
 }

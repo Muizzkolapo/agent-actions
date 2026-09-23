@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
     "skip_if": "skip_condition",
+    "observe": "context_scope.observe",
+    "drops": "context_scope.drop",
 }
 
 

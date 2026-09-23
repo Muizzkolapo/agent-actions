@@ -15,13 +15,18 @@ from agent_actions.guards import GuardParser, parse_guard_config
 _NEAR_MISS_CUTOFF = 0.65
 _SQLITE_MAX_INT = 2**63 - 1
 
-# The list directives under `context_scope:`. Written beside it instead of under
-# it, they are the shape a YAML indentation slip produces.
-_CONTEXT_SCOPE_LIST_DIRECTIVES = frozenset({"observe", "passthrough", "drop", "drops"})
+# Directives that belong under `context_scope:`, mapped to the spelling each is
+# read under — nothing has ever read one under `drops`.
+_CONTEXT_SCOPE_LIST_DIRECTIVES = {
+    "observe": "observe",
+    "passthrough": "passthrough",
+    "drop": "drop",
+    "drops": "drop",
+}
 
 
-def _refuse_context_scope_siblings(data: Any) -> Any:
-    """Refuse a context_scope directive written as an action key."""
+def _refuse_context_scope_siblings(data: Any, surface: str) -> Any:
+    """Refuse a context_scope directive written as a key of *surface*."""
     if not isinstance(data, dict):
         return data
     stray = sorted(str(key) for key in data if str(key) in _CONTEXT_SCOPE_LIST_DIRECTIVES)
@@ -29,10 +34,10 @@ def _refuse_context_scope_siblings(data: Any) -> Any:
         return data
 
     raise ValueError(
-        "; ".join(f"'{key}' is a context_scope directive, not an action key" for key in stray)
+        "; ".join(f"'{key}' is a context_scope directive, not a {surface} key" for key in stray)
         + "; indent under context_scope:\n"
         "  context_scope:\n"
-        f"    {stray[0]}:\n"
+        f"    {_CONTEXT_SCOPE_LIST_DIRECTIVES[stray[0]]}:\n"
         "      - source.*"
     )
 
@@ -294,7 +299,7 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return _refuse_context_scope_siblings(data)
+        return _refuse_context_scope_siblings(data, "action")
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -453,7 +458,9 @@ class DefaultsConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(data, cls, "defaults")
+        return _refuse_undeclared_keys(
+            _refuse_context_scope_siblings(data, "defaults"), cls, "defaults"
+        )
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")

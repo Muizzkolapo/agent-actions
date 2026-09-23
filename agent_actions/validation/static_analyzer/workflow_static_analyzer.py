@@ -796,7 +796,7 @@ class WorkflowStaticAnalyzer:
             if not context_scope:
                 continue
 
-            for directive in ["observe", "drop", "passthrough", "drops"]:
+            for directive in ["observe", "drop", "passthrough"]:
                 field_refs = context_scope.get(directive, [])
                 if not isinstance(field_refs, list):
                     continue
