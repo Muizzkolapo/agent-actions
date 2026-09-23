@@ -191,8 +191,6 @@ class WorkflowParser:
             # Extract additional action configuration fields
             action["granularity"] = action_data.get("granularity")  # RECORD or FILE
             action["guard"] = action_data.get("guard")  # Conditional execution
-            action["drops"] = action_data.get("drops", [])  # Fields excluded from prompt
-            action["observe"] = action_data.get("observe", [])  # Pass-through fields
             action["policy"] = action_data.get("policy")  # Execution policy
             action["prompt"] = action_data.get("prompt")  # Prompt reference
             action["idempotency_key"] = action_data.get("idempotency_key")

@@ -292,13 +292,17 @@ These are the non-obvious behaviors, edge cases, and invariants that will bite y
 
 Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. Pydantic raises it per key, naming the key and its location. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
 
+Four names get a refusal of their own before Pydantic's: `observe`, `passthrough`, `drop` and `drops` are directives that belong *under* `context_scope:`, and written beside it they are what a YAML indentation slip produces. `extra_forbidden` names the key correctly and says nothing about the indentation, so the refusal does, and shows the nesting.
+
 ### 2. DefaultsConfig uses `extra="forbid"`
 
 Unlike `ActionConfig`, which leaves the refusal to Pydantic, the defaults section raises its own: it names every undeclared key, what each resembles, and then the keys the block takes. The list is unconditional — a suggestion is a string-distance match, so it lands on a real field often enough that a reader given only the guess is left with nothing when it is wrong.
 
-The invariant that makes the strictness safe runs one way: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins that containment; add to both when you add an inheritable field.
+The invariant that makes the strictness safe runs both ways: **a key is declared on `DefaultsConfig` if and only if something reads it out of a defaults block**.
 
-The converse does not hold and is not claimed. `drops` and `observe` are declared here and read from nowhere — a defaults-level value for either is accepted and never reaches an agent, which is the pre-existing shape this strictness cannot detect, because a declared key passes by definition. Generation parameters avoid it by being inherited as well as declared, `frequency_penalty` and `presence_penalty` included; declaring one without adding it to `SIMPLE_CONFIG_FIELDS` accepts it and then drops it.
+Left to right, it is what keeps the refusal from refusing a key the framework itself goes looking for. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those names off the defaults dict, so one in that set and missing from the model would fail at load while the expander still asked for it. A test pins that containment.
+
+Right to left is the side no schema check can cover, because a declared key passes validation by definition: declare a key nothing reads and a workflow setting it loads clean and gets nothing. `drops` and `observe` were that shape until they were removed — the live spelling is `context_scope: {drop: [...], observe: [...]}`, which is declared, inherited and read. `tests/unit/config/test_defaults_keys_declared_are_read.py` walks the package AST and pins this direction; add to both `DefaultsConfig` and `SIMPLE_CONFIG_FIELDS` when you add an inheritable field.
 
 ### 3. WorkflowConfig uses `extra="forbid"`
 

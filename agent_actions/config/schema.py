@@ -15,6 +15,27 @@ from agent_actions.guards import GuardParser, parse_guard_config
 _NEAR_MISS_CUTOFF = 0.65
 _SQLITE_MAX_INT = 2**63 - 1
 
+# The list directives under `context_scope:`. Written beside it instead of under
+# it, they are the shape a YAML indentation slip produces.
+_CONTEXT_SCOPE_LIST_DIRECTIVES = frozenset({"observe", "passthrough", "drop", "drops"})
+
+
+def _refuse_context_scope_siblings(data: Any) -> Any:
+    """Refuse a context_scope directive written as an action key."""
+    if not isinstance(data, dict):
+        return data
+    stray = sorted(str(key) for key in data if str(key) in _CONTEXT_SCOPE_LIST_DIRECTIVES)
+    if not stray:
+        return data
+
+    raise ValueError(
+        "; ".join(f"'{key}' is a context_scope directive, not an action key" for key in stray)
+        + "; indent under context_scope:\n"
+        "  context_scope:\n"
+        f"    {stray[0]}:\n"
+        "      - source.*"
+    )
+
 
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
     """Name every undeclared key, what each resembles, and the keys *surface* takes.
@@ -270,6 +291,11 @@ class ActionConfig(_RetryValidators):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _no_context_scope_siblings(cls, data: Any) -> Any:
+        return _refuse_context_scope_siblings(data)
+
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
     kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
@@ -282,14 +308,6 @@ class ActionConfig(_RetryValidators):
         default=None,
         description="Output schema",
         alias="schema",  # noqa: A003 — shadows builtin; rename breaks YAML compat
-    )
-    drops: list[str] = Field(
-        default_factory=list, description="Fields to exclude from LLM prompt and final output"
-    )
-    observe: list[str] = Field(
-        default_factory=list,
-        description="Fields to pass-through from input to output without LLM "
-        "generation (visible to LLM but not regenerated)",
     )
     granularity: Granularity | None = Field(default=None, description="Execution granularity")
     guard: str | dict[str, Any] | None = Field(
@@ -442,14 +460,6 @@ class DefaultsConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="Default JSON mode setting")
     granularity: Granularity | None = Field(default=None, description="Default granularity")
     run_mode: RunMode | None = Field(default=None, description="Default run mode")
-    drops: list[str] | None = Field(
-        default=None, description="Default fields to exclude from LLM prompt and output"
-    )
-    observe: list[str] | None = Field(
-        default=None,
-        description="Default fields to pass-through from input to output "
-        "(visible to LLM but not regenerated)",
-    )
     data_source: str | dict[str, Any] | None = Field(
         default=None,
         description="Default data source for start-node input",
