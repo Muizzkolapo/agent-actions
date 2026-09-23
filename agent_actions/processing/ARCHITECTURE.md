@@ -51,7 +51,7 @@ Input records (from staging or upstream action)
     ▼
 ┌──────────────────────────────────────────────────────┐
 │  Step 1: GUARD FILTER                                │
-│  unified.py:108-115                                  │
+│  unified.py:150-162                                  │
 │                                                      │
 │  Evaluates guard clause from YAML config:            │
 │    guard: { condition: '...', on_false: "filter" }   │
@@ -65,7 +65,7 @@ Input records (from staging or upstream action)
            ▼
 ┌──────────────────────────────────────────────────────┐
 │  Step 2: SOURCE_GUID ASSIGNMENT (first-stage only)   │
-│  unified.py:119-122                                  │
+│  unified.py:116-119                                  │
 │                                                      │
 │  First-stage records have no source_guid (they come  │
 │  from staging files). Assigns deterministic UUID5    │
