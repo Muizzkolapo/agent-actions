@@ -10,12 +10,17 @@ pins the second against the first.
 import json
 import pathlib
 import tempfile
+from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.processing.enrichment import VersionIdEnricher
+from agent_actions.processing.enrichment import LineageEnricher, VersionIdEnricher
 from agent_actions.processing.source_resolution import resolve_source_content
-from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.types import (
+    ProcessingContext,
+    ProcessingResult,
+    ProcessingStatus,
+)
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.merge import _select_universal_key, merge_records_by_key
@@ -364,3 +369,41 @@ class TestWhatTheDerivedCorrelationIdBuys:
         rows, _ = reconcile_outputs(invented(1), "a2", [{"source_guid": "G0", "content": {}}])
 
         assert "version_correlation_id" not in rows[0]
+
+
+class TestWhenTheToolReturnsMoreRowsThanInputs:
+    """``file_tool`` calls that an expansion, and ``LineageEnricher`` then re-mints
+    every row and backfills ``parent_source_guid`` from the guid it replaced. A row
+    that named no producer is given one there — unresolvable, and read as absent by
+    every consumer, but no longer absent. Pinned so the deviation from what this
+    module writes is visible here rather than only in #1044."""
+
+    def _expanded(self):
+        raw = FileUDFResult(
+            [{"source_index": 0, "data": {"o": 0}}, {"source_index": None, "data": {"o": 1}}]
+        )
+        return reconcile_outputs(raw, "a2", records("G0"))[0]
+
+    def test_this_module_leaves_the_invented_row_unattributed(self):
+        rows = self._expanded()
+
+        assert rows[1].get("parent_source_guid") is None
+
+    def test_lineage_enrichment_then_gives_it_one_that_resolves_to_nothing(self):
+        rows = self._expanded()
+        minted = rows[1]["source_guid"]
+        context = MagicMock(spec=ProcessingContext)
+        context.action_name = context.agent_name = "a2"
+        context.is_first_stage = False
+        context.source_data = None
+        context.parent_records = []
+        context.record_index = 0
+        context.agent_config = {}
+
+        enriched = LineageEnricher().enrich(
+            ProcessingResult(data=rows, status=ProcessingStatus.SUCCESS, is_expansion=True),
+            context,
+        )
+
+        assert enriched.data[1]["parent_source_guid"] == minted
+        assert resolve_source_content(enriched.data[1], None, [{"source_guid": "G0"}]) is None

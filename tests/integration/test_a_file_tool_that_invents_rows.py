@@ -205,3 +205,23 @@ def test_what_a_retry_does_to_a_row_no_single_record_produced(inventing):
         counts.append(len(_raw(inventing, "roll_up")))
 
     assert counts == [2, 4, 6], f"the retry behaviour changed: {counts}"
+
+
+def test_a_row_carried_past_a_retry_keeps_what_came_before_it(inventing):
+    """Counting the rows is not enough — they can survive and be gutted.
+
+    A carried row is read back reconstructed, and the mode it was stored under
+    does not survive that read, so it would be re-stored as a delta against an
+    identity nothing upstream holds and come back with only this action's
+    namespace. That is the loss this ticket exists to stop, returning on the
+    first repair.
+    """
+    selected = _record_ids(inventing, ACTION)[1]
+    _fail(inventing, selected, ACTION)
+
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+    assert result.exit_code == 0, result.output
+
+    namespaces = [sorted(r.get("content", {})) for r in _read_back(inventing, "roll_up")]
+    assert namespaces == [["flatten", "roll_up", "source"]] * len(namespaces)
+    assert len(namespaces) == 4
