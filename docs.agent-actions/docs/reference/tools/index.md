@@ -139,7 +139,7 @@ def aggregate_tool(data: list[dict], **kwargs) -> list[dict]:
 | What you return | Framework behavior |
 |---|---|
 | Original record dict (has `node_id`) | Extends parent lineage — downstream `observe` can load ancestor data |
-| New dict (no `node_id`) | Creates new root — fresh lineage, no parent |
+| New dict (no `node_id`) | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and names the input it stands in for as `parent_source_guid` so `source` still resolves. |
 
 ## Tool Discovery
 

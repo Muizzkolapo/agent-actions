@@ -52,13 +52,12 @@ def _reattach_source_guid(
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
-    Mutates structured_data in place; an explicit tool value wins. A row with no
-    inheritable parent — synthetic, unmapped, or a parent lacking one — is born
-    here rather than left blank for a fallback to fabricate.
-
-    So are several rows claiming one parent: one guid shared between distinct
-    entities is one row to every store keyed by identity. Each keeps the parent
-    as ``parent_source_guid``; a parent's only child inherits as before.
+    Mutates structured_data in place; an explicit tool value wins. A parent's
+    only child inherits; every other row is born here — one with nothing to
+    inherit (synthetic, or a parent carrying no guid), and each of several rows
+    claiming one parent, since one guid shared between distinct entities is one
+    row to every store keyed by identity. Born rows are marked alike: the marks
+    follow from the minting, not from which of those a row is.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -74,27 +73,28 @@ def _reattach_source_guid(
         parent = original_data[source_idx] if source_idx is not None else None
         parent_guid = parent.get("source_guid") if parent else None
 
-        if parent is not None and claimed[cast(int, source_idx)] > 1:
-            # Hand on the pool-resolvable identity, not the intermediate one: a
-            # parent that is itself an expansion child has a minted guid that
-            # matches nothing in the source pool.
-            inherited = parent.get("parent_source_guid") or parent_guid
-            if inherited and not item.get("parent_source_guid"):
-                item["parent_source_guid"] = inherited
-            item["source_guid"] = IDGenerator.generate_source_guid()
-            # A minted guid joins nothing upstream, so the row has to carry its
-            # whole content rather than be stored as a delta against it.
-            item["_delta_mode"] = "full"
-            # The parent's correlation id would fan these back into one row at a
-            # merge, undoing the identity they were just given.
-            item.pop("version_correlation_id", None)
-            continue
-
-        if parent is not None:
+        if parent is not None and parent_guid and claimed[cast(int, source_idx)] == 1:
             if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = parent["parent_source_guid"]
+            item["source_guid"] = parent_guid
+            continue
 
-        item["source_guid"] = parent_guid or IDGenerator.generate_source_guid()
+        # Attributed to the input whose namespaces it carries — its own parent, or
+        # the one _resolve_input_record stands in — by that input's pool-resolvable
+        # identity: an expansion child's own guid matches nothing in the pool.
+        attributed = parent if parent is not None else _resolve_input_record(None, original_data)
+        if attributed is not None and not item.get("parent_source_guid"):
+            inherited = attributed.get("parent_source_guid") or attributed.get("source_guid")
+            if inherited:
+                item["parent_source_guid"] = inherited
+        item["source_guid"] = IDGenerator.generate_source_guid()
+        # A minted guid joins nothing upstream, so the row has to carry its whole
+        # content rather than be stored as a delta against it.
+        item["_delta_mode"] = "full"
+        # The correlation id it inherited belongs to a record it is not, and a
+        # merge groups on that before anything else — undoing the identity the
+        # row was just given.
+        item.pop("version_correlation_id", None)
 
 
 def _resolve_input_record(
