@@ -638,9 +638,11 @@ class TestEdgeCases:
         assert prompt_ctx["seed"]["ref_data"] == [1, 2, 3]
 
     def test_orphaned_directives_detected(self):
-        """context_scope: null with observe as sibling -> error."""
-        from agent_actions.input.context.normalizer import detect_orphaned_directives
+        """context_scope: null with observe as sibling -> refused at load."""
+        import pytest
+
+        from agent_actions.config.schema import refuse_context_scope_siblings
 
         config = {"context_scope": None, "observe": ["dep.*"]}
-        orphaned = detect_orphaned_directives(config)
-        assert "observe" in orphaned
+        with pytest.raises(ValueError, match="observe"):
+            refuse_context_scope_siblings(config, "action")

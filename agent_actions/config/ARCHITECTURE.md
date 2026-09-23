@@ -306,7 +306,7 @@ Left to right, it is what keeps the refusal from refusing a key the framework it
 
 Right to left is the side no schema check can cover, because a declared key passes validation by definition: declare a key nothing reads and a workflow setting it loads clean and gets nothing. `drops` and `observe` were that shape until they were removed — the live spelling is `context_scope: {drop: [...], observe: [...]}`, which is declared, inherited and read. `tests/unit/config/test_defaults_keys_declared_are_read.py` walks the package AST and pins this direction; add to both `DefaultsConfig` and `SIMPLE_CONFIG_FIELDS` when you add an inheritable field.
 
-The same shape reached two surfaces beyond this one, and both are closed the same way. `ActionConfig` declared the pair too. The legacy top-level `agents:` format validates against `AgentConfig`, whose `extra="allow"` means removing a field there refuses nothing on its own, so both names join `_REMOVED_AGENT_SPELLINGS` in `manager.py` — the mechanism that already existed for exactly this hole.
+The same shape reached two surfaces beyond this one, and all three are closed by one function. `ActionConfig` declared the pair too. The legacy top-level `agents:` format validates against `AgentConfig`, whose `extra="allow"` means removing a field there refuses nothing on its own, so `merge_agent_configs` calls `refuse_context_scope_siblings` directly. Every surface that validates an action-shaped dict calls it, and each calls it with all four spellings: refusing a subset on one surface is the bug again, one spelling over.
 
 ### 3. WorkflowConfig uses `extra="forbid"`
 

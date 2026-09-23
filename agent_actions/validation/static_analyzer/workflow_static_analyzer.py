@@ -14,7 +14,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.guards.consolidated_guard import GuardBehavior
 from agent_actions.input.context.normalizer import (
     SEED_CONFIG_KEYS,
-    detect_orphaned_directives,
     normalize_context_scope,
 )
 from agent_actions.output.response.config_fields import get_default
@@ -435,21 +434,10 @@ class WorkflowStaticAnalyzer:
             context_scope = action.get("context_scope")
             if not context_scope or not isinstance(context_scope, dict):
                 if context_scope is None and "context_scope" in action:
-                    orphaned = detect_orphaned_directives(action)
-                    if orphaned:
-                        hint = (
-                            f"{', '.join(orphaned)} are siblings of context_scope "
-                            "instead of children. This is usually a YAML indentation error — "
-                            "indent them under context_scope:\n"
-                            "  context_scope:\n"
-                            "    observe:\n"
-                            "      - source.*"
-                        )
-                    else:
-                        hint = (
-                            "context_scope is null. Check YAML indentation — "
-                            "observe/passthrough/drop must be indented under context_scope."
-                        )
+                    hint = (
+                        "context_scope is null. Check YAML indentation — "
+                        "observe/passthrough/drop must be indented under context_scope."
+                    )
                 elif context_scope is not None and not isinstance(context_scope, dict):
                     hint = (
                         f"context_scope must be a mapping, got {type(context_scope).__name__}. "

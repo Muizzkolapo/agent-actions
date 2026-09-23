@@ -16,7 +16,7 @@ from agent_actions.config.path_config import (
     resolve_project_root,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
-from agent_actions.config.schema import WorkflowConfig
+from agent_actions.config.schema import WorkflowConfig, refuse_context_scope_siblings
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
@@ -34,8 +34,6 @@ logger = logging.getLogger(__name__)
 _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
     "skip_if": "skip_condition",
-    "observe": "context_scope.observe",
-    "drops": "context_scope.drop",
 }
 
 
@@ -265,6 +263,16 @@ class ConfigManager:
         )
         default_agent_config = default_model.model_dump()
         for agent in user_agents:
+            try:
+                refuse_context_scope_siblings(agent, "agent")
+            except ValueError as e:
+                raise ConfigurationError(
+                    str(e),
+                    context={
+                        "agent_type": agent.get("agent_type") or "NOT_SET",
+                        "operation": "merge_agent_configs",
+                    },
+                ) from e
             removed = _REMOVED_AGENT_SPELLINGS.keys() & agent.keys()
             if removed:
                 raise ConfigurationError(

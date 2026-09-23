@@ -25,16 +25,26 @@ _CONTEXT_SCOPE_LIST_DIRECTIVES = {
 }
 
 
-def _refuse_context_scope_siblings(data: Any, surface: str) -> Any:
-    """Refuse a context_scope directive written as a key of *surface*."""
+def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
+    """Refuse a context_scope directive written as a key of *surface*.
+
+    Every surface that validates one of these dicts calls this, including the
+    two whose models allow extras and so refuse nothing by omission.
+    """
     if not isinstance(data, dict):
         return data
     stray = sorted(str(key) for key in data if str(key) in _CONTEXT_SCOPE_LIST_DIRECTIVES)
     if not stray:
         return data
 
+    article = "an" if surface[0] in "aeiou" else "a"
+    named = data.get("name") or data.get("agent_type")
+    where = f"{surface} '{named}': " if isinstance(named, str) and named else ""
     raise ValueError(
-        "; ".join(f"'{key}' is a context_scope directive, not a {surface} key" for key in stray)
+        where
+        + "; ".join(
+            f"'{key}' is a context_scope directive, not {article} {surface} key" for key in stray
+        )
         + "; indent under context_scope:\n"
         "  context_scope:\n"
         f"    {_CONTEXT_SCOPE_LIST_DIRECTIVES[stray[0]]}:\n"
@@ -299,7 +309,7 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return _refuse_context_scope_siblings(data, "action")
+        return refuse_context_scope_siblings(data, "action")
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -459,7 +469,7 @@ class DefaultsConfig(_RetryValidators):
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(
-            _refuse_context_scope_siblings(data, "defaults"), cls, "defaults"
+            refuse_context_scope_siblings(data, "defaults"), cls, "defaults"
         )
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
@@ -706,6 +716,7 @@ class WorkflowConfig(BaseModel):
 
 __all__ = [
     "ActionKind",
+    "refuse_context_scope_siblings",
     "Granularity",
     "HitlConfig",
     "VersionConfig",
