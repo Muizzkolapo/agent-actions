@@ -198,8 +198,42 @@ def _resolve_api(
         _fetch_api_data(config, cache_file)
     else:
         logger.info("Using cached API data: %s (from %s)", cache_file, config.url)
+        _bring_cache_to_the_document_rule(cache_file)
 
     return DataSourceResolutionResult(directories=[cache_dir])
+
+
+def _as_staging_document(payload: Any) -> list[Any]:
+    """Read an API response as the staging document the cache file must hold.
+
+    The walk reads that file as a list of records. A response that is not a list
+    is the single record it has always staged as — the reader cannot wrap a file
+    the framework wrote.
+    """
+    return payload if isinstance(payload, list) else [payload]
+
+
+def _bring_cache_to_the_document_rule(cache_file: Path) -> None:
+    """Rewrite a cache entry written before a response was stored as a document."""
+    try:
+        cached = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ConfigurationError(
+            f"Cached API data at {cache_file} cannot be read: {e}. "
+            "Delete the _remote_cache/api/ directory to fetch it again.",
+            context={"cache_file": str(cache_file), "operation": "read_api_cache"},
+            cause=e,
+        ) from e
+
+    if isinstance(cached, list):
+        return
+
+    logger.info(
+        "Rewriting cached API data as a staging document: %s (held %s)",
+        cache_file,
+        type(cached).__name__,
+    )
+    atomic_json_write(cache_file, _as_staging_document(cached), fsync=False)
 
 
 def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
@@ -226,11 +260,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 
         parsed = json.loads(data)
 
-        # The cache file is walked as a staging document, which must be a list of
-        # records. A response that is not one is the single record it has always
-        # staged as — the reader cannot wrap a file the framework wrote.
-        document = parsed if isinstance(parsed, list) else [parsed]
-        atomic_json_write(cache_file, document, fsync=False)
+        atomic_json_write(cache_file, _as_staging_document(parsed), fsync=False)
 
         logger.info("Fetched and cached API data: %s -> %s", config.url, cache_file)
 
