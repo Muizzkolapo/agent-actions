@@ -281,7 +281,7 @@ def _carry_persistent_fields(
 
     1. **Tracking fields** (``source_guid``, ``parent_source_guid``,
        ``version_correlation_id``) — the record's stable identity, set once
-       at creation (parent_source_guid at expansion re-mint).
+       at creation (parent_source_guid wherever a minted row knows its producer).
     2. **Lifecycle fields** (``_state_history``, ``_state_schema_version``) —
        metadata tied to the record's state machine; ``_state_history`` grows
        across stages, ``_state_schema_version`` tags the history format.

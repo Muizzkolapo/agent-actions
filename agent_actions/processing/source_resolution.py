@@ -23,8 +23,8 @@ def resolve_source_content(
     """Resolve source content for a non-first-stage record by identity.
 
     1. Record content has "source" key -> return record (already source-shaped)
-    2. Own source_guid, then the record's carried parent_source_guid (the
-       original pool identity, preserved when expansion re-mints guids) ->
+    2. Own source_guid, then the record's carried parent_source_guid (the pool
+       identity a minted row carries when it knows its producer) ->
        look up by guid
     3. Neither identity resolves against a non-empty pool -> None. Never the
        item itself -- that would expose the record's own action-output

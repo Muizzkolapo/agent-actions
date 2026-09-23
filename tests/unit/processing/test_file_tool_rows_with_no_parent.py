@@ -18,7 +18,7 @@ from agent_actions.processing.source_resolution import resolve_source_content
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
-from agent_actions.workflow.merge import merge_records_by_key
+from agent_actions.workflow.merge import _select_universal_key, merge_records_by_key
 from agent_actions.workflow.pipeline_file_mode import reconcile_outputs
 
 UPSTREAM = {"source": {"t": "alpha"}, "a1": {"v": 1}}
@@ -137,6 +137,27 @@ class TestARowThatNamesNoParent:
 
         assert [row.get("parent_source_guid") for row in rows] == [None, None]
 
+    @pytest.mark.parametrize("version_merge", [False, True])
+    def test_an_ancestor_carried_from_the_input_is_cleared_not_kept(self, version_merge):
+        """The row takes its namespaces from ``original_data[0]``, and the envelope
+        carries that record's tracking fields with them. When the input is itself
+        an expansion child it carries an ancestor, which arrives on the row looking
+        inherited — every consumer would read it as this row's producer."""
+        expansion_children = [
+            {
+                "source_guid": f"M{i}",
+                "parent_source_guid": "POOL0",
+                "content": {"a1": {"i": i}},
+            }
+            for i in range(2)
+        ]
+
+        rows, _ = reconcile_outputs(
+            invented(2), "a2", expansion_children, version_merge=version_merge
+        )
+
+        assert [row.get("parent_source_guid") for row in rows] == [None, None]
+
     def test_it_does_not_take_the_identity_of_the_input_standing_in_for_it(self):
         """``_resolve_input_record`` stands ``original_data[0]`` in for namespace
         carry-forward. That is a content decision, not an identity one."""
@@ -214,7 +235,7 @@ class TestAParentThatCarriesNoIdentity:
         )
 
         assert rows[0]["_delta_mode"] == "full"
-        assert "version_correlation_id" not in rows[0]
+        assert rows[0]["version_correlation_id"] == "V1#0"
 
     def test_it_is_attributed_to_its_own_parent_not_to_the_first_input(self):
         """The stand-in only applies to a row that names no parent. This one
@@ -307,29 +328,39 @@ class TestUnderAVersionedAction:
         assert len(merge_records_by_key(self._enriched(kept))) == 1
 
 
-class TestWhatTheCorrelationDropCosts:
-    """Dropping the id makes the row a plain branch — the shape
-    ``_select_universal_key`` already handles by keying the whole pool on
-    ``source_guid`` rather than per record. Pinned because that demotion is
-    visible to an unrelated fan-in that happens to share the pool."""
+class TestWhatTheDerivedCorrelationIdBuys:
+    """The id is derived from the one the row inherited rather than dropped. A
+    dropped id makes the row keyless, and ``_select_universal_key`` answers a
+    mixed pool by keying every record on ``source_guid`` — which splits an
+    unrelated fan-in that merely shares the merge pool."""
 
     FANNED = [
         {"source_guid": "m1", "version_correlation_id": "V9", "content": {"a": 1}},
         {"source_guid": "m2", "version_correlation_id": "V9", "content": {"b": 2}},
     ]
 
-    def test_a_fan_in_on_its_own_still_merges(self):
-        assert len(merge_records_by_key([dict(r) for r in self.FANNED])) == 1
-
-    def test_a_row_with_no_parent_in_the_pool_demotes_the_key_for_everyone(self):
-        """The trade, stated: the rows the identity was minted to separate stay
-        separate, and a fan-in sharing the pool is keyed on ``source_guid``
-        instead, which splits it. Keeping the inherited id is the reported bug;
-        minting a fresh one needs the version base name and session id this
-        function is not given. Left as a follow-up rather than guessed at.
-        """
+    def test_a_fan_in_sharing_the_pool_still_merges(self):
         rows, _ = reconcile_outputs(invented(1), "a2", records("G0"))
 
         pool = [dict(r) for r in self.FANNED] + rows
 
-        assert len(merge_records_by_key(pool)) == 3
+        assert _select_universal_key(pool) == "version_correlation_id"
+        assert len(merge_records_by_key(pool)) == 2
+
+    def test_the_matching_rows_of_two_version_branches_still_correlate(self):
+        """Two branches of a versioned action run the same tool over the same
+        input. A freshly minted id differs per branch and would leave the
+        branches uncorrelated; a derived one matches."""
+        parents = records("G0", "G1")
+
+        first, _ = reconcile_outputs(invented(2), "a2", parents)
+        second, _ = reconcile_outputs(invented(2), "a2", parents)
+
+        assert [r["version_correlation_id"] for r in first] == [
+            r["version_correlation_id"] for r in second
+        ]
+
+    def test_a_row_whose_input_carried_no_id_is_not_given_one(self):
+        rows, _ = reconcile_outputs(invented(1), "a2", [{"source_guid": "G0", "content": {}}])
+
+        assert "version_correlation_id" not in rows[0]

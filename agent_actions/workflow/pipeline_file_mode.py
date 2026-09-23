@@ -53,12 +53,11 @@ def _reattach_source_guid(
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
     Mutates structured_data in place; an explicit tool value wins. A parent's only
-    child inherits; every other row is born here — one with nothing to inherit,
-    and each of several rows claiming one parent, since one guid shared between
-    distinct entities is one row to every store keyed by identity.
-
-    Born rows carry the same storage marks; they differ on ``parent_source_guid``,
-    read as the row's *producer*, which a row that named no parent cannot claim.
+    child inherits; every other row is born here, since one guid shared between
+    distinct entities is one row to every store keyed by identity. Born rows are
+    stored whole and take a correlation id derived from the one they inherited —
+    distinct per row, equal across version branches — and claim a producer only
+    where they named a parent.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -82,19 +81,26 @@ def _reattach_source_guid(
 
         # Hand on the parent's pool-resolvable identity, not the intermediate one:
         # a parent that is itself an expansion child has a minted guid matching
-        # nothing in the source pool. A row with no parent is left unattributed.
+        # nothing in the source pool.
         if parent is not None:
             inherited = parent.get("parent_source_guid") or parent_guid
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
+        else:
+            # The envelope carried this field from `original_data[0]` along with
+            # its namespaces. That record's ancestor is not this row's producer —
+            # no single input is — and every consumer reads the field as one.
+            item.pop("parent_source_guid", None)
         item["source_guid"] = IDGenerator.generate_source_guid()
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.
         item["_delta_mode"] = "full"
-        # The correlation id it inherited belongs to a record it is not, and a
-        # merge groups on that before anything else — undoing the identity the
-        # row was just given.
-        item.pop("version_correlation_id", None)
+        # Distinct per row so a merge cannot fan them back into the one identity
+        # they were just given; derived, so two version branches still correlate
+        # and the pool keeps a key every record shares. A bare drop loses both.
+        inherited_correlation = item.get("version_correlation_id")
+        if inherited_correlation:
+            item["version_correlation_id"] = f"{inherited_correlation}#{i}"
 
 
 def _resolve_input_record(
