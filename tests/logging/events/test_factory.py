@@ -219,3 +219,21 @@ class TestLoggerFactoryIntegration:
         event = capture.events[-1]
         assert event.meta.invocation_id == "test-inv"
         assert event.meta.extra.get("workflow_name") == "test-workflow"
+
+
+class TestLoggerFactoryFileHandlerSink:
+    """Regression: 627 — a read-only command still writes the event log it
+    promises to keep clean."""
+
+    def test_initialize_without_output_dir_creates_no_log_directory(self, tmp_path, monkeypatch):
+        """No output_dir means no workflow run is executing (CLI startup,
+        `agac inspect`, `validate-udfs`, ...). Registering a file handler here
+        wrote every such command's events into a project-wide log with no
+        owner and no rotation — 519MB in the real project."""
+        monkeypatch.delenv("AGENT_ACTIONS_NO_LOG_FILE", raising=False)
+        (tmp_path / "agent_actions.yml").write_text("version: '1.0'\n")
+        monkeypatch.chdir(tmp_path)
+
+        LoggerFactory.initialize()
+
+        assert not (tmp_path / "logs").exists()
