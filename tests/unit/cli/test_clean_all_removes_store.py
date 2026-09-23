@@ -242,3 +242,26 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def test_all_still_removes_a_source_directory_left_by_an_earlier_release(tmp_path):
+    """Nothing writes agent_io/source/ any more, but every project that ran a
+    version-merge before carries one, holding per-record source_guid, lineage and
+    node_id. --all says it removes all agent_io directories, and someone scrubbing
+    a workspace before handing it over is entitled to believe that."""
+    cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+
+    cleaner.run()
+
+    assert "source" in _cleaned_names(agent_manager)
+
+
+def test_target_does_not_touch_a_leftover_source_directory(tmp_path):
+    """--target is scoped to generated output; the leftover is --all's business."""
+    cleaner, agent_manager = _make_cleaner(
+        tmp_path, remove_all=False, remove_target=True, force=True
+    )
+
+    cleaner.run()
+
+    assert "source" not in _cleaned_names(agent_manager)
