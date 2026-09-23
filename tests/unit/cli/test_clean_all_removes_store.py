@@ -56,7 +56,7 @@ def test_all_removes_store(tmp_path):
     cleaner.run()
     names = _cleaned_names(agent_manager)
     assert "store" in names, f"--all must remove store/, got {names}"
-    assert names == {"target", "staging", "store"}
+    assert names == {"target", "staging", "store", "source"}
 
 
 def test_no_all_preserves_store(tmp_path):
@@ -173,7 +173,7 @@ def test_all_ignores_backend_that_owns_no_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"target", "staging", "store"}, (
+    assert names == {"target", "staging", "store", "source"}, (
         "Remote backend contributed no paths yet SQLite's store/ still gets wiped"
     )
 
@@ -237,7 +237,7 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"target", "staging", "store", "warehouse"}
+    assert names == {"target", "staging", "store", "source", "warehouse"}
 
 
 if __name__ == "__main__":  # pragma: no cover

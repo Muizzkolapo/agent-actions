@@ -71,7 +71,7 @@ def test_all_still_removes_everything(tmp_path):
     """Regression: explicit --all callers keep today's full-removal behaviour."""
     cleaner, agent_manager = _make_cleaner(tmp_path, force=True, remove_all=True)
     cleaner.run()
-    assert _cleaned_names(agent_manager) == {"target", "staging", "store"}
+    assert _cleaned_names(agent_manager) == {"target", "staging", "store", "source"}
 
 
 def test_target_with_all_is_still_full_removal(tmp_path):
@@ -79,7 +79,7 @@ def test_target_with_all_is_still_full_removal(tmp_path):
         tmp_path, force=True, remove_target=True, remove_all=True
     )
     cleaner.run()
-    assert _cleaned_names(agent_manager) == {"target", "staging", "store"}
+    assert _cleaned_names(agent_manager) == {"target", "staging", "store", "source"}
 
 
 def test_cli_exposes_target_flag():

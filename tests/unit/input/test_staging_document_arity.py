@@ -130,7 +130,7 @@ class TestTheStoreCanSeeAOneRowDocument:
         backend = SQLiteBackend(str(tmp_path / "s.db"), "wf")
         backend.initialize()
         rows = _prepare([PAYLOAD], "batch", str(doc))
-        _save_source_data([], rows, str(doc), str(staging), str(target), storage_backend=backend)
+        _save_source_data([], rows, str(doc), str(staging), storage_backend=backend)
         stored = backend.read_source("ticket")
         backend.close()
         assert [row["content"]["source"] for row in stored] == [PAYLOAD]
@@ -140,7 +140,7 @@ class TestTheStoreCanSeeAOneRowDocument:
         backend = SQLiteBackend(str(tmp_path / "s.db"), "wf")
         backend.initialize()
         rows = _prepare([PAYLOAD], "batch", str(doc))
-        _save_source_data([], rows, str(doc), str(staging), str(target), storage_backend=backend)
+        _save_source_data([], rows, str(doc), str(staging), storage_backend=backend)
         stored = backend.read_source("ticket")
         backend.close()
         assert [row["source_guid"] for row in stored] == [rows[0]["source_guid"]]

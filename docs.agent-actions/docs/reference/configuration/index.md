@@ -268,7 +268,6 @@ project/
         │   └── my_workflow.yml # Agentic workflow definition
         ├── agent_io/
         │   ├── staging/        # Input data (starting point)
-        │   ├── source/         # Metadata tracking
         │   └── target/         # Output data
         ├── seed_data/          # Static reference data (workflow-level)
         └── prompt_store/       # Domain-specific prompts (optional)

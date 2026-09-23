@@ -147,7 +147,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 |---------|-------------|
 | [`init`](./utilities#init) | Initialize a new project |
 | [`example`](./utilities#example) | Browse and install example projects from GitHub |
-| [`clean`](./utilities#clean) | Remove regenerable working directories (output/staging opt-in) |
+| [`clean`](./utilities#clean) | Remove working directories — say which with --target or --all |
 | [`docs`](./utilities#docs) | Generate documentation |
 | [`status`](./utilities#status) | Check agentic workflow status |
 | [`skills`](./skills) | Install AI assistant skills (Claude Code / Codex) |

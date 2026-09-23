@@ -32,7 +32,7 @@ from agent_actions.llm.realtime.cleaner import Cleaner
     is_flag=True,
     default=False,
     help=(
-        "Also remove the target directory (agent_io/target/ — your "
+        "Remove the target directory (agent_io/target/ — your "
         "generated output). Confirms unless --force."
     ),
 )

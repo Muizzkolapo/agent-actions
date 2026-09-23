@@ -140,10 +140,7 @@ Removes:
 
 **Examples:**
 ```bash
-# Remove regenerable preprocessed inputs (with confirmation)
-agac clean -a my_workflow
-
-# Also remove generated output
+# Remove generated output (with confirmation)
 agac clean -a my_workflow --target
 
 # Remove everything, including staging inputs and the durable store

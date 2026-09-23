@@ -15,7 +15,7 @@ processing.
 | `BaseLoader` | Class | Generic loader with `load_file(_async)`, `process(_async)`, and `supports_filetype` contracts. | `config.interfaces`, `typing` |
 | `file_reader.py` | Module | Convenience reader for PDFs, DOCX, HTML, Excel, XML, Markdown, and other user-facing file types with rich error handling. | `processors`, `logging` |
 | `json.py` | Module | `JsonLoader` that parses JSON strings or files via `process(content, file_path)`, returning parsed dicts/lists with structured error reporting. | `errors`, `json` |
-| `source_data.py` | Module | `SourceDataLoader` that loads/saves source data via storage backend (`read_source`/`write_source`), requiring a `StorageBackend` at init. | `config.interfaces`, `errors`, `storage.backend` |
+| `source_data.py` | Module | `SourceDataLoader` that loads source data via the storage backend (`read_source`), requiring a `StorageBackend` at init. | `config.interfaces`, `errors`, `storage.backend` |
 | `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsError`. | `errors`, `logging` |
 | `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing only modules that declare a tool-registering decorator (`udf_tool`/`expectation_check`) and validating `impl` references. `expectation_check` files register project-defined expectation types into `agent_actions.expectations.registry` as an import side effect, before preflight validates `type:` names. | `utils.module_loader`, `utils.udf_management`, `errors` |
 | `xml.py` | Module | `XmlLoader` that parses XML text into `ElementTree` roots, exposes helper for turning elements to dicts, and surfaces parse metadata. | `errors`, `xml` |

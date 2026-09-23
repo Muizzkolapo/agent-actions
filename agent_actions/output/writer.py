@@ -49,7 +49,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """Execute a write operation with event firing and error handling.
 
         Args:
-            write_kind: Canonical kind ('staging', 'target', or 'source') used both for
+            write_kind: Canonical kind ('staging' or 'target') used both for
                 logging context and so handle_file_error maps OSError → FileWriteError
                 (handle_file_error matches the literal 'write' against an allow-list).
         """

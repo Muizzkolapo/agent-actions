@@ -108,7 +108,7 @@ Note that CSV returns raw rows (list of lists), not dicts. The `TabularLoader` h
 
 ### SourceDataLoader -- storage backend reads
 
-`SourceDataLoader` wraps the `StorageBackend` for reading/writing intermediate source data. It implements the `ISourceDataLoader` interface. Used by downstream actions that need to read a previous action's output as their input:
+`SourceDataLoader` wraps the `StorageBackend` for reading intermediate source data. It implements the `ISourceDataLoader` interface. Used by downstream actions that need to read a previous action's output as their input:
 
 ```
 SourceDataLoader(agent_name, storage_backend)

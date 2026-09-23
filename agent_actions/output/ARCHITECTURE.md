@@ -48,7 +48,7 @@ FileWriter handles all disk I/O with atomic writes and optional database persist
 │     action_name       → node name for backend writes     │
 │     output_directory  → base dir for relative paths      │
 │                                                          │
-│   Three write methods:                                   │
+│   Two write methods:                                   │
 │                                                          │
 │   write_staging(data)                                    │
 │     ├── .json → atomic_json_write (temp + fsync + rename)│
@@ -62,9 +62,6 @@ FileWriter handles all disk I/O with atomic writes and optional database persist
 │     ├── assert_path_contained (path traversal guard)     │
 │     ├── storage_backend.write_target()  ← authoritative  │
 │     └── atomic_json_write()  ← disk materialization      │
-│                                                          │
-│   write_source(data)                                     │
-│     └── atomic_json_write (JSON only)                    │
 └─────────────────────────────────────────────────────────┘
 
 UnifiedSourceDataSaver:
@@ -416,7 +413,7 @@ ResponseBuilder (static methods):
 
 5. **Schema name collisions fail on reference, not on discovery.** `SchemaLoader.load_schema()` raises `SchemaValidationError` (naming every colliding path) when the requested name matches more than one file. `discover_schema_files()` stays lenient — first occurrence wins, warning logged once per process — because the LSP indexer and docs scanner call it directly and must not crash on a user project state.
 
-6. **write_target requires both storage_backend and action_name.** Calling `write_target()` without both raises `ValueError` at runtime. There is no compile-time check -- the constructor accepts `None` for both parameters because `write_staging()` and `write_source()` do not need them.
+6. **write_target requires both storage_backend and action_name.** Calling `write_target()` without both raises `ValueError` at runtime. There is no compile-time check -- the constructor accepts `None` for both parameters because `write_staging()` does not need them.
 
 7. **captured_results for add_dispatch.** The `captured_results` dict populated during dispatch injection is returned alongside the compiled schema. It carries the output of `dispatch_task()` UDF calls so that the caller (typically `create_dynamic_agent` in the builder) can merge those results into the LLM response. If no dispatch calls exist, it is an empty dict.
 

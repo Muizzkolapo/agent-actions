@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_actions.logging.core.manager import fire_event
@@ -24,11 +23,9 @@ class UnifiedSourceDataSaver:
 
     def __init__(
         self,
-        base_directory: str,
         enable_deduplication: bool = True,
         storage_backend: StorageBackend | None = None,
     ):
-        self.base_directory = Path(base_directory)
         self.enable_deduplication = enable_deduplication
         self.storage_backend = storage_backend
 
@@ -44,12 +41,10 @@ class UnifiedSourceDataSaver:
         if isinstance(items, dict):
             items = [items]
 
-        destination = f"source data for {relative_path}"
-
         logger.debug(
-            "Saving %d source items as %s (dedup=%s, backend=%s)",
+            "Saving %d source items under %s (dedup=%s, backend=%s)",
             len(items),
-            destination,
+            relative_path,
             self.enable_deduplication,
             self.storage_backend is not None,
         )
@@ -63,7 +58,7 @@ class UnifiedSourceDataSaver:
 
         fire_event(
             SourceDataSavingEvent(
-                file_path=destination,
+                file_path=relative_path,
                 item_count=len(items),
             )
         )
@@ -75,10 +70,10 @@ class UnifiedSourceDataSaver:
 
         fire_event(
             SourceDataSavedEvent(
-                file_path=destination,
+                file_path=relative_path,
                 item_count=len(items),
                 bytes_written=bytes_written,
             )
         )
 
-        logger.info("Saved %d source items as %s", len(items), destination)
+        logger.info("Saved %d source items under %s", len(items), relative_path)

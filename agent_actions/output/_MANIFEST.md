@@ -19,7 +19,7 @@ serving schema/guard metadata to downstream tooling.
 |------|------|-------------|---------|
 | `file_handler.py` | Module | Backward-compatibility shim — re-exports `FileHandler` from `utils.file_handler`. | `utils.file_handler` |
 | `saver.py` | Module | Persistent saver for workflow outputs and guard results. | `workflow`, `logging` |
-| `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. | `output.response`, `logging` |
+| `writer.py` | Module | FileWriter for staging and target outputs with optional storage backend and relative-path preservation. | `output.response`, `logging` |
 
 ## FileWriter Interface
 
@@ -61,7 +61,6 @@ This prevents file collisions when multiple files share the same name but live i
 |--------|------|-------------|------------|
 | `FileWriter.write_target()` | `agent_io/store/{workflow}.db` | Writes | — |
 | `FileWriter.write_staging()` | `agent_io/staging/` | Writes | — |
-| `FileWriter.write_source()` | `agent_io/staging/` | Writes | — |
 | `UnifiedSourceDataSaver.save_source_items()` | `agent_io/target/{action}/` | Writes | — |
 | `SchemaLoader.load_schema()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |
 | `SchemaLoader.discover_schema_files()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |

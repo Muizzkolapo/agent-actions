@@ -61,6 +61,13 @@ class Cleaner:
         if target_path.exists():
             directories.append(target_path)
         if self.remove_all:
+            # Nothing writes source/ any more, but a project that ran a
+            # version-merge on an earlier release still has one, and --all
+            # promises to leave nothing behind.
+            legacy_source = io_dir / "source"
+            if legacy_source.exists():
+                directories.append(legacy_source)
+        if self.remove_all:
             staging_path = io_dir / "staging"
             if staging_path.exists():
                 directories.append(staging_path)

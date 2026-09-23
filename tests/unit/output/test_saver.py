@@ -17,18 +17,14 @@ from agent_actions.output.saver import UnifiedSourceDataSaver
 class TestSaverInit:
     """Tests for UnifiedSourceDataSaver initialization."""
 
-    def test_basic_init(self, tmp_path):
-        saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
-            storage_backend=MagicMock(),
-        )
-        assert saver.base_directory == tmp_path
+    def test_basic_init(self):
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
+
         assert saver.enable_deduplication is True
         assert saver.storage_backend is not None
 
     def test_deduplication_disabled(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             enable_deduplication=False,
             storage_backend=MagicMock(),
         )
@@ -36,7 +32,6 @@ class TestSaverInit:
 
     def test_no_backend(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         assert saver.storage_backend is None
@@ -54,7 +49,6 @@ class TestSaveSourceItems:
     def test_single_dict_wrapped_to_list(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         item = {"key": "value"}
@@ -70,7 +64,6 @@ class TestSaveSourceItems:
     def test_list_of_dicts_passed_through(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"a": 1}, {"b": 2}]
@@ -86,7 +79,6 @@ class TestSaveSourceItems:
     def test_deduplication_flag_forwarded(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             enable_deduplication=False,
             storage_backend=backend,
         )
@@ -102,7 +94,7 @@ class TestSaveSourceItems:
     def test_the_event_names_the_path_the_items_are_stored_under(self, mock_fire, tmp_path):
         """The items go to the store under the relative path, so that is what the
         event names — there is no file to point at."""
-        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
 
         saver.save_source_items([{"x": 1}], "node_1/batch_001")
 
@@ -123,7 +115,6 @@ class TestSaverEvents:
     def test_fires_saving_and_saved_events(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"k": "v"}]
@@ -147,7 +138,7 @@ class TestSaverEvents:
         """Source items go to the store. Naming agent_io/source/<path>.json sends
         anyone reading the event, or the log line beside it, to a path that has
         never existed."""
-        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
 
         saver.save_source_items([{"k": "v"}], "path")
 
@@ -160,7 +151,6 @@ class TestSaverEvents:
     def test_bytes_written_calculated_correctly(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"a": 1}, {"b": "hello"}]
@@ -181,7 +171,6 @@ class TestSaverErrors:
 
     def test_raises_valueerror_when_no_backend(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         with pytest.raises(ValueError, match="Storage backend not configured"):
@@ -189,7 +178,6 @@ class TestSaverErrors:
 
     def test_error_message_names_the_path_that_could_not_be_stored(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         with pytest.raises(ValueError, match=r"node/batch"):
@@ -200,7 +188,6 @@ class TestSaverErrors:
         backend = MagicMock()
         backend.write_source.side_effect = RuntimeError("db locked")
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         with pytest.raises(RuntimeError, match="db locked"):
@@ -211,7 +198,6 @@ class TestSaverErrors:
         """Items containing bytes values must not crash json.dumps."""
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"key": b"binary data from UDF", "normal": "text"}]
@@ -227,7 +213,6 @@ class TestSaverErrors:
         backend = MagicMock()
         backend.write_source.side_effect = RuntimeError("fail")
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         with pytest.raises(RuntimeError):
