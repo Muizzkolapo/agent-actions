@@ -12,8 +12,9 @@ from agent_actions.llm.realtime.cleaner import Cleaner
 @click.command(
     name="clean",
     help=(
-        "Remove regenerable working directories created by an agent. "
-        "By default removes the source directory only; generated output "
+        "Remove a workflow's working directories. By default removes only "
+        "agent_io/source/, which earlier versions wrote and this one does not, "
+        "so a project that never had one has nothing to clean; generated output "
         "under agent_io/target/ requires --target, and --all removes "
         "everything including staging and the durable store."
     ),

@@ -372,11 +372,11 @@ Run N: Resume (if recovery submitted)
 6. VersionOutputCorrelator← version/loop input correlation
 7. ActionStateManager    ← .agent_status.json persistence
 8. SkipEvaluator         ← WHERE clause evaluation
-10. BatchLifecycleManager ← polling + processing lifecycle
-11. ActionOutputManager   ← previous output loading
-12. ActionExecutor        ← bundles all above + console
-13. ActionLevelOrchestrator ← topological sort + parallel dispatch
-14. ManifestManager       ← .manifest.json for external tools
+9. BatchLifecycleManager ← polling + processing lifecycle
+10. ActionOutputManager   ← previous output loading
+11. ActionExecutor        ← bundles all above + console
+12. ActionLevelOrchestrator ← topological sort + parallel dispatch
+13. ManifestManager       ← .manifest.json for external tools
 ```
 
 ---

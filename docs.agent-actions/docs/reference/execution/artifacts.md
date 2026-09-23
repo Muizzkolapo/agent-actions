@@ -22,7 +22,6 @@ project/
         └── agent_io/
             ├── .agent_status.json      # Per-action execution state
             ├── staging/                # Input data
-            ├── source/                 # Source metadata tracking
             ├── store/
             │   └── {workflow_name}.db  # SQLite storage backend
             ├── logs/

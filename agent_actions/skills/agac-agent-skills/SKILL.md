@@ -23,7 +23,6 @@ agent_workflow/{name}/
   agent_config/{name}.yml    # workflow config
   agent_io/
     staging/                 # input data (JSON files)
-    source/                  # framework-processed input
     store/                   # SQLite DB (state, traces)
     target/                  # per-action output
   seed_data/                 # reference data for grounded prompts

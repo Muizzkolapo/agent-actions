@@ -48,7 +48,7 @@ FileWriter handles all disk I/O with atomic writes and optional database persist
 │     action_name       → node name for backend writes     │
 │     output_directory  → base dir for relative paths      │
 │                                                          │
-│   Three write methods:                                   │
+│   Two write methods:                                     │
 │                                                          │
 │   write_staging(data)                                    │
 │     ├── .json → atomic_json_write (temp + fsync + rename)│
