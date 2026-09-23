@@ -198,7 +198,8 @@ def _resolve_api(
         _fetch_api_data(config, cache_file)
     else:
         logger.info("Using cached API data: %s (from %s)", cache_file, config.url)
-        _bring_cache_to_the_document_rule(cache_file)
+
+    _bring_cache_to_the_document_rule(cache_dir)
 
     return DataSourceResolutionResult(directories=[cache_dir])
 
@@ -213,27 +214,50 @@ def _as_staging_document(payload: Any) -> list[Any]:
     return payload if isinstance(payload, list) else [payload]
 
 
-def _bring_cache_to_the_document_rule(cache_file: Path) -> None:
-    """Rewrite a cache entry written before a response was stored as a document."""
-    try:
-        cached = json.loads(cache_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        raise ConfigurationError(
-            f"Cached API data at {cache_file} cannot be read: {e}. "
-            "Delete the _remote_cache/api/ directory to fetch it again.",
-            context={"cache_file": str(cache_file), "operation": "read_api_cache"},
-            cause=e,
-        ) from e
+def _staged_by_the_walk(item: Path) -> bool:
+    """Mirror the runner's own skip rules for an item under an input directory."""
+    return item.is_file() and not item.name.startswith(".") and "batch" not in item.parts
 
-    if isinstance(cached, list):
-        return
 
-    logger.info(
-        "Rewriting cached API data as a staging document: %s (held %s)",
-        cache_file,
-        type(cached).__name__,
-    )
-    atomic_json_write(cache_file, _as_staging_document(cached), fsync=False)
+def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
+    """Rewrite cache entries written before a response was stored as a document.
+
+    The walk stages more than the entry this action fetched — a renamed action or
+    a sibling start node leaves others beside it — and it stages less than every
+    file here. Reading one it skips would fail a run over something that was never
+    going to be staged.
+    """
+    for cache_file in sorted(cache_dir.rglob("*.json")):
+        if not _staged_by_the_walk(cache_file):
+            continue
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise ConfigurationError(
+                f"Cached API data at {cache_file} cannot be read: {e}. "
+                "Delete the _remote_cache/api/ directory to fetch it again.",
+                context={"cache_file": str(cache_file), "operation": "read_api_cache"},
+                cause=e,
+            ) from e
+
+        if isinstance(cached, list):
+            continue
+
+        logger.info(
+            "Rewriting cached API data as a staging document: %s (held %s)",
+            cache_file,
+            type(cached).__name__,
+        )
+        try:
+            atomic_json_write(cache_file, _as_staging_document(cached), fsync=False)
+        except OSError as e:
+            raise ConfigurationError(
+                f"Cached API data at {cache_file} predates the staging document rule "
+                f"and cannot be rewritten: {e}. "
+                "Delete the _remote_cache/api/ directory to fetch it again.",
+                context={"cache_file": str(cache_file), "operation": "rewrite_api_cache"},
+                cause=e,
+            ) from e
 
 
 def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
