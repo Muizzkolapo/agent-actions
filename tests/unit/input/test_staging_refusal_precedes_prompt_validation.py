@@ -4,7 +4,11 @@ import json
 
 import pytest
 
-from agent_actions.errors import AgentActionsError, RecordContextError
+from agent_actions.errors import (
+    AgentActionsError,
+    ConfigValidationError,
+    RecordContextError,
+)
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     InitialStageContext,
     process_initial_stage,
@@ -85,3 +89,18 @@ class TestARowThatIsNotARecord:
         with pytest.raises(AgentActionsError) as caught:
             _run(tmp_path, [42])
         assert not isinstance(caught.value, RecordContextError)
+
+
+class TestAReservedKeyDoesNotHideTheDocumentRule:
+    """The namespace guard runs first and only ever sees documents that are refused."""
+
+    def test_a_lone_object_carrying_a_reserved_key_reports_the_document_rule(self, tmp_path):
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, {"version": "2024-01", "items": [{"ticket_id": "T-1"}]})
+        assert "A staged input must be rows" in str(caught.value)
+
+    def test_a_list_row_carrying_a_reserved_key_still_reports_the_collision(self, tmp_path):
+        """A real record with a reserved field name is still the guard's business."""
+        with pytest.raises(ConfigValidationError) as caught:
+            _run(tmp_path, [{"version": "2024-01", "ticket_id": "T-1", "text": "x"}])
+        assert "collide with reserved namespace names" in str(caught.value)
