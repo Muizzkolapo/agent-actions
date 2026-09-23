@@ -332,3 +332,36 @@ class TestAtFileGranularity:
         # rows survive either way here, so the diagnostic is what tells the two
         # apart — and on a shape that can hold a diamond it is a deletion.
         assert "cannot be attributed" not in result.output
+
+    def test_the_named_rows_are_replaced_while_a_limit_drops_other_records(
+        self, file_granularity, monkeypatch
+    ):
+        """The positive half, at FILE granularity and under a limit.
+
+        Everything else here asserts that nothing vanished, which a repair doing
+        nothing at all satisfies. This one asserts the work happened: the named
+        record's rows are gone and replaced by new ones. Under a limit at the
+        same time, because the two arms of the granularity fork capture the
+        input separately and only one of them was ever pinned above the limit.
+        """
+        selected = _record_ids(file_granularity, ACTION)[0]
+        before = _rows(file_granularity, "fsplit")
+        stale = {r["source_guid"] for r in before if r.get("parent_source_guid") == selected}
+        untouched = {r["source_guid"] for r in before if r.get("parent_source_guid") != selected}
+        assert len(stale) == 2
+        assert len(untouched) == (RECORDS - 1) * 2
+        _fail(file_granularity, selected, ACTION)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+        assert result.exit_code == 0, result.output
+        after = _rows(file_granularity, "fsplit")
+        guids = {r["source_guid"] for r in after}
+        fresh = {r["source_guid"] for r in after if r.get("parent_source_guid") == selected}
+        assert stale.isdisjoint(guids), "the named record's rows were not replaced"
+        assert len(fresh) == 2, "the named record was not re-run"
+        assert untouched <= guids, (
+            f"rows of a record the limit dropped were deleted: {sorted(untouched - guids)}"
+        )
+        assert "cannot be attributed" not in result.output
