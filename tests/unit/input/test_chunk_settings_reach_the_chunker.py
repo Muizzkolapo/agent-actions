@@ -5,12 +5,17 @@ it — the YAML, the agent dict, `agac inspect` — shows the value that was ask
 for whether or not the chunker ever saw it.
 """
 
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
+from agent_actions.config.manager import ConfigManager
 from agent_actions.config.schema import WorkflowConfig
+from agent_actions.errors import ConfigurationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     DataPreparationContext,
     _prepare_online_data,
@@ -173,6 +178,92 @@ def test_the_retired_overlap_spelling_is_refused_not_ignored(level):
                 "actions": [action],
             }
         )
+
+    message = str(exc.value)
+    assert "overlap" in message
+    assert "chunk_overlap" in message
+
+
+@pytest.mark.parametrize("setting", sorted(SETTINGS))
+def test_the_project_files_chunk_config_reaches_the_chunker(setting):
+    """`default_agent_config:` in agent_actions.yml is merged into every agent and
+    validated by a model that allows extras. It is where the retired spelling is
+    actually written, so a rename that skips this surface trades one silence for
+    another."""
+    root = Path(tempfile.mkdtemp())
+    (root / "agent_actions.yml").write_text(
+        yaml.safe_dump(
+            {
+                "project_name": "p",
+                "default_agent_config": {
+                    "api_key": "k",
+                    "model_name": "gpt-4",
+                    "chunk_config": {setting: SETTINGS[setting]},
+                },
+            }
+        )
+    )
+    config_dir = root / "agent_config"
+    config_dir.mkdir()
+    (config_dir / "w.yml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "w",
+                "description": "d",
+                "version": "1.0",
+                "defaults": {"model_vendor": "openai"},
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p"}],
+            }
+        )
+    )
+    manager = ConfigManager(
+        str(config_dir / "w.yml"), str(root / "agent_actions.yml"), project_root=root
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+    manager.merge_agent_configs(manager.get_user_agents())
+    agent = manager.agent_configs["a1"].model_dump()
+
+    assert _tokenizer_call(agent, "batch")[setting] == SETTINGS[setting]
+
+
+def test_the_project_files_retired_spelling_is_refused_not_ignored():
+    """The one spelling found in a real project. Refusing it is what keeps the
+    rename from silently halving somebody's overlap."""
+    root = Path(tempfile.mkdtemp())
+    (root / "agent_actions.yml").write_text(
+        yaml.safe_dump(
+            {
+                "project_name": "p",
+                "default_agent_config": {
+                    "api_key": "k",
+                    "model_name": "gpt-4",
+                    "chunk_config": {"chunk_size": 4000, "overlap": 500},
+                },
+            }
+        )
+    )
+    config_dir = root / "agent_config"
+    config_dir.mkdir()
+    (config_dir / "w.yml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "w",
+                "description": "d",
+                "version": "1.0",
+                "defaults": {"model_vendor": "openai"},
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p"}],
+            }
+        )
+    )
+    manager = ConfigManager(
+        str(config_dir / "w.yml"), str(root / "agent_actions.yml"), project_root=root
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+
+    with pytest.raises((ConfigurationError, ValidationError)) as exc:
+        manager.merge_agent_configs(manager.get_user_agents())
 
     message = str(exc.value)
     assert "overlap" in message
