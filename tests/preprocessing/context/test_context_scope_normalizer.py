@@ -58,8 +58,7 @@ class TestDirectiveRegistry:
         assert DIRECTIVE_REGISTRY["drop"]["type"] == "list"
         assert DIRECTIVE_REGISTRY["drop"]["expand_versions"] is True
 
-        assert DIRECTIVE_REGISTRY["drops"]["type"] == "list"
-        assert DIRECTIVE_REGISTRY["drops"]["expand_versions"] is True
+        assert "drops" not in DIRECTIVE_REGISTRY
 
     def test_dict_directives_are_not_expanded(self):
         assert DIRECTIVE_REGISTRY["seed"]["type"] == "dict"

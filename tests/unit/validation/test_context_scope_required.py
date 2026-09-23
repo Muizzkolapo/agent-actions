@@ -101,22 +101,22 @@ class TestContextScopeRequired:
         assert len(errors) == 1
         assert "broken" in errors[0].message
 
-    def test_null_context_scope_with_orphaned_observe_caught_by_normalizer(self):
-        """When observe is a sibling of null context_scope, the runtime normalizer
-        catches it with an indentation error. The static analyzer normalizes null
-        to {} and reports 'no context_scope' (the indentation hint is in the
-        normalizer's ConfigurationError, not here)."""
+    def test_null_context_scope_with_orphaned_observe_is_refused_before_here(self):
+        """A sibling directive never reaches the analyzer — every model that
+        validates an action refuses it first, naming the indentation. What is
+        left here is the null block itself, which this reports without one."""
         import pytest
 
-        from agent_actions.errors import ConfigurationError
-        from agent_actions.input.context.normalizer import normalize_all_agent_configs
+        from agent_actions.config.schema import refuse_context_scope_siblings
 
-        agent_configs = {
-            "misindented": {
-                "name": "misindented",
-                "context_scope": None,
-                "observe": ["source.*"],
-            }
-        }
-        with pytest.raises(ConfigurationError, match="indentation"):
-            normalize_all_agent_configs(agent_configs)
+        action = {"name": "misindented", "context_scope": None, "observe": ["source.*"]}
+        with pytest.raises(ValueError, match="indent under context_scope"):
+            refuse_context_scope_siblings(action, "action")
+
+        result = WorkflowStaticAnalyzer(
+            {"name": "wf", "actions": [{"name": "misindented", "context_scope": None}]}
+        ).analyze()
+
+        errors = [e for e in result.errors if "no context_scope" in e.message]
+        assert len(errors) == 1
+        assert "context_scope is null" in errors[0].hint

@@ -195,8 +195,6 @@ class AgentConfig(BaseModel):
     prompt: str | None = None
     schema_name: str | None = None
     chunk_config: dict[str, Any] = Field(default_factory=dict)
-    observe: list[str] = Field(default_factory=list)
-    drops: list[str] = Field(default_factory=list)
     is_operational: bool = True
     add_dispatch: bool | None = None
     run_mode: RunMode = RunMode.ONLINE

@@ -42,7 +42,6 @@ class ContextScopeDict(TypedDict, total=False):
     observe: list[str]
     passthrough: list[str]
     drop: list[str]
-    drops: list[str]
     seed: dict[str, Any]
 
 

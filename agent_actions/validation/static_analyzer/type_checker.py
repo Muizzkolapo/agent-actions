@@ -169,7 +169,7 @@ class StaticTypeChecker:
                         referenced_agent=source_agent,
                         referenced_field=field_path,
                         available_fields=available,
-                        hint=f"Remove '{root_field}' from the 'drops' list in "
+                        hint=f"Remove '{root_field}' from context_scope.drop in "
                         f"action '{source_agent}', or use a different field",
                     )
                 )

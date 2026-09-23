@@ -225,7 +225,7 @@ context_scope:           version_base_map:
                               - extraction.ssn
 ```
 
-`normalize_all_agent_configs()` mutates agent configs in place. It also detects YAML indentation errors where `observe`/`passthrough`/`drop` appear as sibling keys of `context_scope` instead of children (the `context_scope: null` + orphaned directives pattern).
+`normalize_all_agent_configs()` mutates agent configs in place. A directive written as a sibling key of `context_scope` rather than a child never reaches it, because `config/` refuses that shape at load on every path that gets here — on the strict models through a validator, and around the two that allow extras through a call in `manager.py`. Construct `AgentConfig` yourself and nothing refuses it.
 
 ---
 
@@ -394,7 +394,7 @@ The resolver (`resolver.py`) and validator (`validator.py`) use parsed reference
 ### Context
 | File | Role |
 |------|------|
-| `context/normalizer.py` | context_scope normalization, version expansion, orphan detection |
+| `context/normalizer.py` | context_scope normalization, version expansion |
 
 ### Preprocessing -- staging
 | File | Role |
@@ -454,6 +454,6 @@ Batch mode assigns `source_guid` during `_add_batch_metadata()`, before source s
 
 When a guard condition raises `GuardSemanticError` (e.g., unquoted string literal), the error is cached by condition string. All subsequent evaluations of the same condition return the cached error immediately without re-evaluation. This prevents the same broken condition from logging thousands of warnings across a large dataset.
 
-### Context scope orphan detection
+### Context scope directives written as sibling keys
 
-A common YAML indentation mistake puts `observe`/`passthrough`/`drop` as siblings of `context_scope` instead of children. `normalize_all_agent_configs()` detects this pattern (null `context_scope` + orphaned directive keys) and raises `ConfigurationError` with a corrective YAML example.
+A common YAML indentation mistake puts `observe`/`passthrough`/`drop`/`drops` as siblings of `context_scope` instead of children. It is refused at load rather than here — `refuse_context_scope_siblings` in `config/schema.py`, called by every surface that validates one of these dicts, names the action and shows the nesting.

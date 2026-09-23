@@ -292,13 +292,23 @@ These are the non-obvious behaviors, edge cases, and invariants that will bite y
 
 Any unknown key in an action definition raises a `ValidationError`. This is intentional — it catches YAML typos like `temperture` before they silently do nothing. Pydantic raises it per key, naming the key and its location. If you add a new action-level field, you must add it to `ActionConfig` in `schema.py`.
 
+Four names get a refusal of their own before Pydantic's, and the defaults block raises the same one: `observe`, `passthrough` and `drop` belong *under* `context_scope:`, and written beside it they are what a YAML indentation slip produces. `extra_forbidden` names the key correctly and says nothing about the indentation, so the refusal does, and shows the nesting.
+
+The fourth is `drops`, which no consumer has ever applied — every one of them reads `context_scope.drop`, so a value written under `drops` dropped nothing. Only the static analyzer's reference check ever looked at it, validating refs it would then ignore. It is refused with the others and its remedy names `drop`, because echoing the key back would move a silent no-op under `context_scope:` rather than end it.
+
 ### 2. DefaultsConfig uses `extra="forbid"`
 
 Unlike `ActionConfig`, which leaves the refusal to Pydantic, the defaults section raises its own: it names every undeclared key, what each resembles, and then the keys the block takes. The list is unconditional — a suggestion is a string-distance match, so it lands on a real field often enough that a reader given only the guess is left with nothing when it is wrong.
 
-The invariant that makes the strictness safe runs one way: **every key read out of a defaults block is declared on `DefaultsConfig`**. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those keys from the defaults dict, so a key in that set and missing from the model would be refused at load while the framework still went looking for it. A test pins that containment; add to both when you add an inheritable field.
+The invariant that makes the strictness safe runs both ways: **a key is declared on `DefaultsConfig` if and only if something reads it out of a defaults block**.
 
-The converse does not hold and is not claimed. `drops` and `observe` are declared here and read from nowhere — a defaults-level value for either is accepted and never reaches an agent, which is the pre-existing shape this strictness cannot detect, because a declared key passes by definition. Generation parameters avoid it by being inherited as well as declared, `frequency_penalty` and `presence_penalty` included; declaring one without adding it to `SIMPLE_CONFIG_FIELDS` accepts it and then drops it.
+Left to right, it is what keeps the refusal from refusing a key the framework itself goes looking for. `inherit_simple_fields` iterates `SIMPLE_CONFIG_FIELDS` and reads each of those names off the defaults dict, so one in that set and missing from the model would fail at load while the expander still asked for it. A test pins that containment.
+
+Right to left is the side no schema check can cover, because a declared key passes validation by definition: declare a key nothing reads and a workflow setting it loads clean and gets nothing. `drops` and `observe` were that shape until they were removed — the live spelling is `context_scope: {drop: [...], observe: [...]}`, which is declared, inherited and read. `tests/unit/config/test_defaults_keys_declared_are_read.py` walks the package AST and pins this direction; add to both `DefaultsConfig` and `SIMPLE_CONFIG_FIELDS` when you add an inheritable field.
+
+The same shape reached three surfaces beyond this one, and all four are closed by one function, `refuse_context_scope_siblings`. `ActionConfig` declared the pair too. The other two carry agent settings and are validated by models with `extra="allow"`, where removing a field refuses nothing on its own, so `manager.py` calls the function directly on each: a legacy top-level `agents:` entry, and the project file's `default_agent_config:` block, which is merged into every agent and is read twice — once for the expander's defaults and once at merge.
+
+Every one of those calls passes all four spellings. Refusing a subset on one surface is this bug again, one spelling over, which is how the second and third of them were found. The boundary is `extra="allow"` itself: those two models accept any undeclared key, so `seed`, the one `context_scope` directive that takes a mapping rather than a list, is refused on the strict surfaces and not on them.
 
 ### 3. WorkflowConfig uses `extra="forbid"`
 

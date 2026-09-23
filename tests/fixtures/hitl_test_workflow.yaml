@@ -30,10 +30,11 @@ actions:
 
         Approve if the data looks good, or reject with feedback if corrections are needed.
       timeout: 300
-    observe:
-      - extract_data.title
-      - extract_data.summary
-      - source.original_text
+    context_scope:
+      observe:
+        - extract_data.title
+        - extract_data.summary
+        - source.original_text
 
   - name: final_processing
     dependencies: [review_extraction]
