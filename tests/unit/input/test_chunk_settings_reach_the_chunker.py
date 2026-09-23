@@ -26,8 +26,8 @@ from agent_actions.output.response.expander import ActionExpander
 SETTINGS = {
     "chunk_size": 999,
     "chunk_overlap": 200,
-    "tokenizer_model": "spacy",
-    "split_method": "spacy",
+    "tokenizer_model": "p50k_base",
+    "split_method": "chars",
 }
 
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
@@ -180,8 +180,7 @@ def test_the_retired_overlap_spelling_is_refused_not_ignored(level):
         )
 
     message = str(exc.value)
-    assert "overlap" in message
-    assert "chunk_overlap" in message
+    assert "did you mean 'chunk_overlap'?" in message
 
 
 @pytest.mark.parametrize("setting", sorted(SETTINGS))
@@ -266,5 +265,68 @@ def test_the_project_files_retired_spelling_is_refused_not_ignored():
         manager.merge_agent_configs(manager.get_user_agents())
 
     message = str(exc.value)
-    assert "overlap" in message
-    assert "chunk_overlap" in message
+    assert "did you mean 'chunk_overlap'?" in message
+
+
+def test_a_loose_setting_fills_a_name_the_block_leaves_out():
+    """A block and a loose key together: the block wins where it speaks, and the
+    loose key fills the rest rather than being dropped for having a neighbour."""
+    agent = _expand(
+        {"chunk_config": {"chunk_size": 4000}, "chunk_overlap": 250, "split_method": "chars"}
+    )
+
+    seen = _tokenizer_call(agent, "batch")
+
+    assert (seen["chunk_size"], seen["chunk_overlap"], seen["split_method"]) == (4000, 250, "chars")
+
+
+def test_an_action_setting_beats_the_workflow_one():
+    agent = _expand({"chunk_overlap": 10}, {"chunk_overlap": 250})
+
+    assert _tokenizer_call(agent, "batch")["chunk_overlap"] == 250
+
+
+def test_a_zero_overlap_survives_instead_of_reading_as_unset():
+    """0 is a real answer — no overlap — and `or`-style defaulting eats it."""
+    agent = _expand({"chunk_config": {"chunk_size": 4000, "chunk_overlap": 0}})
+
+    assert _tokenizer_call(agent, "batch")["chunk_overlap"] == 0
+
+
+def test_a_scaffolded_project_loads_and_chunks():
+    """`agac init` writes a default_agent_config of its own. A key it scaffolds
+    that the schema refuses makes the first command in a new project fail."""
+    from agent_actions.config.init import ProjectInitializer
+
+    base = Path(tempfile.mkdtemp())
+    ProjectInitializer("proj", base_path=base).init_project()
+    root = base / "proj"
+
+    scaffolded = yaml.safe_load((root / "agent_actions.yml").read_text())
+    block = scaffolded["default_agent_config"]["chunk_config"]
+    config_dir = root / "agent_config"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "w.yml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "w",
+                "description": "d",
+                "version": "1.0",
+                "defaults": {"model_vendor": "openai"},
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p"}],
+            }
+        )
+    )
+    manager = ConfigManager(
+        str(config_dir / "w.yml"), str(root / "agent_actions.yml"), project_root=root
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+    manager.merge_agent_configs(manager.get_user_agents())
+    agent = manager.agent_configs["a1"].model_dump()
+
+    seen = _tokenizer_call(agent, "batch")
+    assert (seen["chunk_size"], seen["chunk_overlap"]) == (
+        block["chunk_size"],
+        block["chunk_overlap"],
+    )
