@@ -24,21 +24,28 @@ Agent Actions accepts multiple input formats. Place files in `agent_io/staging/`
 
 ## JSON Input
 
-Each JSON file becomes one record. A file containing an array creates multiple records (one per element).
+A JSON file holds a list of records — one array, one object per record. Each
+element becomes one record.
 
 ```json
-{
-  "page_content": "The text content to process...",
-  "url": "https://source.example.com/doc",
-  "metadata": {
-    "author": "John Doe",
-    "date": "2024-01-15"
+[
+  {
+    "page_content": "The text content to process...",
+    "url": "https://source.example.com/doc",
+    "metadata": {
+      "author": "John Doe",
+      "date": "2024-01-15"
+    }
   }
-}
+]
 ```
 
-A record is always an object. A file whose top level is a bare value, or an array
-holding one, is refused at staging and names the row it stopped on.
+A file holding one record is that same list with one element in it. A top level
+that is not an array — a lone object, or a bare value — is refused at staging,
+naming the file and the fix: wrap it in `[ ]`.
+
+A record is always an object. An array holding a bare value is refused too, and
+names the row it stopped on.
 
 ## CSV/Tabular Input
 
@@ -49,6 +56,12 @@ id,title,content,category
 1,First Doc,Content here...,technical
 2,Second Doc,More content...,general
 ```
+
+## Excel Input
+
+The same rule reaches `.xlsx` through the sheet rather than the file: a sheet is
+a list of records, each row becomes one record, and the header row names the
+fields. A one-row sheet is one record, not a record of its own shape.
 
 ## Accessing Source Data
 
