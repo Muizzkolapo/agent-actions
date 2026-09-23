@@ -49,6 +49,18 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
     block they would outrank the workflow's own loose keys; as loose keys the
     shallow merge below puts the workflow above them, which is the real order.
     """
+    retired = set(ChunkConfig.retired_spellings()) & project_defaults.keys()
+    if retired:
+        raise ConfigurationError(
+            "default_agent_config: "
+            + "; ".join(
+                f"unknown chunk setting '{key}' — did you mean "
+                f"'{ChunkConfig.retired_spellings()[key]}'?"
+                for key in sorted(retired)
+            ),
+            context={"operation": "load_project_defaults"},
+        )
+
     block = project_defaults.get("chunk_config")
     if block is None:
         return project_defaults

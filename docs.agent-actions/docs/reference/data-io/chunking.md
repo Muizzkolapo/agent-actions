@@ -28,7 +28,16 @@ default_agent_config:
 | `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, or `spacy` |
 | `tokenizer_model` | `cl100k_base` | Tokenizer used to measure chunk size |
 
-These four are the only keys `chunk_config` takes; anything else is refused at load, naming the field it resembles. Each can also be written as a key of its own on an action or in `defaults:`, where it fills a name the block leaves out.
+These four are the only keys `chunk_config` takes; anything else is refused at load, naming the field it resembles. Each can also be written as a key of its own on an action, in `defaults:`, or in `default_agent_config:`.
+
+Settings merge by name, not by block, so a block that omits a name keeps whatever a wider level set for it. Nearest wins, and within a level the block wins over a key beside it:
+
+```
+default_agent_config key  <  default_agent_config block  <  defaults: key
+  <  defaults: block  <  action key  <  action block
+```
+
+An overlap at or above the chunk size it would be split with is refused at load rather than at the split, since merging by name can pair a nearer size with a wider overlap.
 
 The defaults are tuned for the framework's own short-document benchmarks. The examples below show larger values (4000 / 8000) tuned for OpenAI-class context windows — start there for production workloads on long documents.
 

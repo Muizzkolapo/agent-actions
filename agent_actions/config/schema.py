@@ -148,6 +148,11 @@ class ChunkConfig(BaseModel):
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(data, cls, "chunk_config")
 
+    @staticmethod
+    def retired_spellings() -> dict[str, str]:
+        """Names once read for a declared setting, mapped to the one that is."""
+        return {"overlap": "chunk_overlap"}
+
     chunk_size: int | None = Field(default=None, gt=0, description="Characters or tokens per chunk")
     chunk_overlap: int | None = Field(
         default=None, ge=0, description="Overlap between consecutive chunks"
