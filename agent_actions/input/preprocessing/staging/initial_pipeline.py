@@ -132,12 +132,11 @@ def _validate_staged_data(
     if not raw_prompt:
         return
 
-    if file_type == ".json" and isinstance(raw_content, list) and raw_content:
+    if file_type == ".json":
+        # A JSON document is rows of records by the time it reaches here; the
+        # document rule runs before this and refuses anything else.
         first_item = raw_content[0]
         source_content = first_item
-    elif file_type == ".json" and isinstance(raw_content, dict):
-        source_content = raw_content
-        first_item = raw_content
     else:
         source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
@@ -178,6 +177,12 @@ def process_initial_stage(ctx: InitialStageContext):
     from agent_actions.input.preprocessing.staging.field_validation import (
         validate_staging_field_names,
     )
+
+    if file_type == ".json":
+        # Before anything reads this as a record. Two validators below would
+        # otherwise report a collision or a missing field for a document that is
+        # not records at all, and the reader would fix those and still be here.
+        _refuse_rows_that_are_not_records(content, ctx.file_path, ctx.agent_name)
 
     validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
 
@@ -385,16 +390,20 @@ def _prepare_json_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare pre-parsed JSON content for batch mode."""
-    rows = content if isinstance(content, list) else [content]
-    _refuse_rows_that_are_not_records(rows, file_path, agent_name)
-    return _add_batch_metadata(rows, batch_id, node_id, storage_backend, relative_path)
+    _refuse_rows_that_are_not_records(content, file_path, agent_name)
+    return _add_batch_metadata(content, batch_id, node_id, storage_backend, relative_path)
 
 
 def _refuse_rows_that_are_not_records(rows: Any, file_path: str, agent_name: str) -> None:
     """Stop an input whose rows cannot carry a payload, before identity is derived."""
     if not isinstance(rows, list):
+        remedy = (
+            "Wrap it in an array: [ ... ]."
+            if isinstance(rows, dict)
+            else "Give each record its own object, and hold them in an array."
+        )
         raise AgentActionsError(
-            f"A staged input must be rows; found {type(rows).__name__}.",
+            f"A staged input must be rows; found {type(rows).__name__}. {remedy}",
             context={
                 "file_path": file_path,
                 "agent_name": agent_name,
@@ -565,10 +574,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
 
     elif ctx.file_type == ".json":
         raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
-
-        if not isinstance(raw_items, list):
-            raw_items = [raw_items]
-
         _refuse_rows_that_are_not_records(raw_items, ctx.file_path, ctx.agent_name)
         data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
 

@@ -568,7 +568,7 @@ class TestRecordLimitInitialStage:
         mock_prep.return_value = (all_records, all_src)
 
         reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
+        reader_instance.read.return_value = [{"page": "raw"}]
         reader_instance.file_type = ".json"
         mock_reader.return_value = reader_instance
 
@@ -625,7 +625,7 @@ class TestRecordLimitInitialStage:
         mock_prep.return_value = (rows, rows)
 
         reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
+        reader_instance.read.return_value = [{"page": "raw"}]
         reader_instance.file_type = ".json"
         mock_reader.return_value = reader_instance
         mock_process.return_value = "/output/file.json"
@@ -666,7 +666,7 @@ class TestRecordLimitInitialStage:
         mock_prep.return_value = (all_records, [])
 
         reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
+        reader_instance.read.return_value = [{"page": "raw"}]
         reader_instance.file_type = ".json"
         mock_reader.return_value = reader_instance
 
@@ -707,7 +707,7 @@ class TestRecordLimitInitialStage:
         mock_prep.return_value = (all_records, [])
 
         reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
+        reader_instance.read.return_value = [{"page": "raw"}]
         reader_instance.file_type = ".json"
         mock_reader.return_value = reader_instance
 
@@ -752,7 +752,7 @@ class TestRecordLimitInitialStageUnderBatch:
         rows = [{"source_guid": f"g{i}", "content": str(i)} for i in range(6)]
         mock_prep.return_value = (rows, [])
         reader_instance = MagicMock()
-        reader_instance.read.return_value = "raw"
+        reader_instance.read.return_value = [{"page": "raw"}]
         reader_instance.file_type = ".json"
         mock_reader.return_value = reader_instance
         mock_process.return_value = "/output/file.json"

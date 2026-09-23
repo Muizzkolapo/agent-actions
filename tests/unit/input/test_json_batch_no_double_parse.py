@@ -9,6 +9,9 @@ Covers:
 import json
 import logging
 
+import pytest
+
+from agent_actions.errors import AgentActionsError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.input.loaders.json import JsonLoader
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
@@ -55,23 +58,18 @@ class TestPrepareJsonBatchWithParsedInput:
             assert row["root_target_id"] == row["target_id"]
             assert row["node_id"] == "node_0"
 
-    def test_single_dict_gets_the_envelope_a_list_row_gets(self):
-        """Single dict (non-list JSON) is one record, enveloped and stamped like any other."""
-        content = {"key": "value", "number": 42}
-        result = _prepare_json_batch(
-            content,
-            batch_id="batch_single",
-            node_id="node_1",
-            file_path="/tmp/test.json",
-            agent_name="test_agent",
-        )
+    def test_single_dict_is_refused(self):
+        """A pre-parsed object is not a document: it must be wrapped in an array."""
+        with pytest.raises(AgentActionsError) as caught:
+            _prepare_json_batch(
+                {"key": "value", "number": 42},
+                batch_id="batch_single",
+                node_id="node_1",
+                file_path="/tmp/test.json",
+                agent_name="test_agent",
+            )
 
-        assert len(result) == 1
-        assert result[0]["content"]["source"] == content
-        assert result[0]["source_guid"]
-        assert result[0]["batch_id"] == "batch_single"
-        assert result[0]["batch_uuid"] == "batch_single_0"
-        assert result[0]["node_id"] == "node_1"
+        assert "Wrap it in an array" in str(caught.value)
 
     def test_empty_list_returns_empty(self):
         """Empty list input should return empty list."""
