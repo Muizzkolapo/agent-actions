@@ -58,7 +58,14 @@ def _names_a_workflow(node: ast.AST) -> bool:
 
 
 def _defaults_names(tree: ast.AST) -> set[str]:
-    bound = set(DEFAULTS_NAMES)
+    """Names holding a workflow defaults block in this module.
+
+    A module that binds the bare name to something else — `ActionConfig` has an
+    unrelated `defaults` field, for per-field UDF defaults — loses the seed, so
+    its reads cannot vouch for a key that nothing else reads.
+    """
+    genuine: set[str] = set()
+    rebound: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
@@ -68,14 +75,17 @@ def _defaults_names(tree: ast.AST) -> set[str]:
             targets, value = [node.target], node.value
         else:
             continue
-        if not _is_defaults_read(value):
-            continue
-        for target in targets:
-            if isinstance(target, ast.Name):
-                bound.add(target.id)
-            elif isinstance(target, ast.Attribute):
-                bound.add(target.attr)
-    return bound
+        names = {n for n in (_bindable_name(t) for t in targets) if n}
+        (genuine if _is_defaults_read(value) else rebound).update(names)
+    return (set(DEFAULTS_NAMES) | genuine) - (rebound - genuine)
+
+
+def _bindable_name(target: ast.AST) -> str | None:
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    return None
 
 
 def _is_defaults(node: ast.AST, bound: set[str]) -> bool:
@@ -173,6 +183,9 @@ CAUGHT = {
 MISSED = {
     "crosses a function boundary": 'def helper(d):\n    return d.get("stray")\nhelper(defaults)',
     "held under some other name": 'blk = load()\nblk.get("stray")',
+    # `defaults` also names an action's per-field UDF defaults. A module binding
+    # it to one of those must not vouch for a key nothing else reads.
+    "the name rebound to another block": 'defaults = action.get("defaults")\ndefaults.get("stray")',
 }
 
 
