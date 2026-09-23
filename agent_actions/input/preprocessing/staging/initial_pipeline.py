@@ -385,16 +385,16 @@ def _prepare_json_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare pre-parsed JSON content for batch mode."""
-    rows = content if isinstance(content, list) else [content]
-    _refuse_rows_that_are_not_records(rows, file_path, agent_name)
-    return _add_batch_metadata(rows, batch_id, node_id, storage_backend, relative_path)
+    _refuse_rows_that_are_not_records(content, file_path, agent_name)
+    return _add_batch_metadata(content, batch_id, node_id, storage_backend, relative_path)
 
 
 def _refuse_rows_that_are_not_records(rows: Any, file_path: str, agent_name: str) -> None:
     """Stop an input whose rows cannot carry a payload, before identity is derived."""
     if not isinstance(rows, list):
         raise AgentActionsError(
-            f"A staged input must be rows; found {type(rows).__name__}.",
+            f"A staged input must be rows; found {type(rows).__name__}. "
+            "Wrap it in an array: [ ... ].",
             context={
                 "file_path": file_path,
                 "agent_name": agent_name,
@@ -565,10 +565,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
 
     elif ctx.file_type == ".json":
         raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
-
-        if not isinstance(raw_items, list):
-            raw_items = [raw_items]
-
         _refuse_rows_that_are_not_records(raw_items, ctx.file_path, ctx.agent_name)
         data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
 
