@@ -15,6 +15,7 @@ from tests.integration.test_retry_ignores_record_cap import (
     RECORDS,
     WORKFLOW,
     _backend,
+    _fail,
     _record_ids,
     project,  # noqa: F401
 )
@@ -155,14 +156,27 @@ def test_the_expectation_below_passes_on_what_it_is_handed(inventing):
     assert verdicts == [True, True]
 
 
-def test_an_invented_row_says_which_identity_to_resolve_it_by(inventing):
-    """Its own guid matches nothing in the source pool, so it must name one that
-    does or `resolve_source_content` dead-ends on it."""
-    staged = set(_record_ids(inventing, ACTION))
+def test_an_invented_row_claims_no_producer(inventing):
+    """No single input produced it, and `parent_source_guid` is read as the
+    producer — by source lookup, and by the gate deciding which stored rows a
+    repair may replace. Naming the input that stood in for its namespaces would
+    answer the first at the price of misleading the second."""
     parents = {r.get("parent_source_guid") for r in _raw(inventing, "roll_up")}
 
-    assert parents <= staged
-    assert None not in parents
+    assert parents == {None}
+
+
+def test_a_retry_below_it_still_says_it_cannot_attribute_these_rows(inventing):
+    """The diagnostic that survives because the row claims nothing. The rerun
+    regenerates rows the gate also hands back, and this warning is the only
+    thing that tells a user so — see #1022 for the duplication itself."""
+    selected = _record_ids(inventing, ACTION)[1]
+    _fail(inventing, selected, ACTION)
+
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+    assert result.exit_code == 0, result.output
+    assert "cannot be attributed" in result.output
 
 
 def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
@@ -170,3 +184,24 @@ def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
     being synthetic, and the rows above it must not start being tombstoned as
     records the tool forgot."""
     assert len(_raw(inventing, ACTION)) == RECORDS
+
+
+def test_what_a_retry_does_to_a_row_no_single_record_produced(inventing):
+    """Pinned as numbers so the growth cannot worsen unnoticed.
+
+    Every retry carries the stored rows back beside the ones the rerun makes
+    again, because an aggregating action recomputes over whatever input the
+    repair narrowed it to and the gate cannot match the results up. This branch
+    does not change that — it keeps the rows attributable-to-nothing, so the
+    warning above still fires. Closing it needs the field in #1022.
+    """
+    ids = _record_ids(inventing, ACTION)
+    counts = [len(_raw(inventing, "roll_up"))]
+
+    for selected in (ids[0], ids[1]):
+        _fail(inventing, selected, ACTION)
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+        assert result.exit_code == 0, result.output
+        counts.append(len(_raw(inventing, "roll_up")))
+
+    assert counts == [2, 4, 6], f"the retry behaviour changed: {counts}"

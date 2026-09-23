@@ -11,7 +11,11 @@ import json
 import pathlib
 import tempfile
 
+import pytest
+
+from agent_actions.processing.enrichment import VersionIdEnricher
 from agent_actions.processing.source_resolution import resolve_source_content
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.merge import merge_records_by_key
@@ -19,7 +23,9 @@ from agent_actions.workflow.pipeline_file_mode import reconcile_outputs
 
 UPSTREAM = {"source": {"t": "alpha"}, "a1": {"v": 1}}
 
-MARKS = ("_delta_mode", "version_correlation_id", "parent_source_guid")
+# The marks that follow from minting. Attribution is not among them: it follows
+# from whether the row named a parent, which is what the two branches differ on.
+STORAGE_MARKS = ("_delta_mode", "version_correlation_id")
 
 
 def records(*guids, content=None):
@@ -43,8 +49,8 @@ def stored(rows):
     return [{**r, "_state": "processed", "_schema_version": 1} for r in rows]
 
 
-def marks(row):
-    return {k: row.get(k) for k in MARKS}
+def storage_marks(row):
+    return {k: row.get(k) for k in STORAGE_MARKS}
 
 
 class TestARowWithNoParentIsStillWholeWhenReadBack:
@@ -73,6 +79,30 @@ class TestARowWithNoParentIsStillWholeWhenReadBack:
             ["a1", "a2", "source"],
         ]
 
+    def test_its_source_resolves_once_it_comes_back_whole(self):
+        """What an attribution would have bought, bought by the storage mark
+        instead: the row carries `source` in its own content, which is the first
+        thing `resolve_source_content` reads. Stored as a delta it came back
+        without it, and the lookup fell through to a guid the pool never had."""
+        rows, _ = reconcile_outputs(invented(1), "a2", records("G0", content=UPSTREAM))
+
+        with tempfile.TemporaryDirectory() as directory:
+            backend = SQLiteBackend(str(pathlib.Path(directory) / "s.db"), "wf")
+            backend.initialize()
+            backend.save_metadata("execution_order", json.dumps(["a1", "a2"]))
+            backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": ["a1"]}))
+            backend.write_target(
+                "a1", "f.json", stored([{"source_guid": "G0", "content": dict(UPSTREAM)}])
+            )
+            backend.write_target("a2", "f.json", stored(rows))
+            read_back = backend.read_target("a2", "f.json")[0]
+
+        pool = [{"source_guid": "G0", "content": {"source": dict(UPSTREAM["source"])}}]
+        resolved = resolve_source_content(read_back, read_back.get("source_guid"), pool)
+
+        assert resolved is not None
+        assert resolved["content"]["source"] == UPSTREAM["source"]
+
 
 class TestRowsWithNoParentAreNotFannedBackIn:
     def test_a_merge_keeps_them_apart(self):
@@ -94,43 +124,79 @@ class TestRowsWithNoParentAreNotFannedBackIn:
         assert len(merge_records_by_key(rows)) == 2
 
 
-class TestARowWithNoParentSaysHowToResolveIt:
-    """``parent_source_guid`` means "my own guid matches nothing in the pool".
-    A minted one never does, so the row has to name an identity that does."""
+class TestARowThatNamesNoParent:
+    """``parent_source_guid`` is read as the row's *producer* — by source lookup,
+    and by the gate that decides which stored rows a repair may replace. A
+    synthetic row has no single producer, so it claims none."""
 
-    def test_it_names_the_identity_of_the_input_whose_namespaces_it_carries(self):
-        rows, _ = reconcile_outputs(invented(2), "a2", records("G0", "G1"))
-
-        assert [r.get("parent_source_guid") for r in rows] == ["G0", "G0"]
-
-    def test_the_source_pool_resolves_through_it(self):
-        rows, _ = reconcile_outputs(invented(1), "a2", records("G0", "G1"))
-        pool = [{"source_guid": "G0", "content": {"source": {"t": "alpha"}}}]
-
-        resolved = resolve_source_content(rows[0], rows[0].get("source_guid"), pool)
-
-        assert resolved == pool[0]
-
-    def test_an_ancestor_the_input_already_carries_wins_over_the_input_itself(self):
-        """The input may itself be an expansion child, whose minted guid matches
-        nothing in the pool either. Pass on the pool-resolvable one."""
-        parents = [{"source_guid": "M0", "parent_source_guid": "POOL0", "content": {}}]
-        rows, _ = reconcile_outputs(invented(1), "a2", parents)
-
-        assert rows[0]["parent_source_guid"] == "POOL0"
-
-
-class TestTheTwoMintingBranchesAgree:
-    def test_a_row_with_no_parent_is_marked_like_a_row_that_shares_one(self):
-        """Both are born here, so both take on what a minted identity implies.
-        A difference between them would have to be one this asserts away."""
-        shared = FileUDFResult(
-            [{"source_index": 0, "data": {"o": 0}}, {"source_index": 0, "data": {"o": 1}}]
+    @pytest.mark.parametrize("version_merge", [False, True])
+    def test_it_claims_no_producer(self, version_merge):
+        rows, _ = reconcile_outputs(
+            invented(2), "a2", records("G0", "G1"), version_merge=version_merge
         )
-        sharing, _ = reconcile_outputs(shared, "a2", records("G0", "G1"))
+
+        assert [row.get("parent_source_guid") for row in rows] == [None, None]
+
+    def test_it_does_not_take_the_identity_of_the_input_standing_in_for_it(self):
+        """``_resolve_input_record`` stands ``original_data[0]`` in for namespace
+        carry-forward. That is a content decision, not an identity one."""
+        rows, _ = reconcile_outputs(invented(1), "a2", records("G0"))
+
+        assert rows[0]["source_guid"] != "G0"
+
+
+class TestARowThatNamesAParent:
+    """It hands on the parent's pool-resolvable identity: a parent that is itself
+    an expansion child has a minted guid matching nothing in the pool."""
+
+    SHARED = FileUDFResult(
+        [{"source_index": 0, "data": {"o": 0}}, {"source_index": 0, "data": {"o": 1}}]
+    )
+
+    @pytest.mark.parametrize("version_merge", [False, True])
+    def test_an_ancestor_the_parent_carries_wins_over_the_parent_itself(self, version_merge):
+        """Parametrised over the version-merge fork because that is the only mode
+        in which this line is observable: with it off, ``RecordEnvelope.build``
+        has already carried the ancestor onto the row and the branch never runs,
+        so a version-merge action is the one place the precedence can be lost."""
+        parents = [{"source_guid": "M0", "parent_source_guid": "POOL0", "content": {"a1": {}}}]
+
+        rows, _ = reconcile_outputs(self.SHARED, "a2", parents, version_merge=version_merge)
+
+        assert [row.get("parent_source_guid") for row in rows] == ["POOL0", "POOL0"]
+
+    @pytest.mark.parametrize("version_merge", [False, True])
+    def test_a_parent_with_no_ancestor_hands_on_its_own_identity(self, version_merge):
+        parents = [{"source_guid": "G0", "content": {"a1": {}}}]
+
+        rows, _ = reconcile_outputs(self.SHARED, "a2", parents, version_merge=version_merge)
+
+        assert [row.get("parent_source_guid") for row in rows] == ["G0", "G0"]
+
+
+class TestTheTwoMintingBranches:
+    """Both are born here, so both take on what a minted identity implies for
+    storage. They part on attribution, and only there."""
+
+    SHARED = FileUDFResult(
+        [{"source_index": 0, "data": {"o": 0}}, {"source_index": 0, "data": {"o": 1}}]
+    )
+
+    def test_they_carry_the_same_storage_marks(self):
+        sharing, _ = reconcile_outputs(self.SHARED, "a2", records("G0", "G1"))
         parentless, _ = reconcile_outputs(invented(2), "a2", records("G0", "G1"))
 
-        assert [marks(r) for r in parentless] == [marks(r) for r in sharing]
+        assert [storage_marks(r) for r in parentless] == [storage_marks(r) for r in sharing]
+
+    def test_only_the_one_that_named_a_parent_claims_a_producer(self):
+        """The stated difference. A row that shares a parent has one to name; a
+        row that named none would have to borrow, and the field is read as a
+        producer by the gate deciding which rows a repair may replace."""
+        sharing, _ = reconcile_outputs(self.SHARED, "a2", records("G0", "G1"))
+        parentless, _ = reconcile_outputs(invented(2), "a2", records("G0", "G1"))
+
+        assert [r.get("parent_source_guid") for r in sharing] == ["G0", "G0"]
+        assert [r.get("parent_source_guid") for r in parentless] == [None, None]
 
 
 class TestAParentThatCarriesNoIdentity:
@@ -141,7 +207,10 @@ class TestAParentThatCarriesNoIdentity:
         rows, _ = reconcile_outputs(
             FileUDFResult([{"source_index": 1, "data": {"o": 0}}]),
             "a2",
-            [{"source_guid": "G0", "content": {}}, {"content": {}}],
+            [
+                {"source_guid": "G0", "content": {}},
+                {"version_correlation_id": "V1", "content": {}},
+            ],
         )
 
         assert rows[0]["_delta_mode"] == "full"
@@ -199,10 +268,40 @@ class TestWhatIsNotMinted:
         assert rows[0]["source_guid"] == "G0"
         assert "_delta_mode" not in rows[0]
 
-    def test_a_row_with_no_parent_does_not_take_the_identity_it_is_attributed_to(self):
-        """The stand-in answers "resolve me through this", not "I am this". Taking
-        the guid would put two rows under one identity, which is 615 again."""
-        rows, _ = reconcile_outputs(invented(1), "a2", records("G0"))
 
-        assert rows[0]["source_guid"] != "G0"
-        assert rows[0]["parent_source_guid"] == "G0"
+class TestUnderAVersionedAction:
+    """``VersionIdEnricher`` assigns an id only to a row that has none, so the drop
+    above is the only thing that can separate two rows born from one stand-in."""
+
+    CONFIG = {
+        "agent_type": "consumer",
+        "is_versioned_agent": True,
+        "version_base_name": "a2",
+        "workflow_session_id": "sess",
+        "action_name": "a2",
+    }
+
+    def _enriched(self, rows):
+        context = ProcessingContext(
+            agent_config=dict(self.CONFIG), agent_name="a2", is_first_stage=False
+        )
+        context.record_index = 0
+        result = ProcessingResult.success(data=rows, source_guid=None)
+        return VersionIdEnricher().enrich(result, context).data
+
+    def test_two_rows_with_no_parent_end_with_distinct_ids(self):
+        rows, _ = reconcile_outputs(invented(2), "a2", records("G0", "G1"))
+
+        ids = [row.get("version_correlation_id") for row in self._enriched(rows)]
+
+        assert len(set(ids)) == 2
+
+    def test_an_id_that_reached_the_enricher_would_have_survived_it(self):
+        """Why the drop cannot be left to the enricher. Built as the rows arrived
+        before the drop, since the point is what the enricher does with them."""
+        kept = [
+            {"source_guid": "minted-1", "version_correlation_id": "V0", "content": {}},
+            {"source_guid": "minted-2", "version_correlation_id": "V0", "content": {}},
+        ]
+
+        assert len(merge_records_by_key(self._enriched(kept))) == 1
