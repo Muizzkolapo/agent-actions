@@ -1,12 +1,13 @@
 """Regression tests: lineage preservation across version merge boundaries.
 
 When version_consumption merges outputs from N version agents, the merged
-record's lineage must survive into the consuming action's output.  Before the
-fix, _create_correlation_source_data() wrote skeletal source records without
-lineage, causing the enricher to truncate to [own_node_id].
+record's lineage must survive into the consuming action's output, or the
+enricher truncates to [own_node_id].
+
+Read through the store, which is where the runtime loads an action's source
+records from.
 """
 
-import json
 from pathlib import Path
 
 import pytest
@@ -26,13 +27,25 @@ def _write_version_outputs_to_backend(backend, version_agents: dict):
         backend._write_target_raw(agent_name, "data.json", enriched)
 
 
-def _load_source_data(agent_folder: Path, filename: str = "data.json") -> list[dict]:
-    """Load source records written by _create_correlation_source_data."""
-    source_file = agent_folder / "source" / filename
-    if not source_file.exists():
+def _correlated_source_records(backend, action: str = "consumer") -> list[dict]:
+    """The source records the enricher is handed at run time.
+
+    The runtime loads these through the store, so the correlated output is read
+    back the same way and projected into the shape a source record has.
+    """
+    try:
+        merged = backend.read_target(action, "data.json")
+    except FileNotFoundError:
         return []
-    with open(source_file) as f:
-        return json.load(f)
+    return [
+        {
+            "source_guid": record.get("source_guid"),
+            "id": record.get("target_id", record.get("source_guid")),
+            "lineage": record.get("lineage", []),
+            "node_id": record.get("node_id"),
+        }
+        for record in merged
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +156,7 @@ class TestVersionMergeLineage:
 
         correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
 
-        source_data = _load_source_data(agent_folder)
+        source_data = _correlated_source_records(backend)
         assert len(source_data) == 1
         assert "lineage" in source_data[0], "Source record must include lineage"
 
@@ -192,7 +205,7 @@ class TestVersionMergeLineage:
         records = backend.read_target("consumer", "data.json")
         assert records[0]["source_guid"] == "sg-abc"
 
-        source_data = _load_source_data(agent_folder)
+        source_data = _correlated_source_records(backend)
         assert source_data[0]["source_guid"] == "sg-abc"
 
     def test_partial_merge_preserves_lineage(self, correlator, backend, agent_folder):
@@ -292,7 +305,7 @@ class TestVersionMergeLineage:
         )
 
         correlator.prepare_correlated_input("consumer", ["gen_1", "gen_2"], 3)
-        source_data = _load_source_data(agent_folder)
+        source_data = _correlated_source_records(backend)
         assert len(source_data) == 2
 
         # Enrich each record — per-item parent lookup via source_guid matching
@@ -312,3 +325,76 @@ class TestVersionMergeLineage:
             enriched = enricher.enrich(result, context)
             item = enriched.data[0]
             assert len(item["lineage"]) > 1, f"Lineage for {sg} truncated to {item['lineage']}"
+
+
+class TestCorrelationLeavesNoUnreadArtefact:
+    """The correlator used to write agent_io/source/<target>.json beside its output.
+
+    Nothing read it: an action's source records come from the store. It was a
+    stub — source_guid, id, lineage, node_id — keyed on the target's basename
+    with the action directory dropped, so two merges onto same-named targets
+    overwrote each other.
+    """
+
+    @pytest.fixture
+    def agent_folder(self, tmp_path):
+        return tmp_path
+
+    @pytest.fixture
+    def backend(self, agent_folder):
+        b = SQLiteBackend.create(db_path=str(agent_folder / "store" / "t.db"), workflow_name="t")
+        b.initialize()
+        yield b
+        b.close()
+
+    @pytest.fixture
+    def correlator(self, agent_folder, backend):
+        return VersionOutputCorrelator(agent_folder, storage_backend=backend)
+
+    def test_no_source_artefact_is_left_in_the_project(self, correlator, backend, agent_folder):
+        _write_version_outputs_to_backend(
+            backend,
+            {
+                "v1": [
+                    {
+                        "source_guid": "sg-1",
+                        "version_correlation_id": "vc-1",
+                        "target_id": "tid-1",
+                        "node_id": "v1_aaa",
+                        "lineage": ["root", "v1_aaa"],
+                        "content": {"v1": {"x": 1}},
+                    }
+                ],
+            },
+        )
+
+        correlator.prepare_correlated_input("consumer", ["v1"], 2)
+
+        leftovers = sorted(p.name for p in (agent_folder / "source").glob("*.json"))
+        assert leftovers == [], f"correlation left unread files behind: {leftovers}"
+
+    def test_the_merged_output_still_carries_identity_and_lineage(
+        self, correlator, backend, agent_folder
+    ):
+        """Control: removing the artefact removes nothing the framework reads."""
+        _write_version_outputs_to_backend(
+            backend,
+            {
+                "v1": [
+                    {
+                        "source_guid": "sg-1",
+                        "version_correlation_id": "vc-1",
+                        "target_id": "tid-1",
+                        "node_id": "v1_aaa",
+                        "lineage": ["root", "v1_aaa"],
+                        "content": {"v1": {"x": 1}},
+                    }
+                ],
+            },
+        )
+
+        correlator.prepare_correlated_input("consumer", ["v1"], 2)
+
+        records = _correlated_source_records(backend)
+        assert [r["source_guid"] for r in records] == ["sg-1"]
+        assert records[0]["lineage"] == ["root", "v1_aaa"]

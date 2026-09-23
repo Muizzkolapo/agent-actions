@@ -1,8 +1,9 @@
-"""``agac clean``'s default scope must not delete generated output.
+"""``agac clean``'s scope must not delete generated output by accident.
 
-``target/`` holds paid per-action output; ``source/`` is rebuilt from
-``staging/`` on the next run. Contract: default removes source only,
-``--target`` opts into output removal, ``--all`` stays full removal.
+``target/`` holds paid per-action output, so it stays behind ``--target``;
+``--all`` stays full removal. Nothing writes ``agent_io/source/`` any more, so
+a bare ``agac clean`` names the flags that do something rather than reporting
+success over an empty list.
 """
 
 from __future__ import annotations
@@ -36,38 +37,41 @@ def _cleaned_names(agent_manager: MagicMock) -> set[str]:
     return {Path(call.args[1]).name for call in agent_manager.clean_directory.call_args_list}
 
 
-def test_default_removes_source_only(tmp_path):
+def test_a_bare_clean_names_the_flags_that_do_something(tmp_path):
+    """Nothing writes source/ any more, so the old default has nothing to remove.
+    Reporting success over an empty list reads as 'cleaned' to a script."""
     cleaner, agent_manager = _make_cleaner(tmp_path, force=True)
+
+    with pytest.raises(click.ClickException) as exc:
+        cleaner.run()
+
+    message = str(exc.value)
+    assert "--target" in message and "--all" in message
+    agent_manager.clean_directory.assert_not_called()
+
+
+def test_target_flag_removes_generated_output(tmp_path):
+    cleaner, agent_manager = _make_cleaner(tmp_path, force=True, remove_target=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"source"}, f"default scope must be source only, got {names}"
+    assert names == {"target"}, f"--target scope must be target, got {names}"
 
 
-def test_default_confirmation_lists_only_source(tmp_path, monkeypatch, capsys):
-    cleaner, agent_manager = _make_cleaner(tmp_path, force=False)
+def test_target_confirmation_lists_what_it_will_remove(tmp_path, monkeypatch, capsys):
+    cleaner, agent_manager = _make_cleaner(tmp_path, force=False, remove_target=True)
     monkeypatch.setattr(click, "confirm", lambda *args, **kwargs: False)
     cleaner.run()
     out = capsys.readouterr().out
     listed = [line for line in out.splitlines() if line.strip().startswith("•")]
-    assert any(line.rstrip().endswith("source") for line in listed)
-    assert not any(line.rstrip().endswith("target") for line in listed), (
-        f"confirmation must not list target/ for a default clean, output was:\n{out}"
-    )
+    assert any(line.rstrip().endswith("target") for line in listed)
     agent_manager.clean_directory.assert_not_called()
-
-
-def test_target_flag_removes_source_and_target(tmp_path):
-    cleaner, agent_manager = _make_cleaner(tmp_path, force=True, remove_target=True)
-    cleaner.run()
-    names = _cleaned_names(agent_manager)
-    assert names == {"source", "target"}, f"--target scope must be source+target, got {names}"
 
 
 def test_all_still_removes_everything(tmp_path):
     """Regression: explicit --all callers keep today's full-removal behaviour."""
     cleaner, agent_manager = _make_cleaner(tmp_path, force=True, remove_all=True)
     cleaner.run()
-    assert _cleaned_names(agent_manager) == {"source", "target", "staging", "store"}
+    assert _cleaned_names(agent_manager) == {"target", "staging", "store"}
 
 
 def test_target_with_all_is_still_full_removal(tmp_path):
@@ -75,7 +79,7 @@ def test_target_with_all_is_still_full_removal(tmp_path):
         tmp_path, force=True, remove_target=True, remove_all=True
     )
     cleaner.run()
-    assert _cleaned_names(agent_manager) == {"source", "target", "staging", "store"}
+    assert _cleaned_names(agent_manager) == {"target", "staging", "store"}
 
 
 def test_cli_exposes_target_flag():
@@ -84,9 +88,9 @@ def test_cli_exposes_target_flag():
     assert "output" in opt.help.lower(), "--target help must say it removes generated output"
 
 
-def test_command_help_describes_source_only_default():
-    assert "source and target" not in clean_cli.help, (
-        "command help still claims the default removes target/"
+def test_command_help_does_not_promise_a_default_removal():
+    assert "source directory" not in clean_cli.help, (
+        "command help still describes a directory nothing writes"
     )
     assert "source" in clean_cli.help
 

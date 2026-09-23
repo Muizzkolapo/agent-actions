@@ -146,6 +146,20 @@ class TestSaverEvents:
         assert saved_event.bytes_written == len(json.dumps({"k": "v"}).encode())
 
     @patch("agent_actions.output.saver.fire_event")
+    def test_the_events_do_not_name_a_file_that_is_never_written(self, mock_fire, tmp_path):
+        """Source items go to the store. Naming agent_io/source/<path>.json sends
+        anyone reading the event, or the log line beside it, to a path that has
+        never existed."""
+        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+
+        saver.save_source_items([{"k": "v"}], "path")
+
+        assert not (tmp_path / "agent_io" / "source").exists()
+        for call in mock_fire.call_args_list:
+            named = call[0][0].file_path
+            assert "agent_io/source" not in named, f"event points at an unwritten file: {named}"
+
+    @patch("agent_actions.output.saver.fire_event")
     def test_bytes_written_calculated_correctly(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
