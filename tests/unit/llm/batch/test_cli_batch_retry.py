@@ -29,7 +29,6 @@ def _make_service(**overrides) -> BatchProcessingService:
         "context_manager": MagicMock(),
         "result_processor": MagicMock(),
         "registry_manager_factory": MagicMock(),
-        "source_handler": None,
         "action_indices": {},
         "dependency_configs": {},
         "storage_backend": MagicMock(),

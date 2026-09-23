@@ -314,7 +314,6 @@ def _build_processing_service(*, storage_backend: Any = None) -> Any:
         context_manager=MagicMock(),
         result_processor=MagicMock(),
         registry_manager_factory=MagicMock(),
-        source_handler=None,
         action_indices={},
         dependency_configs={},
         storage_backend=storage_backend,

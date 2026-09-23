@@ -103,9 +103,6 @@ def initialize_services(
     from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
         BatchClientResolver,
     )
-    from agent_actions.llm.batch.infrastructure.batch_source_handler import (
-        BatchSourceHandler,
-    )
     from agent_actions.llm.batch.infrastructure.context import BatchContextManager
     from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
     from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
@@ -115,7 +112,6 @@ def initialize_services(
     result_processor = BatchResultStrategy()
     context_manager = BatchContextManager()
     client_resolver = BatchClientResolver(client_cache={}, default_client=None)
-    source_handler = BatchSourceHandler()
     assert storage_backend is not None, "storage_backend required for batch services"
     registry_manager_factory = create_registry_manager_factory(storage_backend)
     job_manager = BatchJobManager(client_resolver=client_resolver, storage_backend=storage_backend)
@@ -125,7 +121,6 @@ def initialize_services(
         context_manager=context_manager,
         result_processor=result_processor,
         registry_manager_factory=registry_manager_factory,
-        source_handler=source_handler,
         action_indices=metadata.action_indices,
         dependency_configs=metadata.action_configs,
         storage_backend=storage_backend,

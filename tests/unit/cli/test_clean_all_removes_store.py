@@ -18,7 +18,9 @@ from agent_actions.storage.backend import StorageBackend
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
-def _make_cleaner(tmp_path: Path, *, remove_all: bool, force: bool) -> tuple[Cleaner, MagicMock]:
+def _make_cleaner(
+    tmp_path: Path, *, remove_all: bool, force: bool, remove_target: bool = False
+) -> tuple[Cleaner, MagicMock]:
     """Build a Cleaner over a fake agent_io tree with a mocked AgentManager.
 
     Returns the cleaner and the agent_manager mock so tests can inspect which
@@ -37,6 +39,7 @@ def _make_cleaner(tmp_path: Path, *, remove_all: bool, force: bool) -> tuple[Cle
         agent="wf",
         force=force,
         remove_all=remove_all,
+        remove_target=remove_target,
         project_root=tmp_path,
         agent_manager=agent_manager,
     )
@@ -53,17 +56,19 @@ def test_all_removes_store(tmp_path):
     cleaner.run()
     names = _cleaned_names(agent_manager)
     assert "store" in names, f"--all must remove store/, got {names}"
-    assert names == {"source", "target", "staging", "store"}
+    assert names == {"target", "staging", "store"}
 
 
 def test_no_all_preserves_store(tmp_path):
-    """Baseline: without --all, only source/ is removed (store survives)."""
-    cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=False, force=True)
+    """Baseline: --target removes generated output and nothing durable."""
+    cleaner, agent_manager = _make_cleaner(
+        tmp_path, remove_all=False, remove_target=True, force=True
+    )
     cleaner.run()
     names = _cleaned_names(agent_manager)
     assert "store" not in names
     assert "staging" not in names
-    assert names == {"source"}
+    assert names == {"target"}
 
 
 def test_all_confirmation_lists_store(tmp_path, monkeypatch, capsys):
@@ -168,7 +173,7 @@ def test_all_ignores_backend_that_owns_no_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"source", "target", "staging", "store"}, (
+    assert names == {"target", "staging", "store"}, (
         "Remote backend contributed no paths yet SQLite's store/ still gets wiped"
     )
 
@@ -232,7 +237,7 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"source", "target", "staging", "store", "warehouse"}
+    assert names == {"target", "staging", "store", "warehouse"}
 
 
 if __name__ == "__main__":  # pragma: no cover

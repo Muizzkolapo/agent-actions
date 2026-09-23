@@ -99,19 +99,16 @@ class TestSaveSourceItems:
         )
 
     @patch("agent_actions.output.saver.fire_event")
-    def test_source_file_path_construction(self, mock_fire, tmp_path):
-        """Source file path should be base/agent_io/source/{relative_path}.json."""
-        backend = MagicMock()
-        saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
-            storage_backend=backend,
-        )
+    def test_the_event_names_the_path_the_items_are_stored_under(self, mock_fire, tmp_path):
+        """The items go to the store under the relative path, so that is what the
+        event names — there is no file to point at."""
+        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+
         saver.save_source_items([{"x": 1}], "node_1/batch_001")
 
-        expected_path = str(tmp_path / "agent_io" / "source" / "node_1" / "batch_001.json")
-        # Verify the saving event received the correct path
         saving_event = mock_fire.call_args_list[0][0][0]
-        assert saving_event.file_path == expected_path
+        assert "node_1/batch_001" in saving_event.file_path
+        assert not saving_event.file_path.endswith(".json")
 
 
 # ---------------------------------------------------------------------------
@@ -190,12 +187,12 @@ class TestSaverErrors:
         with pytest.raises(ValueError, match="Storage backend not configured"):
             saver.save_source_items([{"x": 1}], "path")
 
-    def test_error_message_includes_file_path(self, tmp_path):
+    def test_error_message_names_the_path_that_could_not_be_stored(self, tmp_path):
         saver = UnifiedSourceDataSaver(
             base_directory=str(tmp_path),
             storage_backend=None,
         )
-        with pytest.raises(ValueError, match=r"\.json"):
+        with pytest.raises(ValueError, match=r"node/batch"):
             saver.save_source_items([{"x": 1}], "node/batch")
 
     @patch("agent_actions.output.saver.fire_event")

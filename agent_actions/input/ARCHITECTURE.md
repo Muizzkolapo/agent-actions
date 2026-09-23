@@ -113,7 +113,6 @@ Note that CSV returns raw rows (list of lists), not dicts. The `TabularLoader` h
 ```
 SourceDataLoader(agent_name, storage_backend)
   .load_source_data(relative_path)  --> storage_backend.read_source()
-  .save_source_data(relative_path, data)  --> storage_backend.write_source()
 ```
 
 ### Data source resolution

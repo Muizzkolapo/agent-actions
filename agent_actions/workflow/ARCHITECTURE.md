@@ -367,7 +367,6 @@ Run N: Resume (if recovery submitted)
 1. ActionRunner          ← DI container, tool discovery
 2. BatchClientResolver   ← resolves provider SDK by vendor name
 3. BatchContextManager   ← context map persistence
-4. BatchSourceHandler    ← source data for retry
 5. BatchJobManager       ← registry manager factory
 6. BatchProcessingService← orchestrates result processing
 7. VersionOutputCorrelator← version/loop input correlation

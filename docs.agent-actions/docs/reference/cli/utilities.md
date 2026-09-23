@@ -120,15 +120,14 @@ agac example install contract_reviewer my_project
 
 ## clean
 
-The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, which holds the correlation files written for version-merge actions and is rebuilt on the next run that needs it. Your staged input is untouched. Anything beyond that is opt-in.
+The `clean` command removes a workflow's working directories under `agent_io/`. Nothing is removed unless you say what: the command names the flags and stops. Your staged input and the durable store are untouched unless you ask for them.
 
 ```bash
 agac clean -a <workflow-name> [options]
 ```
 
 Removes:
-- `agent_io/source/` — version-correlation files, rewritten on the next run that needs them (always)
-- `agent_io/target/` — your generated output (only with `--target` or `--all`)
+- `agent_io/target/` — your generated output (with `--target` or `--all`)
 - `agent_io/staging/` and the durable store — your input data and run history (only with `--all`)
 
 **Options:**
@@ -136,7 +135,7 @@ Removes:
 |--------|-------------|
 | `-a, --agent TEXT` | Agentic workflow name (required) |
 | `-f, --force` | Skip interactive confirmation |
-| `--target` | Also remove `agent_io/target/` — your generated output |
+| `--target` | Remove `agent_io/target/` — your generated output |
 | `--all` | Remove all directories including target, staging, and the durable store — unrecoverable |
 
 **Examples:**

@@ -301,43 +301,6 @@ class TestWriteTarget:
 
 
 # ---------------------------------------------------------------------------
-# write_source
-# ---------------------------------------------------------------------------
-
-
-class TestWriteSource:
-    """Tests for write_source (JSON atomic write)."""
-
-    @patch("agent_actions.output.writer.fire_event")
-    def test_writes_json_atomically(self, mock_fire, tmp_path):
-        fp = str(tmp_path / "source.json")
-        writer = FileWriter(fp)
-        data = [{"id": 1}, {"id": 2}]
-        writer.write_source(data)
-
-        with open(fp) as f:
-            loaded = json.load(f)
-        assert loaded == data
-
-    @patch("agent_actions.output.writer.fire_event")
-    def test_creates_parent_dirs(self, mock_fire, tmp_path):
-        fp = str(tmp_path / "deep" / "nested" / "source.json")
-        writer = FileWriter(fp)
-        writer.write_source({"k": "v"})
-
-        assert Path(fp).exists()
-
-    @patch("agent_actions.output.writer.fire_event")
-    def test_no_leftover_tmp_files(self, mock_fire, tmp_path):
-        fp = str(tmp_path / "source.json")
-        writer = FileWriter(fp)
-        writer.write_source({"k": "v"})
-
-        tmp_files = list(tmp_path.glob("*.tmp"))
-        assert len(tmp_files) == 0
-
-
-# ---------------------------------------------------------------------------
 # Error handling in _execute_write
 # ---------------------------------------------------------------------------
 

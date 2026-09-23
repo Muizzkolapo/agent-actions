@@ -46,11 +46,16 @@ class Cleaner:
         )
         io_dir = Path(io_dir_str)
         include_target = self.remove_target or self.remove_all
+        if not include_target:
+            raise click.ClickException(
+                "Nothing is cleaned by default. Choose what to remove:\n"
+                "  --target  generated output under agent_io/target/\n"
+                "  --all     everything, including staging and the durable store"
+            )
         directories: list[Path] = []
-        for sub in ("source", "target") if include_target else ("source",):
-            sub_path = io_dir / sub
-            if sub_path.exists():
-                directories.append(sub_path)
+        target_path = io_dir / "target"
+        if target_path.exists():
+            directories.append(target_path)
         if self.remove_all:
             staging_path = io_dir / "staging"
             if staging_path.exists():

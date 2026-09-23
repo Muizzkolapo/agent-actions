@@ -22,7 +22,6 @@ and chunking/lineage support).
 |--------|------|-------------|------------|
 | `FileReader.read()` | `agent_io/staging/` | Reads | — |
 | `SourceDataLoader.load_source_data()` | `agent_io/target/{action}/` | Reads | — |
-| `SourceDataLoader.save_source_data()` | `agent_io/target/{action}/` | Writes | — |
 | `resolve_start_node_data_source()` | `agent_io/staging/` | Reads | `data_source` |
 | `discover_udfs()` | `tools/{workflow}/*.py` | Reads | — |
 | `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl` |

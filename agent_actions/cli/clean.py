@@ -13,9 +13,9 @@ from agent_actions.llm.realtime.cleaner import Cleaner
     name="clean",
     help=(
         "Remove regenerable working directories created by an agent. "
-        "By default removes the source directory only; generated output "
-        "under agent_io/target/ requires --target, and --all removes "
-        "everything including staging and the durable store."
+        "Nothing is removed unless you say what: generated output under "
+        "agent_io/target/ requires --target, and --all removes everything "
+        "including staging and the durable store."
     ),
 )
 @click.option(

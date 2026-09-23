@@ -303,44 +303,8 @@ class VersionOutputCorrelator:
                     action_name,
                     e,
                 )
-            output_file = output_dir / filename
-            self._create_correlation_source_data(output_file, cleaned_data)
         else:
-            output_file = output_dir / filename
-            atomic_json_write(output_file, cleaned_data, indent=2)
-            self._create_correlation_source_data(output_file, cleaned_data)
-
-    def _create_correlation_source_data(
-        self, target_file: Path, correlated_data: list[dict[str, Any]]
-    ):
-        """Write the correlation target's source file, replacing what was there."""
-        try:
-            parts = target_file.parts
-            agent_io_index = None
-            for i, part in enumerate(parts):
-                if part == "agent_io":
-                    agent_io_index = i
-                    break
-            filename = target_file.name
-            if agent_io_index is not None:
-                pipeline_parts = parts[:agent_io_index]
-                source_path = Path(*pipeline_parts) / "agent_io" / "source" / filename
-            else:
-                source_path = self.agent_folder / "source" / filename
-            source_path.parent.mkdir(parents=True, exist_ok=True)
-            source_records = []
-            for record in correlated_data:
-                source_record = {
-                    "source_guid": record.get("source_guid"),
-                    "id": record.get("target_id", record.get("source_guid")),
-                    "lineage": record.get("lineage", []),
-                    "node_id": record.get("node_id"),
-                }
-                source_records.append(source_record)
-
-            atomic_json_write(source_path, source_records, indent=2)
-        except (OSError, ValueError) as e:
-            logger.warning("Could not create correlation source data: %s", e)
+            atomic_json_write(output_dir / filename, cleaned_data, indent=2)
 
 
 __all__ = ["VersionOutputCorrelator"]

@@ -1,6 +1,5 @@
 """Tests for Loop Output Correlator functionality."""
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -124,13 +123,13 @@ class TestVersionOutputCorrelator:
         assert result_dir is not None, "prepare_correlated_input returned None"
         target_files = storage_backend.list_target_files("reconstruct_options")
         assert test_filename in target_files, f"Expected {test_filename} in backend target files"
-        source_file = temp_agent_folder / "source" / test_filename
-        assert source_file.exists(), f"Source file {test_filename} not created"
 
-    def test_correlation_source_includes_lineage(
+    def test_correlated_output_includes_lineage(
         self, correlator, storage_backend, temp_agent_folder
     ):
-        """Source file created by correlation must include lineage for downstream enrichment."""
+        """Correlated output must carry lineage for downstream enrichment. Read
+        from the store, which is where the consuming action's source records
+        come from."""
         for i in range(1, 3):
             action_name = f"scorer_{i}"
             test_data = [
@@ -149,13 +148,10 @@ class TestVersionOutputCorrelator:
 
         correlator.prepare_correlated_input("aggregate", ["scorer_1", "scorer_2"], 3)
 
-        source_file = temp_agent_folder / "source" / "data.json"
-        assert source_file.exists()
-        with open(source_file) as f:
-            source_data = json.load(f)
+        merged = storage_backend.read_target("aggregate", "data.json")
 
-        assert len(source_data) == 1
-        record = source_data[0]
+        assert len(merged) == 1
+        record = merged[0]
         assert record["source_guid"] == "guid-1"
         assert len(record["lineage"]) >= 2
         assert "node_0_root" in record["lineage"]

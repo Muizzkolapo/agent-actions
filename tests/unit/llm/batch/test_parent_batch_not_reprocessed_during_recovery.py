@@ -85,7 +85,6 @@ def _service(manager: BatchRegistryManager) -> BatchProcessingService:
         context_manager=MagicMock(),
         result_processor=MagicMock(),
         registry_manager_factory=lambda _: manager,
-        source_handler=None,
         action_indices={},
         dependency_configs={},
         storage_backend=MagicMock(),

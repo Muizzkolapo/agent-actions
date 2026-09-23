@@ -1,14 +1,12 @@
 """What staging persists, and what it refuses, at the source-save boundary."""
 
 import json
-from pathlib import Path
 
 import pytest
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _save_source_data
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 CORRELATION_STUB = [{"source_guid": "g0", "id": "t0", "lineage": [], "node_id": "n0"}]
 
@@ -102,23 +100,3 @@ class TestWhatWasStagedIsPersisted:
         stored = _stored(backend, "ticket")
         backend.close()
         assert [row["content"]["source"] for row in stored] == [{"only": "one"}]
-
-
-class TestTheCorrelationSourceFileFollowsItsTarget:
-    def _correlate(self, tmp_path, records):
-        action_dir = tmp_path / "wf" / "agent_io" / "target" / "act"
-        action_dir.mkdir(parents=True, exist_ok=True)
-        correlator = VersionOutputCorrelator(agent_folder=action_dir)
-        correlator._create_correlation_source_data(action_dir / "data.json", records)
-        return Path(tmp_path / "wf" / "agent_io" / "source" / "data.json")
-
-    def test_a_later_write_replaces_an_earlier_one(self, tmp_path):
-        self._correlate(tmp_path, [{"source_guid": "g1", "target_id": "t1", "node_id": "n"}])
-        written = self._correlate(
-            tmp_path,
-            [
-                {"source_guid": "g1", "target_id": "t1", "node_id": "n"},
-                {"source_guid": "g2", "target_id": "t2", "node_id": "n"},
-            ],
-        )
-        assert [row["source_guid"] for row in json.loads(written.read_text())] == ["g1", "g2"]

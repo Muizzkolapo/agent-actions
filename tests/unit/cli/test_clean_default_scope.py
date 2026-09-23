@@ -92,7 +92,7 @@ def test_command_help_does_not_promise_a_default_removal():
     assert "source directory" not in clean_cli.help, (
         "command help still describes a directory nothing writes"
     )
-    assert "source" in clean_cli.help
+    assert "--target" in clean_cli.help and "--all" in clean_cli.help
 
 
 if __name__ == "__main__":  # pragma: no cover

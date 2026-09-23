@@ -8,8 +8,6 @@ Read through the store, which is where the runtime loads an action's source
 records from.
 """
 
-from pathlib import Path
-
 import pytest
 
 from agent_actions.processing.enrichment import LineageEnricher

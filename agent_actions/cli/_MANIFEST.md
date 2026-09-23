@@ -126,7 +126,7 @@
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
 | `BaseInspectCommand._load_workflow()` | `agent_config/{workflow}.yml` | Reads | — |
-| `clean_cli()` | `agent_io/source/` | Writes | — |
+| `clean_cli()` | `agent_io/target/`, `agent_io/staging/`, `agent_io/store/` | Deletes | — |
 | `clean_cli()` | `agent_io/staging/` | Writes | — |
 | `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
 
