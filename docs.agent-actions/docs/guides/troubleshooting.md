@@ -117,14 +117,10 @@ Fix: Check that 'classify' produces the referenced field.
 
 **Error:**
 ```
-Template rendering failed for agent 'my_action'
-
-  Reference: source.content
-  Namespace 'source' exists: NO
-  Available namespaces: items, metadata
+A staged input must be rows; found dict. Wrap it in an array: [ ... ].
 ```
 
-**Cause:** Source data is a wrapper object, not a flat array of records. This happens when your JSON file has metadata alongside the actual records.
+**Cause:** The staging file's top level is a wrapper object, not the list of records staging reads. This happens when your JSON file has metadata alongside the actual records.
 
 **Wrong format:**
 ```json
@@ -149,26 +145,38 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
 
 **Fix options:**
 
-1. **Restructure input** - Extract array to staging file:
+1. **Restructure input** - Extract the array into the staging file. This is
+   usually what you want: one record per item, so `{{ source.content }}` resolves.
    ```python
    data = json.load(open("wrapper.json"))
    records = data["items"]
    json.dump(records, open("staging/data.json", "w"))
    ```
 
-2. **Add preprocessing action** - First action extracts items:
+2. **Keep the wrapper as one record** - If the document really is a single
+   record, put it in an array. It then stages as one record whose fields are
+   `exam_name` and `items`, and the prompt loops over the array inside it:
+   ```json
+   [
+     {
+       "exam_name": "My Exam",
+       "items": [{"id": "1", "content": "..."}]
+     }
+   ]
+   ```
+   ```jinja2
+   {% for item in source.items %}
+     {{ item.content }}
+   {% endfor %}
+   ```
+
+3. **Add a preprocessing action** - With the file wrapped as in option 2, a
+   first action can expand the one record into many:
    ```yaml
    - name: extract_items
     kind: tool
     impl: extract_items_from_wrapper
     granularity: file
-   ```
-
-3. **Update prompts** - If wrapper is intentional:
-   ```jinja2
-   {% for item in source.items %}
-     {{ item.content }}
-   {% endfor %}
    ```
 
 ---
