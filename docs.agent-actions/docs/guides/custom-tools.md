@@ -150,10 +150,10 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
 | Input | Single `dict` with namespaced upstream data | `list[dict]` — each record has `content`, `node_id`, `lineage` |
 | Read fields | `data["action_name"]["field"]` | `record["content"]["action_name"]["field"]` |
 | Passthrough | Return modified dict | Return the original record dict |
-| New records | N/A | Return a new dict without `node_id` |
+| New records | N/A | Return `FileUDFResult` with `source_index: None` |
 
 :::tip Lineage tracking
-Each record carries a `node_id` that the framework uses to track lineage. When you return the original record, lineage extends automatically. When you return a new dict (aggregation), the framework creates fresh lineage. You never manage `node_id` directly.
+Each record carries a `node_id` that the framework uses to track lineage. When you return the original record, lineage extends automatically. When you return a `FileUDFResult` output declaring `source_index: None` (aggregation), the framework creates fresh lineage. You never manage `node_id` directly.
 :::
 
 ## CLI Commands

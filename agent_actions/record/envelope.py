@@ -51,9 +51,9 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
-# parent_source_guid is the original source-pool identity, set when an expansion
-# re-mints source_guid — source resolution follows it when the minted guid
-# cannot match the pool.
+# parent_source_guid is the original source-pool identity, set wherever a minted
+# row knows its producer (an expansion, or a FILE tool splitting one input into
+# several). A row with no single producer adds none of its own.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
@@ -63,7 +63,8 @@ RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
 )
 
 # Lifecycle fields: cumulative across stages — carried forward AND appended to.
-# _state_history grows via transition(); _state_schema_version tags the format.
+# _state_history grows via transition(); _delta_mode records how the row was
+# stored, and every read path strips it.
 # Carried by _carry_persistent_fields() so tombstone builders get them automatically.
 RECORD_LIFECYCLE_FIELDS: frozenset[str] = frozenset(
     {
@@ -281,7 +282,7 @@ def _carry_persistent_fields(
 
     1. **Tracking fields** (``source_guid``, ``parent_source_guid``,
        ``version_correlation_id``) — the record's stable identity, set once
-       at creation (parent_source_guid at expansion re-mint).
+       at creation (parent_source_guid wherever a minted row knows its producer).
     2. **Lifecycle fields** (``_state_history``, ``_state_schema_version``) —
        metadata tied to the record's state machine; ``_state_history`` grows
        across stages, ``_state_schema_version`` tags the history format.

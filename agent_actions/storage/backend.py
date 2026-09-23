@@ -253,10 +253,36 @@ class StorageBackend(ABC):
         which is the truth for a consumer reading forward and a lie about an action
         whose output for that record already exists.
 
+        Rows stored whole are handed back marked so: reconstruction drops the mark
+        and re-deriving it picks ``delta``, which for an identity joining nothing
+        upstream loses every namespace above this action.
+
         Raises:
             FileNotFoundError: If the target data doesn't exist.
         """
-        return self._reconstructed_target(action_name, relative_path)
+        rows = self._reconstructed_target(action_name, relative_path)
+        stored = self._read_target_raw(action_name, relative_path)
+        # Positional, not keyed on the guid: reconstruction is one row out per row
+        # in and keeps their order, while several rows can share one identity — a
+        # guid set would mark a delta row stored beside a whole one.
+        if len(stored) != len(rows):
+            # Reconstruction is one row out per row in, so this cannot happen; say
+            # so rather than skip quietly, because skipping means a row stored
+            # whole is rewritten as a delta and loses everything above it.
+            logger.warning(
+                "Action '%s': %d stored row(s) reconstructed to %d for %s, so how each "
+                "was stored cannot be carried into a rewrite; rows whose identity joins "
+                "nothing upstream will lose their upstream namespaces",
+                action_name,
+                len(stored),
+                len(rows),
+                relative_path,
+            )
+            return rows
+        for row, raw in zip(rows, stored, strict=True):
+            if raw.get("_delta_mode") == "full":
+                row["_delta_mode"] = "full"
+        return rows
 
     def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""
@@ -390,9 +416,9 @@ class StorageBackend(ABC):
         delta_records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Reconstruct full records by joining upstream deltas."""
-        # All records in a batch have the same _delta_mode (set uniformly by
-        # write_target). Checking records[0] is sufficient — mixed batches
-        # cannot occur through the write_target API.
+        # records[0] answers for the batch only about the key's presence: every
+        # record gets one from write_target. The values differ — a minted row is
+        # stored whole beside deltas — so the loop reads each record's own mode.
         if not delta_records or "_delta_mode" not in delta_records[0]:
             return delta_records
 

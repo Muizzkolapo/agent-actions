@@ -52,13 +52,14 @@ def _reattach_source_guid(
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
-    Mutates structured_data in place; an explicit tool value wins. A row with no
-    inheritable parent — synthetic, unmapped, or a parent lacking one — is born
-    here rather than left blank for a fallback to fabricate.
+    Mutates structured_data in place; an explicit tool value wins. A parent's only
+    child inherits; every other row is born here, since one guid shared between
+    distinct entities is one row to every store keyed by identity. Born rows are
+    stored whole and take a correlation id derived from the one they inherited —
+    distinct per row, equal across version branches.
 
-    So are several rows claiming one parent: one guid shared between distinct
-    entities is one row to every store keyed by identity. Each keeps the parent
-    as ``parent_source_guid``; a parent's only child inherits as before.
+    ``parent_source_guid`` is left as the envelope carried it: clearing it is the
+    honest answer and the FILE-mode resolver then skips the row (#1046, #1022).
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -74,27 +75,31 @@ def _reattach_source_guid(
         parent = original_data[source_idx] if source_idx is not None else None
         parent_guid = parent.get("source_guid") if parent else None
 
-        if parent is not None and claimed[cast(int, source_idx)] > 1:
-            # Hand on the pool-resolvable identity, not the intermediate one: a
-            # parent that is itself an expansion child has a minted guid that
-            # matches nothing in the source pool.
+        if parent is not None and parent_guid and claimed[cast(int, source_idx)] == 1:
+            if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
+                item["parent_source_guid"] = parent["parent_source_guid"]
+            item["source_guid"] = parent_guid
+            continue
+
+        # Hand on the parent's pool-resolvable identity, not the intermediate one:
+        # a parent that is itself an expansion child has a minted guid matching
+        # nothing in the source pool.
+        if parent is not None:
             inherited = parent.get("parent_source_guid") or parent_guid
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
-            item["source_guid"] = IDGenerator.generate_source_guid()
-            # A minted guid joins nothing upstream, so the row has to carry its
-            # whole content rather than be stored as a delta against it.
-            item["_delta_mode"] = "full"
-            # The parent's correlation id would fan these back into one row at a
-            # merge, undoing the identity they were just given.
-            item.pop("version_correlation_id", None)
-            continue
-
-        if parent is not None:
-            if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
-                item["parent_source_guid"] = parent["parent_source_guid"]
-
-        item["source_guid"] = parent_guid or IDGenerator.generate_source_guid()
+        item["source_guid"] = IDGenerator.generate_source_guid()
+        # A minted guid joins nothing upstream, so the row has to carry its whole
+        # content rather than be stored as a delta against it.
+        item["_delta_mode"] = "full"
+        # Distinct per row so a merge cannot fan them back into the one identity
+        # they were just given; derived, so two version branches still correlate
+        # and the pool keeps a key every record shares. A bare drop loses both.
+        # Appended rather than replaced: chained aggregations grow it a segment
+        # each, where replacing would collide this stage's rows with the last's.
+        inherited_correlation = item.get("version_correlation_id")
+        if inherited_correlation:
+            item["version_correlation_id"] = f"{inherited_correlation}#{i}"
 
 
 def _resolve_input_record(
