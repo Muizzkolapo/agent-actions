@@ -226,7 +226,11 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 
         parsed = json.loads(data)
 
-        atomic_json_write(cache_file, parsed, fsync=False)
+        # The cache file is walked as a staging document, which must be a list of
+        # records. A response that is not one is the single record it has always
+        # staged as — the reader cannot wrap a file the framework wrote.
+        document = parsed if isinstance(parsed, list) else [parsed]
+        atomic_json_write(cache_file, document, fsync=False)
 
         logger.info("Fetched and cached API data: %s -> %s", config.url, cache_file)
 
