@@ -61,7 +61,7 @@ def test_online_text_source_wrapped_no_leak():
     ctx = DataPreparationContext(
         content="a short text chunk.",
         file_type=".txt",
-        agent_config={"chunk_config": {"chunk_size": 4000, "overlap": 0}},
+        agent_config={"chunk_config": {"chunk_size": 4000, "chunk_overlap": 0}},
         file_path="/tmp/d.txt",
         agent_name="a",
     )

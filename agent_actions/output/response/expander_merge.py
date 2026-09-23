@@ -46,21 +46,30 @@ CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_metho
 def process_chunk_config(
     agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
-    """Build the agent's chunk_config from its own block and the loose settings.
+    """Merge the chunk settings the action and the workflow supply, name by name.
 
-    A loose setting fills a name the block leaves out rather than being dropped:
-    the chunker reads chunk_config and nothing else, so a value that stays
-    outside it is one the split never sees.
+    The chunker reads chunk_config and nothing else, so anything that stays
+    outside it is a value the split never sees. Merging per name rather than per
+    block is what keeps a narrower block from dropping the names it omits, and
+    what stops a block written further out from overruling the action.
+
+    Later layers win: workflow key, workflow block, action key, action block.
+    The project file's block arrives folded into the workflow's defaults.
     """
-    block = action.get("chunk_config", defaults.get("chunk_config")) or {}
-    agent["chunk_config"] = dict(block)
+    layers = (
+        {setting: defaults.get(setting) for setting in CHUNK_SETTINGS},
+        defaults.get("chunk_config") or {},
+        {setting: action.get(setting) for setting in CHUNK_SETTINGS},
+        action.get("chunk_config") or {},
+    )
 
-    for setting in CHUNK_SETTINGS:
-        if agent["chunk_config"].get(setting) is not None:
-            continue
-        value = action.get(setting, defaults.get(setting))
-        if value is not None:
-            agent["chunk_config"][setting] = value
+    merged: dict[str, Any] = {}
+    for layer in layers:
+        for setting in CHUNK_SETTINGS:
+            value = layer.get(setting)
+            if value is not None:
+                merged[setting] = value
+    agent["chunk_config"] = merged
 
 
 def initialize_optional_fields(agent: dict[str, Any]) -> None:

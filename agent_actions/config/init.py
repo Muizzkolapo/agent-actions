@@ -97,7 +97,7 @@ class ProjectInitializer:
             "default_agent_config": {
                 API_KEY_KEY: "OPENAI_API_KEY",
                 MODEL_NAME_KEY: "gpt-4o-mini",
-                CHUNK_CONFIG_KEY: {"chunk_size": 300, "overlap": 10},
+                CHUNK_CONFIG_KEY: {"chunk_size": 300, "chunk_overlap": 10},
             },
             "schema_path": "schema",
             "tool_path": ["tools"],

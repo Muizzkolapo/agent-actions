@@ -56,7 +56,7 @@ def test_text_chunk_source_parity_no_framework_leak():
     # Text chunks must expose source.* the same way as structured rows — no framework leak.
     built = _prepare_text_chunks_batch(
         "a single short chunk.",
-        {"chunk_config": {"chunk_size": 4000, "overlap": 0}},
+        {"chunk_config": {"chunk_size": 4000, "chunk_overlap": 0}},
         batch_id="run",
         node_id="node_0",
     )
