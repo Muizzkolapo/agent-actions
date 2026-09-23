@@ -207,6 +207,27 @@ def test_repairing_a_record_does_not_delete_its_descendants_rows(diamond):
     assert not (before - after), f"rows deleted by the repair: {sorted(before - after)}"
 
 
+def test_the_growth_it_cannot_prevent_is_two_rows_a_retry(diamond):
+    """The reported symptom, still live in this one shape, pinned as a number.
+
+    Neither identity here can be attributed, so the rows are carried and
+    regenerated both — the duplication this ticket is about, surviving where the
+    two cannot be told apart. Not a regression: `main` grows by the same two for
+    the same reason, and the run now says so out loud. The count is recorded
+    rather than left open so a change that makes it worse cannot pass unnoticed.
+    Closing it needs the per-action provenance field in issue #1022.
+    """
+    selected = _record_ids(diamond, ACTION)[0]
+    counts = [len(_rows(diamond, "combine"))]
+    for _ in range(2):
+        _fail(diamond, selected, ACTION)
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+        assert result.exit_code == 0, result.output
+        counts.append(len(_rows(diamond, "combine")))
+
+    assert counts == [36, 38, 40], f"the unresolvable growth changed: {counts}"
+
+
 class TestARecordTheLimitDropped:
     """A record limit narrows an action's input above the repair.
 
@@ -248,6 +269,10 @@ class TestARecordTheLimitDropped:
         assert untouched <= after, (
             f"rows of an untouched record deleted: {sorted(untouched - after)}"
         )
+        # Nothing is deleted at a single mint whichever list the gate reads —
+        # the rows are carried either way — so without this the test cannot tell
+        # a gate that resolved them from one that gave up on all of them.
+        assert "cannot be attributed" not in result.output
 
 
 # Deliberately not `split.py`: tool discovery imports by module name, so two
