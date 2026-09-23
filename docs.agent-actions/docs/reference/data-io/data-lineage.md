@@ -194,7 +194,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 2. The tool receives full records and returns them
 3. The framework matches each output to its input by `node_id`
 4. Matched outputs extend the parent's lineage chain
-5. Outputs without `node_id` (aggregation results) get fresh lineage
+5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage
 
 ```
 Input records:                        Tool output:                     After enrichment:

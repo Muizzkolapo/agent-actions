@@ -34,7 +34,7 @@ Every record that flows through the pipeline is a plain dict with this shape:
         "classification": {"type": ".."},
     },
     "source_guid": "abc-123-...",        ← stable identity (first-stage: UUID5 content hash)
-    "parent_source_guid": "xyz-789-...", ← original pool identity, set when expansion re-mints source_guid
+    "parent_source_guid": "xyz-789-...", ← original pool identity, set wherever a minted row knows its producer
     "version_correlation_id": "def-...", ← links versions across re-runs
     "_state": "processed",               ← current lifecycle state
     "_state_history": [                  ← audit trail (capped at 64)
@@ -77,7 +77,8 @@ RECORD_TRACKING_FIELDS (stable identity — set once, carried forward)
 
 RECORD_LIFECYCLE_FIELDS (cumulative — carried forward AND appended to)
 ├── _state_history
-└── _state_schema_version
+├── _state_schema_version
+└── _delta_mode          ← carried, so a row stored whole keeps being stored whole
 
 RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
 ├── target_id

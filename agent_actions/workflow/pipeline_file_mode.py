@@ -52,12 +52,13 @@ def _reattach_source_guid(
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
-    Mutates structured_data in place; an explicit tool value wins. A parent's
-    only child inherits; every other row is born here — one with nothing to
-    inherit (synthetic, or a parent carrying no guid), and each of several rows
-    claiming one parent, since one guid shared between distinct entities is one
-    row to every store keyed by identity. Born rows are marked alike: the marks
-    follow from the minting, not from which of those a row is.
+    Mutates structured_data in place; an explicit tool value wins. A parent's only
+    child inherits; every other row is born here — one with nothing to inherit,
+    and each of several rows claiming one parent, since one guid shared between
+    distinct entities is one row to every store keyed by identity.
+
+    Born rows carry the same storage marks; they differ on ``parent_source_guid``,
+    read as the row's *producer*, which a row that named no parent cannot claim.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -79,13 +80,12 @@ def _reattach_source_guid(
             item["source_guid"] = parent_guid
             continue
 
-        # Attributed to the input whose namespaces it carries — its own parent, or
-        # the one _resolve_input_record stands in — by that input's pool-resolvable
-        # identity: an expansion child's own guid matches nothing in the pool.
-        attributed = parent if parent is not None else _resolve_input_record(None, original_data)
-        if attributed is not None and not item.get("parent_source_guid"):
-            inherited = attributed.get("parent_source_guid") or attributed.get("source_guid")
-            if inherited:
+        # Hand on the parent's pool-resolvable identity, not the intermediate one:
+        # a parent that is itself an expansion child has a minted guid matching
+        # nothing in the source pool. A row with no parent is left unattributed.
+        if parent is not None:
+            inherited = parent.get("parent_source_guid") or parent_guid
+            if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
         item["source_guid"] = IDGenerator.generate_source_guid()
         # A minted guid joins nothing upstream, so the row has to carry its whole

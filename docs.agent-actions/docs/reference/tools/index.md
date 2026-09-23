@@ -102,7 +102,7 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 - **Input is an array of full records** — each record has `content`, `node_id`, `source_guid`, `lineage`
 - **Read business data from `record["content"]["action_name"]["field"]`** — not `record["field"]`
 - **Return the original record for passthrough** (filter, dedup, sort, transform) — preserves `node_id` and lineage
-- **Return a new dict for aggregation** (no `node_id`) — framework creates fresh lineage
+- **Return `FileUDFResult` with `source_index: None` for aggregation** — says no single input produced the row; the framework mints it an identity and fresh lineage. A plain new dict in a list is rejected
 - **Output flexibility** — return an array of any size (N→M transformation)
 
 See [Granularity](../execution/granularity.md) for detailed documentation.
@@ -112,7 +112,7 @@ See [Granularity](../execution/granularity.md) for detailed documentation.
 The framework tracks each record through the pipeline using `node_id` — inspired by [Apache NiFi's FlowFile model](https://nifi.apache.org/docs/nifi-docs/html/nifi-in-depth.html). You never manage `node_id` directly. The framework handles it automatically based on what you return:
 
 ```python
-from agent_actions import udf_tool
+from agent_actions import FileUDFResult, udf_tool
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
@@ -131,15 +131,18 @@ def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
 
 
 @udf_tool(granularity=Granularity.FILE)
-def aggregate_tool(data: list[dict], **kwargs) -> list[dict]:
+def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
     total = sum(r["content"]["score_action"]["score"] for r in data)
-    return [{"summary": f"Total: {total}", "count": len(data)}]  # new dict → fresh lineage
+    # source_index: None — no single input produced this row → fresh lineage
+    return FileUDFResult(outputs=[
+        {"source_index": None, "data": {"summary": f"Total: {total}", "count": len(data)}}
+    ])
 ```
 
 | What you return | Framework behavior |
 |---|---|
 | Original record dict (has `node_id`) | Extends parent lineage — downstream `observe` can load ancestor data |
-| New dict (no `node_id`) | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and names the input it stands in for as `parent_source_guid` so `source` still resolves. |
+| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. It names no `parent_source_guid`: no single input produced it. |
 
 ## Tool Discovery
 

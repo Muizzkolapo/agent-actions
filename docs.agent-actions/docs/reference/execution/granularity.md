@@ -104,7 +104,7 @@ def deduplicate_facts(records, **kwargs):
 ```
 
 :::tip Record Identity
-FILE tools receive records with a `node_id` that tracks each record's identity through the pipeline. When you return the original record dict, the framework automatically matches it to the correct input and extends the lineage chain. For aggregation (creating new data), return a new dict without `node_id` — the framework treats it as a new record.
+FILE tools receive records with a `node_id` that tracks each record's identity through the pipeline. When you return the original record dict, the framework automatically matches it to the correct input and extends the lineage chain. For aggregation (creating new data), return a `FileUDFResult` whose output declares `source_index: None` — the framework treats it as a new record. A plain new dict in a list is rejected.
 :::
 
 ## Mixing Granularities

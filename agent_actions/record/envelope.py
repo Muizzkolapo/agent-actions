@@ -51,9 +51,9 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 
 # Tracking fields: set once at record creation, carried forward through all 1:1
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
-# parent_source_guid is the original source-pool identity, set when an expansion
-# re-mints source_guid — source resolution follows it when the minted guid
-# cannot match the pool.
+# parent_source_guid is the original source-pool identity, set wherever a minted
+# row knows its producer (an expansion, or a FILE tool splitting one input into
+# several). A row with no single producer leaves it unset.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
