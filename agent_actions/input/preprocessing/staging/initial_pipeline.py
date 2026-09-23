@@ -430,18 +430,8 @@ def _give_repeats_their_own_identity(
 def _wrap_online_rows(
     payloads: list[Any], storage_backend: Any = None, relative_path: str = ""
 ) -> list[Any]:
-    """Envelope and stamp online first-stage rows through the single authority.
-
-    A non-dict payload cannot be namespaced under content.source, so it passes through
-    unchanged (preserving the prior behavior for non-record items) — hence the list may
-    contain a non-dict item, which surfaces downstream at the storage boundary.
-    """
-    wrapped: list[Any] = []
-    for payload in payloads:
-        if not isinstance(payload, dict):
-            wrapped.append(payload)
-            continue
-        wrapped.append(_envelope_row(payload))
+    """Envelope and stamp online first-stage rows through the single authority."""
+    wrapped: list[Any] = [_envelope_row(payload) for payload in payloads]
     return _give_repeats_their_own_identity(wrapped, storage_backend, relative_path)
 
 
@@ -481,9 +471,26 @@ def _prepare_json_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare pre-parsed JSON content for batch mode."""
-    if isinstance(content, list):
-        return _add_batch_metadata(content, batch_id, node_id, storage_backend, relative_path)
-    return [{"content": content, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
+    rows = content if isinstance(content, list) else [content]
+    _refuse_rows_that_are_not_records(rows, file_path, agent_name)
+    return _add_batch_metadata(rows, batch_id, node_id, storage_backend, relative_path)
+
+
+def _refuse_rows_that_are_not_records(rows: list[Any], file_path: str, agent_name: str) -> None:
+    """Stop a JSON input whose rows cannot carry a payload, before identity is derived."""
+    for index, row in enumerate(rows):
+        if isinstance(row, dict):
+            continue
+        raise AgentActionsError(
+            f"A JSON input row must be an object; found {type(row).__name__}. "
+            "Give each record its own object naming its fields.",
+            context={
+                "file_path": file_path,
+                "agent_name": agent_name,
+                "row_index": index,
+                "row_type": type(row).__name__,
+            },
+        )
 
 
 def _add_batch_metadata(
@@ -641,6 +648,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
         if not isinstance(raw_items, list):
             raw_items = [raw_items]
 
+        _refuse_rows_that_are_not_records(raw_items, ctx.file_path, ctx.agent_name)
         data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type in (".csv", ".tsv"):

@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: "A JSON input row that is not an object is refused at staging, naming the file, the row it stopped on and what it found there. A file whose top level is a bare value, or an array holding one, previously staged a record with no identity in batch mode, or raised a bare TypeError from the envelope, or passed through online to die at the source save with an AttributeError — which of the three depended on the mode and the shape. Give each record its own object naming its fields."
+time: 2026-09-22T10:01:00Z
