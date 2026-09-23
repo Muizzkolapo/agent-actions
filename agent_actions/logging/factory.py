@@ -190,15 +190,8 @@ class LoggerFactory:
                 buffer_size=1,
             )
             manager.register(errors_handler)
-        elif config.file_handler.enabled:
-            log_file_path = cls._get_log_file_path()
-            if log_file_path:
-                json_handler = JSONFileHandler(
-                    file_path=log_file_path,
-                    min_level=EventLevel.DEBUG,
-                    buffer_size=10,
-                )
-                manager.register(json_handler)
+        # No output_dir (e.g. CLI group init before subcommand dispatch) means
+        # no workflow is running — register no run-log file handler (627).
 
         run_results = RunResultsCollector(
             output_dir=output_dir,
@@ -269,34 +262,6 @@ class LoggerFactory:
         root_logger.addHandler(bridge)
 
         root_logger.propagate = False
-
-    @classmethod
-    def _get_log_file_path(cls) -> Path | None:
-        """Determine the log file path."""
-        if not cls._config:
-            return None
-
-        if cls._config.file_handler.path:
-            return Path(cls._config.file_handler.path)
-
-        project_root = cls._get_project_root()
-        if project_root:
-            return project_root / "logs" / "events.json"
-
-        return Path.home() / ".agent-actions" / "logs" / "events.json"
-
-    @classmethod
-    def _get_project_root(cls) -> Path | None:
-        """Find the project root directory.
-
-        Best-effort fallback: uses Path.cwd() as search start.
-        Primary callers should prefer passing explicit output_dir to initialize().
-        """
-        current = Path.cwd()
-        for parent in [current] + list(current.parents):
-            if (parent / "agent_actions.yml").exists():
-                return parent
-        return None
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
