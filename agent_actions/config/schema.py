@@ -26,10 +26,10 @@ _CONTEXT_SCOPE_LIST_DIRECTIVES = {
 
 
 def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
-    """Refuse a context_scope directive written as a key of *surface*.
+    """Refuse a list directive written as a key of *surface* rather than under context_scope.
 
-    Every surface that validates one of these dicts calls this, including the
-    two whose models allow extras and so refuse nothing by omission.
+    Called by every block that carries agent settings, including the ones whose
+    models allow extras and so refuse nothing by leaving a field undeclared.
     """
     if not isinstance(data, dict):
         return data

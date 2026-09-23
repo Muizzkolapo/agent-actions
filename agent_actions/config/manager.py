@@ -37,6 +37,14 @@ _REMOVED_AGENT_SPELLINGS = {
 }
 
 
+def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
+    """Raise the framework's own error for a misplaced context_scope directive."""
+    try:
+        refuse_context_scope_siblings(block, surface)
+    except ValueError as e:
+        raise ConfigurationError(str(e), context={"operation": operation}) from e
+
+
 class ConfigManager:
     def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
         self.constructor_path = constructor_path
@@ -187,6 +195,7 @@ class ConfigManager:
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
                 project_defaults = project_config.get("default_agent_config", {})
+                _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
             except (FileNotFoundError, ProjectRootNotFoundError):
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:
@@ -258,21 +267,14 @@ class ConfigManager:
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
         from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
 
-        default_model = DefaultAgentConfig.model_validate(
+        project_agent_defaults = (
             self.default_config.get("default_agent_config", {}) if self.default_config else {}
         )
+        _refuse_or_raise(project_agent_defaults, "default_agent_config", "merge_agent_configs")
+        default_model = DefaultAgentConfig.model_validate(project_agent_defaults)
         default_agent_config = default_model.model_dump()
         for agent in user_agents:
-            try:
-                refuse_context_scope_siblings(agent, "agent")
-            except ValueError as e:
-                raise ConfigurationError(
-                    str(e),
-                    context={
-                        "agent_type": agent.get("agent_type") or "NOT_SET",
-                        "operation": "merge_agent_configs",
-                    },
-                ) from e
+            _refuse_or_raise(agent, "agent", "merge_agent_configs")
             removed = _REMOVED_AGENT_SPELLINGS.keys() & agent.keys()
             if removed:
                 raise ConfigurationError(
