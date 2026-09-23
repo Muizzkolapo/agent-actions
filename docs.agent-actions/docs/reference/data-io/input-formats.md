@@ -40,12 +40,13 @@ element becomes one record.
 ]
 ```
 
-A file holding one record is that same list with one element in it. A top level
-that is not an array — a lone object, or a bare value — is refused at staging,
-naming the file and the fix: wrap it in `[ ]`.
+A file holding one record is that same list with one element in it. A lone
+object at the top level is refused at staging, and the fix is to wrap it: `{...}`
+becomes `[{...}]`, which stages the record it always did.
 
-A record is always an object. An array holding a bare value is refused too, and
-names the row it stopped on.
+A record is always an object, so a bare value is refused whether it is the whole
+document or a row inside one — wrapping it changes nothing. The refusal names the
+row it stopped on when there is one.
 
 ## CSV/Tabular Input
 
