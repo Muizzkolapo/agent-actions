@@ -330,3 +330,14 @@ def test_a_scaffolded_project_loads_and_chunks():
         block["chunk_size"],
         block["chunk_overlap"],
     )
+
+
+@pytest.mark.parametrize("setting", sorted(SETTINGS))
+@pytest.mark.parametrize("level", ["defaults", "action"])
+def test_every_chunk_setting_is_writable_as_a_loose_key(setting, level):
+    """All four, at both levels. Two of them were declared on `defaults:` only,
+    so the expander read a name off the action that the action could not carry."""
+    written = {setting: SETTINGS[setting]}
+    agent = _expand(written, None) if level == "defaults" else _expand({}, written)
+
+    assert _tokenizer_call(agent, "batch")[setting] == SETTINGS[setting]
