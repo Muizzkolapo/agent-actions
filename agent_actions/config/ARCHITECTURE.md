@@ -294,7 +294,7 @@ Any unknown key in an action definition raises a `ValidationError`. This is inte
 
 Four names get a refusal of their own before Pydantic's, and the defaults block raises the same one: `observe`, `passthrough` and `drop` belong *under* `context_scope:`, and written beside it they are what a YAML indentation slip produces. `extra_forbidden` names the key correctly and says nothing about the indentation, so the refusal does, and shows the nesting.
 
-The fourth is `drops`, which no reader has ever taken — every one of them reads `context_scope.drop`. It is refused with the others and its remedy names `drop`, because echoing the key back would move a silent no-op under `context_scope:` rather than end it.
+The fourth is `drops`, which no consumer has ever applied — every one of them reads `context_scope.drop`, so a value written under `drops` dropped nothing. Only the static analyzer's reference check ever looked at it, validating refs it would then ignore. It is refused with the others and its remedy names `drop`, because echoing the key back would move a silent no-op under `context_scope:` rather than end it.
 
 ### 2. DefaultsConfig uses `extra="forbid"`
 

@@ -225,7 +225,7 @@ context_scope:           version_base_map:
                               - extraction.ssn
 ```
 
-`normalize_all_agent_configs()` mutates agent configs in place. A directive written as a sibling key of `context_scope` rather than a child never reaches it: every model that validates an action-shaped dict refuses that shape at load.
+`normalize_all_agent_configs()` mutates agent configs in place. A directive written as a sibling key of `context_scope` rather than a child never reaches it, because `config/` refuses that shape at load on every path that gets here — on the strict models through a validator, and around the two that allow extras through a call in `manager.py`. Construct `AgentConfig` yourself and nothing refuses it.
 
 ---
 
