@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsError, ConfigurationError, DataValidationError
-from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
@@ -314,7 +313,7 @@ class VersionOutputCorrelator:
     def _create_correlation_source_data(
         self, target_file: Path, correlated_data: list[dict[str, Any]]
     ):
-        """Create source data file for the correlation target, skipping if existing source is richer."""
+        """Write the correlation target's source file, replacing what was there."""
         try:
             parts = target_file.parts
             agent_io_index = None
@@ -338,17 +337,6 @@ class VersionOutputCorrelator:
                     "node_id": record.get("node_id"),
                 }
                 source_records.append(source_record)
-
-            base_directory = str(target_file.parent)
-
-            if not _should_save_source_items(
-                source_records, str(target_file), base_directory, None
-            ):
-                logger.debug(
-                    "Skipping correlation source save - existing source data is richer than correlation output for %s",
-                    filename,
-                )
-                return
 
             atomic_json_write(source_path, source_records, indent=2)
         except (OSError, ValueError) as e:

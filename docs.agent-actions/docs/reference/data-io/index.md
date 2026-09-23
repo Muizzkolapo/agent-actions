@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Data I/O
 
-> **Storage backend:** SQLite as of v0.2.6. All source and target records live in a single SQLite database per workflow at `agent_io/store/<workflow>.db`. Older snippets that reference `agent_io/source/` and `agent_io/target/` directories are stale — only `agent_io/staging/` remains as on-disk JSON.
+> **Storage backend:** SQLite as of v0.2.6. All source and target records live in a single SQLite database per workflow at `agent_io/store/<workflow>.db`. Older snippets that reference `agent_io/source/` and `agent_io/target/` directories as the record store are stale. `agent_io/staging/` holds your input as on-disk JSON, and `agent_io/source/` holds the correlation files written for version-merge actions — neither is where records are read from.
 
 Every agentic workflow needs data to flow in, through, and out. Agent Actions uses a standardized layout that makes this flow predictable and traceable.
 

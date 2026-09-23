@@ -49,7 +49,7 @@ class TestARowThatCannotCarryAPayload:
     def test_it_reads_the_same_as_the_batch_refusal(self, tmp_path):
         with pytest.raises(AgentActionsError) as caught:
             _staged(42, tmp_path)
-        assert "A JSON input row must be an object; found int" in str(caught.value)
+        assert "A staged row must be an object; found int" in str(caught.value)
 
 
 class TestRecordsStillStage:

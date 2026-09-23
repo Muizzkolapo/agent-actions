@@ -1,6 +1,5 @@
 """Initial stage pipeline: file reading, data preparation, source saving, and processing."""
 
-import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -264,84 +263,6 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
 
-def _source_payload_keys(item: dict) -> set[str]:
-    """The user payload's field names for a source record.
-
-    First-stage records nest the payload under ``content.source``; online source records
-    are flat. Return the payload keys either way so callers compare user data, not the
-    framework envelope.
-    """
-    content = item.get("content")
-    if isinstance(content, dict) and isinstance(content.get("source"), dict):
-        return set(content["source"].keys())
-    return set(item.keys())
-
-
-def _should_save_source_items(
-    new_items: list[dict],
-    file_path: str,
-    base_directory: str,
-    output_directory: str | None = None,
-) -> bool:
-    """Return True if new_items are richer (more fields) than existing source data."""
-    if not new_items:
-        return False
-
-    relative_path = Path(file_path).relative_to(base_directory)
-    workflow_root = _derive_workflow_root(output_directory, base_directory)
-
-    source_file = workflow_root / "agent_io" / "source" / f"{relative_path.with_suffix('')}.json"
-
-    if not source_file.exists():
-        logger.debug("Source file doesn't exist, proceeding with save: %s", source_file)
-        return True
-
-    try:
-        with open(source_file, encoding="utf-8") as f:
-            existing_items = json.load(f)
-            if not isinstance(existing_items, list):
-                logger.debug(
-                    "Existing source file is not a list (type=%s), proceeding with save",
-                    type(existing_items).__name__,
-                )
-                return True
-            if not existing_items:
-                logger.debug("Existing source file is empty, proceeding with save")
-                return True
-            if not isinstance(existing_items[0], dict):
-                logger.debug(
-                    "Existing source items are not dicts (type=%s), proceeding with save",
-                    type(existing_items[0]).__name__,
-                )
-                return True
-
-            # Compare the user payload (content.source), not the framework envelope — the
-            # top-level key count is a fixed set of framework fields and would never differ.
-            existing_fields = _source_payload_keys(existing_items[0])
-            new_fields = _source_payload_keys(new_items[0]) if new_items else set()
-
-            if len(new_fields) > len(existing_fields):
-                logger.info(
-                    "New source data is richer (%d fields) than existing (%d fields), proceeding with save",
-                    len(new_fields),
-                    len(existing_fields),
-                )
-                return True
-            else:
-                logger.debug(
-                    "Existing source data is richer (%d fields) than new data (%d fields), skipping save",
-                    len(existing_fields),
-                    len(new_fields),
-                )
-                return False
-
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning(
-            "Error reading existing source file %s: %s, proceeding with save", source_file, e
-        )
-        return True
-
-
 def _save_source_data(
     src_text: Any,
     data_chunk: Any,
@@ -354,16 +275,9 @@ def _save_source_data(
     if src_text:
         source_items = src_text if isinstance(src_text, list) else [src_text]
     else:
-        source_items = [row.copy() for row in data_chunk if row.get("source_guid")]
+        source_items = [row.copy() for row in data_chunk]
 
     if source_items:
-        if not _should_save_source_items(source_items, file_path, base_directory, output_directory):
-            logger.debug(
-                "Skipping source save - existing source data is richer than new data for %s",
-                file_path,
-            )
-            return
-
         _save_source_items_helper(
             source_items, file_path, base_directory, output_directory, storage_backend
         )
@@ -476,13 +390,22 @@ def _prepare_json_batch(
     return _add_batch_metadata(rows, batch_id, node_id, storage_backend, relative_path)
 
 
-def _refuse_rows_that_are_not_records(rows: list[Any], file_path: str, agent_name: str) -> None:
-    """Stop a JSON input whose rows cannot carry a payload, before identity is derived."""
+def _refuse_rows_that_are_not_records(rows: Any, file_path: str, agent_name: str) -> None:
+    """Stop an input whose rows cannot carry a payload, before identity is derived."""
+    if not isinstance(rows, list):
+        raise AgentActionsError(
+            f"A staged input must be rows; found {type(rows).__name__}.",
+            context={
+                "file_path": file_path,
+                "agent_name": agent_name,
+                "content_type": type(rows).__name__,
+            },
+        )
     for index, row in enumerate(rows):
         if isinstance(row, dict):
             continue
         raise AgentActionsError(
-            f"A JSON input row must be an object; found {type(row).__name__}. "
+            f"A staged row must be an object; found {type(row).__name__}. "
             "Give each record its own object naming its fields.",
             context={
                 "file_path": file_path,
@@ -562,11 +485,9 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     elif ctx.file_type == ".xlsx":
-        if not isinstance(ctx.content, list):
-            logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
-        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
+        _refuse_rows_that_are_not_records(ctx.content, ctx.file_path, ctx.agent_name)
         data_chunk = _add_batch_metadata(
-            rows, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
+            ctx.content, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
         )
         src_text = []
 
@@ -656,8 +577,10 @@ def _prepare_online_data(ctx: DataPreparationContext):
         data_chunk = src_text = _wrap_online_rows(rows, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type == ".xlsx":
-        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
-        data_chunk = src_text = _wrap_online_rows(rows, ctx.storage_backend, ctx.relative_path)
+        _refuse_rows_that_are_not_records(ctx.content, ctx.file_path, ctx.agent_name)
+        data_chunk = src_text = _wrap_online_rows(
+            ctx.content, ctx.storage_backend, ctx.relative_path
+        )
 
     elif ctx.file_type == ".xml":
         raise AgentActionsError(
