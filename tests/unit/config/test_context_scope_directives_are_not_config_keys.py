@@ -6,6 +6,7 @@ agent dict.
 """
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from agent_actions.config.manager import ConfigManager
@@ -19,7 +20,7 @@ DIRECTIVES = ["observe", "drops", "drop", "passthrough"]
 # What each spelling should be written as once it is under `context_scope:`.
 CANONICAL = {"observe": "observe", "drops": "drop", "drop": "drop", "passthrough": "passthrough"}
 
-ARTICLE = {"action": "an", "defaults": "a", "agent": "an"}
+ARTICLE = {"action": "an", "defaults": "a", "agent": "an", "default_agent_config": "a"}
 
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
 
@@ -158,6 +159,57 @@ def test_the_refusal_names_the_action_it_came_from():
         )
 
     assert "review_extraction" in str(exc.value).split("input_value")[0]
+
+
+def _project(tmp_path, agent_defaults):
+    """A minimal project tree whose agent_actions.yml carries *agent_defaults*."""
+    (tmp_path / "agent_actions.yml").write_text(
+        yaml.safe_dump({"project_name": "p", "default_agent_config": agent_defaults})
+    )
+    config_dir = tmp_path / "agent_config"
+    config_dir.mkdir()
+    (config_dir / "w.yml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "w",
+                "description": "d",
+                "version": "1.0",
+                "defaults": {"model_vendor": "openai"},
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p"}],
+            }
+        )
+    )
+    manager = ConfigManager(
+        str(config_dir / "w.yml"), str(tmp_path / "agent_actions.yml"), project_root=tmp_path
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+    return manager
+
+
+@pytest.mark.parametrize("directive", DIRECTIVES)
+def test_the_project_files_agent_defaults_refuse_the_directive_too(tmp_path, directive):
+    """`default_agent_config:` in agent_actions.yml is merged into every agent and
+    validated against a model that allows extras, so a directive written there
+    reached all of them and was read by none."""
+    manager = _project(tmp_path, {"api_key": "k", "model_name": "gpt-4", directive: ["src.f"]})
+
+    with pytest.raises(ConfigurationError) as exc:
+        manager.merge_agent_configs(manager.get_user_agents())
+
+    message = str(exc.value)
+    assert f"'{directive}' is a context_scope directive" in message
+    assert f"    {CANONICAL[directive]}:" in message
+
+
+def test_the_project_files_agent_defaults_still_reach_every_agent(tmp_path):
+    """Control: the block is merged into each agent, so the refusal above is
+    guarding a value that really did arrive there."""
+    manager = _project(tmp_path, {"api_key": "k", "model_name": "gpt-4o-mini"})
+
+    manager.merge_agent_configs(manager.get_user_agents())
+
+    assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4o-mini"
 
 
 @pytest.mark.parametrize("level", ["defaults", "action"])
