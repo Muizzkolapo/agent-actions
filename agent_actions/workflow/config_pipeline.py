@@ -42,8 +42,10 @@ def load_workflow_configs(
     console: Console,
     fire_events: bool = True,
 ) -> WorkflowMetadata:
-    """Run the config pipeline. ``fire_events=False`` for read-only
-    callers (inspect CLI) so events.json stays clean."""
+    """Run the config pipeline. ``fire_events=False`` for read-only callers
+    (inspect CLI): no file ever sees these events (LoggerFactory only attaches
+    a run-log file handler when a workflow run supplies ``output_dir``) — this
+    only silences the initialization/UDF-discovery banner on `-v` consoles."""
     if fire_events:
         fire_event(
             WorkflowInitializationStartEvent(

@@ -426,25 +426,19 @@ agac run --quiet
 
 ### File Handler
 
-File handler writes to:
-- `{workflow}/agent_io/logs/events.json` (when output_dir is set)
-- `logs/agent_actions.log` (fallback, if configured)
-
-Configure via environment or `LoggingConfig`:
+The file handler only attaches when a workflow run passes `output_dir` to
+`LoggerFactory.initialize()` — `agac run` and `agac retry` do this once the
+run's own output directory is known:
 
 ```python
-from agent_actions.logging.config import LoggingConfig
-
-config = LoggingConfig(
-    default_level="INFO",
-    file_handler=FileHandlerConfig(
-        enabled=True,
-        path="logs/events.json",
-    ),
-)
-
-LoggerFactory.initialize(config=config)
+LoggerFactory.initialize(output_dir=agent_folder, workflow_name=..., invocation_id=run_id)
 ```
+
+It writes `{output_dir}/logs/events.json` (all levels) and
+`{output_dir}/logs/errors.json` (ERROR level only). A command that isn't
+executing a workflow — `agac inspect`, `validate-udfs`, and other read-only
+paths — never supplies `output_dir`, so it registers no file handler and
+writes nothing to disk.
 
 ## Best Practices
 

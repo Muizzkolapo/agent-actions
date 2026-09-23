@@ -210,3 +210,37 @@ class TestHardening:
         assert captured_check_status[0]["action_name"] == "action_b", (
             "CLI must auto-route batch_id to the action that owns it"
         )
+
+
+class TestRunLogFileHandler:
+    """`batch status`/`batch retrieve` read and write real batch state for one
+    workflow's run. 627 removed the leaky project-root fallback log handler
+    these commands had been riding on for any event logging at all — without
+    their own run-scoped handler, they'd now log nothing, a silent regression
+    outside the read-only scope 627 names."""
+
+    def test_status_registers_a_run_scoped_log_handler(
+        self, single_workflow_project, captured_check_status
+    ):
+        result = CliRunner().invoke(
+            cli, ["batch", "status", "--action", "solo_action", "--batch-id", "fake_solo_batch"]
+        )
+        assert result.exit_code == 0, f"output: {result.output}"
+        logs_dir = single_workflow_project / "agent_workflow" / "solo" / "agent_io" / "logs"
+        assert logs_dir.exists()
+
+    def test_retrieve_registers_a_run_scoped_log_handler(
+        self, single_workflow_project, monkeypatch
+    ):
+        from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
+
+        monkeypatch.setattr(
+            BatchRetrievalService, "retrieve_results", lambda self, batch_id, target_dir: "ok"
+        )
+
+        result = CliRunner().invoke(
+            cli, ["batch", "retrieve", "--action", "solo_action", "--batch-id", "fake_solo_batch"]
+        )
+        assert result.exit_code == 0, f"output: {result.output}"
+        logs_dir = single_workflow_project / "agent_workflow" / "solo" / "agent_io" / "logs"
+        assert logs_dir.exists()

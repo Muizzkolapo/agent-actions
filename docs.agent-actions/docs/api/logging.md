@@ -890,15 +890,9 @@ collector = RunResultsCollector(
 Configuration for the logging system.
 
 ```python
-from agent_actions.logging.config import LoggingConfig, FileHandlerConfig
+from agent_actions.logging.config import LoggingConfig
 
-config = LoggingConfig(
-    default_level="INFO",
-    file_handler=FileHandlerConfig(
-        enabled=True,
-        path="logs/events.json",
-    ),
-)
+config = LoggingConfig(default_level="INFO")
 
 LoggerFactory.initialize(config=config)
 ```
@@ -909,7 +903,8 @@ LoggerFactory.initialize(config=config)
   Python logger names (e.g. `"httpx"`, `"my_module"`), values are level
   strings. Use this to re-enable a logger the framework clamps by default,
   or to silence one that's still too chatty.
-- `file_handler` (FileHandlerConfig): File handler configuration
+- `file_handler` (FileHandlerSettings): parsed but currently unused — see
+  [File Handler](#filehandlersettings) below
 
 #### Third-party logger suppression
 
@@ -948,20 +943,16 @@ stderr warning — the framework root must stay at DEBUG so every event reaches
 > see the manifest for the wiring status. For now, supply `module_levels`
 > programmatically.
 
-#### FileHandlerConfig
+#### FileHandlerSettings
 
-```python
-from agent_actions.logging.config import FileHandlerConfig
-
-file_config = FileHandlerConfig(
-    enabled=True,
-    path="logs/events.json",
-)
-```
-
-**Fields:**
-- `enabled` (bool): Enable file logging
-- `path` (str): Log file path (relative to project root)
+`LoggingConfig.file_handler` parses to a `FileHandlerSettings` (`enabled`,
+`path`, `level`, `max_bytes`, `backup_count`, `format`), populated from
+`logging.file.*` project config and the `AGENT_ACTIONS_NO_LOG_FILE` /
+`AGENT_ACTIONS_LOG_FILE` / `AGENT_ACTIONS_LOG_DIR` / `AGENT_ACTIONS_FILE_LOG_LEVEL`
+env vars. `LoggerFactory` does not currently read any of these fields —
+whether a run-log file handler is registered, and where it writes, is
+decided entirely by the `output_dir` passed to `LoggerFactory.initialize()`,
+not by this config (see the architecture doc's File Handler section).
 
 ---
 

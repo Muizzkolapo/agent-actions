@@ -14,6 +14,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
+from agent_actions.logging.factory import LoggerFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import StorageBackend
 
@@ -163,6 +164,12 @@ def _prepare_batch_context(
 ) -> _BatchContext:
     root = resolve_project_root(project_root)
     workflow_name, workflow_root = _resolve_workflow(root, agent_name)
+    # A batch command reads/writes one workflow's real state — give it the same
+    # run-scoped log handler `agac run`/`agac retry` use (agent_io/logs/...),
+    # or it logs nothing (627).
+    LoggerFactory.initialize(
+        output_dir=workflow_root / "agent_io", workflow_name=workflow_name, force=True
+    )
     storage_backend = _build_storage_backend(workflow_root, workflow_name)
     resolved_action = _resolve_action(
         storage_backend, workflow_name, action_name, batch_id=batch_id
