@@ -92,7 +92,7 @@ class TestARowThatIsNotARecord:
 
 
 class TestAReservedKeyDoesNotHideTheDocumentRule:
-    """The namespace guard runs first and only ever sees documents that are refused."""
+    """The namespace guard runs after the document rule, so it only sees records."""
 
     def test_a_lone_object_carrying_a_reserved_key_reports_the_document_rule(self, tmp_path):
         with pytest.raises(AgentActionsError) as caught:
@@ -104,3 +104,17 @@ class TestAReservedKeyDoesNotHideTheDocumentRule:
         with pytest.raises(ConfigValidationError) as caught:
             _run(tmp_path, [{"version": "2024-01", "ticket_id": "T-1", "text": "x"}])
         assert "collide with reserved namespace names" in str(caught.value)
+
+
+class TestTheRemedyFitsWhatWasFound:
+    def test_an_object_is_told_to_wrap_itself(self, tmp_path):
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, RECORD)
+        assert "Wrap it in an array: [ ... ]." in str(caught.value)
+
+    def test_a_bare_value_is_not_told_to_wrap(self, tmp_path):
+        """Wrapping a bare value only buys a second refusal about the row inside."""
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, 42)
+        assert "Wrap it in an array" not in str(caught.value)
+        assert "Give each record its own object" in str(caught.value)
