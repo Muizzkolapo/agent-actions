@@ -132,12 +132,16 @@ def _validate_staged_data(
     if not raw_prompt:
         return
 
-    if file_type == ".json" and isinstance(raw_content, list) and raw_content:
+    if file_type == ".json":
+        # Refused at preparation for not being rows, or for holding one that is
+        # not a record. Reading such a document here would fail the prompt first
+        # and report a missing field instead of the shape that is actually wrong.
+        if not isinstance(raw_content, list) or not all(
+            isinstance(row, dict) for row in raw_content
+        ):
+            return
         first_item = raw_content[0]
         source_content = first_item
-    elif file_type == ".json" and isinstance(raw_content, dict):
-        source_content = raw_content
-        first_item = raw_content
     else:
         source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
