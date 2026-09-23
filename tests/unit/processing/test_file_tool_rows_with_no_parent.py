@@ -305,3 +305,31 @@ class TestUnderAVersionedAction:
         ]
 
         assert len(merge_records_by_key(self._enriched(kept))) == 1
+
+
+class TestWhatTheCorrelationDropCosts:
+    """Dropping the id makes the row a plain branch — the shape
+    ``_select_universal_key`` already handles by keying the whole pool on
+    ``source_guid`` rather than per record. Pinned because that demotion is
+    visible to an unrelated fan-in that happens to share the pool."""
+
+    FANNED = [
+        {"source_guid": "m1", "version_correlation_id": "V9", "content": {"a": 1}},
+        {"source_guid": "m2", "version_correlation_id": "V9", "content": {"b": 2}},
+    ]
+
+    def test_a_fan_in_on_its_own_still_merges(self):
+        assert len(merge_records_by_key([dict(r) for r in self.FANNED])) == 1
+
+    def test_a_row_with_no_parent_in_the_pool_demotes_the_key_for_everyone(self):
+        """The trade, stated: the rows the identity was minted to separate stay
+        separate, and a fan-in sharing the pool is keyed on ``source_guid``
+        instead, which splits it. Keeping the inherited id is the reported bug;
+        minting a fresh one needs the version base name and session id this
+        function is not given. Left as a follow-up rather than guessed at.
+        """
+        rows, _ = reconcile_outputs(invented(1), "a2", records("G0"))
+
+        pool = [dict(r) for r in self.FANNED] + rows
+
+        assert len(merge_records_by_key(pool)) == 3
