@@ -85,6 +85,7 @@ class DispositionGate:
         }
         named = held & self._repairing
         resolvable = named - ancestors
+        blocked = named - resolvable
 
         carried: set[str] = set()
         unresolved: set[str] = set()
@@ -95,7 +96,7 @@ class DispositionGate:
             producer = row.get("parent_source_guid")
             if guid in named or producer in resolvable:
                 continue
-            if producer in ancestors or (guid not in held and producer not in held):
+            if producer in blocked or (guid not in held and producer not in held):
                 unresolved.add(guid)
             carried.add(guid)
 

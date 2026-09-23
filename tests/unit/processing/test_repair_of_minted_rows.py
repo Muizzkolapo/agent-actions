@@ -275,6 +275,19 @@ class TestAnInputBesideItsOwnAncestor:
 
         assert from_m0 <= {row["source_guid"] for row in r.stored()}
 
+    def test_repairing_a_record_outside_the_ambiguity_reports_nothing(self, caplog, run):
+        """An ancestor is only unusable for the rows that might be its
+        descendant's. Repairing a third record resolves cleanly, and a warning
+        raised there would be noise on a repair that duplicated nothing."""
+        r = run({"m0": 2})
+        records = [*self._diamond(), {"source_guid": "c", "content": {"prev": {"id": "c"}}}]
+        r(records)
+
+        with caplog.at_level("WARNING"):
+            r.repair(records, {"c"})
+
+        assert "cannot be attributed" not in caplog.text
+
     def test_the_ambiguity_is_reported(self, caplog, run):
         r = run({"m0": 2})
         r(self._diamond())

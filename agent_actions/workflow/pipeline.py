@@ -499,6 +499,14 @@ class ProcessingPipeline:
                     e,
                 )
 
+        # Above every narrowing, as staging captures it: a record the limit drops
+        # is still one of this action's inputs, and the gate reads these to tell a
+        # stored row of its own making from one minted upstream. Leave it out and
+        # a row of that record reads as one of a repaired record's, to be deleted
+        # by a rewrite that never makes it again. A limit never drops a repaired
+        # record, so the extra entries can only widen what is carried.
+        offered_to_repair = data
+
         # ── per-action record_limit ──────────────────────────────────────
         kept = record_indices_to_process(
             data,
@@ -509,10 +517,6 @@ class ProcessingPipeline:
         )
         if kept is not None:
             data = [data[i] for i in kept]
-
-        # The records a repair leaves out are what let the disposition gate tell a
-        # stored row of this action's own making from one minted upstream.
-        offered_to_repair = data
 
         # Above the context scope, which writes `skipped` for every record it drops:
         # a repair must not disposition a record it never named.
