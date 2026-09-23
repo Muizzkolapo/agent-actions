@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
@@ -85,3 +85,57 @@ class TestItStagesWhatItStagedBefore:
         for payload in (ENVELOPE, [{"id": 1}], [], 42, "text", None):
             cache = _fetch(tmp_path, payload, url=f"https://api.example.com/{payload!r}")
             assert isinstance(json.loads(cache.read_text()), list)
+
+
+def _cache_of(tmp_path, payload, url="https://api.example.com/items"):
+    """Resolve once, then leave *payload* in the cache file as an older version wrote it."""
+    cache = _fetch(tmp_path, [{"seed": True}], url=url)
+    cache.write_text(json.dumps(payload))
+    return cache
+
+
+def _resolve_again(tmp_path, url="https://api.example.com/items"):
+    """Resolve with the cache already populated; re-fetching is a failure."""
+    with patch("urllib.request.urlopen", side_effect=AssertionError("re-fetched a warm cache")):
+        result = resolve_start_node_data_source(
+            Path(tmp_path), {"type": "api", "url": url}, "extract"
+        )
+    return Path(result.directories[0]) / "extract.json"
+
+
+class TestACacheWrittenBeforeTheDocumentRule:
+    def test_it_is_brought_to_the_document_rule(self, tmp_path):
+        _cache_of(tmp_path, ENVELOPE)
+        assert json.loads(_resolve_again(tmp_path).read_text()) == [ENVELOPE]
+
+    def test_it_stages_the_record_it_always_staged(self, tmp_path):
+        _cache_of(tmp_path, ENVELOPE)
+        rows = _stage(_resolve_again(tmp_path))
+        assert [row["content"]["source"] for row in rows] == [ENVELOPE]
+
+    def test_a_scalar_cache_is_brought_over_too(self, tmp_path):
+        _cache_of(tmp_path, 42)
+        assert json.loads(_resolve_again(tmp_path).read_text()) == [42]
+
+
+class TestACacheAlreadyHoldingADocument:
+    def test_it_is_left_exactly_as_it_was(self, tmp_path):
+        rows = [{"id": 1}, {"id": 2}]
+        cache = _cache_of(tmp_path, rows)
+        before = cache.read_bytes()
+        assert _resolve_again(tmp_path).read_bytes() == before
+
+    def test_an_empty_document_is_left_alone(self, tmp_path):
+        cache = _cache_of(tmp_path, [])
+        before = cache.read_bytes()
+        assert _resolve_again(tmp_path).read_bytes() == before
+
+
+class TestACacheThatCannotBeRead:
+    def test_it_fails_naming_the_file_and_the_remedy(self, tmp_path):
+        cache = _cache_of(tmp_path, ENVELOPE)
+        cache.write_text("{not json")
+        with pytest.raises(ConfigurationError) as caught:
+            _resolve_again(tmp_path)
+        assert "_remote_cache" in str(caught.value)
+        assert str(cache) in str(caught.value.context.values()) or str(cache) in str(caught.value)
