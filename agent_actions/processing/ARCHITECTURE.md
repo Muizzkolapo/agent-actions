@@ -76,7 +76,7 @@ Input records (from staging or upstream action)
            ▼
 ┌──────────────────────────────────────────────────────┐
 │  Step 3: DISPOSITION GATE                            │
-│  disposition_gate.py:124-164                         │
+│  disposition_gate.py:125-165                         │
 │                                                      │
 │  Queries SQLite for terminal dispositions (SUCCESS,  │
 │  FILTERED, SKIPPED, PASSTHROUGH, EXHAUSTED).         │
@@ -326,7 +326,7 @@ Every path that resets action state also clears checkpoint records:
 
 | Path | When | Code |
 |------|------|------|
-| Normal completion | After `save_main_output` | `pipeline.py:591` |
+| Normal completion | After `save_main_output` | `pipeline.py:618` |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
 
@@ -496,7 +496,7 @@ If you add a new RecordState value that should block downstream:
 ```
 Three places clear action state. ALL THREE must clear checkpoint_output:
 
-1. pipeline.py:591      — after save_main_output (normal completion)
+1. pipeline.py:618      — after save_main_output (normal completion)
 2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
 3. cli/retry.py:201     — RetryCommand.execute (retry command)
 
