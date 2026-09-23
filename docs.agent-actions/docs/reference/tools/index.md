@@ -142,7 +142,7 @@ def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
 | What you return | Framework behavior |
 |---|---|
 | Original record dict (has `node_id`) | Extends parent lineage — downstream `observe` can load ancestor data |
-| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. It names no `parent_source_guid`: no single input produced it. |
+| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. |
 
 ## Tool Discovery
 

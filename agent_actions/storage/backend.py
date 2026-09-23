@@ -253,10 +253,26 @@ class StorageBackend(ABC):
         which is the truth for a consumer reading forward and a lie about an action
         whose output for that record already exists.
 
+        Rows stored whole are handed back marked so. Reconstruction drops the mark,
+        and re-deriving it from the record alone picks ``delta`` — which for an
+        identity that joins nothing upstream means the rewrite stores a delta
+        against a guid no upstream action holds, and the row comes back with only
+        this action's namespace.
+
         Raises:
             FileNotFoundError: If the target data doesn't exist.
         """
-        return self._reconstructed_target(action_name, relative_path)
+        rows = self._reconstructed_target(action_name, relative_path)
+        stored_whole = {
+            raw.get("source_guid")
+            for raw in self._read_target_raw(action_name, relative_path)
+            if raw.get("_delta_mode") == "full" and raw.get("source_guid")
+        }
+        if stored_whole:
+            for row in rows:
+                if row.get("source_guid") in stored_whole:
+                    row["_delta_mode"] = "full"
+        return rows
 
     def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""

@@ -56,8 +56,12 @@ def _reattach_source_guid(
     child inherits; every other row is born here, since one guid shared between
     distinct entities is one row to every store keyed by identity. Born rows are
     stored whole and take a correlation id derived from the one they inherited —
-    distinct per row, equal across version branches — and claim a producer only
-    where they named a parent.
+    distinct per row, equal across version branches.
+
+    ``parent_source_guid`` is left as the envelope carried it. A row that named no
+    parent has no producer to claim, but the FILE-mode source resolver has no rule
+    for a record's own carried ``source`` and would skip it — see #1046. The field
+    serves two readers that want different answers; #1022 owns that.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -86,11 +90,6 @@ def _reattach_source_guid(
             inherited = parent.get("parent_source_guid") or parent_guid
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
-        else:
-            # The envelope carried this field from `original_data[0]` along with
-            # its namespaces. That record's ancestor is not this row's producer —
-            # no single input is — and every consumer reads the field as one.
-            item.pop("parent_source_guid", None)
         item["source_guid"] = IDGenerator.generate_source_guid()
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.

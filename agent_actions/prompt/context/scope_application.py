@@ -421,7 +421,7 @@ def _resolve_source_content(
     """Resolve source namespace content for a record by identity.
 
     Tries the record's own source_guid, then its carried parent_source_guid
-    (the original pool identity, preserved when expansion re-mints guids).
+    (the pool identity a minted row carries when it knows its producer).
     A miss on both against a non-empty pool returns None — substituting any
     other record's source would attribute the wrong document, so the caller
     must skip the record instead.

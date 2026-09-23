@@ -53,7 +53,7 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 # pipeline stages by RecordEnvelope.build(). These are the record's stable identity.
 # parent_source_guid is the original source-pool identity, set wherever a minted
 # row knows its producer (an expansion, or a FILE tool splitting one input into
-# several). A row with no single producer leaves it unset.
+# several). A row with no single producer adds none of its own.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
