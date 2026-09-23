@@ -373,3 +373,75 @@ def test_the_stored_block_carries_only_what_was_asked_for():
     agent = _expand({"chunk_config": {"chunk_size": 4000}})
 
     assert agent["chunk_config"] == {"chunk_size": 4000}
+
+
+def _project_agent(project_agent_defaults, workflow_defaults=None, action_extra=None):
+    """Drive the real three-level load: agent_actions.yml, `defaults:`, action."""
+    root = Path(tempfile.mkdtemp())
+    (root / "agent_actions.yml").write_text(
+        yaml.safe_dump(
+            {
+                "project_name": "p",
+                "default_agent_config": {
+                    "api_key": "k",
+                    "model_name": "gpt-4",
+                    **project_agent_defaults,
+                },
+            }
+        )
+    )
+    config_dir = root / "agent_config"
+    config_dir.mkdir()
+    (config_dir / "w.yml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "w",
+                "description": "d",
+                "version": "1.0",
+                "defaults": {"model_vendor": "openai", **(workflow_defaults or {})},
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p", **(action_extra or {})}],
+            }
+        )
+    )
+    manager = ConfigManager(
+        str(config_dir / "w.yml"), str(root / "agent_actions.yml"), project_root=root
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+    manager.merge_agent_configs(manager.get_user_agents())
+    return manager.agent_configs["a1"].model_dump()
+
+
+@pytest.mark.parametrize("level", ["defaults", "action"])
+def test_a_nearer_loose_key_beats_the_project_files_block(level):
+    """`agac init` scaffolds a project-level block, so every project has one. A
+    block that outranks a nearer loose key leaves that key doing nothing, which
+    is the silence this whole ticket is about."""
+    written = {"chunk_size": 2000, "chunk_overlap": 50}
+    agent = _project_agent(
+        {"chunk_config": {"chunk_size": 300, "chunk_overlap": 10}},
+        workflow_defaults=written if level == "defaults" else None,
+        action_extra=written if level == "action" else None,
+    )
+
+    seen = _tokenizer_call(agent, "batch")
+
+    assert (seen["chunk_size"], seen["chunk_overlap"]) == (2000, 50)
+
+
+def test_the_project_block_still_supplies_what_nothing_nearer_sets():
+    agent = _project_agent(
+        {"chunk_config": {"chunk_size": 300, "chunk_overlap": 10}},
+        workflow_defaults={"chunk_size": 2000},
+    )
+
+    seen = _tokenizer_call(agent, "batch")
+
+    assert (seen["chunk_size"], seen["chunk_overlap"]) == (2000, 10)
+
+
+def test_a_project_block_that_is_not_a_mapping_is_named_not_crashed():
+    with pytest.raises((ConfigurationError, ValidationError)) as exc:
+        _project_agent({"chunk_config": 300})
+
+    assert "chunk_config" in str(exc.value)
