@@ -45,12 +45,12 @@ class TestWhatTheRunReports:
     def test_it_is_the_document_rule(self, tmp_path, label, document, found):
         with pytest.raises(AgentActionsError) as caught:
             _run(tmp_path, document)
-        assert "A staging JSON file must hold a list of records" in str(caught.value)
+        assert "A staged input must be rows" in str(caught.value)
 
     def test_it_names_the_shape_it_found(self, tmp_path, label, document, found):
         with pytest.raises(AgentActionsError) as caught:
             _run(tmp_path, document)
-        assert caught.value.context["document_type"] == found
+        assert caught.value.context["content_type"] == found
 
     def test_it_is_not_a_prompt_failure(self, tmp_path, label, document, found):
         with pytest.raises(AgentActionsError) as caught:
@@ -67,4 +67,21 @@ class TestPromptValidationStillRunsForAList:
     def test_that_failure_is_not_the_document_rule(self, tmp_path):
         with pytest.raises(RecordContextError) as caught:
             _run(tmp_path, [{"ticket_id": "T-1"}])
-        assert "must hold a list of records" not in str(caught.value)
+        assert "A staged input must be rows" not in str(caught.value)
+
+
+class TestARowThatIsNotARecord:
+    def test_a_list_holding_a_bare_value_reports_the_row_rule(self, tmp_path):
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, [42])
+        assert "A staged row must be an object" in str(caught.value)
+
+    def test_it_names_the_row_it_stopped_on(self, tmp_path):
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, [RECORD, "not a record"])
+        assert caught.value.context["row_index"] == 1
+
+    def test_it_is_not_a_prompt_failure(self, tmp_path):
+        with pytest.raises(AgentActionsError) as caught:
+            _run(tmp_path, [42])
+        assert not isinstance(caught.value, RecordContextError)
