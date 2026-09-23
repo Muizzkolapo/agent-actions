@@ -19,7 +19,6 @@ class PathType(Enum):
     PROJECT_ROOT = "project_root"
     AGENT_CONFIG = "agent_config"
     AGENT_IO = "agent_io"
-    SOURCE = "source"
     TARGET = "target"
     SCHEMA = "schema"
     PROMPT_STORE = "prompt_store"
@@ -58,7 +57,6 @@ class PathManager:
     PATH_TEMPLATES = {
         PathType.AGENT_CONFIG: "{agent_name}/agent_config",
         PathType.AGENT_IO: "{agent_name}/agent_io",
-        PathType.SOURCE: "{agent_name}/agent_io/source",
         PathType.TARGET: "{agent_name}/agent_io/target/{action_name}",
         PathType.SCHEMA: "schema",
         PathType.PROMPT_STORE: "prompt_store",
@@ -72,7 +70,6 @@ class PathManager:
     VALIDATION_RULES = {
         PathType.PROJECT_ROOT: {"must_exist": True, "must_be_readable": True},
         PathType.AGENT_CONFIG: {"must_exist": True, "must_be_readable": True},
-        PathType.SOURCE: {"must_be_writable": True},
         PathType.TARGET: {"must_be_writable": True},
         PathType.SCHEMA: {"must_exist": True, "must_be_readable": True},
     }
@@ -172,14 +169,6 @@ class PathManager:
             self._path_cache[cache_key] = resolved_path
 
         return resolved_path
-
-    def get_agent_paths(self, agent_name: str) -> dict[str, Path]:
-        """Get all standard paths for a specific agent."""
-        return {
-            "config": self.get_standard_path(PathType.AGENT_CONFIG, agent_name=agent_name),
-            "io": self.get_standard_path(PathType.AGENT_IO, agent_name=agent_name),
-            "source": self.get_standard_path(PathType.SOURCE, agent_name=agent_name),
-        }
 
     def ensure_path_exists(self, path: Path, is_file: bool = False) -> Path:
         """Ensure a path exists, creating directories as needed."""

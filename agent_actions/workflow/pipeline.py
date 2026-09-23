@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 
 TOOL_VENDOR = "tool"
 HITL_VENDOR = "hitl"
-SOURCE_FOLDER = "source"
 logger = logging.getLogger(__name__)
 
 

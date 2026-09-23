@@ -152,13 +152,3 @@ class FileWriter(ProcessorErrorHandlerMixin):
             return len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
         self._execute_write("target", do_write)
-
-    def write_source(self, data: Any) -> None:
-        """Write data to source file in JSON format."""
-
-        def do_write() -> int:
-            Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
-            atomic_json_write(Path(self.file_path), data, indent=4)
-            return Path(self.file_path).stat().st_size
-
-        self._execute_write("source", do_write)

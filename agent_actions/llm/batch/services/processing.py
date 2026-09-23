@@ -145,7 +145,6 @@ class BatchProcessingService:
         context_manager: BatchContextManager,
         result_processor: BatchResultStrategy,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
-        source_handler: Any | None = None,
         action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
@@ -158,7 +157,6 @@ class BatchProcessingService:
             context_manager: Manager for batch context persistence
             result_processor: Processor for batch results
             registry_manager_factory: Factory function to create registry managers
-            source_handler: Optional handler for source data
             action_indices: Dict mapping agent names to node indices (for recovery)
             dependency_configs: Dict mapping dependency names to configs (for recovery)
             storage_backend: Optional storage backend for database persistence
@@ -168,7 +166,6 @@ class BatchProcessingService:
         self._context_manager = context_manager
         self._result_processor = result_processor
         self._registry_manager_factory = registry_manager_factory
-        self._source_handler = source_handler
         self._action_indices = action_indices or {}
         self._dependency_configs = dependency_configs or {}
         self._storage_backend = storage_backend

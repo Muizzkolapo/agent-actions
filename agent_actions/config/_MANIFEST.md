@@ -57,7 +57,6 @@ Key Functions
 |--------|--------|------|-------------|
 | `paths.py` | `PathManager.get_standard_path` | Method | Resolve standard project/agent paths. |
 | `paths.py` | `PathManager.get_project_root` | Method | Locate the project root (caches only for CWD lookups). |
-| `paths.py` | `PathManager.get_agent_paths` | Method | Resolve per-agent config/io/source paths. |
 | `paths.py` | `PathManager.clean_path` | Method | Remove files/dirs with project-boundary guard. |
 | `path_config.py` | `load_project_config` | Function | Load project-level config from YAML. |
 | `path_config.py` | `resolve_project_root` | Function | Resolve project root, defaulting to `Path.cwd()`. |
