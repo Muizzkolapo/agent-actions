@@ -133,13 +133,8 @@ def _validate_staged_data(
         return
 
     if file_type == ".json":
-        # Refused at preparation for not being rows, or for holding one that is
-        # not a record. Reading such a document here would fail the prompt first
-        # and report a missing field instead of the shape that is actually wrong.
-        if not isinstance(raw_content, list) or not all(
-            isinstance(row, dict) for row in raw_content
-        ):
-            return
+        # A JSON document is rows of records by the time it reaches here; the
+        # document rule runs before this and refuses anything else.
         first_item = raw_content[0]
         source_content = first_item
     else:
@@ -182,6 +177,12 @@ def process_initial_stage(ctx: InitialStageContext):
     from agent_actions.input.preprocessing.staging.field_validation import (
         validate_staging_field_names,
     )
+
+    if file_type == ".json":
+        # Before anything reads this as a record. Two validators below would
+        # otherwise report a collision or a missing field for a document that is
+        # not records at all, and the reader would fix those and still be here.
+        _refuse_rows_that_are_not_records(content, ctx.file_path, ctx.agent_name)
 
     validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
 
@@ -396,9 +397,13 @@ def _prepare_json_batch(
 def _refuse_rows_that_are_not_records(rows: Any, file_path: str, agent_name: str) -> None:
     """Stop an input whose rows cannot carry a payload, before identity is derived."""
     if not isinstance(rows, list):
+        remedy = (
+            "Wrap it in an array: [ ... ]."
+            if isinstance(rows, dict)
+            else "Give each record its own object, and hold them in an array."
+        )
         raise AgentActionsError(
-            f"A staged input must be rows; found {type(rows).__name__}. "
-            "Wrap it in an array: [ ... ].",
+            f"A staged input must be rows; found {type(rows).__name__}. {remedy}",
             context={
                 "file_path": file_path,
                 "agent_name": agent_name,
