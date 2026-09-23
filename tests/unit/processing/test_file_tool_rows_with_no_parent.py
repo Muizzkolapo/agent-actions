@@ -371,6 +371,20 @@ class TestWhatTheDerivedCorrelationIdBuys:
             r["version_correlation_id"] for r in second
         ]
 
+    def test_a_second_aggregation_does_not_collide_with_the_first(self):
+        """The suffix is appended, not replaced. Replacing it would give a chained
+        aggregation the same ids as the stage above, and a fan-in over both would
+        merge rows from different actions — this ticket's own collapse, one stage
+        later. The id grows a segment per stage, which is the price of that."""
+        first, _ = reconcile_outputs(invented(2), "a2", records("G0", "G1"))
+        second, _ = reconcile_outputs(invented(2), "a3", first)
+
+        assert not (
+            {r["version_correlation_id"] for r in first}
+            & {r["version_correlation_id"] for r in second}
+        )
+        assert len(merge_records_by_key([dict(r) for r in first + second])) == 4
+
     def test_a_row_whose_input_carried_no_id_is_not_given_one(self):
         rows, _ = reconcile_outputs(invented(1), "a2", [{"source_guid": "G0", "content": {}}])
 
