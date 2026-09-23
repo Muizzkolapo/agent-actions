@@ -16,7 +16,11 @@ from agent_actions.config.path_config import (
     resolve_project_root,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
-from agent_actions.config.schema import WorkflowConfig, refuse_context_scope_siblings
+from agent_actions.config.schema import (
+    ChunkConfig,
+    WorkflowConfig,
+    refuse_context_scope_siblings,
+)
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
@@ -35,6 +39,29 @@ _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
     "skip_if": "skip_condition",
 }
+
+
+def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
+    """Return *project_defaults* with its chunk block spread into loose keys.
+
+    The project file's settings are the outermost layer, but the expander sees
+    them folded into the workflow's defaults and cannot tell the two apart. As a
+    block they would outrank the workflow's own loose keys; as loose keys the
+    shallow merge below puts the workflow above them, which is the real order.
+    """
+    block = project_defaults.get("chunk_config")
+    if block is None:
+        return project_defaults
+    try:
+        validated = ChunkConfig.model_validate(block).model_dump(exclude_unset=True)
+    except ValidationError as e:
+        detail = "; ".join(err["msg"] for err in e.errors()) or str(e)
+        raise ConfigurationError(
+            f"default_agent_config chunk_config: {detail}",
+            context={"operation": "load_project_defaults"},
+            cause=e,
+        ) from e
+    return {**{k: v for k, v in project_defaults.items() if k != "chunk_config"}, **validated}
 
 
 def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
@@ -196,6 +223,7 @@ class ConfigManager:
                 project_config = load_project_config(project_root)
                 project_defaults = project_config.get("default_agent_config", {})
                 _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
+                project_defaults = _flatten_project_chunk_block(project_defaults)
             except (FileNotFoundError, ProjectRootNotFoundError):
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:

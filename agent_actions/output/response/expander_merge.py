@@ -46,15 +46,11 @@ CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_metho
 def process_chunk_config(
     agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
-    """Merge the chunk settings the action and the workflow supply, name by name.
+    """Merge the chunk settings, name by name, later layers winning.
 
-    The chunker reads chunk_config and nothing else, so anything that stays
-    outside it is a value the split never sees. Merging per name rather than per
-    block is what keeps a narrower block from dropping the names it omits, and
-    what stops a block written further out from overruling the action.
-
-    Later layers win: workflow key, workflow block, action key, action block.
-    The project file's block arrives folded into the workflow's defaults.
+    Per name rather than per block, so a narrower block keeps the names it omits
+    and a block written further out cannot overrule the action. The project
+    file's settings arrive spread across the workflow's keys, outside all four.
     """
     layers = (
         {setting: defaults.get(setting) for setting in CHUNK_SETTINGS},

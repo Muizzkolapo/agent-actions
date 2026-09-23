@@ -448,8 +448,8 @@ class ActionConfig(_RetryValidators):
         default=None, description="Interceptor configuration"
     )
     chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
-    chunk_size: int | None = Field(default=None, description="Chunk size")
-    chunk_overlap: int | None = Field(default=None, description="Chunk overlap")
+    chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
+    chunk_overlap: int | None = Field(default=None, ge=0, description="Chunk overlap")
     tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
     split_method: str | None = Field(default=None, description="How text is split into chunks")
     context_scope: dict[str, Any] | None = Field(
@@ -545,8 +545,8 @@ class DefaultsConfig(_RetryValidators):
     chunk_config: ChunkConfig | None = Field(
         default=None, description="Default chunk configuration"
     )
-    chunk_size: int | None = Field(default=None, description="Default chunk size")
-    chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
+    chunk_size: int | None = Field(default=None, gt=0, description="Default chunk size")
+    chunk_overlap: int | None = Field(default=None, ge=0, description="Default chunk overlap")
 
     # --- Read out of defaults by field inheritance ---
     where_clause: dict[str, Any] | None = Field(
