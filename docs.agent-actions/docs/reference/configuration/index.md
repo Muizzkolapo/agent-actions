@@ -39,7 +39,7 @@ required_by_default: false
 
 chunk_config:
   chunk_size: 4000
-  overlap: 500
+  chunk_overlap: 500
 
 output_storage:
   backend: sqlite

@@ -270,7 +270,7 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │  14.  Initialize dependencies                                │
 │                                                              │
 │  15.  process_chunk_config()                                 │
-│       → chunk_config block OR legacy chunk_size/overlap      │
+│       → chunk_config block, then loose chunk settings        │
 │                                                              │
 │  16.  initialize_optional_fields()                           │
 │       → add_dispatch, conditional_clause, guard              │

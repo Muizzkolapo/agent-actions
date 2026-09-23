@@ -363,6 +363,26 @@ def _wrap_online_rows(
     return _give_repeats_their_own_identity(wrapped, storage_backend, relative_path)
 
 
+def _chunk_settings(agent_config: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
+    """The four chunking settings, under the names `ChunkConfig` declares.
+
+    One reader for both modes: the batch and online sites held the same four
+    lines, and a key that drifted in one of them went unnoticed in the other.
+    """
+    chunk_config = agent_config.get(CHUNK_CONFIG_KEY) or {}
+
+    def setting(key: str) -> Any:
+        value = chunk_config.get(key)
+        return get_default(key) if value is None else value
+
+    return (
+        setting("chunk_size"),
+        setting("chunk_overlap"),
+        setting("tokenizer_model"),
+        setting("split_method"),
+    )
+
+
 def _prepare_text_chunks_batch(
     content: str,
     agent_config: dict[str, Any],
@@ -372,11 +392,7 @@ def _prepare_text_chunks_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
-    chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
-    chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
-    chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
-    tokenizer_model = chunk_config.get("tokenizer_model", get_default("tokenizer_model"))
-    split_method = chunk_config.get("split_method", get_default("split_method"))
+    chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(agent_config)
     chunks = Tokenizer.split_text_content(
         content,
         chunk_size,
@@ -565,11 +581,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
     src_text: Any
 
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
-        chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
-        chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
-        chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
-        tokenizer_model = chunk_config.get("tokenizer_model", get_default("tokenizer_model"))
-        split_method = chunk_config.get("split_method", get_default("split_method"))
+        chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(ctx.agent_config)
         chunks = Tokenizer.split_text_content(
             ctx.content,
             chunk_size,

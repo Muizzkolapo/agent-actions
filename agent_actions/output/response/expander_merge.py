@@ -3,8 +3,6 @@
 import copy
 from typing import Any
 
-from agent_actions.output.response.config_fields import get_default
-
 
 def merge_directive_value(existing: Any, new_value: Any) -> Any:
     """Merge two directive values based on their types."""
@@ -40,23 +38,29 @@ def deep_merge_context_scope(
     return merged
 
 
+# The settings the chunker reads out of chunk_config, which are also writable as
+# keys of their own on an action or in defaults.
+CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_method")
+
+
 def process_chunk_config(
     agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
-    """Process chunk configuration for an agent."""
-    chunk_config = action.get("chunk_config", defaults.get("chunk_config", {}))
-    if chunk_config:
-        agent["chunk_config"] = chunk_config
-    else:
-        agent["chunk_config"] = {}
-        if action.get("chunk_size") or defaults.get("chunk_size"):
-            agent["chunk_config"]["chunk_size"] = action.get(
-                "chunk_size", defaults.get("chunk_size", get_default("chunk_size"))
-            )
-        if action.get("chunk_overlap") or defaults.get("chunk_overlap"):
-            agent["chunk_config"]["chunk_overlap"] = action.get(
-                "chunk_overlap", defaults.get("chunk_overlap", get_default("chunk_overlap"))
-            )
+    """Build the agent's chunk_config from its own block and the loose settings.
+
+    A loose setting fills a name the block leaves out rather than being dropped:
+    the chunker reads chunk_config and nothing else, so a value that stays
+    outside it is one the split never sees.
+    """
+    block = action.get("chunk_config", defaults.get("chunk_config")) or {}
+    agent["chunk_config"] = dict(block)
+
+    for setting in CHUNK_SETTINGS:
+        if agent["chunk_config"].get(setting) is not None:
+            continue
+        value = action.get(setting, defaults.get(setting))
+        if value is not None:
+            agent["chunk_config"][setting] = value
 
 
 def initialize_optional_fields(agent: dict[str, Any]) -> None:

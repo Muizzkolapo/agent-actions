@@ -2,7 +2,7 @@ default_agent_config:
   api_key: GEMINI_API_KEY
   model_name: gemini-flash-lite-latest
   chunk_config:
-    overlap: 500
+    chunk_overlap: 500
     chunk_size: 4000
   prompt_debug: false
 

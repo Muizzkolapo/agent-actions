@@ -15,7 +15,7 @@ Configure chunking at the project level in `agent_actions.yml`:
 default_agent_config:
   chunk_config:
     chunk_size: 4000
-    overlap: 500
+    chunk_overlap: 500
     split_method: tiktoken
 ```
 
@@ -24,8 +24,11 @@ default_agent_config:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `chunk_size` | 300 | Maximum size per chunk (tokens or characters) |
-| `overlap` | 10 | Overlap between consecutive chunks |
+| `chunk_overlap` | 10 | Overlap between consecutive chunks |
 | `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, or `spacy` |
+| `tokenizer_model` | `cl100k_base` | Tokenizer used to measure chunk size |
+
+These four are the only keys `chunk_config` takes; anything else is refused at load, naming the field it resembles. Each can also be written as a key of its own on an action or in `defaults:`, where it fills a name the block leaves out.
 
 The defaults are tuned for the framework's own short-document benchmarks. The examples below show larger values (4000 / 8000) tuned for OpenAI-class context windows — start there for production workloads on long documents.
 
@@ -38,7 +41,7 @@ actions:
   - name: process_large_docs
     chunk_config:
       chunk_size: 8000
-      overlap: 1000
+      chunk_overlap: 1000
       split_method: chars
 ```
 
@@ -51,7 +54,7 @@ Token-based chunking using OpenAI's tokenizer:
 ```yaml
 chunk_config:
   chunk_size: 4000
-  overlap: 500
+  chunk_overlap: 500
   split_method: tiktoken
 ```
 
@@ -64,7 +67,7 @@ Character-based splitting:
 ```yaml
 chunk_config:
   chunk_size: 8000
-  overlap: 1000
+  chunk_overlap: 1000
   split_method: chars
 ```
 
@@ -77,7 +80,7 @@ Semantic chunking using spaCy NLP—splits at sentence boundaries:
 ```yaml
 chunk_config:
   chunk_size: 4000
-  overlap: 500
+  chunk_overlap: 500
   split_method: spacy
 ```
 
@@ -110,7 +113,7 @@ description: "Summarise a long document in chunks"
 defaults:
   chunk_config:
     chunk_size: 4000
-    overlap: 500
+    chunk_overlap: 500
     split_method: tiktoken
 
 actions:
