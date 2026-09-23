@@ -14,7 +14,7 @@ import yaml
 from pydantic import ValidationError
 
 from agent_actions.config.manager import ConfigManager
-from agent_actions.config.schema import WorkflowConfig
+from agent_actions.config.schema import ChunkConfig, WorkflowConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     DataPreparationContext,
@@ -293,7 +293,7 @@ def test_a_zero_overlap_survives_instead_of_reading_as_unset():
     assert _tokenizer_call(agent, "batch")["chunk_overlap"] == 0
 
 
-def test_a_scaffolded_project_loads_and_chunks():
+def test_a_scaffolded_project_loads_and_carries_its_block():
     """`agac init` writes a default_agent_config of its own. A key it scaffolds
     that the schema refuses makes the first command in a new project fail."""
     from agent_actions.config.init import ProjectInitializer
@@ -325,11 +325,8 @@ def test_a_scaffolded_project_loads_and_chunks():
     manager.merge_agent_configs(manager.get_user_agents())
     agent = manager.agent_configs["a1"].model_dump()
 
-    seen = _tokenizer_call(agent, "batch")
-    assert (seen["chunk_size"], seen["chunk_overlap"]) == (
-        block["chunk_size"],
-        block["chunk_overlap"],
-    )
+    assert set(block) <= set(ChunkConfig.model_fields)
+    assert block.items() <= agent["chunk_config"].items()
 
 
 @pytest.mark.parametrize("setting", sorted(SETTINGS))
@@ -368,8 +365,8 @@ def test_an_action_block_fills_in_over_the_workflow_block_key_by_key():
 
 
 def test_the_stored_block_carries_only_what_was_asked_for():
-    """An unset name stored as an explicit null is a value in every dump and
-    inspect view; the reader's default is the one place it should come from."""
+    """The expander stores only what was asked for. The agent model's own dump
+    pads the unset names with nulls, which the reader treats as unset."""
     agent = _expand({"chunk_config": {"chunk_size": 4000}})
 
     assert agent["chunk_config"] == {"chunk_size": 4000}
@@ -445,3 +442,33 @@ def test_a_project_block_that_is_not_a_mapping_is_named_not_crashed():
         _project_agent({"chunk_config": 300})
 
     assert "chunk_config" in str(exc.value)
+
+
+@pytest.mark.parametrize("level", ["defaults", "action"])
+def test_the_block_beats_a_loose_key_written_beside_it(level):
+    """Same name, same level: the block is the dedicated place, so it wins.
+    Every other ordering is pinned; without this one the two layers can be
+    transposed and nothing notices."""
+    written = {"chunk_config": {"chunk_size": 4000, "chunk_overlap": 500}, "chunk_overlap": 10}
+    agent = _expand(written, None) if level == "defaults" else _expand({}, written)
+
+    assert _tokenizer_call(agent, "batch")["chunk_overlap"] == 500
+
+
+@pytest.mark.parametrize("setting,value", [("chunk_size", 0), ("chunk_overlap", -5)])
+@pytest.mark.parametrize("spelling", ["block", "loose"])
+def test_a_setting_out_of_range_is_refused_whichever_way_it_is_written(setting, value, spelling):
+    """Both spellings name one setting, so both have to fail in the same place.
+    A loose one that validates and then reaches the splitter fails mid-run."""
+    written = {"chunk_config": {setting: value}} if spelling == "block" else {setting: value}
+
+    with pytest.raises(ValidationError):
+        WorkflowConfig.model_validate(
+            {
+                "name": "wf",
+                "description": "d",
+                "version": "1.0",
+                "defaults": BASE_DEFAULTS,
+                "actions": [{"name": "a1", "intent": "i", "prompt": "p", **written}],
+            }
+        )
