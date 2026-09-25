@@ -59,12 +59,21 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
         except Exception:
             logger.debug("Error accessing __cause__")
 
+        # `raise X from None` sets __suppress_context__ and leaves __context__
+        # populated with whatever X was raised while handling — the raiser
+        # severed that link on purpose, so the walk must not cross it.
         if next_exc is None:
             try:
-                if hasattr(current, "__context__") and current.__context__ is not None:
-                    next_exc = current.__context__
+                suppressed = bool(getattr(current, "__suppress_context__", False))
             except Exception:
-                logger.debug("Error accessing __context__")
+                suppressed = False
+
+            if not suppressed:
+                try:
+                    if hasattr(current, "__context__") and current.__context__ is not None:
+                        next_exc = current.__context__
+                except Exception:
+                    logger.debug("Error accessing __context__")
 
         if next_exc is None:
             break
