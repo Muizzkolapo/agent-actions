@@ -42,7 +42,7 @@ def _stored(backend, relative_path):
 
 
 def _save(rows, doc, staging, target, backend):
-    _save_source_data([], rows, str(doc), str(staging), str(target), storage_backend=backend)
+    _save_source_data([], rows, str(doc), str(staging), storage_backend=backend)
 
 
 class TestARecordWithNoIdentityReachesTheGuard:

@@ -80,30 +80,16 @@ class BatchProcessingContext:
     retried_records: frozenset[str] = frozenset()
 
 
-def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
-    """Derive workflow root by finding 'agent_io' in path parts."""
-    from agent_actions.utils.path_utils import derive_workflow_root
-
-    target_path = Path(primary_path) if primary_path else Path(fallback_path)
-    return derive_workflow_root(target_path)
-
-
 def _save_source_items_helper(
     source_items: list[dict[str, Any]],
     file_path: str,
     base_directory: str,
-    output_directory: str | None = None,
     storage_backend: Any = None,
 ) -> None:
     """Save source items using UnifiedSourceDataSaver."""
     relative_path = Path(file_path).relative_to(base_directory)
-    workflow_root = _derive_workflow_root(output_directory, base_directory)
 
-    saver = UnifiedSourceDataSaver(
-        base_directory=str(workflow_root),
-        enable_deduplication=True,
-        storage_backend=storage_backend,
-    )
+    saver = UnifiedSourceDataSaver(enable_deduplication=True, storage_backend=storage_backend)
 
     saver.save_source_items(items=source_items, relative_path=str(relative_path.with_suffix("")))
 
@@ -247,7 +233,6 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk,
         ctx.file_path,
         ctx.base_directory,
-        ctx.output_directory,
         storage_backend=ctx.storage_backend,
     )
 
@@ -282,7 +267,6 @@ def _save_source_data(
     data_chunk: Any,
     file_path: str,
     base_directory: str,
-    output_directory: str | None = None,
     storage_backend: Any = None,
 ) -> None:
     """UNIFIED source saving logic for both batch and online modes."""
@@ -292,9 +276,7 @@ def _save_source_data(
         source_items = [row.copy() for row in data_chunk]
 
     if source_items:
-        _save_source_items_helper(
-            source_items, file_path, base_directory, output_directory, storage_backend
-        )
+        _save_source_items_helper(source_items, file_path, base_directory, storage_backend)
 
 
 def _envelope_row(payload: dict[str, Any]) -> dict[str, Any]:

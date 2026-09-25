@@ -45,7 +45,6 @@ pathways.
 |--------|------|-------------|------------|
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `ensure_in_project()` | `agent_actions.yml` | Validates | — |
-| `derive_workflow_root()` | `agent_config/{workflow}.yml` | Reads | — |
 | `resolve_tools_path()` | `agent_actions.yml` | Reads | `tool_path`, `tools` |
 | `FileHandler.get_agent_paths()` | `agent_config/{workflow}.yml` | Reads | — |
 | `FileHandler.get_agent_paths()` | `agent_io/target/{action}/` | Reads | — |
