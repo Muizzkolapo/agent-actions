@@ -61,13 +61,16 @@ def _records(project) -> list[str]:
     return sorted(p.name for p in state.glob("*")) if state.is_dir() else []
 
 
-def _entry(batch_id, parent=None, attempt=None, status=BatchStatus.COMPLETED) -> BatchJobEntry:
+def _entry(
+    batch_id, parent=None, attempt=None, status=BatchStatus.COMPLETED, key=None
+) -> BatchJobEntry:
     return BatchJobEntry(
         batch_id=batch_id,
         status=status,
         timestamp="t",
         provider="agac-provider",
-        file_name=PARENT if parent is None else ROUND_1,
+        # Production always stores an entry under its own key.
+        file_name=key or (PARENT if parent is None else ROUND_1),
         parent_file_name=parent,
         recovery_type=None if parent is None else RecoveryType.RETRY,
         recovery_attempt=attempt,
@@ -119,8 +122,11 @@ def test_a_batch_that_was_never_recorded_releases_quietly(project):
 
     _submit("live")
 
-    release_local_batch_record("batch_abc123_from_openai")
+    reclaimed = release_local_batch_record("batch_abc123_from_openai")
 
+    # False here would make --fresh refuse to clear the registry, and clean --all
+    # refuse to remove the store, for every batch of every other provider.
+    assert reclaimed is True
     assert _records(project) == ["live.json"]
 
 
@@ -179,6 +185,43 @@ def _finalise(project, jobs, finalised):
     return manager
 
 
+def test_finalising_a_file_reads_the_ids_before_the_entries_go(project, monkeypatch):
+    """The entries are what name the rounds. Releasing after they are removed
+    would have nothing left to look them up by — the one site here that drops
+    the name before reclaiming the record, so the read has to come first."""
+    order = []
+    _submit("batch-parent")
+    _submit("batch-retry-1")
+    jobs = {PARENT: _entry("batch-parent"), ROUND_1: _entry("batch-retry-1", PARENT, 1)}
+    monkeypatch.setattr(
+        pr, "release_local_batch_record", lambda batch_id: order.append(f"release:{batch_id}")
+    )
+
+    service = MagicMock()
+
+    def _remove_and_note(manager, parent):
+        order.append("remove")
+        BatchProcessingService._cleanup_recovery_entries(manager, parent)
+
+    service._cleanup_recovery_entries = _remove_and_note
+    manager = _Registry(jobs)
+    context = RecoveryContext(
+        service=service,
+        manager=manager,
+        provider=MagicMock(),
+        agent_config={},
+        output_directory="/out",
+        action_name=ACTION,
+        start_time=0.0,
+    )
+
+    pr.cleanup_recovery(
+        context, BatchIdentity(batch_id="batch-retry-1", file_name=PARENT, entry=jobs[PARENT])
+    )
+
+    assert order == ["remove", "release:batch-retry-1"]
+
+
 def test_finalising_a_file_loses_the_record_of_the_round_it_drops(project):
     _submit("batch-parent")
     _submit("batch-retry-1")
@@ -221,7 +264,9 @@ def test_a_resubmission_over_a_failed_batch_loses_the_failed_record(tmp_path, pr
     service._client_resolver.get_for_config.return_value = MagicMock(
         submit_batch=MagicMock(return_value=("batch-new", BatchStatus.SUBMITTED))
     )
-    registry = _Registry({"my_action": _entry("batch-failed", status=BatchStatus.FAILED)})
+    registry = _Registry(
+        {"my_action": _entry("batch-failed", status=BatchStatus.FAILED, key="my_action")}
+    )
     service._registry_manager_factory = lambda _name: registry
 
     service.submit_batch_job(
@@ -312,7 +357,9 @@ def test_a_resubmission_records_its_successor_before_spending_the_old_record(pro
     something, not a registry pointing at a record that is already gone."""
     _submit("batch-failed")
     order = []
-    registry = _Registry({"my_action": _entry("batch-failed", status=BatchStatus.FAILED)})
+    registry = _Registry(
+        {"my_action": _entry("batch-failed", status=BatchStatus.FAILED, key="my_action")}
+    )
     real_save = registry.save_batch_job
     registry.save_batch_job = lambda name, entry: (order.append("save"), real_save(name, entry))[1]
 
@@ -476,8 +523,7 @@ def test_an_unreadable_entry_still_says_which_batch_its_key_names(project):
 
 
 def test_saving_over_an_unreadable_entry_retires_it(project):
-    """It occupied the key; the successor does now. Leaving it in would put it
-    back into storage on the next write, naming a batch nothing can reach."""
+    """It occupied the key; the successor does now, and storage says so."""
     import json
 
     manager, state = _registry_over({"pages.json": _unreadable_entry("b-unreadable")})
@@ -582,3 +628,79 @@ def test_a_batch_id_that_looks_like_a_pattern_takes_only_its_own(project):
     release_local_batch_record("batch_[12]")
 
     assert _records(project) == ["batch_1_aaaa.tmp", "batch_2_bbbb.tmp"]
+
+
+class TestAnOverwriteOverAnEntryNothingCanRead:
+    """The unreadable case reaches the two save-over sites through a real
+    registry, not the double above — whose `batch_id_at` and `get_batch_job`
+    answer alike and so cannot tell the two apart.
+
+    It is the live case, not a corner: the resubmission guard reads the key with
+    `get_batch_job`, an unreadable entry answers None there too, so the guard
+    falls through to a fresh submit and the overwrite is the only moment that
+    key stops naming the old batch.
+    """
+
+    @staticmethod
+    def _real_registry(key, batch_id):
+        import json
+
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        state = {
+            "raw": json.dumps(
+                {
+                    key: {
+                        "batch_id": batch_id,
+                        "status": "completed",
+                        "timestamp": "t",
+                        "provider": "agac-provider",
+                        "recovery_type": "not-a-recovery-type",
+                    }
+                }
+            )
+        }
+        backend = MagicMock()
+        backend.load_metadata.side_effect = lambda _key: state["raw"]
+        backend.save_metadata.side_effect = lambda _key, raw: state.update(raw=raw)
+        return BatchRegistryManager(backend, ACTION)
+
+    def test_a_resubmission_releases_what_it_displaced(self, project, tmp_path):
+        _submit("b-unreadable")
+        registry = self._real_registry("my_action", "b-unreadable")
+        service = BatchSubmissionService(
+            task_preparator=MagicMock(),
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+        service._task_preparator.prepare_tasks.return_value = MagicMock(
+            tasks=[{"target_id": "r1", "content": "x", "prompt": "p"}],
+            context_map={},
+            task_count=1,
+            stats=MagicMock(total_filtered=0, total_skipped=0),
+        )
+        service._client_resolver.get_for_config.return_value = MagicMock(
+            submit_batch=MagicMock(return_value=("b-new", BatchStatus.SUBMITTED))
+        )
+        service._registry_manager_factory = lambda _name: registry
+
+        service.submit_batch_job(
+            agent_config={"model_vendor": "agac-provider"},
+            batch_name="my_action",
+            data=[{"id": 1}],
+            output_directory=str(tmp_path),
+        )
+
+        assert _records(project) == []
+
+    def test_a_recovery_round_releases_what_it_displaced(self, project):
+        _submit("b-unreadable")
+        _submit("b-parent")
+        registry = self._real_registry(ROUND_1, "b-unreadable")
+
+        pr.register_recovery_batch(
+            registry, ("b-new", 1), PARENT, "agac-provider", RecoveryType.RETRY, 1
+        )
+
+        assert _records(project) == ["b-parent.json"]

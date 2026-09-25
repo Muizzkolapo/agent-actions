@@ -170,6 +170,25 @@ class TestTheHelperItself:
 
         assert script.release_batch_records(root, base, "wf") is False
 
+    def test_it_discards_half_written_records(self, script, project, monkeypatch):
+        """Same reason as `clean --all`: this is the other command that makes a
+        half-written record's orphaning permanent."""
+        from agent_actions.llm.providers import local_batch_records
+
+        root, base = project
+        TestWithTheFramework._registry(base, "mock_batch_abc123")
+        swept = []
+        monkeypatch.setattr(
+            local_batch_records, "discard_partial_batch_records", lambda: swept.append(True)
+        )
+        monkeypatch.setattr(
+            local_batch_records, "release_local_batch_record", lambda batch_id: True
+        )
+
+        script.release_batch_records(root, base, "wf")
+
+        assert swept == [True]
+
     def test_a_workflow_with_no_store_has_nothing_to_keep(self, script, tmp_path):
         root = tmp_path / "project"
         base = root / "agent_workflow" / "wf" / "agent_io"

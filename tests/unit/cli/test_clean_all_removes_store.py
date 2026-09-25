@@ -239,6 +239,22 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))
 
 
+def test_all_discards_half_written_records(tmp_path, monkeypatch):
+    """A `.tmp` written before its registry entry was saved is named by nothing,
+    so the per-batch release cannot reach it — and this command is one of the
+    two that make that orphan permanent."""
+    swept = []
+    monkeypatch.setattr(
+        "agent_actions.llm.providers.local_batch_records.discard_partial_batch_records",
+        lambda: swept.append(True),
+    )
+    cleaner, _agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+
+    cleaner.run()
+
+    assert swept == [True]
+
+
 def test_all_keeps_the_store_when_a_record_would_not_go(tmp_path, monkeypatch, capsys):
     """The store is the only thing naming those batches. Removing it over a
     record that stayed puts the payload out of reach of every command — where
