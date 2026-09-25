@@ -311,6 +311,23 @@ class TestTheRecordHasAnEndOfLife:
 
         assert self._on_disk(project) == []
 
+    def test_clean_all_leaves_no_store_behind_when_there_was_none(self, project):
+        """Reading the registry opens the store, and the list of directories to
+        remove was settled before that — so a store made here is never cleaned."""
+        store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+        assert not store.exists(), "the fixture already has a store"
+
+        cleaned = subprocess.run(
+            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+
+        assert not store.exists()
+
     def test_asking_where_records_live_creates_nothing(self, scoped_to):
         """A project that never submitted a batch must not gain a `.agac/` for
         having been asked where one would go — which is what --fresh does now."""

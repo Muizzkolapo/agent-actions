@@ -346,3 +346,52 @@ def test_a_resubmission_records_its_successor_before_spending_the_old_record(pro
         sub.release_local_batch_record = original
 
     assert order == ["save", "release"]
+
+
+def test_an_entry_no_model_will_read_survives_a_save(project, tmp_path):
+    """The persisted blob is the only place an id lives. Rewriting it from the
+    parsed cache erases whatever the parse dropped, and with it the last thing
+    that could ever name — and so reclaim — that batch."""
+    import json
+
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    stored = {
+        "pages.json": {
+            "batch_id": "b-good",
+            "status": "completed",
+            "timestamp": "t",
+            "provider": "agac-provider",
+        },
+        "pages.json_bad_1": {
+            "batch_id": "b-bad",
+            "status": "completed",
+            "timestamp": "t",
+            "provider": "agac-provider",
+            "recovery_type": "not-a-recovery-type",
+        },
+    }
+    written = {}
+    backend = MagicMock()
+    backend.load_metadata.return_value = json.dumps(stored)
+    backend.save_metadata.side_effect = lambda key, raw: written.update(json.loads(raw))
+    manager = BatchRegistryManager(backend, ACTION)
+
+    manager.save_batch_job("other.json", _entry("b-new"))
+
+    assert sorted(e["batch_id"] for e in written.values()) == ["b-bad", "b-good", "b-new"]
+
+
+def test_a_batch_id_can_only_name_a_file_in_the_state_directory(project):
+    """Every provider's ids reach release now, so one is no longer a string this
+    client minted."""
+    from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+
+    _submit("live")
+    outside = project / "please-do-not.json"
+    outside.write_text("{}")
+
+    release_local_batch_record("../../please-do-not")
+
+    assert outside.exists()
+    assert _records(project) == ["live.json"]
