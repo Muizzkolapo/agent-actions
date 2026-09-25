@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_actions.logging.core.manager import fire_event
@@ -24,11 +23,9 @@ class UnifiedSourceDataSaver:
 
     def __init__(
         self,
-        base_directory: str,
         enable_deduplication: bool = True,
         storage_backend: StorageBackend | None = None,
     ):
-        self.base_directory = Path(base_directory)
         self.enable_deduplication = enable_deduplication
         self.storage_backend = storage_backend
 

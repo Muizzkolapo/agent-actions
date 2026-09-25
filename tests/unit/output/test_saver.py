@@ -19,16 +19,13 @@ class TestSaverInit:
 
     def test_basic_init(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=MagicMock(),
         )
-        assert saver.base_directory == tmp_path
         assert saver.enable_deduplication is True
         assert saver.storage_backend is not None
 
     def test_deduplication_disabled(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             enable_deduplication=False,
             storage_backend=MagicMock(),
         )
@@ -36,7 +33,6 @@ class TestSaverInit:
 
     def test_no_backend(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         assert saver.storage_backend is None
@@ -54,7 +50,6 @@ class TestSaveSourceItems:
     def test_single_dict_wrapped_to_list(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         item = {"key": "value"}
@@ -70,7 +65,6 @@ class TestSaveSourceItems:
     def test_list_of_dicts_passed_through(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"a": 1}, {"b": 2}]
@@ -86,7 +80,6 @@ class TestSaveSourceItems:
     def test_deduplication_flag_forwarded(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             enable_deduplication=False,
             storage_backend=backend,
         )
@@ -103,7 +96,6 @@ class TestSaveSourceItems:
         """The store keys source items by relative path, so that is what
         identifies the save to anyone reading the event."""
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=MagicMock(),
         )
         saver.save_source_items([{"x": 1}], "node_1/batch_001")
@@ -124,7 +116,6 @@ class TestSaverEvents:
     def test_fires_saving_and_saved_events(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"k": "v"}]
@@ -147,7 +138,6 @@ class TestSaverEvents:
     def test_bytes_written_calculated_correctly(self, mock_fire, tmp_path):
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"a": 1}, {"b": "hello"}]
@@ -168,7 +158,6 @@ class TestSaverErrors:
 
     def test_raises_valueerror_when_no_backend(self, tmp_path):
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         with pytest.raises(ValueError, match="Storage backend not configured"):
@@ -178,7 +167,6 @@ class TestSaverErrors:
         """Which save could not be stored, so the message is actionable when a
         run has many."""
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=None,
         )
         with pytest.raises(ValueError, match=r"node/batch"):
@@ -189,7 +177,6 @@ class TestSaverErrors:
         backend = MagicMock()
         backend.write_source.side_effect = RuntimeError("db locked")
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         with pytest.raises(RuntimeError, match="db locked"):
@@ -200,7 +187,6 @@ class TestSaverErrors:
         """Items containing bytes values must not crash json.dumps."""
         backend = MagicMock()
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         items = [{"key": b"binary data from UDF", "normal": "text"}]
@@ -216,7 +202,6 @@ class TestSaverErrors:
         backend = MagicMock()
         backend.write_source.side_effect = RuntimeError("fail")
         saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
             storage_backend=backend,
         )
         with pytest.raises(RuntimeError):
@@ -237,7 +222,7 @@ class TestNothingNamesAFileThatIsNeverWritten:
 
     @patch("agent_actions.output.saver.fire_event")
     def test_the_events_do_not_name_a_file(self, mock_fire, tmp_path):
-        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
 
         saver.save_source_items([{"k": "v"}], "node_1/batch_001")
 
@@ -251,14 +236,14 @@ class TestNothingNamesAFileThatIsNeverWritten:
     @patch("agent_actions.output.saver.fire_event")
     def test_nothing_reaches_disk(self, mock_fire, tmp_path):
         """Control: the path in those events was never backed by a write."""
-        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
 
         saver.save_source_items([{"k": "v"}], "node_1/batch_001")
 
         assert list(tmp_path.rglob("*.json")) == []
 
     def test_the_missing_backend_error_does_not_name_a_file(self, tmp_path):
-        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=None)
+        saver = UnifiedSourceDataSaver(storage_backend=None)
 
         with pytest.raises(ValueError) as exc:
             saver.save_source_items([{"x": 1}], "node/batch")
@@ -266,3 +251,11 @@ class TestNothingNamesAFileThatIsNeverWritten:
         message = str(exc.value)
         assert "node/batch" in message
         assert ".json" not in message, f"error names a file never written: {message}"
+
+
+def test_the_saver_needs_no_directory_to_store_under():
+    """It writes through the backend. A base directory is a parameter it cannot
+    use, and one its caller derived a workflow root to supply."""
+    import inspect
+
+    assert "base_directory" not in inspect.signature(UnifiedSourceDataSaver).parameters
