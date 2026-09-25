@@ -213,11 +213,7 @@ class TestARepairStillLeavesACompletedActionAlone:
         Deciding that per key instead — is `record_limit` stored? — reads this as
         an action that has never completed and writes the repair's own cap,
         which the next ordinary run reads as a change and re-runs truncated."""
-        _write_stamp(
-            project,
-            ACTION,
-            {"status": "completed", "max_records": 3, "config_hash": "written-before-the-rename"},
-        )
+        _write_stamp(project, ACTION, {"status": "completed", "max_records": 3})
         _fail(project, _guids(project)[0])
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
 
@@ -233,8 +229,14 @@ class TestAnUnlimitedFirstCompletionIsStillUnlimited:
     def test_no_cap_still_stamps_no_cap_and_is_still_skipped(
         self, repair_reaches_a_new_action, monkeypatch
     ):
-        """`null` is the honest stamp when nothing was in force, and an action
-        that processed everything must still be skipped by a later run."""
+        """`null` is the honest stamp when nothing was in force, and a later run
+        under nothing in force reads no change and skips.
+
+        The action holds only the records the repair named, not everything — so
+        it is skipped holding one row of eight. Nothing lies about a limit here:
+        what goes unrecorded is coverage, and no limit stamp can record a
+        narrowing the repair did. Pinned as it stands rather than as it ought to
+        be; see the follow-up filed with this change."""
         project = repair_reaches_a_new_action
         monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
         assert (
