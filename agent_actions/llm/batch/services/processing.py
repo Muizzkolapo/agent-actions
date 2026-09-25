@@ -465,10 +465,11 @@ class BatchProcessingService:
         """Hand back every stored row this batch did not answer for.
 
         The output is replaced whole, so what decides is whether the row exists,
-        not what disposition it holds: a batch narrowed to one record leaves the
-        rest of the file standing, and `failed` is not terminal — carrying only
-        terminal rows drops those. ``DispositionGate.carried_past_repair`` is the
-        same rule online.
+        not what disposition it holds: `failed` is not terminal, and a batch
+        narrowed to one record would drop the rest. Same rule as
+        ``DispositionGate.carried_past_repair`` online. The walk spans every
+        target file of the action, not only the one being collected — pre-existing,
+        see the #1017 follow-up.
         """
         if not self._storage_backend or not action_name:
             return batch_output

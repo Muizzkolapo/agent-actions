@@ -111,6 +111,32 @@ Dispositions are cleared by the ids the retry was given, so an id that names no
 input of an action is simply not found there — nothing at that action is
 re-run, and nothing it holds is removed.
 
+## Retrying an action that runs in batch mode
+
+An action configured [`run_mode: batch`](../configuration/run-mode) is repaired
+the same way, with one difference in timing: the retry submits a new batch
+holding only the records it named, then pauses and asks to be run again, and the
+next run collects it. The records the retry did not name are not in that batch,
+so nothing re-answers them.
+
+A retry drops the action's record of the batches it has already collected —
+those are spent, and keeping them would hand the repair a finished batch instead
+of the one it just submitted.
+
+That is also why a retry is refused while a batch is still out at the provider:
+
+```
+Action 'summarize' has 1 batch job(s) in flight (batch_abc123). Their results
+would be lost to this repair's own submission. Collect them first — run the
+workflow again — then retry.
+```
+
+The batch already out owns the records it was submitted for. Starting a repair
+on top of it would put a second batch over the same file, and whichever came
+back last would win while the other was paid for and discarded. Run the workflow
+again to collect the batch in flight, then retry. Nothing is cleared when a
+retry is refused, so the failures it would have repaired are still there to find.
+
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.
 :::
