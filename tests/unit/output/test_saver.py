@@ -226,3 +226,43 @@ class TestSaverErrors:
         assert mock_fire.call_count >= 1
         saving_event = mock_fire.call_args_list[0][0][0]
         assert saving_event.__class__.__name__ == "SourceDataSavingEvent"
+
+
+class TestNothingNamesAFileThatIsNeverWritten:
+    """Source items go to the store. Every surface here names
+    `agent_io/source/<relative_path>.json`, which no version of the framework
+    writes — the directory is gone entirely — so a reader following it finds
+    nothing. The relative path the items are stored under is the honest answer.
+    """
+
+    @patch("agent_actions.output.saver.fire_event")
+    def test_the_events_do_not_name_a_file(self, mock_fire, tmp_path):
+        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+
+        saver.save_source_items([{"k": "v"}], "node_1/batch_001")
+
+        assert mock_fire.call_args_list, "no event fired"
+        for call in mock_fire.call_args_list:
+            named = call[0][0].file_path
+            assert "agent_io/source" not in named, f"event points at an unwritten file: {named}"
+            assert not named.endswith(".json"), f"event names a file: {named}"
+            assert "node_1/batch_001" in named, f"event lost the stored path: {named}"
+
+    @patch("agent_actions.output.saver.fire_event")
+    def test_nothing_reaches_disk(self, mock_fire, tmp_path):
+        """Control: the path in those events was never backed by a write."""
+        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=MagicMock())
+
+        saver.save_source_items([{"k": "v"}], "node_1/batch_001")
+
+        assert list(tmp_path.rglob("*.json")) == []
+
+    def test_the_missing_backend_error_does_not_name_a_file(self, tmp_path):
+        saver = UnifiedSourceDataSaver(base_directory=str(tmp_path), storage_backend=None)
+
+        with pytest.raises(ValueError) as exc:
+            saver.save_source_items([{"x": 1}], "node/batch")
+
+        message = str(exc.value)
+        assert "node/batch" in message
+        assert ".json" not in message, f"error names a file never written: {message}"
