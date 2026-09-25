@@ -462,27 +462,28 @@ class BatchProcessingService:
         action_name: str | None,
         batch_output: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Merge carry-forward records from prior output into batch results.
+        """Hand back every stored row this batch did not answer for.
 
-        Uses the storage backend's terminal disposition set to identify
-        already-processed GUIDs (replacing the filesystem-based
-        .batch_carry_forward.json approach).
+        The output is replaced whole, so what decides is whether the row exists,
+        not what disposition it holds: a batch narrowed to one record leaves the
+        rest of the file standing, and `failed` is not terminal — carrying only
+        terminal rows drops those. ``DispositionGate.carried_past_repair`` is the
+        same rule online.
         """
         if not self._storage_backend or not action_name:
             return batch_output
 
         try:
-            terminal_guids = self._storage_backend.get_terminal_record_ids(action_name)
+            stored_guids = set(self._storage_backend.target_rows_per_source_guid(action_name))
         except Exception:
-            logger.debug("Could not query terminal record IDs for %s", action_name, exc_info=True)
+            logger.debug("Could not read stored rows for %s", action_name, exc_info=True)
             return batch_output
 
-        if not terminal_guids:
+        if not stored_guids:
             return batch_output
 
-        # Only carry forward records that are NOT already in the batch output
         batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
-        carry_guids = terminal_guids - batch_guids
+        carry_guids = stored_guids - batch_guids
 
         if not carry_guids:
             return batch_output
@@ -502,9 +503,11 @@ class BatchProcessingService:
                 len(carry_records),
                 action_name,
             )
-            for record in carry_records:
-                record["_delta_mode"] = "full"
 
+        # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored
+        # whole and leaves the rest for `write_target` to re-derive, so a row
+        # round-trips into the mode it had. Stamping "full" re-stores every
+        # carried row whole — rewriting rows this run never reprocessed.
         return batch_output + carry_records
 
     def _process_single_batch_file(
