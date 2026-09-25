@@ -103,3 +103,62 @@ class TestCatalogGeneratorHappyPath:
         gen = _make_generator(project_path="/")
         result = gen.generate(**_empty_inputs())
         assert result["metadata"]["project_name"] == ""
+
+
+def _wf_events(workflow: str, seqs: list[int], hour: int = 10) -> dict:
+    return {
+        "workflow_name": workflow,
+        "latest_run": None,
+        "action_metrics": {},
+        "runtime_warnings": [],
+        "events": [
+            {
+                "seq": s,
+                "event_type": "ActionCompleteEvent",
+                "code": "A002",
+                "level": "info",
+                "category": "action",
+                "diagnostic": False,
+                "message": f"{workflow} step {s}",
+                "meta": {
+                    "timestamp": f"2026-09-22T{hour:02d}:00:{s:02d}.000Z",
+                    "invocation_id": "inv1",
+                    "workflow_name": workflow,
+                },
+                "data": {"action_name": f"step_{s}"},
+            }
+            for s in seqs
+        ],
+        "manifest": None,
+    }
+
+
+class TestCatalogGeneratorEventStream:
+    """The Log Explorer reads catalog["logs"]["events"]."""
+
+    def test_events_key_exists_for_empty_input(self):
+        gen = _make_generator()
+        result = gen.generate(**_empty_inputs())
+        assert result["logs"]["events"] == []
+        assert result["stats"]["total_events"] == 0
+
+    def test_events_are_merged_newest_first_across_workflows(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {
+            "alpha": _wf_events("alpha", [0, 1], hour=10),
+            "beta": _wf_events("beta", [0], hour=11),
+        }
+        result = gen.generate(**inputs)
+
+        messages = [e["message"] for e in result["logs"]["events"]]
+        assert messages == ["beta step 0", "alpha step 1", "alpha step 0"]
+        assert result["stats"]["total_events"] == 3
+
+    def test_event_id_is_namespaced_by_workflow(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {"alpha": _wf_events("alpha", [7])}
+        result = gen.generate(**inputs)
+
+        assert result["logs"]["events"][0]["id"] == "alpha:7"

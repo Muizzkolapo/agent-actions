@@ -12,6 +12,7 @@ from pathlib import Path
 
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.tooling.docs.scanner.data_scanners import (
+    EVENT_TAIL_LIMIT,
     extract_run_events,
     scan_logs,
 )
@@ -544,3 +545,95 @@ class TestScanSqliteNamespaceUnwrap:
         records = result["nodes"]["classify"]["preview"]
         assert len(records) == 1
         assert records[0]["content"] == {"genre": "fiction", "confidence": 0.9}
+
+
+# ---------------------------------------------------------------------------
+# extract_run_events — event stream tail
+# ---------------------------------------------------------------------------
+
+
+def _stream_event(seq: int, level: str = "info") -> dict:
+    return {
+        "event_type": "ActionCompleteEvent",
+        "code": "A002",
+        "level": level,
+        "category": "action",
+        "diagnostic": False,
+        "message": f"{seq}/12 OK step_{seq} in 1.00s",
+        "meta": {
+            "timestamp": f"2026-09-22T10:06:{seq % 60:02d}.000Z",
+            "invocation_id": "inv1",
+            "correlation_id": None,
+            "workflow_name": "wf",
+        },
+        "data": {"action_name": f"step_{seq}", "execution_time": 1.0},
+    }
+
+
+class TestRunEventsStream:
+    def test_rows_are_returned_verbatim_in_file_order(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(3):
+                f.write(json.dumps(_stream_event(i)) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["message"] for r in rows] == [
+            "0/12 OK step_0 in 1.00s",
+            "1/12 OK step_1 in 1.00s",
+            "2/12 OK step_2 in 1.00s",
+        ]
+        assert rows[0]["code"] == "A002"
+        assert rows[0]["category"] == "action"
+        assert rows[0]["meta"]["invocation_id"] == "inv1"
+        assert rows[0]["data"]["action_name"] == "step_0"
+
+    def test_seq_is_the_absolute_file_position(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(EVENT_TAIL_LIMIT + 5):
+                f.write(json.dumps(_stream_event(i)) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows[:3]] == [5, 6, 7]
+
+    def test_tail_is_bounded(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(EVENT_TAIL_LIMIT + 40):
+                f.write(json.dumps(_stream_event(i)) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert len(rows) == EVENT_TAIL_LIMIT
+        assert rows[-1]["data"]["action_name"] == f"step_{EVENT_TAIL_LIMIT + 39}"
+
+    def test_malformed_lines_do_not_consume_a_seq(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("not valid json\n")
+            f.write(json.dumps(_stream_event(0)) + "\n")
+            f.write("\n")
+            f.write(json.dumps(_stream_event(1)) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0, 1]
+
+    def test_missing_file_returns_no_events(self, tmp_path):
+        assert extract_run_events(tmp_path / "nope.json").events == []
+
+    def test_diagnostic_rows_are_kept(self, tmp_path):
+        """The explorer hides diagnostics by default; it cannot hide what was dropped."""
+        events_path = tmp_path / "events.json"
+        diagnostic = _stream_event(0, level="debug")
+        diagnostic["diagnostic"] = True
+        with open(events_path, "w") as f:
+            f.write(json.dumps(diagnostic) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert len(rows) == 1
+        assert rows[0]["diagnostic"] is True
