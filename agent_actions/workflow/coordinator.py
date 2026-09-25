@@ -13,6 +13,10 @@ from rich.console import Console
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
+from agent_actions.llm.providers.local_batch_records import (
+    discard_partial_batch_records,
+    release_local_batch_record,
+)
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
@@ -127,6 +131,7 @@ class AgentWorkflow:
                     "checkpoints",
                     lambda a=action_name: self.storage_backend.clear_checkpoint_records(a),
                 ),
+                ("batch_records", lambda a=action_name: self._release_batch_records(a)),
                 ("batch_state", lambda a=action_name: self.storage_backend.clear_batch_state(a)),
             ]:
                 try:
@@ -148,6 +153,10 @@ class AgentWorkflow:
         except Exception as e:
             logger.warning("Failed to clear source data: %s", e)
 
+        # A half-written record names no batch at all, so nothing per-batch can
+        # reach one — and unlike a record, it can never be live.
+        discard_partial_batch_records()
+
         self.services.core.state_manager.reset()
 
         # JSONFileHandler opens lazily, so deleting between handler init
@@ -163,6 +172,22 @@ class AgentWorkflow:
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
+
+    def _release_batch_records(self, action_name: str) -> None:
+        """Reclaim what a provider recorded about this action's batches.
+
+        Before the registry goes, not after: an entry is what names a batch, and
+        a record nothing names can never be found again to reclaim. Scoped to
+        this action for the same reason every other clear here is — the records
+        sit in one directory for the whole project, and a neighbouring workflow's
+        batch may still be in flight.
+        """
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        jobs = BatchRegistryManager(self.storage_backend, action_name).get_all_jobs() or {}
+        for entry in jobs.values():
+            if entry.batch_id:
+                release_local_batch_record(entry.batch_id)
 
     def _reset_retryable_actions(self) -> None:
         """Reset failed/skipped/running actions to pending so re-runs retry them.
