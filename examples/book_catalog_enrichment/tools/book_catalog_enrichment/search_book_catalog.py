@@ -7,9 +7,9 @@ Returns grounded results — every recommendation is a real book.
 
 import time
 from typing import Any
-from urllib.parse import quote
 
 import httpx
+
 from agent_actions import udf_tool
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"

@@ -94,9 +94,8 @@ The bug pattern `logger.info("Processing {item_id}")` (missing `f` prefix) is pa
 
 We use multiple tools to catch logging issues:
 
-1. **Ruff** (`task lint:ruff`) - Catches logging anti-patterns
-2. **AST Checker** (`task lint:logging`) - Detects `{var}` without f-prefix
-3. **Pre-commit hooks** - Runs both on every commit
+1. **Ruff** (`task lint`) - The `LOG` and `G` rule families catch logging anti-patterns
+2. **Pre-commit hooks** - Run ruff on every commit
 
 ## Event-Based Logging System
 

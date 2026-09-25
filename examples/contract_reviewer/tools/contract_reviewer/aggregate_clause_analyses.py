@@ -31,23 +31,25 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
         - negotiation_priority
     """
     if not data:
-        return FileUDFResult(outputs=[
-            {
-                "source_index": None,
-                "data": {
-                    "contract_id": "unknown",
-                    "contract_title": "unknown",
-                    "overall_risk_level": "low",
-                    "overall_risk_score": 0.0,
-                    "total_clauses_analyzed": 0,
-                    "risk_distribution": {"high": 0, "medium": 0, "low": 0},
-                    "high_risk_clauses": [],
-                    "total_obligations": [],
-                    "key_deadlines": [],
-                    "negotiation_priority": [],
-                },
-            }
-        ])
+        return FileUDFResult(
+            outputs=[
+                {
+                    "source_index": None,
+                    "data": {
+                        "contract_id": "unknown",
+                        "contract_title": "unknown",
+                        "overall_risk_level": "low",
+                        "overall_risk_score": 0.0,
+                        "total_clauses_analyzed": 0,
+                        "risk_distribution": {"high": 0, "medium": 0, "low": 0},
+                        "high_risk_clauses": [],
+                        "total_obligations": [],
+                        "key_deadlines": [],
+                        "negotiation_priority": [],
+                    },
+                }
+            ]
+        )
 
     # Extract contract metadata from the first record's source namespace
     first_source = data[0].get("source", {})

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "The lint gate now covers the whole tracked tree. `task lint` ran `ruff check agent_actions`, so CI never inspected `examples/` or `tests/`, while AGENTS.md, RELEASING.md and pyproject.toml's per-file-ignores (which carry `examples/*` and `tests/*` entries) all described a wider gate. Four findings had settled on main in example tool scripts a user is invited to copy, including an unused `urllib.parse.quote` import. `task lint`, `task format` and `task format:check` now all run over `.`, the four findings are fixed, and a test derives the tracked Python trees from git and fails if the enforced scope narrows again or lint and format drift apart."
+time: 2026-09-25T09:00:00Z

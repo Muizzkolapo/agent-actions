@@ -14,17 +14,17 @@ tasks:
   lint:
     desc: Lint with ruff
     cmds:
-      - uv run ruff check {{.PACKAGE}}
+      - uv run ruff check .
 
   format:
     desc: Format with ruff
     cmds:
-      - uv run ruff format {{.PACKAGE}} tests
+      - uv run ruff format .
 
   format:check:
     desc: Check formatting
     cmds:
-      - uv run ruff format --check {{.PACKAGE}} tests
+      - uv run ruff format --check .
 
   mypy:
     desc: Type check
