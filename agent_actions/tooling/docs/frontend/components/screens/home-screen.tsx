@@ -47,6 +47,9 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
     [runs],
   )
 
+  // Deep links carry the target only: the level a group was filed under is not
+  // necessarily the level of the events naming it, and a forced level that
+  // matches nothing would land the reader on an empty stream.
   const healthItems = useMemo(
     () =>
       [
@@ -130,7 +133,7 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
             healthItems.map((item) => (
               <button
                 key={`${item.tone}-${item.target}`}
-                onClick={() => onOpenLogs({ q: item.target, level: item.tone === "failed" ? "error" : "warn" })}
+                onClick={() => onOpenLogs({ q: item.target })}
                 className="flex w-full items-start gap-2.5 border-t border-border-soft px-[18px] py-2.5 text-left hover:bg-hover"
               >
                 <span title={`${item.count.toLocaleString()} occurrences`}>

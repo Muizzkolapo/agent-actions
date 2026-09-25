@@ -235,6 +235,12 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
 
   const filtersActive = level !== "all" || search !== "" || workflow !== "all" || range !== null
 
+  // The window is a recent slice of each log, so a search can legitimately match
+  // nothing that is still in it. Saying so beats an unexplained blank panel.
+  const emptyMessage = filtersActive
+    ? `No events match these filters. The window holds the ${events.length.toLocaleString()} most recent events across all logs — an older event will not be in it.`
+    : "No events in the loaded window."
+
   const copy = (id: string, text: string) => {
     navigator.clipboard.writeText(text).then(
       () => { setCopied(id); setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500) },
@@ -446,7 +452,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
           ))}
           {rows.length === 0 && (
             <EmptyState
-              message="No events match these filters"
+              message={emptyMessage}
               actionLabel={filtersActive ? "Clear filters" : undefined}
               onAction={filtersActive ? clearFilters : undefined}
             />
@@ -490,7 +496,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
           ))}
           {groups.length === 0 && (
             <EmptyState
-              message="No events match these filters"
+              message={emptyMessage}
               actionLabel={filtersActive ? "Clear filters" : undefined}
               onAction={filtersActive ? clearFilters : undefined}
             />

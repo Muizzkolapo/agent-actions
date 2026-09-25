@@ -240,16 +240,25 @@ function WorkflowDetail({
   const [tab, setTab] = useState<"graph" | "actions" | "readme">("graph")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
-  const wfActions = useMemo(
-    () => Object.entries(actions).filter(([, a]) => a.wf === workflow.id),
-    [workflow.id, actions],
-  )
   const stepOf = useMemo(() => {
     const order = new Map<string, number>()
     let pos = 1
     for (const level of workflow.levels) for (const name of level) order.set(name, pos++)
     return order
   }, [workflow.levels])
+
+  // Catalog order is arbitrary; the step column is only readable in step order.
+  const wfActions = useMemo(
+    () =>
+      Object.entries(actions)
+        .filter(([, a]) => a.wf === workflow.id)
+        .sort(([ka], [kb]) => {
+          const na = ka.split("/").pop() ?? ka
+          const nb = kb.split("/").pop() ?? kb
+          return (stepOf.get(na) ?? Infinity) - (stepOf.get(nb) ?? Infinity) || na.localeCompare(nb)
+        }),
+    [workflow.id, actions, stepOf],
+  )
 
   const eventsByAction = useMemo(() => {
     const map = new Map<string, LogEvent[]>()

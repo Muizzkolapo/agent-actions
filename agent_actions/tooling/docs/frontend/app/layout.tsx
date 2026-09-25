@@ -26,6 +26,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
+  // Painted before the stylesheet loads, so it cannot read a token. Mirrors --bg.
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#F7F7F8' },
     { media: '(prefers-color-scheme: dark)', color: '#09090B' },
