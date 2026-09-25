@@ -69,6 +69,18 @@ class TestScanLogs:
         assert [r["seq"] for r in rows] == [0, 1, 2]
         assert rows[0]["meta"]["invocation_id"] == "inv-0"
 
+    def test_scan_logs_ignores_a_row_carrying_its_own_seq(self, tmp_path):
+        """Ids are built from the assigned position; a row must not repoint its own."""
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        with open(logs_dir / "events.json", "w") as f:
+            f.write(json.dumps({"event_type": "E", "seq": 999, "meta": {}}) + "\n")
+            f.write(json.dumps({"event_type": "E", "meta": {}}) + "\n")
+
+        rows = scan_logs(tmp_path)["events"]
+
+        assert [r["seq"] for r in rows] == [0, 1]
+
     def test_scan_logs_event_tail_is_bounded(self, tmp_path):
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
@@ -618,7 +630,7 @@ class TestRunEventsStream:
 
         assert rows == [{**_stream_event(i), "seq": i} for i in range(3)]
 
-    def test_seq_is_the_absolute_file_position(self, tmp_path):
+    def test_seq_survives_the_tail_window(self, tmp_path):
         events_path = tmp_path / "events.json"
         with open(events_path, "w") as f:
             for i in range(EVENT_TAIL_LIMIT + 5):

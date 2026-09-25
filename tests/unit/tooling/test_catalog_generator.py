@@ -139,7 +139,7 @@ def _wf_events(workflow: str, seqs: list[int], hour: int = 10, meta_wf: str | No
 class TestCatalogGeneratorEventStream:
     """The Log Explorer reads catalog["logs"]["events"]."""
 
-    def test_events_key_exists_for_empty_input(self):
+    def test_empty_input_yields_an_empty_stream_and_a_zero_window(self):
         gen = _make_generator()
         result = gen.generate(**_empty_inputs())
         assert result["logs"]["events"] == []

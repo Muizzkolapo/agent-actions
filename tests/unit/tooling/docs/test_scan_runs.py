@@ -60,3 +60,32 @@ class TestScanRunsReadsEventLogOnce:
         assert run["action_metrics"]["my_action"]["execution_time"] == 1.0
         assert [w["message"] for w in run["runtime_warnings"]] == ["records filtered"]
         assert opened.count(str(events_path)) == 1
+
+
+class TestScanRunsSurfacesTheEventTail:
+    """The one seam that carries a workflow's tail to the catalog generator."""
+
+    def test_the_tail_reaches_runs_data(self, tmp_path):
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        with open(logs_dir / "events.json", "w", encoding="utf-8") as f:
+            for i in range(3):
+                f.write(
+                    json.dumps(
+                        {
+                            "event_type": "ActionCompleteEvent",
+                            "diagnostic": i == 1,
+                            "meta": {"timestamp": f"2026-09-22T10:00:0{i}Z"},
+                            "data": {"action_name": f"step_{i}"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        rows = scan_runs(tmp_path)["wf"]["events"]
+
+        assert [r["seq"] for r in rows] == [0, 1, 2]
+        assert [r["data"]["action_name"] for r in rows] == ["step_0", "step_1", "step_2"]
+        assert [r["diagnostic"] for r in rows] == [False, True, False]
