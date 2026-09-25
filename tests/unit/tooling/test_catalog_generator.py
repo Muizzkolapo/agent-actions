@@ -329,6 +329,22 @@ class TestCatalogGeneratorProblemsFirst:
 
         assert sorted(e["seq"] for e in events) == [0, 1]
 
+    def test_the_per_log_totals_are_not_shipped_twice(self):
+        """They exist to be summed into stats.event_levels. Serialising the
+        per-log copies as well puts bytes in every reader's download that no
+        reader opens."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["logs_data"] = {**inputs["logs_data"], "level_counts": {"error": 3}}
+        inputs["runs_data"] = {
+            "alpha": {**_wf_events("alpha", [0]), "level_counts": {"warn": 1}},
+        }
+        catalog = gen.generate(**inputs)
+
+        assert catalog["stats"]["event_levels"] == {"error": 3, "warn": 1}
+        assert "level_counts" not in catalog["logs"]
+        assert "level_counts" not in catalog["runs"]["alpha"]
+
     def test_level_totals_describe_every_log_not_the_window(self):
         gen = _make_generator()
         inputs = _empty_inputs()
