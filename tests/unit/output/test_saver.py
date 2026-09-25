@@ -214,10 +214,10 @@ class TestSaverErrors:
 
 
 class TestNothingNamesAFileThatIsNeverWritten:
-    """Source items go to the store. Every surface here names
-    `agent_io/source/<relative_path>.json`, which no version of the framework
-    writes — the directory is gone entirely — so a reader following it finds
-    nothing. The relative path the items are stored under is the honest answer.
+    """Source items go to the store. Four surfaces named
+    `agent_io/source/<relative_path>.json` — two logs, the missing-backend
+    error, and both events — for a file no version of the framework writes and
+    whose directory is gone, so a reader following it finds nothing.
     """
 
     @patch("agent_actions.output.saver.fire_event")
@@ -228,19 +228,50 @@ class TestNothingNamesAFileThatIsNeverWritten:
 
         assert mock_fire.call_args_list, "no event fired"
         for call in mock_fire.call_args_list:
-            named = call[0][0].file_path
+            named = call[0][0].relative_path
             assert "agent_io/source" not in named, f"event points at an unwritten file: {named}"
             assert not named.endswith(".json"), f"event names a file: {named}"
             assert "node_1/batch_001" in named, f"event lost the stored path: {named}"
 
     @patch("agent_actions.output.saver.fire_event")
-    def test_nothing_reaches_disk(self, mock_fire, tmp_path):
-        """Control: the path in those events was never backed by a write."""
+    def test_the_items_go_to_the_store_under_that_path(self, mock_fire):
+        """Control: the name the surfaces report is the one the store is keyed
+        by, so it identifies the save rather than merely avoiding a filename."""
+        backend = MagicMock()
+        saver = UnifiedSourceDataSaver(storage_backend=backend)
+
+        saver.save_source_items([{"k": "v"}], "node_1/batch_001")
+
+        backend.write_source.assert_called_once()
+        assert backend.write_source.call_args[0][0] == "node_1/batch_001"
+
+    def test_neither_log_line_names_a_file(self, caplog):
+        """The two logs are the surfaces a user actually reads while a run is
+        going, and nothing pinned them."""
+        saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
+
+        with caplog.at_level("DEBUG", logger="agent_actions.output.saver"):
+            saver.save_source_items([{"k": "v"}], "node_1/batch_001")
+
+        assert caplog.records, "the saver logged nothing"
+        for record in caplog.records:
+            line = record.getMessage()
+            assert ".json" not in line, f"log names a file never written: {line}"
+            assert "agent_io/source" not in line, f"log names a removed directory: {line}"
+            assert "node_1/batch_001" in line, f"log lost the stored path: {line}"
+
+    @patch("agent_actions.output.saver.fire_event")
+    def test_the_event_payload_does_not_call_it_a_file(self, mock_fire):
+        """`data` is the documented consumer surface. A key named file_path
+        carrying something that is not a file path misleads whatever reads it."""
         saver = UnifiedSourceDataSaver(storage_backend=MagicMock())
 
         saver.save_source_items([{"k": "v"}], "node_1/batch_001")
 
-        assert list(tmp_path.rglob("*.json")) == []
+        for call in mock_fire.call_args_list:
+            payload = call[0][0].data
+            assert "file_path" not in payload, f"payload still calls it a file: {payload}"
+            assert payload["relative_path"] == "node_1/batch_001"
 
     def test_the_missing_backend_error_does_not_name_a_file(self, tmp_path):
         saver = UnifiedSourceDataSaver(storage_backend=None)
