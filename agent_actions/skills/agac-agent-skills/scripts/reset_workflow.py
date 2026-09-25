@@ -43,9 +43,11 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
 
     The store about to go holds the registry, and the registry is what names a
     batch: afterwards nothing can find these records, and each holds the payload
-    its batch was submitted with. False says the store has to stay — only when a
-    record was found and would not go, never when the reclaimer could not run at
-    all, which says nothing about whether there is anything to reclaim.
+    its batch was submitted with. False says the store has to stay.
+
+    Without the framework this cannot reclaim anything, but it can still see
+    whether there is anything to lose: records live at a fixed path and only a
+    submit creates it. Nothing there, nothing to keep the store for.
     """
     if not (base / "store").is_dir():
         return True
@@ -61,15 +63,19 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
         from agent_actions.utils.path_utils import set_path_manager
     except ImportError:
         # `SKILL.md` tells users to run this with a plain `python3`, where the
-        # framework is usually not importable. That is the documented path, and
-        # refusing the wipe there would make --full quietly mean something else.
+        # framework is usually not importable — the documented path, so refusing
+        # the wipe outright would make --full quietly mean something narrower.
+        if not any(root.glob(".agac/batch_state/*.json")):
+            return True
         print(
             f"warning: agent_actions is not importable, so this cannot reclaim what a "
-            f"provider recorded locally about {workflow}'s batches. Run "
-            f"`agac clean -a {workflow} --all` with the project's interpreter to reclaim them.",
+            f"provider recorded locally about {workflow}'s batches, and the store it is "
+            f"about to remove is what names them. Keeping store/. Run "
+            f"`agac clean -a {workflow} --all` with the project's interpreter instead, "
+            f"or re-run this with that interpreter.",
             file=sys.stderr,
         )
-        return True
+        return False
     except Exception as e:  # noqa: BLE001 - reported, and the store then stays
         print(f"warning: could not load the reclaimer ({e}).", file=sys.stderr)
         return False

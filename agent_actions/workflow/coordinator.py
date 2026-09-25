@@ -140,7 +140,14 @@ class AgentWorkflow:
             # The registry is the only thing naming these batches. Clearing it
             # over a record that would not go strands that payload for good, so
             # the name stays and the next --fresh can try again.
-            if self._release_batch_records(action_name):
+            try:
+                released = self._release_batch_records(action_name)
+            except Exception as e:
+                # Reports rather than raises, like every clear above — and keeps
+                # the registry, since a read that failed proves nothing went.
+                logger.warning("Failed to reclaim batch records for %s: %s", action_name, e)
+                released = False
+            if released:
                 try:
                     self.storage_backend.clear_batch_state(action_name)
                 except Exception as e:

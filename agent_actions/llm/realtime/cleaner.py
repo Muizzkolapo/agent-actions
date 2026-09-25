@@ -117,8 +117,14 @@ class Cleaner:
             # Only when there is a store to read: opening a backend creates the
             # directory, and `directories` was settled before this line.
             if not self._release_batch_records(io_dir):
-                store = io_dir / "store"
-                directories = [d for d in directories if d != store]
+                from agent_actions.storage import BACKENDS
+
+                owned = {
+                    path
+                    for backend_cls in BACKENDS.values()
+                    for path in backend_cls.paths_to_wipe(io_dir)
+                }
+                directories = [d for d in directories if d not in owned]
                 click.echo(
                     click.style(
                         "   Keeping the store: it is what names those batches, and removing "

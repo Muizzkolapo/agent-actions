@@ -174,11 +174,11 @@ class AgacBatchClient(BaseBatchClient):
         else looks for, so it goes with the record it was.
         """
         state_dir = cls._state_dir()
-        # Every provider's ids reach this now, so one is no longer a string this
-        # client minted: taken as a bare name, and escaped where it becomes a
-        # pattern, it can only name files of its own inside this directory.
-        name = Path(batch_id).name
-        if not name:
+        # Every provider's ids reach this now. One that is not already a bare
+        # file name never named a record here, and reinterpreting it would reach
+        # a different batch's.
+        name = batch_id
+        if not name or name != Path(name).name:
             return
         (state_dir / f"{name}.json").unlink(missing_ok=True)
         for partial in state_dir.glob(f"{glob.escape(name)}_*.tmp"):
