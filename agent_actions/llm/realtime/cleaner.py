@@ -50,9 +50,13 @@ class Cleaner:
         to go, and a record left behind must not stand in the way of that.
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.llm.providers.local_batch_records import (
+            discard_partial_batch_records,
+            release_local_batch_record,
+        )
         from agent_actions.storage import get_storage_backend
 
+        discard_partial_batch_records()
         try:
             backend = get_storage_backend(
                 workflow_path=str(io_dir.parent), workflow_name=self.agent
@@ -66,6 +70,14 @@ class Cleaner:
                 backend.close()
         except Exception as e:
             logger.warning("Could not reclaim local batch records before cleaning: %s", e)
+            click.echo(
+                click.style(
+                    f"⚠️  Could not reclaim what a provider recorded locally for "
+                    f"'{self.agent}' ({e}). The store naming those batches is about to "
+                    f"go, so nothing will be able to reach them afterwards.",
+                    fg="yellow",
+                )
+            )
 
     def _run(self) -> None:
         logger.debug("Cleaning directories for agent %s", self.agent)

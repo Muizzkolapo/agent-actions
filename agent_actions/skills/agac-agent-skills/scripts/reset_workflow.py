@@ -6,8 +6,9 @@ workflow, while keeping source data and the SQLite store intact. Records already
 completed in the store are carried forward, not regenerated — use --full for a
 true from-scratch rebuild.
 
---full: wipes source/, store/, target/, and .agent_status.json, then
-recreates target/.
+--full: wipes source/, store/, target/, and .agent_status.json, then recreates
+target/, and reclaims what a provider recorded locally under .agac/ about this
+workflow's batches, since the store being removed is what names them.
 
 Usage:
   python reset_workflow.py <workflow> [--full]
@@ -50,11 +51,15 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> None:
     try:
         from agent_actions.config.paths import PathManager
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.llm.providers.local_batch_records import (
+            discard_partial_batch_records,
+            release_local_batch_record,
+        )
         from agent_actions.storage import get_storage_backend
         from agent_actions.utils.path_utils import set_path_manager
 
         set_path_manager(PathManager(project_root=root))
+        discard_partial_batch_records()
         backend = get_storage_backend(workflow_path=str(base.parent), workflow_name=workflow)
         try:
             backend.initialize()
@@ -64,7 +69,11 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> None:
         finally:
             backend.close()
     except Exception as e:  # noqa: BLE001 - a reset must not be blocked by this
-        print(f"warning: could not reclaim local batch records: {e}", file=sys.stderr)
+        print(
+            f"warning: could not reclaim what a provider recorded locally ({e}). The store "
+            "naming those batches is about to go, so nothing will reach them afterwards.",
+            file=sys.stderr,
+        )
 
 
 def main() -> None:

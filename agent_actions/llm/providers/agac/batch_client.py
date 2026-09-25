@@ -198,10 +198,11 @@ class AgacBatchClient(BaseBatchClient):
             try:
                 if partial.stat().st_mtime > cutoff:
                     continue
+                partial.unlink(missing_ok=True)
             except OSError as e:
-                logger.debug("Could not age a half-written record, leaving it: %s", e)
-                continue
-            partial.unlink(missing_ok=True)
+                # One unreadable or undeletable file is not a reason to leave the
+                # rest of a directory of payloads sitting there.
+                logger.debug("Could not reclaim a half-written record: %s", e)
 
     @classmethod
     def _load_state(cls, batch_id: str) -> MockBatchState | None:

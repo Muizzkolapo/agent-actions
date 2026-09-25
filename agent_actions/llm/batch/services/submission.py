@@ -411,13 +411,13 @@ class BatchSubmissionService:
                 # A FAILED or CANCELLED entry falls through the resubmission
                 # guard and is overwritten here; the batch it named stops being
                 # reachable at that moment.
-                superseded = manager.get_batch_job(file_key)
+                superseded = manager.batch_id_at(file_key)
                 manager.save_batch_job(file_key, entry)
                 # After the save, never before: the successor has to be recorded
                 # before anything is thrown away, or a crash in between leaves a
                 # batch this run paid for named by nothing.
-                if superseded and superseded.batch_id and superseded.batch_id != batch_id:
-                    release_local_batch_record(superseded.batch_id)
+                if superseded and superseded != batch_id:
+                    release_local_batch_record(superseded)
 
             return SubmissionResult(batch_id=batch_id)
 

@@ -176,11 +176,13 @@ class AgentWorkflow:
     def _release_batch_records(self, action_name: str) -> None:
         """Reclaim what a provider recorded about this action's batches.
 
-        Before the registry goes, not after: an entry is what names a batch, and
-        a record nothing names can never be found again to reclaim. Scoped to
-        this action for the same reason every other clear here is — the records
-        sit in one directory for the whole project, and a neighbouring workflow's
-        batch may still be in flight.
+        Before the registry goes — the opposite order to the overwrite sites, and
+        for the same reason: both pick the failure that can be undone. Clearing
+        first could leave records nothing names and no command can reach; this
+        way round, a registry naming gone records is repaired by another --fresh.
+
+        Scoped to this action like every other clear here, since the records sit
+        in one directory for the whole project.
         """
         # Ids as stored, not parsed entries: the registry this is about to delete
         # may hold one a `BatchJobEntry` refuses, and refusing to read it here

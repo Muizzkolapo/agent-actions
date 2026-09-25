@@ -48,6 +48,24 @@ class BatchRegistryManager:
         keys = storage_backend.list_metadata_prefix(cls.METADATA_KEY_PREFIX)
         return [k.removeprefix(cls.METADATA_KEY_PREFIX) for k in keys]
 
+    def batch_id_at(self, file_name: str) -> str | None:
+        """The batch id this key names, whether or not the entry parses.
+
+        An overwrite has to release what it displaces, and `get_batch_job`
+        answers None for an entry the load could not read — which would let the
+        record of a batch nothing names any more sit there for good.
+        """
+        with self._lock:
+            entry = self._get_cache().get(file_name)
+            if entry is not None:
+                return entry.batch_id
+            stored = self._unreadable.get(file_name)
+            if isinstance(stored, dict):
+                batch_id = stored.get("batch_id")
+                if isinstance(batch_id, str):
+                    return batch_id
+            return None
+
     @classmethod
     def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
         """Every batch id this action's registry names, read as stored.
@@ -80,6 +98,9 @@ class BatchRegistryManager:
     def save_batch_job(self, file_name: str, entry: BatchJobEntry) -> None:
         with self._lock:
             cache = self._get_cache()
+            # An entry the load could not read still occupies the key, and this
+            # supersedes it — leaving it in would resurrect it on the next write.
+            self._unreadable.pop(file_name, None)
             old = cache.get(file_name)
             if old and self._batch_id_index is not None and old.batch_id != entry.batch_id:
                 self._batch_id_index.pop(old.batch_id, None)
@@ -93,7 +114,12 @@ class BatchRegistryManager:
     def remove_batch_job(self, file_name: str) -> bool:
         with self._lock:
             cache = self._get_cache()
+            unreadable = self._unreadable.pop(file_name, None)
             if file_name not in cache:
+                if unreadable is not None:
+                    self._persist_registry(cache)
+                    logger.info("Removed unreadable batch job entry for %s", file_name)
+                    return True
                 return False
             old_entry = cache[file_name]
             if self._batch_id_index is not None and old_entry.batch_id in self._batch_id_index:
