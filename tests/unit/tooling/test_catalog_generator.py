@@ -1,5 +1,7 @@
 """I-6: Coverage of CatalogGenerator.generate() — happy path and empty input."""
 
+from collections import Counter
+
 from agent_actions.tooling.docs.generator import CatalogGenerator
 from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
 
@@ -274,6 +276,42 @@ class TestCatalogGeneratorProblemsFirst:
 
         assert len(events) == EVENT_TAIL_LIMIT
         assert sorted(e["seq"] for e in events if e["level"] == "error") == [0, 1]
+
+    def test_problems_cannot_spend_the_whole_window(self):
+        """A problem-heavy project would otherwise fill the window with warnings
+        and leave the page that promises recent events showing none."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        runs = {}
+        for name in ("alpha", "beta", "gamma"):
+            wf = _wf_events(name, list(range(EVENT_TAIL_LIMIT)), hour=9, level="warn")
+            wf["events"] += _wf_events(
+                name, list(range(EVENT_TAIL_LIMIT, 2 * EVENT_TAIL_LIMIT)), hour=11, level="info"
+            )["events"]
+            runs[name] = wf
+        inputs["runs_data"] = runs
+
+        events = gen.generate(**inputs)["logs"]["events"]
+        levels = Counter(e["level"] for e in events)
+
+        assert len(events) == EVENT_TAIL_LIMIT
+        assert levels["warn"] > 0
+        assert levels["info"] > 0
+
+    def test_a_quiet_project_still_fills_the_window_with_recent_rows(self):
+        """The reserve works the other way too: a share nobody claims is not lost."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        wf = _wf_events("alpha", [0], hour=9, level="error")
+        wf["events"] += _wf_events(
+            "alpha", list(range(1, EVENT_TAIL_LIMIT + 50)), hour=11, level="info"
+        )["events"]
+        inputs["runs_data"] = {"alpha": wf}
+
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        assert len(events) == EVENT_TAIL_LIMIT
+        assert any(e["level"] == "error" for e in events)
 
     def test_level_totals_describe_every_log_not_the_window(self):
         gen = _make_generator()
