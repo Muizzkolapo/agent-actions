@@ -44,13 +44,10 @@ class UnifiedSourceDataSaver:
         if isinstance(items, dict):
             items = [items]
 
-        source_dir = self.base_directory / "agent_io" / "source"
-        source_file = source_dir / f"{relative_path}.json"
-
         logger.debug(
-            "Saving %d source items to %s (dedup=%s, backend=%s)",
+            "Saving %d source items under %s (dedup=%s, backend=%s)",
             len(items),
-            source_file,
+            relative_path,
             self.enable_deduplication,
             self.storage_backend is not None,
         )
@@ -59,12 +56,12 @@ class UnifiedSourceDataSaver:
             raise ValueError(
                 f"Storage backend not configured for write_source. "
                 f"Configure a storage backend (sqlite, tinydb) in your workflow. "
-                f"File: {source_file}"
+                f"Path: {relative_path}"
             )
 
         fire_event(
             SourceDataSavingEvent(
-                file_path=str(source_file),
+                file_path=relative_path,
                 item_count=len(items),
             )
         )
@@ -76,10 +73,10 @@ class UnifiedSourceDataSaver:
 
         fire_event(
             SourceDataSavedEvent(
-                file_path=str(source_file),
+                file_path=relative_path,
                 item_count=len(items),
                 bytes_written=bytes_written,
             )
         )
 
-        logger.info("Saved %d source items to %s", len(items), source_file)
+        logger.info("Saved %d source items under %s", len(items), relative_path)
