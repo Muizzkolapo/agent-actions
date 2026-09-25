@@ -32,22 +32,20 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
   const hasFields = data.inputFields.length > 0 || data.outputFields.length > 0
 
   return (
-    <div className={`rounded-lg border-2 bg-card shadow hover:shadow-md transition-shadow w-[320px] ${
-      selected ? "border-foreground/80" : "border-foreground/20"
+    <div className={`w-[320px] overflow-hidden rounded-card border bg-surface ${
+      selected ? "border-accent-a30" : "border-border"
     }`}>
       <Handle type="target" position={Position.Left} isConnectable={isConnectable}
-        className={`!w-2.5 !h-2.5 !border-2 !border-card ${isLlm ? "!bg-[hsl(var(--chart-2))]" : "!bg-[hsl(var(--success))]"}`}
+        className={`!h-2 !w-2 !border !border-surface ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
 
       {/* Header row — clicks bubble to React Flow's onNodeClick; only the chevron stops propagation */}
       <div className="flex items-center">
-        <div className="flex items-center px-3 py-2.5 border-r border-border/50">
-          <div className={`flex h-7 w-7 items-center justify-center rounded shrink-0 ${
-            isLlm ? "bg-[hsl(var(--chart-2))]/20" : "bg-[hsl(var(--success))]/20"
+        <div className="flex items-center px-3 py-2.5 border-r border-border-soft">
+          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${
+            isLlm ? "bg-llm/10" : "bg-tool/[0.08]"
           }`}>
-            <span className={`text-[8px] font-bold tracking-wider ${
-              isLlm ? "text-[hsl(var(--chart-2))]" : "text-[hsl(var(--success))]"
-            }`}>{isLlm ? "LLM" : "TOOL"}</span>
+            <span className={`text-[8px] font-semibold ${isLlm ? "text-llm-t" : "text-tool-t"}`}>{isLlm ? "LLM" : "TOOL"}</span>
           </div>
         </div>
         <div className="flex-1 px-3 py-2.5 min-w-0">
@@ -58,7 +56,7 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
                 type="button"
                 aria-label={expanded ? "Collapse fields" : "Expand fields"}
                 onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
-                className="hover:bg-accent/40 rounded p-0.5 transition-colors shrink-0"
+                className="shrink-0 rounded-sm p-0.5 hover:bg-hover"
               >
                 {expanded
                   ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -67,27 +65,27 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
             )}
           </div>
           {data.description && (
-            <div className="text-[10px] text-foreground/60 mt-0.5 line-clamp-2">{data.description}</div>
+            <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{data.description}</div>
           )}
         </div>
       </div>
 
       {/* Expandable fields */}
       {expanded && (
-        <div className="border-t border-border/50 px-3 py-2 space-y-1.5">
+        <div className="space-y-1.5 border-t border-border-soft px-3 py-2">
           {data.inputFields.length > 0 && (
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-mono font-medium text-muted-foreground/70">in</span>
-                <span className="text-[9px] font-mono text-muted-foreground/40">{data.inputFields.length}</span>
-                <div className="flex-1 h-px bg-border/30" />
+                <span className="font-mono text-[9px] font-medium text-muted-foreground">in</span>
+                <span className="font-mono text-[9px] text-muted-2">{data.inputFields.length}</span>
+                <div className="h-px flex-1 bg-border-soft" />
               </div>
               <div className="space-y-px">
                 {data.inputFields.map((f) => (
-                  <div key={f} className={`pl-2 py-0.5 rounded-sm border-l-2 bg-secondary/30 ${
-                    isLlm ? "border-[hsl(var(--chart-2))]/60" : "border-[hsl(var(--success))]/60"
+                  <div key={f} className={`rounded-sm border-l-2 bg-surface-2 py-0.5 pl-2 ${
+                    isLlm ? "border-llm" : "border-tool"
                   }`}>
-                    <span className="text-[10px] font-mono text-foreground/80">{f}</span>
+                    <span className="font-mono text-[10px] text-foreground-2">{f}</span>
                   </div>
                 ))}
               </div>
@@ -96,14 +94,14 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
           {data.outputFields.length > 0 && (
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-mono font-medium text-muted-foreground/70">out</span>
-                <span className="text-[9px] font-mono text-muted-foreground/40">{data.outputFields.length}</span>
-                <div className="flex-1 h-px bg-border/30" />
+                <span className="font-mono text-[9px] font-medium text-muted-foreground">out</span>
+                <span className="font-mono text-[9px] text-muted-2">{data.outputFields.length}</span>
+                <div className="h-px flex-1 bg-border-soft" />
               </div>
               <div className="space-y-px">
                 {data.outputFields.map((f) => (
-                  <div key={f} className="pl-2 py-0.5 rounded-sm border-l-2 border-[hsl(var(--warning))]/60 bg-secondary/30">
-                    <span className="text-[10px] font-mono text-foreground/80">{f}</span>
+                  <div key={f} className="rounded-sm border-l-2 border-warning bg-surface-2 py-0.5 pl-2">
+                    <span className="font-mono text-[10px] text-foreground-2">{f}</span>
                   </div>
                 ))}
               </div>
@@ -113,7 +111,7 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
       )}
 
       <Handle type="source" position={Position.Right} isConnectable={isConnectable}
-        className={`!w-2.5 !h-2.5 !border-2 !border-card ${isLlm ? "!bg-[hsl(var(--chart-2))]" : "!bg-[hsl(var(--success))]"}`}
+        className={`!h-2 !w-2 !border !border-surface ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
     </div>
   )
@@ -188,20 +186,20 @@ function DAGContent({
       defaultEdgeOptions={{
         type: "default",
         animated: false,
-        style: { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1.5, opacity: 0.7 },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: "hsl(var(--muted-foreground))" },
+        style: { stroke: "hsl(var(--border-2))", strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "hsl(var(--border-2))" },
       }}
-      className="rounded-lg"
+      className="rounded-card"
     >
-      <Background gap={24} size={1} className="!bg-background" />
-      <Controls className="!bg-card !border-border !shadow-md !rounded-lg" showInteractive={false} />
+      <Background gap={24} size={1} color="hsl(var(--grid))" className="!bg-well" />
+      <Controls className="!rounded-control !border-border !bg-surface !shadow-none" showInteractive={false} />
       <MiniMap
         nodeColor={(n) =>
-          n.type === "modelNode" ? "hsl(var(--chart-2))"
-          : n.type === "toolNode" ? "hsl(var(--success))"
-          : "hsl(var(--muted-foreground))"
+          n.type === "modelNode" ? "hsl(var(--llm))"
+          : n.type === "toolNode" ? "hsl(var(--tool))"
+          : "hsl(var(--muted))"
         }
-        className="!bg-card !border-border !rounded-lg"
+        className="!rounded-control !border-border !bg-surface"
         nodeBorderRadius={4}
       />
     </ReactFlow>
@@ -221,7 +219,7 @@ export function WorkflowDAGView({
 }) {
   // 280px ≈ top header (48px) + workflow detail header/tabs (~120px) + outer padding (112px)
   return (
-    <div className="w-full rounded-xl border border-border bg-card overflow-hidden" style={{ height: 'clamp(300px, calc(100vh - 280px), 100vh)' }}>
+    <div className="w-full overflow-hidden rounded-card border border-border bg-well" style={{ height: 'clamp(300px, calc(100vh - 280px), 100vh)' }}>
       <ReactFlowProvider>
         <DAGContent actions={actions} workflowId={workflowId} onNodeClick={onNodeClick} />
       </ReactFlowProvider>

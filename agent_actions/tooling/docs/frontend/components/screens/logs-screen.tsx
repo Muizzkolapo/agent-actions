@@ -1,1129 +1,911 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import type { ChartConfig } from "@/components/ui/chart"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ChevronDown, ChevronRight, Copy, Link2, X, ArrowRight } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
-import {
-  ChevronDown,
-  ChevronRight,
-  ArrowUpDown,
-  ArrowLeft,
-  AlertTriangle,
-  AlertCircle,
-  Flame,
-  TrendingDown,
-  Target,
-} from "lucide-react"
-import { AreaChart, Area } from "recharts"
-import type { ValidationGroup } from "@/lib/mock-data"
+import { deriveHealth } from "@/lib/health"
+import { EM_DASH, fmtClock, fmtClockMs, fmtSeconds } from "@/lib/format"
+import { Card, EmptyState, Kbd, PageTitle, SearchInput, Segmented } from "@/components/graphite"
+import type { EventLevel, LogEvent } from "@/lib/mock-data"
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type LogTab = "errors" | "warnings" | "runtime"
-type SortDir = "asc" | "desc"
-
-interface SortState<K extends string> {
-  key: K
-  dir: SortDir
+export interface LogsIntent {
+  level?: EventLevel | "all"
+  q?: string
+  invocationId?: string
 }
 
-interface TopSource {
-  target: string
-  count: number
-  pct: number
+/* ─── Level vocabulary ──────────────────────────────────────────────────── */
+
+const LEVELS: EventLevel[] = ["error", "warn", "info", "debug"]
+
+const LEVEL_STYLE: Record<EventLevel, { label: string; text: string; bg: string; fill: string }> = {
+  error: { label: "ERR", text: "text-danger-t", bg: "bg-danger-a12", fill: "bg-danger" },
+  warn: { label: "WRN", text: "text-warning-t", bg: "bg-warning-a12", fill: "bg-warning" },
+  info: { label: "INF", text: "text-accent-t", bg: "bg-accent-a12", fill: "bg-primary" },
+  debug: { label: "DBG", text: "text-muted-foreground", bg: "bg-surface-2", fill: "bg-muted-2" },
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+/* ─── Per-class derivations ─────────────────────────────────────────────── */
 
-function formatTimestampFull(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  } catch {
-    return iso
+/** No event class carries a `duration` key — each names its own. */
+const DURATION_KEYS = ["execution_time", "elapsed_time", "latency_ms", "timeout_seconds", "retry_after"] as const
+
+function durationKey(data: Record<string, unknown>): string | null {
+  for (const k of DURATION_KEYS) if (typeof data[k] === "number") return k
+  return null
+}
+
+function durationLabel(data: Record<string, unknown>): string {
+  const key = durationKey(data)
+  if (!key) return EM_DASH
+  const value = data[key] as number
+  return key === "latency_ms" ? `${value}ms` : `${value}s`
+}
+
+/**
+ * Span length for the waterfall. `timeout_seconds` and `retry_after` describe a
+ * wait or a configured limit rather than work this event performed — plotting
+ * them would draw a 5s bar for a guard that timed out *at* 5s.
+ */
+function durationMs(data: Record<string, unknown>): number {
+  if (typeof data.execution_time === "number") return Math.round(data.execution_time * 1000)
+  if (typeof data.elapsed_time === "number") return Math.round(data.elapsed_time * 1000)
+  if (typeof data.latency_ms === "number") return data.latency_ms
+  return 0
+}
+
+function tokenLabel(data: Record<string, unknown>): string | null {
+  if (typeof data.total_tokens === "number") return data.total_tokens.toLocaleString()
+  if (typeof data.tokens === "string") {
+    const m = data.tokens.match(/(\d+)/)
+    return m ? Number(m[1]).toLocaleString() : null
   }
-}
-
-/** Safe min/max for large arrays (avoids call-stack overflow from spread) */
-function safeMin(arr: number[]): number {
-  let v = arr[0]
-  for (let i = 1; i < arr.length; i++) if (arr[i] < v) v = arr[i]
-  return v
-}
-function safeMax(arr: number[]): number {
-  let v = arr[0]
-  for (let i = 1; i < arr.length; i++) if (arr[i] > v) v = arr[i]
-  return v
-}
-
-/** Build a 7-bucket histogram from timestamps for sparkline rendering */
-function buildSparkData(timestamps: string[], buckets = 7): number[] {
-  if (timestamps.length === 0) return Array(buckets).fill(0)
-  const times = timestamps.map((t) => new Date(t).getTime()).filter((t) => !isNaN(t))
-  if (times.length === 0) return Array(buckets).fill(0)
-  const min = safeMin(times)
-  const max = safeMax(times)
-  const range = max - min || 1
-  const data = Array(buckets).fill(0) as number[]
-  for (const t of times) {
-    const idx = Math.min(Math.floor(((t - min) / range) * buckets), buckets - 1)
-    data[idx]++
+  if (data.tokens && typeof data.tokens === "object") {
+    const t = data.tokens as Record<string, unknown>
+    if (typeof t.total_tokens === "number") return t.total_tokens.toLocaleString()
   }
-  return data
+  return null
 }
 
-/** Build 12-bucket time series for combined TrendStrip chart */
-function buildTimeSeriesData(
-  errorGroups: ValidationGroup[],
-  warningGroups: ValidationGroup[],
-  buckets = 12,
-): { bucket: string; errors: number; warnings: number }[] {
-  const errorTs = errorGroups.flatMap((g) => g.timestamps)
-  const warningTs = warningGroups.flatMap((g) => g.timestamps)
-  const allTs = [...errorTs, ...warningTs]
-  if (allTs.length === 0) return []
+function chipValue(value: unknown): string {
+  if (value === null) return "null"
+  if (typeof value === "object") return JSON.stringify(value)
+  return String(value)
+}
 
-  const times = allTs.map((t) => new Date(t).getTime()).filter((t) => !isNaN(t))
-  if (times.length === 0) return []
+function searchIndex(e: LogEvent): string {
+  const fields = Object.entries(e.data).map(([k, v]) => `${k}=${chipValue(v)}`)
+  return [e.message, e.code, e.eventType, e.category, e.workflow ?? "", e.invocationId ?? "", ...fields]
+    .join(" ")
+    .toLowerCase()
+}
 
-  const min = safeMin(times)
-  const max = safeMax(times)
-  const range = max - min || 1
+/* ─── Screen ────────────────────────────────────────────────────────────── */
 
-  const errBuckets = Array(buckets).fill(0) as number[]
-  const warnBuckets = Array(buckets).fill(0) as number[]
+const HISTOGRAM_BUCKETS = 36
 
-  for (const ts of errorTs) {
-    const t = new Date(ts).getTime()
-    if (!isNaN(t)) {
-      const idx = Math.min(Math.floor(((t - min) / range) * buckets), buckets - 1)
-      errBuckets[idx]++
+export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
+  const data = useCatalogData()
+  const health = useMemo(() => deriveHealth(data), [data])
+  const events = data.logEvents
+
+  const [view, setView] = useState<"stream" | "grouped">("stream")
+  const [level, setLevel] = useState<EventLevel | "all">(intent?.level ?? "all")
+  const [search, setSearch] = useState(intent?.q ?? "")
+  const [workflow, setWorkflow] = useState("all")
+  const [diagnostics, setDiagnostics] = useState(false)
+  const [dense, setDense] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [cursorId, setCursorId] = useState<string | null>(null)
+  const [trace, setTrace] = useState<string | null>(intent?.invocationId ?? null)
+  const [range, setRange] = useState<[number, number] | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const indexed = useMemo(
+    () => events.map((e) => ({ event: e, haystack: searchIndex(e), time: Date.parse(e.timestamp) })),
+    [events],
+  )
+
+  const workflows = useMemo(() => {
+    const names = new Set<string>()
+    for (const e of events) if (e.workflow) names.add(e.workflow)
+    return [...names].sort()
+  }, [events])
+
+  // Diagnostics, workflow and the histogram range scope the window; level and
+  // search filter inside it, so the level counts describe what is selectable.
+  const scoped = useMemo(
+    () =>
+      indexed.filter(({ event, time }) => {
+        if (!diagnostics && event.diagnostic) return false
+        if (workflow !== "all" && event.workflow !== workflow) return false
+        if (range && (isNaN(time) || time < range[0] || time > range[1])) return false
+        return true
+      }),
+    [indexed, diagnostics, workflow, range],
+  )
+
+  const searched = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return q ? scoped.filter((r) => r.haystack.includes(q)) : scoped
+  }, [scoped, search])
+
+  const levelCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: searched.length, error: 0, warn: 0, info: 0, debug: 0 }
+    for (const { event } of searched) counts[event.level]++
+    return counts
+  }, [searched])
+
+  const rows = useMemo(
+    () =>
+      (level === "all" ? searched : searched.filter((r) => r.event.level === level))
+        .map((r) => r.event)
+        .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : b.seq - a.seq)),
+    [searched, level],
+  )
+
+  const groups = useMemo(() => {
+    const byCode = new Map<string, LogEvent[]>()
+    for (const e of rows) {
+      const list = byCode.get(e.code)
+      if (list) list.push(e)
+      else byCode.set(e.code, [e])
     }
-  }
-  for (const ts of warningTs) {
-    const t = new Date(ts).getTime()
-    if (!isNaN(t)) {
-      const idx = Math.min(Math.floor(((t - min) / range) * buckets), buckets - 1)
-      warnBuckets[idx]++
+    return [...byCode.entries()]
+      .map(([code, list]) => ({
+        code,
+        eventType: list[0].eventType,
+        level: list[0].level,
+        count: list.length,
+        workflows: new Set(list.map((e) => e.workflow).filter(Boolean)).size,
+        last: list[0].timestamp,
+      }))
+      .sort((a, b) => b.count - a.count)
+  }, [rows])
+
+  const slowest = useMemo(() => {
+    let best: { event: LogEvent; ms: number } | null = null
+    for (const { event } of scoped) {
+      const ms = durationMs(event.data)
+      if (ms > 0 && (!best || ms > best.ms)) best = { event, ms }
     }
-  }
+    return best
+  }, [scoped])
 
-  return Array.from({ length: buckets }, (_, i) => ({
-    bucket: `${i + 1}`,
-    errors: errBuckets[i],
-    warnings: warnBuckets[i],
-  }))
-}
+  const histogram = useHistogram(scoped)
 
-/** Build 12-bucket time series for a single category */
-function buildSingleSeriesData(
-  groups: ValidationGroup[],
-  key: string,
-  buckets = 12,
-): { bucket: string; [k: string]: string | number }[] {
-  const allTs = groups.flatMap((g) => g.timestamps)
-  if (allTs.length === 0) return []
+  const problemIds = useMemo(
+    () => rows.filter((e) => e.level === "error" || e.level === "warn").map((e) => e.id),
+    [rows],
+  )
 
-  const times = allTs.map((t) => new Date(t).getTime()).filter((t) => !isNaN(t))
-  if (times.length === 0) return []
+  const jump = useCallback(
+    (ids: string[], dir: 1 | -1) => {
+      if (ids.length === 0) return
+      const at = cursorId ? ids.indexOf(cursorId) : -1
+      const next = at === -1 ? (dir === 1 ? 0 : ids.length - 1) : (at + dir + ids.length) % ids.length
+      const id = ids[next]
+      setCursorId(id)
+      document.querySelector(`[data-event-row="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" })
+    },
+    [cursorId],
+  )
 
-  const min = safeMin(times)
-  const max = safeMax(times)
-  const range = max - min || 1
-
-  const data = Array(buckets).fill(0) as number[]
-  for (const ts of allTs) {
-    const t = new Date(ts).getTime()
-    if (!isNaN(t)) {
-      const idx = Math.min(Math.floor(((t - min) / range) * buckets), buckets - 1)
-      data[idx]++
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const ids = rows.map((r) => r.id)
+      switch (e.key) {
+        case "j": jump(ids, 1); break
+        case "k": jump(ids, -1); break
+        case "n": jump(problemIds, 1); break
+        case "N": jump(problemIds, -1); break
+        case "g": setView((v) => (v === "stream" ? "grouped" : "stream")); break
+        case "e": setLevel((l) => (l === "error" ? "all" : "error")); break
+        case "w": setLevel((l) => (l === "warn" ? "all" : "warn")); break
+        case "t": {
+          const target = rows.find((r) => r.id === cursorId) ?? rows[0]
+          if (target?.invocationId) setTrace(target.invocationId)
+          break
+        }
+        case "Enter":
+          if (cursorId) { e.preventDefault(); setExpandedId((id) => (id === cursorId ? null : cursorId)) }
+          break
+        case "Escape":
+          if (trace) setTrace(null)
+          else if (expandedId) setExpandedId(null)
+          else if (range) setRange(null)
+          break
+        default:
+          return
+      }
     }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [rows, problemIds, cursorId, jump, trace, expandedId, range])
+
+  const clearFilters = () => {
+    setLevel("all")
+    setSearch("")
+    setWorkflow("all")
+    setRange(null)
   }
 
-  return Array.from({ length: buckets }, (_, i) => ({
-    bucket: `${i + 1}`,
-    [key]: data[i],
-  }))
-}
+  const filtersActive = level !== "all" || search !== "" || workflow !== "all" || range !== null
 
-/** Find the top source from validation groups */
-function findTopSource(groups: ValidationGroup[]): TopSource | null {
-  if (groups.length === 0) return null
-  const total = groups.reduce((s, g) => s + g.count, 0)
-  const top = [...groups].sort((a, b) => b.count - a.count)[0]
-  return { target: top.target, count: top.count, pct: Math.round((top.count / total) * 100) }
-}
+  const copy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => { setCopied(id); setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500) },
+      () => { /* clipboard unavailable */ },
+    )
+  }
 
-/** Compute rate per hour from timestamps */
-function computeRate(timestamps: string[]): number | null {
-  if (timestamps.length < 2) return null
-  const times = timestamps.map((t) => new Date(t).getTime()).filter((t) => !isNaN(t)).sort()
-  if (times.length < 2) return null
-  const hours = (times[times.length - 1] - times[0]) / 3_600_000
-  if (hours < 1) return null
-  return Math.round(times.length / hours)
-}
-
-/** Compute active duration in days from timestamps */
-function computeDurationDays(timestamps: string[]): number | null {
-  if (timestamps.length < 2) return null
-  const times = timestamps.map((t) => new Date(t).getTime()).filter((t) => !isNaN(t)).sort()
-  if (times.length < 2) return null
-  const days = Math.ceil((times[times.length - 1] - times[0]) / 86_400_000)
-  return days > 0 ? days : null
-}
-
-// ─── Sparkline ───────────────────────────────────────────────────────────────
-
-function MiniSparkline({ data, color, width = 80, height = 24 }: { data: number[]; color: string; width?: number; height?: number }) {
-  const max = Math.max(safeMax(data), 1)
-  const step = width / (data.length - 1 || 1)
-  const points = data.map((v, i) => `${i * step},${height - (v / max) * height * 0.7 - height * 0.15}`).join(" ")
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width, height }} className="shrink-0">
-      <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} opacity={0.7} />
-    </svg>
-  )
-}
-
-// ─── Chart Configs ───────────────────────────────────────────────────────────
-
-const trendChartConfig = {
-  errors: { label: "Errors", color: "hsl(var(--destructive))" },
-  warnings: { label: "Warnings", color: "hsl(var(--warning))" },
-} satisfies ChartConfig
-
-const errorsChartConfig = {
-  errors: { label: "Errors", color: "hsl(var(--destructive))" },
-} satisfies ChartConfig
-
-const warningsChartConfig = {
-  warnings: { label: "Warnings", color: "hsl(var(--warning))" },
-} satisfies ChartConfig
-
-// ─── Main Component ──────────────────────────────────────────────────────────
-
-export function LogsScreen() {
-  const { validationErrorGroups, validationWarningGroups, runtimeErrorGroups, runtimeWarningGroups, stats } = useCatalogData()
-  const [activeTab, setActiveTab] = useState<LogTab>("errors")
-  const [focusedTarget, setFocusedTarget] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<ValidationGroup | null>(null)
-
-  const trendData = useMemo(
-    () => buildTimeSeriesData(validationErrorGroups, validationWarningGroups),
-    [validationErrorGroups, validationWarningGroups],
-  )
-  const hasTrend = trendData.length > 0
-
-  const errorTopSource = useMemo(() => findTopSource(validationErrorGroups), [validationErrorGroups])
-  const warningTopSource = useMemo(() => findTopSource(validationWarningGroups), [validationWarningGroups])
-  const errorSparkData = useMemo(() => buildSparkData(validationErrorGroups.flatMap((g) => g.timestamps)), [validationErrorGroups])
-  const warningSparkData = useMemo(() => buildSparkData(validationWarningGroups.flatMap((g) => g.timestamps)), [validationWarningGroups])
-
-  const runtimeAllGroups = useMemo(
-    () => [...runtimeErrorGroups, ...runtimeWarningGroups].sort((a, b) => b.count - a.count),
-    [runtimeErrorGroups, runtimeWarningGroups],
-  )
-  const runtimeCount = runtimeErrorGroups.reduce((s, g) => s + g.count, 0) + runtimeWarningGroups.reduce((s, g) => s + g.count, 0)
-
-  const tabs: { id: LogTab; label: string; count: number; icon: React.ReactNode; color: string }[] = [
-    { id: "errors", label: "Errors", count: stats.validation_errors, icon: <AlertCircle className="h-3 w-3" />, color: "hsl(var(--destructive))" },
-    { id: "warnings", label: "Warnings", count: stats.validation_warnings, icon: <AlertTriangle className="h-3 w-3" />, color: "hsl(var(--warning))" },
-    { id: "runtime", label: "Runtime", count: runtimeCount, icon: <Flame className="h-3 w-3" />, color: "hsl(var(--warning))" },
-  ]
-
-  // Stable reference for clearing focus (avoids re-triggering useEffect)
-  const clearFocus = useCallback(() => setFocusedTarget(null), [])
-
-  // L1: Navigate to a tab, optionally focusing a specific target row
-  const navigateToTab = useCallback((tab: LogTab, target?: string) => {
-    setActiveTab(tab)
-    setFocusedTarget(target ?? null)
-    setSelectedGroup(null)
-  }, [])
-
-  const activeGroups = useMemo(() => {
-    if (activeTab === "errors") return validationErrorGroups
-    if (activeTab === "warnings") return validationWarningGroups
-    return runtimeAllGroups
-  }, [activeTab, validationErrorGroups, validationWarningGroups, runtimeAllGroups])
-
-  const totalForActiveTab = useMemo(
-    () => activeGroups.reduce((s, g) => s + g.count, 0),
-    [activeGroups],
-  )
-
-  // L3: SourceDetail view replaces the entire dashboard
-  if (selectedGroup) {
+  if (events.length === 0) {
     return (
-      <SourceDetail
-        group={selectedGroup}
-        colorVar={activeTab === "errors" ? "--destructive" : "--warning"}
-        totalCount={totalForActiveTab}
-        onBack={() => setSelectedGroup(null)}
-      />
+      <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+        <PageTitle
+          title="Logs & Events"
+          subtitle="Structured event stream — filter by level, workflow, field or trace id"
+        />
+        <Card>
+          <EmptyState message="No events in this catalog. Run a workflow, then regenerate the docs to load its event log." />
+        </Card>
+      </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Title */}
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">Logs & Events</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Diagnostic overview — validation errors and warnings</p>
-      </div>
-
-      {/* ── Health Summary Strip ──────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3">
-        <HealthCard
-          icon={<AlertCircle className="h-4 w-4" />}
-          label="Errors"
-          value={stats.validation_errors}
-          accent="destructive"
-          sub={validationErrorGroups.length > 0 ? `${validationErrorGroups.length} distinct sources` : "No errors"}
-          topSource={errorTopSource}
-          sparkData={errorSparkData}
-          onClick={() => navigateToTab("errors")}
-        />
-        <HealthCard
-          icon={<AlertTriangle className="h-4 w-4" />}
-          label="Warnings"
-          value={stats.validation_warnings}
-          accent="warning"
-          sub={validationWarningGroups.length > 0 ? `${validationWarningGroups.length} distinct sources` : "No warnings"}
-          topSource={warningTopSource}
-          sparkData={warningSparkData}
-          onClick={() => navigateToTab("warnings")}
-        />
-      </div>
-
-      {/* ── Diagnostic Findings ───────────────────────────────────────── */}
-      <DiagnosticFindings
-        errorGroups={validationErrorGroups}
-        warningGroups={validationWarningGroups}
-        errorTopSource={errorTopSource}
-        warningTopSource={warningTopSource}
-        stats={stats}
-        onNavigate={navigateToTab}
+    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+      <PageTitle
+        title="Logs & Events"
+        subtitle="Structured event stream — filter by level, workflow, field or trace id"
       />
 
-      {/* ── Trend Strip (combined area chart) ─────────────────────────── */}
-      {hasTrend && (
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Issue Trend</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              {(stats.validation_errors + stats.validation_warnings).toLocaleString()} total issues
-            </span>
-          </div>
-          <ChartContainer config={trendChartConfig} className="h-[80px] w-full !aspect-auto">
-            <AreaChart data={trendData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="fillErrors" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-errors)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--color-errors)" stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="fillWarnings" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-warnings)" stopOpacity={0.25} />
-                  <stop offset="100%" stopColor="var(--color-warnings)" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Area
-                dataKey="warnings"
-                type="monotone"
-                fill="url(#fillWarnings)"
-                stroke="var(--color-warnings)"
-                strokeWidth={1.5}
-              />
-              <Area
-                dataKey="errors"
-                type="monotone"
-                fill="url(#fillErrors)"
-                stroke="var(--color-errors)"
-                strokeWidth={1.5}
-              />
-            </AreaChart>
-          </ChartContainer>
-          <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[9px] text-muted-foreground/50">Earlier</span>
-            <span className="text-[9px] text-muted-foreground/50">Now</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Tab Bar ───────────────────────────────────────────────────── */}
-      <div className="flex gap-1">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id
-          const isUrgent = tab.id === "errors" && tab.count > 0
-          return (
-            <button
-              key={tab.id}
-              onClick={() => navigateToTab(tab.id)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                isActive ? "" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-              style={
-                isActive
-                  ? {
-                      backgroundColor: `color-mix(in srgb, ${tab.color} 12%, transparent)`,
-                      color: tab.color,
-                      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${tab.color} 30%, transparent)`,
-                    }
-                  : undefined
-              }
-            >
-              {tab.icon}
-              {tab.label}
-              <span
-                className={`text-[10px] tabular-nums font-semibold rounded-full px-1.5 py-px ${
-                  isActive
-                    ? "opacity-80"
-                    : isUrgent
-                      ? "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))]"
-                      : "opacity-50"
-                }`}
-              >
-                {tab.count.toLocaleString()}
-              </span>
-            </button>
-          )
-        })}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(215px,1fr))] gap-3">
+        <StatCard
+          dot="bg-danger"
+          label="Errors"
+          value={health.errors.toLocaleString()}
+          valueClass="text-danger"
+          note="across loaded logs"
+        />
+        <StatCard
+          dot="bg-warning"
+          label="Warnings"
+          value={health.warnings.toLocaleString()}
+          valueClass="text-warning-t"
+          note="across loaded logs"
+        />
+        <StatCard
+          label="Slowest event"
+          value={slowest ? fmtSeconds(slowest.ms / 1000) : EM_DASH}
+          note={
+            slowest
+              ? String(slowest.event.data.action_name ?? slowest.event.code)
+              : "no timed events in window"
+          }
+          mono
+        />
+        <StatCard
+          label="Top event code"
+          value={groups[0]?.code || EM_DASH}
+          valueClass="text-warning-t"
+          note={
+            groups[0] && rows.length
+              ? `${Math.round((groups[0].count / rows.length) * 100)}% of window`
+              : "no events in window"
+          }
+          mono
+        />
       </div>
 
-      {/* ── Tab Content ───────────────────────────────────────────────── */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        {activeTab === "errors" && (
-          <ValidationBreakdown
-            groups={validationErrorGroups}
-            colorVar="--destructive"
-            seriesKey="errors"
-            chartConfig={errorsChartConfig}
-            emptyLabel="No errors — looking clean"
-            focusedTarget={focusedTarget}
-            onClearFocus={clearFocus}
-            onViewDetail={setSelectedGroup}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Segmented
+          options={[
+            { value: "stream", label: "Stream" },
+            { value: "grouped", label: "Grouped" },
+          ]}
+          value={view}
+          onChange={(v) => setView(v as "stream" | "grouped")}
+        />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search message, action, field or trace id…"
+          className="min-w-[200px] flex-1"
+        />
+        <select
+          value={workflow}
+          onChange={(e) => setWorkflow(e.target.value)}
+          aria-label="Workflow"
+          className="max-w-[180px] cursor-pointer rounded-control border border-border bg-surface px-2.5 py-[7px] font-mono text-[11.5px] text-foreground-2 outline-none"
+        >
+          <option value="all">all workflows</option>
+          {workflows.map((w) => (
+            <option key={w} value={w}>{w}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => setDense((d) => !d)}
+          title="Row density"
+          className="shrink-0 rounded-control border border-border bg-surface px-2.5 py-[7px] text-[11.5px] text-muted-foreground hover:text-foreground"
+        >
+          {dense ? "Compact" : "Comfortable"}
+        </button>
+        <button
+          onClick={() => setDiagnostics((d) => !d)}
+          title="Framework-internal events — the console hides these unless the run is verbose"
+          className={`shrink-0 rounded-control border border-border px-2.5 py-[7px] text-[11.5px] ${
+            diagnostics ? "bg-accent-a12 text-accent-t" : "bg-surface text-muted-foreground"
+          }`}
+        >
+          Diagnostics {diagnostics ? "on" : "off"}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <LevelChip label="All" count={levelCounts.all} active={level === "all"} onClick={() => setLevel("all")} />
+        {LEVELS.map((l) => (
+          <LevelChip
+            key={l}
+            label={l === "warn" ? "Warn" : l.charAt(0).toUpperCase() + l.slice(1)}
+            count={levelCounts[l]}
+            dot={LEVEL_STYLE[l].fill}
+            active={level === l}
+            onClick={() => setLevel((cur) => (cur === l ? "all" : l))}
           />
-        )}
-        {activeTab === "warnings" && (
-          <ValidationBreakdown
-            groups={validationWarningGroups}
-            colorVar="--warning"
-            seriesKey="warnings"
-            chartConfig={warningsChartConfig}
-            emptyLabel="No warnings"
-            focusedTarget={focusedTarget}
-            onClearFocus={clearFocus}
-            onViewDetail={setSelectedGroup}
-          />
-        )}
-        {activeTab === "runtime" && (
-          <ValidationBreakdown
-            groups={runtimeAllGroups}
-            colorVar="--warning"
-            seriesKey="warnings"
-            chartConfig={warningsChartConfig}
-            emptyLabel="No runtime warnings or errors"
-            focusedTarget={focusedTarget}
-            onClearFocus={clearFocus}
-            onViewDetail={setSelectedGroup}
-          />
-        )}
+        ))}
+        <span className="flex-1" />
+        <span className="font-mono text-[11px] text-muted-2">
+          {rows.length.toLocaleString()}/{events.length.toLocaleString()} events
+        </span>
+      </div>
+
+      <Card className="px-3.5 pb-2.5 pt-3">
+        <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
+          <span className="text-xs font-medium text-muted-foreground">Event volume</span>
+          <span className="font-mono text-[10.5px] text-muted-foreground">{histogram.caption}</span>
+          <span className="flex-1" />
+          {range && (
+            <button
+              onClick={() => setRange(null)}
+              className="flex items-center gap-1.5 rounded-control border border-accent-a30 bg-accent-a12 px-2.5 py-1 text-[11px] text-accent-t"
+            >
+              <X className="h-2.5 w-2.5" strokeWidth={2.6} />
+              Clear range
+            </button>
+          )}
+        </div>
+        <div className="flex h-11 items-end gap-0.5 border-b border-border">
+          {histogram.buckets.map((b, i) => (
+            <button
+              key={i}
+              title={b.title}
+              onClick={(e) =>
+                setRange((cur) =>
+                  e.shiftKey && cur
+                    ? [Math.min(cur[0], b.from), Math.max(cur[1], b.to)]
+                    : [b.from, b.to],
+                )
+              }
+              className="flex h-full min-w-0 flex-1 cursor-pointer flex-col-reverse gap-px rounded-t-sm pb-px hover:bg-hover"
+            >
+              {b.segments.map((s) => (
+                <span
+                  key={s.level}
+                  className={`block shrink-0 rounded-[1.5px] ${LEVEL_STYLE[s.level].fill}`}
+                  style={{ height: s.height }}
+                />
+              ))}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1.5 flex justify-between font-mono text-[9.5px] text-muted-2">
+          {histogram.axis.map((label, i) => (
+            <span key={i}>{label}</span>
+          ))}
+        </div>
+      </Card>
+
+      {trace && (
+        <TracePanel
+          invocationId={trace}
+          events={scoped.map((r) => r.event)}
+          onClose={() => setTrace(null)}
+        />
+      )}
+
+      {view === "stream" ? (
+        <Card>
+          <div className="grid grid-cols-[84px_58px_46px_minmax(0,1fr)_58px_18px] gap-2 bg-surface-2 px-3.5 py-2 text-xs font-medium text-muted-foreground">
+            <span>Time</span>
+            <span>Level</span>
+            <span>Code</span>
+            <span>Category</span>
+            <span className="text-right">Duration</span>
+            <span />
+          </div>
+          {rows.map((e) => (
+            <EventRow
+              key={e.id}
+              event={e}
+              dense={dense}
+              open={expandedId === e.id}
+              cursor={cursorId === e.id}
+              copied={copied}
+              onToggle={() => {
+                setCursorId(e.id)
+                setExpandedId((id) => (id === e.id ? null : e.id))
+              }}
+              onFilterField={(k, v) => setSearch(`${k}=${v}`)}
+              onTrace={() => e.invocationId && setTrace(e.invocationId)}
+              onCopy={copy}
+            />
+          ))}
+          {rows.length === 0 && (
+            <EmptyState
+              message="No events match these filters"
+              actionLabel={filtersActive ? "Clear filters" : undefined}
+              onAction={filtersActive ? clearFilters : undefined}
+            />
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <div className="grid grid-cols-[58px_minmax(0,1fr)_78px_46px] gap-2.5 bg-surface-2 px-3.5 py-2 text-xs font-medium text-muted-foreground">
+            <span>Level</span>
+            <span>Event code</span>
+            <span>Share</span>
+            <span className="text-right">Count</span>
+          </div>
+          {groups.map((g) => (
+            <button
+              key={g.code}
+              onClick={() => { setView("stream"); setSearch(g.code) }}
+              title="Show these events in the stream"
+              className="grid w-full grid-cols-[58px_minmax(0,1fr)_78px_46px] items-center gap-2.5 border-t border-border-soft px-3.5 py-2.5 text-left hover:bg-hover"
+            >
+              <LevelTag level={g.level} />
+              <span className="min-w-0">
+                <span className="block truncate font-mono text-[11.5px] text-foreground-2">
+                  {g.code} · {g.eventType}
+                </span>
+                <span className="mt-0.5 flex gap-2.5 font-mono text-[10.5px] text-muted-foreground">
+                  <span className="shrink-0">
+                    {g.workflows} workflow{g.workflows === 1 ? "" : "s"}
+                  </span>
+                  <span className="shrink-0">last {fmtClock(g.last)}</span>
+                </span>
+              </span>
+              <span className="h-[5px] overflow-hidden rounded-pill bg-surface-2">
+                <span
+                  className={`block h-full rounded-pill ${LEVEL_STYLE[g.level].fill}`}
+                  style={{ width: `${rows.length ? (g.count / rows.length) * 100 : 0}%` }}
+                />
+              </span>
+              <span className="text-right font-mono text-xs text-foreground">{g.count.toLocaleString()}</span>
+            </button>
+          ))}
+          {groups.length === 0 && (
+            <EmptyState
+              message="No events match these filters"
+              actionLabel={filtersActive ? "Clear filters" : undefined}
+              onAction={filtersActive ? clearFilters : undefined}
+            />
+          )}
+        </Card>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3.5 text-[10.5px] text-muted-foreground">
+        <span className="flex items-center gap-1"><Kbd>j</Kbd><Kbd>k</Kbd>move</span>
+        <span className="flex items-center gap-1"><Kbd>n</Kbd><Kbd>N</Kbd>next/prev problem</span>
+        <span className="flex items-center gap-1"><Kbd>↵</Kbd>expand</span>
+        <span className="flex items-center gap-1"><Kbd>t</Kbd>trace run</span>
+        <span className="flex items-center gap-1"><Kbd>e</Kbd>errors</span>
+        <span className="flex items-center gap-1"><Kbd>w</Kbd>warnings</span>
+        <span className="flex items-center gap-1"><Kbd>g</Kbd>group</span>
+        <span className="flex items-center gap-1"><Kbd>esc</Kbd>back out</span>
+        <span className="flex items-center gap-1"><Kbd>⌘K</Kbd>jump</span>
       </div>
     </div>
   )
 }
 
-// ─── Health Card ─────────────────────────────────────────────────────────────
+/* ─── Row ───────────────────────────────────────────────────────────────── */
 
-function HealthCard({
-  icon,
-  label,
-  value,
-  accent,
-  sub,
-  topSource,
-  sparkData,
-  onClick,
+function EventRow({
+  event,
+  dense,
+  open,
+  cursor,
+  copied,
+  onToggle,
+  onFilterField,
+  onTrace,
+  onCopy,
 }: {
-  icon: React.ReactNode
-  label: string
-  value: number
-  accent: "destructive" | "warning"
-  sub: string
-  topSource?: TopSource | null
-  sparkData: number[]
-  onClick?: () => void
+  event: LogEvent
+  dense: boolean
+  open: boolean
+  cursor: boolean
+  copied: string | null
+  onToggle: () => void
+  onFilterField: (key: string, value: string) => void
+  onTrace: () => void
+  onCopy: (id: string, text: string) => void
 }) {
-  const accentVar = `var(--${accent})`
-  const color = `hsl(${accentVar})`
-  const hasIssues = value > 0
-  const iconBgMap: Record<string, string> = {
-    destructive: "bg-[hsl(var(--destructive))]/10",
-    warning: "bg-[hsl(var(--warning))]/10",
-  }
-  const iconFgMap: Record<string, string> = {
-    destructive: "text-[hsl(var(--destructive))]",
-    warning: "text-[hsl(var(--warning))]",
-  }
+  const durKey = durationKey(event.data)
+  const tokens = tokenLabel(event.data)
+  const chips = Object.entries(event.data).filter(
+    ([k]) => k !== durKey && !(tokens && (k === "total_tokens" || k === "tokens")),
+  )
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative rounded-lg border border-border bg-card p-4 text-left overflow-hidden cursor-pointer hover:border-foreground/20 hover:shadow-sm transition-all"
-      style={hasIssues ? { borderLeft: `3px solid ${color}` } : undefined}
+    <div
+      data-event-row={event.id}
+      className={`border-t border-border-soft ${cursor ? "bg-accent-a12" : ""}`}
     >
-      {/* Sparkline watermark */}
-      <div className="absolute bottom-0 right-0 w-24 h-10 opacity-[0.12]">
-        <MiniSparkline data={sparkData} color={color} width={96} height={40} />
-      </div>
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`flex items-center justify-center h-7 w-7 rounded-md ${iconBgMap[accent]}`}>
-          <span className={iconFgMap[accent]}>{icon}</span>
-        </div>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
-      </div>
-      <div
-        className="text-2xl font-semibold font-mono tabular-nums"
-        style={hasIssues ? { color } : undefined}
+      <button
+        onClick={onToggle}
+        className={`block w-full px-3.5 text-left hover:bg-hover ${dense ? "py-1.5" : "py-2.5"}`}
       >
-        {value.toLocaleString()}
-      </div>
-      <p className="text-[11px] mt-1 text-muted-foreground">{sub}</p>
-      {topSource && (
-        <p className="text-[10px] mt-0.5 text-muted-foreground truncate">
-          Top: <span className="font-mono font-medium text-foreground">{topSource.target}</span>
-          <span className="tabular-nums ml-1 opacity-60">({topSource.pct}%)</span>
-        </p>
+        <span className="grid grid-cols-[84px_58px_46px_minmax(0,1fr)_58px_18px] items-center gap-2">
+          <span className="font-mono text-[11px] text-muted-foreground">{fmtClockMs(event.timestamp)}</span>
+          <LevelTag level={event.level} />
+          <span className="whitespace-nowrap font-mono text-[10.5px] text-muted-foreground">{event.code}</span>
+          <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{event.category}</span>
+          <span className="text-right font-mono text-[11px] text-muted-foreground">
+            {durationLabel(event.data)}
+          </span>
+          {open ? (
+            <ChevronDown className="h-[13px] w-[13px] text-muted-2" strokeWidth={2.2} />
+          ) : (
+            <ChevronRight className="h-[13px] w-[13px] text-muted-2" strokeWidth={2.2} />
+          )}
+        </span>
+        {/* Real messages run past 400px, so the message gets its own full-width
+            line below a fixed metadata grid. It does not go back in the grid. */}
+        <span
+          title={event.message}
+          className="mt-[3px] block overflow-hidden text-xs leading-[1.45] text-foreground-2 [text-wrap:pretty]"
+          style={{
+            marginLeft: 92,
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: dense ? 1 : 3,
+          }}
+        >
+          {event.message}
+        </span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2.5 py-0.5 pb-3.5 pl-[106px] pr-3.5">
+          {chips.length > 0 && (
+            <>
+              <div className="font-mono text-xs font-medium text-muted-2">data</div>
+              <div className="flex flex-wrap gap-1.5">
+                {chips.map(([k, v]) => (
+                  <button
+                    key={k}
+                    onClick={() => onFilterField(k, chipValue(v))}
+                    title={`Filter stream to ${k}=${chipValue(v)}`}
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-control border border-border bg-well px-2 py-0.5 font-mono text-[10.5px] hover:border-accent-a30 hover:bg-accent-a12"
+                  >
+                    <span className="text-muted-2">{k}</span>
+                    <span className="max-w-[320px] truncate text-foreground-2">{chipValue(v)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="flex flex-wrap items-center gap-4 border-t border-border-soft pt-0.5 font-mono text-[10.5px] text-muted-foreground">
+            <span>event_type <span className="text-foreground-3">{event.eventType}</span></span>
+            <span>category <span className="text-foreground-3">{event.category || EM_DASH}</span></span>
+            <span>workflow_name <span className="text-foreground-3">{event.workflow ?? EM_DASH}</span></span>
+            <span className="flex items-center gap-1.5">
+              invocation_id
+              {event.invocationId ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={onTrace}
+                  onKeyDown={(e) => { if (e.key === "Enter") onTrace() }}
+                  title="Show every event in this run as a waterfall"
+                  className="flex cursor-pointer items-center gap-1 border-b border-dashed border-accent-a30 text-accent-t hover:border-accent-t"
+                >
+                  {event.invocationId}
+                  <ArrowRight className="h-2.5 w-2.5" strokeWidth={2.4} />
+                </span>
+              ) : (
+                <span className="text-foreground-3">{EM_DASH}</span>
+              )}
+            </span>
+            <span>correlation_id <span className="text-foreground-3">{event.correlationId ?? EM_DASH}</span></span>
+            {tokens && <span>tokens <span className="text-foreground-3">{tokens}</span></span>}
+            <span className="flex-1" />
+            <button
+              onClick={() => onCopy(`${event.id}:link`, `${location.origin}${location.pathname}#ev=${encodeURIComponent(event.id)}`)}
+              title="Permalink to this event"
+              className="flex items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-0.5 text-[10.5px] text-foreground-3 hover:border-border-2 hover:text-foreground"
+            >
+              <Link2 className="h-[11px] w-[11px]" strokeWidth={2.2} />
+              {copied === `${event.id}:link` ? "Copied" : "Copy link"}
+            </button>
+            <button
+              onClick={() => onCopy(`${event.id}:json`, JSON.stringify(event, null, 2))}
+              className="flex items-center gap-1.5 rounded-control border border-border bg-surface px-2 py-0.5 text-[10.5px] text-foreground-3 hover:border-border-2 hover:text-foreground"
+            >
+              <Copy className="h-[11px] w-[11px]" strokeWidth={2.2} />
+              {copied === `${event.id}:json` ? "Copied" : "Copy JSON"}
+            </button>
+          </div>
+        </div>
       )}
+    </div>
+  )
+}
+
+function LevelTag({ level }: { level: EventLevel }) {
+  const s = LEVEL_STYLE[level]
+  return (
+    <span className={`rounded-sm py-0.5 text-center font-mono text-[9.5px] font-bold tracking-[0.04em] ${s.bg} ${s.text}`}>
+      {s.label}
+    </span>
+  )
+}
+
+function LevelChip({
+  label,
+  count,
+  dot,
+  active,
+  onClick,
+}: {
+  label: string
+  count: number
+  dot?: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1 text-[11.5px] ${
+        active ? "bg-selected text-foreground" : "bg-surface text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {dot && <span className={`h-1.5 w-1.5 rounded-pill ${dot}`} />}
+      {label}
+      <span className="font-mono text-[10px] opacity-75">{count.toLocaleString()}</span>
     </button>
   )
 }
 
-// ─── Diagnostic Findings ─────────────────────────────────────────────────────
-
-function DiagnosticFindings({
-  errorGroups,
-  warningGroups,
-  errorTopSource,
-  warningTopSource,
-  stats,
-  onNavigate,
+function StatCard({
+  dot,
+  label,
+  value,
+  valueClass = "text-foreground",
+  note,
+  mono = false,
 }: {
-  errorGroups: ValidationGroup[]
-  warningGroups: ValidationGroup[]
-  errorTopSource: TopSource | null
-  warningTopSource: TopSource | null
-  stats: { validation_errors: number; validation_warnings: number }
-  onNavigate: (tab: LogTab, target?: string) => void
+  dot?: string
+  label: string
+  value: string
+  valueClass?: string
+  note: string
+  mono?: boolean
 }) {
-  const findings: { icon: React.ReactNode; text: string; severity: "destructive" | "warning" | "success"; onClick?: () => void }[] = []
-
-  // Error findings
-  if (stats.validation_errors > 0 && errorTopSource) {
-    const sourceText = errorGroups.length === 1
-      ? `1 error source: ${errorTopSource.target}`
-      : `${errorGroups.length} error sources \u00b7 top: ${errorTopSource.target} (${errorTopSource.pct}%)`
-    findings.push({
-      icon: <AlertCircle className="h-3 w-3" />,
-      text: sourceText,
-      severity: "destructive",
-      onClick: () => onNavigate("errors", errorTopSource.target),
-    })
-  } else if (stats.validation_errors === 0) {
-    findings.push({
-      icon: <TrendingDown className="h-3 w-3" />,
-      text: "No validation errors",
-      severity: "success",
-    })
-  }
-
-  // Warning concentration finding
-  if (warningTopSource && warningTopSource.pct >= 80) {
-    findings.push({
-      icon: <Flame className="h-3 w-3" />,
-      text: `Warning hotspot \u00b7 ${warningTopSource.target} accounts for ${warningTopSource.pct}%`,
-      severity: "warning",
-      onClick: () => onNavigate("warnings", warningTopSource.target),
-    })
-  } else if (stats.validation_warnings > 0 && warningTopSource) {
-    findings.push({
-      icon: <AlertTriangle className="h-3 w-3" />,
-      text: `${warningGroups.length} warning sources \u00b7 ${stats.validation_warnings.toLocaleString()} total`,
-      severity: "warning",
-      onClick: () => onNavigate("warnings", warningTopSource.target),
-    })
-  }
-
-  if (findings.length === 0) return null
-
-  const severityColor: Record<string, string> = {
-    destructive: "hsl(var(--destructive))",
-    warning: "hsl(var(--warning))",
-    success: "hsl(var(--success))",
-  }
-
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {findings.map((f, i) => (
-        <button
-          type="button"
-          key={i}
-          onClick={f.onClick}
-          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${f.onClick ? "cursor-pointer hover:opacity-80" : ""}`}
-          style={{
-            backgroundColor: `color-mix(in srgb, ${severityColor[f.severity]} 8%, transparent)`,
-            color: severityColor[f.severity],
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${severityColor[f.severity]} 15%, transparent)`,
-          }}
-        >
-          {f.icon}
-          <span>{f.text}</span>
-        </button>
-      ))}
+    <div className="rounded-card border border-border bg-surface px-4 py-3.5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {dot && <span className={`h-1.5 w-1.5 rounded-pill ${dot}`} />}
+        {label}
+      </div>
+      <div className={`mt-1.5 font-mono text-[26px] font-semibold leading-tight ${valueClass}`}>{value}</div>
+      <div
+        className={`mt-0.5 break-words text-[11px] leading-[1.45] text-muted-foreground ${mono ? "font-mono" : ""}`}
+      >
+        {note}
+      </div>
     </div>
   )
 }
 
-// ─── Sortable Header ─────────────────────────────────────────────────────────
+/* ─── Run trace waterfall ───────────────────────────────────────────────── */
 
-function SortableHeader<K extends string>({
-  label,
-  sortKey,
-  current,
-  onSort,
-  align = "left",
+/**
+ * An event's timestamp is its *emit* time, so a class that reports work done
+ * spans [timestamp − duration, timestamp]. Everything else is an instant marker.
+ */
+function TracePanel({
+  invocationId,
+  events,
+  onClose,
 }: {
-  label: string
-  sortKey: K
-  current: SortState<K>
-  onSort: (key: K) => void
-  align?: "left" | "center"
+  invocationId: string
+  events: LogEvent[]
+  onClose: () => void
 }) {
-  const active = current.key === sortKey
-  return (
-    <th className={`text-${align} cursor-pointer select-none hover:text-foreground transition-colors`} onClick={() => onSort(sortKey)}>
-      <span className="inline-flex items-center gap-1">
-        {label}
-        <ArrowUpDown className={`h-3 w-3 ${active ? "opacity-80" : "opacity-30"}`} />
-      </span>
-    </th>
-  )
-}
-
-// ─── Validation Breakdown (enhanced — shared for Errors & Warnings) ─────────
-
-type VGSortKey = "count" | "target"
-
-function ValidationBreakdown({
-  groups,
-  colorVar,
-  seriesKey,
-  chartConfig,
-  emptyLabel,
-  focusedTarget,
-  onClearFocus,
-  onViewDetail,
-}: {
-  groups: ValidationGroup[]
-  colorVar: string
-  seriesKey: string
-  chartConfig: ChartConfig
-  emptyLabel: string
-  focusedTarget?: string | null
-  onClearFocus?: () => void
-  onViewDetail?: (group: ValidationGroup) => void
-}) {
-  const [sort, setSort] = useState<SortState<VGSortKey>>({ key: "count", dir: "desc" })
-  const [expandedTarget, setExpandedTarget] = useState<string | null>(null)
-  const tableRef = useRef<HTMLTableElement>(null)
-
-  // Apply focusedTarget from parent (L1 drill-down) — auto-expand the target row
-  useEffect(() => {
-    if (focusedTarget) {
-      setExpandedTarget(focusedTarget)
-      // Scroll first, then clear focus — avoids parent re-render racing with RAF
-      requestAnimationFrame(() => {
-        const row = tableRef.current?.querySelector(`[data-target="${CSS.escape(focusedTarget)}"]`)
-        row?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-        onClearFocus?.()
+  const spans = useMemo(() => {
+    const inRun = events
+      .filter((e) => e.invocationId === invocationId)
+      .map((e) => {
+        const end = Date.parse(e.timestamp)
+        const ms = durationMs(e.data)
+        return { event: e, start: end - ms, end, ms }
       })
-    }
-  }, [focusedTarget, onClearFocus])
+      .filter((s) => !isNaN(s.end))
+      .sort((a, b) => a.start - b.start)
+    if (inRun.length === 0) return null
+    const t0 = Math.min(...inRun.map((s) => s.start))
+    const t1 = Math.max(...inRun.map((s) => s.end))
+    const span = Math.max(1, t1 - t0)
+    return { rows: inRun, t0, t1, span }
+  }, [events, invocationId])
 
-  const toggleSort = useCallback(
-    (key: VGSortKey) => {
-      setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }))
-    },
-    [],
-  )
-
-  const sorted = useMemo(() => {
-    const arr = [...groups]
-    const dir = sort.dir === "asc" ? 1 : -1
-    if (sort.key === "count") {
-      arr.sort((a, b) => dir * (a.count - b.count))
-    } else {
-      arr.sort((a, b) => dir * a.target.localeCompare(b.target))
-    }
-    return arr
-  }, [groups, sort])
-
-  const totalCount = groups.reduce((s, g) => s + g.count, 0)
-  const color = `hsl(var(${colorVar}))`
-
-  const breakdownData = useMemo(() => buildSingleSeriesData(groups, seriesKey), [groups, seriesKey])
-  const hasBreakdownChart = breakdownData.length > 0
-
-  const gradientId = `fill-${seriesKey}`
-
-  // Detect hotspot: top source accounting for > 60%
-  const hotspot = useMemo(() => {
-    if (groups.length < 2) return null
-    const top = [...groups].sort((a, b) => b.count - a.count)[0]
-    const pct = totalCount > 0 ? Math.round((top.count / totalCount) * 100) : 0
-    if (pct < 60) return null
-    return { target: top.target, count: top.count, distinctCount: top.distinctCount, pct }
-  }, [groups, totalCount])
-
-  if (groups.length === 0) {
+  if (!spans) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <div className="text-sm">{emptyLabel}</div>
-      </div>
+      <Card accent>
+        <div className="flex items-center gap-3 bg-surface-2 px-3.5 py-2.5">
+          <span className="text-xs font-medium text-muted-foreground">Run trace</span>
+          <span className="font-mono text-xs text-accent-t">{invocationId}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            no events for this run in the loaded window
+          </span>
+          <span className="flex-1" />
+          <CloseTrace onClose={onClose} />
+        </div>
+      </Card>
     )
   }
 
-  return (
-    <div className="flex flex-col">
-      {/* Hotspot callout */}
-      {hotspot && (
-        <button
-          type="button"
-          onClick={() => setExpandedTarget(hotspot.target)}
-          className="mx-3 mt-3 rounded-md px-3 py-2.5 flex items-center gap-3 text-left cursor-pointer hover:opacity-90 transition-opacity"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${color} 6%, transparent)`,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 15%, transparent)`,
-          }}
-        >
-          <div
-            className="flex items-center justify-center h-6 w-6 rounded shrink-0"
-            style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)` }}
-          >
-            <Target className="h-3.5 w-3.5" style={{ color }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color }}>Hotspot</span>
-              <span className="text-xs font-mono font-medium text-foreground truncate">{hotspot.target}</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Accounts for <span className="font-semibold tabular-nums" style={{ color }}>{hotspot.pct}%</span> of all {seriesKey} ({hotspot.count.toLocaleString()} of {totalCount.toLocaleString()})
-              {hotspot.distinctCount > 1 && <span> {"\u00b7"} {hotspot.distinctCount} distinct messages</span>}
-            </p>
-          </div>
-        </button>
-      )}
-
-      {/* Breakdown area chart */}
-      {hasBreakdownChart && (
-        <div className="px-4 py-3 border-b border-border">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-muted-foreground">Distribution over time</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              {totalCount.toLocaleString()} total
-            </span>
-          </div>
-          <ChartContainer config={chartConfig} className="h-[52px] w-full !aspect-auto">
-            <AreaChart data={breakdownData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={`var(--color-${seriesKey})`} stopOpacity={0.3} />
-                  <stop offset="100%" stopColor={`var(--color-${seriesKey})`} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Area
-                dataKey={seriesKey}
-                type="monotone"
-                fill={`url(#${gradientId})`}
-                stroke={`var(--color-${seriesKey})`}
-                strokeWidth={1.5}
-              />
-            </AreaChart>
-          </ChartContainer>
-        </div>
-      )}
-
-      {/* Table */}
-      <table ref={tableRef} className="w-full dense-table">
-        <thead>
-          <tr>
-            <SortableHeader label="Count" sortKey="count" current={sort} onSort={toggleSort} align="center" />
-            <th className="text-left w-28">Proportion</th>
-            <SortableHeader label="Target" sortKey="target" current={sort} onSort={toggleSort} />
-            <th className="text-left">Sample</th>
-            <th className="text-center w-10"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((g) => {
-            const isExpanded = expandedTarget === g.target
-            return (
-              <ValidationGroupRow
-                key={g.target}
-                group={g}
-                color={color}
-                colorVar={colorVar}
-                totalCount={totalCount}
-                isExpanded={isExpanded}
-                onToggle={() => setExpandedTarget(isExpanded ? null : g.target)}
-                onViewDetail={onViewDetail}
-              />
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-// ─── Validation Group Row ────────────────────────────────────────────────────
-
-function ValidationGroupRow({
-  group,
-  color,
-  colorVar,
-  totalCount,
-  isExpanded,
-  onToggle,
-  onViewDetail,
-}: {
-  group: ValidationGroup
-  color: string
-  colorVar: string
-  totalCount: number
-  isExpanded: boolean
-  onToggle: () => void
-  onViewDetail?: (group: ValidationGroup) => void
-}) {
-  const sparkData = useMemo(() => buildSparkData(group.timestamps), [group.timestamps])
-  const hasSparkData = sparkData.some((v) => v > 0)
-  const proportion = totalCount > 0 ? (group.count / totalCount) * 100 : 0
-  const isDominant = proportion >= 60
-  const rate = useMemo(() => computeRate(group.timestamps), [group.timestamps])
-  const durationDays = useMemo(() => computeDurationDays(group.timestamps), [group.timestamps])
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle() }
-  }, [onToggle])
+  const { rows, t0, span } = spans
+  const errors = rows.filter((s) => s.event.level === "error").length
+  // A trace often spans milliseconds, so the axis takes the same resolution as
+  // the duration column rather than rounding every tick to 0.0s.
+  const ticks = Array.from({ length: 5 }, (_, i) => ({
+    left: `${(i / 4) * 100}%`,
+    label: fmtSeconds((span * i) / 4 / 1000),
+  }))
 
   return (
-    <>
-      <tr data-target={group.target} className="hover:bg-accent/30 transition-colors cursor-pointer" tabIndex={0} onClick={onToggle} onKeyDown={handleKeyDown}>
-        <td className="text-center w-20">
-          <span
-            className="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold tabular-nums min-w-[2.5rem]"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${color} ${isDominant ? 18 : 12}%, transparent)`,
-              color,
-            }}
-          >
-            {group.count.toLocaleString()}
+    <Card accent>
+      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-2 px-3.5 py-2.5">
+        <span className="text-xs font-medium text-muted-foreground">Run trace</span>
+        <span className="font-mono text-xs text-accent-t">{invocationId}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {rows[0].event.workflow ?? "unscoped"} · {rows.length} events · {fmtSeconds(span / 1000)}
+        </span>
+        {errors > 0 && (
+          <span className="rounded-sm bg-danger-a12 px-1.5 py-0.5 font-mono text-[10px] font-bold text-danger-t">
+            {errors} ERROR
           </span>
-        </td>
-        <td className="w-28">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+        )}
+        <span className="flex-1" />
+        <CloseTrace onClose={onClose} />
+      </div>
+      <div className="px-3.5 pb-3.5 pt-2.5">
+        <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_62px] gap-2.5 pb-1.5">
+          <span />
+          <div className="relative h-3.5">
+            {ticks.map((t, i) => (
+              <span
+                key={i}
+                className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[9.5px] text-muted-2"
+                style={{ left: t.left }}
+              >
+                {t.label}
+              </span>
+            ))}
+          </div>
+          <span />
+        </div>
+        {rows.map((s) => (
+          <div
+            key={s.event.id}
+            className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_62px] items-center gap-2.5 border-t border-border-soft py-1"
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={`shrink-0 rounded-[3px] px-1 py-px font-mono text-[9px] font-bold ${
+                  LEVEL_STYLE[s.event.level].bg
+                } ${LEVEL_STYLE[s.event.level].text}`}
+              >
+                {s.event.code}
+              </span>
+              <span className="truncate font-mono text-[11px] text-foreground-2">
+                {String(s.event.data.action_name ?? s.event.eventType)}
+              </span>
+            </span>
+            <div className="relative h-4 rounded-[3px] bg-well">
               <div
-                className="h-full rounded-full transition-all duration-500"
+                title={`+${fmtSeconds((s.start - t0) / 1000)} · ${s.ms ? fmtSeconds(s.ms / 1000) : "instant"}`}
+                className={`absolute bottom-[3px] top-[3px] rounded-sm ${LEVEL_STYLE[s.event.level].fill}`}
                 style={{
-                  width: `${proportion}%`,
-                  backgroundColor: color,
-                  opacity: isDominant ? 1 : 0.7,
+                  left: `${((s.start - t0) / span) * 100}%`,
+                  width: `${Math.max(0.8, (s.ms / span) * 100)}%`,
                 }}
               />
             </div>
-            <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 w-7 text-right">
-              {Math.round(proportion)}%
+            <span className="text-right font-mono text-[10.5px] text-muted-foreground">
+              {s.ms ? fmtSeconds(s.ms / 1000) : EM_DASH}
             </span>
           </div>
-        </td>
-        <td>
-          <span className="font-mono font-medium text-[11px] text-foreground">
-            {group.target}
-          </span>
-        </td>
-        <td className="text-muted-foreground max-w-[350px]">
-          {group.sample ? (
-            <span className="line-clamp-1">{group.sample}</span>
-          ) : (
-            <span className="italic text-muted-foreground/40">No message captured</span>
-          )}
-        </td>
-        <td className="text-center w-10">
-          {isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 mx-auto" />
-          )}
-        </td>
-      </tr>
-
-      {/* Expanded detail panel */}
-      {isExpanded && (
-        <tr>
-          <td colSpan={5} className="!p-0">
-            <div
-              className="border-t border-border px-4 py-3 space-y-2.5"
-              style={{
-                backgroundColor: `color-mix(in srgb, ${color} 3%, transparent)`,
-                borderLeft: `3px solid ${color}`,
-              }}
-            >
-              {/* Stats row */}
-              <div className="flex items-center gap-4 text-[11px] flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Occurrences:</span>
-                  <span className="font-semibold tabular-nums" style={{ color }}>{group.count.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Share:</span>
-                  <span className="font-semibold tabular-nums">{Math.round((group.count / totalCount) * 100)}%</span>
-                </div>
-                {group.distinctCount > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Distinct messages:</span>
-                    <span className="font-semibold tabular-nums">{group.distinctCount}</span>
-                  </div>
-                )}
-                {rate != null && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Rate:</span>
-                    <span className="font-semibold tabular-nums">~{rate}/hr</span>
-                  </div>
-                )}
-                {durationDays != null && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Active:</span>
-                    <span className="font-semibold tabular-nums">{durationDays}d</span>
-                  </div>
-                )}
-                {hasSparkData && (
-                  <div className="flex items-center gap-1.5 ml-auto">
-                    <span className="text-muted-foreground text-[10px]">Distribution:</span>
-                    <MiniSparkline data={sparkData} color={color} width={80} height={16} />
-                  </div>
-                )}
-              </div>
-
-              {/* Sample message block */}
-              {group.sample && (
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Sample message</div>
-                  <div
-                    className="rounded-md px-3 py-2 text-[11px] font-mono leading-relaxed border"
-                    style={{
-                      backgroundColor: `color-mix(in srgb, ${color} 4%, hsl(var(--card)))`,
-                      borderColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-                    }}
-                  >
-                    <span className="text-foreground">{group.sample}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* View all messages link (L2 → L3) */}
-              {onViewDetail && group.messages.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onViewDetail(group) }}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium hover:underline transition-colors"
-                  style={{ color }}
-                >
-                  View all {group.messages.length} messages &rarr;
-                </button>
-              )}
-
-              {/* Temporal info */}
-              {group.timestamps.length > 0 && (
-                <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-                  <span>First seen: {formatTimestampFull(group.timestamps[0])}</span>
-                  {group.timestamps.length > 1 && (
-                    <span>Last seen: {formatTimestampFull(group.timestamps[group.timestamps.length - 1])}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+        ))}
+      </div>
+    </Card>
   )
 }
 
-// ─── Source Detail (L3 — full message list) ─────────────────────────────────
-
-type MsgSortKey = "count" | "message"
-
-function SourceDetail({
-  group,
-  colorVar,
-  totalCount,
-  onBack,
-}: {
-  group: ValidationGroup
-  colorVar: string
-  totalCount: number
-  onBack: () => void
-}) {
-  const [sort, setSort] = useState<SortState<MsgSortKey>>({ key: "count", dir: "desc" })
-  const color = `hsl(var(${colorVar}))`
-
-  const toggleSort = useCallback(
-    (key: MsgSortKey) => {
-      setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }))
-    },
-    [],
-  )
-
-  const sortedMessages = useMemo(() => {
-    const arr = [...group.messages]
-    const dir = sort.dir === "asc" ? 1 : -1
-    if (sort.key === "count") {
-      arr.sort((a, b) => dir * (a.count - b.count))
-    } else {
-      arr.sort((a, b) => dir * a.text.localeCompare(b.text))
-    }
-    return arr
-  }, [group.messages, sort])
-
-  const sparkData = buildSparkData(group.timestamps, 12)
-  const proportion = totalCount > 0 ? Math.round((group.count / totalCount) * 100) : 0
-  const rate = computeRate(group.timestamps)
-  const durationDays = computeDurationDays(group.timestamps)
-
+function CloseTrace({ onClose }: { onClose: () => void }) {
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-mono font-semibold text-foreground truncate">{group.target}</h1>
-            <span
-              className="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold tabular-nums"
-              style={{
-                backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-                color,
-              }}
-            >
-              {group.count.toLocaleString()}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {group.messages.length} distinct message{group.messages.length !== 1 ? "s" : ""} &middot; {proportion}% of total
-          </p>
-        </div>
-      </div>
-
-      {/* Stats strip */}
-      <div className="rounded-lg border border-border bg-card p-3">
-        <div className="flex items-center gap-5 text-[11px] flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Occurrences:</span>
-            <span className="font-semibold tabular-nums" style={{ color }}>{group.count.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Share:</span>
-            <span className="font-semibold tabular-nums">{proportion}%</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Distinct messages:</span>
-            <span className="font-semibold tabular-nums">{group.messages.length}</span>
-          </div>
-          {rate && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Rate:</span>
-              <span className="font-semibold tabular-nums">~{rate}/hr</span>
-            </div>
-          )}
-          {durationDays && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Active:</span>
-              <span className="font-semibold tabular-nums">{durationDays}d</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 ml-auto">
-            <span className="text-muted-foreground text-[10px]">Distribution:</span>
-            <MiniSparkline data={sparkData} color={color} width={200} height={28} />
-          </div>
-        </div>
-      </div>
-
-      {/* Messages table */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <table className="w-full dense-table">
-          <thead>
-            <tr>
-              <SortableHeader label="Message" sortKey="message" current={sort} onSort={toggleSort} />
-              <SortableHeader label="Count" sortKey="count" current={sort} onSort={toggleSort} align="center" />
-              <th className="text-left">First Seen</th>
-              <th className="text-left">Last Seen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedMessages.map((msg) => (
-              <tr key={msg.text} className="hover:bg-accent/30 transition-colors">
-                <td className="max-w-[500px]">
-                  <span className="font-mono text-[11px] text-foreground break-words">{msg.text}</span>
-                </td>
-                <td className="text-center w-20">
-                  <span
-                    className="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold tabular-nums min-w-[2.5rem]"
-                    style={{
-                      backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
-                      color,
-                    }}
-                  >
-                    {msg.count.toLocaleString()}
-                  </span>
-                </td>
-                <td className="text-[11px] text-muted-foreground whitespace-nowrap">
-                  {msg.firstSeen ? formatTimestampFull(msg.firstSeen) : "\u2014"}
-                </td>
-                <td className="text-[11px] text-muted-foreground whitespace-nowrap">
-                  {msg.lastSeen ? formatTimestampFull(msg.lastSeen) : "\u2014"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Temporal footer */}
-      {group.timestamps.length > 0 && (
-        <div className="flex items-center gap-4 text-[10px] text-muted-foreground px-1">
-          <span>Overall first seen: {formatTimestampFull(group.timestamps[0])}</span>
-          {group.timestamps.length > 1 && (
-            <span>Overall last seen: {formatTimestampFull(group.timestamps[group.timestamps.length - 1])}</span>
-          )}
-        </div>
-      )}
-    </div>
+    <button
+      onClick={onClose}
+      className="flex items-center gap-1.5 rounded-control border border-border bg-surface px-2.5 py-1 text-[11.5px] text-foreground-2 hover:bg-hover"
+    >
+      <X className="h-[11px] w-[11px]" strokeWidth={2.4} />
+      Close trace
+    </button>
   )
+}
+
+/* ─── Histogram ─────────────────────────────────────────────────────────── */
+
+interface Bucket {
+  from: number
+  to: number
+  title: string
+  segments: { level: EventLevel; height: string }[]
+}
+
+function useHistogram(scoped: { event: LogEvent; time: number }[]) {
+  return useMemo(() => {
+    const times = scoped.map((r) => r.time).filter((t) => !isNaN(t))
+    if (times.length === 0) {
+      return { buckets: [] as Bucket[], axis: [] as string[], caption: "no events in window" }
+    }
+    const min = Math.min(...times)
+    const max = Math.max(...times)
+    const span = Math.max(1, max - min)
+    const width = span / HISTOGRAM_BUCKETS
+
+    const counts: Record<EventLevel, number>[] = Array.from({ length: HISTOGRAM_BUCKETS }, () => ({
+      error: 0, warn: 0, info: 0, debug: 0,
+    }))
+    for (const { event, time } of scoped) {
+      if (isNaN(time)) continue
+      const idx = Math.min(HISTOGRAM_BUCKETS - 1, Math.floor((time - min) / width))
+      counts[idx][event.level]++
+    }
+    const peak = Math.max(1, ...counts.map((c) => c.error + c.warn + c.info + c.debug))
+
+    const buckets: Bucket[] = counts.map((c, i) => {
+      const from = min + i * width
+      const to = from + width
+      const total = c.error + c.warn + c.info + c.debug
+      return {
+        from,
+        to,
+        title: `${new Date(from).toTimeString().slice(0, 8)} — ${total} event${total === 1 ? "" : "s"}`,
+        segments: LEVELS.filter((l) => c[l] > 0).map((l) => ({
+          level: l,
+          height: `${(c[l] / peak) * 100}%`,
+        })),
+      }
+    })
+
+    const axis = [0, 1, 2, 3].map((i) =>
+      new Date(min + (span * i) / 3).toTimeString().slice(0, 8),
+    )
+    return {
+      buckets,
+      axis,
+      caption: `${fmtSeconds(span / 1000)} · ${scoped.length.toLocaleString()} events`,
+    }
+  }, [scoped])
 }

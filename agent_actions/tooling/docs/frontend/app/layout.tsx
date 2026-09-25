@@ -1,17 +1,21 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
-import { Sora, JetBrains_Mono } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import { CatalogProvider } from "@/lib/catalog-context"
 import { ThemeProvider } from "@/components/theme-provider"
 
 import './globals.css'
 
-const sora = Sora({
+const geist = Geist({
   subsets: ['latin'],
-  variable: '--font-sora',
+  variable: '--font-geist',
   weight: ['400', '500', '600', '700'],
 })
-const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono' })
+const geistMono = Geist_Mono({
+  subsets: ['latin'],
+  variable: '--font-geist-mono',
+  weight: ['400', '500', '600', '700'],
+})
 
 export const metadata: Metadata = {
   title: 'Agent Actions Docs',
@@ -23,8 +27,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f7f8fa' },
-    { media: '(prefers-color-scheme: dark)', color: '#111520' },
+    { media: '(prefers-color-scheme: light)', color: '#F7F7F8' },
+    { media: '(prefers-color-scheme: dark)', color: '#09090B' },
   ],
 }
 
@@ -35,12 +39,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${sora.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
-          disableTransitionOnChange={false}
+          disableTransitionOnChange
         >
           <CatalogProvider>{children}</CatalogProvider>
         </ThemeProvider>

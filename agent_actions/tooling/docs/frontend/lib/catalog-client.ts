@@ -22,6 +22,7 @@ export interface RawCatalogJson {
     validation_warnings: RawValidationEntry[]
     runtime_warnings?: RawValidationEntry[]
     runtime_errors?: RawValidationEntry[]
+    events?: RawLogEvent[]
   }
   stats: {
     total_workflows: number
@@ -36,7 +37,29 @@ export interface RawCatalogJson {
     validation_warnings: number
     runtime_errors?: number
     runtime_warnings?: number
+    total_events?: number
   }
+}
+
+/** A `BaseEvent.to_dict()` row from agent_io logs, as the generator embeds it. */
+export interface RawLogEvent {
+  id?: string
+  seq?: number
+  event_type?: string
+  code?: string
+  level?: string
+  category?: string
+  message?: string
+  diagnostic?: boolean
+  meta?: {
+    timestamp?: string
+    invocation_id?: string | null
+    correlation_id?: string | null
+    workflow_name?: string | null
+    action_name?: string | null
+    [key: string]: unknown
+  }
+  data?: Record<string, unknown>
 }
 
 export interface RawWorkflow {

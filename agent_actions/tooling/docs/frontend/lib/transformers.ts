@@ -9,6 +9,7 @@ import type {
   RawValidationEntry,
   RawExecution,
   RawWorkflowData,
+  RawLogEvent,
 } from "./catalog-client"
 import type {
   Stats,
@@ -24,6 +25,8 @@ import type {
   ValidationGroup,
   DataNode,
   WorkflowDataSummary,
+  EventLevel,
+  LogEvent,
 } from "./mock-data"
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
@@ -98,9 +101,6 @@ function buildActionMetrics(raw?: RawAction["metrics"]): ActionMetrics {
 
 export function transformActions(catalog: RawCatalogJson): Record<string, Action> {
   const result: Record<string, Action> = {}
-
-  // Track seen action names to detect collisions across workflows
-  const seen = new Map<string, string>() // actionName → workflowId
 
   for (const [wfId, wf] of Object.entries(catalog.workflows)) {
     for (const [actionName, rawAction] of Object.entries(wf.actions)) {
@@ -387,6 +387,45 @@ export function transformWorkflowData(catalog: RawCatalogJson): WorkflowDataSumm
   )
 }
 
+// ─── Event stream ────────────────────────────────────────────────────────────
+
+const EVENT_LEVELS: EventLevel[] = ["error", "warn", "info", "debug"]
+
+function normalizeLevel(raw: string | undefined): EventLevel {
+  const level = (raw ?? "").toLowerCase()
+  if (level === "warning") return "warn"
+  return (EVENT_LEVELS as string[]).includes(level) ? (level as EventLevel) : "info"
+}
+
+/** Absent and empty read the same to a reader; both mean "not recorded". */
+function orNull(value: string | null | undefined): string | null {
+  return value ? value : null
+}
+
+export function transformLogEvents(catalog: RawCatalogJson): LogEvent[] {
+  return (catalog.logs?.events ?? []).map((raw: RawLogEvent, i: number) => {
+    const meta = raw.meta ?? {}
+    return {
+      id: raw.id ?? `${raw.seq ?? i}`,
+      seq: raw.seq ?? i,
+      eventType: raw.event_type ?? "Event",
+      code: raw.code ?? "",
+      level: normalizeLevel(raw.level),
+      category: raw.category ?? "",
+      message: raw.message ?? "",
+      diagnostic: raw.diagnostic === true,
+      timestamp: meta.timestamp ?? "",
+      actionName:
+        orNull(typeof raw.data?.action_name === "string" ? raw.data.action_name : null) ??
+        orNull(meta.action_name),
+      invocationId: orNull(meta.invocation_id),
+      correlationId: orNull(meta.correlation_id),
+      workflow: orNull(meta.workflow_name),
+      data: raw.data ?? {},
+    }
+  })
+}
+
 // ─── All-in-one ──────────────────────────────────────────────────────────────
 
 export interface CatalogData {
@@ -402,6 +441,7 @@ export interface CatalogData {
   runtimeErrorGroups: ValidationGroup[]
   runtimeWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
+  logEvents: LogEvent[]
   generatedAt: string
   projectName: string | null
 }
@@ -447,6 +487,7 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     runtimeErrorGroups: groupValidationEntries(allRuntimeErrors),
     runtimeWarningGroups: groupValidationEntries(catalog.logs?.runtime_warnings ?? []),
     workflowData: transformWorkflowData(catalog),
+    logEvents: transformLogEvents(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
     projectName: catalog.metadata?.project_name ?? null,
   }

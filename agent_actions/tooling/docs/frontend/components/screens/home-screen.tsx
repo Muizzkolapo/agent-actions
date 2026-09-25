@@ -1,403 +1,236 @@
 "use client"
 
-import React from "react"
-
-import { Play, AlertTriangle, Clock, ArrowRight, CheckCircle2, Circle, GitBranch, Boxes, Activity, ShieldCheck } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { useMemo } from "react"
 import { useCatalogData } from "@/lib/catalog-context"
+import { deriveHealth } from "@/lib/health"
+import { EM_DASH, fmtDuration, pct, plural } from "@/lib/format"
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  PageTitle,
+  StatusBadge,
+  ViewAllButton,
+  type Tone,
+} from "@/components/graphite"
+import type { LogsIntent } from "@/components/screens/logs-screen"
+import type { Run } from "@/lib/mock-data"
 
 interface HomeScreenProps {
   onNavigate: (section: string) => void
+  onOpenLogs: (intent: LogsIntent) => void
 }
 
-export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { stats, workflows, runs, validationErrorGroups, validationWarningGroups } = useCatalogData()
-  const successRuns = runs.filter((r) => r.status === "SUCCESS").length
-  const failedRuns = runs.filter((r) => r.status === "FAILED").length
+export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
+  const data = useCatalogData()
+  const { stats, workflows, runs } = data
+  const health = useMemo(() => deriveHealth(data), [data])
+
   const runningWfs = workflows.filter((w) => w.manifestStatus === "running").length
-  const successRate = runs.length > 0 ? Math.round((successRuns / runs.length) * 100) : 0
-  const totalIssues = stats.validation_errors + stats.validation_warnings
+  const inFlight = runs.filter((r) => r.status === "running").length
+  const passedRuns = runs.filter((r) => r.status === "SUCCESS").length
+
+  // A partial rate reads as a verdict, so an in-flight run withholds the number.
+  const passRate =
+    inFlight > 0 || runs.length === 0
+      ? EM_DASH
+      : `${Math.round((passedRuns / runs.length) * 100)}%`
+  const passRateSub =
+    inFlight > 0
+      ? `Run in progress · ${passedRuns} passed so far`
+      : runs.length === 0
+        ? "No runs recorded"
+        : `${passedRuns} of ${runs.length} passed`
+
+  const recentRuns = useMemo(
+    () => [...runs].sort((a, b) => (a.started < b.started ? 1 : -1)).slice(0, 6),
+    [runs],
+  )
+
+  const healthItems = useMemo(
+    () =>
+      [
+        ...health.errorGroups.map((g) => ({ ...g, tone: "failed" as Tone })),
+        ...health.warningGroups.map((g) => ({ ...g, tone: "warning" as Tone })),
+      ]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6),
+    [health],
+  )
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ── Dashboard Stats ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
+    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+      <PageTitle title="Home" />
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
+        <StatTile
           label="Workflows"
-          value={stats.total_workflows}
-          accent="primary"
-          sub={runningWfs > 0 ? `${runningWfs} active` : "All idle"}
-          subColor={runningWfs > 0 ? "text-[hsl(var(--primary))]" : undefined}
-          sparkData={[3, 5, 4, 7, 6, 8, stats.total_workflows]}
+          value={stats.total_workflows.toLocaleString()}
+          badges={runningWfs > 0 ? [{ tone: "running", label: `${runningWfs} running` }] : []}
           onClick={() => onNavigate("workflows")}
-          delay={0}
         />
-        <StatCard
+        <StatTile
           label="Actions"
-          value={stats.total_actions}
-          accent="primary"
-          sub={`${stats.llm_actions} LLM \u00b7 ${stats.tool_actions} tool`}
-          sparkData={[2, 4, 3, 5, 6, 5, stats.total_actions]}
+          value={stats.total_actions.toLocaleString()}
+          sub={`${stats.llm_actions} LLM · ${stats.tool_actions} tool`}
           onClick={() => onNavigate("actions")}
-          delay={60}
         />
-        <StatCard
-          label="Runs"
-          value={runs.length}
-          accent={successRate >= 80 ? "success" : successRate >= 50 ? "warning" : "destructive"}
-          sub={`${successRate}% pass rate`}
-          subColor={successRate >= 80 ? "text-[hsl(var(--success))]" : successRate >= 50 ? "text-[hsl(var(--warning))]" : "text-[hsl(var(--destructive))]"}
-          sparkData={[1, 3, 2, 5, 4, 6, runs.length]}
+        <StatTile
+          label="Pass rate"
+          value={passRate}
+          sub={passRateSub}
           onClick={() => onNavigate("runs")}
-          delay={120}
         />
-        <StatCard
+        <StatTile
           label="Health"
-          value={totalIssues}
-          accent={totalIssues > 0 ? "destructive" : "success"}
-          sub={totalIssues === 0 ? "All clear" : `${stats.validation_errors} err \u00b7 ${stats.validation_warnings} warn`}
-          subColor={stats.validation_errors > 0 ? "text-[hsl(var(--destructive))]" : totalIssues === 0 ? "text-[hsl(var(--success))]" : undefined}
-          sparkData={[5, 4, 6, 3, 4, 2, totalIssues]}
+          value={health.total.toLocaleString()}
+          sub={health.total === 0 ? "No errors or warnings" : undefined}
+          badges={[
+            ...(health.errors > 0
+              ? [{ tone: "failed" as Tone, label: plural(health.errors, "error") }]
+              : []),
+            ...(health.warnings > 0
+              ? [{ tone: "warning" as Tone, label: plural(health.warnings, "warning") }]
+              : []),
+          ]}
           onClick={() => onNavigate("logs")}
-          delay={180}
         />
       </div>
 
-      {/* ── Workflows (full width) ─────────────────────────────────────── */}
-      <div
-        className="rounded-lg border border-border/60 bg-card overflow-hidden animate-fade-in-up"
-        style={{ animationDelay: "200ms" }}
-      >
-        <div className="flex items-center justify-between px-5 py-3">
-          <span className="text-sm font-semibold text-foreground">
-            Workflows
-            <span className="ml-1.5 text-muted-foreground font-normal">{workflows.length}</span>
-          </span>
-          <button
-            onClick={() => onNavigate("workflows")}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
-          >
-            View all
-            <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-        <div className="divide-y divide-border">
-          {workflows.map((wf, idx) => (
-            <button
-              key={wf.id}
-              className="flex w-full items-center gap-3.5 px-5 py-3 text-left hover:bg-accent/50 transition-colors animate-fade-in-up"
-              style={{ animationDelay: `${300 + idx * 50}ms` }}
-              onClick={() => onNavigate("workflows")}
-            >
-              <WorkflowStatusDot status={wf.manifestStatus} />
-              <div className="flex flex-col min-w-0 flex-1">
-                <span className="text-sm font-mono font-medium text-foreground truncate">
-                  {wf.name}
-                </span>
-                <span className="text-[11px] text-muted-foreground mt-0.5">
-                  {wf.actionCount} actions
-                </span>
-              </div>
-              <Badge variant="outline" className="text-[11px] font-mono font-normal rounded px-2 py-0.5 h-5 shrink-0">
-                v{wf.version}
-              </Badge>
-              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                {wf.llmCount}L / {wf.toolCount}T
-              </span>
-              {wf.defaults.model_name ? (
-                <Badge variant="secondary" className="text-[10px] font-mono font-normal rounded px-2 py-0.5 h-5 shrink-0">
-                  {wf.defaults.model_name}
-                </Badge>
-              ) : (
-                <span className="text-[11px] text-muted-foreground shrink-0">{"\u2014"}</span>
-              )}
-              <MiniBarChart values={deriveBarData(wf.llmCount, wf.toolCount, wf.actionCount)} />
-            </button>
-          ))}
-          {workflows.length === 0 && (
-            <div className="px-4 py-6 text-center text-xs text-muted-foreground">No workflows found</div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Recent Runs + Health (side by side) ────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        {/* Recent Runs (60%) */}
-        <div
-          className="lg:col-span-3 rounded-lg border border-border/60 bg-card overflow-hidden animate-fade-in-up"
-          style={{ animationDelay: "320ms" }}
-        >
-          <div className="flex items-center justify-between px-5 py-3">
-            <span className="text-sm font-semibold text-foreground">
-              Recent runs
-              <span className="ml-1.5 text-muted-foreground font-normal">{runs.length}</span>
-            </span>
-            <button
-              onClick={() => onNavigate("runs")}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
-            >
-              View all
-              <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-          {/* Column headers */}
-          <div className="grid grid-cols-[16px_1fr_1fr_100px_56px_60px] gap-2 px-5 py-1.5 border-y border-border text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-            <span />
-            <span>Run ID</span>
-            <span>Workflow</span>
-            <span>Progress</span>
-            <span className="text-right">Duration</span>
-            <span className="text-right">Tokens</span>
-          </div>
-          <div className="divide-y divide-border">
-            {runs.slice(0, 8).map((run, idx) => {
-              const pct = run.total > 0 ? (run.success / run.total) * 100 : 0
-              return (
-                <button
-                  key={run.id}
-                  className="grid grid-cols-[16px_1fr_1fr_100px_56px_60px] gap-2 w-full items-center px-5 py-2 text-left hover:bg-accent/50 transition-colors animate-fade-in-up"
-                  style={{ animationDelay: `${400 + idx * 40}ms` }}
-                  onClick={() => onNavigate("runs")}
-                >
-                  <RunStatusIndicator status={run.status} />
-                  <span className="text-xs font-mono text-foreground truncate">
-                    {run.id.length > 30 ? run.id.slice(-20) : run.id}
-                  </span>
-                  <span className="text-xs text-muted-foreground truncate">
-                    {run.wf}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-1 flex-1 rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor:
-                            run.status === "FAILED" ? "hsl(var(--destructive))"
-                            : run.status === "PAUSED" ? "hsl(var(--warning))"
-                            : "hsl(var(--success))",
-                        }}
-                      />
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground tabular-nums shrink-0">
-                      {run.success}/{run.total}
-                    </span>
-                  </div>
-                  <span className="text-xs font-mono text-foreground tabular-nums text-right">{Math.round(run.duration || 0)}s</span>
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums text-right">
-                    {run.tokens > 0 ? run.tokens.toLocaleString() : "\u2014"}
-                  </span>
-                </button>
-              )
-            })}
-            {runs.length === 0 && (
-              <div className="px-4 py-10 text-center">
-                <Activity className="h-8 w-8 mx-auto text-muted-foreground/20 mb-3" />
-                <p className="text-xs text-muted-foreground">No runs recorded</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">Execute a workflow to see results here</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Health Panel (40%) */}
-        <div
-          className="lg:col-span-2 rounded-lg border border-border/60 bg-card overflow-hidden animate-fade-in-up"
-          style={{ animationDelay: "380ms" }}
-        >
-          <div className="flex items-center justify-between px-5 py-3">
-            <span className="text-sm font-semibold text-foreground">Health</span>
-            <button
-              onClick={() => onNavigate("logs")}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
-            >
-              View all
-              <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-
-          {validationErrorGroups.length === 0 && validationWarningGroups.length === 0 ? (
-            /* Clean state — checklist */
-            <div className="px-5 py-4 space-y-4">
-              <Badge className="bg-[hsl(var(--success))]/15 text-[hsl(var(--success))] border-[hsl(var(--success))]/20 hover:bg-[hsl(var(--success))]/15 text-xs font-medium px-3 py-1">
-                Clean
-              </Badge>
-              <div className="space-y-3">
-                <HealthCheckItem label="No validation issues" />
-                <HealthCheckItem label="All schemas valid" />
-                <HealthCheckItem label="Dependencies resolved" />
-              </div>
-            </div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] gap-3.5">
+        <Card>
+          <CardHeader
+            title="Recent runs"
+            count={runs.length}
+            action={<ViewAllButton onClick={() => onNavigate("runs")} />}
+          />
+          {recentRuns.length === 0 ? (
+            <EmptyState message="No runs recorded yet — execute a workflow, then regenerate docs." />
           ) : (
-            /* Issues state — error/warning list */
-            <div className="divide-y divide-border max-h-[280px] overflow-y-auto">
-              {validationErrorGroups.map((g) => (
-                <button
-                  key={`err-${g.target}`}
-                  className="flex w-full items-start gap-2.5 px-5 py-2.5 text-left hover:bg-accent/50 transition-colors"
-                  onClick={() => onNavigate("logs")}
-                >
-                  <span className="mt-px shrink-0 rounded px-1.5 py-0 text-[10px] font-mono font-semibold bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] leading-relaxed">
-                    {g.count}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-foreground font-mono truncate">{g.target}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{g.sample}</p>
-                  </div>
-                </button>
+            <>
+              <div className="grid grid-cols-[96px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px] gap-2 whitespace-nowrap border-b border-border px-[18px] py-[7px] text-xs font-medium text-muted-2">
+                <span>Status</span>
+                <span>Run ID</span>
+                <span>Workflow</span>
+                <span>Progress</span>
+                <span className="text-right">Duration</span>
+              </div>
+              {recentRuns.map((run) => (
+                <RunRow key={run.id} run={run} onClick={() => onNavigate("runs")} />
               ))}
-              {validationWarningGroups.map((g) => (
-                <button
-                  key={`warn-${g.target}`}
-                  className="flex w-full items-start gap-2.5 px-5 py-2.5 text-left hover:bg-accent/50 transition-colors"
-                  onClick={() => onNavigate("logs")}
-                >
-                  <span className="mt-px shrink-0 rounded px-1.5 py-0 text-[10px] font-mono font-semibold bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] leading-relaxed">
-                    {g.count}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-foreground font-mono truncate">{g.target}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{g.sample}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            </>
           )}
-        </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Health" action={<ViewAllButton onClick={() => onNavigate("logs")} />} />
+          {healthItems.length === 0 ? (
+            <EmptyState message="No validation or runtime issues in the loaded logs." />
+          ) : (
+            healthItems.map((item) => (
+              <button
+                key={`${item.tone}-${item.target}`}
+                onClick={() => onOpenLogs({ q: item.target, level: item.tone === "failed" ? "error" : "warn" })}
+                className="flex w-full items-start gap-2.5 border-t border-border-soft px-[18px] py-2.5 text-left hover:bg-hover"
+              >
+                <span title={`${item.count.toLocaleString()} occurrences`}>
+                  <StatusBadge tone={item.tone} label={`×${item.count.toLocaleString()}`} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm leading-5 text-foreground [text-wrap:pretty]">
+                    {item.sample || "No message captured"}
+                  </span>
+                  <span
+                    title={item.target}
+                    className="mt-0.5 block truncate font-mono text-xs text-foreground-3"
+                  >
+                    {item.target}
+                  </span>
+                </span>
+              </button>
+            ))
+          )}
+        </Card>
       </div>
     </div>
   )
 }
 
-/* -- Sub-components -- */
-
-function StatCard({
+function StatTile({
   label,
   value,
-  accent,
   sub,
-  subColor,
-  sparkData,
+  badges = [],
   onClick,
-  delay = 0,
 }: {
   label: string
-  value: number
-  accent: "primary" | "success" | "destructive" | "warning"
-  sub: string
-  subColor?: string
-  sparkData: number[]
-  onClick?: () => void
-  delay?: number
+  value: string
+  sub?: string
+  badges?: { tone: Tone; label: string }[]
+  onClick: () => void
 }) {
-  const accentVar = `var(--${accent})`
   return (
     <button
       onClick={onClick}
-      className="group relative rounded-lg bg-card p-4 text-left animate-fade-in-up overflow-hidden"
-      style={{ animationDelay: `${delay}ms` }}
+      className="flex flex-col gap-1 rounded-card border border-border bg-surface px-5 py-4 text-left text-foreground hover:border-border-2"
     >
-      {/* Gradient glow behind sparkline */}
-      <div
-        className="absolute inset-y-0 right-0 w-1/2 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse at 85% 60%, hsl(${accentVar} / 0.08), transparent 70%)` }}
-      />
-      {/* Sparkline */}
-      <div
-        className="absolute bottom-0 right-0 w-32 h-14 opacity-[0.15] group-hover:opacity-[0.25] transition-opacity animate-reveal-right pointer-events-none"
-        style={{ animationDelay: `${delay + 300}ms` }}
-      >
-        <MiniSparkline data={sparkData} color={`hsl(${accentVar})`} />
-      </div>
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</span>
-      <div className="mt-1">
-        <span className="text-3xl font-semibold font-mono tabular-nums text-foreground">
-          {value.toLocaleString()}
-        </span>
-      </div>
-      <p className={`text-xs mt-1 ${subColor || "text-muted-foreground"}`}>{sub}</p>
+      <span className="text-xs font-medium leading-4 text-muted-foreground">{label}</span>
+      <span className="text-[28px] font-semibold leading-8 tracking-[-0.02em] text-foreground">{value}</span>
+      <span className="flex min-h-5 flex-wrap items-center gap-2">
+        {badges.map((b) => (
+          <StatusBadge key={b.label} tone={b.tone} label={b.label} />
+        ))}
+        {sub && <span className="text-xs leading-4 text-muted-foreground">{sub}</span>}
+      </span>
     </button>
   )
 }
 
-function MiniSparkline({ data, color }: { data: number[]; color: string }) {
-  const max = Math.max(...data, 1)
-  const h = 40
-  const w = 96
-  const step = w / (data.length - 1)
-  const points = data.map((v, i) => `${i * step},${h - (v / max) * h * 0.8 - h * 0.1}`).join(" ")
+function RunRow({ run, onClick }: { run: Run; onClick: () => void }) {
+  const done = run.success + run.failed + run.skipped
+  const inFlight = run.status === "running" ? Math.max(0, run.total - done) : 0
+  const shortId = run.id.length > 22 ? `…${run.id.slice(-20)}` : run.id
+
+  const tone: Tone =
+    run.status === "running" ? "running"
+      : run.status === "SUCCESS" ? "passed"
+        : run.status === "FAILED" ? "failed"
+          : "neutral"
+  const label =
+    run.status === "running" ? "Running"
+      : run.status === "SUCCESS" ? "Passed"
+        : run.status === "FAILED" ? "Failed"
+          : "Paused"
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full">
-      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-    </svg>
-  )
-}
-
-function MiniBarChart({ values }: { values: number[] }) {
-  const max = Math.max(...values, 1)
-  return (
-    <div className="flex items-end gap-[2px] h-5 shrink-0">
-      {values.map((v, i) => (
-        <div
-          key={i}
-          className="w-[3px] rounded-sm bg-muted-foreground/25"
-          style={{ height: `${Math.max((v / max) * 100, 8)}%` }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function deriveBarData(llm: number, tool: number, total: number): number[] {
-  const base = Math.max(total, 1)
-  return [
-    llm * 0.6,
-    tool * 0.8,
-    base * 0.4,
-    llm + tool * 0.3,
-    base,
-  ].map((v) => Math.max(v, 0.5))
-}
-
-function WorkflowStatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    running: "text-[hsl(var(--primary))] fill-[hsl(var(--primary))]",
-    completed: "text-[hsl(var(--success))] fill-[hsl(var(--success))]",
-    failed: "text-[hsl(var(--destructive))] fill-[hsl(var(--destructive))]",
-    paused: "text-[hsl(var(--warning))] fill-[hsl(var(--warning))]",
-  }
-  return <Circle className={`h-2.5 w-2.5 shrink-0 ${colors[status] || colors.paused}`} />
-}
-
-function RunStatusIndicator({ status }: { status: string }) {
-  const map: Record<string, React.ReactNode> = {
-    SUCCESS: <CheckCircle2 className="h-3.5 w-3.5 text-[hsl(var(--success))]" />,
-    FAILED: <AlertTriangle className="h-3.5 w-3.5 text-[hsl(var(--destructive))]" />,
-    running: <Play className="h-3 w-3 text-[hsl(var(--primary))] fill-[hsl(var(--primary))]" />,
-    PAUSED: <Clock className="h-3.5 w-3.5 text-[hsl(var(--warning))]" />,
-  }
-  return <div className="flex items-center justify-center">{map[status] || map.PAUSED}</div>
-}
-
-function HealthCheckItem({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))] shrink-0" />
-      <span className="text-sm text-muted-foreground">{label}</span>
-    </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    SUCCESS: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))] border-[hsl(var(--success))]/20",
-    FAILED: "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20",
-    running: "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] border-[hsl(var(--primary))]/20",
-    PAUSED: "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20",
-  }
-  return (
-    <Badge variant="outline" className={`text-[10px] font-normal rounded-md ${styles[status] || ""}`}>
-      {status.toLowerCase()}
-    </Badge>
+    <button
+      onClick={onClick}
+      className="grid w-full grid-cols-[96px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px] items-center gap-2 border-t border-border-soft px-[18px] py-2.5 text-left hover:bg-hover"
+    >
+      <span className="justify-self-start">
+        <StatusBadge tone={tone} label={label} />
+      </span>
+      <span title={run.id} className="min-w-0 truncate font-mono text-[13px] text-foreground">
+        {shortId}
+      </span>
+      <span className="min-w-0 truncate text-[13px] text-foreground-3">{run.wf}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span
+          title={`${run.success} passed · ${run.failed} failed · ${run.skipped} skipped`}
+          className="flex h-1.5 flex-1 gap-px overflow-hidden rounded-pill bg-track"
+        >
+          <span className="h-full bg-success" style={{ width: pct(run.success, run.total) }} />
+          <span className="h-full bg-danger" style={{ width: pct(run.failed, run.total) }} />
+          <span className="h-full bg-muted-2" style={{ width: pct(run.skipped, run.total) }} />
+          <span className="h-full bg-primary" style={{ width: pct(inFlight, run.total) }} />
+        </span>
+        <span className="shrink-0 text-xs text-foreground-3">
+          {done}/{run.total}
+        </span>
+      </span>
+      <span className="shrink-0 text-right font-mono text-[13px] text-foreground">
+        {fmtDuration(run.duration)}
+      </span>
+    </button>
   )
 }

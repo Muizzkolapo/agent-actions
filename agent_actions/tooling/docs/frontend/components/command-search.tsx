@@ -1,27 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  GitBranch,
-  Boxes,
-  FileCode,
-  MessageSquare,
-  Wrench,
-  Play,
-  ScrollText,
-  Database,
-  Home,
-} from "lucide-react"
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { Command } from "cmdk"
+import { Search } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
+import { Kbd } from "@/components/graphite"
 
 interface CommandSearchProps {
   open: boolean
@@ -35,32 +19,43 @@ interface SearchEntry {
   description: string
   section: string
   group: string
-  icon: React.ComponentType<{ className?: string }>
+  /** Two or three characters — the type, not an icon. */
+  tag: string
+  tagClass: string
 }
+
+const GROUP_ORDER = ["Pages", "Workflows", "Actions", "Schemas", "Prompts", "Tools"]
 
 export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchProps) {
   const { workflows, actions, schemas, prompts, toolFunctions } = useCatalogData()
 
   const entries = useMemo<SearchEntry[]>(() => {
     const items: SearchEntry[] = []
+    const neutral = "bg-surface-2 text-muted-foreground"
 
-    // Navigation pages
     const pages = [
-      { label: "Home", section: "home", icon: Home, description: "Overview dashboard" },
-      { label: "Workflows", section: "workflows", icon: GitBranch, description: "All workflows" },
-      { label: "All Actions", section: "actions", icon: Boxes, description: "All actions across workflows" },
-      { label: "Runs", section: "runs", icon: Play, description: "Execution history" },
-      { label: "Data Explorer", section: "data", icon: Database, description: "Staging and target data" },
-      { label: "Schemas", section: "schemas", icon: FileCode, description: "Output schemas" },
-      { label: "Prompts", section: "prompts", icon: MessageSquare, description: "Prompt store" },
-      { label: "Tools", section: "tools", icon: Wrench, description: "User-defined functions" },
-      { label: "Logs", section: "logs", icon: ScrollText, description: "Validation logs and events" },
+      { label: "Home", section: "home", description: "Health at a glance" },
+      { label: "Workflows", section: "workflows", description: "All workflows" },
+      { label: "All Actions", section: "actions", description: "Every action definition" },
+      { label: "Runs", section: "runs", description: "Execution history" },
+      { label: "Data Explorer", section: "data", description: "Stored records" },
+      { label: "Schemas", section: "schemas", description: "Output contracts" },
+      { label: "Prompts", section: "prompts", description: "Prompt store" },
+      { label: "Tools", section: "tools", description: "User-defined functions" },
+      { label: "Logs", section: "logs", description: "Event stream" },
     ]
     for (const p of pages) {
-      items.push({ id: `nav:${p.section}`, label: p.label, description: p.description, section: p.section, group: "Pages", icon: p.icon })
+      items.push({
+        id: `nav:${p.section}`,
+        label: p.label,
+        description: p.description,
+        section: p.section,
+        group: "Pages",
+        tag: "GO",
+        tagClass: neutral,
+      })
     }
 
-    // Workflows
     for (const wf of workflows) {
       items.push({
         id: `wf:${wf.id}`,
@@ -68,38 +63,37 @@ export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchP
         description: wf.description || `${wf.actionCount} actions`,
         section: "workflows",
         group: "Workflows",
-        icon: GitBranch,
+        tag: "WF",
+        tagClass: neutral,
       })
     }
 
-    // Actions (Record<string, Action> — key is wfId/actionName)
     for (const [key, a] of Object.entries(actions)) {
-      const kind = a.type === "tool" ? "tool" : "llm"
-      const shortName = key.includes("/") ? key.split("/").pop()! : key
+      const shortName = key.split("/").pop() ?? key
       items.push({
-        id: `action:${a.wf}:${shortName}`,
+        id: `action:${key}`,
         label: shortName,
-        description: a.intent || `${kind} action in ${a.wf}`,
+        description: a.intent || `${a.type} action in ${a.wf}`,
         section: "actions",
         group: "Actions",
-        icon: Boxes,
+        tag: a.type === "tool" ? "TOOL" : "LLM",
+        tagClass: a.type === "tool" ? "bg-tool/[0.08] text-tool-t" : "bg-llm/10 text-llm-t",
       })
     }
 
-    // Schemas
     for (const s of schemas) {
       const fieldCount = Array.isArray(s.fields) ? s.fields.length : s.fields
       items.push({
         id: `schema:${s.id}`,
         label: s.id,
-        description: `${fieldCount} fields`,
+        description: `${fieldCount} field${fieldCount === 1 ? "" : "s"}`,
         section: "schemas",
         group: "Schemas",
-        icon: FileCode,
+        tag: "SCH",
+        tagClass: neutral,
       })
     }
 
-    // Prompts
     for (const p of prompts) {
       items.push({
         id: `prompt:${p.id}`,
@@ -107,11 +101,11 @@ export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchP
         description: p.source || "prompt",
         section: "prompts",
         group: "Prompts",
-        icon: MessageSquare,
+        tag: "PRM",
+        tagClass: neutral,
       })
     }
 
-    // Tools
     for (const t of toolFunctions) {
       items.push({
         id: `tool:${t.name}`,
@@ -119,12 +113,23 @@ export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchP
         description: t.sig || "tool function",
         section: "tools",
         group: "Tools",
-        icon: Wrench,
+        tag: "FN",
+        tagClass: neutral,
       })
     }
 
     return items
   }, [workflows, actions, schemas, prompts, toolFunctions])
+
+  const groups = useMemo(() => {
+    const grouped = new Map<string, SearchEntry[]>()
+    for (const e of entries) {
+      const list = grouped.get(e.group)
+      if (list) list.push(e)
+      else grouped.set(e.group, [e])
+    }
+    return GROUP_ORDER.filter((g) => grouped.has(g)).map((g) => ({ name: g, items: grouped.get(g)! }))
+  }, [entries])
 
   const handleSelect = useCallback(
     (entry: SearchEntry) => {
@@ -134,72 +139,86 @@ export function CommandSearch({ open, onOpenChange, onNavigate }: CommandSearchP
     [onNavigate, onOpenChange],
   )
 
-  // Group entries
-  const groups = useMemo(() => {
-    const order = ["Pages", "Workflows", "Actions", "Schemas", "Prompts", "Tools"]
-    const grouped = new Map<string, SearchEntry[]>()
-    for (const e of entries) {
-      const list = grouped.get(e.group) || []
-      list.push(e)
-      grouped.set(e.group, list)
-    }
-    return order.filter((g) => grouped.has(g)).map((g) => ({ name: g, items: grouped.get(g)! }))
-  }, [entries])
-
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Search workflows, actions, schemas, prompts..." />
-      <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
-        {groups.map((group, gi) => (
-          <div key={group.name}>
-            {gi > 0 && <CommandSeparator />}
-            <CommandGroup heading={group.name}>
-              {group.items.map((entry) => (
-                <CommandItem
-                  key={entry.id}
-                  value={`${entry.label} ${entry.description}`}
-                  onSelect={() => handleSelect(entry)}
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[4px] data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content className="fixed left-1/2 top-[11vh] z-50 flex w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-border-2 bg-surface data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2">
+          <DialogPrimitive.Title className="sr-only">Jump to</DialogPrimitive.Title>
+          <Command className="flex flex-col overflow-hidden" loop>
+            <div className="flex items-center gap-2.5 border-b border-border px-4">
+              <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" strokeWidth={2.2} />
+              <Command.Input
+                placeholder="Jump to a workflow, action, prompt, schema or page…"
+                className="h-[52px] min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+              <Kbd>esc</Kbd>
+            </div>
+            <Command.List className="max-h-[min(420px,52vh)] overflow-y-auto p-1.5">
+              <Command.Empty className="px-2.5 py-8 text-center text-[12.5px] text-muted-foreground">
+                Nothing matches that search
+              </Command.Empty>
+              {groups.map((group) => (
+                <Command.Group
+                  key={group.name}
+                  heading={group.name}
+                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-2"
                 >
-                  <entry.icon className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex flex-col">
-                    <span>{entry.label}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[400px]">
-                      {entry.description}
-                    </span>
-                  </div>
-                </CommandItem>
+                  {group.items.map((entry) => (
+                    <Command.Item
+                      key={entry.id}
+                      value={`${entry.label} ${entry.description}`}
+                      onSelect={() => handleSelect(entry)}
+                      className="flex cursor-pointer items-center gap-2.5 rounded-control px-2.5 py-1.5 data-[selected=true]:bg-selected"
+                    >
+                      <span
+                        className={`flex h-6 w-[30px] shrink-0 items-center justify-center rounded-control font-mono text-[9px] font-bold ${entry.tagClass}`}
+                      >
+                        {entry.tag}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-[12.5px] text-foreground">
+                          {entry.label}
+                        </span>
+                        <span className="mt-px block truncate text-[11px] text-muted-foreground">
+                          {entry.description}
+                        </span>
+                      </span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
               ))}
-            </CommandGroup>
-          </div>
-        ))}
-      </CommandList>
-    </CommandDialog>
+            </Command.List>
+            <div className="flex items-center gap-4 border-t border-border bg-surface-2 px-4 py-2 text-[10.5px] text-muted-foreground">
+              <span className="flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd>navigate</span>
+              <span className="flex items-center gap-1"><Kbd>↵</Kbd>open</span>
+              <span className="flex items-center gap-1"><Kbd>/</Kbd>open anywhere</span>
+              <span className="flex-1" />
+              <span className="font-mono">{entries.length.toLocaleString()} items</span>
+            </div>
+          </Command>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
 }
 
-/**
- * Hook to manage command search open state with keyboard shortcuts.
- * Listens for "/" and Cmd+K / Ctrl+K.
- */
+/** Opens on ⌘K / Ctrl+K, and on "/" outside a text field. */
 export function useCommandSearch() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      // Cmd+K or Ctrl+K
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         setOpen((prev) => !prev)
         return
       }
-      // "/" when not in an input/textarea
       if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) {
         e.preventDefault()
         setOpen(true)
       }
     }
-
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [])
