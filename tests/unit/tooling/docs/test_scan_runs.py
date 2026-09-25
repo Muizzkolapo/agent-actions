@@ -89,3 +89,16 @@ class TestScanRunsSurfacesTheEventTail:
         assert [r["seq"] for r in rows] == [0, 1, 2]
         assert [r["data"]["action_name"] for r in rows] == ["step_0", "step_1", "step_2"]
         assert [r["diagnostic"] for r in rows] == [False, True, False]
+
+    def test_the_level_totals_reach_runs_data(self, tmp_path):
+        """The other half of the same seam: without this the catalog's per-level
+        totals silently lose every workflow and the page understates itself."""
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        with open(logs_dir / "events.json", "w", encoding="utf-8") as f:
+            for level in ("error", "warn", "warn", "info"):
+                f.write(json.dumps(_warn_event("step", "m", level=level)) + "\n")
+
+        assert scan_runs(tmp_path)["wf"]["level_counts"] == {"error": 1, "warn": 2, "info": 1}

@@ -779,6 +779,24 @@ class TestRunEventsProblemRetention:
         assert len([r for r in rows if r["level"] == "error"]) == EVENT_PROBLEM_LIMIT
         assert len([r for r in rows if r["level"] == "warn"]) == EVENT_PROBLEM_LIMIT
 
+    def test_the_window_is_returned_in_file_order(self, tmp_path):
+        """A problem inside the recency window must not jump ahead of older rows:
+        the merge reverses each log assuming file order, so a scrambled window
+        changes which rows a tight budget admits, not just how they display."""
+        events_path = tmp_path / "events.json"
+        total = EVENT_TAIL_LIMIT + 10
+        old_problem, recent_problem = 3, total - 100
+        with open(events_path, "w") as f:
+            for i in range(total):
+                level = "error" if i in (old_problem, recent_problem) else "debug"
+                f.write(json.dumps(_stream_event(i, level=level)) + "\n")
+
+        seqs = [r["seq"] for r in extract_run_events(events_path).events]
+
+        assert seqs == sorted(seqs)
+        assert seqs[:3] == [old_problem, total - EVENT_TAIL_LIMIT, total - EVENT_TAIL_LIMIT + 1]
+        assert recent_problem in seqs
+
     def test_rows_are_not_duplicated_when_a_problem_is_also_recent(self, tmp_path):
         events_path = tmp_path / "events.json"
         with open(events_path, "w") as f:
@@ -814,6 +832,21 @@ class TestRunEventsProblemRetention:
         assert [r["seq"] for r in logs["events"] if r["level"] == "error"] == [0]
         assert logs["level_counts"]["error"] == 1
         assert logs["level_counts"]["debug"] == EVENT_TAIL_LIMIT + 19
+
+    def test_a_row_with_no_timestamp_does_not_abort_the_window(self, tmp_path):
+        """A row may carry a meta object with no timestamp in it. The merge sorts
+        on that value, and None against str is a TypeError that takes the whole
+        catalog build down with it."""
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(
+                json.dumps({"event_type": "E", "level": "error", "meta": {}, "data": {}}) + "\n"
+            )
+            f.write(json.dumps(_stream_event(1, level="info")) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0, 1]
 
     def test_a_row_whose_meta_is_not_an_object_is_skipped(self, tmp_path):
         """Rows are read back from disk; one malformed row must not abort the build."""

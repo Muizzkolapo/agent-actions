@@ -1,9 +1,11 @@
 """I-6: Coverage of CatalogGenerator.generate() — happy path and empty input."""
 
+import json
 from collections import Counter
 
 from agent_actions.tooling.docs.generator import CatalogGenerator
 from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
+from agent_actions.tooling.docs.scanner.data_scanners import scan_runs
 
 
 def _make_generator(workflows_data=None, project_path="/tmp"):
@@ -313,6 +315,20 @@ class TestCatalogGeneratorProblemsFirst:
         assert len(events) == EVENT_TAIL_LIMIT
         assert any(e["level"] == "error" for e in events)
 
+    def test_a_row_with_no_timestamp_does_not_abort_the_merge(self):
+        """The merge sorts on meta.timestamp. A row whose meta carries none is
+        accepted by the scanner, and None against str takes the build down."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        wf = _wf_events("alpha", [0])
+        wf["events"][0]["meta"] = {}
+        wf["events"] += _wf_events("alpha", [1])["events"]
+        inputs["runs_data"] = {"alpha": wf}
+
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        assert sorted(e["seq"] for e in events) == [0, 1]
+
     def test_level_totals_describe_every_log_not_the_window(self):
         gen = _make_generator()
         inputs = _empty_inputs()
@@ -334,3 +350,89 @@ class TestCatalogGeneratorProblemsFirst:
 
         assert [e["seq"] for e in logs_data["events"]] == [0]
         assert "id" not in logs_data["events"][0]
+
+
+class TestCatalogContractWithTheDashboard:
+    """The dashboard reads catalog.json across a language boundary that has no
+    test runner, and its transform defaults every absent key. Rename one here
+    and the Logs screen still renders — every row reading level "info", every
+    error tile reading zero — with nothing going red. These names are the
+    contract; change them only together with the reader.
+
+    The rows come from the real scanner, not a hand-built dict, so the fixture
+    cannot drift away from what the framework writes.
+    """
+
+    ROW_KEYS = ("id", "seq", "event_type", "code", "level", "category", "message")
+    META_KEYS = ("timestamp", "invocation_id", "correlation_id", "workflow_name")
+
+    def _catalog(self, tmp_path):
+        """A log shaped exactly as the framework writes one."""
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        rows = [
+            {
+                "event_type": "LogEvent",
+                "code": "X000",
+                "level": "error",
+                "category": "workflow",
+                "message": "it failed",
+                "meta": {
+                    "timestamp": "2026-06-23T08:00:15.162326+00:00",
+                    "correlation_id": "99d78b46",
+                    "invocation_id": "run_wf_5aa47355",
+                    "thread_id": None,
+                    "workflow_name": "wf",
+                },
+                "data": {},
+            },
+            {
+                "event_type": "ActionCompleteEvent",
+                "code": "A002",
+                "level": "info",
+                "category": "action",
+                "message": "done",
+                "diagnostic": False,
+                "meta": {
+                    "timestamp": "2026-06-23T08:00:16.000000+00:00",
+                    "correlation_id": "99d78b46",
+                    "invocation_id": "run_wf_5aa47355",
+                    "thread_id": None,
+                    "workflow_name": "wf",
+                    "action_name": "step_one",
+                },
+                "data": {"action_name": "step_one", "execution_time": 1.0},
+            },
+        ]
+        with open(logs_dir / "events.json", "w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row) + "\n")
+
+        inputs = _empty_inputs()
+        inputs["runs_data"] = scan_runs(tmp_path)
+        return _make_generator().generate(**inputs)
+
+    def test_the_stream_and_the_level_totals_keep_their_names(self, tmp_path):
+        catalog = self._catalog(tmp_path)
+
+        assert len(catalog["logs"]["events"]) == 2
+        assert catalog["stats"]["event_levels"] == {"error": 1, "info": 1}
+
+    def test_every_row_carries_the_keys_the_dashboard_reads(self, tmp_path):
+        for row in self._catalog(tmp_path)["logs"]["events"]:
+            assert all(k in row for k in self.ROW_KEYS), sorted(row)
+            assert all(k in row["meta"] for k in self.META_KEYS), sorted(row["meta"])
+
+    def test_an_action_row_names_its_action_where_both_readers_look(self, tmp_path):
+        rows = self._catalog(tmp_path)["logs"]["events"]
+        action = next(r for r in rows if r["event_type"] == "ActionCompleteEvent")
+
+        assert action["data"]["action_name"] == "step_one"
+        assert action["meta"]["action_name"] == "step_one"
+
+    def test_ids_are_unique_across_logs(self, tmp_path):
+        ids = [row["id"] for row in self._catalog(tmp_path)["logs"]["events"]]
+
+        assert len(ids) == len(set(ids))
