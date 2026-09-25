@@ -131,13 +131,25 @@ class AgentWorkflow:
                     "checkpoints",
                     lambda a=action_name: self.storage_backend.clear_checkpoint_records(a),
                 ),
-                ("batch_records", lambda a=action_name: self._release_batch_records(a)),
-                ("batch_state", lambda a=action_name: self.storage_backend.clear_batch_state(a)),
             ]:
                 try:
                     op_call()
                 except Exception as e:
                     logger.warning("Failed to clear %s for %s: %s", op_name, action_name, e)
+
+            # The registry is the only thing naming these batches. Clearing it
+            # over a record that would not go strands that payload for good, so
+            # the name stays and the next --fresh can try again.
+            if self._release_batch_records(action_name):
+                try:
+                    self.storage_backend.clear_batch_state(action_name)
+                except Exception as e:
+                    logger.warning("Failed to clear batch_state for %s: %s", action_name, e)
+            else:
+                self.console.print(
+                    f"[yellow]--fresh: kept the batch registry for {action_name} — a provider's "
+                    f"local record would not go, and the registry is what names it[/yellow]"
+                )
 
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
@@ -173,7 +185,7 @@ class AgentWorkflow:
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
         )
 
-    def _release_batch_records(self, action_name: str) -> None:
+    def _release_batch_records(self, action_name: str) -> bool:
         """Reclaim what a provider recorded about this action's batches.
 
         Before the registry goes — the opposite order to the overwrite sites, and
@@ -189,8 +201,12 @@ class AgentWorkflow:
         # would strand its record for good.
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        for batch_id in BatchRegistryManager.batch_ids(self.storage_backend, action_name):
-            release_local_batch_record(batch_id)
+        return all(
+            [
+                release_local_batch_record(batch_id)
+                for batch_id in BatchRegistryManager.batch_ids(self.storage_backend, action_name)
+            ]
+        )
 
     def _reset_retryable_actions(self) -> None:
         """Reset failed/skipped/running actions to pending so re-runs retry them.

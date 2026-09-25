@@ -38,16 +38,16 @@ def remove(p: Path) -> None:
         p.unlink()
 
 
-def release_batch_records(root: Path, base: Path, workflow: str) -> None:
+def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
     """Reclaim what a provider recorded locally about this workflow's batches.
 
     The store about to go holds the registry, and the registry is what names a
     batch: afterwards nothing can find these records, and each holds the payload
-    its batch was submitted with. Reported and not raised — the reset is what
-    was asked for.
+    its batch was submitted with. False says the store has to stay.
     """
     if not (base / "store").is_dir():
-        return
+        return True
+    released = True
     try:
         from agent_actions.config.paths import PathManager
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -65,21 +65,26 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> None:
             backend.initialize()
             for action_name in BatchRegistryManager.list_action_names(backend):
                 for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
-                    release_local_batch_record(batch_id)
+                    released = release_local_batch_record(batch_id) and released
         finally:
             backend.close()
     except Exception as e:  # noqa: BLE001 - a reset must not be blocked by this
         print(
-            f"warning: could not reclaim what a provider recorded locally ({e}). The store "
-            "naming those batches is about to go, so nothing will reach them afterwards.",
+            f"warning: could not reclaim what a provider recorded locally ({e}).",
             file=sys.stderr,
         )
+        return False
+    return released
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workflow")
-    parser.add_argument("--full", action="store_true", help="wipe all agent_io state")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="wipe all agent_io state and reclaim this workflow's local batch records",
+    )
     args = parser.parse_args()
 
     root = find_project_root(Path.cwd())
@@ -90,9 +95,16 @@ def main() -> None:
     status = base / ".agent_status.json"
 
     if args.full:
-        print(f"Full reset: wiping source, store, target, and status under {base}")
-        release_batch_records(root, base, args.workflow)
-        for sub in ("target", "source", "store"):
+        print(
+            f"Full reset: wiping source, store, target, and status under {base}, "
+            "and reclaiming this workflow's local batch records"
+        )
+        # The store is what names these batches. Removing it over a record that
+        # would not go puts that payload out of reach of every command.
+        reclaimed = release_batch_records(root, base, args.workflow)
+        if not reclaimed:
+            print("Keeping store/: it is what names the batches whose records stayed.")
+        for sub in ("target", "source", "store") if reclaimed else ("target", "source"):
             remove(base / sub)
         remove(status)
         (base / "target").mkdir(parents=True, exist_ok=True)

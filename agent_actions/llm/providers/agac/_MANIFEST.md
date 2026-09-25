@@ -12,6 +12,7 @@ Claude-branded provider adapter (AGAC) with non-blocking clients and test helper
 | `AgacBatchClient._load_state()` | `.agac/batch_state/{batch_id}.json` | Reads | — |
 | `AgacBatchClient.release_batch()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
 | `AgacBatchClient.discard_partial_writes()` | `.agac/batch_state/*.tmp` | Deletes | — |
+| `AgacBatchClient.reset()` | `.agac/batch_state/` | Deletes | — |
 
 ## Modules
 

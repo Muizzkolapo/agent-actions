@@ -16,7 +16,8 @@ from agent_actions.llm.realtime.cleaner import Cleaner
         "agent_io/source/, which earlier versions wrote and this one does not, "
         "so a project that never had one has nothing to clean; generated output "
         "under agent_io/target/ requires --target, and --all removes "
-        "everything including staging and the durable store."
+        "everything including staging and the durable store, and reclaims what "
+        "a provider recorded locally about this workflow's batches."
     ),
 )
 @click.option(

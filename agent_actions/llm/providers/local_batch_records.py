@@ -7,7 +7,7 @@ from agent_actions.config.paths import PathManagerError
 logger = logging.getLogger(__name__)
 
 
-def release_local_batch_record(batch_id: str) -> None:
+def release_local_batch_record(batch_id: str) -> bool:
     """Drop what a provider recorded in the project about one batch.
 
     Called where a batch id stops being named by the registry, never when its
@@ -15,8 +15,8 @@ def release_local_batch_record(batch_id: str) -> None:
     failure there brings the next run back for the same batch.
 
     Only the agac provider records one here; other vendors' ids pass through.
-    Failing to reclaim is reported, never raised — every caller is mid-way
-    through work that already succeeded.
+    False says it is still on disk — for the callers about to destroy the name,
+    which must not while the payload is still there.
     """
     from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
 
@@ -24,6 +24,8 @@ def release_local_batch_record(batch_id: str) -> None:
         AgacBatchClient.release_batch(batch_id)
     except (OSError, PathManagerError) as e:
         logger.warning("Could not reclaim the local record for batch %s: %s", batch_id, e)
+        return False
+    return True
 
 
 def discard_partial_batch_records() -> None:

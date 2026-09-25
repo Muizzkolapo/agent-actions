@@ -16,7 +16,7 @@ metadata.
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
-| `Cleaner._release_batch_records()` | `.agac/batch_state/{batch_id}.json` | Deletes | `--all` |
+| `Cleaner._release_batch_records()` | `.agac/batch_state/` | Deletes (`{batch_id}.json` and abandoned `*.tmp`) | `--all` |
 
 ## Modules
 

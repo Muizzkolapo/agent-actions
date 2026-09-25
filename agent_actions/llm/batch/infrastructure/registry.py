@@ -70,13 +70,14 @@ class BatchRegistryManager:
     def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
         """Every batch id this action's registry names, read as stored.
 
-        Not through ``BatchJobEntry``: a retired recovery type refuses to parse,
-        a corrupt registry parses to nothing and an unreadable entry is skipped,
-        and a caller about to delete the registry would then never learn the ids
-        it was holding. An id is a string either way.
+        Not through ``BatchJobEntry``: a retired recovery type refuses to parse
+        and an unreadable entry is skipped, so a caller about to delete the
+        registry would never learn the ids it was holding. Anything unreadable
+        reads as no ids rather than an error — a registry nothing can read names
+        no batch anything could reclaim.
         """
         raw = storage_backend.load_metadata(cls.METADATA_KEY_PREFIX + action_name)
-        if raw is None:
+        if not isinstance(raw, str):
             return []
         try:
             stored = json.loads(raw)
