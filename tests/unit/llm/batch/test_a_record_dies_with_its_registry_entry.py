@@ -395,3 +395,42 @@ def test_a_batch_id_can_only_name_a_file_in_the_state_directory(project):
 
     assert outside.exists()
     assert _records(project) == ["live.json"]
+
+
+def test_a_round_saved_over_its_own_key_loses_the_record_it_replaces(project):
+    """A retried attempt number lands on the key its predecessor holds. The
+    supersession loop skips that name, so only this branch reaches it."""
+    for batch_id in ("batch-parent", "batch-round-a", "batch-round-b"):
+        _submit(batch_id)
+    manager = _Registry(
+        {PARENT: _entry("batch-parent"), ROUND_1: _entry("batch-round-a", PARENT, 1)}
+    )
+
+    pr.register_recovery_batch(
+        manager, ("batch-round-b", 1), PARENT, "agac-provider", RecoveryType.RETRY, 1
+    )
+
+    assert manager.get_batch_job(ROUND_1).batch_id == "batch-round-b"
+    assert _records(project) == ["batch-parent.json", "batch-round-b.json"]
+
+
+def test_a_round_records_its_successor_before_spending_the_one_it_replaces(project, monkeypatch):
+    """Same rule as a resubmission: a crash in between must leave the successor
+    registered, not a key pointing at a record that is already gone."""
+    _submit("batch-round-a")
+    order = []
+    manager = _Registry({ROUND_1: _entry("batch-round-a", PARENT, 1)})
+    real_save = manager.save_batch_job
+
+    def _watched_save(name, entry):
+        order.append("save")
+        real_save(name, entry)
+
+    manager.save_batch_job = _watched_save
+    monkeypatch.setattr(pr, "release_local_batch_record", lambda batch_id: order.append("release"))
+
+    pr.register_recovery_batch(
+        manager, ("batch-round-b", 1), PARENT, "agac-provider", RecoveryType.RETRY, 1
+    )
+
+    assert order == ["save", "release"]

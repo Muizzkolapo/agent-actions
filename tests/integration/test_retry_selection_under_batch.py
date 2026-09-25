@@ -142,9 +142,9 @@ def _rows(project):
 def _submitted_batches(project):
     """Every batch the provider mock holds, as {batch_id: task count}.
 
-    A read never spends the record — only a finalized output does, which is a
-    later moment and not every round reaches it. Callers therefore compare
-    against a before-snapshot rather than reading a count.
+    A read never spends the record — only an entry that stops naming the batch
+    does, which is a later moment and not every round reaches it. Callers
+    therefore compare against a before-snapshot rather than reading a count.
     """
     state = project / ".agac" / "batch_state"
     if not state.is_dir():
