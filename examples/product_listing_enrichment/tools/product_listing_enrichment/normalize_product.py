@@ -5,7 +5,6 @@ from typing import Any
 
 from agent_actions import udf_tool
 
-
 # Map Kaggle categories to pipeline categories
 CATEGORY_MAP = {
     "camera": "electronics",

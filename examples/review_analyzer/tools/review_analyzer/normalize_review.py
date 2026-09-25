@@ -5,7 +5,6 @@ from typing import Any
 
 from agent_actions import udf_tool
 
-
 # Map raw Kaggle categories to readable names
 CATEGORY_MAP = {
     "kindle": "E-Readers",
@@ -87,10 +86,15 @@ def normalize_review(data: dict[str, Any]) -> dict[str, Any]:
             source.get("categories", source.get("product_category", "")),
             source.get("name", ""),
         ),
-        "reviewer_name": source.get("reviews.username", source.get("customer_id", "Anonymous")).strip() or "Anonymous",
+        "reviewer_name": source.get(
+            "reviews.username", source.get("customer_id", "Anonymous")
+        ).strip()
+        or "Anonymous",
         "review_date": _parse_date(source.get("reviews.date", source.get("review_date", ""))),
         "star_rating": star_rating,
         "review_title": source.get("reviews.title", source.get("review_headline", "")).strip(),
         "review_text": review_text,
-        "verified_purchase": _parse_bool(source.get("reviews.doRecommend", source.get("verified_purchase", "true"))),
+        "verified_purchase": _parse_bool(
+            source.get("reviews.doRecommend", source.get("verified_purchase", "true"))
+        ),
     }
