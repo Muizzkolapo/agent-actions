@@ -100,6 +100,25 @@ def _as_record_count(value: Any) -> int | None:
     return int(value)
 
 
+# Keys only a completion writes. An action whose stored details carry none of
+# them has never completed, whatever its status reads: `agac retry` resets every
+# action it re-runs to pending before the run starts, so a first completion and a
+# repeat are indistinguishable by status alone. ``max_records`` is the retired
+# spelling of ``record_limit`` and still marks a stamp left before the rename.
+_COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
+    {
+        "record_limit",
+        "file_limit",
+        "model_name",
+        "model_vendor",
+        "config_hash",
+        "records_processed",
+        "truncated",
+        "max_records",
+    }
+)
+
+
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
     """True when the stamp proves *record_limit* leaves the stored record set whole.
 
@@ -255,15 +274,29 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
+    def _repair_is_keeping_an_earlier_stamp(self, action_name: str) -> bool:
+        """Whether a repair of *action_name* has an earlier completion to preserve.
+
+        A first completion has nothing to preserve, and preserving nothing writes
+        the limit a full uncapped run writes — the cap it ran under is then
+        unreadable. Asked of the whole stamp rather than the one key being
+        written: the keys were introduced at different times, and per key a
+        repair would replace a limit stored under the retired spelling.
+        """
+        if not getattr(self.deps.action_runner, "retried_records", ()):
+            return False
+        details = self.deps.state_manager.get_status_details(action_name)
+        return not _COMPLETION_STAMP_KEYS.isdisjoint(details)
+
     def _stamped_limit(self, action_name: str, key: str, in_force: int | None) -> int | None:
-        """*in_force*, unless this run is only repairing records — then the stored one.
+        """*in_force*, unless a repair is keeping an earlier completion's stamp.
 
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
         next ordinary run would read a change, clear the action's dispositions
         and re-run it. The same reason the comparison ignores a limit here.
         """
-        if getattr(self.deps.action_runner, "retried_records", ()):
+        if self._repair_is_keeping_an_earlier_stamp(action_name):
             stored: int | None = self.deps.state_manager.get_status_details(action_name).get(key)
             return stored
         return in_force
@@ -272,11 +305,14 @@ class ActionExecutor:
         """What the slices admitted, unless this run is only repairing records.
 
         A repair processes the records it names and no others, so its count is
-        not what the action represents. Storing it would leave a smaller number
-        than the action actually processed, and the next run would read a limit
-        above that number as one which cannot truncate — skipping an action that
-        limit would in fact cut down. The same reason the stored limit stands.
+        not what the action represents: the next run would read a limit above
+        that number as one which cannot truncate, skipping an action that limit
+        would in fact cut down.
         """
+        # Suppressed on a first completion too, unlike the stored limit: these
+        # numbers come from the limit's own slice, which a repair narrows again.
+        # Stamping them records an untruncated run that wrote one row of eight —
+        # what a later limit reads as proof it cannot truncate.
         if getattr(self.deps.action_runner, "retried_records", ()):
             details = self.deps.state_manager.get_status_details(action_name)
             stored = _as_record_count(details.get("records_processed"))
