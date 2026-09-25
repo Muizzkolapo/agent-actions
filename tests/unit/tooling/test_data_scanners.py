@@ -58,6 +58,30 @@ class TestScanLogs:
         assert isinstance(result["recent_invocations"], list)
         assert len(result["recent_invocations"]) <= 10  # capped at last 10
 
+    def test_scan_logs_returns_the_event_tail(self, tmp_path):
+        """The Log Explorer reads validation events from the project-level log too."""
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        _write_events(logs_dir / "events.json", 3)
+
+        rows = scan_logs(tmp_path)["events"]
+
+        assert [r["seq"] for r in rows] == [0, 1, 2]
+        assert rows[0]["meta"]["invocation_id"] == "inv-0"
+
+    def test_scan_logs_event_tail_is_bounded(self, tmp_path):
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        _write_events(logs_dir / "events.json", EVENT_TAIL_LIMIT + 7)
+
+        rows = scan_logs(tmp_path)["events"]
+
+        assert len(rows) == EVENT_TAIL_LIMIT
+        assert rows[0]["seq"] == 7
+
+    def test_scan_logs_event_tail_empty_without_a_log(self, tmp_path):
+        assert scan_logs(tmp_path)["events"] == []
+
     def test_scan_logs_reads_all_events(self, tmp_path):
         """scan_logs reads the entire file with no line cap."""
         logs_dir = tmp_path / "logs"
