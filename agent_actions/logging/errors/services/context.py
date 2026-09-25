@@ -23,7 +23,13 @@ class ErrorContextService:
         while current and id(current) not in visited:
             visited.add(id(current))
             chain.append(current)
-            current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+            cause = getattr(current, "__cause__", None)
+            if cause is not None:
+                current = cause
+            elif getattr(current, "__suppress_context__", False):
+                current = None
+            else:
+                current = getattr(current, "__context__", None)
 
         for exception in reversed(chain):
             if hasattr(exception, "context") and isinstance(exception.context, dict):
