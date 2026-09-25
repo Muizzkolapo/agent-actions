@@ -43,7 +43,9 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
 
     The store about to go holds the registry, and the registry is what names a
     batch: afterwards nothing can find these records, and each holds the payload
-    its batch was submitted with. False says the store has to stay.
+    its batch was submitted with. False says the store has to stay — only when a
+    record was found and would not go, never when the reclaimer could not run at
+    all, which says nothing about whether there is anything to reclaim.
     """
     if not (base / "store").is_dir():
         return True
@@ -57,7 +59,22 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
         )
         from agent_actions.storage import get_storage_backend
         from agent_actions.utils.path_utils import set_path_manager
+    except ImportError:
+        # `SKILL.md` tells users to run this with a plain `python3`, where the
+        # framework is usually not importable. That is the documented path, and
+        # refusing the wipe there would make --full quietly mean something else.
+        print(
+            f"warning: agent_actions is not importable, so this cannot reclaim what a "
+            f"provider recorded locally about {workflow}'s batches. Run "
+            f"`agac clean -a {workflow} --all` with the project's interpreter to reclaim them.",
+            file=sys.stderr,
+        )
+        return True
+    except Exception as e:  # noqa: BLE001 - reported, and the store then stays
+        print(f"warning: could not load the reclaimer ({e}).", file=sys.stderr)
+        return False
 
+    try:
         set_path_manager(PathManager(project_root=root))
         discard_partial_batch_records()
         backend = get_storage_backend(workflow_path=str(base.parent), workflow_name=workflow)
@@ -68,7 +85,7 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
                     released = release_local_batch_record(batch_id) and released
         finally:
             backend.close()
-    except Exception as e:  # noqa: BLE001 - a reset must not be blocked by this
+    except Exception as e:  # noqa: BLE001 - reported, and the store then stays
         print(
             f"warning: could not reclaim what a provider recorded locally ({e}).",
             file=sys.stderr,
