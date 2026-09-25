@@ -246,6 +246,7 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
         "recent_invocations": [],
         "validation_errors": [],
         "validation_warnings": [],
+        "events": [],
     }
 
     logs_dir = project_root / "logs"
@@ -260,7 +261,9 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     try:
         invocations: dict[str, dict[str, Any]] = {}
-        for event in _iter_events(events_path):
+        tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+        for seq, event in enumerate(_iter_events(events_path)):
+            tail.append({"seq": seq, **event})
             event_type = event.get("event_type")
             meta = event.get("meta", {})
             data = event.get("data", {})
@@ -304,6 +307,7 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
         # Get recent invocations (last 10)
         logs_data["recent_invocations"] = list(invocations.values())[-10:]
+        logs_data["events"] = list(tail)
 
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)

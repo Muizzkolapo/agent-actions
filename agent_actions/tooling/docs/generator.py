@@ -447,7 +447,9 @@ class CatalogGenerator:
         # Merge each workflow's event tail into one reverse-chronological stream.
         # The id pairs the workflow with the event's position in its own log, so a
         # permalink survives a regenerate that appended more events.
-        event_stream: list[dict] = []
+        event_stream: list[dict] = [
+            {"id": f"logs:{evt.get('seq')}", **evt} for evt in (logs_data or {}).get("events", [])
+        ]
         for wf_name, wf_data in (runs_data or {}).items():
             for evt in wf_data.get("events", []):
                 event_stream.append({"id": f"{wf_name}:{evt.get('seq')}", **evt})
