@@ -115,6 +115,40 @@ class TestExtractRootCause:
         result = extract_root_cause(top)
         assert result == root
 
+    def test_raise_from_none_stops_at_the_suppressing_exception(self):
+        """`raise X from None` sets __suppress_context__ but leaves __context__
+        pointing at the caught exception. The walk must stop at X, not fall
+        through to the interpreter's own message underneath it."""
+        try:
+            try:
+                int("nonsense")
+            except ValueError:
+                raise ValueError("AGAC_FILE_LIMIT='nonsense' is not an integer") from None
+        except ValueError as caught:
+            deliberate = caught
+
+        result = extract_root_cause(deliberate)
+        assert result is deliberate
+
+    def test_suppressed_link_partway_through_a_longer_chain(self):
+        """A chain mixing an explicit __cause__ with a suppressed __context__
+        further down: the walk must stop at the suppression, not surface the
+        interpreter noise it was written to hide."""
+        interpreter_noise = ValueError("hidden interpreter noise")
+        try:
+            try:
+                raise interpreter_noise
+            except ValueError:
+                raise RuntimeError("the deliberate, user-facing message") from None
+        except RuntimeError as caught:
+            suppressed = caught
+            top = TypeError("outer wrapper")
+            top.__cause__ = suppressed
+
+        result = extract_root_cause(top)
+        assert result is suppressed
+        assert result is not interpreter_noise
+
 
 class TestGetErrorChain:
     """Test get_error_chain function."""
