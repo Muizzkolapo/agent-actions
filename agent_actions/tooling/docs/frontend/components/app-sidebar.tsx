@@ -23,6 +23,7 @@ interface NavItem {
   label: string
   icon: LucideIcon
   badge?: string
+  badgeTitle?: string
 }
 
 interface AppSidebarProps {
@@ -132,6 +133,7 @@ export function AppSidebar({
               label: "Logs",
               icon: ScrollText,
               badge: health.errors > 0 ? health.errors.toLocaleString() : undefined,
+              badgeTitle: "Problems needing attention — not the same count as the event stream's error rows",
             }}
             active={activeSection === "logs"}
             collapsed={collapsed}
@@ -145,7 +147,11 @@ export function AppSidebar({
         <button
           onClick={health.errors > 0 ? onShowErrors : () => onNavigate("logs")}
           className="flex h-8 w-full items-center gap-2 rounded-control border border-border bg-surface px-2.5 text-left hover:bg-hover"
-          title={health.errors > 0 ? "Show errors in Logs" : "Open Logs"}
+          title={
+            health.errors > 0
+              ? "Failed runs and actions plus validation findings. The Logs page counts event rows by level, so its total differs."
+              : "Open Logs"
+          }
         >
           <span
             className={`h-[7px] w-[7px] shrink-0 rounded-pill ${
@@ -219,6 +225,7 @@ function NavButton({
       {!collapsed && <span className="flex-1 whitespace-nowrap text-left">{item.label}</span>}
       {!collapsed && item.badge && (
         <span
+          title={item.badgeTitle}
           className={
             alarmBadge
               ? "shrink-0 rounded-sm bg-danger-a12 px-1.5 py-px font-mono text-[10px] text-danger-t"

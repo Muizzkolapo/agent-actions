@@ -16,7 +16,7 @@ export function Logo({ size = 32 }: { size?: number }) {
         height="31"
         rx="5.5"
         fill="hsl(var(--accent-a12))"
-        stroke="hsl(var(--accent-a18))"
+        stroke="hsl(var(--accent-a30))"
       />
       <rect x="7.5" y="13" width="4" height="10" rx="2" fill="hsl(var(--accent))" />
       <rect x="14" y="7" width="4" height="16" rx="2" fill="hsl(var(--accent-soft-a50))" />

@@ -242,31 +242,38 @@ def _is_usable(event: Any) -> bool:
     )
 
 
+def _problem_windows() -> dict[str, deque[dict[str, Any]]]:
+    """A budget per problem level, never one shared between them.
+
+    Warnings outrun errors by roughly 780:1 in a real log, so a shared budget is
+    spent by warnings and the errors the page exists to show fall off the back
+    of it.
+    """
+    return {level: deque(maxlen=EVENT_PROBLEM_LIMIT) for level in PROBLEM_LEVELS}
+
+
 def _collect_window(
     tail: deque[dict[str, Any]],
-    problems: deque[dict[str, Any]],
+    problems: dict[str, deque[dict[str, Any]]],
     levels: dict[str, int],
     seq: int,
     event: dict[str, Any],
 ) -> None:
-    """Fold one row into the recency window, the problem window and the totals.
-
-    Warnings and errors keep a budget of their own: they are rare and often far
-    back in a log, so a plain recency window holds none of them and the page that
-    exists to answer "what went wrong" answers nothing.
-    """
+    """Fold one row into the recency window, its problem window and the totals."""
     row = {**event, "seq": seq}
     tail.append(row)
     level = event.get("level")
     if isinstance(level, str):
         levels[level] = levels.get(level, 0) + 1
-        if level in PROBLEM_LEVELS:
-            problems.append(row)
+        if level in problems:
+            problems[level].append(row)
 
 
-def _window(tail: deque[dict[str, Any]], problems: deque[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The two windows in one list, in file order, each row once."""
-    by_seq = {row["seq"]: row for row in problems}
+def _window(
+    tail: deque[dict[str, Any]], problems: dict[str, deque[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    """Every window in one list, in file order, each row once."""
+    by_seq = {row["seq"]: row for rows in problems.values() for row in rows}
     by_seq.update({row["seq"]: row for row in tail})
     return [by_seq[seq] for seq in sorted(by_seq)]
 
@@ -314,7 +321,7 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
     try:
         invocations: dict[str, dict[str, Any]] = {}
         tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
-        problems: deque[dict[str, Any]] = deque(maxlen=EVENT_PROBLEM_LIMIT)
+        problems = _problem_windows()
         levels: dict[str, int] = {}
         for seq, event in enumerate(_iter_events(events_path)):
             _collect_window(tail, problems, levels, seq, event)
@@ -481,7 +488,7 @@ def extract_run_events(events_path: Path) -> RunEvents:
     action_metrics: dict[str, Any] = {}
     runtime_warnings: list[dict[str, Any]] = []
     tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
-    problems: deque[dict[str, Any]] = deque(maxlen=EVENT_PROBLEM_LIMIT)
+    problems = _problem_windows()
     levels: dict[str, int] = {}
 
     try:

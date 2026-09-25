@@ -36,6 +36,10 @@ def _event_sort_key(event: dict) -> tuple[str, int]:
     return (str(timestamp or ""), seq if isinstance(seq, int) else 0)
 
 
+# Scanner projections that exist to be folded into the catalog, not shipped in it.
+_PER_LOG_ONLY = frozenset({"events", "level_counts"})
+
+
 def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
     """Take from each queue in turn until the budget runs out."""
     taken: list[dict] = []
@@ -51,11 +55,13 @@ def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
 def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> list[dict]:
     """Merge per-log event tails into one reverse-chronological window.
 
-    Warnings and errors are admitted first — they are rare and often a log's
-    oldest rows, so a budget spent by recency alone holds none of them. The rest
-    is shared round-robin, newest first: a project-level log accumulates across
-    every CLI invocation, so a straight global sort gives it the whole window.
-    Sources are pairs because a workflow may share a name with the project log.
+    Problems and recent rows each hold half the window, and either may spend
+    what the other cannot fill. Neither alone is the answer: a budget spent by
+    recency holds none of the rare old errors, and one spent by problems shows
+    nothing of what just happened. Within each half the share is round-robin,
+    newest first, because a project-level log accumulates across every CLI
+    invocation and a straight global sort hands it everything. Sources are
+    pairs because a workflow may share a name with the project log.
     """
     stamped = [
         [{**evt, "id": f"{name}:{evt.get('seq')}"} for evt in reversed(rows)]
@@ -63,10 +69,12 @@ def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> lis
         if rows
     ]
     is_problem = lambda evt: evt.get("level") in PROBLEM_LEVELS  # noqa: E731
-    merged = _round_robin([[e for e in q if is_problem(e)] for q in stamped], limit)
-    merged += _round_robin(
-        [[e for e in q if not is_problem(e)] for q in stamped], limit - len(merged)
-    )
+    problems = [[e for e in q if is_problem(e)] for q in stamped]
+    recent = [[e for e in q if not is_problem(e)] for q in stamped]
+
+    reserve = limit // 2
+    merged = _round_robin(problems, max(reserve, limit - sum(len(q) for q in recent)))
+    merged += _round_robin(recent, limit - len(merged))
     merged.sort(key=_event_sort_key, reverse=True)
     return merged
 
@@ -284,10 +292,12 @@ class CatalogGenerator:
             # Each workflow's event tail is merged into logs.events below; keeping
             # the per-workflow copy here too would ship the same rows twice.
             "runs": {
-                name: {k: v for k, v in data.items() if k != "events"}
+                name: {k: v for k, v in data.items() if k not in _PER_LOG_ONLY}
                 for name, data in (runs_data or {}).items()
             },
-            "logs": dict(logs_data or {}),  # Global CLI logs and validation events
+            # Global CLI logs and validation events. Copied, not aliased: the
+            # caller's dict is still read below to build the event window.
+            "logs": {k: v for k, v in (logs_data or {}).items() if k not in _PER_LOG_ONLY},
             "vendors": vendors_data or {},  # LLM vendor configurations
             "error_types": error_types_data or {},  # Error class hierarchy
             "event_types": event_types_data or {},  # Event type definitions

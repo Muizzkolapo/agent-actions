@@ -14,10 +14,15 @@ function sum(groups: ValidationGroup[]): number {
 }
 
 /**
- * Home's health card, the sidebar Logs badge and the Logs header stats all read
- * this. Counting the same groups the Logs page lists is what keeps them from
- * drifting apart — a monitoring dashboard that contradicts itself is worse than
- * one that shows nothing.
+ * Problems worth acting on: schema validation findings, plus the runs and
+ * actions that failed. Home's health card and the sidebar badge both read this,
+ * so those two always agree.
+ *
+ * This is deliberately NOT the Logs page's population. Logs counts rows in the
+ * event stream by level; this counts distinct problems, drawn partly from run
+ * records that are not log rows at all. The two numbers differ on a healthy
+ * project and both are right — which is why each names what it counts on screen
+ * rather than being labelled "errors" twice.
  */
 export function deriveHealth(data: CatalogData): HealthSummary {
   const errorGroups = [...data.validationErrorGroups, ...data.runtimeErrorGroups]

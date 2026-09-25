@@ -90,7 +90,6 @@ const config: Config = {
         'accent-t': 'hsl(var(--accent-t) / <alpha-value>)',
         'accent-bright': 'hsl(var(--accent-bright) / <alpha-value>)',
         'accent-a12': 'hsl(var(--accent-a12) / <alpha-value>)',
-        'accent-a18': 'hsl(var(--accent-a18) / <alpha-value>)',
         'accent-a30': 'hsl(var(--accent-a30) / <alpha-value>)',
         'accent-soft-a50': 'hsl(var(--accent-soft-a50) / <alpha-value>)',
         'accent-soft-a70': 'hsl(var(--accent-soft-a70) / <alpha-value>)',

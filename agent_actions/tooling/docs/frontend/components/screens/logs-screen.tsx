@@ -144,7 +144,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   const scoped = useMemo(
     () =>
       range
-        ? unranged.filter(({ time }) => !isNaN(time) && time >= range[0] && time <= range[1])
+        ? unranged.filter(({ time }) => !isNaN(time) && time >= range[0] && time < range[1])
         : unranged,
     [unranged, range],
   )
@@ -292,9 +292,13 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
     setSearch("")
     setWorkflow("all")
     setRange(null)
+    setDiagnostics(true)
   }
 
-  const filtersActive = level !== "all" || search !== "" || workflow !== "all" || range !== null
+  // Diagnostics-off hides rows like any other filter, and a window that is all
+  // diagnostics empties the page with nothing on screen saying why.
+  const filtersActive =
+    level !== "all" || search !== "" || workflow !== "all" || range !== null || !diagnostics
 
   // The window is a recent slice of each log, so a search can legitimately match
   // nothing that is still in it. Saying so beats an unexplained blank panel.
@@ -333,14 +337,14 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
       <div className="grid grid-cols-[repeat(auto-fit,minmax(215px,1fr))] gap-3">
         <StatCard
           dot="bg-danger"
-          label="Errors"
+          label="Error events"
           value={levelCounts.error.toLocaleString()}
           valueClass="text-danger-t"
           note={`in view · ${eventLevels.error.toLocaleString()} across all logs`}
         />
         <StatCard
           dot="bg-warning"
-          label="Warnings"
+          label="Warning events"
           value={levelCounts.warn.toLocaleString()}
           valueClass="text-warning-t"
           note={`in view · ${eventLevels.warn.toLocaleString()} across all logs`}
@@ -361,7 +365,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
           valueClass="text-warning-t"
           note={
             groups[0] && rows.length
-              ? `${Math.round((groups[0].count / rows.length) * 100)}% of window`
+              ? `${Math.round((groups[0].count / rows.length) * 100)}% of the rows shown`
               : "no events in window"
           }
           mono
@@ -973,13 +977,17 @@ function useHistogram(scoped: { event: LogEvent; time: number }[], range: [numbe
 
     const buckets: Bucket[] = counts.map((c, i) => {
       const from = min + i * width
-      const to = from + width
+      // Buckets are half-open so a row on a boundary lands in exactly one, but
+      // the newest row is clamped into the last bucket — which must therefore
+      // reach past it, or selecting that bucket drops the row it counts.
+      const last = i === HISTOGRAM_BUCKETS - 1
+      const to = last ? max + 1 : from + width
       const total = c.error + c.warn + c.info + c.debug
       return {
         from,
         to,
         title: `${fmtSpanTick(from, span)} — ${total} event${total === 1 ? "" : "s"}`,
-        selected: !range || (to >= range[0] && from <= range[1]),
+        selected: !range || (to > range[0] && from < range[1]),
         segments: LEVELS.filter((l) => c[l] > 0).map((l) => ({
           level: l,
           height: `${(c[l] / peak) * 100}%`,
@@ -988,10 +996,14 @@ function useHistogram(scoped: { event: LogEvent; time: number }[], range: [numbe
     })
 
     const axis = [0, 1, 2, 3].map((i) => fmtSpanTick(min + (span * i) / 3, span))
+    const [from, to] = range ?? [min, max]
+    const plotted = counts.reduce((n, c) => n + c.error + c.warn + c.info + c.debug, 0)
     return {
       buckets,
       axis,
-      caption: `${fmtSpan(min, max)} · ${scoped.length.toLocaleString()} in window`,
+      caption: range
+        ? `${fmtSpan(from, to)} selected of ${fmtSpan(min, max)}`
+        : `${fmtSpan(min, max)} · ${plotted.toLocaleString()} plotted`,
     }
   }, [scoped, range])
 }

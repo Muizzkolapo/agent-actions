@@ -391,10 +391,21 @@ export function transformWorkflowData(catalog: RawCatalogJson): WorkflowDataSumm
 
 const EVENT_LEVELS: EventLevel[] = ["error", "warn", "info", "debug"]
 
-function normalizeLevel(raw: string | undefined): EventLevel {
-  const level = (raw ?? "").toLowerCase()
+/** Rows are read back from a file on disk, so `raw` is whatever was written —
+ *  a number here would throw inside the whole-catalog transform, not just here. */
+function normalizeLevel(raw: unknown): EventLevel {
+  const level = typeof raw === "string" ? raw.toLowerCase() : ""
   if (level === "warning") return "warn"
   return (EVENT_LEVELS as string[]).includes(level) ? (level as EventLevel) : "info"
+}
+
+/** The generator stamps each row's id with the log it came from: `workflow:<name>:<seq>`
+ *  or `project:logs:<seq>`. That is the attribution it is certain of, and it stands in
+ *  where a row carries no workflow of its own. */
+function sourceWorkflow(id: string | undefined): string | null {
+  if (!id) return null
+  const parts = id.split(":")
+  return parts.length === 3 && parts[0] === "workflow" ? parts[1] : null
 }
 
 /** Absent and empty read the same to a reader; both mean "not recorded". */
@@ -428,7 +439,7 @@ export function transformLogEvents(catalog: RawCatalogJson): LogEvent[] {
         orNull(meta.action_name),
       invocationId: orNull(meta.invocation_id),
       correlationId: orNull(meta.correlation_id),
-      workflow: orNull(meta.workflow_name),
+      workflow: orNull(meta.workflow_name) ?? sourceWorkflow(raw.id),
       data: raw.data ?? {},
     }
   })
