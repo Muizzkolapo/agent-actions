@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import sqlite3
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -16,6 +17,10 @@ from agent_actions.utils.file_handler import find_project_dirs
 from ..parser import extract_fields_for_docs
 
 logger = logging.getLogger(__name__)
+
+# Event logs reach hundreds of megabytes, so the docs catalog embeds only the most
+# recent slice of the stream per workflow.
+EVENT_TAIL_LIMIT = 2000
 
 
 def scan_prompts(project_root: Path) -> dict[str, Any]:
@@ -182,9 +187,10 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             events_path = target_dir / "events.json"
         action_metrics: dict[str, Any] = {}
         runtime_warnings: list[dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
         if events_path.exists():
             try:
-                action_metrics, runtime_warnings = extract_run_events(events_path)
+                action_metrics, runtime_warnings, events = extract_run_events(events_path)
             except (OSError, ValueError, KeyError) as e:
                 logger.warning(
                     "Failed to extract run events from %s: %s",
@@ -210,6 +216,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "latest_run": latest_run,
             "action_metrics": action_metrics,
             "runtime_warnings": runtime_warnings,
+            "events": events,
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
@@ -305,10 +312,11 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
 
 class RunEvents(NamedTuple):
-    """Per-action metrics and warn/error events read from one events.json."""
+    """Projections read from one events.json in a single pass."""
 
     action_metrics: dict[str, Any]
     runtime_warnings: list[dict[str, Any]]
+    events: list[dict[str, Any]]
 
 
 def _collect_runtime_warning(event: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
@@ -402,18 +410,23 @@ def _collect_action_metrics(event: dict[str, Any], action_metrics: dict[str, Any
 
 
 def extract_run_events(events_path: Path) -> RunEvents:
-    """Read an events.json once, returning action metrics and runtime warnings.
+    """Read an events.json once, returning every projection the docs site needs.
 
-    Event logs grow to hundreds of megabytes on an active project, so both
-    projections are folded from a single pass rather than a read each.
+    Event logs grow to hundreds of megabytes on an active project, so all three
+    projections are folded from a single pass rather than a read each. Rows keep
+    their `seq` — the position of the event among the parsed lines of the file —
+    so a permalink to one event survives later appends, which a row index within
+    the returned tail would not.
     """
     action_metrics: dict[str, Any] = {}
     runtime_warnings: list[dict[str, Any]] = []
+    tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
 
     try:
-        for event in _iter_events(events_path):
+        for seq, event in enumerate(_iter_events(events_path)):
             _collect_runtime_warning(event, runtime_warnings)
             _collect_action_metrics(event, action_metrics)
+            tail.append({"seq": seq, **event})
     except OSError as e:
         logger.debug("Could not read run events from %s: %s", events_path, e)
 
@@ -423,4 +436,4 @@ def extract_run_events(events_path: Path) -> RunEvents:
         if req_count > 0:
             metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
-    return RunEvents(action_metrics, runtime_warnings)
+    return RunEvents(action_metrics, runtime_warnings, list(tail))

@@ -29,6 +29,7 @@ from .component_scanners import (
     scan_vendors,
 )
 from .data_scanners import (
+    EVENT_TAIL_LIMIT,
     extract_run_events,
     scan_logs,
     scan_prompts,
@@ -54,6 +55,7 @@ __all__ = [
     "scan_runs",
     "scan_logs",
     "extract_run_events",
+    "EVENT_TAIL_LIMIT",
     # Code scanners
     "scan_tool_functions",
     # Component scanners

@@ -444,6 +444,21 @@ class CatalogGenerator:
         catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
         catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
 
+        # Merge each workflow's event tail into one reverse-chronological stream.
+        # The id pairs the workflow with the event's position in its own log, so a
+        # permalink survives a regenerate that appended more events.
+        event_stream: list[dict] = []
+        for wf_name, wf_data in (runs_data or {}).items():
+            for evt in wf_data.get("events", []):
+                event_stream.append({"id": f"{wf_name}:{evt.get('seq')}", **evt})
+        event_stream.sort(
+            key=lambda e: (e.get("meta", {}).get("timestamp") or "", e.get("seq") or 0),
+            reverse=True,
+        )
+        del event_stream[scanner.EVENT_TAIL_LIMIT :]
+        catalog["logs"]["events"] = event_stream
+        catalog["stats"]["total_events"] = len(event_stream)
+
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0
         catalog["stats"]["total_error_types"] = sum(
