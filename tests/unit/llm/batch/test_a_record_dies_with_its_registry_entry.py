@@ -534,6 +534,17 @@ def test_saving_over_an_unreadable_entry_retires_it(project):
     assert json.loads(state["raw"])["pages.json"]["batch_id"] == "b-new"
 
 
+def test_a_key_that_was_unreadable_names_its_successor(project):
+    """The cache answers before the entries the load could not read — the factory
+    keeps one manager per action, so a second save-over on this key would
+    otherwise read the stale id and strand the first successor's record."""
+    manager, _state = _registry_over({"pages.json": _unreadable_entry("b-unreadable")})
+
+    manager.save_batch_job("pages.json", _entry("b-new"))
+
+    assert manager.batch_id_at("pages.json") == "b-new"
+
+
 def test_removing_an_unreadable_entry_really_removes_it(project):
     """`remove_batch_job` means the key is gone — a write that put it back would
     hand a spent attempt to the next run as if it were live."""
