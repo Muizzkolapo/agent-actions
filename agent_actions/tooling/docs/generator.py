@@ -24,6 +24,34 @@ from .scanner import ReadmeData
 logger = logging.getLogger(__name__)
 
 
+def _merge_event_tails(sources: dict[str, list[dict]], limit: int) -> list[dict]:
+    """Merge per-log event tails into one reverse-chronological window.
+
+    The budget is shared round-robin, newest first, rather than handed to
+    whichever log happens to be newest: a project-level log accumulates across
+    every CLI invocation, so a straight global sort gives it the whole window and
+    leaves every workflow undiagnosable. An event's id pairs its log with its
+    position in that log, so a permalink survives a regenerate that appended rows.
+    """
+    queues = [
+        [{"id": f"{name}:{evt.get('seq')}", **evt} for evt in reversed(rows)]
+        for name, rows in sorted(sources.items())
+        if rows
+    ]
+    merged: list[dict] = []
+    for depth in range(max((len(q) for q in queues), default=0)):
+        if len(merged) >= limit:
+            break
+        for queue in queues:
+            if depth < len(queue) and len(merged) < limit:
+                merged.append(queue[depth])
+    merged.sort(
+        key=lambda e: (e.get("meta", {}).get("timestamp") or "", e.get("seq") or 0),
+        reverse=True,
+    )
+    return merged
+
+
 def _copy_readme_images(
     readme_data: ReadmeData,
     workflow_id: str,
@@ -444,20 +472,11 @@ class CatalogGenerator:
         catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
         catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
 
-        # Merge each workflow's event tail into one reverse-chronological stream.
-        # The id pairs the workflow with the event's position in its own log, so a
-        # permalink survives a regenerate that appended more events.
-        event_stream: list[dict] = [
-            {"id": f"logs:{evt.get('seq')}", **evt} for evt in (logs_data or {}).get("events", [])
-        ]
+        # One reverse-chronological stream over every log the project wrote.
+        event_sources = {"logs": (logs_data or {}).get("events", [])}
         for wf_name, wf_data in (runs_data or {}).items():
-            for evt in wf_data.get("events", []):
-                event_stream.append({"id": f"{wf_name}:{evt.get('seq')}", **evt})
-        event_stream.sort(
-            key=lambda e: (e.get("meta", {}).get("timestamp") or "", e.get("seq") or 0),
-            reverse=True,
-        )
-        del event_stream[scanner.EVENT_TAIL_LIMIT :]
+            event_sources[wf_name] = wf_data.get("events", [])
+        event_stream = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
         catalog["logs"]["events"] = event_stream
         catalog["stats"]["total_events"] = len(event_stream)
 
