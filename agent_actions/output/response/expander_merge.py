@@ -3,6 +3,7 @@
 import copy
 from typing import Any
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.config_fields import get_default
 
 
@@ -40,23 +41,61 @@ def deep_merge_context_scope(
     return merged
 
 
+# The settings the chunker reads out of chunk_config, which are also writable as
+# keys of their own on an action or in defaults.
+CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_method")
+
+
 def process_chunk_config(
     agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
-    """Process chunk configuration for an agent."""
-    chunk_config = action.get("chunk_config", defaults.get("chunk_config", {}))
-    if chunk_config:
-        agent["chunk_config"] = chunk_config
-    else:
-        agent["chunk_config"] = {}
-        if action.get("chunk_size") or defaults.get("chunk_size"):
-            agent["chunk_config"]["chunk_size"] = action.get(
-                "chunk_size", defaults.get("chunk_size", get_default("chunk_size"))
-            )
-        if action.get("chunk_overlap") or defaults.get("chunk_overlap"):
-            agent["chunk_config"]["chunk_overlap"] = action.get(
-                "chunk_overlap", defaults.get("chunk_overlap", get_default("chunk_overlap"))
-            )
+    """Merge the chunk settings, name by name, later layers winning.
+
+    Per name rather than per block, so a narrower block keeps the names it omits
+    and a block written further out cannot overrule the action. The project
+    file's settings arrive spread across the workflow's keys, outside all four.
+    """
+    layers = (
+        {setting: defaults.get(setting) for setting in CHUNK_SETTINGS},
+        defaults.get("chunk_config") or {},
+        {setting: action.get(setting) for setting in CHUNK_SETTINGS},
+        action.get("chunk_config") or {},
+    )
+
+    merged: dict[str, Any] = {}
+    for layer in layers:
+        for setting in CHUNK_SETTINGS:
+            value = layer.get(setting)
+            if value is not None:
+                merged[setting] = value
+    agent["chunk_config"] = merged
+    _refuse_unsplittable(merged, action.get("name", "unknown"))
+
+
+def _refuse_unsplittable(chunk_config: dict[str, Any], action_name: str) -> None:
+    """Refuse at load the size/overlap pair the splitter refuses at split.
+
+    Merging by name is what lets a nearer chunk_size meet an overlap set further
+    out, so the pair is reachable without either level asking for it. Both values
+    are known here; leaving it to the splitter spends a run to say so.
+    """
+    size = chunk_config.get("chunk_size")
+    overlap = chunk_config.get("chunk_overlap")
+    size = get_default("chunk_size") if size is None else size
+    overlap = get_default("chunk_overlap") if overlap is None else overlap
+    split_method = chunk_config.get("split_method") or get_default("split_method")
+
+    if overlap >= size and split_method in ("tiktoken", "chars"):
+        raise ConfigurationError(
+            f"chunk_overlap ({overlap}) must be smaller than chunk_size ({size}) "
+            f"for a '{split_method}' split",
+            context={
+                "action": action_name,
+                "chunk_size": size,
+                "chunk_overlap": overlap,
+                "split_method": split_method,
+            },
+        )
 
 
 def initialize_optional_fields(agent: dict[str, Any]) -> None:

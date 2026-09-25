@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
+from agent_actions.config.schema import ChunkConfig
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ValidationError
 from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
@@ -161,7 +162,7 @@ class DefaultAgentConfig(BaseModel):
 
     api_key: SecretStr | None = None
     model_name: str | None = None
-    chunk_config: dict[str, Any] | None = None
+    chunk_config: ChunkConfig | None = None
     is_operational: bool = True
     run_mode: RunMode = RunMode.ONLINE
     model_config = ConfigDict(extra="allow")
@@ -194,7 +195,7 @@ class AgentConfig(BaseModel):
     dependencies: list[str] = Field(default_factory=list)
     prompt: str | None = None
     schema_name: str | None = None
-    chunk_config: dict[str, Any] = Field(default_factory=dict)
+    chunk_config: ChunkConfig = Field(default_factory=ChunkConfig)
     is_operational: bool = True
     add_dispatch: bool | None = None
     run_mode: RunMode = RunMode.ONLINE

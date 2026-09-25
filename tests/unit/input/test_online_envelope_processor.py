@@ -40,7 +40,7 @@ def test_online_text_data_chunk_is_wrapped():
     dc, st = _online(
         "a short chunk.",
         file_type=".txt",
-        agent_config={"chunk_config": {"chunk_size": 4000, "overlap": 0}},
+        agent_config={"chunk_config": {"chunk_size": 4000, "chunk_overlap": 0}},
     )
     assert dc is st
     assert dc[0]["content"]["source"] == {"content": "a short chunk."}

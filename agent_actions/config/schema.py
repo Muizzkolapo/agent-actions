@@ -133,6 +133,34 @@ class VersionConfig(BaseModel):
     mode: VersionMode = Field(default=VersionMode.PARALLEL, description="Execution mode")
 
 
+class ChunkConfig(BaseModel):
+    """The chunking settings, under the names the chunker reads them by.
+
+    Typed because an undeclared key here is silently replaced by the hardcoded
+    default at split time: `overlap` was read for `chunk_overlap` for long
+    enough that both spellings are written in the wild.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(data, cls, "chunk_config")
+
+    @staticmethod
+    def retired_spellings() -> dict[str, str]:
+        """Names once read for a declared setting, mapped to the one that is."""
+        return {"overlap": "chunk_overlap"}
+
+    chunk_size: int | None = Field(default=None, gt=0, description="Characters or tokens per chunk")
+    chunk_overlap: int | None = Field(
+        default=None, ge=0, description="Overlap between consecutive chunks"
+    )
+    tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
+    split_method: str | None = Field(default=None, description="How text is split into chunks")
+
+
 class MergePattern(str, Enum):
     """Patterns for version output consumption."""
 
@@ -424,9 +452,11 @@ class ActionConfig(_RetryValidators):
     interceptors: list[dict[str, Any]] | None = Field(
         default=None, description="Interceptor configuration"
     )
-    chunk_config: dict[str, Any] | None = Field(default=None, description="Chunking configuration")
-    chunk_size: int | None = Field(default=None, description="Chunk size")
-    chunk_overlap: int | None = Field(default=None, description="Chunk overlap")
+    chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
+    chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
+    chunk_overlap: int | None = Field(default=None, ge=0, description="Chunk overlap")
+    tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
+    split_method: str | None = Field(default=None, description="How text is split into chunks")
     context_scope: dict[str, Any] | None = Field(
         default=None, description="Context scope configuration"
     )
@@ -517,11 +547,11 @@ class DefaultsConfig(_RetryValidators):
 
     # --- Expander-consumed keys ---
     context_scope: dict[str, Any] | None = Field(default=None, description="Default ctx scope")
-    chunk_config: dict[str, Any] | None = Field(
+    chunk_config: ChunkConfig | None = Field(
         default=None, description="Default chunk configuration"
     )
-    chunk_size: int | None = Field(default=None, description="Default chunk size")
-    chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
+    chunk_size: int | None = Field(default=None, gt=0, description="Default chunk size")
+    chunk_overlap: int | None = Field(default=None, ge=0, description="Default chunk overlap")
 
     # --- Read out of defaults by field inheritance ---
     where_clause: dict[str, Any] | None = Field(
@@ -716,6 +746,7 @@ class WorkflowConfig(BaseModel):
 
 __all__ = [
     "ActionKind",
+    "ChunkConfig",
     "refuse_context_scope_siblings",
     "Granularity",
     "HitlConfig",

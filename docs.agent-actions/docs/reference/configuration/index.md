@@ -31,15 +31,14 @@ default_agent_config:
   api_key: OPENAI_API_KEY
   model_name: gpt-4o-mini
   model_vendor: openai
+  chunk_config:
+    chunk_size: 4000
+    chunk_overlap: 500
 
 schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
 required_by_default: false
-
-chunk_config:
-  chunk_size: 4000
-  overlap: 500
 
 output_storage:
   backend: sqlite
@@ -48,12 +47,11 @@ output_storage:
 
 | Field | Description |
 |-------|-------------|
-| `default_agent_config` | Default settings inherited by all actions |
+| `default_agent_config` | Default settings inherited by all actions, including `chunk_config` — see [Chunking](../data-io/chunking). Only keys nested here reach an action; a `chunk_config:` at the file's top level is read by nothing |
 | `schema_path` | Directory containing output schemas (default: `schema`) |
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
-| `chunk_config` | Text chunking for large inputs |
 | `output_storage` | Storage backend config: `backend` (`sqlite`), `db_path` (database file location) |
 
 ## Agentic Workflow Configuration
