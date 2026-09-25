@@ -97,7 +97,9 @@ class Cleaner:
         if not self.force and (not self._confirm(directories)):
             click.echo("Aborted – nothing was cleaned.")
             return
-        if self.remove_all:
+        if self.remove_all and (io_dir / "store").is_dir():
+            # Only when there is a store to read: opening a backend creates the
+            # directory, and `directories` was settled before this line.
             self._release_batch_records(io_dir)
         failures = []
         for directory in directories:
@@ -120,4 +122,6 @@ class Cleaner:
         click.echo(f"The following directories for '{self.agent}' will be removed:")
         for path in directories:
             click.echo(f"  • {path}")
+        if self.remove_all:
+            click.echo("  • what a provider recorded locally about this workflow's batches")
         return bool(click.confirm(click.style("Proceed?", fg="yellow"), default=False))

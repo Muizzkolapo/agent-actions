@@ -44,7 +44,9 @@ from agent_actions.llm.realtime.cleaner import Cleaner
     default=False,
     help=(
         "Remove all agent_io directories including target, staging and any "
-        "backend-owned store contents — unrecoverable. Confirms unless --force."
+        "backend-owned store contents, and reclaim what a provider recorded "
+        "locally about this workflow's batches — unrecoverable. Confirms "
+        "unless --force."
     ),
 )
 @handles_user_errors("clean")

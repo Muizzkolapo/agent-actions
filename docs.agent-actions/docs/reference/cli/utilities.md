@@ -130,6 +130,7 @@ Removes:
 - `agent_io/source/` — left behind by an earlier version; no longer written (always)
 - `agent_io/target/` — your generated output (only with `--target` or `--all`)
 - `agent_io/staging/` and the durable store — your input data and run history (only with `--all`)
+- what a provider recorded locally about this workflow's batches, under `.agac/` at the project root — the store being removed is what names them, so this is the last moment anything can reach them (only with `--all`)
 
 **Options:**
 | Option | Description |
@@ -137,7 +138,7 @@ Removes:
 | `-a, --agent TEXT` | Agentic workflow name (required) |
 | `-f, --force` | Skip interactive confirmation |
 | `--target` | Also remove `agent_io/target/` — your generated output |
-| `--all` | Remove all directories including target, staging, and the durable store — unrecoverable |
+| `--all` | Remove all directories including target, staging, and the durable store, and reclaim what a provider recorded locally about this workflow's batches — unrecoverable |
 
 **Examples:**
 ```bash

@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
@@ -37,6 +37,7 @@ class BatchRegistryManager:
         self._action_name = action_name
         self._metadata_key = f"{self.METADATA_KEY_PREFIX}{action_name}"
         self._cache: dict[str, BatchJobEntry] | None = None
+        self._unreadable: dict[str, Any] = {}
         self._batch_id_index: dict[str, str] | None = None
         self._lock = threading.Lock()
         logger.debug("Initialized BatchRegistryManager for action %s", action_name)
@@ -288,6 +289,7 @@ class BatchRegistryManager:
                 ) from e
             except (TypeError, ValueError) as e:
                 logger.warning("Invalid entry for %s in registry: %s", file_name, e)
+                self._unreadable[file_name] = entry_dict
                 continue
 
         logger.debug("Loaded %d entries from registry", len(registry))
@@ -299,7 +301,11 @@ class BatchRegistryManager:
         return registry
 
     def _persist_registry(self, registry: dict[str, BatchJobEntry]) -> None:
-        raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
+        # Entries the load could not read are written back as they came. Dropping
+        # one here would erase the only record of a batch id, and the id is what
+        # anything reclaiming that batch's payload has to go on.
+        raw_data = dict(self._unreadable)
+        raw_data.update({file_name: entry.to_dict() for file_name, entry in registry.items()})
         self._backend.save_metadata(self._metadata_key, json.dumps(raw_data, ensure_ascii=False))
         logger.debug(
             "Registry persisted for action %s (%d entries)", self._action_name, len(registry)

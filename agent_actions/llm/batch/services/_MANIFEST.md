@@ -4,6 +4,15 @@
 
 Services that coordinate batch submission, retrieval, and processing updates.
 
+## Project Surface
+
+| Symbol | File | Interaction | Config Key |
+|--------|------|-------------|------------|
+| `BatchSubmissionService._submit_to_provider()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
+| `register_recovery_batch()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
+| `process_recovery_batch()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
+| `cleanup_recovery()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
+
 ## Modules
 
 | Name | Type | Description | Signals |

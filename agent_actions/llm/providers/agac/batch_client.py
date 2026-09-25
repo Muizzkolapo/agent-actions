@@ -173,8 +173,13 @@ class AgacBatchClient(BaseBatchClient):
         else looks for, so it goes with the record it was.
         """
         state_dir = cls._state_dir()
-        (state_dir / f"{batch_id}.json").unlink(missing_ok=True)
-        for partial in state_dir.glob(f"{batch_id}_*.tmp"):
+        # Every provider's ids reach this now, so one is no longer a string this
+        # client minted: taken as a bare name, it can only name a file in here.
+        name = Path(batch_id).name
+        if not name:
+            return
+        (state_dir / f"{name}.json").unlink(missing_ok=True)
+        for partial in state_dir.glob(f"{name}_*.tmp"):
             partial.unlink(missing_ok=True)
         cls._batches.pop(batch_id, None)
         cls._tasks_by_batch.pop(batch_id, None)
@@ -193,7 +198,8 @@ class AgacBatchClient(BaseBatchClient):
             try:
                 if partial.stat().st_mtime > cutoff:
                     continue
-            except OSError:
+            except OSError as e:
+                logger.debug("Could not age a half-written record, leaving it: %s", e)
                 continue
             partial.unlink(missing_ok=True)
 

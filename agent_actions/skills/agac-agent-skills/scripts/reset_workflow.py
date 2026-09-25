@@ -37,6 +37,36 @@ def remove(p: Path) -> None:
         p.unlink()
 
 
+def release_batch_records(root: Path, base: Path, workflow: str) -> None:
+    """Reclaim what a provider recorded locally about this workflow's batches.
+
+    The store about to go holds the registry, and the registry is what names a
+    batch: afterwards nothing can find these records, and each holds the payload
+    its batch was submitted with. Reported and not raised — the reset is what
+    was asked for.
+    """
+    if not (base / "store").is_dir():
+        return
+    try:
+        from agent_actions.config.paths import PathManager
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.storage import get_storage_backend
+        from agent_actions.utils.path_utils import set_path_manager
+
+        set_path_manager(PathManager(project_root=root))
+        backend = get_storage_backend(workflow_path=str(base.parent), workflow_name=workflow)
+        try:
+            backend.initialize()
+            for action_name in BatchRegistryManager.list_action_names(backend):
+                for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
+                    release_local_batch_record(batch_id)
+        finally:
+            backend.close()
+    except Exception as e:  # noqa: BLE001 - a reset must not be blocked by this
+        print(f"warning: could not reclaim local batch records: {e}", file=sys.stderr)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workflow")
@@ -52,6 +82,7 @@ def main() -> None:
 
     if args.full:
         print(f"Full reset: wiping source, store, target, and status under {base}")
+        release_batch_records(root, base, args.workflow)
         for sub in ("target", "source", "store"):
             remove(base / sub)
         remove(status)
