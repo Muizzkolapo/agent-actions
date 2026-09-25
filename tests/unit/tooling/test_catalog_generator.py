@@ -1,6 +1,7 @@
 """I-6: Coverage of CatalogGenerator.generate() — happy path and empty input."""
 
 from agent_actions.tooling.docs.generator import CatalogGenerator
+from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
 
 
 def _make_generator(workflows_data=None, project_path="/tmp"):
@@ -121,7 +122,7 @@ def _wf_events(workflow: str, seqs: list[int], hour: int = 10) -> dict:
                 "diagnostic": False,
                 "message": f"{workflow} step {s}",
                 "meta": {
-                    "timestamp": f"2026-09-22T{hour:02d}:00:{s:02d}.000Z",
+                    "timestamp": f"2026-09-22T{hour:02d}:00:00.{s:06d}Z",
                     "invocation_id": "inv1",
                     "workflow_name": workflow,
                 },
@@ -162,3 +163,32 @@ class TestCatalogGeneratorEventStream:
         result = gen.generate(**inputs)
 
         assert result["logs"]["events"][0]["id"] == "alpha:7"
+
+    def test_a_busy_log_does_not_crowd_out_a_quiet_one(self):
+        """One workflow logging far more — and more recently — must not take the
+        whole window, or its neighbours become undiagnosable."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {
+            "alpha": _wf_events("alpha", list(range(EVENT_TAIL_LIMIT)), hour=11),
+            "beta": _wf_events("beta", [0, 1], hour=9),
+        }
+        result = gen.generate(**inputs)
+
+        events = result["logs"]["events"]
+        assert len(events) == EVENT_TAIL_LIMIT
+        sources = {e["id"].split(":")[0] for e in events}
+        assert sources == {"alpha", "beta"}
+
+    def test_the_project_log_shares_the_window_with_workflows(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["logs_data"] = {
+            **inputs["logs_data"],
+            "events": _wf_events("logs", list(range(EVENT_TAIL_LIMIT)), hour=12)["events"],
+        }
+        inputs["runs_data"] = {"alpha": _wf_events("alpha", [0, 1], hour=9)}
+        result = gen.generate(**inputs)
+
+        sources = {e["id"].split(":")[0] for e in result["logs"]["events"]}
+        assert sources == {"logs", "alpha"}
