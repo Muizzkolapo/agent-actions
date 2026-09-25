@@ -1,51 +1,60 @@
-"""Pins the enforced ruff scope to the tree that actually holds tracked Python.
+"""Pins the ruff gate's effective scope to every tracked Python file.
 
-``task lint`` ran ``ruff check agent_actions`` while AGENTS.md, RELEASING.md and
-``pyproject.toml``'s ``per-file-ignores`` (which carry ``examples/*`` and ``tests/*``
-entries) all described a wider gate. CI runs ``task lint``, so four findings sat on
-``main`` in ``examples/`` — code a user is invited to copy — for as long as the gap
-existed. These tests fail if the enforced scope narrows again, if lint and format drift
-apart, or if a new top-level Python tree appears that the gate does not reach.
+Coverage is read back from ruff itself rather than from the Taskfile's path arguments: a
+narrowing can arrive as the task's scope, an ``--exclude`` flag, or an ``exclude`` in
+``pyproject.toml``, and only the first is visible in the YAML. ``--no-cache`` is load
+bearing — ruff reports a cached clean result for a file it has not re-read, so a warm
+cache hides a violation from every scope at once.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TASKFILE = _REPO_ROOT / "Taskfile.yml"
 
-# Tasks whose ruff invocation is a merge gate (`task check` chains lint + format:check,
-# and `format` is the writer that must reach everything `format:check` inspects).
-_RUFF_TASKS = ("lint", "format", "format:check")
+
+def _ruff() -> str:
+    candidate = Path(sys.prefix) / "bin" / "ruff"
+    resolved = str(candidate) if candidate.is_file() else shutil.which("ruff")
+    assert resolved, "ruff is a dev dependency and must be installed to verify the lint gate"
+    return resolved
 
 
-def _ruff_scope(task_name: str) -> set[str]:
-    """Path arguments the named task hands to ruff, with Taskfile vars resolved."""
+def _ruff_args(task_name: str) -> list[str]:
+    """The argv the named task hands to ruff, Taskfile vars resolved."""
     doc = yaml.safe_load(_TASKFILE.read_text())
     variables = doc.get("vars", {})
-    cmds = doc["tasks"][task_name]["cmds"]
+    cmds = [c for c in doc["tasks"][task_name]["cmds"] if isinstance(c, str) and "ruff" in c]
+    assert len(cmds) == 1, f"task {task_name!r} must run exactly one ruff command, found {cmds}"
 
-    ruff_cmds = [c for c in cmds if isinstance(c, str) and "ruff" in c]
-    assert ruff_cmds, f"task {task_name!r} runs no ruff command"
-
-    paths: set[str] = set()
-    for cmd in ruff_cmds:
-        for name, value in variables.items():
-            cmd = cmd.replace("{{." + name + "}}", str(value))
-        tokens = cmd.split()
-        # Skip `uv run ruff <subcommand>`; the rest is flags and paths.
-        after_subcommand = tokens[tokens.index("ruff") + 2 :]
-        paths.update(t for t in after_subcommand if not t.startswith("-"))
-    return paths
+    cmd = cmds[0]
+    for name, value in variables.items():
+        cmd = cmd.replace("{{." + name + "}}", str(value))
+    tokens = cmd.split()
+    return tokens[tokens.index("ruff") + 1 :]
 
 
-def _tracked_python_trees() -> set[str]:
-    """Top-level directories under which git tracks at least one ``.py`` file."""
+def _files_ruff_would_inspect(args: list[str]) -> set[str]:
+    """Repo-relative paths ruff reports it would read, given a task's own arguments."""
+    result = subprocess.run(
+        [_ruff(), *args, "--no-cache", "--show-files"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    listed = (Path(line) for line in result.stdout.splitlines() if line.strip())
+    return {str(p.relative_to(_REPO_ROOT)) if p.is_absolute() else str(p) for p in listed}
+
+
+def _tracked_python_files() -> set[str]:
     result = subprocess.run(
         ["git", "ls-files", "*.py"],
         cwd=_REPO_ROOT,
@@ -53,28 +62,29 @@ def _tracked_python_trees() -> set[str]:
         text=True,
         check=True,
     )
-    return {line.split("/")[0] for line in result.stdout.splitlines() if "/" in line}
+    return {line for line in result.stdout.splitlines() if line.strip()}
 
 
-def _unreached(scope: set[str], trees: set[str]) -> set[str]:
-    if "." in scope:
-        return set()
-    return trees - scope
+def _scope_tokens(task_name: str) -> set[str]:
+    """A task's ruff arguments minus the subcommand, for comparing lint against format."""
+    return {t for t in _ruff_args(task_name)[1:] if t != "--check"}
 
 
-def test_tracked_python_trees_are_discovered():
-    """Guards the helper: an empty result would make the coverage tests vacuous."""
-    assert _tracked_python_trees() >= {"agent_actions", "examples", "tests"}
+def test_tracked_python_files_are_discovered():
+    """Guards the helpers: empty results would make the coverage assertion vacuous."""
+    tracked = _tracked_python_files()
+    assert len(tracked) > 500, f"expected the full tracked tree, got {len(tracked)} files"
+    assert {p.split("/")[0] for p in tracked} == {"agent_actions", "examples", "tests"}
 
 
-@pytest.mark.parametrize("task_name", _RUFF_TASKS)
-def test_task_reaches_every_tracked_python_tree(task_name):
-    unreached = _unreached(_ruff_scope(task_name), _tracked_python_trees())
+def test_lint_task_inspects_every_tracked_python_file():
+    unreached = _tracked_python_files() - _files_ruff_would_inspect(_ruff_args("lint"))
     assert not unreached, (
-        f"task {task_name} does not reach {sorted(unreached)}; "
-        f"its scope is {sorted(_ruff_scope(task_name))}"
+        f"`task lint` would not read {len(unreached)} tracked file(s), e.g. {sorted(unreached)[:5]}"
     )
 
 
-def test_lint_and_format_check_share_one_scope():
-    assert _ruff_scope("lint") == _ruff_scope("format:check")
+def test_format_tasks_carry_the_same_scope_as_lint():
+    """One tree, one scope: `ruff format` has no --show-files, so compare arguments."""
+    assert _scope_tokens("format") == _scope_tokens("lint")
+    assert _scope_tokens("format:check") == _scope_tokens("lint")
