@@ -294,6 +294,23 @@ class TestTheRecordHasAnEndOfLife:
         assert _run(project)[0] == 0
         assert _records(project), "the batch was no longer collectable"
 
+    def test_clean_all_reclaims_the_records_it_would_orphan(self, project):
+        """`agac clean --all` wipes the store holding the registry. Afterwards no
+        entry names these batches, so nothing could ever find them to reclaim."""
+        assert _run(project, "--fresh")[0] == 0
+        assert self._on_disk(project), "the submit recorded nothing"
+
+        cleaned = subprocess.run(
+            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+
+        assert self._on_disk(project) == []
+
     def test_asking_where_records_live_creates_nothing(self, scoped_to):
         """A project that never submitted a batch must not gain a `.agac/` for
         having been asked where one would go — which is what --fresh does now."""
@@ -309,10 +326,12 @@ class TestTheRecordHasAnEndOfLife:
         """`atomic_json_write` mkstemps beside the target, so a kill between
         create and rename leaves a `.tmp` holding the same payload — and one
         written before the registry entry was saved is named by nothing, so
-        only a sweep can reach it. A `.tmp` is never a live record."""
+        only a sweep can reach it. Backdated because a write in progress owns
+        its temp file and a sweep has to leave that one alone."""
         assert _run(project, "--fresh")[0] == 0
         orphan = project / ".agac" / "batch_state" / "mock_batch_abandoned_kj38fa.tmp"
         orphan.write_text('{"tasks": [{"user_content": "secret"}]}')
+        os.utime(orphan, (1700000000, 1700000000))
 
         assert _run(project, "--fresh")[0] == 0
 

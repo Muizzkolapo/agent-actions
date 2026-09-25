@@ -200,6 +200,7 @@ def test_a_resubmission_over_a_failed_batch_loses_the_failed_record(tmp_path, pr
     """A FAILED entry does not block resubmission — it is overwritten, and the
     batch it named stops being reachable at that moment."""
     _submit("batch-failed")
+    _submit("live")
     service = BatchSubmissionService(
         task_preparator=MagicMock(),
         client_resolver=MagicMock(),
@@ -227,4 +228,121 @@ def test_a_resubmission_over_a_failed_batch_loses_the_failed_record(tmp_path, pr
     )
 
     assert registry.get_batch_job("my_action").batch_id == "batch-new"
-    assert _records(project) == []
+    assert _records(project) == ["live.json"]
+
+
+def test_a_registry_entry_nothing_can_parse_still_gives_up_its_id(project, tmp_path):
+    """--fresh reads ids to release, then deletes the registry holding them.
+
+    A retired recovery type refuses to become a `BatchJobEntry`, and the remedy
+    the framework prints for that is --fresh — so reading through the model would
+    strand exactly the record the user was told to clear.
+    """
+    import json
+
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    backend = MagicMock()
+    backend.load_metadata.return_value = json.dumps(
+        {
+            "pages.json": {"batch_id": "batch-parent", "status": "completed"},
+            "pages.json_reprompt_1": {"batch_id": "batch-retired", "recovery_type": "reprompt"},
+        }
+    )
+
+    assert BatchRegistryManager.batch_ids(backend, ACTION) == ["batch-parent", "batch-retired"]
+
+
+def test_a_corrupt_registry_gives_up_no_id_rather_than_raising(project):
+    """Nothing to release is not an error: the clear it precedes must still run."""
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    backend = MagicMock()
+    backend.load_metadata.return_value = "{not json at all"
+
+    assert BatchRegistryManager.batch_ids(backend, ACTION) == []
+
+
+def test_a_record_that_cannot_be_reclaimed_does_not_undo_the_work(project, monkeypatch):
+    """Every caller is mid-way through work that already succeeded — a submitted
+    batch, a written output, a cleared workflow. A file left behind is reported,
+    never raised."""
+    from agent_actions.llm.providers import local_batch_records
+
+    monkeypatch.setattr(
+        AgacBatchClient,
+        "release_batch",
+        classmethod(lambda cls, batch_id: (_ for _ in ()).throw(OSError("read-only .agac"))),
+    )
+
+    local_batch_records.release_local_batch_record("b1")
+
+
+def test_a_temp_file_a_write_is_still_holding_survives_the_sweep(project):
+    """`atomic_json_write` creates its temp here and renames a moment later;
+    taking it in between fails that write."""
+    from agent_actions.llm.providers.local_batch_records import discard_partial_batch_records
+
+    state_dir = project / ".agac" / "batch_state"
+    state_dir.mkdir(parents=True)
+    live = state_dir / "mock_batch_being_written_ab12.tmp"
+    live.write_text("{}")
+    abandoned = state_dir / "mock_batch_killed_cd34.tmp"
+    abandoned.write_text('{"tasks": [{"user_content": "secret"}]}')
+    import os
+
+    long_ago = 1700000000
+    os.utime(abandoned, (long_ago, long_ago))
+
+    discard_partial_batch_records()
+
+    assert live.exists()
+    assert not abandoned.exists()
+
+
+def test_a_resubmission_records_its_successor_before_spending_the_old_record(project):
+    """A crash between the two must leave a batch this run paid for named by
+    something, not a registry pointing at a record that is already gone."""
+    _submit("batch-failed")
+    order = []
+    registry = _Registry({"my_action": _entry("batch-failed", status=BatchStatus.FAILED)})
+    real_save = registry.save_batch_job
+    registry.save_batch_job = lambda name, entry: (order.append("save"), real_save(name, entry))[1]
+
+    service = BatchSubmissionService(
+        task_preparator=MagicMock(),
+        client_resolver=MagicMock(),
+        context_manager=MagicMock(),
+        registry_manager_factory=MagicMock(),
+    )
+    service._task_preparator.prepare_tasks.return_value = MagicMock(
+        tasks=[{"target_id": "r1", "content": "x", "prompt": "p"}],
+        context_map={},
+        task_count=1,
+        stats=MagicMock(total_filtered=0, total_skipped=0),
+    )
+    service._client_resolver.get_for_config.return_value = MagicMock(
+        submit_batch=MagicMock(return_value=("batch-new", BatchStatus.SUBMITTED))
+    )
+    service._registry_manager_factory = lambda _name: registry
+
+    from agent_actions.llm.batch.services import submission as sub
+
+    original = sub.release_local_batch_record
+
+    def _watched(batch_id):
+        order.append("release")
+        original(batch_id)
+
+    sub.release_local_batch_record = _watched
+    try:
+        service.submit_batch_job(
+            agent_config={"model_vendor": "agac-provider"},
+            batch_name="my_action",
+            data=[{"id": 1}],
+            output_directory=str(project),
+        )
+    finally:
+        sub.release_local_batch_record = original
+
+    assert order == ["save", "release"]
