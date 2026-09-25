@@ -509,3 +509,76 @@ def test_removing_an_unreadable_entry_really_removes_it(project):
 
     manager.save_batch_job("third.json", _entry("b-third"))
     assert sorted(json.loads(state["raw"])) == ["other.json", "third.json"]
+
+
+def test_a_reclaim_that_fails_says_so(project, monkeypatch):
+    """The callers that are about to destroy the name need to hear it."""
+    from agent_actions.llm.providers import local_batch_records
+
+    _submit("live")
+    assert local_batch_records.release_local_batch_record("live") is True
+
+    _submit("stuck")
+    monkeypatch.setattr(
+        AgacBatchClient,
+        "release_batch",
+        classmethod(lambda cls, batch_id: (_ for _ in ()).throw(OSError("read-only .agac"))),
+    )
+
+    assert local_batch_records.release_local_batch_record("stuck") is False
+
+
+def test_fresh_keeps_the_registry_when_a_record_would_not_go(project, monkeypatch):
+    """Clearing the registry over a record that stayed strands that payload for
+    good: the registry is the only thing naming it."""
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+    from agent_actions.workflow.coordinator import AgentWorkflow
+
+    _submit("stuck")
+    monkeypatch.setattr(
+        AgacBatchClient,
+        "release_batch",
+        classmethod(lambda cls, batch_id: (_ for _ in ()).throw(OSError("read-only .agac"))),
+    )
+    monkeypatch.setattr(
+        BatchRegistryManager, "batch_ids", classmethod(lambda cls, backend, action: ["stuck"])
+    )
+    workflow = MagicMock(spec=AgentWorkflow)
+    workflow.storage_backend = MagicMock()
+
+    kept = AgentWorkflow._release_batch_records(workflow, ACTION)
+
+    assert kept is False
+    assert _records(project) == ["stuck.json"]
+
+
+def test_fresh_clears_the_registry_once_the_records_are_gone(project, monkeypatch):
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+    from agent_actions.workflow.coordinator import AgentWorkflow
+
+    _submit("spent")
+    monkeypatch.setattr(
+        BatchRegistryManager, "batch_ids", classmethod(lambda cls, backend, action: ["spent"])
+    )
+    workflow = MagicMock(spec=AgentWorkflow)
+    workflow.storage_backend = MagicMock()
+
+    cleared = AgentWorkflow._release_batch_records(workflow, ACTION)
+
+    assert cleared is True
+    assert _records(project) == []
+
+
+def test_a_batch_id_that_looks_like_a_pattern_takes_only_its_own(project):
+    """The id becomes a glob for the temp sweep; unescaped, one batch's release
+    reaches every other batch's half-written record."""
+    from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+
+    state_dir = project / ".agac" / "batch_state"
+    state_dir.mkdir(parents=True)
+    for name in ("batch_1_aaaa.tmp", "batch_2_bbbb.tmp", "batch_[12]_cccc.tmp"):
+        (state_dir / name).write_text("{}")
+
+    release_local_batch_record("batch_[12]")
+
+    assert _records(project) == ["batch_1_aaaa.tmp", "batch_2_bbbb.tmp"]
