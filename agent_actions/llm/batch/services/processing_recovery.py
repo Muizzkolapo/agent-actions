@@ -867,10 +867,15 @@ def register_recovery_batch(
         recovery_type=recovery_type,
         recovery_attempt=attempt,
     )
+    # A retried attempt number lands on the key its predecessor holds, and saving
+    # over it is the fourth way an entry stops naming a batch.
+    replaced = manager.get_batch_job(recovery_file_name)
     manager.save_batch_job(recovery_file_name, recovery_entry)
 
     # After the save, never before: a crash in between must leave the successor
     # registered, not leave the parent with no recovery at all.
+    if replaced and replaced.batch_id and replaced.batch_id != batch_id:
+        release_local_batch_record(replaced.batch_id)
     for name, entry in manager.get_all_jobs().items():
         if entry.parent_file_name == parent_file_name and name != recovery_file_name:
             logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)

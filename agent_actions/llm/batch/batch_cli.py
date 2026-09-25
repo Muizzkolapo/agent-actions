@@ -78,9 +78,9 @@ def _resolve_action(
     """Return the action name to use.
 
     When `--action` is given, it's accepted verbatim — empty strings are
-    rejected. Skipping the registry check lets recovery flows work (e.g.
-    a batch is still live at the provider after `--fresh` wiped the
-    local registry).
+    rejected. Skipping the registry check lets recovery flows work (a batch
+    still live at a vendor after `--fresh` wiped the local registry; for the
+    offline provider the record is the batch, so `--fresh` takes it too).
 
     When `--action` is omitted and `batch_id` is supplied, scan registered
     actions for one whose registry contains that batch_id. Exactly one

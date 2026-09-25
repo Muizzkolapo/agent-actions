@@ -39,6 +39,34 @@ class Cleaner:
             logger.exception("Unexpected error while cleaning directories")
             raise click.ClickException(f"Cleaning failed for agent '{self.agent}': {exc}") from exc
 
+    def _release_batch_records(self, io_dir: Path) -> None:
+        """Reclaim what a provider recorded about this workflow's batches.
+
+        The store about to be wiped holds the registry, and the registry is what
+        names a batch: afterwards nothing could find these records to reclaim,
+        and each holds the payload its batch was submitted with.
+
+        Reported and not raised if it fails — the user asked for the directories
+        to go, and a record left behind must not stand in the way of that.
+        """
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.storage import get_storage_backend
+
+        try:
+            backend = get_storage_backend(
+                workflow_path=str(io_dir.parent), workflow_name=self.agent
+            )
+            try:
+                backend.initialize()
+                for action_name in BatchRegistryManager.list_action_names(backend):
+                    for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
+                        release_local_batch_record(batch_id)
+            finally:
+                backend.close()
+        except Exception as e:
+            logger.warning("Could not reclaim local batch records before cleaning: %s", e)
+
     def _run(self) -> None:
         logger.debug("Cleaning directories for agent %s", self.agent)
         _, io_dir_str, _ = self.agent_manager.get_agent_paths(
@@ -69,6 +97,8 @@ class Cleaner:
         if not self.force and (not self._confirm(directories)):
             click.echo("Aborted – nothing was cleaned.")
             return
+        if self.remove_all:
+            self._release_batch_records(io_dir)
         failures = []
         for directory in directories:
             try:

@@ -47,6 +47,31 @@ class BatchRegistryManager:
         keys = storage_backend.list_metadata_prefix(cls.METADATA_KEY_PREFIX)
         return [k.removeprefix(cls.METADATA_KEY_PREFIX) for k in keys]
 
+    @classmethod
+    def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
+        """Every batch id this action's registry names, read as stored.
+
+        Not through ``BatchJobEntry``: a retired recovery type refuses to parse,
+        a corrupt registry parses to nothing and an unreadable entry is skipped,
+        and a caller about to delete the registry would then never learn the ids
+        it was holding. An id is a string either way.
+        """
+        raw = storage_backend.load_metadata(cls.METADATA_KEY_PREFIX + action_name)
+        if raw is None:
+            return []
+        try:
+            stored = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error("Corrupted registry metadata for %s: %s", action_name, e)
+            return []
+        if not isinstance(stored, dict):
+            return []
+        return [
+            entry["batch_id"]
+            for entry in stored.values()
+            if isinstance(entry, dict) and isinstance(entry.get("batch_id"), str)
+        ]
+
     # ============================================================
     # PUBLIC API - Thread-safe operations
     # ============================================================

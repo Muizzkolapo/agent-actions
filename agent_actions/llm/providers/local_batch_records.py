@@ -2,34 +2,41 @@
 
 import logging
 
+from agent_actions.config.paths import PathManagerError
+
 logger = logging.getLogger(__name__)
 
 
 def release_local_batch_record(batch_id: str) -> None:
     """Drop what a provider recorded in the project about one batch.
 
-    Called where a batch id stops being named by the registry — nothing can be
-    sent back to it, so the payload it was submitted with has nothing left to
-    say. Never when results are read: the caller still has to write, parse and
-    reconcile them, and a failure there brings the next run back for the batch.
+    Called where a batch id stops being named by the registry, never when its
+    results are read: the caller still has to write and reconcile them, and a
+    failure there brings the next run back for the same batch.
 
-    Only the agac provider records a batch in the project; every other keeps its
-    copy at the vendor, so their batch ids name nothing here and pass through.
+    Only the agac provider records one here; other vendors' ids pass through.
+    Failing to reclaim is reported, never raised — every caller is mid-way
+    through work that already succeeded.
     """
     from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
 
-    AgacBatchClient.release_batch(batch_id)
+    try:
+        AgacBatchClient.release_batch(batch_id)
+    except (OSError, PathManagerError) as e:
+        logger.warning("Could not reclaim the local record for batch %s: %s", batch_id, e)
 
 
 def discard_partial_batch_records() -> None:
-    """Drop every half-written record in the project.
+    """Drop the half-written records an interrupted write left behind.
 
-    An atomic write killed between create and rename leaves a `.tmp` holding the
-    same payload, and one written before the registry entry was saved is named
-    by nothing — no per-batch release can reach it. Sweeping them all is safe
-    where sweeping records is not: a `.tmp` is never a live record, so this
-    cannot take a batch another workflow is still waiting on.
+    One written before its registry entry was saved is named by nothing, so no
+    per-batch release can reach it. Safe to sweep whole where records are not,
+    because a `.tmp` belongs to no workflow — except one a write is still
+    holding, which age tells apart.
     """
     from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
 
-    AgacBatchClient.discard_partial_writes()
+    try:
+        AgacBatchClient.discard_partial_writes()
+    except (OSError, PathManagerError) as e:
+        logger.warning("Could not reclaim half-written batch records: %s", e)

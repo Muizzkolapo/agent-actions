@@ -148,14 +148,14 @@ class AgentWorkflow:
                         except OSError:
                             logger.debug("Could not delete batch artifact: %s", f)
 
+        # Not per action: a half-written record names no batch, so it belongs to
+        # no action either. Reports rather than raises, like every clear above.
+        discard_partial_batch_records()
+
         try:
             self.storage_backend.clear_source_data()
         except Exception as e:
             logger.warning("Failed to clear source data: %s", e)
-
-        # A half-written record names no batch at all, so nothing per-batch can
-        # reach one — and unlike a record, it can never be live.
-        discard_partial_batch_records()
 
         self.services.core.state_manager.reset()
 
@@ -182,12 +182,13 @@ class AgentWorkflow:
         sit in one directory for the whole project, and a neighbouring workflow's
         batch may still be in flight.
         """
+        # Ids as stored, not parsed entries: the registry this is about to delete
+        # may hold one a `BatchJobEntry` refuses, and refusing to read it here
+        # would strand its record for good.
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        jobs = BatchRegistryManager(self.storage_backend, action_name).get_all_jobs() or {}
-        for entry in jobs.values():
-            if entry.batch_id:
-                release_local_batch_record(entry.batch_id)
+        for batch_id in BatchRegistryManager.batch_ids(self.storage_backend, action_name):
+            release_local_batch_record(batch_id)
 
     def _reset_retryable_actions(self) -> None:
         """Reset failed/skipped/running actions to pending so re-runs retry them.

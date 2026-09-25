@@ -24,6 +24,11 @@ from agent_actions.llm.providers.batch_base import (
 
 logger = logging.getLogger(__name__)
 
+# Longer than any atomic write takes to create its temp file and rename it,
+# short enough that a record abandoned by a killed process is reclaimed by
+# the next run rather than the one after it.
+_ABANDONED_WRITE_SECONDS = 60.0
+
 
 @dataclass
 class MockBatchState:
@@ -178,11 +183,18 @@ class AgacBatchClient(BaseBatchClient):
     def discard_partial_writes(cls) -> None:
         """Drop every `.tmp` an interrupted write left behind.
 
-        A completed write renames its temp file away, so one still sitting here
-        describes no batch anybody can reach — including one written before the
-        registry entry that would have named it.
+        A completed write renames its temp away, so one still sitting here
+        describes no batch anybody can reach. Except one a write is still
+        holding — taking that fails the write — and age tells them apart: a live
+        temp was touched now, an abandoned one whenever the process died.
         """
+        cutoff = time.time() - _ABANDONED_WRITE_SECONDS
         for partial in cls._state_dir().glob("*.tmp"):
+            try:
+                if partial.stat().st_mtime > cutoff:
+                    continue
+            except OSError:
+                continue
             partial.unlink(missing_ok=True)
 
     @classmethod
