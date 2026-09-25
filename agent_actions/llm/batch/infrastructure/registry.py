@@ -54,6 +54,10 @@ class BatchRegistryManager:
         An overwrite has to release what it displaces, and `get_batch_job`
         answers None for an entry the load could not read — which would let the
         record of a batch nothing names any more sit there for good.
+
+        "Could not read" here is the entry a field or an enum value made
+        unusable, which `_load_registry` keeps. A retired recovery type is not
+        one of those: that refuses the whole registry, so this raises with it.
         """
         with self._lock:
             entry = self._get_cache().get(file_name)
@@ -70,8 +74,8 @@ class BatchRegistryManager:
     def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
         """Every batch id this action's registry names, read as stored.
 
-        Not through ``BatchJobEntry``: a retired recovery type refuses to parse
-        and an unreadable entry is skipped, so a caller about to delete the
+        Not through ``BatchJobEntry``: a retired recovery type refuses the whole
+        registry and a spoiled entry is skipped, so a caller about to delete the
         registry would never learn the ids it was holding. Anything unreadable
         reads as no ids rather than an error — a registry nothing can read names
         no batch anything could reclaim.
@@ -99,9 +103,6 @@ class BatchRegistryManager:
     def save_batch_job(self, file_name: str, entry: BatchJobEntry) -> None:
         with self._lock:
             cache = self._get_cache()
-            # An entry the load could not read still occupies the key, and this
-            # supersedes it — leaving it in would resurrect it on the next write.
-            self._unreadable.pop(file_name, None)
             old = cache.get(file_name)
             if old and self._batch_id_index is not None and old.batch_id != entry.batch_id:
                 self._batch_id_index.pop(old.batch_id, None)
@@ -330,7 +331,8 @@ class BatchRegistryManager:
     def _persist_registry(self, registry: dict[str, BatchJobEntry]) -> None:
         # Entries the load could not read are written back as they came. Dropping
         # one here would erase the only record of a batch id, and the id is what
-        # anything reclaiming that batch's payload has to go on.
+        # anything reclaiming that batch's payload has to go on. A parsed entry
+        # under the same key supersedes it, which is what saving over one means.
         raw_data = dict(self._unreadable)
         raw_data.update({file_name: entry.to_dict() for file_name, entry in registry.items()})
         self._backend.save_metadata(self._metadata_key, json.dumps(raw_data, ensure_ascii=False))
