@@ -106,7 +106,13 @@ class TestCatalogGeneratorHappyPath:
         assert result["metadata"]["project_name"] == ""
 
 
-def _wf_events(workflow: str, seqs: list[int], hour: int = 10, meta_wf: str | None = None) -> dict:
+def _wf_events(
+    workflow: str,
+    seqs: list[int],
+    hour: int = 10,
+    meta_wf: str | None = None,
+    level: str = "info",
+) -> dict:
     """A scanned log. `meta_wf` differs from the source name for the project log,
     whose rows name whichever workflow the invocation targeted."""
     return {
@@ -119,7 +125,7 @@ def _wf_events(workflow: str, seqs: list[int], hour: int = 10, meta_wf: str | No
                 "seq": s,
                 "event_type": "ActionCompleteEvent",
                 "code": "A002",
-                "level": "info",
+                "level": level,
                 "category": "action",
                 "diagnostic": False,
                 "message": f"{workflow} step {s}",
@@ -139,11 +145,10 @@ def _wf_events(workflow: str, seqs: list[int], hour: int = 10, meta_wf: str | No
 class TestCatalogGeneratorEventStream:
     """The Log Explorer reads catalog["logs"]["events"]."""
 
-    def test_empty_input_yields_an_empty_stream_and_a_zero_window(self):
+    def test_empty_input_yields_an_empty_stream(self):
         gen = _make_generator()
         result = gen.generate(**_empty_inputs())
         assert result["logs"]["events"] == []
-        assert result["stats"]["events_in_window"] == 0
 
     def test_events_are_merged_newest_first_across_workflows(self):
         gen = _make_generator()
@@ -156,7 +161,6 @@ class TestCatalogGeneratorEventStream:
 
         messages = [e["message"] for e in result["logs"]["events"]]
         assert messages == ["beta step 0", "alpha step 1", "alpha step 0"]
-        assert result["stats"]["events_in_window"] == 3
 
     def test_event_id_is_namespaced_by_workflow(self):
         gen = _make_generator()
@@ -247,3 +251,48 @@ class TestCatalogGeneratorEventStream:
         assert "events" not in result["runs"]["alpha"]
         assert result["runs"]["alpha"]["workflow_name"] == "alpha"
         assert len(result["logs"]["events"]) == 2
+
+
+class TestCatalogGeneratorProblemsFirst:
+    """A window that fills by recency alone is mostly debug, and the errors a
+    reader came for sit outside it."""
+
+    def test_an_old_error_beats_a_newer_debug_row_for_the_budget(self):
+        """Each log's share is drained newest-first, so a log whose errors are its
+        oldest rows loses every one of them to its own debug noise."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        alpha = _wf_events("alpha", list(range(2)), hour=9, level="error")
+        alpha["events"] += _wf_events(
+            "alpha", list(range(2, EVENT_TAIL_LIMIT)), hour=11, level="debug"
+        )["events"]
+        inputs["runs_data"] = {
+            "alpha": alpha,
+            "beta": _wf_events("beta", list(range(EVENT_TAIL_LIMIT)), hour=11, level="debug"),
+        }
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        assert len(events) == EVENT_TAIL_LIMIT
+        assert sorted(e["seq"] for e in events if e["level"] == "error") == [0, 1]
+
+    def test_level_totals_describe_every_log_not_the_window(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["logs_data"] = {**inputs["logs_data"], "level_counts": {"error": 3, "debug": 7}}
+        inputs["runs_data"] = {
+            "alpha": {**_wf_events("alpha", [0]), "level_counts": {"error": 2, "warn": 1}},
+        }
+        stats = gen.generate(**inputs)["stats"]
+
+        assert stats["event_levels"] == {"error": 5, "warn": 1, "debug": 7}
+
+    def test_generate_does_not_mutate_the_caller_s_logs_data(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        logs_data = {**inputs["logs_data"], "events": _wf_events("logs", [0])["events"]}
+        inputs["logs_data"] = logs_data
+
+        gen.generate(**inputs)
+
+        assert [e["seq"] for e in logs_data["events"]] == [0]
+        assert "id" not in logs_data["events"][0]

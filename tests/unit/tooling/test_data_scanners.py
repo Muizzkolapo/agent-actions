@@ -12,6 +12,7 @@ from pathlib import Path
 
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.tooling.docs.scanner.data_scanners import (
+    EVENT_PROBLEM_LIMIT,
     EVENT_TAIL_LIMIT,
     extract_run_events,
     scan_logs,
@@ -699,6 +700,90 @@ class TestRunEventsStream:
             f.write("[1, 2, 3]\n")
             f.write(json.dumps(_stream_event(0)) + "\n")
             f.write('"a string"\n')
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0]
+
+
+class TestRunEventsProblemRetention:
+    """Warnings and errors are rare and often old. A window that is only the most
+    recent N rows is 90% debug and holds none of them, which leaves the page that
+    exists to answer "what went wrong" answering nothing."""
+
+    def test_an_old_error_survives_a_flood_of_later_debug(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            error = _stream_event(0, level="error")
+            f.write(json.dumps(error) + "\n")
+            for i in range(1, EVENT_TAIL_LIMIT + 50):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows if r["level"] == "error"] == [0]
+
+    def test_problem_retention_is_bounded(self, tmp_path):
+        """Problems older than the recency window come from their own budget, and
+        that budget keeps the newest of them."""
+        events_path = tmp_path / "events.json"
+        older = EVENT_PROBLEM_LIMIT + 30
+        with open(events_path, "w") as f:
+            for i in range(older):
+                f.write(json.dumps(_stream_event(i, level="warn")) + "\n")
+            for i in range(older, older + EVENT_TAIL_LIMIT):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+
+        rows = extract_run_events(events_path).events
+        warns = [r["seq"] for r in rows if r["level"] == "warn"]
+
+        assert len(warns) == EVENT_PROBLEM_LIMIT
+        assert warns[-1] == older - 1
+        assert warns[0] == older - EVENT_PROBLEM_LIMIT
+
+    def test_rows_are_not_duplicated_when_a_problem_is_also_recent(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps(_stream_event(0, level="error")) + "\n")
+            f.write(json.dumps(_stream_event(1, level="info")) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0, 1]
+
+    def test_level_totals_cover_the_whole_file_not_the_window(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(EVENT_TAIL_LIMIT + 10):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+            f.write(json.dumps(_stream_event(9001, level="error")) + "\n")
+
+        result = extract_run_events(events_path)
+
+        assert result.level_counts["debug"] == EVENT_TAIL_LIMIT + 10
+        assert result.level_counts["error"] == 1
+
+    def test_scan_logs_counts_and_retains_the_same_way(self, tmp_path):
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        with open(logs_dir / "events.json", "w") as f:
+            f.write(json.dumps(_stream_event(0, level="error")) + "\n")
+            for i in range(1, EVENT_TAIL_LIMIT + 20):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+
+        logs = scan_logs(tmp_path)
+
+        assert [r["seq"] for r in logs["events"] if r["level"] == "error"] == [0]
+        assert logs["level_counts"]["error"] == 1
+        assert logs["level_counts"]["debug"] == EVENT_TAIL_LIMIT + 19
+
+    def test_a_row_whose_meta_is_not_an_object_is_skipped(self, tmp_path):
+        """Rows are read back from disk; one malformed row must not abort the build."""
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps({"event_type": "E", "meta": "nope", "data": {}}) + "\n")
+            f.write(json.dumps({"event_type": "E", "meta": {}, "data": [1, 2]}) + "\n")
+            f.write(json.dumps(_stream_event(0)) + "\n")
 
         rows = extract_run_events(events_path).events
 

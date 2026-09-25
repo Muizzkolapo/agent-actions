@@ -2,6 +2,7 @@
 
 import socket
 import threading
+from contextlib import closing
 from functools import partial
 
 import pytest
@@ -110,21 +111,17 @@ class TestConcurrency:
     def test_a_stalled_large_response_does_not_block_the_next_request(self, running_server):
         port = running_server
 
-        slow = socket.create_connection(("127.0.0.1", port), timeout=10)
-        slow.sendall(b"GET /artefact/catalog.json HTTP/1.0\r\n\r\n")
-        assert slow.recv(64)  # headers arrive; the body is left undrained
+        with closing(socket.create_connection(("127.0.0.1", port), timeout=10)) as slow:
+            slow.sendall(b"GET /artefact/catalog.json HTTP/1.0\r\n\r\n")
+            assert slow.recv(64)  # headers arrive; the body is left undrained
 
-        try:
-            quick = socket.create_connection(("127.0.0.1", port), timeout=10)
-            quick.sendall(b"GET /artefact/runs.json HTTP/1.0\r\n\r\n")
-            quick.settimeout(10)
-            received = b""
-            while b"\r\n\r\n" not in received:
-                chunk = quick.recv(4096)
-                if not chunk:
-                    break
-                received += chunk
-            assert b"200" in received.split(b"\r\n")[0]
-        finally:
-            slow.close()
-            quick.close()
+            with closing(socket.create_connection(("127.0.0.1", port), timeout=10)) as quick:
+                quick.sendall(b"GET /artefact/runs.json HTTP/1.0\r\n\r\n")
+                quick.settimeout(10)
+                received = b""
+                while b"\r\n\r\n" not in received:
+                    chunk = quick.recv(4096)
+                    if not chunk:
+                        break
+                    received += chunk
+                assert b"200" in received.split(b"\r\n")[0]

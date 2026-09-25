@@ -109,9 +109,9 @@ every log:
 ### Search
 
 Find resources quickly with full-text search across agentic workflows, actions,
-schemas, prompts and event codes. Press `⌘K` (or `/`) from anywhere. As your
-project grows, search becomes essential for navigating between related
-components.
+schemas, prompts and tools. Press `⌘K` (or `/`) from anywhere. As your project
+grows, search becomes essential for navigating between related components. Event
+codes and messages have their own search box on the Logs & Events page.
 
 ## Deployment
 

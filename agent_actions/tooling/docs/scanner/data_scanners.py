@@ -20,6 +20,8 @@ from ..parser import extract_fields_for_docs
 logger = logging.getLogger(__name__)
 
 EVENT_TAIL_LIMIT = DocsDefaults.EVENT_TAIL_LIMIT
+EVENT_PROBLEM_LIMIT = DocsDefaults.EVENT_PROBLEM_LIMIT
+PROBLEM_LEVELS = ("warn", "error")
 
 
 def scan_prompts(project_root: Path) -> dict[str, Any]:
@@ -187,9 +189,14 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         action_metrics: dict[str, Any] = {}
         runtime_warnings: list[dict[str, Any]] = []
         events: list[dict[str, Any]] = []
+        level_counts: dict[str, int] = {}
         if events_path.exists():
             try:
-                action_metrics, runtime_warnings, events = extract_run_events(events_path)
+                run_events = extract_run_events(events_path)
+                action_metrics = run_events.action_metrics
+                runtime_warnings = run_events.runtime_warnings
+                events = run_events.events
+                level_counts = run_events.level_counts
             except (OSError, ValueError, KeyError) as e:
                 logger.warning(
                     "Failed to extract run events from %s: %s",
@@ -216,6 +223,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "action_metrics": action_metrics,
             "runtime_warnings": runtime_warnings,
             "events": events,
+            "level_counts": level_counts,
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
@@ -223,6 +231,44 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         }
 
     return runs_data
+
+
+def _is_usable(event: Any) -> bool:
+    """A row whose meta or data is not an object crashes every reader of it."""
+    return (
+        isinstance(event, dict)
+        and isinstance(event.get("meta", {}), dict)
+        and isinstance(event.get("data", {}), dict)
+    )
+
+
+def _collect_window(
+    tail: deque[dict[str, Any]],
+    problems: deque[dict[str, Any]],
+    levels: dict[str, int],
+    seq: int,
+    event: dict[str, Any],
+) -> None:
+    """Fold one row into the recency window, the problem window and the totals.
+
+    Warnings and errors keep a budget of their own: they are rare and often far
+    back in a log, so a plain recency window holds none of them and the page that
+    exists to answer "what went wrong" answers nothing.
+    """
+    row = {**event, "seq": seq}
+    tail.append(row)
+    level = event.get("level")
+    if isinstance(level, str):
+        levels[level] = levels.get(level, 0) + 1
+        if level in PROBLEM_LEVELS:
+            problems.append(row)
+
+
+def _window(tail: deque[dict[str, Any]], problems: deque[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The two windows in one list, in file order, each row once."""
+    by_seq = {row["seq"]: row for row in problems}
+    by_seq.update({row["seq"]: row for row in tail})
+    return [by_seq[seq] for seq in sorted(by_seq)]
 
 
 def _iter_events(path: Path) -> Iterator[dict[str, Any]]:
@@ -240,7 +286,7 @@ def _iter_events(path: Path) -> Iterator[dict[str, Any]]:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(event, dict):
+            if _is_usable(event):
                 yield event
 
 
@@ -252,6 +298,7 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
         "validation_errors": [],
         "validation_warnings": [],
         "events": [],
+        "level_counts": {},
     }
 
     logs_dir = project_root / "logs"
@@ -267,8 +314,10 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
     try:
         invocations: dict[str, dict[str, Any]] = {}
         tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+        problems: deque[dict[str, Any]] = deque(maxlen=EVENT_PROBLEM_LIMIT)
+        levels: dict[str, int] = {}
         for seq, event in enumerate(_iter_events(events_path)):
-            tail.append({**event, "seq": seq})
+            _collect_window(tail, problems, levels, seq, event)
             event_type = event.get("event_type")
             meta = event.get("meta", {})
             data = event.get("data", {})
@@ -312,7 +361,8 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
         # Get recent invocations (last 10)
         logs_data["recent_invocations"] = list(invocations.values())[-10:]
-        logs_data["events"] = list(tail)
+        logs_data["events"] = _window(tail, problems)
+        logs_data["level_counts"] = levels
 
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)
@@ -326,6 +376,7 @@ class RunEvents(NamedTuple):
     action_metrics: dict[str, Any]
     runtime_warnings: list[dict[str, Any]]
     events: list[dict[str, Any]]
+    level_counts: dict[str, int]
 
 
 def _collect_runtime_warning(event: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
@@ -430,12 +481,14 @@ def extract_run_events(events_path: Path) -> RunEvents:
     action_metrics: dict[str, Any] = {}
     runtime_warnings: list[dict[str, Any]] = []
     tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+    problems: deque[dict[str, Any]] = deque(maxlen=EVENT_PROBLEM_LIMIT)
+    levels: dict[str, int] = {}
 
     try:
         for seq, event in enumerate(_iter_events(events_path)):
             _collect_runtime_warning(event, runtime_warnings)
             _collect_action_metrics(event, action_metrics)
-            tail.append({**event, "seq": seq})
+            _collect_window(tail, problems, levels, seq, event)
     except OSError as e:
         logger.debug("Could not read run events from %s: %s", events_path, e)
 
@@ -445,4 +498,4 @@ def extract_run_events(events_path: Path) -> RunEvents:
         if req_count > 0:
             metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
-    return RunEvents(action_metrics, runtime_warnings, list(tail))
+    return RunEvents(action_metrics, runtime_warnings, _window(tail, problems), levels)

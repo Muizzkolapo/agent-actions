@@ -9,9 +9,10 @@
    llm / tool                 category series in charts and type tags
 
    Every token is an HSL triplet so both `hsl(var(--x))` and Tailwind's
-   `hsl(var(--x) / <alpha-value>)` resolve. Semantic base tokens sit *behind*
-   content (fills, borders, dots); the `-t` variants are the text-safe pairs and
-   are the only ones that may reach a `color:`. */
+   `hsl(var(--x) / <alpha-value>)` resolve. A status or category base token sits
+   *behind* content (fills, borders, dots) and its `-t` variant is the only one
+   of the pair that may reach a `color:`. The two `--type-*` tokens have no pair:
+   they label schema field types as text and are picked to carry that contrast. */
 @layer base {
   :root {
     --bg: 240 6.7% 97.1%;

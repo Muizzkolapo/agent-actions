@@ -57,6 +57,27 @@ export function fmtTimestampShort(iso: string): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`
 }
 
+const HOUR_MS = 3_600_000
+const DAY_MS = 86_400_000
+
+/** A histogram tick. The clock alone reads as a lie once the window spans days,
+ *  so the date joins it at whatever resolution the span needs. */
+export function fmtSpanTick(ms: number, spanMs: number): string {
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return EM_DASH
+  const clock = d.toTimeString().slice(0, spanMs < HOUR_MS ? 8 : 5)
+  if (spanMs < DAY_MS) return clock
+  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${clock}`
+}
+
+/** What a histogram covers: a duration while it fits in a day, dated bounds past
+ *  that — "2217h 46m" is not a span a reader can place. */
+export function fmtSpan(min: number, max: number): string {
+  const span = max - min
+  if (span < DAY_MS) return fmtSeconds(span / 1000)
+  return `${fmtSpanTick(min, span)} → ${fmtSpanTick(max, span)}`
+}
+
 /** A bar width. Run records come straight off disk, so the parts are clamped:
  *  a record whose counts exceed its total must not paint past its track. */
 export function pct(part: number, total: number): string {

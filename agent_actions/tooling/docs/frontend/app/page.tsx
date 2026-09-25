@@ -26,6 +26,12 @@ const SECTION_TITLES: Record<string, string> = {
   logs: "Logs & Events",
 }
 
+/** `#ev=<id>` names an event, which only the Logs screen can show. */
+function sectionFromHash(): string | null {
+  if (typeof window === "undefined") return null
+  return /[#&]ev=/.test(window.location.hash) ? "logs" : null
+}
+
 export default function Page() {
   const catalogState = useCatalog()
 
@@ -36,7 +42,7 @@ export default function Page() {
 }
 
 function Dashboard() {
-  const [activeSection, setActiveSection] = useState("home")
+  const [activeSection, setActiveSection] = useState(() => sectionFromHash() ?? "home")
   const [navKeys, setNavKeys] = useState<Record<string, number>>({})
   const [collapsed, setCollapsed] = useState(false)
   const [logsIntent, setLogsIntent] = useState<LogsIntent | null>(null)

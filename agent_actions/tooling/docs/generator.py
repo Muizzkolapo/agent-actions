@@ -19,7 +19,7 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 from . import scanner
 from .parser import WorkflowParser
 from .run_tracker import _empty_runs_data
-from .scanner import ReadmeData
+from .scanner import PROBLEM_LEVELS, ReadmeData
 
 logger = logging.getLogger(__name__)
 
@@ -36,27 +36,37 @@ def _event_sort_key(event: dict) -> tuple[str, int]:
     return (str(timestamp or ""), seq if isinstance(seq, int) else 0)
 
 
+def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
+    """Take from each queue in turn until the budget runs out."""
+    taken: list[dict] = []
+    for depth in range(max((len(q) for q in queues), default=0)):
+        if len(taken) >= budget:
+            break
+        for queue in queues:
+            if depth < len(queue) and len(taken) < budget:
+                taken.append(queue[depth])
+    return taken
+
+
 def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> list[dict]:
     """Merge per-log event tails into one reverse-chronological window.
 
-    The budget is shared round-robin, newest first, rather than handed to whichever
-    log happens to be newest: a project-level log accumulates across every CLI
-    invocation, so a straight global sort gives it the whole window and leaves
-    every workflow undiagnosable. Sources are pairs, not a mapping, because a
-    workflow may share a name with the project log.
+    Warnings and errors are admitted first — they are rare and often a log's
+    oldest rows, so a budget spent by recency alone holds none of them. The rest
+    is shared round-robin, newest first: a project-level log accumulates across
+    every CLI invocation, so a straight global sort gives it the whole window.
+    Sources are pairs because a workflow may share a name with the project log.
     """
-    queues = [
+    stamped = [
         [{**evt, "id": f"{name}:{evt.get('seq')}"} for evt in reversed(rows)]
         for name, rows in sources
         if rows
     ]
-    merged: list[dict] = []
-    for depth in range(max((len(q) for q in queues), default=0)):
-        if len(merged) >= limit:
-            break
-        for queue in queues:
-            if depth < len(queue) and len(merged) < limit:
-                merged.append(queue[depth])
+    is_problem = lambda evt: evt.get("level") in PROBLEM_LEVELS  # noqa: E731
+    merged = _round_robin([[e for e in q if is_problem(e)] for q in stamped], limit)
+    merged += _round_robin(
+        [[e for e in q if not is_problem(e)] for q in stamped], limit - len(merged)
+    )
     merged.sort(key=_event_sort_key, reverse=True)
     return merged
 
@@ -277,7 +287,7 @@ class CatalogGenerator:
                 name: {k: v for k, v in data.items() if k != "events"}
                 for name, data in (runs_data or {}).items()
             },
-            "logs": logs_data or {},  # Global CLI logs and validation events
+            "logs": dict(logs_data or {}),  # Global CLI logs and validation events
             "vendors": vendors_data or {},  # LLM vendor configurations
             "error_types": error_types_data or {},  # Error class hierarchy
             "event_types": event_types_data or {},  # Event type definitions
@@ -496,9 +506,16 @@ class CatalogGenerator:
             (f"workflow:{name}", data.get("events", []))
             for name, data in sorted((runs_data or {}).items())
         ]
-        event_stream = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
-        catalog["logs"]["events"] = event_stream
-        catalog["stats"]["events_in_window"] = len(event_stream)
+        catalog["logs"]["events"] = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
+
+        # Totals over every log, so "N in view" can be read against the whole.
+        event_levels: dict[str, int] = {}
+        for counts in [(logs_data or {}).get("level_counts", {})] + [
+            data.get("level_counts", {}) for data in (runs_data or {}).values()
+        ]:
+            for level, n in counts.items():
+                event_levels[level] = event_levels.get(level, 0) + n
+        catalog["stats"]["event_levels"] = event_levels
 
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0

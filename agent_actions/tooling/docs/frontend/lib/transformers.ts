@@ -402,6 +402,14 @@ function orNull(value: string | null | undefined): string | null {
   return value ? value : null
 }
 
+export function transformEventLevels(catalog: RawCatalogJson): Record<EventLevel, number> {
+  const totals: Record<EventLevel, number> = { error: 0, warn: 0, info: 0, debug: 0 }
+  for (const [level, count] of Object.entries(catalog.stats?.event_levels ?? {})) {
+    totals[normalizeLevel(level)] += count
+  }
+  return totals
+}
+
 export function transformLogEvents(catalog: RawCatalogJson): LogEvent[] {
   return (catalog.logs?.events ?? []).map((raw: RawLogEvent, i: number) => {
     const meta = raw.meta ?? {}
@@ -442,6 +450,8 @@ export interface CatalogData {
   runtimeWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
   logEvents: LogEvent[]
+  /** How many events of each level every log holds — the window is a subset. */
+  eventLevels: Record<EventLevel, number>
   generatedAt: string
   projectName: string | null
 }
@@ -449,30 +459,9 @@ export interface CatalogData {
 export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): CatalogData {
   const { errors, warnings } = transformValidationGroups(catalog)
 
-  // Synthesize runtime error entries from failed executions so they appear in the Logs page
-  const execFailureEntries: RawValidationEntry[] = []
-  for (const exec of runs.executions) {
-    const status = exec.status.toUpperCase()
-    if (status === "FAILED") {
-      execFailureEntries.push({
-        target: exec.workflow_name || exec.workflow_id,
-        message: exec.error_message || `Run ${exec.id} failed`,
-        timestamp: exec.ended_at ?? exec.started_at,
-      })
-    }
-    // Surface per-action failures too
-    for (const [actionName, a] of Object.entries(exec.actions ?? {})) {
-      if (a.status?.toUpperCase() === "FAILED") {
-        execFailureEntries.push({
-          target: actionName,
-          message: a.error || `Action ${actionName} failed in run ${exec.id}`,
-          timestamp: a.ended_at ?? exec.started_at,
-        })
-      }
-    }
-  }
-
-  const allRuntimeErrors = [...(catalog.logs?.runtime_errors ?? []), ...execFailureEntries]
+  // A failed execution is already in catalog.logs.runtime_errors — the generator
+  // puts it there. Synthesising it again here counted every failure twice.
+  const allRuntimeErrors = catalog.logs?.runtime_errors ?? []
 
   return {
     stats: transformStats(catalog),
@@ -488,6 +477,7 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     runtimeWarningGroups: groupValidationEntries(catalog.logs?.runtime_warnings ?? []),
     workflowData: transformWorkflowData(catalog),
     logEvents: transformLogEvents(catalog),
+    eventLevels: transformEventLevels(catalog),
     generatedAt: catalog.metadata?.generated_at ?? "",
     projectName: catalog.metadata?.project_name ?? null,
   }

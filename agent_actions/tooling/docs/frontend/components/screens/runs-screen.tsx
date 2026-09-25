@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
-import { EM_DASH, fmtDuration, fmtTimestamp, fmtTimestampShort, pct, pctNumber } from "@/lib/format"
+import { EM_DASH, fmtDuration, fmtSeconds, fmtTimestamp, fmtTimestampShort, pct, pctNumber } from "@/lib/format"
 import {
   BackButton,
   Card,
@@ -162,7 +162,7 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
 
   const ticks = Array.from({ length: 5 }, (_, i) => ({
     left: `${(i / 4) * 100}%`,
-    label: fmtDuration((timeline.span * i) / 4 / 1000),
+    label: fmtSeconds((timeline.span * i) / 4 / 1000),
   }))
 
   const result =
@@ -208,7 +208,8 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
           <div className="flex flex-wrap items-center gap-3.5 border-b border-border px-[18px] py-3">
             <span className="text-[13px] font-semibold">Timeline</span>
             <span className="font-mono text-[11px] text-muted-foreground">
-              {entries.length} action{entries.length === 1 ? "" : "s"} · {fmtDuration(timeline.span / 1000)}
+              {entries.length} action{entries.length === 1 ? "" : "s"} · axis spans{" "}
+              {fmtSeconds(timeline.span / 1000)}
             </span>
             <span className="flex-1" />
             <span className="flex items-center gap-3 text-[10.5px] text-muted-foreground">

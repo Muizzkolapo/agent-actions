@@ -56,3 +56,6 @@ class DocsDefaults:
     # Event logs reach hundreds of megabytes, so the docs catalog embeds only the
     # most recent slice of the stream, shared across every log the project wrote.
     EVENT_TAIL_LIMIT: int = 2000
+    # Warnings and errors are rare and often old, so a plain recency window holds
+    # none of them. They are retained on their own budget.
+    EVENT_PROBLEM_LIMIT: int = 500

@@ -19,6 +19,17 @@ type SortKey = "issues" | "dur" | "wf" | "name"
 
 const PLACEMENTS_SHOWN = 8
 
+/** What this action looks like inside the workflow scope the reader has chosen. */
+function scopeOf(entry: ActionEntry, workflow: string) {
+  const events =
+    workflow === "all" ? entry.events : (entry.eventsByWf.get(workflow) ?? [])
+  return {
+    events,
+    errors: events.filter((e) => e.level === "error").length,
+    warnings: events.filter((e) => e.level === "warn").length,
+  }
+}
+
 interface Member {
   key: string
   name: string
@@ -38,6 +49,9 @@ interface ActionEntry {
   impl?: string
   promptName: string | null
   members: Member[]
+  /** Events per workflow: two workflows can each declare an action of this name,
+   *  and showing one's failures against the other is how a reader is misled. */
+  eventsByWf: Map<string, LogEvent[]>
   events: LogEvent[]
   errors: number
   warnings: number
@@ -55,11 +69,13 @@ function buildCatalog(
   events: LogEvent[],
   runs: Run[],
 ): ActionEntry[] {
+  // Keyed by workflow: an action named `extract` running in one workflow says
+  // nothing about the `extract` of another.
   const running = new Set<string>()
   for (const run of runs) {
     if (run.status !== "running") continue
     for (const [name, a] of Object.entries(run.actions)) {
-      if (a.status === "running") running.add(name)
+      if (a.status === "running") running.add(`${run.wf}/${name}`)
     }
   }
 
@@ -80,6 +96,7 @@ function buildCatalog(
         impl: a.impl,
         promptName: a.promptName,
         members: [],
+        eventsByWf: new Map(),
         events: [],
         errors: 0,
         warnings: 0,
@@ -101,18 +118,26 @@ function buildCatalog(
       name,
       wf: a.wf,
       sec: a.metrics.execution_time,
-      running: running.has(name),
+      running: running.has(`${a.wf}/${name}`),
     })
   }
 
   for (const e of events) {
-    if (!e.actionName) continue
+    if (!e.actionName || !e.workflow) continue
     const entry = byBase.get(baseName(e.actionName))
-    if (entry) entry.events.push(e)
+    if (!entry || !entry.wfs.includes(e.workflow)) continue
+    const forWf = entry.eventsByWf.get(e.workflow)
+    if (forWf) forWf.push(e)
+    else entry.eventsByWf.set(e.workflow, [e])
   }
 
   for (const entry of byBase.values()) {
-    entry.events.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    for (const list of entry.eventsByWf.values()) {
+      list.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    }
+    entry.events = [...entry.eventsByWf.values()]
+      .flat()
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     entry.errors = entry.events.filter((e) => e.level === "error").length
     entry.warnings = entry.events.filter((e) => e.level === "warn").length
     entry.running = entry.members.some((m) => m.running)
@@ -140,7 +165,8 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
     const q = search.trim().toLowerCase()
     return catalog.filter((c) => {
       if (workflow !== "all" && !c.wfs.includes(workflow)) return false
-      if (issuesOnly && c.errors + c.warnings === 0) return false
+      if (issuesOnly && scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings === 0)
+        return false
       if (!q) return true
       return [c.name, c.intent, c.schema, c.impl, c.wfs.join(" ")].join(" ").toLowerCase().includes(q)
     })
@@ -148,10 +174,11 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
 
   const rows = useMemo(() => {
     const list = scoped.filter((c) => type === "all" || c.type === type)
+    const issuesOf = (c: ActionEntry) => scopeOf(c, workflow)
     const sorters: Record<SortKey, (a: ActionEntry, b: ActionEntry) => number> = {
       issues: (a, b) =>
-        b.errors - a.errors ||
-        b.warnings - a.warnings ||
+        issuesOf(b).errors - issuesOf(a).errors ||
+        issuesOf(b).warnings - issuesOf(a).warnings ||
         Number(b.running) - Number(a.running) ||
         a.name.localeCompare(b.name),
       dur: (a, b) => (b.sec ?? -1) - (a.sec ?? -1),
@@ -159,7 +186,7 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
       name: (a, b) => a.name.localeCompare(b.name),
     }
     return [...list].sort(sorters[sort])
-  }, [scoped, type, sort])
+  }, [scoped, type, sort, workflow])
 
   const selected = rows.find((c) => c.name === selectedName) ?? rows[0] ?? null
   const maxSec = Math.max(1, ...catalog.map((c) => c.sec ?? 0))
@@ -167,7 +194,7 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
 
   const runningNow = catalog.find((c) => c.running) ?? null
   const slowest = [...catalog].filter((c) => !c.running && c.sec != null).sort((a, b) => b.sec! - a.sec!)[0] ?? null
-  const withIssues = catalog.filter((c) => c.errors + c.warnings > 0)
+  const withIssues = catalog.filter((c) => scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings > 0)
 
   const typeTabs = [
     { value: "all", label: "All", count: scoped.length },
@@ -204,7 +231,7 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
           onClick={() => setIssuesOnly(true)}
           value={withIssues.length ? String(withIssues.length) : "0"}
           valueClass={withIssues.length ? "text-warning-t" : "text-foreground"}
-          sub={`${withIssues.reduce((n, c) => n + c.errors, 0)} err · ${withIssues.reduce((n, c) => n + c.warnings, 0)} warn`}
+          sub={`${withIssues.reduce((n, c) => n + scopeOf(c, workflow).errors, 0)} err · ${withIssues.reduce((n, c) => n + scopeOf(c, workflow).warnings, 0)} warn`}
         />
       </div>
 
@@ -308,13 +335,15 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
                 </span>
               </span>
               <span className="flex justify-end">
-                {c.errors + c.warnings > 0 ? (
+                {scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings > 0 ? (
                   <span
                     className={`rounded-sm px-1.5 py-px font-mono text-[10px] font-bold ${
-                      c.errors ? "bg-danger-a12 text-danger-t" : "bg-warning-a12 text-warning-t"
+                      scopeOf(c, workflow).errors
+                        ? "bg-danger-a12 text-danger-t"
+                        : "bg-warning-a12 text-warning-t"
                     }`}
                   >
-                    {c.errors + c.warnings}
+                    {scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings}
                   </span>
                 ) : (
                   <span className="font-mono text-[11px] text-muted-2">{EM_DASH}</span>
@@ -343,6 +372,7 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
         {selected && (
           <ActionDetailPanel
             entry={selected}
+            scope={workflow}
             workflowCount={workflows.length}
             onOpenLogs={onOpenLogs}
           />
@@ -384,17 +414,20 @@ function SummaryCard({
 
 function ActionDetailPanel({
   entry,
+  scope,
   workflowCount,
   onOpenLogs,
 }: {
   entry: ActionEntry
+  scope: string
   workflowCount: number
   onOpenLogs: (intent: LogsIntent) => void
 }) {
   const a = entry.sample
+  const { events, errors, warnings } = scopeOf(entry, scope)
   const status = entry.running
     ? { label: "running", text: "text-info-t", dot: "bg-info" }
-    : entry.errors > 0
+    : errors > 0
       ? { label: "errors in window", text: "text-danger-t", dot: "bg-danger" }
       : entry.sec != null
         ? { label: "succeeded last", text: "text-success-t", dot: "bg-success" }
@@ -448,9 +481,9 @@ function ActionDetailPanel({
         <PanelStat label="Workflows" value={String(entry.wfs.length)} sub={`of ${workflowCount}`} />
         <PanelStat
           label="Issues"
-          value={String(entry.errors + entry.warnings)}
-          valueClass={entry.errors ? "text-danger-t" : entry.warnings ? "text-warning-t" : "text-foreground"}
-          sub={entry.errors + entry.warnings ? `${entry.errors} err · ${entry.warnings} warn` : "in loaded window"}
+          value={String(errors + warnings)}
+          valueClass={errors ? "text-danger-t" : warnings ? "text-warning-t" : "text-foreground"}
+          sub={errors + warnings ? `${errors} err · ${warnings} warn` : "in loaded window"}
           last
         />
       </div>
@@ -536,7 +569,7 @@ function ActionDetailPanel({
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Recent events</span>
             <span className="flex-1" />
-            {entry.events.length > 0 && (
+            {events.length > 0 && (
               <button
                 onClick={() => onOpenLogs({ q: entry.name })}
                 className="border-0 bg-transparent p-0 text-[11px] text-accent-t hover:underline"
@@ -545,7 +578,7 @@ function ActionDetailPanel({
               </button>
             )}
           </div>
-          {entry.events.slice(0, 4).map((e) => (
+          {events.slice(0, 4).map((e) => (
             <button
               key={e.id}
               onClick={() => onOpenLogs({ q: entry.name })}
@@ -561,7 +594,7 @@ function ActionDetailPanel({
               <span className="line-clamp-2 text-[11.5px] leading-[1.45] text-foreground-2">{e.message}</span>
             </button>
           ))}
-          {entry.events.length === 0 && (
+          {events.length === 0 && (
             <span className="text-[11.5px] text-muted-foreground">No events for this action in the loaded window.</span>
           )}
         </div>

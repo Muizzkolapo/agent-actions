@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Copy, Link2, X, ArrowRight } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
-import { deriveHealth } from "@/lib/health"
-import { EM_DASH, fmtClock, fmtClockMs, fmtSeconds } from "@/lib/format"
+import { EM_DASH, fmtClock, fmtClockMs, fmtSeconds, fmtSpan, fmtSpanTick } from "@/lib/format"
 import { Card, EmptyState, Kbd, PageTitle, SearchInput, Segmented } from "@/components/graphite"
 import type { EventLevel, LogEvent } from "@/lib/mock-data"
 
@@ -96,10 +95,16 @@ function searchIndex(e: LogEvent): string {
 
 const HISTOGRAM_BUCKETS = 36
 
+// The window samples every log by recency and then keeps every warning and error
+// it found, so its level mix is not the project's. Saying so once here stops each
+// count on the page from reading as a proportion of the whole log.
+const LOGS_SUBTITLE =
+  "Recent events from every log, plus every warning and error retained from further back"
+
 export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   const data = useCatalogData()
-  const health = useMemo(() => deriveHealth(data), [data])
   const events = data.logEvents
+  const { eventLevels } = data
 
   const [view, setView] = useState<"stream" | "grouped">("stream")
   const [level, setLevel] = useState<EventLevel | "all">(intent?.level ?? "all")
@@ -126,15 +131,22 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
 
   // Diagnostics, workflow and the histogram range scope the window; level and
   // search filter inside it, so the level counts describe what is selectable.
-  const scoped = useMemo(
+  const unranged = useMemo(
     () =>
-      indexed.filter(({ event, time }) => {
+      indexed.filter(({ event }) => {
         if (!diagnostics && event.diagnostic) return false
         if (workflow !== "all" && event.workflow !== workflow) return false
-        if (range && (isNaN(time) || time < range[0] || time > range[1])) return false
         return true
       }),
-    [indexed, diagnostics, workflow, range],
+    [indexed, diagnostics, workflow],
+  )
+
+  const scoped = useMemo(
+    () =>
+      range
+        ? unranged.filter(({ time }) => !isNaN(time) && time >= range[0] && time <= range[1])
+        : unranged,
+    [unranged, range],
   )
 
   const searched = useMemo(() => {
@@ -147,6 +159,11 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
     for (const { event } of searched) counts[event.level]++
     return counts
   }, [searched])
+
+  const totalLogged = useMemo(
+    () => Object.values(eventLevels).reduce((n, c) => n + c, 0),
+    [eventLevels],
+  )
 
   const rows = useMemo(
     () =>
@@ -177,14 +194,14 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
 
   const slowest = useMemo(() => {
     let best: { event: LogEvent; ms: number } | null = null
-    for (const { event } of scoped) {
+    for (const event of rows) {
       const ms = durationMs(event.data)
       if (ms > 0 && (!best || ms > best.ms)) best = { event, ms }
     }
     return best
-  }, [scoped])
+  }, [rows])
 
-  const histogram = useHistogram(scoped)
+  const histogram = useHistogram(unranged, range)
 
   // The cards count exactly what the level chips count, and name the cumulative
   // figure beside it. Two numbers for the same thing on one screen is the failure
@@ -282,7 +299,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   // The window is a recent slice of each log, so a search can legitimately match
   // nothing that is still in it. Saying so beats an unexplained blank panel.
   const emptyMessage = filtersActive
-    ? `No events match these filters. The window holds the ${events.length.toLocaleString()} most recent events across all logs — an older event will not be in it.`
+    ? `No events match these filters. This window holds ${events.length.toLocaleString()} events — every log's recent activity plus its warnings and errors — so an older routine event will not be in it.`
     : "No events in the loaded window."
 
   const copy = (id: string, text: string) => {
@@ -297,7 +314,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
       <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
         <PageTitle
           title="Logs & Events"
-          subtitle="Structured event stream — filter by level, workflow, field or trace id"
+          subtitle={LOGS_SUBTITLE}
         />
         <Card>
           <EmptyState message="No events in this catalog. Run a workflow, then regenerate the docs to load its event log." />
@@ -310,7 +327,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
     <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
       <PageTitle
         title="Logs & Events"
-        subtitle="Structured event stream — filter by level, workflow, field or trace id"
+        subtitle={LOGS_SUBTITLE}
       />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(215px,1fr))] gap-3">
@@ -318,15 +335,15 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
           dot="bg-danger"
           label="Errors"
           value={levelCounts.error.toLocaleString()}
-          valueClass="text-danger"
-          note={`in view · ${health.errors.toLocaleString()} across all logs`}
+          valueClass="text-danger-t"
+          note={`in view · ${eventLevels.error.toLocaleString()} across all logs`}
         />
         <StatCard
           dot="bg-warning"
           label="Warnings"
           value={levelCounts.warn.toLocaleString()}
           valueClass="text-warning-t"
-          note={`in view · ${health.warnings.toLocaleString()} across all logs`}
+          note={`in view · ${eventLevels.warn.toLocaleString()} across all logs`}
         />
         <StatCard
           label="Slowest event"
@@ -408,8 +425,12 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
           />
         ))}
         <span className="flex-1" />
-        <span className="font-mono text-[11px] text-muted-2">
-          {rows.length.toLocaleString()}/{events.length.toLocaleString()} events
+        <span
+          className="font-mono text-[11px] text-muted-2"
+          title="Chip counts are the window's, not the project's — the window keeps every warning and error it found, so its mix is deliberately not the log's mix."
+        >
+          {rows.length.toLocaleString()}/{events.length.toLocaleString()} in window ·{" "}
+          {totalLogged.toLocaleString()} logged
         </span>
       </div>
 
@@ -440,7 +461,9 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
                     : [b.from, b.to],
                 )
               }
-              className="flex h-full min-w-0 flex-1 cursor-pointer flex-col-reverse overflow-hidden rounded-t-sm hover:bg-hover"
+              className={`flex h-full min-w-0 flex-1 cursor-pointer flex-col-reverse overflow-hidden rounded-t-sm hover:bg-hover ${
+                b.selected ? "" : "opacity-30"
+              }`}
             >
               {b.segments.map((s) => (
                 <span
@@ -876,7 +899,7 @@ function TracePanel({
                 {String(s.event.data.action_name ?? s.event.eventType)}
               </span>
             </span>
-            <div className="relative h-4 rounded-[3px] bg-well">
+            <div className="relative h-4 overflow-hidden rounded-[3px] bg-well">
               <div
                 title={`+${fmtSeconds((s.start - t0) / 1000)} · ${s.ms ? fmtSeconds(s.ms / 1000) : "instant"}`}
                 className={`absolute bottom-[3px] top-[3px] rounded-sm ${LEVEL_STYLE[s.event.level].fill}`}
@@ -914,17 +937,27 @@ interface Bucket {
   from: number
   to: number
   title: string
+  selected: boolean
   segments: { level: EventLevel; height: string }[]
 }
 
-function useHistogram(scoped: { event: LogEvent; time: number }[]) {
+/**
+ * Plotted over the window *before* the range is applied, so the chart stays the
+ * thing a range is chosen from — a histogram of the current range can only ever
+ * be narrowed further, which made shift-extend a no-op.
+ */
+function useHistogram(scoped: { event: LogEvent; time: number }[], range: [number, number] | null) {
   return useMemo(() => {
-    const times = scoped.map((r) => r.time).filter((t) => !isNaN(t))
-    if (times.length === 0) {
+    let min = Infinity
+    let max = -Infinity
+    for (const { time } of scoped) {
+      if (isNaN(time)) continue
+      if (time < min) min = time
+      if (time > max) max = time
+    }
+    if (min === Infinity) {
       return { buckets: [] as Bucket[], axis: [] as string[], caption: "no events in window" }
     }
-    const min = Math.min(...times)
-    const max = Math.max(...times)
     const span = Math.max(1, max - min)
     const width = span / HISTOGRAM_BUCKETS
 
@@ -945,7 +978,8 @@ function useHistogram(scoped: { event: LogEvent; time: number }[]) {
       return {
         from,
         to,
-        title: `${new Date(from).toTimeString().slice(0, 8)} — ${total} event${total === 1 ? "" : "s"}`,
+        title: `${fmtSpanTick(from, span)} — ${total} event${total === 1 ? "" : "s"}`,
+        selected: !range || (to >= range[0] && from <= range[1]),
         segments: LEVELS.filter((l) => c[l] > 0).map((l) => ({
           level: l,
           height: `${(c[l] / peak) * 100}%`,
@@ -953,13 +987,11 @@ function useHistogram(scoped: { event: LogEvent; time: number }[]) {
       }
     })
 
-    const axis = [0, 1, 2, 3].map((i) =>
-      new Date(min + (span * i) / 3).toTimeString().slice(0, 8),
-    )
+    const axis = [0, 1, 2, 3].map((i) => fmtSpanTick(min + (span * i) / 3, span))
     return {
       buckets,
       axis,
-      caption: `${fmtSeconds(span / 1000)} · ${scoped.length.toLocaleString()} events`,
+      caption: `${fmtSpan(min, max)} · ${scoped.length.toLocaleString()} in window`,
     }
-  }, [scoped])
+  }, [scoped, range])
 }

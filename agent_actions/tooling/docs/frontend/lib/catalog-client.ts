@@ -37,7 +37,8 @@ export interface RawCatalogJson {
     validation_warnings: number
     runtime_errors?: number
     runtime_warnings?: number
-    events_in_window?: number
+    /** Level totals over every log, not just the window. */
+    event_levels?: Record<string, number>
   }
 }
 
