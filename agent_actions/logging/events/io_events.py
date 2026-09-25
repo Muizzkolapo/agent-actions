@@ -24,17 +24,17 @@ __all__ = [
 
 @dataclass
 class SourceDataSavingEvent(BaseEvent):
-    """Fired before saving source data to file."""
+    """Fired before source data is written to the store."""
 
-    file_path: str = ""
+    relative_path: str = ""
     item_count: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.FILE_IO
-        self.message = f"Saving {self.item_count} items to {self.file_path}"
+        self.message = f"Saving {self.item_count} items under {self.relative_path}"
         self.data = {
-            "file_path": self.file_path,
+            "relative_path": self.relative_path,
             "item_count": self.item_count,
         }
 
@@ -45,9 +45,9 @@ class SourceDataSavingEvent(BaseEvent):
 
 @dataclass
 class SourceDataSavedEvent(BaseEvent):
-    """Fired after source data is saved to file."""
+    """Fired after source data is written to the store."""
 
-    file_path: str = ""
+    relative_path: str = ""
     item_count: int = 0
     bytes_written: int = 0
 
@@ -55,9 +55,9 @@ class SourceDataSavedEvent(BaseEvent):
         self.level = EventLevel.DEBUG
         self.category = EventCategories.FILE_IO
         size_kb = self.bytes_written / 1024 if self.bytes_written > 0 else 0
-        self.message = f"Saved {self.item_count} items to {self.file_path} ({size_kb:.1f}KB)"
+        self.message = f"Saved {self.item_count} items under {self.relative_path} ({size_kb:.1f}KB)"
         self.data = {
-            "file_path": self.file_path,
+            "relative_path": self.relative_path,
             "item_count": self.item_count,
             "bytes_written": self.bytes_written,
         }

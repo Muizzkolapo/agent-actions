@@ -101,7 +101,7 @@ class TestSaveSourceItems:
         saver.save_source_items([{"x": 1}], "node_1/batch_001")
 
         saving_event = mock_fire.call_args_list[0][0][0]
-        assert saving_event.file_path == "node_1/batch_001"
+        assert saving_event.relative_path == "node_1/batch_001"
 
 
 # ---------------------------------------------------------------------------

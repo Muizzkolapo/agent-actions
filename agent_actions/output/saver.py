@@ -30,13 +30,11 @@ class UnifiedSourceDataSaver:
         self.storage_backend = storage_backend
 
     def save_source_items(self, items: dict | list[dict], relative_path: str) -> None:
-        """Save source data to storage backend with optional deduplication.
+        """Save source data to the storage backend, optionally deduplicated.
 
-        Args:
-            relative_path: Relative path for source file (e.g., 'node_1_Agent/batch_001')
-
-        Raises:
-            ValueError: If storage_backend is not configured
+        *relative_path* is the key the store records these items under
+        ('node_1_Agent/batch_001'), not a location on disk — nothing here writes
+        a file.
         """
         if isinstance(items, dict):
             items = [items]
@@ -52,13 +50,13 @@ class UnifiedSourceDataSaver:
         if self.storage_backend is None:
             raise ValueError(
                 f"Storage backend not configured for write_source. "
-                f"Configure a storage backend (sqlite, tinydb) in your workflow. "
+                f"Configure a storage backend (sqlite) in your workflow. "
                 f"Path: {relative_path}"
             )
 
         fire_event(
             SourceDataSavingEvent(
-                file_path=relative_path,
+                relative_path=relative_path,
                 item_count=len(items),
             )
         )
@@ -70,7 +68,7 @@ class UnifiedSourceDataSaver:
 
         fire_event(
             SourceDataSavedEvent(
-                file_path=relative_path,
+                relative_path=relative_path,
                 item_count=len(items),
                 bytes_written=bytes_written,
             )

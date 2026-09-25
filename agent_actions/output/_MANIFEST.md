@@ -61,7 +61,7 @@ This prevents file collisions when multiple files share the same name but live i
 |--------|------|-------------|------------|
 | `FileWriter.write_target()` | `agent_io/store/{workflow}.db` | Writes | — |
 | `FileWriter.write_staging()` | `agent_io/staging/` | Writes | — |
-| `UnifiedSourceDataSaver.save_source_items()` | `agent_io/target/{action}/` | Writes | — |
+| `UnifiedSourceDataSaver.save_source_items()` | `agent_io/store/` | Writes | — |
 | `SchemaLoader.load_schema()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |
 | `SchemaLoader.discover_schema_files()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |
 | `ActionExpander.expand()` | `agent_config/{workflow}.yml` | Transforms | `actions`, `defaults`, `versions` |
