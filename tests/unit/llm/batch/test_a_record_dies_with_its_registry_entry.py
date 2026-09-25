@@ -86,6 +86,10 @@ class _Registry:
     def get_batch_job(self, file_name):
         return self._jobs.get(file_name)
 
+    def batch_id_at(self, file_name):
+        entry = self._jobs.get(file_name)
+        return entry.batch_id if entry is not None else None
+
     def save_batch_job(self, file_name, entry):
         self._jobs[file_name] = entry
 
@@ -269,13 +273,16 @@ def test_a_record_that_cannot_be_reclaimed_does_not_undo_the_work(project, monke
     never raised."""
     from agent_actions.llm.providers import local_batch_records
 
+    _submit("live")
     monkeypatch.setattr(
         AgacBatchClient,
         "release_batch",
         classmethod(lambda cls, batch_id: (_ for _ in ()).throw(OSError("read-only .agac"))),
     )
 
-    local_batch_records.release_local_batch_record("b1")
+    local_batch_records.release_local_batch_record("live")
+
+    assert _records(project) == ["live.json"], "a failed reclaim half-deleted the record"
 
 
 def test_a_temp_file_a_write_is_still_holding_survives_the_sweep(project):
@@ -434,3 +441,71 @@ def test_a_round_records_its_successor_before_spending_the_one_it_replaces(proje
     )
 
     assert order == ["save", "release"]
+
+
+def _registry_over(stored):
+    """A real BatchRegistryManager over a backend that just holds one blob."""
+    import json
+
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    state = {"raw": json.dumps(stored)}
+    backend = MagicMock()
+    backend.load_metadata.side_effect = lambda _key: state["raw"]
+    backend.save_metadata.side_effect = lambda _key, raw: state.update(raw=raw)
+    return BatchRegistryManager(backend, ACTION), state
+
+
+def _unreadable_entry(batch_id):
+    return {
+        "batch_id": batch_id,
+        "status": "completed",
+        "timestamp": "t",
+        "provider": "agac-provider",
+        "recovery_type": "not-a-recovery-type",
+    }
+
+
+def test_an_unreadable_entry_still_says_which_batch_its_key_names(project):
+    """An overwrite has to release what it displaces, and the parsed view of an
+    unreadable entry is None — which would leave that record named by nothing."""
+    manager, _state = _registry_over({"pages.json": _unreadable_entry("b-unreadable")})
+
+    assert manager.get_batch_job("pages.json") is None
+    assert manager.batch_id_at("pages.json") == "b-unreadable"
+
+
+def test_saving_over_an_unreadable_entry_retires_it(project):
+    """It occupied the key; the successor does now. Leaving it in would put it
+    back into storage on the next write, naming a batch nothing can reach."""
+    import json
+
+    manager, state = _registry_over({"pages.json": _unreadable_entry("b-unreadable")})
+
+    manager.save_batch_job("pages.json", _entry("b-new"))
+
+    assert list(json.loads(state["raw"])) == ["pages.json"]
+    assert json.loads(state["raw"])["pages.json"]["batch_id"] == "b-new"
+
+
+def test_removing_an_unreadable_entry_really_removes_it(project):
+    """`remove_batch_job` means the key is gone — a write that put it back would
+    hand a spent attempt to the next run as if it were live."""
+    import json
+
+    manager, state = _registry_over(
+        {
+            "pages.json": _unreadable_entry("b-unreadable"),
+            "other.json": {
+                "batch_id": "b-good",
+                "status": "completed",
+                "timestamp": "t",
+                "provider": "agac-provider",
+            },
+        }
+    )
+
+    assert manager.remove_batch_job("pages.json") is True
+
+    manager.save_batch_job("third.json", _entry("b-third"))
+    assert sorted(json.loads(state["raw"])) == ["other.json", "third.json"]
