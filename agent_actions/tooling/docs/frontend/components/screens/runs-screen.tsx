@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
-import { EM_DASH, fmtDuration, fmtTimestamp, fmtTimestampShort, pct } from "@/lib/format"
+import { EM_DASH, fmtDuration, fmtTimestamp, fmtTimestampShort, pct, pctNumber } from "@/lib/format"
 import {
   BackButton,
   Card,
@@ -48,7 +48,7 @@ export function RunsScreen() {
     return runs
       .filter((r) => status === "all" || r.status === status)
       .filter((r) => !q || `${r.id} ${r.wf}`.toLowerCase().includes(q))
-      .sort((a, b) => (a.started < b.started ? 1 : -1))
+      .sort((a, b) => b.started.localeCompare(a.started))
   }, [runs, search, status])
 
   if (selected) return <RunDetail run={selected} onBack={() => setSelected(null)} />
@@ -251,11 +251,10 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
                   : a.type === "tool"
                     ? "bg-tool"
                     : "bg-llm"
-            const left = bar.start != null && !isNaN(bar.start) ? (bar.start / timeline.span) * 100 : 0
-            const width =
-              bar.start != null && bar.end != null && !isNaN(bar.end)
-                ? ((bar.end - bar.start) / timeline.span) * 100
-                : (a.dur * 1000) / timeline.span * 100
+            const left = bar.start != null ? pctNumber(bar.start, timeline.span) : 0
+            const rawWidth =
+              bar.start != null && bar.end != null ? bar.end - bar.start : a.dur * 1000
+            const width = Math.min(100 - left, pctNumber(rawWidth, timeline.span))
             return (
               <div
                 key={bar.name}

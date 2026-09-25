@@ -1,9 +1,10 @@
 """Documentation HTTP server for agent-actions workflows."""
 
 import logging
+import sys
 import urllib.parse
 from functools import partial
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import click
@@ -11,6 +12,25 @@ import click
 from agent_actions.config.path_config import resolve_project_root
 
 logger = logging.getLogger(__name__)
+
+
+class DocsServer(ThreadingHTTPServer):
+    """Serves each request on its own thread.
+
+    A browser fetches catalog.json and runs.json together and drains a large
+    response gradually. Handling one request at a time meant the server blocked
+    writing the first response into a socket the client had not finished reading,
+    and the second request was never reached — on a project whose catalog runs to
+    tens of megabytes the page never left its loading state.
+    """
+
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        """A client that closes mid-download is routine, not a server error."""
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
 
 
 class DocsRequestHandler(SimpleHTTPRequestHandler):
@@ -105,7 +125,7 @@ def serve_docs(
     click.echo("Press Ctrl+C to exit\n")
 
     try:
-        with HTTPServer(("127.0.0.1", port), handler) as httpd:
+        with DocsServer(("127.0.0.1", port), handler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         click.echo("\nShutting down server...")

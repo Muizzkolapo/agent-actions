@@ -4,17 +4,22 @@ export const EM_DASH = "—"
 
 /** Coarse wall-clock duration: 48s, 2m 19s, 1h 6m. */
 export function fmtDuration(seconds: number): string {
-  if (!seconds || seconds < 0) return "0s"
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s"
   const s = Math.round(seconds)
   if (s < 60) return `${s}s`
   if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
 }
 
-/** Precise below a minute, coarse above it. Renders an em dash for no value. */
+/**
+ * Precise below a minute, coarse above it. Sub-millisecond durations are real —
+ * a tool action completes in tens of microseconds — so they keep two decimals
+ * rather than rounding to the 0ms that reads as "not measured".
+ */
 export function fmtSeconds(seconds: number | null | undefined): string {
-  if (seconds == null || seconds < 0) return EM_DASH
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return EM_DASH
   if (seconds === 0) return "0s"
+  if (seconds < 0.001) return `${(seconds * 1000).toFixed(2)}ms`
   if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
   if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`
   return fmtDuration(seconds)
@@ -52,11 +57,20 @@ export function fmtTimestampShort(iso: string): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`
 }
 
+/** A bar width. Run records come straight off disk, so the parts are clamped:
+ *  a record whose counts exceed its total must not paint past its track. */
 export function pct(part: number, total: number): string {
-  if (total <= 0) return "0%"
-  return `${((part / total) * 100).toFixed(2)}%`
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return "0%"
+  const ratio = Math.min(1, Math.max(0, part / total))
+  return `${(ratio * 100).toFixed(2)}%`
 }
 
 export function plural(n: number, word: string): string {
   return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`
+}
+
+/** Clamped to [0, 100] for the same reason as `pct`. */
+export function pctNumber(part: number, total: number): number {
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return 0
+  return Math.min(100, Math.max(0, (part / total) * 100))
 }

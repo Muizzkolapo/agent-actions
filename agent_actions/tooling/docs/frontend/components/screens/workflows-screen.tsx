@@ -87,17 +87,19 @@ export function WorkflowsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsInten
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const score = (w: Workflow) => issuesOf(w.id).errors * 1000 + issuesOf(w.id).warnings
+    const byIssues = (a: Workflow, b: Workflow) =>
+      issuesOf(b.id).errors - issuesOf(a.id).errors ||
+      issuesOf(b.id).warnings - issuesOf(a.id).warnings
     return workflows
       .filter((w) => status === "all" || w.manifestStatus === status)
       .filter((w) => !q || `${w.name} ${w.description}`.toLowerCase().includes(q))
       .sort((a, b) => {
         if (sort === "name") return a.name.localeCompare(b.name)
         if (sort === "actions") return b.actionCount - a.actionCount
-        if (sort === "issues") return score(b) - score(a) || a.name.localeCompare(b.name)
+        if (sort === "issues") return byIssues(a, b) || a.name.localeCompare(b.name)
         return (
           STATUS_RANK[a.manifestStatus] - STATUS_RANK[b.manifestStatus] ||
-          score(b) - score(a) ||
+          byIssues(a, b) ||
           a.name.localeCompare(b.name)
         )
       })

@@ -37,7 +37,7 @@ export interface RawCatalogJson {
     validation_warnings: number
     runtime_errors?: number
     runtime_warnings?: number
-    total_events?: number
+    events_in_window?: number
   }
 }
 

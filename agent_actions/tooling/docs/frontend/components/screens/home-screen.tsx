@@ -43,7 +43,7 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
         : `${passedRuns} of ${runs.length} passed`
 
   const recentRuns = useMemo(
-    () => [...runs].sort((a, b) => (a.started < b.started ? 1 : -1)).slice(0, 6),
+    () => [...runs].sort((a, b) => b.started.localeCompare(a.started)).slice(0, 6),
     [runs],
   )
 

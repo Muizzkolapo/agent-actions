@@ -76,6 +76,7 @@ This value was previously duplicated in three files. It can be overridden at run
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
 | `README_MAX_BYTES` | int | `100 * 1024` | Maximum README content included in catalog.json (100 KB) |
+| `EVENT_TAIL_LIMIT` | int | `2000` | Most recent events embedded in catalog.json, shared across every log |
 
 ## Naming Conventions
 

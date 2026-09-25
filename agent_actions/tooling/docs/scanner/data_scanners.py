@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from agent_actions.config.defaults import DocsDefaults
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -18,9 +19,7 @@ from ..parser import extract_fields_for_docs
 
 logger = logging.getLogger(__name__)
 
-# Event logs reach hundreds of megabytes, so the docs catalog embeds only the most
-# recent slice of the stream per workflow.
-EVENT_TAIL_LIMIT = 2000
+EVENT_TAIL_LIMIT = DocsDefaults.EVENT_TAIL_LIMIT
 
 
 def scan_prompts(project_root: Path) -> dict[str, Any]:
@@ -227,16 +226,22 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
 
 
 def _iter_events(path: Path) -> Iterator[dict[str, Any]]:
-    """Yield parsed JSON events from a JSONL file, skipping malformed lines."""
+    """Yield parsed JSON objects from a JSONL file, skipping every other line.
+
+    A line that parses to a list or a scalar is as malformed here as one that does
+    not parse at all, and letting it through crashes the caller instead.
+    """
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if isinstance(event, dict):
+                yield event
 
 
 def scan_logs(project_root: Path) -> dict[str, Any]:
@@ -263,7 +268,7 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
         invocations: dict[str, dict[str, Any]] = {}
         tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
         for seq, event in enumerate(_iter_events(events_path)):
-            tail.append({"seq": seq, **event})
+            tail.append({**event, "seq": seq})
             event_type = event.get("event_type")
             meta = event.get("meta", {})
             data = event.get("data", {})
@@ -430,7 +435,7 @@ def extract_run_events(events_path: Path) -> RunEvents:
         for seq, event in enumerate(_iter_events(events_path)):
             _collect_runtime_warning(event, runtime_warnings)
             _collect_action_metrics(event, action_metrics)
-            tail.append({"seq": seq, **event})
+            tail.append({**event, "seq": seq})
     except OSError as e:
         logger.debug("Could not read run events from %s: %s", events_path, e)
 

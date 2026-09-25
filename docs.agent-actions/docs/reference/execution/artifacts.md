@@ -372,7 +372,7 @@ The catalog is a snapshot of your entire project for the documentation site:
 agac docs
 ```
 
-The catalog contains: workflow definitions, action metadata, prompt templates, schema definitions, run history, and execution metrics. See [Documentation Site](../documentation-site) for the full browsable interface.
+The catalog contains: workflow definitions, action metadata, prompt templates, schema definitions, run history, execution metrics, and a bounded tail of the event stream shared across every log the project wrote. See [Documentation Site](../documentation-site) for the full browsable interface.
 
 ## Logs
 

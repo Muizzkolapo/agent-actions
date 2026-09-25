@@ -106,7 +106,9 @@ class TestCatalogGeneratorHappyPath:
         assert result["metadata"]["project_name"] == ""
 
 
-def _wf_events(workflow: str, seqs: list[int], hour: int = 10) -> dict:
+def _wf_events(workflow: str, seqs: list[int], hour: int = 10, meta_wf: str | None = None) -> dict:
+    """A scanned log. `meta_wf` differs from the source name for the project log,
+    whose rows name whichever workflow the invocation targeted."""
     return {
         "workflow_name": workflow,
         "latest_run": None,
@@ -124,7 +126,7 @@ def _wf_events(workflow: str, seqs: list[int], hour: int = 10) -> dict:
                 "meta": {
                     "timestamp": f"2026-09-22T{hour:02d}:00:00.{s:06d}Z",
                     "invocation_id": "inv1",
-                    "workflow_name": workflow,
+                    "workflow_name": meta_wf or workflow,
                 },
                 "data": {"action_name": f"step_{s}"},
             }
@@ -141,7 +143,7 @@ class TestCatalogGeneratorEventStream:
         gen = _make_generator()
         result = gen.generate(**_empty_inputs())
         assert result["logs"]["events"] == []
-        assert result["stats"]["total_events"] == 0
+        assert result["stats"]["events_in_window"] == 0
 
     def test_events_are_merged_newest_first_across_workflows(self):
         gen = _make_generator()
@@ -154,7 +156,7 @@ class TestCatalogGeneratorEventStream:
 
         messages = [e["message"] for e in result["logs"]["events"]]
         assert messages == ["beta step 0", "alpha step 1", "alpha step 0"]
-        assert result["stats"]["total_events"] == 3
+        assert result["stats"]["events_in_window"] == 3
 
     def test_event_id_is_namespaced_by_workflow(self):
         gen = _make_generator()
@@ -162,7 +164,7 @@ class TestCatalogGeneratorEventStream:
         inputs["runs_data"] = {"alpha": _wf_events("alpha", [7])}
         result = gen.generate(**inputs)
 
-        assert result["logs"]["events"][0]["id"] == "alpha:7"
+        assert result["logs"]["events"][0]["id"] == "workflow:alpha:7"
 
     def test_a_busy_log_does_not_crowd_out_a_quiet_one(self):
         """One workflow logging far more — and more recently — must not take the
@@ -177,18 +179,71 @@ class TestCatalogGeneratorEventStream:
 
         events = result["logs"]["events"]
         assert len(events) == EVENT_TAIL_LIMIT
-        sources = {e["id"].split(":")[0] for e in events}
-        assert sources == {"alpha", "beta"}
+        sources = {e["id"].rsplit(":", 1)[0] for e in events}
+        assert sources == {"workflow:alpha", "workflow:beta"}
 
     def test_the_project_log_shares_the_window_with_workflows(self):
         gen = _make_generator()
         inputs = _empty_inputs()
         inputs["logs_data"] = {
             **inputs["logs_data"],
-            "events": _wf_events("logs", list(range(EVENT_TAIL_LIMIT)), hour=12)["events"],
+            "events": _wf_events("logs", list(range(EVENT_TAIL_LIMIT)), hour=12, meta_wf="alpha")[
+                "events"
+            ],
         }
         inputs["runs_data"] = {"alpha": _wf_events("alpha", [0, 1], hour=9)}
         result = gen.generate(**inputs)
 
-        sources = {e["id"].split(":")[0] for e in result["logs"]["events"]}
-        assert sources == {"logs", "alpha"}
+        sources = {e["id"].rsplit(":", 1)[0] for e in result["logs"]["events"]}
+        assert sources == {"project:logs", "workflow:alpha"}
+
+    def test_the_window_keeps_each_log_s_newest_events(self):
+        """Filling the shared budget from the oldest end would drop exactly the rows
+        a tail exists to show."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {
+            "alpha": _wf_events("alpha", list(range(EVENT_TAIL_LIMIT)), hour=11),
+            "beta": _wf_events("beta", [0, 1], hour=9),
+        }
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        alpha = sorted(e["seq"] for e in events if e["id"].startswith("workflow:alpha:"))
+        beta = sorted(e["seq"] for e in events if e["id"].startswith("workflow:beta:"))
+        assert alpha[-1] == EVENT_TAIL_LIMIT - 1
+        assert alpha[0] == 2
+        assert beta == [0, 1]
+
+    def test_a_workflow_named_logs_does_not_displace_the_project_log(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["logs_data"] = {**inputs["logs_data"], "events": _wf_events("logs", [0])["events"]}
+        inputs["runs_data"] = {"logs": _wf_events("logs", [0], hour=11)}
+        result = gen.generate(**inputs)
+
+        ids = {e["id"] for e in result["logs"]["events"]}
+        assert ids == {"project:logs:0", "workflow:logs:0"}
+
+    def test_diagnostic_rows_survive_the_merge(self):
+        """The explorer hides diagnostics behind a toggle; it cannot show what the
+        catalog dropped."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        wf = _wf_events("alpha", [0, 1])
+        wf["events"][0]["diagnostic"] = True
+        inputs["runs_data"] = {"alpha": wf}
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        assert sum(1 for e in events if e["diagnostic"]) == 1
+
+    def test_the_tail_is_not_echoed_into_catalog_runs(self):
+        """The stream is embedded once. Echoing every workflow's tail under runs
+        doubled a megabyte-scale payload the dashboard never reads."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {"alpha": _wf_events("alpha", [0, 1])}
+        result = gen.generate(**inputs)
+
+        assert "events" not in result["runs"]["alpha"]
+        assert result["runs"]["alpha"]["workflow_name"] == "alpha"
+        assert len(result["logs"]["events"]) == 2

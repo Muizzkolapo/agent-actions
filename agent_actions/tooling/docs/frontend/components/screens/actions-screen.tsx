@@ -112,7 +112,7 @@ function buildCatalog(
   }
 
   for (const entry of byBase.values()) {
-    entry.events.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
+    entry.events.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     entry.errors = entry.events.filter((e) => e.level === "error").length
     entry.warnings = entry.events.filter((e) => e.level === "warn").length
     entry.running = entry.members.some((m) => m.running)
@@ -150,7 +150,8 @@ export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent)
     const list = scoped.filter((c) => type === "all" || c.type === type)
     const sorters: Record<SortKey, (a: ActionEntry, b: ActionEntry) => number> = {
       issues: (a, b) =>
-        b.errors * 100 + b.warnings - (a.errors * 100 + a.warnings) ||
+        b.errors - a.errors ||
+        b.warnings - a.warnings ||
         Number(b.running) - Number(a.running) ||
         a.name.localeCompare(b.name),
       dur: (a, b) => (b.sec ?? -1) - (a.sec ?? -1),

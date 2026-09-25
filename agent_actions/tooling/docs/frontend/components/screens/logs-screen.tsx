@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Copy, Link2, X, ArrowRight } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
 import { deriveHealth } from "@/lib/health"
@@ -27,31 +27,43 @@ const LEVEL_STYLE: Record<EventLevel, { label: string; text: string; bg: string;
 
 /* ─── Per-class derivations ─────────────────────────────────────────────── */
 
-/** No event class carries a `duration` key — each names its own. */
-const DURATION_KEYS = ["execution_time", "elapsed_time", "latency_ms", "timeout_seconds", "retry_after"] as const
+/**
+ * No event class carries a `duration` key — each names its own, and the two kinds
+ * do not mean the same thing. `execution_time` / `elapsed_time` / `latency_ms`
+ * measure work the event performed; `timeout_seconds` / `retry_after` describe a
+ * configured wait. Both belong in the Duration column, where they read as a
+ * value, but only the first kind may become a span: plotting the second would
+ * draw a 5s bar for a guard that timed out *at* 5s.
+ */
+const ELAPSED_KEYS = ["execution_time", "elapsed_time", "latency_ms"] as const
+const WAIT_KEYS = ["timeout_seconds", "retry_after"] as const
 
-function durationKey(data: Record<string, unknown>): string | null {
-  for (const k of DURATION_KEYS) if (typeof data[k] === "number") return k
+interface DurationField {
+  key: string
+  seconds: number
+  elapsed: boolean
+}
+
+function durationField(data: Record<string, unknown>): DurationField | null {
+  for (const key of ELAPSED_KEYS) {
+    const value = data[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return { key, seconds: key === "latency_ms" ? value / 1000 : value, elapsed: true }
+    }
+  }
+  for (const key of WAIT_KEYS) {
+    const value = data[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return { key, seconds: value, elapsed: false }
+    }
+  }
   return null
 }
 
-function durationLabel(data: Record<string, unknown>): string {
-  const key = durationKey(data)
-  if (!key) return EM_DASH
-  const value = data[key] as number
-  return key === "latency_ms" ? `${value}ms` : `${value}s`
-}
-
-/**
- * Span length for the waterfall. `timeout_seconds` and `retry_after` describe a
- * wait or a configured limit rather than work this event performed — plotting
- * them would draw a 5s bar for a guard that timed out *at* 5s.
- */
+/** Span length for the waterfall — zero for anything that is not elapsed work. */
 function durationMs(data: Record<string, unknown>): number {
-  if (typeof data.execution_time === "number") return Math.round(data.execution_time * 1000)
-  if (typeof data.elapsed_time === "number") return Math.round(data.elapsed_time * 1000)
-  if (typeof data.latency_ms === "number") return data.latency_ms
-  return 0
+  const field = durationField(data)
+  return field?.elapsed ? field.seconds * 1000 : 0
 }
 
 function tokenLabel(data: Record<string, unknown>): string | null {
@@ -174,6 +186,17 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
 
   const histogram = useHistogram(scoped)
 
+  // The cards count exactly what the level chips count, and name the cumulative
+  // figure beside it. Two numbers for the same thing on one screen is the failure
+  // this page exists to avoid.
+
+  // The trace answers "what happened in this run", so it is scoped only by the
+  // diagnostics toggle — never by the search, workflow or histogram range.
+  const traceEvents = useMemo(
+    () => (diagnostics ? events : events.filter((e) => !e.diagnostic)),
+    [events, diagnostics],
+  )
+
   const problemIds = useMemo(
     () => rows.filter((e) => e.level === "error" || e.level === "warn").map((e) => e.id),
     [rows],
@@ -190,6 +213,27 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
     },
     [cursorId],
   )
+
+  // A permalink opens its event expanded and in view. A diagnostic target forces
+  // the toggle on, or the link would open to nothing.
+  const openedPermalink = useRef(false)
+  useEffect(() => {
+    if (openedPermalink.current || events.length === 0) return
+    const match = /[#&]ev=([^&]+)/.exec(window.location.hash)
+    if (!match) return
+    openedPermalink.current = true
+    const id = decodeURIComponent(match[1])
+    const target = events.find((e) => e.id === id)
+    if (!target) return
+    if (target.diagnostic) setDiagnostics(true)
+    setExpandedId(id)
+    setCursorId(id)
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-event-row="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ block: "center" })
+    })
+  }, [events])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -273,16 +317,16 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
         <StatCard
           dot="bg-danger"
           label="Errors"
-          value={health.errors.toLocaleString()}
+          value={levelCounts.error.toLocaleString()}
           valueClass="text-danger"
-          note="across loaded logs"
+          note={`in view · ${health.errors.toLocaleString()} across all logs`}
         />
         <StatCard
           dot="bg-warning"
           label="Warnings"
-          value={health.warnings.toLocaleString()}
+          value={levelCounts.warn.toLocaleString()}
           valueClass="text-warning-t"
-          note="across loaded logs"
+          note={`in view · ${health.warnings.toLocaleString()} across all logs`}
         />
         <StatCard
           label="Slowest event"
@@ -396,7 +440,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
                     : [b.from, b.to],
                 )
               }
-              className="flex h-full min-w-0 flex-1 cursor-pointer flex-col-reverse gap-px rounded-t-sm pb-px hover:bg-hover"
+              className="flex h-full min-w-0 flex-1 cursor-pointer flex-col-reverse overflow-hidden rounded-t-sm hover:bg-hover"
             >
               {b.segments.map((s) => (
                 <span
@@ -416,11 +460,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
       </Card>
 
       {trace && (
-        <TracePanel
-          invocationId={trace}
-          events={scoped.map((r) => r.event)}
-          onClose={() => setTrace(null)}
-        />
+        <TracePanel invocationId={trace} events={traceEvents} onClose={() => setTrace(null)} />
       )}
 
       {view === "stream" ? (
@@ -542,10 +582,13 @@ function EventRow({
   onTrace: () => void
   onCopy: (id: string, text: string) => void
 }) {
-  const durKey = durationKey(event.data)
+  const durField = durationField(event.data)
   const tokens = tokenLabel(event.data)
+  // Only an elapsed key is fully represented by the Duration column; a configured
+  // wait keeps its chip so the field is not lost behind a number.
+  const promoted = durField?.elapsed ? durField.key : null
   const chips = Object.entries(event.data).filter(
-    ([k]) => k !== durKey && !(tokens && (k === "total_tokens" || k === "tokens")),
+    ([k]) => k !== promoted && !(tokens && (k === "total_tokens" || k === "tokens")),
   )
 
   return (
@@ -562,8 +605,13 @@ function EventRow({
           <LevelTag level={event.level} />
           <span className="whitespace-nowrap font-mono text-[10.5px] text-muted-foreground">{event.code}</span>
           <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{event.category}</span>
-          <span className="text-right font-mono text-[11px] text-muted-foreground">
-            {durationLabel(event.data)}
+          <span
+            title={durField ? durField.key : undefined}
+            className={`text-right font-mono text-[11px] ${
+              durField && !durField.elapsed ? "text-muted-2" : "text-muted-foreground"
+            }`}
+          >
+            {durField ? fmtSeconds(durField.seconds) : EM_DASH}
           </span>
           {open ? (
             <ChevronDown className="h-[13px] w-[13px] text-muted-2" strokeWidth={2.2} />
@@ -619,7 +667,7 @@ function EventRow({
                   tabIndex={0}
                   onClick={onTrace}
                   onKeyDown={(e) => { if (e.key === "Enter") onTrace() }}
-                  title="Show every event in this run as a waterfall"
+                  title="Show this run as a waterfall"
                   className="flex cursor-pointer items-center gap-1 border-b border-dashed border-accent-a30 text-accent-t hover:border-accent-t"
                 >
                   {event.invocationId}

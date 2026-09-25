@@ -88,9 +88,30 @@ View all prompts with full content and source file location. When you need to un
 
 ![Prompt Library](/img/docs-site/prompts.png)
 
+### Logs & Events
+
+The event explorer is where a "why did that happen?" ends. It reads the same
+structured events the framework writes to `agent_io/**/logs/events.json` and the
+project's own `logs/events.json`, showing the most recent slice shared across
+every log:
+
+- **Stream or grouped** — reverse-chronological rows, or collapsed by event code
+  with counts and a share bar
+- **Filters** — level, workflow, free text, and every `key=value` in an event's
+  payload
+- **Diagnostics toggle** — framework-internal events are hidden by default, the
+  same way the console hides them outside a verbose run
+- **Run trace** — click an `invocation_id` to see that run laid out as spans on
+  a time axis
+
+![Logs & Events](/img/docs-site/logs.png)
+
 ### Search
 
-Find resources quickly with full-text search across agentic workflows, actions, schemas, and prompts. As your project grows, search becomes essential for navigating between related components.
+Find resources quickly with full-text search across agentic workflows, actions,
+schemas, prompts and event codes. Press `⌘K` (or `/`) from anywhere. As your
+project grows, search becomes essential for navigating between related
+components.
 
 ## Deployment
 

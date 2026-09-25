@@ -53,3 +53,6 @@ class DocsDefaults:
     """Defaults for documentation scanning."""
 
     README_MAX_BYTES: int = 100 * 1024  # 100 KB
+    # Event logs reach hundreds of megabytes, so the docs catalog embeds only the
+    # most recent slice of the stream, shared across every log the project wrote.
+    EVENT_TAIL_LIMIT: int = 2000

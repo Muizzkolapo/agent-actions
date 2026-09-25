@@ -59,7 +59,7 @@ class TestScanLogs:
         assert len(result["recent_invocations"]) <= 10  # capped at last 10
 
     def test_scan_logs_returns_the_event_tail(self, tmp_path):
-        """The Log Explorer reads validation events from the project-level log too."""
+        """The project-level log reaches the Log Explorer, not only its two projections."""
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
         _write_events(logs_dir / "events.json", 3)
@@ -78,6 +78,19 @@ class TestScanLogs:
 
         assert len(rows) == EVENT_TAIL_LIMIT
         assert rows[0]["seq"] == 7
+
+    def test_scan_logs_keeps_diagnostic_rows(self, tmp_path):
+        """The explorer hides diagnostics behind a toggle; it cannot show what the
+        scanner dropped."""
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        with open(logs_dir / "events.json", "w") as f:
+            f.write(json.dumps({"event_type": "E", "diagnostic": True, "meta": {}}) + "\n")
+            f.write(json.dumps({"event_type": "E", "diagnostic": False, "meta": {}}) + "\n")
+
+        rows = scan_logs(tmp_path)["events"]
+
+        assert [r["diagnostic"] for r in rows] == [True, False]
 
     def test_scan_logs_event_tail_empty_without_a_log(self, tmp_path):
         assert scan_logs(tmp_path)["events"] == []
@@ -603,15 +616,7 @@ class TestRunEventsStream:
 
         rows = extract_run_events(events_path).events
 
-        assert [r["message"] for r in rows] == [
-            "0/12 OK step_0 in 1.00s",
-            "1/12 OK step_1 in 1.00s",
-            "2/12 OK step_2 in 1.00s",
-        ]
-        assert rows[0]["code"] == "A002"
-        assert rows[0]["category"] == "action"
-        assert rows[0]["meta"]["invocation_id"] == "inv1"
-        assert rows[0]["data"]["action_name"] == "step_0"
+        assert rows == [{**_stream_event(i), "seq": i} for i in range(3)]
 
     def test_seq_is_the_absolute_file_position(self, tmp_path):
         events_path = tmp_path / "events.json"
@@ -661,3 +666,28 @@ class TestRunEventsStream:
 
         assert len(rows) == 1
         assert rows[0]["diagnostic"] is True
+
+    def test_a_row_carrying_its_own_seq_does_not_win(self, tmp_path):
+        """Real logs carry keys beyond BaseEvent.to_dict(); one named seq would
+        silently repoint every id built from it."""
+        events_path = tmp_path / "events.json"
+        row = _stream_event(0)
+        row["seq"] = 999
+        with open(events_path, "w") as f:
+            f.write(json.dumps(row) + "\n")
+            f.write(json.dumps(_stream_event(1)) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0, 1]
+
+    def test_a_line_that_is_not_an_object_is_skipped(self, tmp_path):
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write("[1, 2, 3]\n")
+            f.write(json.dumps(_stream_event(0)) + "\n")
+            f.write('"a string"\n')
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows] == [0]

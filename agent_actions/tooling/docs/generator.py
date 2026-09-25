@@ -24,18 +24,30 @@ from .scanner import ReadmeData
 logger = logging.getLogger(__name__)
 
 
-def _merge_event_tails(sources: dict[str, list[dict]], limit: int) -> list[dict]:
+def _event_sort_key(event: dict) -> tuple[str, int]:
+    """Order by emit time, then by position in the log the row came from.
+
+    Defensive about shape: these rows are read back from a file on disk, and one
+    malformed row must not abort the whole catalog build.
+    """
+    meta = event.get("meta")
+    timestamp = meta.get("timestamp") if isinstance(meta, dict) else None
+    seq = event.get("seq")
+    return (str(timestamp or ""), seq if isinstance(seq, int) else 0)
+
+
+def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> list[dict]:
     """Merge per-log event tails into one reverse-chronological window.
 
-    The budget is shared round-robin, newest first, rather than handed to
-    whichever log happens to be newest: a project-level log accumulates across
-    every CLI invocation, so a straight global sort gives it the whole window and
-    leaves every workflow undiagnosable. An event's id pairs its log with its
-    position in that log, so a permalink survives a regenerate that appended rows.
+    The budget is shared round-robin, newest first, rather than handed to whichever
+    log happens to be newest: a project-level log accumulates across every CLI
+    invocation, so a straight global sort gives it the whole window and leaves
+    every workflow undiagnosable. Sources are pairs, not a mapping, because a
+    workflow may share a name with the project log.
     """
     queues = [
-        [{"id": f"{name}:{evt.get('seq')}", **evt} for evt in reversed(rows)]
-        for name, rows in sorted(sources.items())
+        [{**evt, "id": f"{name}:{evt.get('seq')}"} for evt in reversed(rows)]
+        for name, rows in sources
         if rows
     ]
     merged: list[dict] = []
@@ -45,10 +57,7 @@ def _merge_event_tails(sources: dict[str, list[dict]], limit: int) -> list[dict]
         for queue in queues:
             if depth < len(queue) and len(merged) < limit:
                 merged.append(queue[depth])
-    merged.sort(
-        key=lambda e: (e.get("meta", {}).get("timestamp") or "", e.get("seq") or 0),
-        reverse=True,
-    )
+    merged.sort(key=_event_sort_key, reverse=True)
     return merged
 
 
@@ -262,7 +271,12 @@ class CatalogGenerator:
             "prompts": prompts_with_refs,
             "schemas": schemas_with_refs,
             "tool_functions": tool_functions_data or {},
-            "runs": runs_data or {},  # Workflow run data and metrics
+            # Each workflow's event tail is merged into logs.events below; keeping
+            # the per-workflow copy here too would ship the same rows twice.
+            "runs": {
+                name: {k: v for k, v in data.items() if k != "events"}
+                for name, data in (runs_data or {}).items()
+            },
             "logs": logs_data or {},  # Global CLI logs and validation events
             "vendors": vendors_data or {},  # LLM vendor configurations
             "error_types": error_types_data or {},  # Error class hierarchy
@@ -472,13 +486,19 @@ class CatalogGenerator:
         catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
         catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
 
-        # One reverse-chronological stream over every log the project wrote.
-        event_sources = {"logs": (logs_data or {}).get("events", [])}
-        for wf_name, wf_data in (runs_data or {}).items():
-            event_sources[wf_name] = wf_data.get("events", [])
+        # One reverse-chronological stream over every log the project wrote. The
+        # kind prefix keeps a workflow named `logs` from colliding with the
+        # project-level log.
+        event_sources: list[tuple[str, list[dict]]] = [
+            ("project:logs", (logs_data or {}).get("events", []))
+        ]
+        event_sources += [
+            (f"workflow:{name}", data.get("events", []))
+            for name, data in sorted((runs_data or {}).items())
+        ]
         event_stream = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
         catalog["logs"]["events"] = event_stream
-        catalog["stats"]["total_events"] = len(event_stream)
+        catalog["stats"]["events_in_window"] = len(event_stream)
 
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0
