@@ -741,6 +741,44 @@ class TestRunEventsProblemRetention:
         assert warns[-1] == older - 1
         assert warns[0] == older - EVENT_PROBLEM_LIMIT
 
+    def test_a_flood_of_warnings_does_not_evict_the_errors(self, tmp_path):
+        """Warnings outnumber errors by ~780:1 in a real log. On one shared budget
+        the common level sets the boundary and the rare one falls off it."""
+        events_path = tmp_path / "events.json"
+        errors = list(range(5))
+        with open(events_path, "w") as f:
+            for i in errors:
+                f.write(json.dumps(_stream_event(i, level="error")) + "\n")
+            start = len(errors)
+            for i in range(start, start + EVENT_PROBLEM_LIMIT + 200):
+                f.write(json.dumps(_stream_event(i, level="warn")) + "\n")
+            tail_start = start + EVENT_PROBLEM_LIMIT + 200
+            for i in range(tail_start, tail_start + EVENT_TAIL_LIMIT):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert [r["seq"] for r in rows if r["level"] == "error"] == errors
+
+    def test_each_problem_level_keeps_its_own_budget(self, tmp_path):
+        """Neither level may spend the other's share."""
+        events_path = tmp_path / "events.json"
+        over = EVENT_PROBLEM_LIMIT + 40
+        with open(events_path, "w") as f:
+            seq = 0
+            for _ in range(over):
+                f.write(json.dumps(_stream_event(seq, level="error")) + "\n")
+                seq += 1
+                f.write(json.dumps(_stream_event(seq, level="warn")) + "\n")
+                seq += 1
+            for i in range(seq, seq + EVENT_TAIL_LIMIT):
+                f.write(json.dumps(_stream_event(i, level="debug")) + "\n")
+
+        rows = extract_run_events(events_path).events
+
+        assert len([r for r in rows if r["level"] == "error"]) == EVENT_PROBLEM_LIMIT
+        assert len([r for r in rows if r["level"] == "warn"]) == EVENT_PROBLEM_LIMIT
+
     def test_rows_are_not_duplicated_when_a_problem_is_also_recent(self, tmp_path):
         events_path = tmp_path / "events.json"
         with open(events_path, "w") as f:
