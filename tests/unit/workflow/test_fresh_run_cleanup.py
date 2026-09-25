@@ -220,3 +220,62 @@ class TestFreshRunClearsBatchJsonlFiles:
             assert not (
                 tmp_path / "agent_io" / "target" / action / "batch" / f"{action}_input.jsonl"
             ).exists()
+
+
+class TestFreshKeepsTheNameWhileThePayloadIsThere:
+    """The batch registry is the only thing naming a provider's local records.
+    Clearing it over one that would not go strands that payload: --fresh cannot
+    find it (registry gone), `clean --all` cannot (store gone), and
+    `agac batch retrieve --batch-id` scans registries."""
+
+    @staticmethod
+    def _workflow():
+        """A stand-in for the coordinator: only the clear's own decision is under
+        test, so everything it reaches is a mock except that decision."""
+        workflow = MagicMock()
+        workflow.execution_order = ["summarize"]
+        workflow.config.resolve_project_root.return_value = Path("/nonexistent-project")
+        return workflow
+
+    def test_the_registry_stays_when_a_record_would_not_go(self):
+        from agent_actions.workflow.coordinator import AgentWorkflow
+
+        workflow = self._workflow()
+        workflow._release_batch_records.return_value = False
+
+        AgentWorkflow._clear_for_fresh_run(workflow)
+
+        workflow.storage_backend.clear_batch_state.assert_not_called()
+
+    def test_the_registry_goes_once_the_records_are_gone(self):
+        from agent_actions.workflow.coordinator import AgentWorkflow
+
+        workflow = self._workflow()
+        workflow._release_batch_records.return_value = True
+
+        AgentWorkflow._clear_for_fresh_run(workflow)
+
+        workflow.storage_backend.clear_batch_state.assert_called_once_with("summarize")
+
+    def test_a_registry_that_cannot_be_read_keeps_itself(self):
+        """A read that failed proves nothing went, so it is the same case."""
+        from agent_actions.workflow.coordinator import AgentWorkflow
+
+        workflow = self._workflow()
+        workflow._release_batch_records.side_effect = OSError("database is locked")
+
+        AgentWorkflow._clear_for_fresh_run(workflow)
+
+        workflow.storage_backend.clear_batch_state.assert_not_called()
+
+    def test_one_action_failing_does_not_stop_the_rest(self):
+        """Every other clear here reports rather than raises; this one must too."""
+        from agent_actions.workflow.coordinator import AgentWorkflow
+
+        workflow = self._workflow()
+        workflow.execution_order = ["first", "second"]
+        workflow._release_batch_records.side_effect = [OSError("locked"), True]
+
+        AgentWorkflow._clear_for_fresh_run(workflow)
+
+        workflow.storage_backend.clear_batch_state.assert_called_once_with("second")
