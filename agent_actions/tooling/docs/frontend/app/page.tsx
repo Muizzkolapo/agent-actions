@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { useState, useCallback, useEffect } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CommandSearch, useCommandSearch } from "@/components/command-search"
 import { HomeScreen } from "@/components/screens/home-screen"
@@ -9,12 +8,29 @@ import { WorkflowsScreen } from "@/components/screens/workflows-screen"
 import { ActionsScreen } from "@/components/screens/actions-screen"
 import { RunsScreen } from "@/components/screens/runs-screen"
 import { DataScreen } from "@/components/screens/data-screen"
-import { LogsScreen } from "@/components/screens/logs-screen"
+import { LogsScreen, type LogsIntent } from "@/components/screens/logs-screen"
 import { PromptsScreen, SchemasScreen, ToolsScreen } from "@/components/screens/catalog-screens"
-import { Separator } from "@/components/ui/separator"
 import { useCatalog, useCatalogRetry, useCatalogData } from "@/lib/catalog-context"
-import { AlertTriangle, RefreshCw, Zap, Loader2 } from "lucide-react"
+import { AlertTriangle, PanelLeft, RefreshCw, Loader2 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+
+const SECTION_TITLES: Record<string, string> = {
+  home: "Home",
+  workflows: "Workflows",
+  actions: "All Actions",
+  runs: "Runs",
+  data: "Data Explorer",
+  schemas: "Schemas",
+  prompts: "Prompts",
+  tools: "Tools",
+  logs: "Logs & Events",
+}
+
+/** `#ev=<id>` names an event, which only the Logs screen can show. */
+function sectionFromHash(): string | null {
+  if (typeof window === "undefined") return null
+  return /[#&]ev=/.test(window.location.hash) ? "logs" : null
+}
 
 export default function Page() {
   const catalogState = useCatalog()
@@ -26,21 +42,42 @@ export default function Page() {
 }
 
 function Dashboard() {
-  const [activeSection, setActiveSection] = useState("home")
+  const [activeSection, setActiveSection] = useState(() => sectionFromHash() ?? "home")
   const [navKeys, setNavKeys] = useState<Record<string, number>>({})
-  const { workflows, projectName: catalogProjectName } = useCatalogData()
+  const [collapsed, setCollapsed] = useState(false)
+  const [logsIntent, setLogsIntent] = useState<LogsIntent | null>(null)
+  const { workflows, projectName: catalogProjectName, generatedAt } = useCatalogData()
   const { open: searchOpen, setOpen: setSearchOpen } = useCommandSearch()
 
-  // Reset drill-down state when re-clicking the same sidebar item
+  // Re-clicking the active sidebar item resets that screen's drill-down state
   const handleNavigate = useCallback((section: string) => {
+    setLogsIntent(null)
     setActiveSection((prev) => {
       if (section === prev) setNavKeys((nk) => ({ ...nk, [section]: (nk[section] || 0) + 1 }))
-      return section === prev ? prev : section
+      return section
     })
   }, [])
 
-  // Project name from catalog metadata (set by generator from directory name).
-  // Falls back to path heuristic for older catalog.json files without the field.
+  const openLogs = useCallback((intent: LogsIntent) => {
+    setLogsIntent(intent)
+    setActiveSection("logs")
+    setNavKeys((nk) => ({ ...nk, logs: (nk.logs || 0) + 1 }))
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+      e.preventDefault()
+      setCollapsed((c) => !c)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [])
+
+  // Project name from catalog metadata (set by the generator from the directory
+  // name). Older catalog.json files predate the field, hence the path heuristic.
   const projectName = catalogProjectName || (() => {
     if (workflows.length === 0) return "project"
     const p = workflows[0].path || ""
@@ -52,86 +89,101 @@ function Dashboard() {
     return parts[0] || "project"
   })()
 
-  const sectionTitles: Record<string, string> = {
-    home: "Overview",
-    workflows: "Workflows",
-    actions: "All Actions",
-    runs: "Runs",
-    data: "Data Explorer",
-    schemas: "Schemas",
-    prompts: "Prompts",
-    tools: "Tools",
-    logs: "Logs & Events",
-  }
+  const generatedDate = generatedAt ? generatedAt.split("T")[0] : ""
 
   return (
-    <SidebarProvider>
-      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} onSearchClick={() => setSearchOpen(true)} projectName={projectName} />
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      <AppSidebar
+        activeSection={activeSection}
+        collapsed={collapsed}
+        onNavigate={handleNavigate}
+        onSearchClick={() => setSearchOpen(true)}
+        onShowErrors={() => openLogs({ level: "error" })}
+        projectName={projectName}
+      />
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} onNavigate={handleNavigate} />
-      <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
-          <SidebarTrigger className="-ml-1 h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" />
-          <Separator orientation="vertical" className="mr-2 h-4 bg-border/50" />
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground tracking-tight">{sectionTitles[activeSection]}</span>
-            {activeSection !== "home" && (
-              <span className="text-[10px] font-mono text-muted-foreground/50 hidden sm:inline">
-                / {projectName}
-              </span>
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 rounded-lg bg-secondary/60 px-3 py-1.5">
-              <span className="text-[10px] font-mono font-medium text-foreground">{projectName}</span>
-            </div>
-            <ThemeToggle />
-          </div>
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-5">
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            title="Toggle sidebar  ["
+            aria-label="Toggle sidebar"
+            className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted-foreground hover:bg-hover hover:text-foreground"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+          <span className="h-4 w-px bg-border" />
+          <span className="text-sm font-medium text-foreground">{SECTION_TITLES[activeSection]}</span>
+          {activeSection !== "home" && (
+            <>
+              <span className="text-[12.5px] text-muted-2">/</span>
+              <span className="truncate font-mono text-xs text-muted-foreground">{projectName}</span>
+            </>
+          )}
+          <span className="flex-1" />
+          {generatedDate && (
+            <span className="hidden shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:inline">
+              Generated {generatedDate}
+            </span>
+          )}
+          <ThemeToggle />
         </header>
-        <main className="flex-1 overflow-auto p-6">
-          {activeSection === "home" && <HomeScreen onNavigate={handleNavigate} />}
-          {activeSection === "workflows" && <WorkflowsScreen key={navKeys.workflows} />}
-          {activeSection === "actions" && <ActionsScreen key={navKeys.actions} />}
-          {activeSection === "runs" && <RunsScreen key={navKeys.runs} />}
-          {activeSection === "data" && <DataScreen key={navKeys.data} />}
-          {activeSection === "logs" && <LogsScreen key={navKeys.logs} />}
-          {activeSection === "schemas" && <SchemasScreen key={navKeys.schemas} />}
-          {activeSection === "prompts" && <PromptsScreen key={navKeys.prompts} />}
-          {activeSection === "tools" && <ToolsScreen key={navKeys.tools} />}
+
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-14 pt-6">
+          {/* The reading measure lives here, not in each screen, so none of them
+              can drift from the others, and it is centred — left-aligned, every
+              screen hugs the sidebar with the gutter all on one side. It steps
+              up on a large display: 1180px is a measure for prose, and the run
+              and event tables have columns to spend it on. */}
+          <div className="mx-auto w-full max-w-[1180px] 2xl:max-w-[1440px] min-[2100px]:max-w-[1680px]">
+            {activeSection === "home" && <HomeScreen onNavigate={handleNavigate} onOpenLogs={openLogs} />}
+            {activeSection === "workflows" && <WorkflowsScreen key={navKeys.workflows} onOpenLogs={openLogs} />}
+            {activeSection === "actions" && <ActionsScreen key={navKeys.actions} onOpenLogs={openLogs} />}
+            {activeSection === "runs" && <RunsScreen key={navKeys.runs} />}
+            {activeSection === "data" && <DataScreen key={navKeys.data} />}
+            {activeSection === "logs" && <LogsScreen key={navKeys.logs} intent={logsIntent} />}
+            {activeSection === "schemas" && <SchemasScreen key={navKeys.schemas} />}
+            {activeSection === "prompts" && <PromptsScreen key={navKeys.prompts} />}
+            {activeSection === "tools" && <ToolsScreen key={navKeys.tools} />}
+          </div>
         </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   )
 }
 
 function LoadingSkeleton() {
   return (
     <div className="flex h-screen bg-background">
-      <div className="w-64 border-r border-border bg-card/50 p-4 flex flex-col gap-6">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-secondary animate-pulse" />
+      <div className="flex w-[252px] flex-col gap-6 border-r border-border p-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 animate-pulse rounded-control bg-surface-2" />
           <div className="flex flex-col gap-1">
-            <div className="h-3 w-24 rounded bg-secondary animate-pulse" />
-            <div className="h-2 w-16 rounded bg-secondary animate-pulse" />
+            <div className="h-3 w-24 animate-pulse rounded-sm bg-surface-2" />
+            <div className="h-2 w-16 animate-pulse rounded-sm bg-surface-2" />
           </div>
         </div>
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="h-8 rounded-lg bg-secondary animate-pulse" style={{ opacity: 1 - i * 0.1 }} />
+        <div className="flex flex-col gap-1">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="h-8 animate-pulse rounded-control bg-surface-2" style={{ opacity: 1 - i * 0.08 }} />
           ))}
         </div>
       </div>
-      <div className="flex-1 p-6 flex flex-col gap-6">
-        <div className="h-12 border-b border-border" />
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-5 w-5 text-[hsl(var(--primary))] animate-spin" />
-          <span className="text-sm text-muted-foreground">Loading catalog...</span>
+      <div className="flex flex-1 flex-col">
+        <div className="h-11 border-b border-border" />
+        <div className="flex flex-col gap-3.5 px-8 pt-6">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Loading catalog…</span>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-card bg-surface" />
+            ))}
+          </div>
+          <div className="h-64 animate-pulse rounded-card bg-surface" />
         </div>
-        <div className="grid grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-32 rounded-xl bg-secondary/50 animate-pulse" />
-          ))}
-        </div>
-        <div className="h-64 rounded-xl bg-secondary/30 animate-pulse" />
       </div>
     </div>
   )
@@ -141,27 +193,24 @@ function ErrorState({ message }: { message: string }) {
   const retry = useCatalogRetry()
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-6 max-w-md text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[hsl(var(--destructive))]/10 ring-1 ring-[hsl(var(--destructive))]/20">
-          <AlertTriangle className="h-8 w-8 text-[hsl(var(--destructive))]" />
+    <div className="flex h-screen items-center justify-center bg-background px-6">
+      <div className="flex max-w-md flex-col items-center gap-5 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-card border border-border bg-danger-a12">
+          <AlertTriangle className="h-5 w-5 text-danger-t" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Catalog Not Available</h1>
-          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{message}</p>
+          <h1 className="text-xl font-semibold text-foreground">Catalog not available</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 w-full shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4 text-[hsl(var(--primary))]" />
-            <span className="text-xs font-medium text-foreground">Quick fix</span>
-          </div>
-          <div className="rounded-lg bg-secondary/50 p-3 font-mono text-xs text-muted-foreground">
-            <span className="text-[hsl(var(--primary))]">$</span> agac docs
+        <div className="w-full rounded-card border border-border bg-surface p-4 text-left">
+          <div className="text-xs font-medium text-muted-foreground">Quick fix</div>
+          <div className="mt-2 rounded-control border border-border-soft bg-well px-3 py-2 font-mono text-xs text-foreground-2">
+            <span className="text-muted-foreground">$ </span>agac docs
           </div>
         </div>
         <button
           onClick={retry}
-          className="flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 rounded-control bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover"
         >
           <RefreshCw className="h-4 w-4" />
           Retry

@@ -81,7 +81,9 @@ RECORD_LIFECYCLE_FIELDS (carried forward; _state_history is appended to)
 ├── _state_schema_version
 └── _delta_mode          ← how the row was stored. Reads strip it, so a rewrite
                            would re-derive it; read_target_for_rewrite hands it
-                           back for rows that were stored whole
+                           back for rows that were stored whole, and a re-derived
+                           mode consults the identities upstream holds rather
+                           than the row alone
 
 RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
 ├── repeat_of_source_guid ← the staged identity this record repeats

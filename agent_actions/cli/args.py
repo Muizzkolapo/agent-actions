@@ -57,6 +57,10 @@ class RetryCommandArgs(BaseModel):
         default=False,
         description="Show what would be retried without executing.",
     )
+    abandon_in_flight: bool = Field(
+        default=False,
+        description="Proceed even though a batch is still in flight, giving up its results.",
+    )
 
 
 class RunCommandArgs(BaseModel):

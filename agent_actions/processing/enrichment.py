@@ -93,23 +93,27 @@ class LineageEnricher(Enricher):
                 item["target_id"] = IDGenerator.generate_target_id()
                 if old_target_id:
                     item["parent_target_id"] = old_target_id
+                # Minting again would attribute it to its own previous guid, which no
+                # pool holds — and that guid is already unique.
+                minted_at_producer = item.get("source_guid") and self._named_no_input(result, i)
                 # Each expansion child gets its own source_guid to prevent
                 # UNIQUE constraint collisions when written to source_data.
                 # parent_source_guid keeps the original pool-resolvable identity:
                 # on nested expansion it is preserved, not overwritten with the
                 # intermediate minted guid (which matches nothing in the pool).
-                old_source_guid = item.get("source_guid")
-                item["source_guid"] = IDGenerator.generate_source_guid()
-                if old_source_guid and not item.get("parent_source_guid"):
-                    item["parent_source_guid"] = old_source_guid
-                # The row is re-keyed, so the guid it carried no longer accounts for
-                # its producer. Read off the mapping, never off that guid — on a FILE
-                # expansion it was minted here a step earlier and names no input.
-                producers = self._producers_of(i, result, context, old_source_guid)
-                if producers:
-                    item["producer_source_guids"] = producers
-                else:
-                    item.pop("producer_source_guids", None)
+                if not minted_at_producer:
+                    old_source_guid = item.get("source_guid")
+                    item["source_guid"] = IDGenerator.generate_source_guid()
+                    if old_source_guid and not item.get("parent_source_guid"):
+                        item["parent_source_guid"] = old_source_guid
+                    # Re-keyed, so the guid it carried no longer accounts for its
+                    # producer. Read off the mapping, never off that guid. A row kept at
+                    # its producer-minted identity keeps the record _reattach set.
+                    producers = self._producers_of(i, result, context, old_source_guid)
+                    if producers:
+                        item["producer_source_guids"] = producers
+                    else:
+                        item.pop("producer_source_guids", None)
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 
@@ -179,6 +183,19 @@ class LineageEnricher(Enricher):
 
         result.node_id = base_node_id
         return result
+
+    @staticmethod
+    def _named_no_input(result: ProcessingResult, index: int) -> bool:
+        """Whether the producer mapped output *index* to no input record.
+
+        ``source_mapping[index] is None`` is the FILE tool's own statement that no
+        single input produced the row — the same reading the lineage step below gives
+        it, and only a FILE tool can say it. The online and batch expansion paths set
+        no mapping at all, and a child there inherits the identity of its one input,
+        which its siblings share, so it does still need re-minting.
+        """
+        mapping = result.source_mapping
+        return mapping is not None and index in mapping and mapping[index] is None
 
     @staticmethod
     def _index_by_source_guid(

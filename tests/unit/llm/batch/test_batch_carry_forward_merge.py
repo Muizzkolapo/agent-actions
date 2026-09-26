@@ -1,8 +1,10 @@
 """Tests for batch carry-forward merge at retrieve time.
 
 Tests cover: parent spec items 6, 17 (cleanup part).
-Carry-forward is now derived from terminal dispositions in the storage
-backend, not from a filesystem file.
+What is carried is every row of the file being written that the batch did not
+answer for — the rows exist and the output is replaced whole, so a row left out
+is a row deleted. Their dispositions do not enter into it, and neither do the
+action's other files: these rows go straight into this one.
 """
 
 from __future__ import annotations
@@ -11,10 +13,13 @@ import sys
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 _sentinel = object()
 if sys.modules.get("agent_actions.workflow.pipeline_file_mode", _sentinel) is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 
 
@@ -36,11 +41,9 @@ def _make_service(
 def _mock_backend(
     target_files: list[str] | None = None,
     prior_output: dict[str, list[dict]] | None = None,
-    terminal_guids: set[str] | None = None,
 ) -> MagicMock:
     backend = MagicMock()
     backend.list_target_files.return_value = target_files or []
-    backend.get_terminal_record_ids.return_value = terminal_guids or set()
 
     def read_target(action_name: str, rel_path: str) -> list[dict]:
         if prior_output and rel_path in prior_output:
@@ -62,25 +65,24 @@ class TestMergeCarryForward:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={f"r{i}" for i in range(9)},
         )
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r9", "score_quality": {"score": 0.7}}]
-        result = service._merge_carry_forward("test_action", batch_output)
+        result = service._merge_carry_forward("test_action", batch_output, "data.json")
 
         assert len(result) == 10
         assert result[0]["source_guid"] == "r9"
         guids = {r["source_guid"] for r in result}
         assert guids == {f"r{i}" for i in range(10)}
 
-    def test_no_terminal_guids_returns_unchanged(self):
-        """No terminal dispositions -> output unchanged."""
-        backend = _mock_backend(terminal_guids=set())
+    def test_no_stored_rows_returns_unchanged(self):
+        """The action holds no rows of its own -> nothing to carry."""
+        backend = _mock_backend()
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r0"}]
-        result = service._merge_carry_forward("test_action", batch_output)
+        result = service._merge_carry_forward("test_action", batch_output, "data.json")
         assert result == batch_output
 
     def test_carry_forward_records_have_prior_run_data(self):
@@ -91,11 +93,10 @@ class TestMergeCarryForward:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={"r0"},
         )
         service = _make_service(storage_backend=backend)
 
-        result = service._merge_carry_forward("test_action", [])
+        result = service._merge_carry_forward("test_action", [], "data.json")
 
         assert len(result) == 1
         assert result[0]["enriched_ns"] == {"key": "value"}
@@ -103,63 +104,55 @@ class TestMergeCarryForward:
 
 
 class TestCarryForwardEdgeCases:
-    def test_missing_prior_output_partial_merge(self):
-        """Prior output missing for one file -> partial merge, not crash."""
+    def test_unreadable_prior_output_is_not_a_crash(self):
+        """The file being written has no stored rows yet -> nothing to carry."""
+        backend = _mock_backend(target_files=["data1.json"], prior_output={})
+        service = _make_service(storage_backend=backend)
+
+        result = service._merge_carry_forward("test_action", [{"source_guid": "r9"}], "data1.json")
+
+        assert result == [{"source_guid": "r9"}]
+
+    def test_a_duplicate_identity_elsewhere_is_not_carried_twice(self):
+        """The shape the real store was left in: a second file holding the first's
+        identities. Narrowing only which identities to carry is not enough — the
+        rows must be fetched from the file being written, or the duplicate in the
+        other file is appended beside the real one.
+        """
         backend = _mock_backend(
-            target_files=["data1.json", "data2.json"],
-            prior_output={"data1.json": [{"source_guid": "r0", "data": "ok"}]},
-            terminal_guids={"r0", "r1"},
+            target_files=["a.json", "b.json"],
+            prior_output={
+                "a.json": [{"source_guid": "a0"}, {"source_guid": "a1", "from": "a"}],
+                "b.json": [{"source_guid": "a1", "from": "b"}],
+            },
         )
         service = _make_service(storage_backend=backend)
 
-        result = service._merge_carry_forward("test_action", [])
-        assert len(result) == 1
-        assert result[0]["source_guid"] == "r0"
+        result = service._merge_carry_forward("test_action", [{"source_guid": "a0"}], "a.json")
 
-    def test_a_producer_resolved_row_is_not_resurrected_beside_its_replacement(self):
-        """The same invariant as test_overlap_deduplication, for a row carried through
-        the input that produced it. An action minting an identity per row holds none
-        carrying its input's, so the "already in the batch output" guard cannot see
-        such a row by source_guid and the stale pair is merged back in beside the
-        fresh one."""
-        prior_records = [
-            {"source_guid": "m0", "producer_source_guids": ["r0"], "data": "old"},
-            {"source_guid": "m1", "producer_source_guids": ["r0"], "data": "old"},
-        ]
+        assert [r["source_guid"] for r in result] == ["a0", "a1"], (
+            f"the duplicate in b.json was carried into a.json as well: {result}"
+        )
+        assert result[1]["from"] == "a", "the row came from the wrong file"
+
+    def test_another_file_s_rows_are_not_pulled_in(self):
+        """The defect this rule exists to stop: rows are handed straight to the
+        write, so reading a file other than the one being written puts that
+        file's records into this one."""
         backend = _mock_backend(
-            target_files=["data.json"],
-            prior_output={"data.json": prior_records},
-            terminal_guids={"r0"},
+            target_files=["a.json", "b.json"],
+            prior_output={
+                "a.json": [{"source_guid": "a0"}, {"source_guid": "a1"}],
+                "b.json": [{"source_guid": "b0"}],
+            },
         )
         service = _make_service(storage_backend=backend)
 
-        # This run reprocessed r0 and minted a fresh pair for it.
-        batch_output = [
-            {"source_guid": "n0", "producer_source_guids": ["r0"], "data": "new"},
-            {"source_guid": "n1", "producer_source_guids": ["r0"], "data": "new"},
-        ]
-        result = service._merge_carry_forward("test_action", batch_output)
+        result = service._merge_carry_forward("test_action", [{"source_guid": "a0"}], "a.json")
 
-        guids = [r.get("source_guid") for r in result]
-        assert guids == ["n0", "n1"], f"stale rows resurrected: {guids}"
-
-    def test_a_producer_resolved_row_is_still_carried_when_not_reprocessed(self):
-        """The other half: if this run produced nothing for r0, its stored rows must
-        still come back, or narrowing the batch deletes them."""
-        prior_records = [
-            {"source_guid": "m0", "producer_source_guids": ["r0"], "data": "old"},
-            {"source_guid": "m1", "producer_source_guids": ["r0"], "data": "old"},
-        ]
-        backend = _mock_backend(
-            target_files=["data.json"],
-            prior_output={"data.json": prior_records},
-            terminal_guids={"r0"},
+        assert [r["source_guid"] for r in result] == ["a0", "a1"], (
+            "b.json's rows were written into a.json"
         )
-        service = _make_service(storage_backend=backend)
-
-        result = service._merge_carry_forward("test_action", [{"source_guid": "other"}])
-
-        assert [r.get("source_guid") for r in result] == ["other", "m0", "m1"]
 
     def test_overlap_deduplication(self):
         """Overlapping GUIDs between batch and carry-forward -> deduplicated."""
@@ -170,22 +163,49 @@ class TestCarryForwardEdgeCases:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={"r0", "r1"},
         )
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r0", "data": "new"}]
-        result = service._merge_carry_forward("test_action", batch_output)
+        result = service._merge_carry_forward("test_action", batch_output, "data.json")
 
         assert len(result) == 2
         r0s = [r for r in result if r["source_guid"] == "r0"]
         assert len(r0s) == 1
         assert r0s[0]["data"] == "new"
 
+    def test_a_non_terminal_row_is_carried(self):
+        """The half a terminal-disposition rule gets wrong. `failed` is not a
+        terminal disposition, so a rule reading dispositions drops this row and
+        leaves its disposition naming a record with no data."""
+        backend = _mock_backend(
+            target_files=["data.json"],
+            prior_output={"data.json": [{"source_guid": "r0", "data": "kept"}]},
+        )
+        service = _make_service(storage_backend=backend)
+
+        result = service._merge_carry_forward("test_action", [{"source_guid": "r1"}], "data.json")
+
+        assert [r["source_guid"] for r in result] == ["r1", "r0"]
+        backend.get_terminal_record_ids.assert_not_called()
+
+    def test_a_corrupt_store_is_not_swallowed_into_row_loss(self):
+        """`read_target_for_rewrite` reconstructs and lifecycle-validates, and raises
+        on a store it cannot read — the loud "delete agent_io/target/ and re-run"
+        error. Catching that and returning the batch's answers hands them to a write
+        that replaces the file, so every row the batch did not answer for is deleted,
+        reported at debug. The error has to reach the caller."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.side_effect = ConfigurationError("corrupt store")
+        service = _make_service(storage_backend=backend)
+
+        with pytest.raises(ConfigurationError):
+            service._merge_carry_forward("test_action", [{"source_guid": "a0"}], "a.json")
+
     def test_no_storage_backend_returns_unchanged(self):
         """No storage backend -> output unchanged."""
         service = _make_service(storage_backend=None)
 
         batch_output = [{"source_guid": "r1"}]
-        result = service._merge_carry_forward("test_action", batch_output)
+        result = service._merge_carry_forward("test_action", batch_output, "data.json")
         assert result == batch_output

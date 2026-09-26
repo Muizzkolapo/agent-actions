@@ -4,10 +4,12 @@ import json
 import logging
 import re
 import sqlite3
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from agent_actions.config.defaults import DocsDefaults
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -16,6 +18,10 @@ from agent_actions.utils.file_handler import find_project_dirs
 from ..parser import extract_fields_for_docs
 
 logger = logging.getLogger(__name__)
+
+EVENT_TAIL_LIMIT = DocsDefaults.EVENT_TAIL_LIMIT
+EVENT_PROBLEM_LIMIT = DocsDefaults.EVENT_PROBLEM_LIMIT
+PROBLEM_LEVELS = ("warn", "error")
 
 
 def scan_prompts(project_root: Path) -> dict[str, Any]:
@@ -158,6 +164,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             if yml_files:
                 workflow_name = yml_files[0].stem
 
+        is_workflow = workflow_name is not None
         if not workflow_name:
             workflow_name = workflow_dir.name
 
@@ -182,9 +189,15 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             events_path = target_dir / "events.json"
         action_metrics: dict[str, Any] = {}
         runtime_warnings: list[dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
+        level_counts: dict[str, int] = {}
         if events_path.exists():
             try:
-                action_metrics, runtime_warnings = extract_run_events(events_path)
+                run_events = extract_run_events(events_path)
+                action_metrics = run_events.action_metrics
+                runtime_warnings = run_events.runtime_warnings
+                events = run_events.events
+                level_counts = run_events.level_counts
             except (OSError, ValueError, KeyError) as e:
                 logger.warning(
                     "Failed to extract run events from %s: %s",
@@ -210,26 +223,80 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "latest_run": latest_run,
             "action_metrics": action_metrics,
             "runtime_warnings": runtime_warnings,
+            "events": events,
+            "level_counts": level_counts,
             "manifest": manifest_data,
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
             "manifest_path": str(manifest_path) if manifest_path.exists() else None,
+            "is_workflow": is_workflow,
         }
 
     return runs_data
 
 
+def _is_usable(event: Any) -> bool:
+    """A row whose meta or data is not an object crashes every reader of it."""
+    return (
+        isinstance(event, dict)
+        and isinstance(event.get("meta", {}), dict)
+        and isinstance(event.get("data", {}), dict)
+    )
+
+
+def _problem_windows() -> dict[str, deque[dict[str, Any]]]:
+    """A budget per problem level, never one shared between them.
+
+    Warnings outrun errors by roughly 780:1 in a real log, so a shared budget is
+    spent by warnings and the errors the page exists to show fall off the back
+    of it.
+    """
+    return {level: deque(maxlen=EVENT_PROBLEM_LIMIT) for level in PROBLEM_LEVELS}
+
+
+def _collect_window(
+    tail: deque[dict[str, Any]],
+    problems: dict[str, deque[dict[str, Any]]],
+    levels: dict[str, int],
+    seq: int,
+    event: dict[str, Any],
+) -> None:
+    """Fold one row into the recency window, its problem window and the totals."""
+    row = {**event, "seq": seq}
+    tail.append(row)
+    level = event.get("level")
+    if isinstance(level, str):
+        levels[level] = levels.get(level, 0) + 1
+        if level in problems:
+            problems[level].append(row)
+
+
+def _window(
+    tail: deque[dict[str, Any]], problems: dict[str, deque[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    """Every window in one list, in file order, each row once."""
+    by_seq = {row["seq"]: row for rows in problems.values() for row in rows}
+    by_seq.update({row["seq"]: row for row in tail})
+    return [by_seq[seq] for seq in sorted(by_seq)]
+
+
 def _iter_events(path: Path) -> Iterator[dict[str, Any]]:
-    """Yield parsed JSON events from a JSONL file, skipping malformed lines."""
+    """Yield parsed JSON objects from a JSONL file, skipping every other line.
+
+    A line that parses to a list or a scalar is as malformed here as one that does
+    not parse at all, and letting it through crashes the caller instead.
+    """
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if _is_usable(event):
+                yield event
 
 
 def scan_logs(project_root: Path) -> dict[str, Any]:
@@ -239,6 +306,8 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
         "recent_invocations": [],
         "validation_errors": [],
         "validation_warnings": [],
+        "events": [],
+        "level_counts": {},
     }
 
     logs_dir = project_root / "logs"
@@ -251,9 +320,14 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     logs_data["events_path"] = str(events_path)
 
+    invocations: dict[str, dict[str, Any]] = {}
+    tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+    problems = _problem_windows()
+    levels: dict[str, int] = {}
+
     try:
-        invocations: dict[str, dict[str, Any]] = {}
-        for event in _iter_events(events_path):
+        for seq, event in enumerate(_iter_events(events_path)):
+            _collect_window(tail, problems, levels, seq, event)
             event_type = event.get("event_type")
             meta = event.get("meta", {})
             data = event.get("data", {})
@@ -295,20 +369,26 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
                     }
                 )
 
-        # Get recent invocations (last 10)
-        logs_data["recent_invocations"] = list(invocations.values())[-10:]
-
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)
+
+    # Outside the read: a log that fails partway has still told us about every
+    # row it did yield, and discarding those leaves the page emptier than the
+    # truth. Every projection, or the claim only holds for some of them.
+    logs_data["events"] = _window(tail, problems)
+    logs_data["level_counts"] = levels
+    logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
     return logs_data
 
 
 class RunEvents(NamedTuple):
-    """Per-action metrics and warn/error events read from one events.json."""
+    """Projections read from one events.json in a single pass."""
 
     action_metrics: dict[str, Any]
     runtime_warnings: list[dict[str, Any]]
+    events: list[dict[str, Any]]
+    level_counts: dict[str, int]
 
 
 def _collect_runtime_warning(event: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
@@ -402,18 +482,25 @@ def _collect_action_metrics(event: dict[str, Any], action_metrics: dict[str, Any
 
 
 def extract_run_events(events_path: Path) -> RunEvents:
-    """Read an events.json once, returning action metrics and runtime warnings.
+    """Read an events.json once, returning every projection the docs site needs.
 
-    Event logs grow to hundreds of megabytes on an active project, so both
-    projections are folded from a single pass rather than a read each.
+    Event logs grow to hundreds of megabytes on an active project, so all three
+    projections are folded from a single pass rather than a read each. Rows keep
+    their `seq` — the position of the event among the parsed lines of the file —
+    so a permalink to one event survives later appends, which a row index within
+    the returned tail would not.
     """
     action_metrics: dict[str, Any] = {}
     runtime_warnings: list[dict[str, Any]] = []
+    tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+    problems = _problem_windows()
+    levels: dict[str, int] = {}
 
     try:
-        for event in _iter_events(events_path):
+        for seq, event in enumerate(_iter_events(events_path)):
             _collect_runtime_warning(event, runtime_warnings)
             _collect_action_metrics(event, action_metrics)
+            _collect_window(tail, problems, levels, seq, event)
     except OSError as e:
         logger.debug("Could not read run events from %s: %s", events_path, e)
 
@@ -423,4 +510,4 @@ def extract_run_events(events_path: Path) -> RunEvents:
         if req_count > 0:
             metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
 
-    return RunEvents(action_metrics, runtime_warnings)
+    return RunEvents(action_metrics, runtime_warnings, _window(tail, problems), levels)

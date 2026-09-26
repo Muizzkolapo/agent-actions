@@ -29,6 +29,10 @@ class BatchJobEntry:
     parent_file_name: str | None = None  # links to original batch's file_name key
     recovery_type: RecoveryType | None = None
     recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
+    # When this batch's results were written, which `status` cannot answer:
+    # a provider poll persists COMPLETED the moment the batch finishes, long
+    # before anything is retrieved. Only `finalize_batch_output` sets this.
+    collected_at: str | None = None
 
     def __post_init__(self):
         """Warn on unrecognized status to avoid breaking existing registries."""

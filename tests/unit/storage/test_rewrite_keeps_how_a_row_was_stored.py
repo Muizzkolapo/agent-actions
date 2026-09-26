@@ -1,10 +1,10 @@
 """How a row was stored has to reach the caller rewriting it.
 
 ``read_target_for_rewrite`` reconstructs, and reconstruction drops
-``_delta_mode``. ``_extract_delta`` then re-derives it from the record alone,
-where an identity that joins nothing upstream is invisible — so a row stored
-whole would be rewritten as a delta against a guid no upstream action holds and
-come back with only its own namespace.
+``_delta_mode``. Re-deriving the mode covers the row whose identity nothing
+upstream holds, but not the row stored whole under an identity its upstream does
+hold — a producer's own stamp, which the re-derivation cannot see and would
+rewrite as a delta.
 
 Marking is per row, not per identity: ``source_guid`` is a content hash, so an
 action can hold several rows under one, and their modes differ routinely — a

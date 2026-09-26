@@ -60,3 +60,64 @@ class TestScanRunsReadsEventLogOnce:
         assert run["action_metrics"]["my_action"]["execution_time"] == 1.0
         assert [w["message"] for w in run["runtime_warnings"]] == ["records filtered"]
         assert opened.count(str(events_path)) == 1
+
+
+class TestScanRunsSurfacesTheEventTail:
+    """The one seam that carries a workflow's tail to the catalog generator."""
+
+    def test_the_tail_reaches_runs_data(self, tmp_path):
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        with open(logs_dir / "events.json", "w", encoding="utf-8") as f:
+            for i in range(3):
+                f.write(
+                    json.dumps(
+                        {
+                            "event_type": "ActionCompleteEvent",
+                            "diagnostic": i == 1,
+                            "meta": {"timestamp": f"2026-09-22T10:00:0{i}Z"},
+                            "data": {"action_name": f"step_{i}"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        rows = scan_runs(tmp_path)["wf"]["events"]
+
+        assert [r["seq"] for r in rows] == [0, 1, 2]
+        assert [r["data"]["action_name"] for r in rows] == ["step_0", "step_1", "step_2"]
+        assert [r["diagnostic"] for r in rows] == [False, True, False]
+
+    def test_the_level_totals_reach_runs_data(self, tmp_path):
+        """The other half of the same seam: without this the catalog's per-level
+        totals silently lose every workflow and the page understates itself."""
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir.mkdir(parents=True)
+        with open(logs_dir / "events.json", "w", encoding="utf-8") as f:
+            for level in ("error", "warn", "warn", "info"):
+                f.write(json.dumps(_warn_event("step", "m", level=level)) + "\n")
+
+        assert scan_runs(tmp_path)["wf"]["level_counts"] == {"error": 1, "warn": 2, "info": 1}
+
+
+class TestScanRunsNamesOnlyRealWorkflows:
+    def test_a_directory_with_no_workflow_config_is_not_a_workflow(self, tmp_path):
+        """A nested agent_io directory names its run entry after itself. The
+        dashboard must not offer that to a reader as a workflow."""
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        real = tmp_path / "agent_io" / "logs"
+        real.mkdir(parents=True)
+        (real / "events.json").write_text(json.dumps(_action_event("step")) + "\n")
+        stray = tmp_path / "agent_io" / "agent_io" / "logs"
+        stray.mkdir(parents=True)
+        (stray / "events.json").write_text(json.dumps(_action_event("step")) + "\n")
+
+        result = scan_runs(tmp_path)
+
+        assert result["wf"]["is_workflow"] is True
+        assert result["agent_io"]["is_workflow"] is False

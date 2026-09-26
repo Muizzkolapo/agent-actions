@@ -187,13 +187,24 @@ class StorageBackend(ABC):
                 execution_order = self._get_execution_order()
                 is_first_action = bool(execution_order) and execution_order[0] == action_name
 
+            # Read once for the batch, and only if some row might be stored as a
+            # delta: a write whose every row is already marked whole — an
+            # expansion, a FILE tool's invented rows — pays nothing for the check.
+            upstream_guids: set[str] | None = None
             delta_records = []
             for record in data:
                 if record.get("_delta_mode") == "full":
                     delta_records.append(record)
                 else:
+                    if upstream_guids is None:
+                        upstream_guids = self._joinable_identities(action_name, relative_path)
                     delta_records.append(
-                        self._extract_delta(record, action_name, is_first_action=is_first_action)
+                        self._extract_delta(
+                            record,
+                            action_name,
+                            is_first_action=is_first_action,
+                            upstream_guids=upstream_guids,
+                        )
                     )
 
         # Refuse to persist namespaces that are the compiled JSON Schema instead of
@@ -253,9 +264,9 @@ class StorageBackend(ABC):
         which is the truth for a consumer reading forward and a lie about an action
         whose output for that record already exists.
 
-        Rows stored whole are handed back marked so: reconstruction drops the mark
-        and re-deriving it picks ``delta``, which for an identity joining nothing
-        upstream loses every namespace above this action.
+        Rows stored whole are handed back marked so: re-deriving the mode cannot
+        see a producer's own stamp on a row whose identity its upstream holds, and
+        would rewrite that row as a delta.
 
         Raises:
             FileNotFoundError: If the target data doesn't exist.
@@ -267,12 +278,12 @@ class StorageBackend(ABC):
         # guid set would mark a delta row stored beside a whole one.
         if len(stored) != len(rows):
             # Reconstruction is one row out per row in, so this cannot happen; say
-            # so rather than skip quietly, because skipping means a row stored
-            # whole is rewritten as a delta and loses everything above it.
+            # so rather than skip quietly, because skipping changes how a row is
+            # stored on the way back in.
             logger.warning(
                 "Action '%s': %d stored row(s) reconstructed to %d for %s, so how each "
-                "was stored cannot be carried into a rewrite; rows whose identity joins "
-                "nothing upstream will lose their upstream namespaces",
+                "was stored cannot be carried into a rewrite; a row stored whole under "
+                "an identity its upstream holds will be rewritten as a delta",
                 action_name,
                 len(stored),
                 len(rows),
@@ -380,10 +391,49 @@ class StorageBackend(ABC):
         """Return all metadata keys starting with `prefix`, sorted lexically."""
         raise NotImplementedError(f"{type(self).__name__} must implement list_metadata_prefix()")
 
+    def _joinable_identities(self, action_name: str, relative_path: str) -> set[str]:
+        """Identities the upstream actions hold for this file.
+
+        Measures at write time what :meth:`_reconstruct_from_deltas` will try to
+        rejoin at read time, over the same actions and the same file. An action
+        with no upstream returns the empty set, which is the same answer as an
+        upstream holding nothing: either way a delta would rejoin nothing.
+
+        A missing upstream file counts as holding nothing rather than raising —
+        it is what reconstruction will find too.
+        """
+        upstream_actions = self._get_upstream_actions(action_name)
+        if not upstream_actions:
+            return set()
+
+        identities: set[str] = set()
+        for records in self._read_target_raw_batch(upstream_actions, relative_path).values():
+            for record in records:
+                if isinstance(record, dict):
+                    guid = record.get("source_guid")
+                    content = record.get("content")
+                    # Content, not just the identity: a row stored without usable
+                    # content is rejoined as nothing, so counting its identity
+                    # would call a row joinable that rejoins an empty namespace.
+                    if guid and isinstance(content, dict) and content:
+                        identities.add(guid)
+        return identities
+
     def _extract_delta(
-        self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
+        self,
+        record: dict[str, Any],
+        action_name: str,
+        *,
+        is_first_action: bool = False,
+        upstream_guids: set[str],
     ) -> dict[str, Any]:
-        """Extract delta: preserve entire envelope, strip content to this action's namespace."""
+        """Extract delta: preserve entire envelope, strip content to this action's namespace.
+
+        ``upstream_guids`` is required because whether a row is storable as a
+        delta is not a property of the row: storing one discards every namespace
+        above this action, and only the identities upstream holds say whether
+        reconstruction could put them back.
+        """
         content = record.get("content")
         if not isinstance(content, dict):
             return {**record, "_delta_mode": "full"}
@@ -400,6 +450,10 @@ class StorageBackend(ABC):
                 delta_content["source"] = content["source"]
             delta_content[action_name] = content[action_name]
             mode = "first"
+        elif record["source_guid"] not in upstream_guids:
+            # Dropping the other namespaces promises they can be rejoined under
+            # this identity, and nothing upstream holds it to rejoin them from.
+            return {**record, "_delta_mode": "full"}
         else:
             delta_content = {action_name: content[action_name]}
             mode = "delta"
@@ -429,11 +483,12 @@ class StorageBackend(ABC):
 
         upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
 
-        # Index upstream deltas by (action_name, source_guid).
-        # Track which guids have a "full" record — those are self-contained
-        # and we don't need to look further upstream for that guid.
+        # A guid's "full" record is self-contained above the action that stored it,
+        # so it bounds that guid's merge — the shallowest such action, because a
+        # position in this list is not proof of being an ancestor.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
+        position = {act: i for i, act in enumerate(upstream_actions)}
         for act, records in upstream_data.items():
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
@@ -445,13 +500,17 @@ class StorageBackend(ABC):
                         rec_content = {}
                     guid_map[guid] = rec_content
                     if rec.get("_delta_mode") == "full":
-                        full_boundary_guids[guid] = act
+                        held = full_boundary_guids.get(guid)
+                        # Storage hands these back in no defined order, and which
+                        # one is chosen decides what the merge drops, so choose by
+                        # the graph rather than by arrival.
+                        if held is None or position.get(act, 0) < position.get(held, 0):
+                            full_boundary_guids[guid] = act
             upstream[act] = guid_map
 
-        # For each current record, determine how far back to reconstruct.
-        # If a "full" upstream record exists for this guid, only merge from
-        # that point forward — the full record already contains everything
-        # before it (expansion records embed upstream content).
+        # For each current record, determine how far back to reconstruct: a guid
+        # whose boundary is upstream skips that boundary's own upstream, which the
+        # boundary's row already carries.
         reconstructed: list[dict[str, Any]] = []
         for record in delta_records:
             mode = record.get("_delta_mode")
@@ -462,12 +521,14 @@ class StorageBackend(ABC):
 
             guid = record.get("source_guid")
 
-            # Find the boundary: if this guid has a full record upstream,
-            # start merging from that action (inclusive), not from the beginning.
+            # A whole row carries everything above the action that stored it, so
+            # its ancestors are superseded. Its peers are not above it and hold
+            # namespaces it never carried, so they still merge.
             boundary_action = full_boundary_guids.get(guid) if guid else None
             if boundary_action and boundary_action in upstream_actions:
-                boundary_idx = upstream_actions.index(boundary_action)
-                merge_actions = upstream_actions[boundary_idx:]
+                superseded = set(self._get_upstream_actions(boundary_action))
+                superseded.discard(boundary_action)
+                merge_actions = [a for a in upstream_actions if a not in superseded]
             else:
                 merge_actions = upstream_actions
 
@@ -505,8 +566,10 @@ class StorageBackend(ABC):
     def _get_upstream_actions(self, action_name: str) -> list[str]:
         """Get the transitive upstream actions for a given action.
 
-        Uses the dependency graph if available (correct for DAGs with parallel actions).
-        Falls back to execution_order[:idx] if no graph stored (legacy).
+        Uses the dependency graph if available, falling back to
+        execution_order[:idx]. Either way the answer is a superset of the action's
+        true ancestors: the stored graph records every action of every earlier
+        execution level, so it includes actions this one never reads.
         """
         # Try dependency graph first (correct for parallel pipelines)
         if self._dependency_graph_cache is None:

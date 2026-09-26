@@ -1,8 +1,13 @@
-"""Tests for docs server path traversal protection and localhost binding."""
+"""Tests for docs server path traversal protection, binding and concurrency."""
+
+import socket
+import threading
+from contextlib import closing
+from functools import partial
 
 import pytest
 
-from agent_actions.tooling.docs.server import DocsRequestHandler
+from agent_actions.tooling.docs.server import DocsRequestHandler, DocsServer
 
 
 @pytest.fixture()
@@ -74,3 +79,49 @@ class TestLocalhostBinding:
 
         source = inspect.getsource(srv_mod.serve_docs)
         assert '"127.0.0.1"' in source or "'127.0.0.1'" in source
+
+
+class TestConcurrency:
+    """A browser fetches catalog.json and runs.json at once, and drains a large
+    response slowly. A server that handles one request at a time stalls on the
+    first socket's buffer and never reaches the second."""
+
+    @pytest.fixture()
+    def running_server(self, tmp_path):
+        docs_dir = tmp_path / "docs_site"
+        docs_dir.mkdir()
+        (docs_dir / "index.html").write_text("<html>docs</html>")
+        artefact_dir = tmp_path / "artefact"
+        artefact_dir.mkdir()
+        # Larger than any plausible combined socket buffer, so the server blocks
+        # writing it while the client is not reading.
+        (artefact_dir / "catalog.json").write_bytes(b"x" * (16 * 1024 * 1024))
+        (artefact_dir / "runs.json").write_text("{}")
+
+        handler = partial(DocsRequestHandler, docs_site_dir=docs_dir, artefact_dir=artefact_dir)
+        httpd = DocsServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield httpd.server_address[1]
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def test_a_stalled_large_response_does_not_block_the_next_request(self, running_server):
+        port = running_server
+
+        with closing(socket.create_connection(("127.0.0.1", port), timeout=10)) as slow:
+            slow.sendall(b"GET /artefact/catalog.json HTTP/1.0\r\n\r\n")
+            assert slow.recv(64)  # headers arrive; the body is left undrained
+
+            with closing(socket.create_connection(("127.0.0.1", port), timeout=10)) as quick:
+                quick.sendall(b"GET /artefact/runs.json HTTP/1.0\r\n\r\n")
+                quick.settimeout(10)
+                received = b""
+                while b"\r\n\r\n" not in received:
+                    chunk = quick.recv(4096)
+                    if not chunk:
+                        break
+                    received += chunk
+                assert b"200" in received.split(b"\r\n")[0]

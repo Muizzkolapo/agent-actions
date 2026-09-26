@@ -27,6 +27,10 @@ PREP_FAILED = "prep_failed"
 
 # -- Batch -------------------------------------------------------------------
 BATCH_NOT_RETURNED = "batch_not_returned"
+# A batch the operator gave up on. The records it held are deferred with nothing
+# left in flight, and `deferred` is not retry-eligible, so they are moved to a
+# disposition `agac retry` can still reach.
+BATCH_ABANDONED = "batch_abandoned"
 
 # -- Tool (FILE mode) -------------------------------------------------------
 TOOL_MISSING_RECORD = "tool_missing_record"

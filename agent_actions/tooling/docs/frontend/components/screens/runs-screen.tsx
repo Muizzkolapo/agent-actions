@@ -1,469 +1,367 @@
 "use client"
 
-import React from "react"
-import { useState } from "react"
-import { Search, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, Pause, ChevronDown, Clock, Zap, Hash } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { useCatalogData } from "@/lib/catalog-context"
+import { EM_DASH, fmtDuration, fmtSeconds, fmtTimestamp, fmtTimestampShort, pct, pctNumber } from "@/lib/format"
+import {
+  BackButton,
+  Card,
+  EmptyState,
+  PageTitle,
+  SearchInput,
+  Segmented,
+  StatusBadge,
+  TypeTag,
+  type Tone,
+} from "@/components/graphite"
 import type { Run, RunStatus } from "@/lib/mock-data"
 
-/* --- Formatting helpers --- */
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds < 0) return "0s"
-  const s = Math.round(seconds)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+const RUN_TONE: Record<RunStatus, Tone> = {
+  running: "running",
+  SUCCESS: "passed",
+  FAILED: "failed",
+  PAUSED: "neutral",
 }
 
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`
-}
-
-function formatTimestampShort(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  const now = new Date()
-  const time = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
-  if (d.toDateString() === now.toDateString()) return time
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  if (d.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`
-  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`
-}
-
-// Keys match RunStatus exactly: "SUCCESS" | "FAILED" | "PAUSED" (uppercase) + "running" (lowercase).
-const statusColorVar: Record<string, string> = {
-  SUCCESS: "--success",
-  FAILED: "--destructive",
-  running: "--primary",
-  PAUSED: "--warning",
+const RUN_LABEL: Record<RunStatus, string> = {
+  running: "Running",
+  SUCCESS: "Passed",
+  FAILED: "Failed",
+  PAUSED: "Paused",
 }
 
 export function RunsScreen() {
   const { runs } = useCatalogData()
   const [search, setSearch] = useState("")
+  const [status, setStatus] = useState("all")
   const [selected, setSelected] = useState<Run | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>("all")
 
-  const filtered = runs.filter((r) => {
-    const matchSearch =
-      r.wf.toLowerCase().includes(search.toLowerCase()) ||
-      r.id.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === "all" || r.status === statusFilter
-    return matchSearch && matchStatus
-  })
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: runs.length, running: 0, SUCCESS: 0, FAILED: 0, PAUSED: 0 }
+    for (const r of runs) c[r.status]++
+    return c
+  }, [runs])
 
-  if (selected) {
-    return <RunDetail run={selected} onBack={() => setSelected(null)} />
-  }
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return runs
+      .filter((r) => status === "all" || r.status === status)
+      .filter((r) => !q || `${r.id} ${r.wf}`.toLowerCase().includes(q))
+      .sort((a, b) => b.started.localeCompare(a.started))
+  }, [runs, search, status])
 
-  const statusCounts = {
-    all: runs.length,
-    PAUSED: runs.filter((r) => r.status === "PAUSED").length,
-    FAILED: runs.filter((r) => r.status === "FAILED").length,
-    SUCCESS: runs.filter((r) => r.status === "SUCCESS").length,
-    running: runs.filter((r) => r.status === "running").length,
-  }
+  if (selected) return <RunDetail run={selected} onBack={() => setSelected(null)} />
+
+  const statusTabs = [
+    { value: "all", label: "All", count: counts.all },
+    ...(["running", "SUCCESS", "FAILED", "PAUSED"] as RunStatus[])
+      .filter((s) => counts[s] > 0)
+      .map((s) => ({ value: s, label: RUN_LABEL[s], count: counts[s] })),
+  ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Runs</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {runs.length} total runs &middot; {statusCounts.FAILED} failed &middot; {statusCounts.PAUSED} paused
-        </p>
+    <div className="flex animate-view-in flex-col gap-4">
+      <PageTitle
+        title="Runs"
+        subtitle={`${runs.length} total runs · ${counts.FAILED} failed · ${counts.PAUSED} paused`}
+      />
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Filter by workflow or run id…"
+          className="min-w-[220px] max-w-[420px] flex-1"
+        />
+        <Segmented options={statusTabs} value={status} onChange={setStatus} />
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filter by workflow or run ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
-          />
+      <Card>
+        <div className="grid grid-cols-[100px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_80px_20px] gap-2.5 bg-hover px-[17px] py-2.5 text-xs font-medium text-muted-foreground">
+          <span>Status</span>
+          <span>Run</span>
+          <span>Workflow</span>
+          <span>Progress</span>
+          <span className="text-right">Duration</span>
+          <span />
         </div>
-        <div className="flex gap-1">
-          {(["all", "PAUSED", "FAILED", "SUCCESS"] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                statusFilter === status
-                  ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-            >
-              {status === "all" ? "all" : status.toLowerCase()}
-              <span className="text-[10px] tabular-nums opacity-60">{statusCounts[status]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Runs list */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
-        <div className="grid grid-cols-[auto_auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-2.5 bg-secondary/30">
-          <span className="w-8 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Status</span>
-          <span className="w-14" />
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Run</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Workflow</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold w-32">Progress</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold w-20 text-right">Duration</span>
-          <span className="w-4" />
-        </div>
-
         {filtered.map((run) => {
-          const actionCount = Object.keys(run.actions).length
+          const tracked = Object.keys(run.actions).length
+          const done = run.success + run.failed + run.skipped
+          const inFlight = run.status === "running" ? Math.max(0, run.total - done) : 0
           return (
-          <button
-            key={run.id}
-            className="grid grid-cols-[auto_auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
-            onClick={() => setSelected(run)}
-          >
-            <RunStatusIcon status={run.status} />
-            <span className="text-[10px] font-medium w-14" style={{ color: `hsl(var(${statusColorVar[run.status] || "--muted-foreground"}))` }}>
-              {run.status.toLowerCase()}
-            </span>
-            <div className="min-w-0">
-              <span className="text-xs font-mono text-[hsl(var(--primary))]">{run.id.replace(/^run_.*?_(\d{8}_\d{6})$/, "#$1").replace(/^run_/, "")}</span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
-                  {formatTimestampShort(run.started)}
-                </span>
-                {actionCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {actionCount} action{actionCount !== 1 ? "s" : ""} tracked
-                  </span>
-                )}
-              </div>
-            </div>
-            <span className="text-sm font-mono text-foreground truncate">{run.wf}</span>
-            <div className="flex items-center gap-2 w-32">
-              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden flex">
-                {run.success > 0 && (
-                  <div
-                    className="h-full transition-all duration-500"
-                    style={{
-                      width: `${run.total > 0 ? (run.success / run.total) * 100 : 0}%`,
-                      backgroundColor: "hsl(var(--success))",
-                    }}
-                  />
-                )}
-                {run.failed > 0 && (
-                  <div
-                    className="h-full transition-all duration-500"
-                    style={{
-                      width: `${run.total > 0 ? (run.failed / run.total) * 100 : 0}%`,
-                      backgroundColor: "hsl(var(--destructive))",
-                    }}
-                  />
-                )}
-                {run.skipped > 0 && (
-                  <div
-                    className="h-full transition-all duration-500"
-                    style={{
-                      width: `${run.total > 0 ? (run.skipped / run.total) * 100 : 0}%`,
-                      backgroundColor: "hsl(var(--muted-foreground))",
-                      opacity: 0.35,
-                    }}
-                  />
-                )}
-              </div>
-              <span className="text-[10px] font-mono text-muted-foreground tabular-nums whitespace-nowrap">
-                {run.success + run.failed + run.skipped}/{run.total}
+            <button
+              key={run.id}
+              onClick={() => setSelected(run)}
+              className="grid w-full grid-cols-[100px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_80px_20px] items-center gap-2.5 border-t border-border-soft px-[17px] py-2.5 text-left hover:bg-hover"
+            >
+              <span className="justify-self-start">
+                <StatusBadge tone={RUN_TONE[run.status]} label={RUN_LABEL[run.status]} />
               </span>
-            </div>
-            <span className="text-xs font-mono text-muted-foreground tabular-nums w-20 text-right">{formatDuration(run.duration)}</span>
-            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-          </button>
+              <span className="min-w-0">
+                <span className="block truncate font-mono text-[12.5px] text-accent-bright">{run.id}</span>
+                <span className="mt-0.5 block text-[10.5px] text-muted-foreground">
+                  {fmtTimestampShort(run.started)} · {tracked} action{tracked === 1 ? "" : "s"} tracked
+                </span>
+              </span>
+              <span className="truncate text-xs text-foreground-2">{run.wf}</span>
+              <span className="flex items-center gap-2">
+                <span className="flex h-[5px] flex-1 gap-px overflow-hidden rounded-[3px] bg-surface-2">
+                  <span className="h-full bg-success" style={{ width: pct(run.success, run.total) }} />
+                  <span className="h-full bg-danger" style={{ width: pct(run.failed, run.total) }} />
+                  <span className="h-full bg-muted-2" style={{ width: pct(run.skipped, run.total) }} />
+                  <span className="h-full bg-primary" style={{ width: pct(inFlight, run.total) }} />
+                </span>
+                <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">
+                  {done}/{run.total}
+                </span>
+              </span>
+              <span className="text-right font-mono text-xs">{fmtDuration(run.duration)}</span>
+              <span className="text-right text-muted-foreground">→</span>
+            </button>
           )
         })}
-
         {filtered.length === 0 && (
-          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-            No runs match the current filters
-          </div>
+          <EmptyState
+            message={runs.length === 0 ? "No runs recorded yet." : "No runs match these filters"}
+            actionLabel={runs.length === 0 ? undefined : "Clear filters"}
+            onAction={runs.length === 0 ? undefined : () => { setSearch(""); setStatus("all") }}
+          />
         )}
-      </div>
+      </Card>
     </div>
   )
 }
 
-function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
-  const actionEntries = Object.entries(run.actions)
-  const [jsonOpen, setJsonOpen] = useState(false)
-  const statusColor = `hsl(var(${statusColorVar[run.status] || "--muted-foreground"}))`
+/* ─── Detail ────────────────────────────────────────────────────────────── */
 
-  // Compute Gantt data for inline timeline bars
-  const runStart = new Date(run.started).getTime()
-  const ganttBars = actionEntries.map(([name, a]) => {
-    let startSec: number | null = null
-    let endSec: number | null = null
-    if (a.started) startSec = (new Date(a.started).getTime() - runStart) / 1000
-    if (a.ended) endSec = (new Date(a.ended).getTime() - runStart) / 1000
-    if (startSec != null && endSec == null && a.dur > 0) endSec = startSec + a.dur
-    if (endSec != null && startSec == null && a.dur > 0) startSec = endSec - a.dur
-    return { name, startSec, endSec }
-  })
-  const barsWithTiming = ganttBars.filter((b) => b.startSec != null && b.endSec != null && !isNaN(b.startSec!) && !isNaN(b.endSec!))
-  const showGantt = barsWithTiming.length >= 2
-  const ganttMax = showGantt ? Math.max(...barsWithTiming.map((b) => b.endSec!), run.duration, 0.001) : 0
-  const ganttMap = new Map(ganttBars.map((b) => [b.name, b]))
+function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const entries = Object.entries(run.actions)
+
+  // Wall-clock Gantt. Actions that record only a duration fall back to a bar at
+  // the origin rather than vanishing from the timeline.
+  const timeline = useMemo(() => {
+    const t0 = new Date(run.started).getTime()
+    const bars = entries.map(([name, a]) => {
+      let start = a.started ? new Date(a.started).getTime() - t0 : null
+      let end = a.ended ? new Date(a.ended).getTime() - t0 : null
+      if (start != null && end == null && a.dur > 0) end = start + a.dur * 1000
+      if (end != null && start == null && a.dur > 0) start = end - a.dur * 1000
+      return { name, action: a, start, end }
+    })
+    const timed = bars.filter((b) => b.start != null && b.end != null && !isNaN(b.start!) && !isNaN(b.end!))
+    const span = Math.max(
+      1000,
+      run.duration * 1000,
+      ...timed.map((b) => b.end!),
+    )
+    return { bars, span, hasTiming: timed.length >= 2 }
+  }, [entries, run.started, run.duration])
+
+  const ticks = Array.from({ length: 5 }, (_, i) => ({
+    left: `${(i / 4) * 100}%`,
+    label: fmtSeconds((timeline.span * i) / 4 / 1000),
+  }))
+
+  const result =
+    run.failed > 0 ? `${run.failed} failed`
+      : run.success > 0 ? `${run.success} passed`
+        : RUN_LABEL[run.status]
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-start gap-4">
-        <button
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mt-0.5"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-lg font-mono font-semibold text-foreground truncate">{run.id}</h1>
-            <RunStatusBadge status={run.status} />
+    <div className="flex animate-view-in flex-col gap-3.5">
+      <div className="flex items-center gap-3.5">
+        <BackButton onClick={onBack} title="Back to runs" />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="truncate font-mono text-lg font-semibold">{run.id}</span>
+            <StatusBadge tone={RUN_TONE[run.status]} label={RUN_LABEL[run.status]} />
           </div>
-          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground flex-wrap">
-            <span className="font-mono">{run.wf}</span>
-            <span className="opacity-30">/</span>
-            <span className="tabular-nums">{formatTimestamp(run.started)}</span>
-            {run.ended && (
-              <>
-                <span className="opacity-30">&rarr;</span>
-                <span className="tabular-nums">{formatTimestamp(run.ended)}</span>
-              </>
-            )}
-          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {run.wf} · {fmtTimestamp(run.started)}
+            {run.ended ? ` → ${fmtTimestamp(run.ended)}` : ""}
+          </p>
         </div>
       </div>
 
-      {/* ── Error (if failed — immediately visible) ────────────────────── */}
       {run.error && <ErrorBlock error={run.error} />}
 
-      {/* ── Stats strip ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-px rounded-xl overflow-hidden border border-border bg-border">
-        <StatCell icon={<Clock className="h-3.5 w-3.5" />} label="Duration" value={formatDuration(run.duration)} />
-        <StatCell icon={<Hash className="h-3.5 w-3.5" />} label="Actions" value={`${run.success + run.failed + run.skipped} / ${run.total}`} accent={run.failed > 0 ? "destructive" : undefined} />
-        <StatCell icon={<Zap className="h-3.5 w-3.5" />} label="Tokens" value={run.tokens > 0 ? run.tokens.toLocaleString() : "—"} />
-        <StatCell
-          icon={
-            run.status === "FAILED"
-              ? <XCircle className="h-3.5 w-3.5" />
-              : <CheckCircle2 className="h-3.5 w-3.5" />
-          }
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
+        <StatCard label="Duration" value={fmtDuration(run.duration)} />
+        <StatCard label="Actions" value={`${run.success + run.failed + run.skipped} / ${run.total}`} />
+        <StatCard label="Tokens" value={run.tokens > 0 ? run.tokens.toLocaleString() : EM_DASH} />
+        <StatCard
           label="Result"
-          value={run.failed > 0 ? `${run.failed} failed` : run.success > 0 ? `${run.success} passed` : run.status.toLowerCase()}
-          accent={run.failed > 0 ? "destructive" : run.success > 0 ? "success" : undefined}
+          value={result}
+          valueClass={run.failed > 0 ? "text-danger-t" : run.success > 0 ? "text-success-t" : "text-foreground"}
         />
       </div>
 
-      {/* ── Action Execution (with inline Gantt when 2+ actions) ────── */}
-      {actionEntries.length > 0 ? (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-            <h3 className="text-sm font-medium text-foreground">Actions</h3>
-            {showGantt && (
-              <span className="text-[10px] text-muted-foreground tabular-nums">
-                0s — {formatDuration(ganttMax)}
-              </span>
-            )}
-          </div>
-          <div className="divide-y divide-border">
-            {actionEntries.map(([name, a], i) => {
-              const color = actionStatusColor(a.status)
-              const gantt = ganttMap.get(name)
-              const hasGanttData = showGantt && gantt?.startSec != null && gantt?.endSec != null
-
-              return (
-                <div key={name} className="px-5 py-3">
-                  {/* Row 1: identity + metadata */}
-                  <div className="flex items-center gap-2.5">
-                    {/* Step indicator */}
-                    <div
-                      className="flex h-6 w-6 items-center justify-center rounded-full shrink-0"
-                      style={{ backgroundColor: `${color}15`, boxShadow: `0 0 0 1px ${color}25` }}
-                    >
-                      <span className="text-[9px] font-mono font-bold" style={{ color }}>{i + 1}</span>
-                    </div>
-
-                    {/* Type badge */}
-                    <Badge
-                      variant="outline"
-                      className={`w-12 justify-center text-[9px] font-normal rounded-md shrink-0 ${
-                        a.type === "llm"
-                          ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                          : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      }`}
-                    >
-                      {a.type}
-                    </Badge>
-
-                    {/* Name */}
-                    <span className="text-sm font-mono text-foreground truncate">{name}</span>
-
-                    {/* Status */}
-                    <Badge
-                      variant="outline"
-                      className="text-[9px] font-normal rounded-md shrink-0"
-                      style={{ backgroundColor: `${color}10`, color, borderColor: `${color}25` }}
-                    >
-                      {a.status === "running" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />}
-                      {a.status}
-                    </Badge>
-
-                    {/* Spacer */}
-                    <div className="flex-1" />
-
-                    {/* Right-side metadata */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      {a.vendor && <span className="text-[10px] font-mono text-muted-foreground/50">{a.vendor}</span>}
-                      {a.model && <span className="text-[10px] font-mono text-purple-400/80">{a.model}</span>}
-                      {a.impl && <span className="text-[10px] font-mono text-emerald-400/80">{a.impl}()</span>}
-                      {a.started && (
-                        <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
-                          {a.started.split("T")[1]?.slice(0, 8)}
-                        </span>
-                      )}
-                      <span className="text-xs font-mono text-muted-foreground tabular-nums font-medium w-10 text-right">
-                        {a.dur > 0 ? formatDuration(a.dur) : "\u2014"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Row 2: inline Gantt bar (only when 2+ actions have timing) */}
-                  {showGantt && (
-                    <div className="mt-2 ml-[calc(1.5rem+0.625rem)] mr-[2.5rem]">
-                      <div className="relative h-2 rounded-full bg-secondary overflow-hidden">
-                        {hasGanttData ? (
-                          <div
-                            className="absolute top-0 h-full rounded-full transition-all duration-500"
-                            style={{
-                              left: `${(gantt!.startSec! / ganttMax) * 100}%`,
-                              width: `${Math.max(((gantt!.endSec! - gantt!.startSec!) / ganttMax) * 100, 1)}%`,
-                              backgroundColor: color,
-                              opacity: a.status === "skipped" ? 0.3 : 0.65,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            className="absolute top-0 h-full rounded-full"
-                            style={{ left: 0, width: "100%", backgroundColor: color, opacity: 0.06 }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      {entries.length === 0 ? (
+        <Card>
+          <EmptyState message="No action execution data recorded for this run." />
+        </Card>
       ) : (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <p className="text-sm text-muted-foreground text-center py-6">
-            No action execution data recorded for this run
-          </p>
-        </div>
+        <Card>
+          <div className="flex flex-wrap items-center gap-3.5 border-b border-border px-[18px] py-3">
+            <span className="text-[13px] font-semibold">Timeline</span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {entries.length} action{entries.length === 1 ? "" : "s"} · axis spans{" "}
+              {fmtSeconds(timeline.span / 1000)}
+            </span>
+            <span className="flex-1" />
+            <span className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="h-1.5 w-2.5 rounded-sm bg-llm" />LLM</span>
+              <span className="flex items-center gap-1.5"><span className="h-1.5 w-2.5 rounded-sm bg-tool" />Tool</span>
+              <span className="flex items-center gap-1.5"><span className="h-1.5 w-2.5 rounded-sm bg-danger" />Failed</span>
+              <span className="flex items-center gap-1.5"><span className="h-1.5 w-2.5 rounded-sm bg-info" />Running</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[22px_46px_minmax(110px,0.7fr)_minmax(0,1.6fr)_72px] items-end gap-2.5 px-[18px] pb-1.5 pt-2.5">
+            <span />
+            <span />
+            <span className="text-xs font-medium text-muted-foreground">Action</span>
+            <div className="relative h-3">
+              {ticks.map((t, i) => (
+                <span
+                  key={i}
+                  className="absolute whitespace-nowrap font-mono text-[9.5px] text-muted-2"
+                  style={{ left: t.left, transform: i === 0 ? "none" : i === 4 ? "translateX(-100%)" : "translateX(-50%)" }}
+                >
+                  {t.label}
+                </span>
+              ))}
+            </div>
+            <span className="text-right text-xs font-medium text-muted-foreground">Duration</span>
+          </div>
+
+          {timeline.bars.map((bar, i) => {
+            const a = bar.action
+            const failed = a.status?.toLowerCase() === "failed"
+            const isRunning = a.status?.toLowerCase() === "running"
+            const skipped = a.status?.toLowerCase() === "skipped"
+            const fill = failed
+              ? "bg-danger"
+              : isRunning
+                ? "bg-info"
+                : skipped
+                  ? "bg-muted-2"
+                  : a.type === "tool"
+                    ? "bg-tool"
+                    : "bg-llm"
+            const left = bar.start != null ? pctNumber(bar.start, timeline.span) : 0
+            const rawWidth =
+              bar.start != null && bar.end != null ? bar.end - bar.start : a.dur * 1000
+            const width = Math.min(100 - left, pctNumber(rawWidth, timeline.span))
+            return (
+              <div
+                key={bar.name}
+                title={`${bar.name} · ${a.status}`}
+                className="grid grid-cols-[22px_46px_minmax(110px,0.7fr)_minmax(0,1.6fr)_72px] items-center gap-2.5 border-t border-border-soft px-[18px] py-[5px] hover:bg-hover"
+              >
+                <span className="font-mono text-[10.5px] text-muted-2">{i + 1}</span>
+                <TypeTag type={a.type} />
+                <span className={`min-w-0 truncate font-mono text-[11.5px] ${failed ? "text-danger-t" : isRunning ? "text-info-t" : "text-foreground-2"}`}>
+                  {bar.name}
+                </span>
+                <div
+                  className="relative h-3.5 overflow-hidden rounded-[3px] bg-well"
+                  style={{
+                    backgroundImage: "linear-gradient(to right, hsl(var(--grid)) 1px, transparent 1px)",
+                    backgroundSize: "25% 100%",
+                  }}
+                >
+                  <div
+                    className={`absolute bottom-0.5 top-0.5 rounded-sm ${fill}`}
+                    style={{ left: `${left}%`, width: `${Math.max(0.8, width)}%` }}
+                  />
+                </div>
+                <span className={`whitespace-nowrap text-right font-mono text-[11px] ${failed ? "text-danger-t" : "text-muted-foreground"}`}>
+                  {a.dur > 0 ? fmtDuration(a.dur) : EM_DASH}
+                </span>
+              </div>
+            )
+          })}
+        </Card>
       )}
 
-      {/* ── Run Summary (collapsed by default) ─────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <Card>
         <button
-          onClick={() => setJsonOpen(!jsonOpen)}
-          className="flex items-center justify-between w-full px-5 py-3 text-left hover:bg-accent/30 transition-colors"
+          onClick={() => setJsonOpen((o) => !o)}
+          className="flex w-full items-center justify-between px-[18px] py-3 text-left hover:bg-hover"
         >
-          <span className="text-xs font-medium text-foreground">Run Summary</span>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-muted-foreground">JSON</span>
-            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${jsonOpen ? "rotate-180" : ""}`} />
-          </div>
+          <span className="text-xs font-medium text-foreground">Run summary</span>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">JSON</span>
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground ${jsonOpen ? "rotate-180" : ""}`} />
+          </span>
         </button>
         {jsonOpen && (
-          <div className="px-5 pb-5 border-t border-border">
-            <pre className="text-xs font-mono text-foreground/80 leading-relaxed mt-4 overflow-x-auto">
-{JSON.stringify({
-  run_id: run.id,
-  workflow: run.wf,
-  status: run.status,
-  started: run.started,
-  ...(run.ended ? { ended: run.ended } : {}),
-  duration: formatDuration(run.duration),
-  actions_succeeded: run.success,
-  actions_failed: run.failed,
-  actions_skipped: run.skipped,
-  actions_total: run.total,
-  tokens: run.tokens,
-}, null, 2)}
+          <div className="border-t border-border px-[18px] pb-[18px]">
+            <pre className="mt-3.5 overflow-x-auto font-mono text-xs leading-relaxed text-foreground-2">
+              {JSON.stringify(
+                {
+                  run_id: run.id,
+                  workflow: run.wf,
+                  status: run.status,
+                  started: run.started,
+                  ...(run.ended ? { ended: run.ended } : {}),
+                  duration: fmtDuration(run.duration),
+                  actions_succeeded: run.success,
+                  actions_failed: run.failed,
+                  actions_skipped: run.skipped,
+                  actions_total: run.total,
+                  tokens: run.tokens,
+                },
+                null,
+                2,
+              )}
             </pre>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
 
-/* --- Stats strip cell --- */
-
-function StatCell({
-  icon,
+function StatCard({
   label,
   value,
-  accent,
+  valueClass = "text-foreground",
 }: {
-  icon: React.ReactNode
   label: string
   value: string
-  accent?: "destructive" | "success"
+  valueClass?: string
 }) {
-  const accentColor = accent === "destructive"
-    ? "text-[hsl(var(--destructive))]"
-    : accent === "success"
-      ? "text-[hsl(var(--success))]"
-      : "text-foreground"
-
   return (
-    <div className="bg-card px-4 py-3">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-muted-foreground">{icon}</span>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
-      </div>
-      <p className={`text-sm font-mono font-medium tabular-nums ${accentColor}`}>{value}</p>
+    <div className="rounded-card border border-border bg-surface px-4 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className={`mt-1.5 font-mono text-[17px] ${valueClass}`}>{value}</div>
     </div>
   )
 }
-
-/* --- Error display --- */
 
 function ErrorBlock({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false)
   const lines = error.trimEnd().split("\n")
   const summary = lines.filter((l) => l.trim()).pop() || error.slice(0, 200)
-  const hasTraceback = lines.length > 1
 
   return (
-    <div className="rounded-xl border-l-4 border-[hsl(var(--destructive))] bg-[hsl(var(--destructive))]/5 px-5 py-4">
-      <p className="text-sm font-mono text-[hsl(var(--destructive))] font-medium leading-relaxed">{summary}</p>
-      {hasTraceback && (
+    <div className="rounded-card border border-border bg-danger-a12 px-[18px] py-3.5">
+      <p className="m-0 font-mono text-sm font-medium leading-relaxed text-danger-t">{summary}</p>
+      {lines.length > 1 && (
         <>
           <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-[10px] text-[hsl(var(--destructive))]/60 hover:text-[hsl(var(--destructive))] mt-2 transition-colors"
+            onClick={() => setExpanded((e) => !e)}
+            className="mt-2 text-[10.5px] text-danger-t hover:underline"
           >
             {expanded ? "Hide traceback" : "Show full traceback"}
           </button>
           {expanded && (
-            <pre className="text-[10px] font-mono text-[hsl(var(--destructive))]/70 leading-relaxed mt-2 max-h-64 overflow-y-auto overflow-x-auto whitespace-pre-wrap border-t border-[hsl(var(--destructive))]/10 pt-2">
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap border-t border-border-soft pt-2 font-mono text-[10.5px] leading-relaxed text-foreground-2">
               {error}
             </pre>
           )}
@@ -471,54 +369,4 @@ function ErrorBlock({ error }: { error: string }) {
       )}
     </div>
   )
-}
-
-/* --- Status components --- */
-
-function RunStatusIcon({ status }: { status: RunStatus }) {
-  const map: Record<string, React.ReactNode> = {
-    SUCCESS: (
-      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[hsl(var(--success))]/15 ring-1 ring-[hsl(var(--success))]/20">
-        <CheckCircle2 className="h-3.5 w-3.5 text-[hsl(var(--success))]" />
-      </div>
-    ),
-    FAILED: (
-      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[hsl(var(--destructive))]/15 ring-1 ring-[hsl(var(--destructive))]/20">
-        <XCircle className="h-3.5 w-3.5 text-[hsl(var(--destructive))]" />
-      </div>
-    ),
-    running: (
-      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/15 ring-1 ring-[hsl(var(--primary))]/20">
-        <Loader2 className="h-3.5 w-3.5 text-[hsl(var(--primary))] animate-spin" />
-      </div>
-    ),
-    PAUSED: (
-      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[hsl(var(--warning))]/15 ring-1 ring-[hsl(var(--warning))]/20">
-        <Pause className="h-3.5 w-3.5 text-[hsl(var(--warning))]" />
-      </div>
-    ),
-  }
-  return <>{map[status] || map.PAUSED}</>
-}
-
-function RunStatusBadge({ status }: { status: RunStatus }) {
-  const styles: Record<string, string> = {
-    SUCCESS: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))] border-[hsl(var(--success))]/20",
-    FAILED: "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20",
-    running: "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] border-[hsl(var(--primary))]/20",
-    PAUSED: "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20",
-  }
-  return (
-    <Badge variant="outline" className={`text-[10px] font-normal rounded-md ${styles[status] || ""}`}>
-      {status === "running" && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))] animate-pulse" />}
-      {status.toLowerCase()}
-    </Badge>
-  )
-}
-
-function actionStatusColor(status: string): string {
-  if (status === "success") return "hsl(var(--success))"
-  if (status === "failed") return "hsl(var(--destructive))"
-  if (status === "skipped") return "hsl(var(--muted-foreground))"
-  return "hsl(var(--primary))"
 }

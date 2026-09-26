@@ -92,14 +92,13 @@ class VersionIdGenerator:
     ) -> dict:
         """Add version correlation ID to an object.
 
-        For versioned agents (``is_versioned_agent=True``), keys on
-        ``source_guid`` so all N parallel versions of one source record share
-        an id. Expansions (``force=True``) are keyed on position instead, so
-        each 1→N child gets a unique id for downstream fan-in grouping;
-        non-versioned agents assign only on that expansion path.
+        Versioned agents key on ``source_guid`` so all N versions of one source
+        record share an id. Expansions (``force=True``) key on position plus the
+        identity the child inherited — which assumes two records sharing a
+        ``record_index`` window carry different inherited identities, and nothing
+        enforces that.
 
-        Raises:
-            ValueError: If workflow_session_id is missing in version context.
+        Raises ValueError when ``workflow_session_id`` is absent.
         """
         if not force and not agent_config.get("is_versioned_agent", False):
             return obj
@@ -133,8 +132,16 @@ class VersionIdGenerator:
                 source_guid, version_base_name, workflow_session_id
             )
         elif record_index is not None:
+            # A child's source_guid is a uuid4 minted moments ago, so keying on it
+            # varies per run and per branch. The inherited id is stable, and unlike
+            # parent_source_guid it separates two parents of one earlier expansion.
+            file_context = (
+                (obj.get("version_correlation_id") or obj.get("parent_source_guid") or "")
+                if force
+                else (source_guid or "")
+            )
             obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, workflow_session_id, file_context=source_guid or ""
+                record_index, version_base_name, workflow_session_id, file_context=file_context
             )
         elif source_guid:
             obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(

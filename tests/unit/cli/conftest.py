@@ -12,6 +12,10 @@ def make_mock_backend(dispositions: dict[str, list[dict]] | None = None):
     """
     dispositions = dispositions or {}
     backend = MagicMock()
+    # A real backend answers `str | None`; left as a bare MagicMock it answers a
+    # MagicMock, and any caller that parses the metadata — the batch registry
+    # does — fails on the mock rather than on what the test is about.
+    backend.load_metadata.return_value = None
 
     def get_disposition(action_name, record_id=None, disposition=None):
         rows = dispositions.get(action_name, [])

@@ -334,7 +334,7 @@ function TreeField({ fieldKey, value, defaultOpen = true, depth = 0 }: { fieldKe
         <ChevronRight
           className={`h-2.5 w-2.5 shrink-0 text-muted-foreground/40 transition-transform ${open ? "rotate-90" : ""}`}
         />
-        <span className="text-[0.85em] font-mono text-[#7dd3fc] shrink-0">{fieldKey}</span>
+        <span className="text-[0.85em] font-mono text-tool-t shrink-0">{fieldKey}</span>
         {!open && (
           <span className="text-[0.8em] font-mono text-muted-foreground/40 truncate">{preview}</span>
         )}
@@ -370,8 +370,8 @@ function TreeNode({
         <ChevronRight
           className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
         />
-        <span className="text-[0.9em] font-mono font-semibold text-[#c084fc]">{label}</span>
-        {badge && <span className="text-[0.75em] font-mono text-[#6ee7b7]">{badge}</span>}
+        <span className="text-[0.9em] font-mono font-semibold text-llm-t">{label}</span>
+        {badge && <span className="text-[0.75em] font-mono text-success-t">{badge}</span>}
       </button>
       <div className="data-card-drawer" data-open={open}>
         <div className="pl-4">{children}</div>
@@ -410,8 +410,8 @@ function ArrayItemNode({
         <ChevronRight
           className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
         />
-        <span className="text-[0.85em] font-mono text-[#7dd3fc]">[{index}]</span>
-        <span className="text-[0.75em] font-mono text-[#6ee7b7]">object</span>
+        <span className="text-[0.85em] font-mono text-tool-t">[{index}]</span>
+        <span className="text-[0.75em] font-mono text-success-t">object</span>
         {!open && (
           <span className="text-[0.8em] text-muted-foreground/50 truncate ml-1 italic">
             {preview}

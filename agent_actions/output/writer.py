@@ -22,6 +22,22 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 
+def target_relative_path(file_path: str | Path, output_directory: str | None) -> str:
+    """The key a target file is stored under, given where it is being written.
+
+    Shared with batch carry-forward, which has to name the same file the write
+    will land in: a second copy of this rule drifts, and a drifted copy hands one
+    file's rows to another.
+    """
+    path = Path(file_path)
+    if not output_directory:
+        return path.name
+    try:
+        return str(path.relative_to(output_directory))
+    except ValueError:
+        return path.name
+
+
 class FileWriter(ProcessorErrorHandlerMixin):
     """Writes data to JSON, TXT, or CSV files with optional storage backend persistence."""
 
@@ -132,13 +148,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     f"File: {self.file_path}"
                 )
             file_path = Path(self.file_path)
-            if self.output_directory:
-                try:
-                    relative_path = str(file_path.relative_to(self.output_directory))
-                except ValueError:
-                    relative_path = file_path.name
-            else:
-                relative_path = file_path.name
+            relative_path = target_relative_path(file_path, self.output_directory)
 
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
