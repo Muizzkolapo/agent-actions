@@ -1,16 +1,9 @@
-"""`interceptors:` is not a config key — the system it configured was deleted.
+"""`interceptors:` is not a config key — `f97267b1` deleted the system it configured.
 
-The interceptor runtime went in `f97267b1` ("remove reprompt and interceptor
-systems"), which took the factory, the validation interceptor and the realtime
-interceptor service. Its config surface did not go with it: the key stayed
-declared on `ActionConfig` and the expander kept copying it onto the agent. #965
-retired the `reprompt:` half of that same deletion; this is the other half.
-
-Pinned on both sites separately, because either one alone still loses the value
-in silence: a declaration with no copy accepts a key that reaches nothing, and a
-copy with no declaration puts a key on the agent that no schema admits. The
-copy is the worse of the two — the value *is* visible on the agent config, so
-anything dumping or inspecting that config shows it present and applied.
+Pinned on the declaration and the expander's copy separately, because either one
+alone still loses the value in silence. The copy is the worse of the two: the
+value reaches the agent config, so a reader dumping it sees the block present and
+apparently applied.
 """
 
 import pytest
