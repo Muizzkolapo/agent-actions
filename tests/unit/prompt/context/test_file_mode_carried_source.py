@@ -1,15 +1,12 @@
 """A FILE-mode record that carries its own ``source`` namespace resolves against it
-when neither identity hop matches the pool, the way the RECORD-mode twin already does.
+when neither identity hop matches the pool, as the RECORD-mode twin already does.
 
-``processing/source_resolution.resolve_source_content`` checks the record's content for
-a ``source`` key before it looks at any guid. The FILE-mode resolver had no such rule:
-it tried ``source_guid``, then ``parent_source_guid``, and returned ``None`` against a
-non-empty pool — which the caller turns into a ``source_unresolved`` skip even though
-the row already holds the namespace the scope asked for. A run where that happens to
-every record then fails the action on a ``prefilter_by_guard`` length mismatch.
+``resolve_source_content`` reads the record's content before any guid; the FILE-mode
+resolver had no such rule, so a row already holding the namespace the scope asked for
+was skipped ``source_unresolved`` — and a batch where that hits every row then fails
+the action on a ``prefilter_by_guard`` length mismatch.
 
-The fallback is last, not first: a row whose guid resolves keeps taking the pool's
-source, so rows that resolve today resolve identically.
+The fallback is last, not first: a row whose guid resolves still takes the pool's.
 """
 
 from agent_actions.processing.source_resolution import resolve_source_content
