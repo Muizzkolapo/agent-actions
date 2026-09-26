@@ -109,6 +109,10 @@ class TestFileUDFResultValidation:
 
         message = str(caught.value)
         assert "output[0]" in message, message
+        assert "empty list" in message, (
+            f"the refusal has to name what was wrong with the input, or it reads as the "
+            f"missing-source_index error and misdiagnoses it: {message}"
+        )
         assert "None" in message, (
             f"the refusal has to name the way to say a row had no input, or the author "
             f"retries with the same empty list: {message}"

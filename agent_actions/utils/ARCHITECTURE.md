@@ -314,8 +314,8 @@ get_existing_content(record, is_first_stage=False)
 | File | Role |
 |------|------|
 | `module_loader.py` | Thread-safe module loading via importlib (no sys.path mutation) |
-| `udf_management/registry.py` | `UDF_REGISTRY` dict, `@udf_tool` decorator, lookup functions |
-| `udf_management/tooling.py` | UDF execution, error wrapping, `FileUDFResult` validation |
+| `udf_management/registry.py` | `UDF_REGISTRY` dict, `@udf_tool` decorator, lookup functions, `FileUDFResult` provenance validation |
+| `udf_management/tooling.py` | UDF execution, error wrapping, output validation against the schema |
 
 ### Transformation
 | File | Role |
