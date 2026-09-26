@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import stat as stat_module
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -104,6 +105,17 @@ def _lose_file(runner: Any, action_name: str) -> None:
     costs a re-run, and under-reporting costs the records.
     """
     forget_slice_observation(getattr(runner, "storage_backend", None), action_name)
+
+
+def _is_regular_file(item: Path) -> bool:
+    """Whether *item* is a regular file, raising when the filesystem will not say.
+
+    ``Path.is_file()`` cannot be used for this: it catches the ``OSError`` from
+    the underlying ``stat()`` and answers ``False``, which a walk reads as a
+    deliberate "not a file" and drops the entry silently. A caller that needs to
+    tell a directory from a file it could not look at has to see the error.
+    """
+    return stat_module.S_ISREG(item.stat().st_mode)
 
 
 def _log_processing_errors(
@@ -249,10 +261,16 @@ def should_skip_item(
     processed_paths: set,
     file_type_filter: set[str] | None = None,
 ) -> bool:
-    """Check if an item should be skipped during processing."""
+    """Whether to skip *item*, raising ``OSError`` for one it cannot classify.
+
+    The deliberate exclusions are answered first so that none of them needs the
+    filesystem: a dotfile or a filtered suffix would never be processed, and
+    reporting it as a lost record because ``stat()`` failed is a false alarm. Only
+    an entry that survives all of them is asked whether it is a regular file, and
+    that question can fail — the caller has to treat the failure as a loss rather
+    than as a skip.
+    """
     if "batch" in item.parts:
-        return True
-    if not item.is_file():
         return True
     if item.name.startswith("."):
         return True
@@ -261,7 +279,7 @@ def should_skip_item(
         return True
     if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
         return True
-    return False
+    return not _is_regular_file(item)
 
 
 def _build_file_params(
@@ -296,15 +314,21 @@ def _build_file_params(
     return SingleFileProcessParams(**kwargs)
 
 
-def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, list[Path]]:
-    """Collect files from upstream directories, grouped by relative path.
+def collect_files_from_upstream(
+    upstream_data_dirs: list[str],
+) -> tuple[dict[Path, list[Path]], list[tuple[Path, OSError]]]:
+    """Collect upstream files by relative path → (grouped, the ones it could not read).
 
     Returned in sorted key order, not raw rglob order: a file limit truncates this
     mapping, so an unordered walk makes "the first N" mean whatever the filesystem
     happened to enumerate first — a different subset on the next run of the same
     command, and interleaved by first-seen when several upstreams contribute.
+
+    Losses are returned rather than logged here because the caller owns the action's
+    record count, which a staged file that never reached the grouping leaves short.
     """
     files_by_relative_path: dict[Path, list[Path]] = {}
+    lost: list[tuple[Path, OSError]] = []
 
     for input_directory in upstream_data_dirs:
         input_path = Path(input_directory)
@@ -314,9 +338,14 @@ def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, lis
         for item in input_path.rglob("*"):
             if "batch" in item.parts:
                 continue
-            if not item.is_file():
-                continue
             if item.name.startswith("."):
+                continue
+
+            try:
+                if not _is_regular_file(item):
+                    continue
+            except OSError as e:
+                lost.append((item, e))
                 continue
 
             relative_path = item.relative_to(input_path)
@@ -324,7 +353,8 @@ def collect_files_from_upstream(upstream_data_dirs: list[str]) -> dict[Path, lis
                 files_by_relative_path[relative_path] = []
             files_by_relative_path[relative_path].append(item)
 
-    return {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
+    grouped = {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
+    return grouped, sorted(lost, key=lambda pair: pair[0])
 
 
 def warn_no_files_found(params: FileProcessParams) -> None:
@@ -366,7 +396,20 @@ def process_directory_files(
     # happened to enumerate first.
     items = _files_holding_retried_records(runner, sorted(input_path.rglob("*")), input_path)
     for position, item in enumerate(items):
-        if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
+        try:
+            if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
+                continue
+        except OSError as e:
+            # Reported, not skipped: the file was staged and its records never
+            # reach a slice, so the count has to go out of service exactly as it
+            # does for a file that fails while being read.
+            errors.record(item.relative_to(input_path), e)
+            _lose_file(runner, params.action_name)
+            logger.warning(
+                "Could not read the staged file %s, so it went unprocessed: %s",
+                item.relative_to(input_path),
+                e,
+            )
             continue
 
         relative_path = item.relative_to(input_path)
@@ -389,11 +432,21 @@ def process_directory_files(
             )
 
         def _unread(position: int = position) -> bool:
-            """Whether any entry past *position* would have been processed."""
-            return any(
-                not should_skip_item(later, input_path, processed_paths, params.file_type_filter)
-                for later in items[position + 1 :]
-            )
+            """Whether any entry past *position* would have been processed.
+
+            An entry that cannot be classified counts as one that would: treating
+            it as skippable is how a run stops short of a file and says nothing.
+            """
+
+            def _would_process(later: Path) -> bool:
+                try:
+                    return not should_skip_item(
+                        later, input_path, processed_paths, params.file_type_filter
+                    )
+                except OSError:
+                    return True
+
+            return any(_would_process(later) for later in items[position + 1 :])
 
         if _file_limit_reached(runner, params, count, _unread):
             break
@@ -450,10 +503,15 @@ def process_merged_files(
 ) -> tuple[int, int, CollectedErrors]:
     """Merge and process files from several upstreams → (found, processed, per_file_errors)."""
     output_path = Path(params.output_directory)
-    files_by_path = collect_files_from_upstream(params.upstream_data_dirs)
+    files_by_path, lost = collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
     errors = CollectedErrors()
     files_seen = 0
+
+    for item, error in lost:
+        errors.record(Path(item.name), error)
+        _lose_file(runner, params.action_name)
+        logger.warning("Could not read the upstream file %s, so it went unmerged: %s", item, error)
 
     for relative_path, file_paths in files_by_path.items():
         files_seen += 1
