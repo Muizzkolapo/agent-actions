@@ -360,8 +360,10 @@ def finalize_batch_output(
     context.manager.update_status(identity.batch_id, BatchStatus.COMPLETED)
     # Separate from the status: a provider poll writes COMPLETED as soon as the
     # batch finishes, so only a stamp set here distinguishes results that were
-    # written from results that merely exist.
-    context.manager.mark_collected(identity.batch_id)
+    # written from results that merely exist. Stamped on the file rather than
+    # the batch, because a recovery round finalises under its own id and the
+    # cleanup below then removes that entry.
+    context.manager.mark_collected(identity.file_name)
     return str(output_file)
 
 

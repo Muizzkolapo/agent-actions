@@ -259,16 +259,18 @@ class BatchRegistryManager:
         with self._lock:
             return bool(self._get_cache())
 
-    def mark_collected(self, batch_id: str, when: str | None = None) -> bool:
-        """Record that this batch's results have been written."""
+    def mark_collected(self, file_name: str, when: str | None = None) -> bool:
+        """Record that this file's results have been written.
+
+        Keyed on the file, not the batch id: a recovery round finalises under
+        its own id, and the cleanup that follows removes that entry — so a
+        stamp placed on it is discarded with it, leaving the parent, which is
+        the entry that survives, reading as never collected.
+        """
         with self._lock:
             cache = self._get_cache()
-            if self._batch_id_index is None:
-                self._rebuild_batch_id_index()
-            assert self._batch_id_index is not None
-            file_name = self._batch_id_index.get(batch_id)
-            if not file_name or file_name not in cache:
-                logger.warning("Batch ID %s not in registry — cannot mark collected", batch_id)
+            if file_name not in cache:
+                logger.warning("No registry entry for %s — cannot mark collected", file_name)
                 return False
             stamp = when or datetime.now(UTC).isoformat()
             cache[file_name] = dataclasses.replace(cache[file_name], collected_at=stamp)
