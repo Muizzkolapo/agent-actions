@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.reasons import TOOL_MISSING_RECORD
@@ -143,22 +145,11 @@ class TestAnIndexTheToolNamedButCannotResolve:
 
         assert _tombstoned(results) == ["r1", "r2"]
 
-    def test_a_negative_index_accounts_for_nobody(self):
-        records = _records("r0", "r1", "r2")
-
-        results = _invoke(
-            records,
-            FileUDFResult(outputs=[{"source_index": [0, -1], "data": {"group": "a"}}]),
-        )
-
-        assert _tombstoned(results) == ["r1", "r2"]
-
-    def test_a_non_integer_index_accounts_for_nobody(self):
-        records = _records("r0", "r1", "r2")
-
-        results = _invoke(
-            records,
-            FileUDFResult(outputs=[{"source_index": [1, "0"], "data": {"group": "a"}}]),
-        )
-
-        assert _tombstoned(results) == ["r0", "r2"]
+    @pytest.mark.parametrize("source_index", [[0, -1], [1, "0"]], ids=["negative", "non-integer"])
+    def test_an_index_that_could_not_be_a_position_never_reaches_the_accounting(self, source_index):
+        """These two no longer get here: a negative or non-integer contributor is refused
+        where the outputs are built, so no record can be excused by one. The out-of-range
+        case above still arrives, because how many inputs there are is not knowable at
+        that boundary — which is why range stays the run's concern and type is not."""
+        with pytest.raises(ValueError, match="non-negative integers"):
+            FileUDFResult(outputs=[{"source_index": source_index, "data": {"group": "a"}}])

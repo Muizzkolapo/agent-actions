@@ -45,6 +45,17 @@ class FileUDFResult:
                     f"Use None to declare that no single input produced this row, "
                     f"or list the inputs that contributed to it."
                 )
+            # Range is left to the run, which accounts for nobody on an index it cannot
+            # resolve — the count of inputs is not knowable here. Type and sign are, and
+            # a bool indexes (True is 1) where a None takes the first input's namespaces.
+            positions = src if isinstance(src, list) else ([] if src is None else [src])
+            stray = [p for p in positions if isinstance(p, bool) or not isinstance(p, int) or p < 0]
+            if stray:
+                raise ValueError(
+                    f"FileUDFResult output[{i}] source_index must give input positions as "
+                    f"non-negative integers; got {stray!r}. Use None to declare that no "
+                    f"single input produced this row."
+                )
             if "data" not in out or not isinstance(out["data"], dict):
                 raise ValueError(
                     f"FileUDFResult output[{i}] missing 'data' dict. "
