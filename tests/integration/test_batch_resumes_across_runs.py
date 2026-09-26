@@ -33,7 +33,7 @@ def project(tmp_path):
     return root
 
 
-def _run(project, *args, env=None):
+def _run_workflow(project, workflow, *args, env=None):
     """One `agac run`, in its own process — the boundary under test.
 
     The mock completes a batch after a delay, which is a separate question from
@@ -41,7 +41,7 @@ def _run(project, *args, env=None):
     lost its batch, not one that asked too early.
     """
     result = subprocess.run(
-        [str(Path(sys.executable).parent / "agac"), "run", "-a", WORKFLOW, "-u", "tools", *args],
+        [str(Path(sys.executable).parent / "agac"), "run", "-a", workflow, "-u", "tools", *args],
         cwd=project,
         capture_output=True,
         text=True,
@@ -49,6 +49,10 @@ def _run(project, *args, env=None):
         env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", **(env or {})},
     )
     return result.returncode, result.stdout + result.stderr
+
+
+def _run(project, *args, env=None):
+    return _run_workflow(project, WORKFLOW, *args, env=env)
 
 
 def _records(project):
@@ -165,6 +169,8 @@ class TestARecordThatSaysNothingAboutABatch:
 
         AgacBatchClient._batches.clear()
         AgacBatchClient._tasks_by_batch.clear()
+        # The state directory is made by a submit, not by being asked for.
+        AgacBatchClient._state_dir().mkdir(parents=True, exist_ok=True)
         return AgacBatchClient()
 
     @pytest.mark.parametrize(
@@ -237,3 +243,113 @@ class TestTheRecordOutlivesTheRead:
         self._as_a_new_process()
 
         assert submitted._fetch_status("b1") != "unknown"
+
+
+class TestTheRecordHasAnEndOfLife:
+    """A record holds the batch's whole payload — every prompt and every piece of
+    user content it was submitted with — and today nothing ever ends its life.
+
+    It dies with the registry entry that names it. Not earlier: while an entry
+    names a batch the framework can still be sent back to it, and a spent record
+    turns that into `Batch not found`.
+    """
+
+    @staticmethod
+    def _on_disk(project):
+        state = project / ".agac" / "batch_state"
+        return sorted(p.name for p in state.glob("*")) if state.is_dir() else []
+
+    def test_an_abandoned_batch_is_reclaimed_by_a_fresh_run(self, project):
+        """A batch nobody ever collects is what --fresh means by a clean slate."""
+        assert _run(project, "--fresh")[0] == 0
+        abandoned = set(self._on_disk(project))
+        assert abandoned, "the submit recorded nothing to reclaim"
+
+        assert _run(project, "--fresh")[0] == 0
+
+        assert not abandoned & set(self._on_disk(project))
+
+    def test_a_collected_batch_is_reclaimed_by_a_fresh_run(self, project):
+        """--fresh drops the registry too, so nothing can be sent back to it."""
+        assert _run(project, "--fresh")[0] == 0
+        assert _run(project)[0] == 0
+        collected = set(self._on_disk(project))
+        assert collected, "the cycle recorded nothing to reclaim"
+
+        assert _run(project, "--fresh")[0] == 0
+
+        assert not collected & set(self._on_disk(project))
+
+    def test_a_neighbours_fresh_run_does_not_take_this_batch(self, project):
+        """One `.agac/batch_state` serves the whole project; --fresh is per
+        workflow. A neighbour's clean slate must leave this batch collectable."""
+        assert _run(project, "--fresh")[0] == 0
+        in_flight = set(self._on_disk(project))
+        assert in_flight, "the submit recorded nothing"
+
+        code, output = _run_workflow(project, "inline_rules", "--fresh")
+        assert code == 0, output
+
+        assert in_flight <= set(self._on_disk(project))
+        assert _run(project)[0] == 0
+        assert _records(project), "the batch was no longer collectable"
+
+    def test_clean_all_reclaims_the_records_it_would_orphan(self, project):
+        """`agac clean --all` wipes the store holding the registry. Afterwards no
+        entry names these batches, so nothing could ever find them to reclaim."""
+        assert _run(project, "--fresh")[0] == 0
+        assert self._on_disk(project), "the submit recorded nothing"
+
+        cleaned = subprocess.run(
+            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+
+        assert self._on_disk(project) == []
+
+    def test_clean_all_leaves_no_store_behind_when_there_was_none(self, project):
+        """Reading the registry opens the store, and the list of directories to
+        remove was settled before that — so a store made here is never cleaned."""
+        store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+        assert not store.exists(), "the fixture already has a store"
+
+        cleaned = subprocess.run(
+            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+
+        assert not store.exists()
+
+    def test_asking_where_records_live_creates_nothing(self, scoped_to):
+        """A project that never submitted a batch must not gain a `.agac/` for
+        having been asked where one would go — which is what --fresh does now."""
+        from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
+
+        assert not (scoped_to / ".agac").exists()
+
+        AgacBatchClient()._state_dir()
+
+        assert not (scoped_to / ".agac").exists()
+
+    def test_a_fresh_run_discards_a_half_written_record(self, project):
+        """`atomic_json_write` mkstemps beside the target, so a kill between
+        create and rename leaves a `.tmp` holding the same payload — and one
+        written before the registry entry was saved is named by nothing, so
+        only a sweep can reach it. Backdated because a write in progress owns
+        its temp file and a sweep has to leave that one alone."""
+        assert _run(project, "--fresh")[0] == 0
+        orphan = project / ".agac" / "batch_state" / "mock_batch_abandoned_kj38fa.tmp"
+        orphan.write_text('{"tasks": [{"user_content": "secret"}]}')
+        os.utime(orphan, (1700000000, 1700000000))
+
+        assert _run(project, "--fresh")[0] == 0
+
+        assert not orphan.exists()

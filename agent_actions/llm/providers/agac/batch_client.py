@@ -7,6 +7,7 @@ without hitting real APIs. Uses schema-based fake data generation.
 Auto-completes after configurable time (default 5 seconds).
 """
 
+import glob
 import json
 import logging
 import time
@@ -23,6 +24,11 @@ from agent_actions.llm.providers.batch_base import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Longer than any atomic write takes to create its temp file and rename it,
+# short enough that a record abandoned by a killed process is reclaimed by
+# the next run rather than the one after it.
+_ABANDONED_WRITE_SECONDS = 60.0
 
 
 @dataclass
@@ -116,22 +122,17 @@ class AgacBatchClient(BaseBatchClient):
     def _state_dir() -> Path:
         """Where a submitted batch is recorded, derivable without any argument.
 
-        The resume path is given a batch id and nothing else — it never asks for
-        a batch directory — so the location cannot depend on the output directory
-        the submit happened to use.
+        The resume path is given a batch id and nothing else, so the location
+        cannot depend on the output directory the submit happened to use. From
+        the project root the CLI resolved, not the working directory: `agac` runs
+        from a subdirectory without chdir. Not under `agent_io/`, which marks a
+        workflow to the docs scanner.
 
-        From the project root the CLI resolved, not the working directory: `agac`
-        supports being run from a subdirectory and does not chdir, so a cwd-derived
-        path would lose the batch exactly as this exists to prevent. Not under
-        `agent_io/`, which is per-workflow and which the docs scanner treats as
-        marking one — a copy at the project root would make it report a workflow
-        named after the project.
+        Resolved, never created — only a submit creates it.
         """
-        from agent_actions.utils.path_utils import ensure_directory_exists, get_path_manager
+        from agent_actions.utils.path_utils import get_path_manager
 
-        state_dir = get_path_manager().get_project_root() / ".agac" / "batch_state"
-        ensure_directory_exists(state_dir)
-        return state_dir
+        return get_path_manager().get_project_root() / ".agac" / "batch_state"
 
     @classmethod
     def _write_state(cls, state: MockBatchState, tasks: list[dict[str, Any]]) -> None:
@@ -141,9 +142,12 @@ class AgacBatchClient(BaseBatchClient):
         is the failure this exists to prevent, arrived at silently.
         """
         from agent_actions.utils.atomic_write import atomic_json_write
+        from agent_actions.utils.path_utils import ensure_directory_exists
 
+        state_dir = cls._state_dir()
+        ensure_directory_exists(state_dir)
         atomic_json_write(
-            cls._state_dir() / f"{state.batch_id}.json",
+            state_dir / f"{state.batch_id}.json",
             # Reconstructible by definition, and rewritten on every poll: durability
             # here would buy nothing and cost an fsync per status check.
             {
@@ -159,19 +163,48 @@ class AgacBatchClient(BaseBatchClient):
         )
 
     @classmethod
-    def _forget_state(cls, batch_id: str) -> None:
-        """Drop a batch's record.
+    def release_batch(cls, batch_id: str) -> None:
+        """Drop a batch's record, once nothing can be sent back to the batch.
 
-        Deliberately not called when results are read. A read hands bytes to a
-        caller that still has to write, parse, reconcile and evaluate them, and
-        any of that can fail with the entry already marked done — so a re-run
-        comes back for the same batch. Forgetting it there turns a repeatable
-        read into `Batch not found`, which is worse than the status this exists
-        to fix. Whose job it is to end the record's life is open.
+        Not when results are read: the caller still has to write, parse and
+        reconcile them, and a failure there brings the next run back for the same
+        batch — which a spent record answers with `Batch not found`.
+
+        The `.tmp` of a killed write holds the same payload under a name nothing
+        else looks for, so it goes with the record it was.
         """
-        (cls._state_dir() / f"{batch_id}.json").unlink(missing_ok=True)
+        state_dir = cls._state_dir()
+        # Every provider's ids reach this now. One that is not already a bare
+        # file name never named a record here, and reinterpreting it would reach
+        # a different batch's.
+        name = batch_id
+        if not name or name != Path(name).name:
+            return
+        (state_dir / f"{name}.json").unlink(missing_ok=True)
+        for partial in state_dir.glob(f"{glob.escape(name)}_*.tmp"):
+            partial.unlink(missing_ok=True)
         cls._batches.pop(batch_id, None)
         cls._tasks_by_batch.pop(batch_id, None)
+
+    @classmethod
+    def discard_partial_writes(cls) -> None:
+        """Drop every `.tmp` an interrupted write left behind.
+
+        A completed write renames its temp away, so one still sitting here
+        describes no batch anybody can reach. Except one a write is still
+        holding — taking that fails the write — and age tells them apart: a live
+        temp was touched now, an abandoned one whenever the process died.
+        """
+        cutoff = time.time() - _ABANDONED_WRITE_SECONDS
+        for partial in cls._state_dir().glob("*.tmp"):
+            try:
+                if partial.stat().st_mtime > cutoff:
+                    continue
+                partial.unlink(missing_ok=True)
+            except OSError as e:
+                # One unreadable or undeletable file is not a reason to leave the
+                # rest of a directory of payloads sitting there.
+                logger.debug("Could not reclaim a half-written record: %s", e)
 
     @classmethod
     def _load_state(cls, batch_id: str) -> MockBatchState | None:
@@ -401,6 +434,7 @@ class AgacBatchClient(BaseBatchClient):
         cls._tasks_by_batch.clear()
         for stale in cls._state_dir().glob("*.json"):
             stale.unlink(missing_ok=True)
+        cls.discard_partial_writes()
         logger.debug("AgacBatchClient state reset")
 
     @classmethod

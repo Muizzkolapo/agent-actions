@@ -35,6 +35,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
 )
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata
@@ -95,6 +96,8 @@ def process_recovery_batch(
             parent_file_name,
         )
         manager.remove_batch_job(file_name)
+        if entry.batch_id:
+            release_local_batch_record(entry.batch_id)
         return None
 
     agent_config = service._apply_workflow_session_id(agent_config, entry)
@@ -362,8 +365,25 @@ def cleanup_recovery(
     context: RecoveryContext,
     identity: BatchIdentity,
 ) -> None:
-    """Remove recovery batch entries from registry after finalization."""
+    """Drop the recovery entries this file spawned, and the records naming them.
+
+    An entry going means nothing can be sent back to the batch it named, so its
+    record has nothing left to say. Read before the removal, which is what names
+    them.
+
+    The parent entry is not one of these — it survives finalisation, and `agac
+    retry` replays the batch id it still holds.
+    """
+    spent = [
+        entry.batch_id
+        for entry in (context.manager.get_all_jobs() or {}).values()
+        if entry.batch_id and entry.parent_file_name == identity.file_name
+    ]
+
     context.service._cleanup_recovery_entries(context.manager, identity.file_name)
+
+    for batch_id in sorted(spent):
+        release_local_batch_record(batch_id)
 
 
 # ---------------------------------------------------------------------------
@@ -847,14 +867,21 @@ def register_recovery_batch(
         recovery_type=recovery_type,
         recovery_attempt=attempt,
     )
+    # A retried attempt number lands on the key its predecessor holds, and saving
+    # over it is the fourth way an entry stops naming a batch.
+    replaced = manager.batch_id_at(recovery_file_name)
     manager.save_batch_job(recovery_file_name, recovery_entry)
 
     # After the save, never before: a crash in between must leave the successor
     # registered, not leave the parent with no recovery at all.
+    if replaced and replaced != batch_id:
+        release_local_batch_record(replaced)
     for name, entry in manager.get_all_jobs().items():
         if entry.parent_file_name == parent_file_name and name != recovery_file_name:
             logger.info("Superseding recovery entry %s with %s", name, recovery_file_name)
             manager.remove_batch_job(name)
+            if entry.batch_id:
+                release_local_batch_record(entry.batch_id)
 
 
 def _remove_batch_placeholder(output_file: Path) -> None:

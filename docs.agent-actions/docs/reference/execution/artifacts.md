@@ -11,6 +11,10 @@ Agent Actions generates artifacts for debugging, auditing, and resuming interrup
 
 ```
 project/
+├── .agac/
+│   └── batch_state/                    # What an offline-provider batch was submitted with,
+│                                       # so the run that collects it can find it. Reclaimed
+│                                       # when the batch registry stops naming the batch.
 ├── artefact/
 │   ├── catalog.json                    # Project catalog (agac docs)
 │   ├── runs.json                       # Workflow execution history (agac run + agac docs)

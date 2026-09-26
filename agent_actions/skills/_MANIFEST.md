@@ -15,7 +15,7 @@ per provider (Claude/Codex). This package ships the `agac` skill.
 
 ## Project Surface
 
-This is a content-only module (no Python runtime code). The bundled documentation describes the following project paths and the helper scripts touch state under `agent_workflow/{workflow}/agent_io/`:
+This is a content-only module (no Python runtime code). The bundled documentation describes the following project paths; the helper scripts touch state under `agent_workflow/{workflow}/agent_io/`, and `--full` additionally reaches `.agac/` at the project root:
 
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
@@ -32,6 +32,7 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{source,store,target}/` | Writes (`--full` wipes) | — |
+| `scripts/reset_workflow.py` | `.agac/batch_state/` | Writes (`--full` reclaims) | — |
 | `scripts/inspect_action.py` | `agent_config/{workflow}.yml` | Reads (via `agac inspect`) | — |
 
 ## Dependencies

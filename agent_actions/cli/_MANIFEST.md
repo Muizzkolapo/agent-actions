@@ -116,6 +116,7 @@
 | `RunCommand.execute()` | `agent_io/target/{action}/` | Writes | — |
 | `RunCommand.execute()` | `agent_io/target/events.json` | Writes | — |
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
+| `RunCommand.execute()` | `.agac/batch_state/` | Deletes | `--fresh` |
 | `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
 | `RenderCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `RenderCommand.execute()` | `prompt_store/{workflow}.md` | Reads | — |
@@ -129,6 +130,7 @@
 | `clean_cli()` | `agent_io/source/` | Writes | — |
 | `clean_cli()` | `agent_io/staging/` | Writes | — |
 | `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
+| `clean_cli()` | `.agac/batch_state/` | Deletes | `--all` |
 
 ## Dependencies
 

@@ -13,6 +13,10 @@ from rich.console import Console
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
+from agent_actions.llm.providers.local_batch_records import (
+    discard_partial_batch_records,
+    release_local_batch_record,
+)
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
@@ -127,12 +131,32 @@ class AgentWorkflow:
                     "checkpoints",
                     lambda a=action_name: self.storage_backend.clear_checkpoint_records(a),
                 ),
-                ("batch_state", lambda a=action_name: self.storage_backend.clear_batch_state(a)),
             ]:
                 try:
                     op_call()
                 except Exception as e:
                     logger.warning("Failed to clear %s for %s: %s", op_name, action_name, e)
+
+            # The registry is the only thing naming these batches. Clearing it
+            # over a record that would not go strands that payload for good, so
+            # the name stays and the next --fresh can try again.
+            try:
+                released = self._release_batch_records(action_name)
+            except Exception as e:
+                # Reports rather than raises, like every clear above — and keeps
+                # the registry, since a read that failed proves nothing went.
+                logger.warning("Failed to reclaim batch records for %s: %s", action_name, e)
+                released = False
+            if released:
+                try:
+                    self.storage_backend.clear_batch_state(action_name)
+                except Exception as e:
+                    logger.warning("Failed to clear batch_state for %s: %s", action_name, e)
+            else:
+                self.console.print(
+                    f"[yellow]--fresh: kept the batch registry for {action_name} — a provider's "
+                    f"local record would not go, and the registry is what names it[/yellow]"
+                )
 
             batch_dir = target_dir / action_name / "batch"
             if batch_dir.is_dir():
@@ -142,6 +166,10 @@ class AgentWorkflow:
                             f.unlink(missing_ok=True)
                         except OSError:
                             logger.debug("Could not delete batch artifact: %s", f)
+
+        # Not per action: a half-written record names no batch, so it belongs to
+        # no action either. Reports rather than raises, like every clear above.
+        discard_partial_batch_records()
 
         try:
             self.storage_backend.clear_source_data()
@@ -162,6 +190,29 @@ class AgentWorkflow:
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
+        )
+
+    def _release_batch_records(self, action_name: str) -> bool:
+        """Reclaim what a provider recorded about this action's batches.
+
+        Before the registry goes — the opposite order to the overwrite sites, and
+        for the same reason: both pick the failure that can be undone. Clearing
+        first could leave records nothing names and no command can reach; this
+        way round, a registry naming gone records is repaired by another --fresh.
+
+        Scoped to this action like every other clear here, since the records sit
+        in one directory for the whole project.
+        """
+        # Ids as stored, not parsed entries: the registry this is about to delete
+        # may hold one a `BatchJobEntry` refuses, and refusing to read it here
+        # would strand its record for good.
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        return all(
+            [
+                release_local_batch_record(batch_id)
+                for batch_id in BatchRegistryManager.batch_ids(self.storage_backend, action_name)
+            ]
         )
 
     def _reset_retryable_actions(self) -> None:

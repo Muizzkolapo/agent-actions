@@ -237,3 +237,54 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def test_all_discards_half_written_records(tmp_path, monkeypatch):
+    """A `.tmp` written before its registry entry was saved is named by nothing,
+    so the per-batch release cannot reach it — and this command is one of the
+    two that make that orphan permanent."""
+    swept = []
+    monkeypatch.setattr(
+        "agent_actions.llm.providers.local_batch_records.discard_partial_batch_records",
+        lambda: swept.append(True),
+    )
+    cleaner, _agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+
+    cleaner.run()
+
+    assert swept == [True]
+
+
+def test_all_keeps_the_store_when_a_record_would_not_go(tmp_path, monkeypatch, capsys):
+    """The store is the only thing naming those batches. Removing it over a
+    record that stayed puts the payload out of reach of every command — where
+    keeping it costs a second run of the same command."""
+    cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+    monkeypatch.setattr(Cleaner, "_release_batch_records", lambda self, io_dir: False)
+
+    cleaner.run()
+
+    names = _cleaned_names(agent_manager)
+    assert "store" not in names, f"the store went while a record was still there: {names}"
+    assert names == {"source", "target", "staging"}
+    assert "Keeping the store" in capsys.readouterr().out
+
+
+def test_all_keeps_whatever_the_backend_calls_its_store(tmp_path, monkeypatch):
+    """The keep decision has to name the same paths `paths_to_wipe` did, or a
+    backend that stores elsewhere loses it while the decision says otherwise."""
+    elsewhere = tmp_path / "agent_io" / "vault"
+    elsewhere.mkdir(parents=True)
+
+    class _Elsewhere(SQLiteBackend):
+        @classmethod
+        def paths_to_wipe(cls, io_dir: Path) -> list[Path]:
+            return [io_dir / "vault"]
+
+    monkeypatch.setitem(BACKENDS, "sqlite", _Elsewhere)
+    cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+    monkeypatch.setattr(Cleaner, "_release_batch_records", lambda self, io_dir: False)
+
+    cleaner.run()
+
+    assert "vault" not in _cleaned_names(agent_manager)

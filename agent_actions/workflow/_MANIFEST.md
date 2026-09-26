@@ -55,6 +55,7 @@ actions would produce garbage. `_handle_exhausted_policy` in `ResultCollector` h
 | `AgentWorkflow.__init__()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions[]`, `defaults` |
 | `AgentWorkflow.__init__()` | `.env` | Reads | — |
 | `AgentWorkflow.run()` | `agent_io/target/{action}/` | Writes | — |
+| `AgentWorkflow._clear_for_fresh_run()` | `.agac/batch_state/` | Deletes | `--fresh` |
 | `AgentWorkflow._run_storage_maintenance()` | `agent_config/{workflow}.yml` | Reads | `storage.prompt_trace_retention_runs`, `storage.source_data_ttl_days` (off the raw config dict, not the validated model) |
 | `AgentWorkflow.async_run()` | `agent_io/target/{action}/` | Writes | — |
 | `load_workflow_configs()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions[]`, `defaults` |

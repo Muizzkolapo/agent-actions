@@ -136,7 +136,7 @@ Executable helpers an AI assistant can run on the user's behalf:
 | File | Purpose |
 |------|---------|
 | `inspect_action.py` | Runs `agac inspect action` and `agac inspect context` for one action — shows config, dependencies, observe fields, schema, and template variable resolution side-by-side |
-| `reset_workflow.py` | Soft reset (clear `.agent_status.json`) or `--full` reset (wipe `source/`, `store/`, `target/`, status) for one workflow |
+| `reset_workflow.py` | Soft reset (clear `.agent_status.json`) or `--full` reset (wipe `source/`, `store/`, `target/`, status, and reclaim what a provider recorded locally about this workflow's batches under `.agac/`) for one workflow |
 
 Both scripts self-locate the project root by walking up for `agent_actions.yml`, so they work from any subdirectory of a user project.
 

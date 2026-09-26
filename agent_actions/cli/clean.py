@@ -16,7 +16,8 @@ from agent_actions.llm.realtime.cleaner import Cleaner
         "agent_io/source/, which earlier versions wrote and this one does not, "
         "so a project that never had one has nothing to clean; generated output "
         "under agent_io/target/ requires --target, and --all removes "
-        "everything including staging and the durable store."
+        "everything including staging and the durable store, and reclaims what "
+        "a provider recorded locally about this workflow's batches."
     ),
 )
 @click.option(
@@ -44,7 +45,9 @@ from agent_actions.llm.realtime.cleaner import Cleaner
     default=False,
     help=(
         "Remove all agent_io directories including target, staging and any "
-        "backend-owned store contents — unrecoverable. Confirms unless --force."
+        "backend-owned store contents, and reclaim what a provider recorded "
+        "locally about this workflow's batches — unrecoverable. Confirms "
+        "unless --force."
     ),
 )
 @handles_user_errors("clean")

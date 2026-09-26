@@ -24,6 +24,7 @@ from agent_actions.llm.batch.processing.batch_passthrough_builder import (
     BatchPassthroughBuilder,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.logging.events.batch_events import (
@@ -407,7 +408,16 @@ class BatchSubmissionService:
                     is_versioned_agent=agent_config.get("is_versioned_agent"),
                     version_base_name=agent_config.get("version_base_name"),
                 )
+                # A FAILED or CANCELLED entry falls through the resubmission
+                # guard and is overwritten here; the batch it named stops being
+                # reachable at that moment.
+                superseded = manager.batch_id_at(file_key)
                 manager.save_batch_job(file_key, entry)
+                # After the save, never before: the successor has to be recorded
+                # before anything is thrown away, or a crash in between leaves a
+                # batch this run paid for named by nothing.
+                if superseded and superseded != batch_id:
+                    release_local_batch_record(superseded)
 
             return SubmissionResult(batch_id=batch_id)
 

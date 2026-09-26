@@ -42,7 +42,7 @@ agac run -a my_workflow --execution-mode parallel
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files — the same unit `file_limit` uses — whatever the workflow config sets. It counts files the action got through, so a file that fails does not spend the budget and a directory of unreadable files is attempted in full. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
-| `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution. Gives a clean slate for debugging. |
+| `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json`) before execution, and discard what the provider recorded locally about every batch this workflow submitted, collected or not. Gives a clean slate for debugging. |
 | `--verify-keys` | Verify API keys before execution |
 
 ## Running a project smaller than it is

@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
@@ -37,6 +37,7 @@ class BatchRegistryManager:
         self._action_name = action_name
         self._metadata_key = f"{self.METADATA_KEY_PREFIX}{action_name}"
         self._cache: dict[str, BatchJobEntry] | None = None
+        self._unreadable: dict[str, Any] = {}
         self._batch_id_index: dict[str, str] | None = None
         self._lock = threading.Lock()
         logger.debug("Initialized BatchRegistryManager for action %s", action_name)
@@ -46,6 +47,54 @@ class BatchRegistryManager:
         """Return the action names that have a batch registry in the given backend."""
         keys = storage_backend.list_metadata_prefix(cls.METADATA_KEY_PREFIX)
         return [k.removeprefix(cls.METADATA_KEY_PREFIX) for k in keys]
+
+    def batch_id_at(self, file_name: str) -> str | None:
+        """The batch id this key names, whether or not the entry parses.
+
+        An overwrite has to release what it displaces, and `get_batch_job`
+        answers None for an entry the load could not read — which would let the
+        record of a batch nothing names any more sit there for good.
+
+        "Could not read" here is the entry a field or an enum value made
+        unusable, which `_load_registry` keeps. A retired recovery type is not
+        one of those: that refuses the whole registry, so this raises with it.
+        """
+        with self._lock:
+            entry = self._get_cache().get(file_name)
+            if entry is not None:
+                return entry.batch_id
+            stored = self._unreadable.get(file_name)
+            if isinstance(stored, dict):
+                batch_id = stored.get("batch_id")
+                if isinstance(batch_id, str):
+                    return batch_id
+            return None
+
+    @classmethod
+    def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
+        """Every batch id this action's registry names, read as stored.
+
+        Not through ``BatchJobEntry``: a retired recovery type refuses the whole
+        registry and a spoiled entry is skipped, so a caller about to delete the
+        registry would never learn the ids it was holding. Anything unreadable
+        reads as no ids rather than an error — a registry nothing can read names
+        no batch anything could reclaim.
+        """
+        raw = storage_backend.load_metadata(cls.METADATA_KEY_PREFIX + action_name)
+        if not isinstance(raw, str):
+            return []
+        try:
+            stored = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error("Corrupted registry metadata for %s: %s", action_name, e)
+            return []
+        if not isinstance(stored, dict):
+            return []
+        return [
+            entry["batch_id"]
+            for entry in stored.values()
+            if isinstance(entry, dict) and isinstance(entry.get("batch_id"), str)
+        ]
 
     # ============================================================
     # PUBLIC API - Thread-safe operations
@@ -67,7 +116,12 @@ class BatchRegistryManager:
     def remove_batch_job(self, file_name: str) -> bool:
         with self._lock:
             cache = self._get_cache()
+            unreadable = self._unreadable.pop(file_name, None)
             if file_name not in cache:
+                if unreadable is not None:
+                    self._persist_registry(cache)
+                    logger.info("Removed unreadable batch job entry for %s", file_name)
+                    return True
                 return False
             old_entry = cache[file_name]
             if self._batch_id_index is not None and old_entry.batch_id in self._batch_id_index:
@@ -263,6 +317,7 @@ class BatchRegistryManager:
                 ) from e
             except (TypeError, ValueError) as e:
                 logger.warning("Invalid entry for %s in registry: %s", file_name, e)
+                self._unreadable[file_name] = entry_dict
                 continue
 
         logger.debug("Loaded %d entries from registry", len(registry))
@@ -274,7 +329,12 @@ class BatchRegistryManager:
         return registry
 
     def _persist_registry(self, registry: dict[str, BatchJobEntry]) -> None:
-        raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
+        # Entries the load could not read are written back as they came. Dropping
+        # one here would erase the only record of a batch id, and the id is what
+        # anything reclaiming that batch's payload has to go on. A parsed entry
+        # under the same key supersedes it, which is what saving over one means.
+        raw_data = dict(self._unreadable)
+        raw_data.update({file_name: entry.to_dict() for file_name, entry in registry.items()})
         self._backend.save_metadata(self._metadata_key, json.dumps(raw_data, ensure_ascii=False))
         logger.debug(
             "Registry persisted for action %s (%d entries)", self._action_name, len(registry)

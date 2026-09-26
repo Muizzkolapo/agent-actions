@@ -15,6 +15,7 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 | `error_wrapper.py` | Module | Unified vendor error wrapping: maps SDK exceptions to RateLimitError/NetworkError/VendorAPIError. | `errors`, `llm.providers` |
 | `failure_injection.py` | Module | Utility to simulate latency/failure scenarios across providers. | `logging`, `llm.providers` |
 | `generation_params.py` | Module | Shared helper (`extract_generation_params`) for extracting temperature/max_tokens/top_p/stop from agent config with vendor-specific key mapping. | `llm.providers` |
+| `local_batch_records.py` | Module | Reclaiming what a provider recorded in the project about a batch the registry no longer names. Only the agac provider records one; every other keeps its copy at the vendor. | `llm.batch`, `llm.providers` |
 | `mixins.py` | Module | Shared mixins for access token handling, logging, context propagation. | `llm.providers` |
 | `usage_tracker.py` | Module | Central usage tracking and quota summary used by providers. | `logging`, `llm.providers` |
 | `agac/__init__.py` | Module | `agac` (Claude-branded) provider helpers (callbacks, config). | `llm.providers` |
