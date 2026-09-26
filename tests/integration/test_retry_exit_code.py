@@ -1,15 +1,12 @@
 """`agac retry` reports a failed repair in its exit code, the way `agac run` does.
 
-The two commands classify the finished workflow identically — complete, terminal
-with a failed action, or paused on a batch — and `run` exits 1 on the failed one.
-`retry` computed the same answer, recorded it against the run, and then returned
-success, so a repair that fixed nothing was indistinguishable from one that worked
-to a script, a CI job, or a loop.
+`retry` classified the finished workflow exactly as `run` does and recorded the
+answer against the run, then returned success regardless — so a repair that fixed
+nothing read the same as one that worked to a script, a CI job, or a loop.
 
-What counts as failure is settled by `run` and not re-opened here: a *record* that
-failed inside an action that still completed leaves the action
-``completed_with_failures``, which both commands call success. A failed *action*
-is the non-zero case.
+Which outcomes count as failure is settled by `run` and not re-opened here: a
+record that failed inside an action that still completed leaves the action
+``completed_with_failures``, which both commands call success.
 """
 
 import json
