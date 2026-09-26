@@ -19,6 +19,7 @@ the same three checks for the merge walk.
 
 import json
 import stat
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -136,7 +137,9 @@ class TestTheHelperSeparatesNotAFileFromCannotTell:
         """And for a path a previous pass already took."""
         input_dir = _staging(tmp_path, dangling=("gone.json",))
 
-        assert should_skip_item(input_dir / "gone.json", input_dir, {"gone.json"}) is True
+        processed = {Path("gone.json")}
+
+        assert should_skip_item(input_dir / "gone.json", input_dir, processed) is True
 
     def test_a_readable_file_is_still_processed(self, tmp_path):
         """Control: the happy path must not become a loss."""

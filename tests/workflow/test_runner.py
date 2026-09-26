@@ -299,20 +299,22 @@ class TestCollectFilesFromUpstream:
     def test_single_dir_with_files(self, runner, tmp_path):
         _make_file(tmp_path / "a.json")
         _make_file(tmp_path / "sub" / "b.json")
-        result = collect_files_from_upstream([str(tmp_path)])
+        result, lost = collect_files_from_upstream([str(tmp_path)])
+        assert lost == []
         assert len(result) == 2
         assert Path("a.json") in result
         assert Path("sub/b.json") in result
 
     def test_nonexistent_dir_skipped(self, runner, tmp_path):
-        result = collect_files_from_upstream([str(tmp_path / "nope")])
-        assert result == {}
+        result, lost = collect_files_from_upstream([str(tmp_path / "nope")])
+        assert (result, lost) == ({}, [])
 
     def test_skips_batch_and_dotfiles(self, runner, tmp_path):
         _make_file(tmp_path / "batch" / "x.json")
         _make_file(tmp_path / ".hidden")
         _make_file(tmp_path / "good.json")
-        result = collect_files_from_upstream([str(tmp_path)])
+        result, lost = collect_files_from_upstream([str(tmp_path)])
+        assert lost == [], "a dotfile and a batch dir are deliberate skips, not losses"
         assert len(result) == 1
         assert Path("good.json") in result
 
@@ -321,7 +323,7 @@ class TestCollectFilesFromUpstream:
         dir2 = tmp_path / "dir2"
         _make_file(dir1 / "shared.json", "one")
         _make_file(dir2 / "shared.json", "two")
-        result = collect_files_from_upstream([str(dir1), str(dir2)])
+        result, _lost = collect_files_from_upstream([str(dir1), str(dir2)])
         assert len(result) == 1
         assert len(result[Path("shared.json")]) == 2
 
