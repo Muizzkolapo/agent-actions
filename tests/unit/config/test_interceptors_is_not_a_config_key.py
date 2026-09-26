@@ -85,6 +85,10 @@ def _assert_says_why(message, surface):
         assert phrase in message, (
             f"the {surface} refusal does not say why, so it reads as a typo: {message!r}"
         )
+    assert surface in message, (
+        f"the refusal does not say which block holds the key, so a project whose "
+        f"{surface} is in another file sends the reader to the wrong one: {message!r}"
+    )
 
 
 @pytest.mark.parametrize("level", ["action", "defaults"])
@@ -103,13 +107,17 @@ def test_a_workflow_carrying_interceptors_is_refused_with_the_reason(level):
 
 
 def test_the_refusal_names_the_action_it_came_from():
-    """pydantic locates the error as `actions.0`; a workflow of thirty needs the name."""
+    """pydantic locates the error as `actions.0`; a workflow of thirty needs the name.
+
+    Read off the error's own message rather than the rendered string, which also
+    echoes the offending input and would carry the name whatever the message said.
+    """
     with pytest.raises(ValidationError) as caught:
         WorkflowConfig.model_validate(
             _workflow(action={"name": "review_extraction", "interceptors": BLOCK})
         )
 
-    assert "review_extraction" in str(caught.value).split("input_value")[0]
+    assert "review_extraction" in caught.value.errors()[0]["msg"]
 
 
 def test_the_expander_hands_no_interceptors_to_the_agent():
