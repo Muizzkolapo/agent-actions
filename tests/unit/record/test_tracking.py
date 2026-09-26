@@ -136,3 +136,53 @@ class TestFileUDFResultValidation:
         result = FileUDFResult(outputs=[{"source_index": None, "data": {"q": "Q1"}}])
 
         assert result.outputs[0]["source_index"] is None
+
+    @pytest.mark.parametrize(
+        ("source_index", "shown"),
+        [
+            ([None], "None"),
+            ([None, 0], "None"),
+            ([True], "True"),
+            (True, "True"),
+            (False, "False"),
+            (["0"], "'0'"),
+            ([1.0], "1.0"),
+            ([-1], "-1"),
+            (-1, "-1"),
+        ],
+        ids=[
+            "none-in-a-list",
+            "none-before-a-real-position",
+            "bool-in-a-list",
+            "bool-scalar",
+            "false-scalar",
+            "string-digit",
+            "float",
+            "negative",
+            "negative-scalar",
+        ],
+    )
+    def test_a_position_that_cannot_be_one_is_refused(self, source_index, shown):
+        """None and the bools were the quiet ones: a None took the first input's
+        namespaces under a minted guid, and True indexed input 1 — both with no error,
+        and `[None, 0]` discarded the real contributor it was given."""
+        with pytest.raises(ValueError) as caught:
+            FileUDFResult(outputs=[{"source_index": source_index, "data": {"q": "Q1"}}])
+
+        message = str(caught.value)
+        assert "output[0]" in message, message
+        assert shown in message, f"the refusal has to show what it objected to: {message}"
+
+    def test_an_index_past_the_end_is_left_to_the_run(self):
+        """Control, and this check's boundary: how many inputs there are is not knowable
+        here, and the run already handles an unresolvable contributor by accounting for
+        nobody — so range stays a runtime concern while type and sign do not."""
+        result = FileUDFResult(outputs=[{"source_index": [0, 99], "data": {"q": "Q1"}}])
+
+        assert result.outputs[0]["source_index"] == [0, 99]
+
+    def test_zero_is_not_mistaken_for_a_missing_position(self):
+        """Control: 0 is falsy and is the commonest real position."""
+        result = FileUDFResult(outputs=[{"source_index": 0, "data": {"q": "Q1"}}])
+
+        assert result.outputs[0]["source_index"] == 0
