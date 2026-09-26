@@ -21,8 +21,11 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.record.reasons import BATCH_ABANDONED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FAILED,
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
@@ -325,9 +328,12 @@ class RetryCommand:
         listing = ", ".join(f"{batch_id} ({action})" for action, batch_id in sorted(in_flight))
 
         if self.args.abandon_in_flight:
+            stranded = self._strand_deferred_records(backend, {action for action, _ in in_flight})
             self.console.print(
                 f"\n[yellow]Abandoning {len(in_flight)} batch job(s) still in flight: "
-                f"{listing}. Whatever they return will not be collected.[/yellow]"
+                f"{listing}. Whatever they return will not be collected. "
+                f"{stranded} record(s) waiting on them are marked failed so a later "
+                f"retry can still reach them.[/yellow]"
             )
             return
 
@@ -346,6 +352,34 @@ class RetryCommand:
             f"{len(in_flight)} batch job(s) in flight ({listing}). Their results would "
             f"be lost to this repair's own submission. {remedy}"
         )
+
+    @staticmethod
+    def _strand_deferred_records(backend, actions: set[str]) -> int:
+        """Move records waiting on an abandoned batch to a disposition retry can see.
+
+        ``deferred`` is left out of ``FAILURE_DISPOSITIONS`` because it means a
+        batch is in flight that will resolve the record. Abandoning that batch
+        ends the flight without ending the wait, so the record becomes invisible
+        to ``agac retry`` and a no-op for ``agac run`` — reachable only by
+        ``--fresh``, which is the loss this flag exists to avoid. Only the records
+        the caller did not name are affected; the named ones are cleared below in
+        the ordinary way.
+        """
+        stranded = 0
+        for action in sorted(actions):
+            for row in backend.get_disposition(action, disposition=DISPOSITION_DEFERRED):
+                record_id = row.get("record_id")
+                if not record_id or record_id == NODE_LEVEL_RECORD_ID:
+                    continue
+                backend.set_disposition(
+                    action,
+                    record_id,
+                    DISPOSITION_FAILED,
+                    reason=BATCH_ABANDONED,
+                    detail="the batch holding this record was abandoned by agac retry",
+                )
+                stranded += 1
+        return stranded
 
     def _records_this_repair_may_process(
         self,
