@@ -3,7 +3,7 @@
 import json
 from collections import Counter
 
-from agent_actions.tooling.docs.generator import CatalogGenerator
+from agent_actions.tooling.docs.generator import CatalogGenerator, _merge_event_tails
 from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
 from agent_actions.tooling.docs.scanner.data_scanners import scan_runs
 
@@ -108,6 +108,20 @@ class TestCatalogGeneratorHappyPath:
         gen = _make_generator(project_path="/")
         result = gen.generate(**_empty_inputs())
         assert result["metadata"]["project_name"] == ""
+
+
+def _stream_rows(source: str, level: str, count: int) -> list[dict]:
+    """Rows as a scanner hands them over: oldest first, each with its own `seq`."""
+    return [
+        {
+            "seq": i,
+            "level": level,
+            "message": f"{source} {level} {i}",
+            "meta": {"timestamp": f"2026-09-22T10:00:{i % 60:02d}.{i:06d}Z"},
+            "data": {},
+        }
+        for i in range(count)
+    ]
 
 
 def _wf_events(
@@ -446,6 +460,57 @@ class TestCatalogGeneratorProblemsFirst:
 
         assert [e["seq"] for e in logs_data["events"]] == [0]
         assert "id" not in logs_data["events"][0]
+
+
+class TestEventWindowInvariants:
+    """Whatever the mix of levels across logs, the window holds at most the limit,
+    each row once, newest first. The reserve arithmetic has to hold at the edges
+    too — an all-problem project must not strand the recency half, and one rare
+    error among routine rows must not claim it."""
+
+    SHAPES = {
+        "one empty source": [("a", [])],
+        "a single log of nothing but problems": [("a", ("error", 500))],
+        "a single log of nothing but routine rows": [("a", ("info", 500))],
+        "problems in every log": [(f"w{i}", ("warn", 200)) for i in range(6)],
+        "routine rows in every log": [(f"w{i}", ("debug", 200)) for i in range(6)],
+        "the budget running out mid-cycle": [(f"w{i}", ("error", 7)) for i in range(30)],
+        "one error among routine rows": [("a", ("error", 1)), ("b", ("info", 500))],
+        "one routine row among problems": [("a", ("info", 1)), ("b", ("warn", 500))],
+        "fewer rows than the limit": [("a", ("error", 3)), ("b", ("info", 4))],
+    }
+
+    def _sources(self, shape):
+        out = []
+        for name, spec in shape:
+            if not spec:
+                out.append((name, []))
+                continue
+            level, count = spec
+            out.append((name, _stream_rows(name, level, count)))
+        return out
+
+    def test_the_window_holds_at_most_the_limit(self):
+        for label, shape in self.SHAPES.items():
+            sources = self._sources(shape)
+            window = _merge_event_tails(sources, 100)
+            assert len(window) == min(100, sum(len(r) for _, r in sources)), label
+
+    def test_no_row_appears_twice_whatever_the_mix(self):
+        for label, shape in self.SHAPES.items():
+            ids = [e["id"] for e in _merge_event_tails(self._sources(shape), 100)]
+            assert len(set(ids)) == len(ids), label
+
+    def test_the_window_is_newest_first_whatever_the_mix(self):
+        for label, shape in self.SHAPES.items():
+            stamps = [e["meta"]["timestamp"] for e in _merge_event_tails(self._sources(shape), 100)]
+            assert stamps == sorted(stamps, reverse=True), label
+
+    def test_a_lone_error_survives_a_log_full_of_routine_rows(self):
+        window = _merge_event_tails(self._sources(self.SHAPES["one error among routine rows"]), 100)
+        levels = Counter(e["level"] for e in window)
+
+        assert levels == {"info": 99, "error": 1}
 
 
 class TestCatalogContractWithTheDashboard:
