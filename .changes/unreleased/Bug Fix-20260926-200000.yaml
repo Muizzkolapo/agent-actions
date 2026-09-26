@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The CLI retry reference linked `run_mode: batch` to `../configuration/run-mode`, a page that has never existed in the repository. Docusaurus treats a broken link as a build failure, so the docs site stopped deploying: every `Deploy Docs` run since the link was introduced has failed, and the published site has been serving a stale build. The link now points at the Run Modes reference, which is where run modes are actually documented. Found only because the workflow runs on push to main and not on pull requests, so no PR can catch a broken link."
+time: 2026-09-26T20:00:00Z
