@@ -300,6 +300,26 @@ class TestCatalogGeneratorProblemsFirst:
         assert levels["warn"] > 0
         assert levels["info"] > 0
 
+    def test_warnings_do_not_crowd_out_errors_across_logs(self):
+        """Each log's own budget keeps its errors, and the merge must not undo
+        that: warnings are newer and far more numerous, so draining a shared
+        problem queue newest-first loses the errors a second time."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        runs = {}
+        for name in ("alpha", "beta", "gamma"):
+            wf = _wf_events(name, list(range(4)), hour=9, level="error")
+            wf["events"] += _wf_events(
+                name, list(range(4, 4 + EVENT_TAIL_LIMIT)), hour=11, level="warn"
+            )["events"]
+            runs[name] = wf
+        inputs["runs_data"] = runs
+
+        events = gen.generate(**inputs)["logs"]["events"]
+        errors = Counter(e["id"].rsplit(":", 1)[0] for e in events if e["level"] == "error")
+
+        assert errors == {"workflow:alpha": 4, "workflow:beta": 4, "workflow:gamma": 4}
+
     def test_a_quiet_project_still_fills_the_window_with_recent_rows(self):
         """The reserve works the other way too: a share nobody claims is not lost."""
         gen = _make_generator()
