@@ -168,16 +168,19 @@ class RetryCommand:
 
         self._display_retry_plan(from_action, target_records, execution_order, failures)
 
+        from_idx = execution_order.index(from_action)
+        downstream_actions = execution_order[from_idx:]
+
+        # Above the dry-run return as well as the manifest: a refusal costs nothing
+        # here, and a dry run that withheld it would describe a retry that is not
+        # going to happen.
+        self._settle_batches_in_flight(backend, downstream_actions)
+
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
             return
 
-        from_idx = execution_order.index(from_action)
-        downstream_actions = execution_order[from_idx:]
         record_ids = {r["record_id"] for r in target_records}
-
-        # Before the manifest, so a refusal costs nothing: nothing is cleared yet.
-        self._refuse_while_a_batch_is_in_flight(backend, downstream_actions)
 
         logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
@@ -294,31 +297,55 @@ class RetryCommand:
 
         self.console.print("\n[green]Retry complete.[/green]")
 
-    @staticmethod
-    def _refuse_while_a_batch_is_in_flight(backend, actions: list[str]) -> None:
-        """Abort if any action this repair re-runs still has a batch out at the provider.
+    def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
+        """Decide what a batch still out at the provider means for this repair.
 
-        That batch is authoritative for a rewrite of the file it was submitted
-        for. A repair starting on top of it submits a second one over the same
-        file, and whichever is collected last wins — the other is paid for and
-        its answers are discarded. Collecting first costs a command and settles
-        it, so the repair says that rather than guessing.
+        It owns the records it was submitted for. A repair starting on top of one
+        submits a second batch over the same file, and whichever is collected last
+        wins while the other is paid for and discarded — so by default this
+        refuses, before anything is cleared.
+
+        Two exceptions. A dry run reports the refusal instead of raising: it is
+        the documented way to see what a retry would do, and it changes nothing
+        either way. And ``--abandon-in-flight`` proceeds, because every remedy the
+        refusal names needs the provider to answer about the batch, which it
+        cannot when it has forgotten the id.
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        for action in actions:
-            in_flight = [
-                entry.batch_id
-                for entry in BatchRegistryManager(backend, action).get_all_jobs().values()
-                if entry.is_in_flight
-            ]
-            if in_flight:
-                raise click.ClickException(
-                    f"Action '{action}' has {len(in_flight)} batch job(s) in flight "
-                    f"({', '.join(sorted(in_flight))}). Their results would be lost to "
-                    f"this repair's own submission. Collect them first — run the "
-                    f"workflow again — then retry."
-                )
+        in_flight = [
+            (action, entry.batch_id)
+            for action in actions
+            for entry in BatchRegistryManager(backend, action).get_all_jobs().values()
+            if entry.is_in_flight
+        ]
+        if not in_flight:
+            return
+
+        listing = ", ".join(f"{batch_id} ({action})" for action, batch_id in sorted(in_flight))
+
+        if self.args.abandon_in_flight:
+            self.console.print(
+                f"\n[yellow]Abandoning {len(in_flight)} batch job(s) still in flight: "
+                f"{listing}. Whatever they return will not be collected.[/yellow]"
+            )
+            return
+
+        remedy = (
+            "Collect them first — run the workflow again — then retry. "
+            "If the provider no longer has them, pass --abandon-in-flight."
+        )
+        if self.args.dry_run:
+            self.console.print(
+                f"\n[yellow]This retry would be refused: {len(in_flight)} batch job(s) "
+                f"in flight ({listing}). {remedy}[/yellow]"
+            )
+            return
+
+        raise click.ClickException(
+            f"{len(in_flight)} batch job(s) in flight ({listing}). Their results would "
+            f"be lost to this repair's own submission. {remedy}"
+        )
 
     def _records_this_repair_may_process(
         self,
@@ -426,6 +453,12 @@ class RetryCommand:
     default=False,
     help="Show what would be retried without executing.",
 )
+@click.option(
+    "--abandon-in-flight",
+    is_flag=True,
+    default=False,
+    help="Retry even though a batch is still in flight, giving up its results.",
+)
 @handles_user_errors("retry")
 @requires_project
 def retry(
@@ -433,6 +466,7 @@ def retry(
     from_action: str | None,
     record: str | None,
     dry_run: bool,
+    abandon_in_flight: bool,
     project_root: Path | None = None,
 ) -> None:
     """Retry failed/exhausted records from a specific action forward."""
@@ -441,6 +475,7 @@ def retry(
         from_action=from_action,
         record=record,
         dry_run=dry_run,
+        abandon_in_flight=abandon_in_flight,
     )
     command = RetryCommand(args)
     command.execute(project_root=project_root)
