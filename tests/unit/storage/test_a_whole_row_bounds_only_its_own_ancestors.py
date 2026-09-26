@@ -1,0 +1,100 @@
+"""A row stored whole supersedes what came before it, not what ran beside it.
+
+Reconstruction treats an upstream row stored whole as a merge boundary and stops
+looking further back, because such a row carries the content of everything above
+it. That holds for an ancestor. It does not hold for a peer: two actions in the
+same execution level are both "upstream" of a later one, and neither carries the
+other's namespace, so bounding at one of them drops the other.
+
+The dependency graph makes every earlier level upstream of every later action, so
+a fan-in over parallel start nodes is the ordinary shape here, not a corner.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+
+def _backend(tmp_path, execution_order, dependency_graph):
+    b = SQLiteBackend(str(tmp_path / "agent_io" / "t.db"), "probe")
+    b.initialize()
+    b.save_metadata("execution_order", json.dumps(execution_order))
+    b.save_metadata("dependency_graph", json.dumps(dependency_graph))
+    return b
+
+
+def _row(content):
+    return [{"source_guid": "G0", "_state": "processed", "_schema_version": 1, "content": content}]
+
+
+class TestAFanInOverParallelStartNodes:
+    """Levels [[a1, b1], [c1]], which the graph records as c1 <- [a1, b1] and
+    b1 <- []. b1 is stored whole because nothing upstream holds its identity."""
+
+    @pytest.fixture
+    def fan_in(self, tmp_path):
+        b = _backend(tmp_path, ["a1", "b1", "c1"], {"a1": [], "b1": [], "c1": ["a1", "b1"]})
+        b.write_target(
+            "a1", "f.json", _row({"source": {"t": 1}, "a1": {"v": 1}}), is_first_action=True
+        )
+        b.write_target("b1", "f.json", _row({"source": {"t": 1}, "b1": {"v": 2}}))
+        b.write_target(
+            "c1",
+            "f.json",
+            _row({"source": {"t": 1}, "a1": {"v": 1}, "b1": {"v": 2}, "c1": {"v": 3}}),
+        )
+        return b
+
+    def test_the_peer_that_is_not_the_boundary_still_reaches_the_fan_in(self, fan_in):
+        assert sorted(fan_in.read_target("c1", "f.json")[0]["content"]) == [
+            "a1",
+            "b1",
+            "c1",
+            "source",
+        ]
+
+    def test_the_peers_own_namespaces_are_both_intact(self, fan_in):
+        content = fan_in.read_target("c1", "f.json")[0]["content"]
+
+        assert content["a1"] == {"v": 1}
+        assert content["b1"] == {"v": 2}
+
+
+class TestAnAncestorStoredWholeStillBounds:
+    """The other half: where the boundary is an ancestor, it must still cut. Its
+    row carries everything above it, and merging that content again would
+    resurrect namespaces it was stored without."""
+
+    @pytest.fixture
+    def chain(self, tmp_path):
+        b = _backend(tmp_path, ["a1", "a2", "a3"], {"a1": [], "a2": ["a1"], "a3": ["a1", "a2"]})
+        b.write_target(
+            "a1", "f.json", _row({"source": {"t": 1}, "a1": {"v": 1}}), is_first_action=True
+        )
+        # Stored whole and deliberately without a1: the boundary's promise.
+        b.write_target(
+            "a2",
+            "f.json",
+            [
+                {
+                    "source_guid": "G0",
+                    "_state": "processed",
+                    "_schema_version": 1,
+                    "_delta_mode": "full",
+                    "content": {"source": {"t": 1}, "a2": {"v": 2}},
+                }
+            ],
+        )
+        b.write_target("a3", "f.json", _row({"source": {"t": 1}, "a2": {"v": 2}, "a3": {"v": 3}}))
+        return b
+
+    def test_the_namespace_the_boundary_dropped_is_not_resurrected(self, chain):
+        assert sorted(chain.read_target("a3", "f.json")[0]["content"]) == [
+            "a2",
+            "a3",
+            "source",
+        ]
