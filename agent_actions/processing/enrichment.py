@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -18,9 +19,6 @@ from .types import ProcessingContext, ProcessingResult, ProcessingStatus
 
 logger = logging.getLogger(__name__)
 
-# Distinguishes "this row has no mapping" from "this row is mapped to no input".
-_UNMAPPED = object()
-
 
 class Enricher(ABC):
     """Base class for result enrichers."""
@@ -33,6 +31,33 @@ class Enricher(ABC):
 
 class LineageEnricher(Enricher):
     """Add lineage tracking to results."""
+
+    @staticmethod
+    def _producers_of(
+        index: int,
+        result: ProcessingResult,
+        context: ProcessingContext,
+        old_source_guid: str | None,
+    ) -> list[str]:
+        """Inputs the row at *index* consumed, whose identity it will no longer carry.
+
+        A record-mode expansion has no mapping and exactly one input, which the result
+        names; a FILE expansion has one mapping entry per row.
+        """
+        source_data = context.source_data or []
+        if result.source_mapping is None:
+            single = result.source_guid or old_source_guid
+            return [single] if single else []
+
+        mapped = result.source_mapping.get(index)
+        indices: Sequence[int | None] = mapped if isinstance(mapped, list) else (mapped,)
+        guids: list[str] = []
+        for idx in indices:
+            if isinstance(idx, int) and 0 <= idx < len(source_data):
+                guid = source_data[idx].get("source_guid")
+                if guid and guid not in guids:
+                    guids.append(guid)
+        return guids
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
         """Add lineage tracking using unified method."""
@@ -77,16 +102,14 @@ class LineageEnricher(Enricher):
                 item["source_guid"] = IDGenerator.generate_source_guid()
                 if old_source_guid and not item.get("parent_source_guid"):
                     item["parent_source_guid"] = old_source_guid
-                # Which input made this row: the guid being replaced is the
-                # producer's own, unless the row maps to no input — then that guid
-                # was minted by this action a step earlier and names no input.
-                mapped = (
-                    result.source_mapping.get(i, _UNMAPPED)
-                    if result.source_mapping is not None
-                    else _UNMAPPED
-                )
-                if old_source_guid and mapped is not None and not item.get("producer_source_guid"):
-                    item["producer_source_guid"] = old_source_guid
+                # The row is re-keyed, so the guid it carried no longer accounts for
+                # its producer. Read off the mapping, never off that guid — on a FILE
+                # expansion it was minted here a step earlier and names no input.
+                producers = self._producers_of(i, result, context, old_source_guid)
+                if producers:
+                    item["producer_source_guids"] = producers
+                else:
+                    item.pop("producer_source_guids", None)
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 

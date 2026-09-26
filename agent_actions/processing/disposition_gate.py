@@ -237,10 +237,10 @@ def build_carry_forward(
             chosen[rid] = index
         # An action minting an identity per row holds none carrying its input's, so
         # the rows it produced are the only place that input is named.
-        producer = record.get("producer_source_guid")
-        if producer in carry_ids:
+        produced_for = carry_ids.intersection(record.get("producer_source_guids") or ())
+        if produced_for:
             produced_indices.add(index)
-            producers_found.add(producer)
+            producers_found |= produced_for
     # Indices, so a row carried both ways is written once and a producer's rows keep
     # their place in the file rather than being appended after the direct matches.
     indices = sorted(set(chosen.values()) | produced_indices)

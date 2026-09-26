@@ -16,6 +16,8 @@ from typing import Any
 METADATA_KEYS: frozenset[str] = frozenset(
     {
         "source_guid",
+        "parent_source_guid",
+        "producer_source_guids",
         "lineage",
         "node_id",
         "metadata",

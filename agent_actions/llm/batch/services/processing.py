@@ -480,8 +480,12 @@ class BatchProcessingService:
         if not terminal_guids:
             return batch_output
 
-        # Only carry forward records that are NOT already in the batch output
+        # Only records NOT already in the batch output. An action minting an identity
+        # per row puts no input's guid on one, so without the producers a reprocessed
+        # record's stored rows are merged back beside their replacements.
         batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
+        for record in batch_output:
+            batch_guids |= set(record.get("producer_source_guids") or ())
         carry_guids = terminal_guids - batch_guids
 
         if not carry_guids:

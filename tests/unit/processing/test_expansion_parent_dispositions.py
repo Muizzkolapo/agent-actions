@@ -412,10 +412,13 @@ class TestAPlainCollapseIsAlsoResolvable:
         return [{"source_index": list(range(len(given))), "data": {"merged": "+".join(given)}}]
 
     def test_the_carrier_names_the_contributors_it_does_not_carry(self, run):
+        """Only the ones it does not carry: the row's own guid already accounts for the
+        first contributor, so listing it again would put a redundant entry on every
+        ordinary 1:1 row too."""
         output = run(_records("r0", "r1"), self._merge_all)
 
         assert output[0]["source_guid"] == "r0"
-        assert output[0].get("producer_source_guids") == ["r0", "r1"]
+        assert output[0].get("producer_source_guids") == ["r1"]
 
     def test_a_contributor_is_not_reprocessed(self, run):
         run(_records("r0", "r1"), self._merge_all)
