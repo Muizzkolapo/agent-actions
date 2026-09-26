@@ -83,6 +83,7 @@ def _reattach_source_guid(
     structured_data: list[dict],
     source_mapping: dict[int, int | list[int] | None] | None,
     original_data: list[dict],
+    version_base_name: str,
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
@@ -131,14 +132,12 @@ def _reattach_source_guid(
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.
         item["_delta_mode"] = "full"
-        # Distinct per row so a merge cannot fan them back into the one identity
-        # they were just given; derived, so two version branches still correlate
-        # and the pool keeps a key every record shares. A bare drop loses both.
-        # Appended rather than replaced: chained aggregations grow it a segment
-        # each, where replacing would collide this stage's rows with the last's.
+        # Distinct per row, derived so branches still correlate, appended so a
+        # chained aggregation grows a segment. Base name rather than action name:
+        # it separates siblings whose row indices would otherwise pair them.
         inherited_correlation = item.get("version_correlation_id")
         if inherited_correlation:
-            item["version_correlation_id"] = f"{inherited_correlation}#{i}"
+            item["version_correlation_id"] = f"{inherited_correlation}#{version_base_name}#{i}"
 
 
 def _record_producers(item: dict[str, Any], consumed: list[str]) -> None:
@@ -230,11 +229,14 @@ def reconcile_outputs(
     action_name: str,
     original_data: list[dict],
     version_merge: bool = False,
+    version_base_name: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[int, int | list[int] | None]]:
     """Core reconciliation of tool output to input records.
 
     Dispatches on response type (``FileUDFResult`` vs ``TrackedItem`` list),
-    builds records, and reattaches ``source_guid``.
+    builds records, and reattaches ``source_guid``. A minted row derives its
+    correlation id from ``version_base_name``; only a versioned action carries
+    one, and for any other its own name is already the base.
 
     Returns ``(structured_data, source_mapping)``.
     """
@@ -284,7 +286,9 @@ def reconcile_outputs(
             f"got {type(raw_response).__name__}"
         )
 
-    _reattach_source_guid(structured_data, source_mapping, original_data)
+    _reattach_source_guid(
+        structured_data, source_mapping, original_data, version_base_name or action_name
+    )
     return structured_data, source_mapping
 
 

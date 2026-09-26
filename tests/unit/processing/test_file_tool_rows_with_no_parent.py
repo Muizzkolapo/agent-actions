@@ -240,7 +240,7 @@ class TestAParentThatCarriesNoIdentity:
         )
 
         assert rows[0]["_delta_mode"] == "full"
-        assert rows[0]["version_correlation_id"] == "V1#0"
+        assert rows[0]["version_correlation_id"] == "V1#a2#0"
 
     def test_it_is_attributed_to_its_own_parent_not_to_the_first_input(self):
         """The stand-in only applies to a row that names no parent. This one

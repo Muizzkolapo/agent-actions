@@ -1161,7 +1161,7 @@ class TestReattachSourceGuid:
         mapping = {0: 0, 1: 1}
         original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-a"
         assert structured[1]["source_guid"] == "sg-b"
@@ -1175,7 +1175,7 @@ class TestReattachSourceGuid:
         mapping = {0: 0}
         original = [{"source_guid": "sg-input"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-already-set"
 
@@ -1183,7 +1183,7 @@ class TestReattachSourceGuid:
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [{"content": {"val": 1}}]
-        _reattach_source_guid(structured, None, [{"source_guid": "sg-1"}])
+        _reattach_source_guid(structured, None, [{"source_guid": "sg-1"}], "a2")
         # No mapping to a parent → born at the producer with a fresh guid, never blank.
         assert structured[0]["source_guid"]
         assert structured[0]["source_guid"] != "sg-1"
@@ -1192,7 +1192,7 @@ class TestReattachSourceGuid:
         from agent_actions.workflow.pipeline_file_mode import _reattach_source_guid
 
         structured = [{"content": {"val": 1}}]
-        _reattach_source_guid(structured, {0: 0}, [])
+        _reattach_source_guid(structured, {0: 0}, [], "a2")
         assert structured[0]["source_guid"]  # no inheritable parent → fresh producer guid
 
     def test_many_to_one_uses_first_parent(self):
@@ -1206,7 +1206,7 @@ class TestReattachSourceGuid:
             {"source_guid": "sg-third"},
         ]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-first"
 
@@ -1217,7 +1217,7 @@ class TestReattachSourceGuid:
         mapping = {0: 99}  # Out of bounds — no resolvable parent
         original = [{"source_guid": "sg-only"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         # Unresolvable parent → fresh producer guid, not the wrong parent's, never blank.
         assert structured[0]["source_guid"]
@@ -1240,7 +1240,7 @@ class TestReattachSourceGuid:
             {"source_guid": "sg-c"},
         ]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-a"
         assert structured[1]["source_guid"] == "sg-b"
@@ -1257,7 +1257,7 @@ class TestReattachSourceGuid:
         mapping: dict = {}  # Empty — no node_id matches
         original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-a"
         assert structured[1]["source_guid"] == "sg-b"
@@ -1274,7 +1274,7 @@ class TestReattachSourceGuid:
         mapping: dict = {}  # Empty — no node_id matches
         original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         # No safe positional parent → each gets a fresh, distinct producer guid,
         # never blank and never a mis-attributed parent guid.
@@ -1295,7 +1295,7 @@ class TestReattachSourceGuid:
         mapping = {0: 0, 1: None, 2: 1}
         original = [{"source_guid": "sg-a"}, {"source_guid": "sg-b"}]
 
-        _reattach_source_guid(structured, mapping, original)
+        _reattach_source_guid(structured, mapping, original, "a2")
 
         assert structured[0]["source_guid"] == "sg-a"
         # Synthetic — a new entity, gets a fresh producer guid (not a parent's), never blank.

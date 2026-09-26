@@ -197,6 +197,7 @@ class FileToolStrategy:
                 context.agent_name,
                 original_data,
                 version_merge=is_version_merge(context.agent_config),
+                version_base_name=context.agent_config.get("version_base_name"),
             )
 
             is_expansion = len(structured_data) > len(records)
