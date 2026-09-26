@@ -10,7 +10,7 @@ import yaml
 from pydantic import ValidationError
 
 from agent_actions.config import schema as schema_module
-from agent_actions.config.schema import VersionConfig, WorkflowConfig
+from agent_actions.config.schema import ActionConfig, VersionConfig, WorkflowConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -20,7 +20,12 @@ BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"
 
 # What the refusal has to say. A bare unknown-key error reads as a typo and sends
 # the author to spell it differently rather than to the mechanism that works.
-GUIDANCE = ("is no longer read", "configures nothing", "always parallel", "${i-1}")
+GUIDANCE = (
+    "is no longer read",
+    "configures nothing",
+    "always parallel",
+    "--execution-mode sequential",
+)
 
 
 def _action(**extra):
@@ -82,7 +87,9 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
             _render(tmp_path, workflow)
 
         message = str(caught.value)
-        assert "mode" in message
+        # Quoted: the hint ends in `--execution-mode sequential`, so a bare "mode"
+        # is satisfied by the advice and says nothing about naming the key.
+        assert "'mode'" in message
         assert "a1" in message, "a workflow of thirty actions needs to say which one"
         _says_why(message)
 
@@ -94,15 +101,27 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
         with pytest.raises(ConfigurationError) as caught:
             _render(tmp_path, workflow)
 
-        assert "parem" in str(caught.value)
+        message = str(caught.value)
+        assert "did you mean 'param'?" in message, (
+            f"a bare unknown-key error sends the author to guess again: {message!r}"
+        )
+        assert "valid versions keys are param, range" in message
 
-    def test_a_range_that_is_not_a_range_is_refused(self, tmp_path):
-        workflow = _workflow(actions=[_action(versions={"range": "one to three"})])
+    @pytest.mark.parametrize("bad", ["one to three", {"from": 1}], ids=["string", "mapping"])
+    def test_a_range_that_is_not_a_list_is_refused(self, tmp_path, bad):
+        workflow = _workflow(actions=[_action(versions={"range": bad})])
 
         with pytest.raises(ConfigurationError) as caught:
             _render(tmp_path, workflow)
 
-        assert "range" in str(caught.value), "the refusal has to name the key at fault"
+        assert "versions.range" in str(caught.value), "the refusal has to name the key"
+
+    def test_a_range_written_as_floats_still_counts(self, tmp_path):
+        """Pydantic coerces these, and the expansion reads what was validated —
+        reading the raw block instead turned a valid config into a bare TypeError."""
+        rendered = _render(tmp_path, _workflow(actions=[_action(versions={"range": [1.0, 3.0]})]))
+
+        assert [a["name"] for a in rendered["actions"]] == ["a1_1", "a1_2", "a1_3"]
 
     def test_a_range_of_names_still_expands_over_them(self, tmp_path):
         """The documented non-numeric form: the values become the version suffixes."""
@@ -130,7 +149,7 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
         with pytest.raises(ConfigurationError) as caught:
             _render(tmp_path, workflow)
 
-        assert "list all of them" in str(caught.value)
+        assert "no spelling here" in str(caught.value)
 
     @pytest.mark.parametrize("bad", [[], [3, 1]], ids=["empty", "descending"])
     def test_a_range_that_expands_to_nothing_is_refused(self, tmp_path, bad):
@@ -143,6 +162,28 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
 
         assert "removes the action" in str(caught.value)
 
+    @pytest.mark.parametrize("block", [{}, None], ids=["braces", "bare"])
+    def test_an_empty_block_declares_nothing_and_is_refused(self, tmp_path, block):
+        """It fans out nothing, which is the shape this whole change refuses.
+
+        `range` carrying a default means a missing field no longer refuses it, so
+        the block has to be refused for being empty rather than for being short.
+        """
+        workflow = _workflow(actions=[_action(versions=block)])
+
+        with pytest.raises(ConfigurationError) as caught:
+            _render(tmp_path, workflow)
+
+        message = str(caught.value)
+        assert "a1" in message
+        assert "fans out nothing" in message
+
+    def test_a_block_that_only_names_the_param_still_expands(self, tmp_path):
+        """The contrast: naming the param configures something, so it is not empty."""
+        rendered = _render(tmp_path, _workflow(actions=[_action(versions={"param": "round"})]))
+
+        assert [a["name"] for a in rendered["actions"]] == ["a1_1"]
+
     def test_a_key_only_the_static_analyser_looked_for_is_refused(self, tmp_path):
         """`items_from` was read out of this block and written by no workflow."""
         workflow = _workflow(
@@ -152,7 +193,9 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
         with pytest.raises(ConfigurationError) as caught:
             _render(tmp_path, workflow)
 
-        assert "items_from" in str(caught.value)
+        message = str(caught.value)
+        assert "items_from" in message
+        assert "valid versions keys are param, range" in message
 
     def test_a_block_with_no_range_expands_to_one_version(self, tmp_path):
         """`range` carries the default the expansion already applied."""
@@ -230,34 +273,67 @@ class TestTheExpanderHandsNeitherKeyToTheAgent:
         assert [a["_version_context"]["idx"] for a in agents] == [0, 1]
 
 
+class TestBothExpansionsRefuseTheSameBlock:
+    """One block must not mean two things depending on which expander ran.
+
+    The render step strips `versions:`, so the expander's own expansion is reached
+    only by callers handing over an unstripped block — and it used to accept
+    everything the render step refuses.
+    """
+
+    def _expand(self, versions):
+        return ActionExpander.expand_actions_to_agents(
+            {
+                "name": "wf",
+                "defaults": dict(BASE_DEFAULTS),
+                "actions": [_action(versions=versions)],
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "versions, expected",
+        [
+            ({"range": [1, 2], "mode": "sequential"}, "'mode'"),
+            ({"parem": "round", "range": [1, 2]}, "did you mean 'param'?"),
+            ({"range": []}, "removes the action"),
+            ({"range": [3, 1]}, "removes the action"),
+            ({"range": ["literal", "idiomatic"]}, "no spelling here"),
+        ],
+        ids=["mode", "typo", "empty", "descending", "name-pair"],
+    )
+    def test_the_expander_refuses_what_the_render_step_refuses(self, versions, expected):
+        with pytest.raises(ConfigurationError) as caught:
+            self._expand(versions)
+
+        assert expected in str(caught.value)
+
+    def test_a_sound_block_still_expands_there(self):
+        """Guard: the refusals above also pass if the expander stopped expanding."""
+        agents = self._expand({"param": "round", "range": [1, 2]})["wf"]
+
+        assert [a["name"] for a in agents] == ["a1_1", "a1_2"]
+
+
 class TestTheOrderingThatDoesWork:
-    def test_chained_versions_still_run_one_at_a_time(self, tmp_path):
-        """What `mode: sequential` claimed, done by the dependency graph.
+    def test_a_predecessor_reference_on_the_first_version_is_still_refused(self, tmp_path):
+        """`${i-1}` has no predecessor on the first version, so it names nothing.
 
-        `_render` validates, which is the point: the first version's `${i-1}`
-        resolves to no predecessor, and the stub it leaves behind used to fail the
-        workflow's dependency check before any of this could run.
+        Dropping the dependency instead would re-root that version onto source data
+        and schedule it first — a wrong graph in place of a refusal, and it took a
+        real edge with it whenever the range did not start at the chain's first link.
         """
-        rendered = _render(
-            tmp_path,
-            _workflow(
-                actions=[
-                    _action(
-                        name="refine",
-                        versions={"range": [1, 3]},
-                        dependencies=["refine_${i-1}"],
-                    )
-                ]
-            ),
-        )
-        configs = {a["name"]: a for a in _agents(rendered)}
-        orchestrator = ActionLevelOrchestrator(
-            execution_order=list(configs), action_configs=configs
+        workflow = _workflow(
+            actions=[
+                _action(name="refine", versions={"range": [1, 3]}, dependencies=["refine_${i-1}"])
+            ]
         )
 
-        assert orchestrator.compute_execution_levels() == [["refine_1"], ["refine_2"], ["refine_3"]]
+        with pytest.raises(ValidationError) as caught:
+            _render(tmp_path, workflow)
 
-    def test_unchained_versions_stay_in_one_level(self, tmp_path):
+        assert "refine_" in str(caught.value)
+
+    def test_versions_stay_in_one_level(self, tmp_path):
         """The contrast the inert key could not express: same config minus the
         dependency chain, and all three run together."""
         rendered = _render(
@@ -275,6 +351,10 @@ class TestTheEnumThatPromisedIt:
     def test_the_schema_no_longer_names_a_version_execution_mode(self):
         """`VersionMode.SEQUENTIAL` was the spelled promise behind the key."""
         assert not hasattr(schema_module, "VersionMode")
+
+    def test_the_action_surface_no_longer_declares_the_key(self):
+        """Pinned on the field: re-adding it untyped would slip past the enum check."""
+        assert "version_mode" not in ActionConfig.model_fields
 
     def test_the_block_declares_only_what_it_reads(self):
         """The authoring surfaces read this, so a stray field is offered to users."""

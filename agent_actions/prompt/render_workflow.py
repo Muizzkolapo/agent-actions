@@ -9,10 +9,9 @@ from typing import Any
 import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from pydantic import ValidationError
 
 from agent_actions.config.path_config import resolve_project_root
-from agent_actions.config.schema import VersionConfig
+from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -343,7 +342,7 @@ def _compile_workflow_schemas(
 
 
 def _apply_version_template(
-    value: Any, param_name: str, current_val: int, idx: int, values: list[int]
+    value: Any, param_name: str, current_val: int | str, idx: int, values: list[int | str]
 ) -> Any:
     """
     Apply version template substitution to a value.
@@ -382,32 +381,6 @@ def _apply_version_template(
     return value
 
 
-def _validate_version_block(version_config: Any, action_name: str) -> None:
-    """Validate a `versions:` block here, the last point anything holds it.
-
-    The expansion below drops the block, so a workflow reaches the runtime with no
-    trace of what it asked for — an undeclared or retired key would otherwise be
-    replaced by a default and never reported.
-    """
-    try:
-        VersionConfig.model_validate(version_config)
-    except ValidationError as e:
-        # Raised without a cause because the user-facing message is taken from the
-        # root of the chain: chaining the pydantic error would print its dump and
-        # drop the action name, which is the only way to find the block.
-        raise ConfigurationError(
-            "; ".join(_version_reason(action_name, err) for err in e.errors()),
-            context={"action_name": action_name, "operation": "expand_versioned_action"},
-        ) from None
-
-
-def _version_reason(action_name: str, error: Any) -> str:
-    """One pydantic error as a sentence naming the action and the key at fault."""
-    message = str(error["msg"]).removeprefix("Value error, ")
-    where = ".".join(str(part) for part in error["loc"])
-    return f"action '{action_name}': " + (f"versions.{where}: {message}" if where else message)
-
-
 def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Expand a versioned action into multiple actions.
@@ -425,14 +398,16 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
         Input action with versions: {param: i, range: [1, 3]}
         Output: 3 actions with names action_1, action_2, action_3
     """
-    version_config = action.get("versions", {})
-    _validate_version_block(version_config, action.get("name", "unknown"))
-    param_name = version_config.get("param", "i")
-    version_range = version_config.get("range", [1, 1])
+    validated = validate_version_block(action.get("versions", {}), action.get("name", "unknown"))
+    param_name = validated.param
+    version_range = validated.range
 
     # Calculate range values
+    range_values: list[int | str]
     if len(version_range) == 2:
-        start, end = version_range
+        # A pair is a start and an end; the block's validator has already refused a
+        # pair that is not integers, so counting between them cannot fail here.
+        start, end = int(version_range[0]), int(version_range[1])
         range_values = list(range(start, end + 1))
     else:
         range_values = list(version_range)
@@ -445,16 +420,6 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
     for idx, i in enumerate(range_values):
         # Create a copy of the action without the versions key
         expanded = {k: v for k, v in action.items() if k != "versions"}
-
-        if idx == 0 and isinstance(expanded.get("dependencies"), list):
-            # The first version has no predecessor, so a `${param-1}` dependency
-            # names nothing: substitution leaves a bare `<action>_` that the
-            # workflow's dangling-dependency check then refuses.
-            expanded["dependencies"] = [
-                dep
-                for dep in expanded["dependencies"]
-                if not (isinstance(dep, str) and f"${{{param_name}-1}}" in dep)
-            ]
 
         # Apply template substitution to all fields
         expanded = _apply_version_template(expanded, param_name, i, idx, range_values)
@@ -496,6 +461,15 @@ def _expand_workflow_versions(data: dict[str, Any]) -> None:
 
     expanded_actions = []
     for action in actions:
+        if "versions" in action and not action.get("versions"):
+            # Declared and empty: it fans out nothing, and until `range` carried a
+            # default the missing field was the only thing refusing it.
+            name = action.get("name", "unknown")
+            raise ConfigurationError(
+                f"action '{name}': versions: the block is empty, so it declares no "
+                f"versions and fans out nothing; remove it, or give it a range",
+                context={"action_name": name, "operation": "expand_versioned_action"},
+            )
         if action.get("versions"):
             # Expand versioned action into multiple
             expanded = _expand_versioned_action(action)

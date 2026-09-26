@@ -2,11 +2,20 @@
 
 import difflib
 from enum import Enum
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from agent_actions.config.types import Granularity, RunMode
+from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
 
 # Measured: a transposition or a dropped letter scores 0.667 and above, a
@@ -55,9 +64,9 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
 # Version fan-out puts each version in the dependency graph as its own action, so
 # what order they run in is the graph's answer and no key can change it.
 _VERSION_ORDER_HINT = (
-    "version fan-out is always parallel — run versions one at a time by chaining "
-    'them with dependencies: ["<action>_${i-1}"], or serialise a whole run with '
-    "--execution-mode sequential"
+    "version fan-out is always parallel and there is no per-action ordering; to run a "
+    "whole workflow one action at a time use --execution-mode sequential, and to cap how "
+    "many run at once use --concurrency-limit"
 )
 
 # Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
@@ -98,7 +107,12 @@ def _retired_key_reason(key: str) -> str:
 
 
 def _refuse_retired_version_keys(data: Any) -> Any:
-    """Refuse `mode:` in a `versions:` block, which named an order nothing read."""
+    """Refuse `mode:` in a `versions:` block, which named an order nothing read.
+
+    Kept out of the shared retired-keys dict on purpose: that one is checked against
+    every block carrying agent settings, and `mode` is too general a name to refuse
+    everywhere on the strength of this one block.
+    """
     if isinstance(data, dict) and "mode" in data:
         raise ValueError(
             "versions: 'mode' is no longer read and configures nothing; remove it "
@@ -176,7 +190,7 @@ class VersionConfig(BaseModel):
 
     param: str = Field(default="i", description="Parameter name for version variable")
     range: list[int | str] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
-        default_factory=lambda: cast(list[int | str], [1, 1]),
+        default=[1, 1],
         description="Two ints for an inclusive range, or the values to expand over",
     )
 
@@ -196,19 +210,46 @@ class VersionConfig(BaseModel):
                 "give the range at least one value"
             )
         if len(value) == 2:
-            if not all(isinstance(v, int) for v in value):
+            bounds = [v for v in value if isinstance(v, int)]
+            if len(bounds) != 2:
                 raise ValueError(
-                    f"a two-element range is an inclusive [start, end] of integers; got "
-                    f"{value!r} — to expand over these values rather than count between "
-                    f"them, list all of them"
+                    f"a two-element range is always read as an inclusive [start, end] of "
+                    f"integers; got {value!r} — a pair of non-numeric values has no "
+                    f"spelling here, so use integers, or list three or more values"
                 )
-            start, end = value
-            if start > end:  # type: ignore[operator]
+            if bounds[0] > bounds[1]:
                 raise ValueError(
                     f"an inclusive [start, end] range counts upwards, so it expands to "
                     f"no versions and removes the action; got {value!r}"
                 )
         return value
+
+
+def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
+    """Validate a `versions:` block and return it, for the expansion to read.
+
+    The last point on the load path that holds the block: the expansion below drops
+    it, so an undeclared or retired key would otherwise be replaced by a default and
+    never reported. Returned rather than discarded so the expansion reads the same
+    coerced values that were validated.
+    """
+    try:
+        return VersionConfig.model_validate(version_config)
+    except ValidationError as e:
+        # Raised without a cause because the user-facing message is taken from the
+        # root of the chain: chaining the pydantic error would print its dump and
+        # drop the action name, which is the only way to find the block.
+        raise ConfigurationError(
+            "; ".join(_version_reason(action_name, err) for err in e.errors()),
+            context={"action_name": action_name, "operation": "expand_versioned_action"},
+        ) from None
+
+
+def _version_reason(action_name: str, error: Any) -> str:
+    """One pydantic error as a sentence naming the action and the key at fault."""
+    message = str(error["msg"]).removeprefix("Value error, ")
+    where = ".".join(str(part) for part in error["loc"])
+    return f"action '{action_name}': " + (f"versions.{where}: {message}" if where else message)
 
 
 class ChunkConfig(BaseModel):
