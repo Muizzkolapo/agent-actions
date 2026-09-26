@@ -319,8 +319,10 @@ def _build_file_params(
 def _upstream_relative(item: Path, upstream_data_dirs: list[str]) -> Path:
     """*item* as a path under whichever upstream holds it, falling back to its name.
 
-    A bare basename collides: two upstreams each holding ``sub/a.json`` both record
-    as ``a.json``, naming neither the upstream nor the subdirectory.
+    A bare basename drops the subdirectory, so a lost ``sub/a.json`` records as
+    ``a.json`` — unlike every other record in the merge walk, which is keyed by the
+    group path. Two upstreams holding the same relative path still record alike;
+    that is the group key's own behaviour, not something this resolves.
     """
     for directory in upstream_data_dirs:
         try:
@@ -524,6 +526,10 @@ def process_merged_files(
     files_processed_count = 0
     errors = CollectedErrors()
     files_seen = 0
+    # Not files_seen, which also counts losses: the limit probe asks how far through
+    # the groups the walk is, and a loss-inclusive count compared against the group
+    # total suppresses the truncation announcement by exactly the number of losses.
+    groups_seen = 0
 
     for item, error in lost:
         files_seen += 1
@@ -533,6 +539,7 @@ def process_merged_files(
 
     for relative_path, file_paths in files_by_path.items():
         files_seen += 1
+        groups_seen += 1
         try:
             if len(file_paths) == 1:
                 file_path = file_paths[0]
@@ -584,7 +591,7 @@ def process_merged_files(
                 exc_info=True,
             )
 
-        def _unread(seen: int = files_seen, total: int = len(files_by_path)) -> bool:
+        def _unread(seen: int = groups_seen, total: int = len(files_by_path)) -> bool:
             """Whether any group past this one is still to be merged."""
             return seen < total
 
