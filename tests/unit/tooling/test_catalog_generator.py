@@ -459,6 +459,18 @@ class TestCatalogGeneratorProblemsFirst:
             e["id"] for e in gen.generate(**backward)["logs"]["events"]
         ]
 
+    def test_a_log_that_is_not_a_workflow_is_not_labelled_as_one(self):
+        """A stray directory under a project yields a run entry named after it.
+        Stamping that into an id makes the dashboard offer it as a workflow to
+        filter by, and attributes its rows to a workflow that does not exist."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["runs_data"] = {"agent_io": _wf_events("agent_io", [0])}
+
+        events = gen.generate(**inputs)["logs"]["events"]
+
+        assert [e["id"].rsplit(":", 1)[0] for e in events] == ["project:agent_io"]
+
     def test_level_totals_describe_every_log_not_the_window(self):
         gen = _make_generator()
         inputs = _empty_inputs()
