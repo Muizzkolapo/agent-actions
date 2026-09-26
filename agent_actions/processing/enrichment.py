@@ -153,10 +153,10 @@ class LineageEnricher(Enricher):
         """Whether the producer mapped output *index* to no input record.
 
         ``source_mapping[index] is None`` is the FILE tool's own statement that no
-        single input produced the row — the same reading the lineage step below
-        gives it. Set by every producer that mints ahead of this enricher
-        (``file_tool``, ``hitl``); absent on the online and batch expansion paths,
-        where a child inherits its one input's identity and so does need re-minting.
+        single input produced the row — the same reading the lineage step below gives
+        it, and only a FILE tool can say it. The online and batch expansion paths set
+        no mapping at all, and a child there inherits the identity of its one input,
+        which its siblings share, so it does still need re-minting.
         """
         mapping = result.source_mapping
         return mapping is not None and index in mapping and mapping[index] is None
