@@ -12,6 +12,8 @@
 // The HITL template receives these from the Python server at runtime.
 export const METADATA_KEYS = new Set([
   "source_guid",
+  "parent_source_guid",
+  "producer_source_guids",
   "lineage",
   "node_id",
   "metadata",

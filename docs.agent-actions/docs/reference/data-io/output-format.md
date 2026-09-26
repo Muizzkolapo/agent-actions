@@ -94,6 +94,9 @@ Each element of the JSON array in `data` is a record with this shape:
 The following fields are metadata and are automatically excluded when extracting content for downstream processing:
 
 - `source_guid`
+- `parent_source_guid`
+- `producer_source_guids`
+- `repeat_of_source_guid`
 - `node_id`
 - `target_id`
 - `parent_target_id`
