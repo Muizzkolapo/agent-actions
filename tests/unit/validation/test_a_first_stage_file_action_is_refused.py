@@ -88,8 +88,14 @@ def test_a_first_stage_record_tool_is_accepted():
 
 
 def test_a_first_stage_llm_action_at_file_granularity_is_not_this_refusal():
-    """Control: an LLM action never reaches FILE mode, and a separate rule already
-    refuses it for its kind. Claiming it here would report the same config twice."""
+    """Control: an LLM action never reaches a FILE strategy at any stage, so this rule
+    has nothing to say about it.
+
+    Not because another guard catches it: the kind-based rule in the action-entry
+    validators does not run in the real preflight path either, so such a config passes
+    `agac inspect` today and the granularity is silently ignored. That is stage-independent
+    and out of scope here — the point is only that this check must not claim it.
+    """
     assert _refusals([{"name": "summarize", "granularity": "File", "context_scope": SCOPE}]) == []
 
 

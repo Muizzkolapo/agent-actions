@@ -160,11 +160,7 @@ FILE_GRANULARITY_ACTION = """  - name: roll_up
     schema: tool_action_output
     impl: flatten_pages
     context_scope: { observe: [flatten.summary] }
-    expect:
-      expectations:
-        - id: summary_present_at_file_granularity
-          type: not_null
-          field: summary
+    expect: { repair: none }
 """
 
 
