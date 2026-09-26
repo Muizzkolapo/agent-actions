@@ -6,6 +6,7 @@ and namespace unwrapping.
 
 from __future__ import annotations
 
+import builtins
 import json
 import sqlite3
 from pathlib import Path
@@ -832,6 +833,49 @@ class TestRunEventsProblemRetention:
         assert [r["seq"] for r in logs["events"] if r["level"] == "error"] == [0]
         assert logs["level_counts"]["error"] == 1
         assert logs["level_counts"]["debug"] == EVENT_TAIL_LIMIT + 19
+
+    def test_a_read_that_fails_partway_keeps_what_it_read(self, tmp_path):
+        """A log truncated mid-write still described every row it did yield, and
+        the per-workflow scan keeps its partial window in the same situation."""
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        events_path = logs_dir / "events.json"
+        with open(events_path, "w") as f:
+            for i in range(3):
+                f.write(json.dumps(_stream_event(i, level="error")) + "\n")
+
+        real_open = builtins.open
+        seen = {"n": 0}
+
+        def failing_open(file, *args, **kwargs):
+            if str(file) == str(events_path):
+                seen["n"] += 1
+                handle = real_open(file, *args, **kwargs)
+
+                class Truncated:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *exc):
+                        handle.close()
+                        return False
+
+                    def __iter__(self):
+                        yield next(iter(handle))
+                        raise OSError("disk went away")
+
+                return Truncated()
+            return real_open(file, *args, **kwargs)
+
+        builtins.open = failing_open
+        try:
+            logs = scan_logs(tmp_path)
+        finally:
+            builtins.open = real_open
+
+        assert seen["n"] == 1
+        assert [r["seq"] for r in logs["events"]] == [0]
+        assert logs["level_counts"] == {"error": 1}
 
     def test_a_row_with_no_level_is_not_counted_under_one(self, tmp_path):
         """A missing level counted under `None` serialises as the string "null"

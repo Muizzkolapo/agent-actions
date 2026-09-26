@@ -320,11 +320,12 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     logs_data["events_path"] = str(events_path)
 
+    invocations: dict[str, dict[str, Any]] = {}
+    tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
+    problems = _problem_windows()
+    levels: dict[str, int] = {}
+
     try:
-        invocations: dict[str, dict[str, Any]] = {}
-        tail: deque[dict[str, Any]] = deque(maxlen=EVENT_TAIL_LIMIT)
-        problems = _problem_windows()
-        levels: dict[str, int] = {}
         for seq, event in enumerate(_iter_events(events_path)):
             _collect_window(tail, problems, levels, seq, event)
             event_type = event.get("event_type")
@@ -370,11 +371,15 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
         # Get recent invocations (last 10)
         logs_data["recent_invocations"] = list(invocations.values())[-10:]
-        logs_data["events"] = _window(tail, problems)
-        logs_data["level_counts"] = levels
 
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)
+
+    # Outside the read: a log that fails partway has still told us about every
+    # row it did yield, and discarding those leaves the page emptier than the
+    # truth. The per-workflow scan keeps its partial window for the same reason.
+    logs_data["events"] = _window(tail, problems)
+    logs_data["level_counts"] = levels
 
     return logs_data
 

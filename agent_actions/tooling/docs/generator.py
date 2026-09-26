@@ -39,9 +39,20 @@ def _event_sort_key(event: dict) -> tuple[str, int]:
 # Scanner projections that exist to be folded into the catalog, not shipped in it.
 _PER_LOG_ONLY = frozenset({"events", "level_counts", "is_workflow"})
 
-# Rarest first: a level that outnumbers another by ~780:1 would otherwise spend
-# the shared problem budget before the rarer one is reached.
-PROBLEM_PRIORITY = ("error", "warn")
+# Derived, so a level the scanner retains always has a pass here — without one
+# its rows are a problem nothing asks for, and they vanish. The equal share, not
+# this order, is what protects a rare level from a common one.
+_SEVERITY = ("error", "warn")
+
+
+def problem_priority(levels: tuple[str, ...]) -> tuple[str, ...]:
+    """Rarest known severity first; anything unranked still gets its own pass."""
+    return tuple(
+        sorted(levels, key=lambda lv: _SEVERITY.index(lv) if lv in _SEVERITY else len(_SEVERITY))
+    )
+
+
+PROBLEM_PRIORITY = problem_priority(PROBLEM_LEVELS)
 
 
 def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
@@ -531,14 +542,24 @@ class CatalogGenerator:
         # One reverse-chronological stream over every log the project wrote. The
         # kind prefix keeps a workflow named `logs` from colliding with the
         # project-level log.
+        taken_names: set[str] = set()
+
+        def distinct(name: str) -> str:
+            """Ids are built from these, and two logs may want the same name."""
+            candidate, suffix = name, 2
+            while candidate in taken_names:
+                candidate, suffix = f"{name}~{suffix}", suffix + 1
+            taken_names.add(candidate)
+            return candidate
+
         event_sources: list[tuple[str, list[dict]]] = [
-            ("project:logs", (logs_data or {}).get("events", []))
+            (distinct("project:logs"), (logs_data or {}).get("events", []))
         ]
         # A stray directory yields a run entry named after itself, and only the
         # scanner knows whether it read a workflow config for it.
         event_sources += [
             (
-                f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}",
+                distinct(f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}"),
                 data.get("events", []),
             )
             for name, data in sorted((runs_data or {}).items())

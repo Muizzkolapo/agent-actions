@@ -513,6 +513,27 @@ class TestProblemLevelsAndPriorityAgree:
             window = _merge_event_tails([("a", _stream_rows("a", level, 5))], 100)
             assert len(window) == 5, level
 
+    def test_a_level_added_to_the_scanner_gets_a_pass_without_a_second_edit(self, monkeypatch):
+        """The order is derived, not written twice. Hardcoded, a level added on
+        the scanner side is a problem no pass asks for, and its rows vanish."""
+        import agent_actions.tooling.docs.generator as generator
+
+        monkeypatch.setattr(generator, "PROBLEM_LEVELS", ("warn", "error", "critical"))
+        monkeypatch.setattr(
+            generator,
+            "PROBLEM_PRIORITY",
+            generator.problem_priority(("warn", "error", "critical")),
+        )
+
+        window = _merge_event_tails([("a", _stream_rows("a", "critical", 5))], 100)
+
+        assert len(window) == 5
+        assert generator.problem_priority(("warn", "error", "critical")) == (
+            "error",
+            "warn",
+            "critical",
+        )
+
 
 class TestSourceNamesStayDistinct:
     """A row's id is its React key, its scroll target and what a permalink looks
