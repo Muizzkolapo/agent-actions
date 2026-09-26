@@ -326,25 +326,39 @@ class RetryCommand:
             return
 
         listing = ", ".join(f"{batch_id} ({action})" for action, batch_id in sorted(in_flight))
+        actions_in_flight = {action for action, _ in in_flight}
+        remedy = (
+            "Collect them first — run the workflow again — then retry. "
+            "If the provider no longer has them, pass --abandon-in-flight."
+        )
+
+        # Dry run first, and before anything is written: abandoning strands records,
+        # and a dry run that did that would be writing to the store under the one
+        # flag documented to change nothing.
+        if self.args.dry_run:
+            if self.args.abandon_in_flight:
+                waiting = self._deferred_record_ids(backend, actions_in_flight)
+                self.console.print(
+                    f"\n[yellow]This retry would abandon {len(in_flight)} batch job(s) "
+                    f"still in flight ({listing}), giving up whatever they return, and "
+                    f"would mark {len(waiting)} record(s) waiting on them failed so a "
+                    f"later retry can still reach them.[/yellow]"
+                )
+            else:
+                self.console.print(
+                    f"\n[yellow]This retry would be refused: {len(in_flight)} batch job(s) "
+                    f"in flight ({listing}). {remedy}[/yellow]"
+                )
+            return
 
         if self.args.abandon_in_flight:
-            stranded = self._strand_deferred_records(backend, {action for action, _ in in_flight})
+            waiting = self._deferred_record_ids(backend, actions_in_flight)
+            stranded = self._strand_deferred_records(backend, waiting)
             self.console.print(
                 f"\n[yellow]Abandoning {len(in_flight)} batch job(s) still in flight: "
                 f"{listing}. Whatever they return will not be collected. "
                 f"{stranded} record(s) waiting on them are marked failed so a later "
                 f"retry can still reach them.[/yellow]"
-            )
-            return
-
-        remedy = (
-            "Collect them first — run the workflow again — then retry. "
-            "If the provider no longer has them, pass --abandon-in-flight."
-        )
-        if self.args.dry_run:
-            self.console.print(
-                f"\n[yellow]This retry would be refused: {len(in_flight)} batch job(s) "
-                f"in flight ({listing}). {remedy}[/yellow]"
             )
             return
 
@@ -354,32 +368,38 @@ class RetryCommand:
         )
 
     @staticmethod
-    def _strand_deferred_records(backend, actions: set[str]) -> int:
+    def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:
+        """Every record still waiting on a batch at *actions*, as (action, record_id).
+
+        Read-only, so the dry run can report what abandoning would cost without
+        paying it.
+        """
+        return [
+            (action, row["record_id"])
+            for action in sorted(actions)
+            for row in backend.get_disposition(action, disposition=DISPOSITION_DEFERRED)
+            if row.get("record_id") and row.get("record_id") != NODE_LEVEL_RECORD_ID
+        ]
+
+    @staticmethod
+    def _strand_deferred_records(backend, waiting: list[tuple[str, str]]) -> int:
         """Move records waiting on an abandoned batch to a disposition retry can see.
 
         ``deferred`` is left out of ``FAILURE_DISPOSITIONS`` because it means a
         batch is in flight that will resolve the record. Abandoning that batch
         ends the flight without ending the wait, so the record becomes invisible
         to ``agac retry`` and a no-op for ``agac run`` — reachable only by
-        ``--fresh``, which is the loss this flag exists to avoid. Only the records
-        the caller did not name are affected; the named ones are cleared below in
-        the ordinary way.
+        ``--fresh``, which is the loss this flag exists to avoid.
         """
-        stranded = 0
-        for action in sorted(actions):
-            for row in backend.get_disposition(action, disposition=DISPOSITION_DEFERRED):
-                record_id = row.get("record_id")
-                if not record_id or record_id == NODE_LEVEL_RECORD_ID:
-                    continue
-                backend.set_disposition(
-                    action,
-                    record_id,
-                    DISPOSITION_FAILED,
-                    reason=BATCH_ABANDONED,
-                    detail="the batch holding this record was abandoned by agac retry",
-                )
-                stranded += 1
-        return stranded
+        for action, record_id in waiting:
+            backend.set_disposition(
+                action,
+                record_id,
+                DISPOSITION_FAILED,
+                reason=BATCH_ABANDONED,
+                detail="the batch holding this record was abandoned by agac retry",
+            )
+        return len(waiting)
 
     def _records_this_repair_may_process(
         self,
