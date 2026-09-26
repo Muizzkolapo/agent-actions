@@ -95,7 +95,9 @@ class TestTheRowsSurviveBeingStored:
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = rows
 
-        found, missing = build_carry_forward({"G0"}, "split_tool", "f.json", backend)
+        found, missing = build_carry_forward(
+            {"G0"}, "split_tool", "f.json", backend, produced_by={"G0"}
+        )
 
         assert [r["source_guid"] for r in found] == [rows[0]["source_guid"], rows[1]["source_guid"]]
         assert missing == set()

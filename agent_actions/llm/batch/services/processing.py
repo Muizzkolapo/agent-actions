@@ -496,7 +496,11 @@ class BatchProcessingService:
         carry_records: list[dict[str, Any]] = []
         for rel_path in self._storage_backend.list_target_files(action_name):
             found, _missing = build_carry_forward(
-                carry_guids, action_name, rel_path, self._storage_backend
+                carry_guids,
+                action_name,
+                rel_path,
+                self._storage_backend,
+                produced_by=carry_guids,
             )
             carry_records.extend(found)
 

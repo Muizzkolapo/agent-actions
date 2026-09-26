@@ -58,10 +58,14 @@ def _rows(backend) -> dict[str, dict]:
 
 
 class TestAParentThatProducedSeveralRows:
-    """The mirror of a collapse: each row is minted its own identity, so none
-    of them carries the parent's, and without a row the parent is reprocessed
-    on every retry. Counts match here, which is what keeps the result off the
-    expansion branch and on the one that accounts for contributors."""
+    """The mirror of a collapse: each row is minted its own identity, so none of them
+    carries the parent's, and without a row the parent is reprocessed on every retry.
+
+    Every input is named here. A result that leaves one unnamed is not credited at all:
+    the rows of the named inputs now resolve, so crediting them would leave the next run
+    holding only the input the tool declined, and an empty response from it fails the
+    action. 615 credited those contributors, which was safe only while the named inputs
+    were themselves unresolvable — the gap this branch closes."""
 
     def test_it_still_gets_a_row(self, backend):
         _run_pipeline(
@@ -71,6 +75,7 @@ class TestAParentThatProducedSeveralRows:
                     {"source_index": 0, "data": {"part": 1}},
                     {"source_index": 0, "data": {"part": 2}},
                     {"source_index": 1, "data": {"part": 3}},
+                    {"source_index": 2, "data": {"part": 4}},
                 ]
             ),
             backend,
@@ -86,6 +91,7 @@ class TestAParentThatProducedSeveralRows:
                     {"source_index": 0, "data": {"part": 1}},
                     {"source_index": 0, "data": {"part": 2}},
                     {"source_index": 1, "data": {"part": 3}},
+                    {"source_index": 2, "data": {"part": 4}},
                 ]
             ),
             backend,
@@ -156,8 +162,14 @@ class TestEveryContributorHasARow:
 
 class TestTheSafetyNetsStillHold:
     def test_a_genuinely_dropped_record_is_not_marked_consumed(self, backend):
-        """A record no output accounts for stays unprocessed — consumed rows
-        must never absorb the missing-record tombstone path."""
+        """A record no output accounts for stays unprocessed — consumed rows must never
+        absorb the missing-record tombstone path.
+
+        And nothing else is credited either: the rows of r1 and r2 resolve now, so
+        crediting them would leave a rerun holding only r3, which this tool emits nothing
+        for. 615 credited r2 here; that was safe only while r1 and r2 were themselves
+        unresolvable.
+        """
         _run_pipeline(
             _records("r1", "r2", "r3"),
             FileUDFResult(outputs=[{"source_index": [0, 1], "data": {"group": "a"}}]),
@@ -165,16 +177,11 @@ class TestTheSafetyNetsStillHold:
         )
 
         all_rows = backend.get_disposition(ACTION)
-        # r3 must have exactly its tombstone row — an implementation writing
-        # contributor rows for every input would add a phantom success row
-        # beside it (the UNIQUE key allows both to coexist).
         r3_rows = [r for r in all_rows if r["record_id"] == "r3"]
         assert len(r3_rows) == 1
         assert r3_rows[0]["disposition"] == "unprocessed"
-        assert len(all_rows) == 3
 
-        rows = _rows(backend)
-        assert rows["r2"]["reason"] == "consumed_into_output"
+        assert [r["reason"] for r in all_rows if r["reason"] == "consumed_into_output"] == []
 
     def test_one_to_one_passthrough_writes_no_consumed_rows(self, backend):
         _run_pipeline(

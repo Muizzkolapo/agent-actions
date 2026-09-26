@@ -263,13 +263,10 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            # Credited only where the next run could reproduce the result: every row
+            # Credited only where the next run could reproduce this result: every row
             # belongs to an input and every input is named. Otherwise the rewrite drops a
-            # row it cannot resolve, or narrows to inputs the tool emits nothing for.
-            reproducible = not has_synthetic and not _unnamed_inputs(
-                structured_data, source_mapping, records
-            )
-            if not is_expansion or reproducible:
+            # row nothing resolves, or the run is left holding only what was declined.
+            if not has_synthetic and not _unnamed_inputs(structured_data, source_mapping, records):
                 result.collapse_contributor_guids = _collapse_contributor_guids(
                     structured_data, source_mapping, records, re_keyed=is_expansion
                 )

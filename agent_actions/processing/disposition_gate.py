@@ -190,14 +190,18 @@ def build_carry_forward(
     action_name: str,
     relative_path: str,
     storage_backend: StorageBackend,
+    *,
+    produced_by: Collection[str] = (),
+    reprocessing: Collection[str] = (),
 ) -> tuple[list[dict[str, Any]], set[str]]:
-    """Read prior output for carry-forward records.
+    """Read prior output for carry-forward records, returning (found, missing_ids).
 
-    Reads the current action's prior output (not upstream input) so that
-    carried records include the action's enriched namespace.
+    Reads the action's own prior output, so carried records keep its namespace. Missing
+    ids must be re-queued by the caller, never dropped.
 
-    Returns (found_records, missing_ids). Missing IDs must be added back
-    to ``to_process`` by the caller — never silently dropped.
+    *produced_by* names this run's INPUTS — the only ids resolvable through a row's
+    ``producer_source_guids``, since ``carry_ids`` also holds stored-row ids where a
+    repair named rows. *reprocessing* names what this run rebuilds.
     """
     try:
         prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
@@ -228,22 +232,27 @@ def build_carry_forward(
     # share a source_guid, and the mapping this replaced kept whichever came last.
     # Which of them ought to survive a rewrite is 615's question, not this one, so the
     # answer is left exactly where it was.
+    inputs_carried = frozenset(produced_by) & carry_ids
+    rebuilding = frozenset(reprocessing)
     chosen: dict[str, int] = {}
     produced_indices: set[int] = set()
     producers_found: set[str] = set()
     for index, record in enumerate(prior_output):
         rid = record.get("source_guid")
+        if not rid:
+            continue
         if rid in carry_ids:
             chosen[rid] = index
-        # An action minting an identity per row holds none carrying its input's, so
-        # the rows it produced are the only place that input is named.
-        produced_for = carry_ids.intersection(record.get("producer_source_guids") or ())
-        if produced_for:
+        # An action minting an identity per row holds none carrying its input's. Carried
+        # only when every input it names is carried too and its own identity is not being
+        # rebuilt: a split producer group comes back from the half being reprocessed.
+        producers = frozenset(record.get("producer_source_guids") or ())
+        if producers and producers <= inputs_carried and rid not in rebuilding:
             produced_indices.add(index)
-            producers_found |= produced_for
+            producers_found |= producers
     # Indices, so a row matched both ways is written once and keeps its place. Then one
-    # row per identity, as the direct match states: a producer can name two stored rows
-    # sharing a guid, and handing back both would write a duplicate.
+    # row per identity: a producer can name two rows sharing a guid, and both would
+    # write a duplicate.
     last_for_guid: dict[str, int] = {}
     for index in sorted(set(chosen.values()) | produced_indices):
         last_for_guid[prior_output[index]["source_guid"]] = index

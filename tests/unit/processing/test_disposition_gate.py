@@ -295,6 +295,7 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r0"},
         )
 
         assert [r["source_guid"] for r in found] == ["m0", "m1"]
@@ -317,6 +318,7 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r0", "r1"},
         )
 
         assert [r["source_guid"] for r in found] == ["m0", "r1", "m1"]
@@ -333,6 +335,7 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r0", "r9"},
         )
 
         assert [r["source_guid"] for r in found] == ["m0"]
@@ -355,6 +358,7 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r1"},
         )
 
         assert [r["row"] for r in found] == ["fresh"]
@@ -374,9 +378,69 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r0"},
         )
 
         assert [r["source_guid"] for r in found] == ["m0", "m1"]
+
+    def test_a_stored_row_identity_does_not_resolve_through_producers(self):
+        """The two callers pass different kinds of id. A repair names stored ROWS; the
+        gate names INPUTS. A producer index is only meaningful for inputs, so a repair's
+        ids must not match one, or a row is handed back while the repair rewrites it —
+        two stored rows under one source_guid."""
+        prior = [
+            {"source_guid": "in0", "producer_source_guids": ["in1"], "v": "TOTAL"},
+            {"source_guid": "in1", "v": "row"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        # `in1` here is a stored row identity the repair named, NOT an input of this run.
+        found, _missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["in1"]
+
+    def test_a_row_is_not_carried_when_only_some_of_its_producers_are(self):
+        """A collapse row is rebuilt by whichever of its inputs this run reprocesses, so
+        carrying it while one producer is re-queued leaves the stale row beside the fresh
+        one."""
+        prior = [{"source_guid": "in0", "producer_source_guids": ["in1", "in2"], "v": "TOTAL"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+            reprocessing={"in2"},
+        )
+
+        assert found == [], f"carried a row a re-queued producer rebuilds: {found}"
+
+    def test_a_row_carrying_no_identity_is_skipped_not_raised(self):
+        """Guid-less prior-output rows are an expected input, as the test below pins. One
+        naming producers must not abort the action on a subscript."""
+        prior = [{"producer_source_guids": ["r0"], "v": "no guid"}, {"source_guid": "r0"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0"},
+        )
+
+        assert [r.get("source_guid") for r in found] == ["r0"]
+        assert missing == set()
 
     def test_a_row_is_returned_once_when_it_matches_both_ways(self):
         """A row whose own identity is carried and whose producer is carried too —
@@ -391,6 +455,7 @@ class TestBuildCarryForward:
             action_name="action_b",
             relative_path="data.json",
             storage_backend=backend,
+            produced_by={"r0"},
         )
 
         assert [r["source_guid"] for r in found] == ["m0"]

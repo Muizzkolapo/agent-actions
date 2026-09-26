@@ -165,6 +165,7 @@ class UnifiedProcessor:
         carry_results: list[ProcessingResult] = []
         to_process = passing
         carry_ids: set[str] = set(repair_carry_ids)
+        gate_carry_ids: set[str] = set()
         if self._disposition_gate is not None:
             if passing:
                 to_process, gate_carry_ids = self._disposition_gate.filter(
@@ -184,6 +185,9 @@ class UnifiedProcessor:
                         context.action_name,
                         relative_path,
                         context.storage_backend,
+                        # Only the gate's ids name inputs; a repair's name stored rows.
+                        produced_by=gate_carry_ids,
+                        reprocessing={rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
                     # missing: re-queueing would process a record the repair did not

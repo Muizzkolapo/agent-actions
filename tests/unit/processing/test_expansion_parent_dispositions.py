@@ -321,6 +321,20 @@ class TestTheSameGapReachedWithMatchingCounts:
 
     @staticmethod
     def _matched(given: list[str]) -> list[dict]:
+        """r0 split in two and r1+r2 folded into one: three rows from three inputs, so
+        not an expansion, and every input named — which is what the credit requires."""
+        out: list[dict] = []
+        for index, guid in enumerate(given):
+            if guid == "r0":
+                out += [{"source_index": index, "data": {"part": p}} for p in range(2)]
+        folded = [i for i, g in enumerate(given) if g in ("r1", "r2")]
+        if folded:
+            out.append({"source_index": folded, "data": {"part": "folded"}})
+        return out
+
+    @staticmethod
+    def _matched_but_declines_one(given: list[str]) -> list[dict]:
+        """The same split, with r2 declined rather than folded."""
         out: list[dict] = []
         for index, guid in enumerate(given):
             for part in range(2 if guid == "r0" else 1 if guid == "r1" else 0):
@@ -331,7 +345,7 @@ class TestTheSameGapReachedWithMatchingCounts:
         run(_records("r0", "r1", "r2"), self._matched)
         run(_records("r0", "r1", "r2"), self._matched)
 
-        assert run.seen[1] == ["r2"], f"re-invoked on: {run.seen[1]}"
+        assert len(run.seen) == 1, f"re-invoked on: {run.seen[1:]}"
 
     def test_its_rows_keep_the_identities_they_were_given(self, run):
         first = run(_records("r0", "r1", "r2"), self._matched)
@@ -348,17 +362,33 @@ class TestTheSameGapReachedWithMatchingCounts:
         identities and writes a row for each, and the previous pair stays."""
         run(_records("r0", "r1", "r2"), self._matched)
         after_one = len(_rows(backend))
+        after_one_rows = sorted((r["record_id"], r["disposition"]) for r in _rows(backend))
 
         run(_records("r0", "r1", "r2"), self._matched)
         run(_records("r0", "r1", "r2"), self._matched)
 
-        assert len(_rows(backend)) == after_one
+        rows = _rows(backend)
+        assert len(rows) == after_one
+        # Cardinality alone is satisfied by a row rewritten under the same record_id,
+        # so the dispositions themselves are compared, not just counted.
+        assert sorted((r["record_id"], r["disposition"]) for r in rows) == after_one_rows
+
+    def test_a_dropped_input_stays_tombstoned_on_a_rerun(self, run, backend):
+        """r2 produced nothing, so it stays offerable. If the run credits the inputs it
+        did name, the next run hands the tool exactly the input it declined, the empty
+        response is read as the empty-output condition, and r2 flips from its
+        `unprocessed` tombstone to `failed` — which is cascade-blocking downstream."""
+        run(_records("r0", "r1", "r2"), self._matched_but_declines_one)
+        run(_records("r0", "r1", "r2"), self._matched_but_declines_one)
+
+        r2 = [r for r in _rows(backend) if r["record_id"] == "r2"]
+        assert [r["disposition"] for r in r2] == ["unprocessed"]
 
     def test_the_dropped_input_is_not_claimed_as_consumed(self, run, backend):
         """r2 produced nothing. Its row must stay the `unprocessed` tombstone —
         a sweep that credited every named input would add a success row beside it,
         and the UNIQUE key lets both rows coexist."""
-        run(_records("r0", "r1", "r2"), self._matched)
+        run(_records("r0", "r1", "r2"), self._matched_but_declines_one)
 
         r2_rows = [r for r in _rows(backend) if r["record_id"] == "r2"]
         assert [r["disposition"] for r in r2_rows] == ["unprocessed"]
@@ -396,7 +426,7 @@ class TestARecordModeExpansion:
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = rows
 
-        found, missing = build_carry_forward({"r0"}, ACTION, "f.json", backend)
+        found, missing = build_carry_forward({"r0"}, ACTION, "f.json", backend, produced_by={"r0"})
 
         assert [r["source_guid"] for r in found] == [r["source_guid"] for r in rows]
         assert missing == set()
@@ -600,7 +630,7 @@ class TestTheFileModeValueForAnInventedRow:
         relative = derive_relative_path(
             str(run.tmp_path / "in" / "f.json"), str(run.tmp_path / "out")
         )
-        found, missing = build_carry_forward({"r0"}, ACTION, relative, backend)
+        found, missing = build_carry_forward({"r0"}, ACTION, relative, backend, produced_by={"r0"})
 
         assert [r["source_guid"] for r in found] == ["r0"]
         assert missing == set()
@@ -608,11 +638,13 @@ class TestTheFileModeValueForAnInventedRow:
 
 
 class TestAnInventedRowDoesNotCostTheCollapseItsAccounting:
-    """Crediting a contributor only suppresses the recompute where the rows were
-    re-keyed, which is an expansion. At matching counts the rows keep their inherited
-    guids, so those inputs are terminal from their own per-item rows whatever the sweep
-    does — withholding the credit there buys nothing and loses the contributor's row,
-    narrowing what 1.0.0 promised for a many-to-one collapse.
+    """A collapse whose result the next run could reproduce keeps the contributor row
+    1.0.0 promised it: every input named, no row invented.
+
+    Crediting is withheld only where the result is NOT reproducible, and then it is not
+    free — an invented row is named by no identity and no producer, so crediting makes
+    every input terminal, the tool is never re-invoked, and the row is dropped from the
+    rewrite. Keeping the audit row is not worth deleting stored output for.
     """
 
     @staticmethod
@@ -628,15 +660,50 @@ class TestAnInventedRowDoesNotCostTheCollapseItsAccounting:
         out.append({"source_index": None, "data": {"summary": f"over {len(given)}"}})
         return out
 
-    def test_the_folded_contributor_still_gets_its_row(self, run, backend):
-        run(_records("r0", "r1", "r2"), self._collapse_and_invent)
+    @staticmethod
+    def _collapse_only(given: list[str]) -> list[dict]:
+        """The reproducible shape: r0+r1 folded, r2 passed through, nothing invented."""
+        merged = [i for i, g in enumerate(given) if g in ("r0", "r1")]
+        out: list[dict] = []
+        if merged:
+            out.append({"source_index": merged, "data": {"amount": 99}})
+        for i, g in enumerate(given):
+            if g == "r2":
+                out.append({"source_index": i, "data": {"amount": 3}})
+        return out
+
+    def test_the_folded_contributor_gets_its_row_when_the_result_is_reproducible(
+        self, run, backend
+    ):
+        run(_records("r0", "r1", "r2"), self._collapse_only)
 
         rows = _by_id(backend)
         assert "r1" in rows, "the folded contributor lost the row 1.0.0 promised it"
         assert rows["r1"]["reason"] == "consumed_into_output"
 
-    def test_the_carrier_and_the_passthrough_keep_a_bare_success(self, run, backend):
+    def test_the_invented_row_outlives_the_contributors_audit_row(self, run):
+        """Both cannot be had: crediting r1 makes every input terminal and the invented
+        row, resolvable by nothing, is dropped. Stored output wins over accounting."""
+        for _ in range(3):
+            output = run(_records("r0", "r1", "r2"), self._collapse_and_invent)
+
+        summaries = [
+            row["content"][ACTION]["summary"]
+            for row in output
+            if "summary" in (row["content"].get(ACTION) or {})
+        ]
+        assert len(summaries) == 1, "the invented row was lost from the stored output"
+
+    def test_no_contributor_is_credited_where_a_row_was_invented(self, run, backend):
         run(_records("r0", "r1", "r2"), self._collapse_and_invent)
+
+        credited = [
+            r["record_id"] for r in _rows(backend) if r.get("reason") == "consumed_into_output"
+        ]
+        assert credited == []
+
+    def test_the_carrier_and_the_passthrough_keep_a_bare_success(self, run, backend):
+        run(_records("r0", "r1", "r2"), self._collapse_only)
 
         rows = _by_id(backend)
         assert [rows["r0"]["reason"], rows["r2"]["reason"]] == [None, None]
