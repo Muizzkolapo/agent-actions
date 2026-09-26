@@ -55,7 +55,7 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
 # Keys whose runtime was deleted. Nothing to redirect to, so the refusal says the
 # feature is gone: a bare unknown-key error reads as a misspelling, and sends the
 # author to try the same block one level up.
-RETIRED_KEYS = frozenset({"interceptors"})
+_RETIRED_CONFIG_KEYS = frozenset({"interceptors"})
 
 
 def refuse_retired_keys(data: Any, surface: str) -> Any:
@@ -68,12 +68,15 @@ def refuse_retired_keys(data: Any, surface: str) -> Any:
     """
     if not isinstance(data, dict):
         return data
-    stray = sorted(str(key) for key in data if str(key) in RETIRED_KEYS)
+    stray = sorted(str(key) for key in data if str(key) in _RETIRED_CONFIG_KEYS)
     if not stray:
         return data
 
+    # Named even when the block has none of its own: `default_agent_config:` lives
+    # in a different file from the workflow, and an error that omits it sends the
+    # reader to the wrong one.
     named = data.get("name") or data.get("agent_type")
-    where = f"{surface} '{named}': " if isinstance(named, str) and named else ""
+    where = f"{surface} '{named}': " if isinstance(named, str) and named else f"{surface}: "
     raise ValueError(
         where
         + "; ".join(f"'{key}' is no longer read and configures nothing; remove it" for key in stray)
@@ -775,6 +778,7 @@ __all__ = [
     "ActionKind",
     "ChunkConfig",
     "refuse_context_scope_siblings",
+    "refuse_retired_keys",
     "Granularity",
     "HitlConfig",
     "VersionConfig",
