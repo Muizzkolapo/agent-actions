@@ -238,14 +238,20 @@ class TestWhichInputARowNames:
         assert [o.get("producer_source_guids") for o in output] == [["m0"], ["m0"], ["m1"]]
 
     def test_a_row_the_tool_invented_names_no_producer(self, run):
-        """A synthetic row maps to no input, so there is nothing to name. Writing
-        one anyway would hand a real input's carry a row it did not make."""
+        """A synthetic row maps to no input, so there is nothing to name. Writing one
+        anyway would hand a real input's carry a row it did not make.
+
+        The invented row sits at an index that is a valid position in the input, so a
+        positional resolution fails the assertion rather than being neutralised by a
+        bounds check.
+        """
         output = run(
-            _records("r0", "r1"),
+            _records("r0", "r1", "r2"),
             [
                 {"source_index": 0, "data": {"part": 1}},
-                {"source_index": 0, "data": {"part": 2}},
                 {"source_index": None, "data": {"part": "invented"}},
+                {"source_index": 0, "data": {"part": 2}},
+                {"source_index": 2, "data": {"part": 3}},
             ],
         )
 
@@ -557,3 +563,38 @@ class TestTheFileModeValueForAnInventedRow:
         assert [r["source_guid"] for r in found] == ["r0"]
         assert missing == set()
         assert len(output) == 3
+
+
+class TestAnInventedRowDoesNotCostTheCollapseItsAccounting:
+    """Crediting a contributor only suppresses the recompute where the rows were
+    re-keyed, which is an expansion. At matching counts the rows keep their inherited
+    guids, so those inputs are terminal from their own per-item rows whatever the sweep
+    does — withholding the credit there buys nothing and loses the contributor's row,
+    narrowing what 1.0.0 promised for a many-to-one collapse.
+    """
+
+    @staticmethod
+    def _collapse_and_invent(given: list[str]) -> list[dict]:
+        """3 in, 3 out: r0+r1 folded, r2 passed through, and one row invented."""
+        merged = [i for i, g in enumerate(given) if g in ("r0", "r1")]
+        out: list[dict] = []
+        if merged:
+            out.append({"source_index": merged, "data": {"amount": 99}})
+        for i, g in enumerate(given):
+            if g == "r2":
+                out.append({"source_index": i, "data": {"amount": 3}})
+        out.append({"source_index": None, "data": {"summary": f"over {len(given)}"}})
+        return out
+
+    def test_the_folded_contributor_still_gets_its_row(self, run, backend):
+        run(_records("r0", "r1", "r2"), self._collapse_and_invent)
+
+        rows = _by_id(backend)
+        assert "r1" in rows, "the folded contributor lost the row 1.0.0 promised it"
+        assert rows["r1"]["reason"] == "consumed_into_output"
+
+    def test_the_carrier_and_the_passthrough_keep_a_bare_success(self, run, backend):
+        run(_records("r0", "r1", "r2"), self._collapse_and_invent)
+
+        rows = _by_id(backend)
+        assert [rows["r0"]["reason"], rows["r2"]["reason"]] == [None, None]
