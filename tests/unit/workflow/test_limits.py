@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.utils.limits import FILE_LIMIT_KEY, record_indices_to_process
+from agent_actions.utils.limits import (
+    FILE_LIMIT_KEY,
+    record_indices_to_process,
+    slice_observation,
+)
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
@@ -1469,6 +1473,119 @@ class TestTheBatchPauseWiring:
         status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
 
         assert status == ActionStatus.PENDING
+
+
+class TestTheBatchPauseIsAProcessBoundary:
+    """A run that collects a batch builds its own backend, and the observation keys on it.
+
+    The class above submits and collects through one executor, so the submitting
+    run's observation is still in the registry when the collection reads it: the
+    count stamps correctly whether or not the stored one was carried across, and
+    removing the carry changes no test. A real resume is a later process. It
+    slices nothing and observes nothing, so the count has to come from what the
+    submission wrote — and every `run_mode: batch` action reaches its completion
+    stamp this way, because the submitting run is the only one that slices.
+
+    Lose it and a batch action stamps uncountable, which the next run cannot tell
+    from a truncated one: it clears the action's dispositions and regenerates
+    every record at provider cost.
+    """
+
+    @staticmethod
+    def _process(status_file, rows_written):
+        """An executor as a fresh process builds one: its own backend, the status file from disk."""
+        deps = MagicMock(spec=ExecutorDependencies)
+        deps.state_manager = ActionStateManager(status_file, ["act"])
+        deps.action_runner = MagicMock()
+        deps.action_runner.retried_records = frozenset()
+        backend = MagicMock()
+        backend.get_storage_stats.return_value = {"nodes": {"act": rows_written}}
+        # The real classifier runs against this backend, and a bare mock answers
+        # every query truthily — reporting the action guard-filtered, then failed.
+        backend.has_disposition.return_value = False
+        backend.get_failed_items.return_value = []
+        deps.action_runner.storage_backend = backend
+        deps.output_manager = MagicMock()
+        deps.batch_manager = MagicMock()
+        return ActionExecutor(deps)
+
+    def _submit(self, status_file, records):
+        """The run that walks the files: it slices, and then records the submission."""
+        executor = self._process(status_file, 0)
+        record_indices_to_process(
+            [{"source_guid": f"g{i}"} for i in range(records)],
+            {},
+            "act",
+            storage_backend=executor.deps.action_runner.storage_backend,
+        )
+        params = MagicMock()
+        params.action_name = "act"
+        params.action_config = {}
+        executor._handle_run_success(
+            params,
+            output_folder="/out",
+            duration=0.1,
+            batch_status="batch_submitted",
+            pre_run_count=0,
+        )
+        return executor.deps.state_manager.get_status_details("act")
+
+    def _collect(self, status_file, rows_written):
+        """The later run, which slices nothing of its own."""
+        executor = self._process(status_file, rows_written)
+        assert slice_observation(executor.deps.action_runner.storage_backend, "act") is None, (
+            "a collecting process holding the submission's observation would prove nothing"
+        )
+        executor._resolve_batch_outcome("act", 0, {}, "/out", "completed", 1.0, 0)
+        return executor.deps.state_manager.get_status_details("act")
+
+    def test_the_collecting_process_keeps_the_count_the_submission_observed(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
+        status_file = tmp_path / ".agent_status.json"
+        assert self._submit(status_file, 6)["records_processed"] == 6
+
+        stored = self._collect(status_file, 6)
+
+        assert stored["records_processed"] == 6
+        assert stored["truncated"] is False
+        assert stored["status"] == ActionStatus.COMPLETED
+
+    def test_a_batch_action_survives_a_limit_too_large_to_have_bitten(self, tmp_path, monkeypatch):
+        """The whole point, for `run_mode: batch`: raising a limit that dropped
+        nothing must not reopen the action. Only the submission counted, so this
+        holds only while its count survives the pause."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
+        status_file = tmp_path / ".agent_status.json"
+        self._submit(status_file, 6)
+        self._collect(status_file, 6)
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2000")
+        executor = self._process(status_file, 6)
+
+        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+
+        assert status == ActionStatus.COMPLETED
+        executor.deps.action_runner.storage_backend.clear_disposition.assert_not_called()
+
+    def test_a_batch_action_the_limit_did_cut_short_still_reopens(self, tmp_path, monkeypatch):
+        """The other direction: a carried `truncated: True` must not read as a
+        limit that could not bite, or lifting one never re-runs what it held back."""
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+        status_file = tmp_path / ".agent_status.json"
+        self._submit(status_file, 5)
+
+        stored = self._collect(status_file, 2)
+
+        assert stored["records_processed"] == 2
+        assert stored["truncated"] is True
+
+        monkeypatch.delenv("AGAC_RECORD_LIMIT")
+        executor = self._process(status_file, 2)
+        assert (
+            executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+            == ActionStatus.PENDING
+        )
 
 
 class TestLimitSchemaValidation:
