@@ -112,6 +112,121 @@ class TestCheckBatchSubmission:
 
         assert result is None
 
+    def test_a_collected_batch_is_not_reported_as_a_submission(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """A COMPLETED entry is spent — `finalize_batch_output` is the only writer
+        of that status and it writes it after the results are collected. Reporting
+        it as a submission pauses the run to collect a batch with nothing left to
+        give, and the action never reaches its completion handling."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "pages.json": {
+                    "batch_id": "b_spent",
+                    "status": "completed",
+                    "timestamp": "t",
+                    "provider": "p",
+                    "collected_at": "2026-01-01T00:00:00Z",
+                }
+            }
+        )
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+
+        with patch.object(Path, "exists", return_value=False):
+            result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
+
+        assert result is None
+
+    def test_a_batch_finished_at_the_provider_but_never_collected_still_pauses(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """COMPLETED does not mean collected. `are_all_jobs_completed` persists the
+        status a provider poll returned, so an entry reads COMPLETED from the moment
+        the batch finishes — before any result is retrieved. Treating that as spent
+        completes the action with none of its records and strands the batch, which
+        nothing can collect afterwards."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "pages.json": {
+                    "batch_id": "b_ready",
+                    "status": "completed",
+                    "timestamp": "t",
+                    "provider": "p",
+                }
+            }
+        )
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+
+        result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
+
+        assert result == "batch_submitted"
+
+    def test_an_uncollected_batch_beside_a_spent_one_still_pauses(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """The spent entry must not mask the live one. Asserted separately from the
+        case above so a fix that simply stops reading the registry cannot hold both."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "done.json": {
+                    "batch_id": "b_spent",
+                    "status": "completed",
+                    "timestamp": "t",
+                    "provider": "p",
+                    "collected_at": "2026-01-01T00:00:00Z",
+                },
+                "live.json": {
+                    "batch_id": "b_live",
+                    "status": "submitted",
+                    "timestamp": "t",
+                    "provider": "p",
+                },
+            }
+        )
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+
+        result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
+
+        assert result == "batch_submitted"
+
+    def test_a_failed_batch_still_pauses(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
+        """Only COMPLETED means collected. A FAILED entry has delivered nothing and
+        is resubmitted by the framework, so it is not spent — pinned so that
+        narrowing this check to the in-flight statuses cannot pass."""
+        import json
+
+        mock_storage_backend.load_metadata.return_value = json.dumps(
+            {
+                "f.json": {
+                    "batch_id": "b_failed",
+                    "status": "failed",
+                    "timestamp": "t",
+                    "provider": "p",
+                }
+            }
+        )
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
+
+        result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
+
+        assert result == "batch_submitted"
+
 
 class TestCheckBatchSubmissionRunMode:
     """Test that configured_run_mode overrides stale batch file detection."""
