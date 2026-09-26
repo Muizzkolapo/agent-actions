@@ -80,8 +80,8 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 A free-form canonical reason string giving the specific cause (see
 `agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
 `guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
-`prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`, and
-`expectations_exhausted`.
+`prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`,
+`expectations_exhausted`, and `consumed_into_output`.
 
 > **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
 > `disposition` values — the matching disposition for both is `unprocessed`. Query the

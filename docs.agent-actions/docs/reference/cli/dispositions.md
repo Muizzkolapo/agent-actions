@@ -43,19 +43,19 @@ One row per action, with a count per disposition:
 
 ### Why Total and Records can differ
 
-**A disposition is one row per input record per action.** `Total` counts the
-records an action *consumed*; `Records` counts the records currently stored
-under it. They match for an action that turns one record into one record, and
-they legitimately differ otherwise —
-`split` above turned one input into five outputs, so its single disposition
-sits beside five records.
+**A disposition names the record it accounts for.** `Total` counts those rows;
+`Records` counts the records currently stored under the action. They match for an
+action that turns one record into one record, and they legitimately differ
+otherwise.
 
-An action that folds records together shows the reverse: more dispositions than
-records, because every input it consumed is accounted for even though only one
-output carries them. Neither case is data loss.
+An action that folds records together shows more dispositions than records:
+every input it consumed is accounted for even though only one output carries
+them, and those it consumed without leaving a row of their own say so with
+`reason=consumed_into_output`. A FILE action that fans out also shows more, since
+the rows it minted an identity for are accounted beside the inputs that produced
+them. Neither case is data loss.
 
-The children an action creates are accounted at the actions that *consume*
-them, not at the one that produced them. This is also why [`retry`](./retry)
+This is also why [`retry`](./retry)
 targets inputs: retrying a record means re-running the input that failed.
 
 `Records` counts every record stored under the action, which is not the same as

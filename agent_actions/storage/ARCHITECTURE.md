@@ -97,11 +97,15 @@ Indexes:
 - `idx_disp_action_disp ON record_disposition(action_name, disposition)`
 - `idx_disp_action_record ON record_disposition(action_name, record_id)`
 
-**The unit is the input record.** One disposition row per input record per
-action: `record_id` holds the guid of the record the action *consumed*, and an
-action that expands or collapses therefore has a disposition count that differs
-from the number of records it wrote. The children of an expansion are accounted
-at the actions that consume them, not at the one that created them.
+**The unit is the input record.** `record_id` holds the guid of the record the
+action *consumed*, and an action that expands or collapses therefore has a
+disposition count that differs from the number of records it wrote.
+
+A FILE-mode result is the exception to the keying, not to the principle. It
+bundles every row under one result, so dispositions are written per output row —
+including rows the action minted an identity for, which no input holds — and an
+input the result consumed without leaving it a row of its own is written beside
+them, keyed on the input, with `reason=consumed_into_output`.
 
 The constraint does not enforce this — `UNIQUE(action_name, record_id,
 disposition)` permits one record to hold rows for two dispositions at once, and
@@ -112,10 +116,13 @@ nothing but the input to name, and keying per output would leave a failed
 expansion with no writable row at all. It is also what `retry --record`
 targets, since retrying means re-running an input.
 
-The consequence to expect: for an action that fans out, the disposition total
-is *smaller* than its output, and for one that folds records together it is
-*larger*. Neither is data loss. `agac dispositions` prints both counts side by
-side for this reason, reading the per-action totals from `target_data`.
+The consequence to expect: the two counts differ in both directions. An action
+that folds records together holds more dispositions than records, because every
+input it consumed is accounted for while a single output carries them. A FILE
+action that fans out holds more as well, since the rows it minted are accounted
+beside the inputs that produced them. Neither is data loss. `agac dispositions`
+prints both counts side by side for this reason, reading the per-action totals
+from `target_data`.
 
 That second number is what the store holds, which is not the same as what the
 action produced on this run. Known divergences, not an exhaustive list:
