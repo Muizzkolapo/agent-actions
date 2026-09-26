@@ -1,13 +1,10 @@
 """A row stored whole supersedes what came before it, not what ran beside it.
 
-Reconstruction treats an upstream row stored whole as a merge boundary and stops
-looking further back, because such a row carries the content of everything above
-it. That holds for an ancestor. It does not hold for a peer: two actions in the
-same execution level are both "upstream" of a later one, and neither carries the
-other's namespace, so bounding at one of them drops the other.
-
-The dependency graph makes every earlier level upstream of every later action, so
-a fan-in over parallel start nodes is the ordinary shape here, not a corner.
+Reconstruction stops above an upstream row stored whole, because such a row
+carries the content of everything above it. That holds for an ancestor and not
+for a peer, which carries namespaces the boundary never held. The dependency
+graph records every earlier level as upstream of every later action, so a fan-in
+over parallel start nodes is the ordinary shape here.
 """
 
 from __future__ import annotations

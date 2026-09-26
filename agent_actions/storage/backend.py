@@ -264,11 +264,9 @@ class StorageBackend(ABC):
         which is the truth for a consumer reading forward and a lie about an action
         whose output for that record already exists.
 
-        Rows stored whole are handed back marked so, because a rewrite must not
-        change how a row is stored. Re-deriving the mode covers the row whose
-        identity nothing upstream holds, but not the row stored whole under an
-        identity its upstream does hold — a producer's own stamp, which the
-        re-derivation cannot see and would rewrite as a delta.
+        Rows stored whole are handed back marked so: re-deriving the mode cannot
+        see a producer's own stamp on a row whose identity its upstream holds, and
+        would rewrite that row as a delta.
 
         Raises:
             FileNotFoundError: If the target data doesn't exist.
@@ -413,7 +411,11 @@ class StorageBackend(ABC):
             for record in records:
                 if isinstance(record, dict):
                     guid = record.get("source_guid")
-                    if guid:
+                    content = record.get("content")
+                    # Content, not just the identity: a row stored without usable
+                    # content is rejoined as nothing, so counting its identity
+                    # would call a row joinable that rejoins an empty namespace.
+                    if guid and isinstance(content, dict) and content:
                         identities.add(guid)
         return identities
 
@@ -514,13 +516,9 @@ class StorageBackend(ABC):
 
             guid = record.get("source_guid")
 
-            # A row stored whole carries the content of everything above the
-            # action that stored it, so merging that action's own ancestors again
-            # would resurrect namespaces the whole row was stored without. Its
-            # peers are not above it and hold namespaces it never carried, so
-            # they still merge: every earlier level is upstream of every later
-            # action, which makes a fan-in over parallel start nodes the ordinary
-            # shape rather than a corner of one.
+            # A whole row carries everything above the action that stored it, so
+            # its ancestors are superseded. Its peers are not above it and hold
+            # namespaces it never carried, so they still merge.
             boundary_action = full_boundary_guids.get(guid) if guid else None
             if boundary_action and boundary_action in upstream_actions:
                 superseded = set(self._get_upstream_actions(boundary_action))

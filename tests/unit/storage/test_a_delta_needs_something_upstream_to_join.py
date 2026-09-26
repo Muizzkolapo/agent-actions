@@ -97,10 +97,8 @@ class TestAnActionWithNoUpstreamThatIsNotTheFirst:
     @pytest.fixture
     def two_roots(self, tmp_path):
         b = _backend(tmp_path, ["a1", "b1"], {"a1": [], "b1": []})
-        # The peer holds G0 too, from the same staged input — source_guid is a
-        # content hash. So "does any action hold it" and "is it in the previous
-        # action" both answer yes here, and only "does b1's own upstream hold
-        # it" answers no.
+        # The peer holds G0 too, so only "does b1's own upstream hold it" answers
+        # no — "does any action hold it" does not.
         b.write_target(
             "a1",
             "f.json",
@@ -192,7 +190,14 @@ class TestTheRuleIsNotKeyedToOneActionName:
         b = _backend(
             tmp_path,
             ["stage_one", "stage_two", "stage_three"],
-            {"stage_one": [], "stage_two": ["stage_one"], "stage_three": ["stage_two"]},
+            # Every earlier level is upstream of every later action, which is what
+            # the coordinator records. A direct-parent graph would leave this
+            # chain's delta rows unable to rejoin `source` at all.
+            {
+                "stage_one": [],
+                "stage_two": ["stage_one"],
+                "stage_three": ["stage_one", "stage_two"],
+            },
         )
         b.write_target(
             "stage_one",
@@ -268,3 +273,6 @@ class TestTheRuleIsNotKeyedToOneActionName:
         )
 
         assert _modes(deeper, "stage_three") == ["delta"]
+        assert _namespaces(deeper, "stage_three") == [
+            ["source", "stage_one", "stage_three", "stage_two"]
+        ]
