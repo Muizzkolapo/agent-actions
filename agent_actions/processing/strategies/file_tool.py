@@ -34,15 +34,17 @@ def _collapse_contributor_guids(
     structured_data: list[dict[str, Any]],
     source_mapping: dict[int, int | list[int] | None] | None,
     records: list[dict[str, Any]],
+    *,
+    re_keyed: bool = False,
 ) -> list[str]:
     """Guids an output consumed but does not carry.
 
-    A collapsed output inherits only its first parent's guid, and a parent that
-    produced several rows is carried by none of them — each was minted its own
-    identity. Without these, such a parent leaves no disposition row at the
-    consuming action and is reprocessed on every retry.
+    Such an input leaves no disposition row at the consuming action and is
+    reprocessed on every retry. *re_keyed* when every row will be minted a fresh
+    identity below this strategy, as lineage enrichment does for an expansion: no
+    guid a row carries now survives, so none accounts for an input.
     """
-    carried = {item.get("source_guid") for item in structured_data}
+    carried = set() if re_keyed else {item.get("source_guid") for item in structured_data}
     contributors: set[str] = set()
     for src in (source_mapping or {}).values():
         indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
@@ -249,10 +251,9 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            if not is_expansion:
-                result.collapse_contributor_guids = _collapse_contributor_guids(
-                    structured_data, source_mapping, records
-                )
+            result.collapse_contributor_guids = _collapse_contributor_guids(
+                structured_data, source_mapping, records, re_keyed=is_expansion
+            )
 
             return [result] + missing_results
 

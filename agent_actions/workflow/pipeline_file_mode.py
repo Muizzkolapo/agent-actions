@@ -88,6 +88,11 @@ def _reattach_source_guid(
             inherited = parent.get("parent_source_guid") or parent_guid
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
+        # Which input made this row, so a later run resolves it from that input.
+        # Not parent_source_guid, handed on above as the pool ancestor: that names
+        # the grandparent once the input was itself expanded.
+        if parent_guid:
+            item["producer_source_guid"] = parent_guid
         item["source_guid"] = IDGenerator.generate_source_guid()
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.

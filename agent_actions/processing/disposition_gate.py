@@ -229,12 +229,23 @@ def build_carry_forward(
     # Which of them ought to survive a rewrite is 615's question, not this one, so the
     # answer is left exactly where it was.
     chosen: dict[str, int] = {}
+    produced_indices: set[int] = set()
+    producers_found: set[str] = set()
     for index, record in enumerate(prior_output):
         rid = record.get("source_guid")
         if rid in carry_ids:
             chosen[rid] = index
-    found: list[dict[str, Any]] = [prior_output[index] for index in sorted(chosen.values())]
-    missing: set[str] = carry_ids - set(chosen)
+        # An action minting an identity per row holds none carrying its input's, so
+        # the rows it produced are the only place that input is named.
+        producer = record.get("producer_source_guid")
+        if producer in carry_ids:
+            produced_indices.add(index)
+            producers_found.add(producer)
+    # Indices, so a row carried both ways is written once and a producer's rows keep
+    # their place in the file rather than being appended after the direct matches.
+    indices = sorted(set(chosen.values()) | produced_indices)
+    found: list[dict[str, Any]] = [prior_output[index] for index in indices]
+    missing: set[str] = carry_ids - set(chosen) - producers_found
     if missing:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",

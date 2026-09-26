@@ -35,6 +35,7 @@ Every record that flows through the pipeline is a plain dict with this shape:
     },
     "source_guid": "abc-123-...",        ← stable identity (first-stage: UUID5 content hash)
     "parent_source_guid": "xyz-789-...", ← original pool identity, set wherever a minted row knows its producer
+    "producer_source_guid": "abc-123-..", ← the input of this action that produced the row (per-stage)
     "version_correlation_id": "def-...", ← links versions across re-runs
     "_state": "processed",               ← current lifecycle state
     "_state_history": [                  ← audit trail (capped at 64)
@@ -83,6 +84,11 @@ RECORD_LIFECYCLE_FIELDS (carried forward; _state_history is appended to)
                            back for rows that were stored whole
 
 RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
+├── producer_source_guid ← which input of THIS action produced the row, on rows
+│                          that were minted an identity rather than inheriting
+│                          one. Carry-forward resolves the input through it.
+│                          Not tracking: carried on, it would name a record the
+│                          next action never received
 ├── target_id
 ├── node_id
 ├── lineage

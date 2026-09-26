@@ -18,6 +18,9 @@ from .types import ProcessingContext, ProcessingResult, ProcessingStatus
 
 logger = logging.getLogger(__name__)
 
+# Distinguishes "this row has no mapping" from "this row is mapped to no input".
+_UNMAPPED = object()
+
 
 class Enricher(ABC):
     """Base class for result enrichers."""
@@ -74,6 +77,16 @@ class LineageEnricher(Enricher):
                 item["source_guid"] = IDGenerator.generate_source_guid()
                 if old_source_guid and not item.get("parent_source_guid"):
                     item["parent_source_guid"] = old_source_guid
+                # Which input made this row: the guid being replaced is the
+                # producer's own, unless the row maps to no input — then that guid
+                # was minted by this action a step earlier and names no input.
+                mapped = (
+                    result.source_mapping.get(i, _UNMAPPED)
+                    if result.source_mapping is not None
+                    else _UNMAPPED
+                )
+                if old_source_guid and mapped is not None and not item.get("producer_source_guid"):
+                    item["producer_source_guid"] = old_source_guid
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 
