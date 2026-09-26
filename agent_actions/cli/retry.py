@@ -73,6 +73,20 @@ def _read_manifest(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _classify_outcome(state_mgr: Any) -> str:
+    """Decide the finished workflow the way ``run.py`` decides it.
+
+    Both commands hand this status to the run tracker and turn it into an exit
+    code, so a caller reading one reads the other. An action that completed with
+    record-level failures is a complete action, and so a success.
+    """
+    if state_mgr.is_workflow_complete():
+        return "SUCCESS"
+    if not state_mgr.is_workflow_done():
+        return "PAUSED"
+    return "FAILED" if state_mgr.has_any_failed() else "SUCCESS"
+
+
 def _delete_manifest(path: Path) -> None:
     """Delete the retry manifest after successful completion."""
     try:
@@ -268,15 +282,7 @@ class RetryCommand:
         error_message = None
         try:
             workflow.run()
-
-            # The same three outcomes `run` reports, decided the same way, because
-            # the exit code below is the one a caller reads from either command.
-            if state_mgr.is_workflow_complete():
-                status = "SUCCESS"
-            elif not state_mgr.is_workflow_done():
-                status = "PAUSED"
-            elif not state_mgr.has_any_failed():
-                status = "SUCCESS"
+            status = _classify_outcome(state_mgr)
         except Exception:
             error_message = traceback.format_exc()
             raise
