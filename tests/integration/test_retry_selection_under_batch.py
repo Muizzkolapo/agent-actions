@@ -374,13 +374,63 @@ class TestARepairArrivingWhileABatchIsInFlight:
         assert code == 0, "a dry run reports; it does not fail"
 
     def test_a_dry_run_still_changes_nothing(self, submitted_not_collected):
-        """Surfacing the refusal must not cost the dry run its one guarantee."""
+        """Surfacing the refusal must not cost the dry run its one guarantee.
+
+        Compared over the whole disposition map, not one synthetic id: the record
+        the command names is the one a dry run is least likely to touch, so an
+        assertion about it alone holds however much else was written.
+        """
         project = submitted_not_collected
-        _set_disposition(project, "p0", "failed")
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        before = _dispositions(project)
 
-        _agac(project, "retry", "-a", WORKFLOW, "--record", "p0", "--dry-run")
+        _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--dry-run")
 
-        assert _dispositions(project)["p0"] == "failed"
+        assert _dispositions(project) == before
+
+    def test_a_dry_run_that_would_abandon_still_changes_nothing(self, submitted_not_collected):
+        """The combination that writes if the dry-run check sits below the abandon
+        branch: abandoning strands the batch's other records, so a dry run reaching
+        that branch marks them failed and then reports 'no changes made'."""
+        project = submitted_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        before = _dispositions(project)
+
+        code, output = _agac(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--dry-run",
+            "--abandon-in-flight",
+        )
+
+        assert code == 0, output
+        assert _dispositions(project) == before, "a dry run wrote to the disposition store"
+
+    def test_a_dry_run_says_what_abandoning_would_cost(self, submitted_not_collected):
+        """Reporting it is the point of surfacing it — the count has to be real."""
+        project = submitted_not_collected
+        deferred = _deferred_ids(project)
+        named = deferred[0]
+        _set_disposition(project, named, "failed")
+
+        _code, output = _agac(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--dry-run",
+            "--abandon-in-flight",
+        )
+
+        assert f"would mark {len(deferred) - 1} record(s)" in output, output
 
     def test_the_repair_can_be_let_through_deliberately(self, submitted_not_collected):
         """A batch the provider has forgotten — an expired id — leaves an entry that
@@ -422,16 +472,23 @@ class TestARepairArrivingWhileABatchIsInFlight:
     def test_abandoning_names_what_it_gives_up(self, submitted_not_collected):
         """Abandoning is a loss, so it is reported rather than performed quietly."""
         project = submitted_not_collected
-        _set_disposition(project, "p0", "failed")
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        # Counted before the command: abandoning is what ends their deferral, so
+        # asking afterwards finds none of them.
+        stranded = len(_deferred_ids(project))
 
         _code, output = _agac(
-            project, "retry", "-a", WORKFLOW, "--record", "p0", "--abandon-in-flight"
+            project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight"
         )
 
         assert "abandon" in output.lower(), output
         assert "batch_" in output, f"the batch id being given up is not named: {output}"
-        assert "record" in output.lower(), (
-            f"abandoning strands the batch's other records; the count is not reported: {output}"
+        # The number, not the word: `_display_retry_plan` already prints
+        # "Records to retry: 1" above this, so a substring check for "record"
+        # passes whether or not the strand is reported at all.
+        assert f"{stranded} record(s) waiting on them" in output, (
+            f"the count of records stranded by abandoning is not reported: {output}"
         )
 
     def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
