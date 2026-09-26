@@ -8,6 +8,7 @@ an all-lost walk completing green and empty. A permission failure was never sile
 same named loss here.
 """
 
+import contextlib
 import errno
 import json
 import logging
@@ -19,6 +20,7 @@ import pytest
 
 from agent_actions.errors import DependencyError
 from agent_actions.utils.limits import record_indices_to_process, slice_observation
+from agent_actions.workflow import runner_file_processing
 from agent_actions.workflow.runner_file_processing import (
     collect_files_from_upstream,
     process_directory_files,
@@ -28,11 +30,7 @@ from agent_actions.workflow.runner_file_processing import (
 )
 
 ACTION = "flatten"
-# Named, not left to the root: `at_level` raises the level of the logger it is
-# given, and an effective level comes from the nearest ancestor that sets one. With
-# only the root raised, an `agent_actions` WARNING would keep every INFO assertion
-# below from seeing anything — and the two that assert an *absence* would pass.
-WALK_LOGGER = "agent_actions.workflow.runner_file_processing"
+WALK_LOGGER = runner_file_processing.__name__
 
 
 class _Backend:
@@ -54,13 +52,30 @@ class _Backend:
         return []
 
 
+@contextlib.contextmanager
+def _walk_log(caplog):
+    """`caplog` with the walk's own logger lowered, so its records actually arrive.
+
+    `at_level` raises the level of the logger it is *given* — the root when omitted —
+    and an effective level resolves through the nearest ancestor that sets one, so an
+    `agent_actions` WARNING left behind by another test blinds every level assertion
+    here, and the two that assert an *absence* would pass while proving nothing. The
+    name comes from the module under test rather than a literal: a mistyped one makes a
+    fresh logger at the requested level and leaves the real one suppressed, silently,
+    for that one test.
+    """
+    with caplog.at_level(logging.DEBUG, logger=WALK_LOGGER):
+        yield caplog
+
+
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
     """Clear the limits an ambient export could impose, including the file limit.
 
-    `AGAC_FILE_LIMIT` is the one every limit test here depends on and was the one
-    missing; `AGAC_MAX_RECORDS` is the retired name, cleared so a stale export cannot
-    trip the retirement path.
+    The tests exposed to `AGAC_FILE_LIMIT` are the ones passing no `file_limit` at all:
+    `_resolve` returns the config value whenever it is set and not greater than the
+    override, so a test asking for 1 was already immune. `AGAC_MAX_RECORDS` is the
+    retired name, cleared so a stale export cannot trip the retirement path.
     """
     for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
         monkeypatch.delenv(name, raising=False)
@@ -234,7 +249,7 @@ class TestTheStagingWalkReportsTheLoss:
         """No signal at all is the part that makes this worse than a read failure."""
         backend = _Backend()
 
-        with caplog.at_level("WARNING"):
+        with _walk_log(caplog):
             self._walk(tmp_path, backend, dangling=("sub/gone.json",))
 
         assert "staged file sub/gone.json" in caplog.text, caplog.text
@@ -354,7 +369,7 @@ class TestTheLimitStillAnnouncesAShortenedRun:
         runner.storage_backend = backend
         runner._process_single_file.side_effect = _slices(backend)
 
-        with caplog.at_level("INFO"):
+        with _walk_log(caplog):
             process_directory_files(
                 runner,
                 input_dir,
@@ -394,14 +409,14 @@ class TestALostFileDoesNotSilenceTheLimit:
         )
 
     def test_a_truncated_merge_still_says_so_when_a_file_was_lost(self, tmp_path, caplog):
-        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+        with _walk_log(caplog):
             self._merge(tmp_path, dangling=1, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
 
     def test_the_same_walk_without_a_loss_still_says_so(self, tmp_path, caplog):
         """Control: isolates the loss as the cause rather than the limit."""
-        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+        with _walk_log(caplog):
             self._merge(tmp_path, dangling=0, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
@@ -414,7 +429,7 @@ class TestALostFileDoesNotSilenceTheLimit:
         nothing. The same walk must emit that warning, so it doubles as evidence the
         records reached ``caplog`` at all.
         """
-        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+        with _walk_log(caplog):
             self._merge(tmp_path, dangling=1, good=1, limit=1)
 
         assert "went unmerged" in caplog.text, f"nothing captured: {caplog.text!r}"
@@ -437,9 +452,9 @@ class TestALostFileDoesNotSilenceTheLimit:
         # The first group fails and the second succeeds, so the limit is actually
         # reached and `_unread` is actually consulted. With every group failing the
         # walk never reaches the limit and this asserts nothing about `groups_seen`.
-        runner._process_single_file.side_effect = [ValueError("merge failed"), _slices(backend)]
+        runner._process_single_file.side_effect = [ValueError("merge failed"), None]
 
-        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+        with _walk_log(caplog):
             found, processed, _errors = process_merged_files(
                 runner,
                 _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": 1}),
@@ -461,9 +476,9 @@ class TestALostFileDoesNotSilenceTheLimit:
         runner = MagicMock()
         runner.retried_records = frozenset()
         runner.storage_backend = backend
-        runner._process_single_file.side_effect = [ValueError("merge failed"), _slices(backend)]
+        runner._process_single_file.side_effect = [ValueError("merge failed"), None]
 
-        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+        with _walk_log(caplog):
             process_merged_files(
                 runner,
                 _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": 1}),
