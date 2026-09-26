@@ -94,6 +94,10 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         # it is excluded from a synthesized first-stage source alongside the rest,
         # rather than relying on such a record always carrying a content dict.
         "repeat_of_source_guid",
+        # The inputs of THIS action the row consumed but whose identity it does not
+        # carry. Plural because a many-to-one output has several. Carried forward it
+        # would name, at the next action, records that action never received.
+        "producer_source_guids",
     }
 )
 

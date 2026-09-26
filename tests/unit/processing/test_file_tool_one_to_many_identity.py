@@ -73,10 +73,9 @@ class TestSeveralOutputsFromOneInput:
 
 class TestTheRowsSurviveBeingStored:
     def test_carry_forward_returns_every_row_it_is_asked_for(self):
-        """Asked for the stored rows' own identities, which is the shape a
-        repair passes. A retry asks with the *input* identities instead, and
-        the parent is legitimately absent from them — it is re-queued, loudly.
-        """
+        """Asked for the stored rows' own identities, which is the shape a repair
+        passes. A retry asks with the *input* identities instead; those resolve
+        through the rows' producer, which the next test covers."""
         rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = rows
@@ -87,6 +86,28 @@ class TestTheRowsSurviveBeingStored:
 
         assert len(found) == 3
         assert missing == set()
+
+    def test_a_retry_asking_with_the_input_identity_finds_the_split_rows(self):
+        """The shape a retry passes: the input's own guid, which no row carries.
+        Without this the parent is re-queued and re-split on every run, and the
+        rows written for the last set are abandoned in the store."""
+        rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = rows
+
+        found, missing = build_carry_forward(
+            {"G0"}, "split_tool", "f.json", backend, produced_by={"G0"}
+        )
+
+        assert [r["source_guid"] for r in found] == [rows[0]["source_guid"], rows[1]["source_guid"]]
+        assert missing == set()
+
+    def test_the_split_rows_name_the_input_that_produced_them(self):
+        """`parent_source_guid` happens to agree here and stops agreeing as soon as
+        the input was itself expanded, when it names the grandparent instead."""
+        rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
+
+        assert [r.get("producer_source_guids") for r in rows] == [["G0"], ["G0"], None]
 
     def test_a_checkpoint_round_trip_returns_every_row(self):
         """The checkpoint table is unique per identity, so two rows sharing one

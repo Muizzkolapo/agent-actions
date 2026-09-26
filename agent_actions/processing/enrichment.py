@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -30,6 +31,33 @@ class Enricher(ABC):
 
 class LineageEnricher(Enricher):
     """Add lineage tracking to results."""
+
+    @staticmethod
+    def _producers_of(
+        index: int,
+        result: ProcessingResult,
+        context: ProcessingContext,
+        old_source_guid: str | None,
+    ) -> list[str]:
+        """Inputs the row at *index* consumed, whose identity it will no longer carry.
+
+        A record-mode expansion has no mapping and exactly one input, which the result
+        names; a FILE expansion has one mapping entry per row.
+        """
+        source_data = context.source_data or []
+        if result.source_mapping is None:
+            single = result.source_guid or old_source_guid
+            return [single] if single else []
+
+        mapped = result.source_mapping.get(index)
+        indices: Sequence[int | None] = mapped if isinstance(mapped, list) else (mapped,)
+        guids: list[str] = []
+        for idx in indices:
+            if isinstance(idx, int) and 0 <= idx < len(source_data):
+                guid = source_data[idx].get("source_guid")
+                if guid and guid not in guids:
+                    guids.append(guid)
+        return guids
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
         """Add lineage tracking using unified method."""
@@ -78,6 +106,14 @@ class LineageEnricher(Enricher):
                     item["source_guid"] = IDGenerator.generate_source_guid()
                     if old_source_guid and not item.get("parent_source_guid"):
                         item["parent_source_guid"] = old_source_guid
+                    # Re-keyed, so the guid it carried no longer accounts for its
+                    # producer. Read off the mapping, never off that guid. A row kept at
+                    # its producer-minted identity keeps the record _reattach set.
+                    producers = self._producers_of(i, result, context, old_source_guid)
+                    if producers:
+                        item["producer_source_guids"] = producers
+                    else:
+                        item.pop("producer_source_guids", None)
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 

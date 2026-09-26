@@ -34,15 +34,17 @@ def _collapse_contributor_guids(
     structured_data: list[dict[str, Any]],
     source_mapping: dict[int, int | list[int] | None] | None,
     records: list[dict[str, Any]],
+    *,
+    re_keyed: bool = False,
 ) -> list[str]:
-    """Guids an output consumed but does not carry.
+    """Guids of inputs an output consumed but does not carry.
 
-    A collapsed output inherits only its first parent's guid, and a parent that
-    produced several rows is carried by none of them — each was minted its own
-    identity. Without these, such a parent leaves no disposition row at the
-    consuming action and is reprocessed on every retry.
+    An input missing from the result leaves no disposition row at the consuming action
+    and is reprocessed on every retry. *re_keyed* when every row will be minted a fresh
+    identity below this strategy, as lineage enrichment does for an expansion: no guid
+    a row carries now survives, so none accounts for an input.
     """
-    carried = {item.get("source_guid") for item in structured_data}
+    carried = set() if re_keyed else {item.get("source_guid") for item in structured_data}
     contributors: set[str] = set()
     for src in (source_mapping or {}).values():
         indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
@@ -52,6 +54,18 @@ def _collapse_contributor_guids(
                 if guid and guid not in carried:
                     contributors.add(guid)
     return sorted(contributors)
+
+
+def _unnamed_inputs(
+    structured_data: list[dict[str, Any]],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    records: list[dict[str, Any]],
+) -> list[str]:
+    """Inputs no output row names. A tool may expand while naming only some of them."""
+    accounted = _accounted_source_guids(structured_data, source_mapping, records)
+    return [
+        guid for record in records if (guid := record.get("source_guid")) and guid not in accounted
+    ]
 
 
 def _accounted_source_guids(
@@ -249,9 +263,12 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            if not is_expansion:
+            # Credited only where the next run could reproduce this result: every row
+            # belongs to an input and every input is named. Otherwise the rewrite drops a
+            # row nothing resolves, or the run is left holding only what was declined.
+            if not has_synthetic and not _unnamed_inputs(structured_data, source_mapping, records):
                 result.collapse_contributor_guids = _collapse_contributor_guids(
-                    structured_data, source_mapping, records
+                    structured_data, source_mapping, records, re_keyed=is_expansion
                 )
 
             return [result] + missing_results

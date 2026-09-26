@@ -18,7 +18,7 @@ from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
-    COLLAPSED_INTO_OUTPUT,
+    CONSUMED_INTO_OUTPUT,
     GUARD_FILTER,
     GUARD_PREFILTER_SKIP,
     GUARD_SKIP,
@@ -560,7 +560,7 @@ def collect_results_from_processing_results(
                             action_name,
                             guid,
                             DISPOSITION_SUCCESS,
-                            COLLAPSED_INTO_OUTPUT,
+                            CONSUMED_INTO_OUTPUT,
                             None,
                             None,
                             None,

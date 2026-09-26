@@ -137,8 +137,9 @@ class ProcessingResult:
     source_mapping: dict[int, int | list[int] | None] | None = None
     processing_context: Optional["ProcessingContext"] = None
     is_expansion: bool = False  # True when a single input produced multiple outputs (1→N)
-    # Inputs folded into a many-to-one output whose guid is not carried on any
-    # output item; each still gets a disposition row at the consuming action.
+    # Inputs consumed without a row of their own, either direction: folded into a
+    # many-to-one output, or split across rows each minted an identity. On an expansion
+    # every row is re-keyed, so an input that mapped 1:1 belongs here too.
     collapse_contributor_guids: list[str] = field(default_factory=list)
 
     @classmethod

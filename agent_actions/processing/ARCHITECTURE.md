@@ -357,6 +357,12 @@ except FileNotFoundError:
     else → reprocess all
 ```
 
+A record resolves either by its own `source_guid` or through the rows it produced,
+matched on their `producer_source_guids`: an action that mints an identity per output
+row holds none carrying its input's, so an input resolvable only the second way would
+be re-queued and reprocessed on every run. Every row a producer made comes back, since
+the input is the whole group's only identity.
+
 ---
 
 ## Evaluation Loop (Batch Only)

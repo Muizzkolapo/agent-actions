@@ -46,6 +46,13 @@ class TestFieldSets:
     def test_target_id_not_in_tracking(self):
         assert "target_id" not in RECORD_TRACKING_FIELDS
 
+    def test_producer_source_guids_is_a_stage_field(self):
+        """It names which input of *this* action produced the row. Carried forward
+        it would name, at the next action, a record that action never received —
+        the degradation that already makes parent_source_guid unusable as one."""
+        assert "producer_source_guids" in RECORD_STAGE_FIELDS
+        assert "producer_source_guids" not in RECORD_TRACKING_FIELDS
+
 
 class TestEnvelopeBuildCarriesTrackingFields:
     def test_carries_version_correlation_id(self):
@@ -71,6 +78,11 @@ class TestEnvelopeBuildCarriesTrackingFields:
         inp = {"source_guid": "g1", "target_id": "t1", "content": {}}
         result = RecordEnvelope.build("act", {"x": 1}, inp)
         assert "target_id" not in result
+
+    def test_does_not_carry_producer_source_guids(self):
+        inp = {"source_guid": "g1", "producer_source_guids": ["r0"], "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert "producer_source_guids" not in result
 
     def test_does_not_carry_lineage(self):
         inp = {"source_guid": "g1", "lineage": ["n1", "n2"], "content": {}}
@@ -214,3 +226,57 @@ class TestBuildSkippedCarriesTrackingFields:
         }
         result = RecordEnvelope.build_skipped("skipped_action", inp)
         assert "metadata" not in result
+
+
+class TestTheProducerIsNotOfferedAsBusinessData:
+    """It is a framework identity, like every other *_source_guid. Two hand-kept lists
+    decide whether such a field reaches a prompt or a reviewer's screen, and neither is
+    derived from the field sets — a new identity field has to be added to both."""
+
+    def test_it_is_not_offered_to_a_prompt_as_record_content(self):
+        from agent_actions.prompt.context.scope_namespace import _RECORD_METADATA_KEYS
+
+        assert "producer_source_guids" in _RECORD_METADATA_KEYS
+
+    def test_a_record_carrying_it_does_not_put_it_in_prompt_content(self):
+        """The behaviour the list gates: without it the field is sent to the model
+        beside the business fields."""
+        from agent_actions.prompt.context.scope_namespace import _extract_content_data
+
+        content = _extract_content_data(
+            {
+                "source_guid": "minted",
+                "parent_source_guid": "s0",
+                "producer_source_guids": ["r0"],
+                "question": "what is 2+2?",
+            }
+        )
+
+        assert content == {"question": "what is 2+2?"}
+
+    def test_every_identity_field_the_prompt_list_excludes_is_also_a_card_field(self):
+        """Two hand-kept lists, one purpose: a framework identity is not business data.
+        Whatever the prompt list excludes, the card must classify as metadata too, or
+        the same field is hidden from the model and shown to a human reviewer."""
+        from agent_actions.prompt.context.scope_namespace import _RECORD_METADATA_KEYS
+        from agent_actions.tooling.rendering.data_card import METADATA_KEYS
+
+        assert sorted(_RECORD_METADATA_KEYS - METADATA_KEYS) == []
+
+    def test_a_parent_identity_is_classified_as_metadata_not_content(self):
+        from agent_actions.tooling.rendering.data_card import classify_field
+
+        assert classify_field("parent_source_guid") == "metadata"
+
+    def test_a_repeat_identity_is_classified_as_metadata_not_content(self):
+        from agent_actions.tooling.rendering.data_card import classify_field
+
+        assert classify_field("repeat_of_source_guid") == "metadata"
+
+    def test_it_is_not_rendered_as_a_data_card_field(self):
+        """data_card.METADATA_KEYS calls itself the single source of truth, mirrored in
+        the frontend and the HITL approval template; an unlisted key renders as business
+        data in the reviewer UI."""
+        from agent_actions.tooling.rendering.data_card import METADATA_KEYS
+
+        assert "producer_source_guids" in METADATA_KEYS

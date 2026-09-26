@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from agent_actions.record.tracking import TrackedItem
@@ -45,6 +45,40 @@ def _parent_index(
     return None
 
 
+def _consumed_guids(
+    output_index: int,
+    structured_data: list[dict],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    original_data: list[dict],
+) -> list[str]:
+    """Identities of every input an output consumed, in mapping order.
+
+    Read off the mapping rather than off the guid the row is replacing: that guid may
+    itself have been minted by this action a step earlier, and would name no input.
+    """
+    if source_mapping is not None and source_mapping.get(output_index, False) is None:
+        # Mapped to no input: the row is the tool's own invention. Resolving it to one
+        # anyway — as the neighbouring _resolve_input_record does for namespaces — would
+        # hand that input's carry a row it never produced.
+        return []
+
+    source_idx: int | list[int] | None = None
+    if source_mapping is not None:
+        if output_index in source_mapping:
+            source_idx = source_mapping[output_index]
+        elif not source_mapping and len(structured_data) == len(original_data):
+            source_idx = output_index
+
+    indices: Sequence[int | None] = source_idx if isinstance(source_idx, list) else (source_idx,)
+    guids: list[str] = []
+    for idx in indices:
+        if isinstance(idx, int) and 0 <= idx < len(original_data):
+            guid = original_data[idx].get("source_guid")
+            if guid and guid not in guids:
+                guids.append(guid)
+    return guids
+
+
 def _reattach_source_guid(
     structured_data: list[dict],
     source_mapping: dict[int, int | list[int] | None] | None,
@@ -71,6 +105,10 @@ def _reattach_source_guid(
 
     for i in inheriting:
         item = structured_data[i]
+        # Which inputs this row consumed, minus the one its own guid will carry. A
+        # later run resolves those inputs from here; parent_source_guid cannot serve,
+        # being the pool ancestor once an input was itself expanded.
+        consumed = _consumed_guids(i, structured_data, source_mapping, original_data)
         source_idx = parents[i]
         parent = original_data[source_idx] if source_idx is not None else None
         parent_guid = parent.get("source_guid") if parent else None
@@ -79,6 +117,7 @@ def _reattach_source_guid(
             if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = parent["parent_source_guid"]
             item["source_guid"] = parent_guid
+            _record_producers(item, consumed)
             continue
 
         # Hand on the parent's pool-resolvable identity, not the intermediate one:
@@ -89,6 +128,7 @@ def _reattach_source_guid(
             if inherited and not item.get("parent_source_guid"):
                 item["parent_source_guid"] = inherited
         item["source_guid"] = IDGenerator.generate_source_guid()
+        _record_producers(item, consumed)
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.
         item["_delta_mode"] = "full"
@@ -100,6 +140,13 @@ def _reattach_source_guid(
         inherited_correlation = item.get("version_correlation_id")
         if inherited_correlation:
             item["version_correlation_id"] = f"{inherited_correlation}#{i}"
+
+
+def _record_producers(item: dict[str, Any], consumed: list[str]) -> None:
+    """Note the consumed inputs the row's own identity does not already account for."""
+    producers = [guid for guid in consumed if guid != item.get("source_guid")]
+    if producers:
+        item["producer_source_guids"] = producers
 
 
 def _resolve_input_record(

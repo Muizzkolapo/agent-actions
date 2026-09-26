@@ -34,9 +34,10 @@ BATCH_ABANDONED = "batch_abandoned"
 
 # -- Tool (FILE mode) -------------------------------------------------------
 TOOL_MISSING_RECORD = "tool_missing_record"
-# Success reason for a many-to-one contributor: consumed as intended, its
-# content lives in the collapsed output rather than an own output record.
-COLLAPSED_INTO_OUTPUT = "collapsed_into_output"
+# An input consumed without a row of its own — folded into a many-to-one output, or
+# split across rows each minted an identity. Names neither direction: the flag at the
+# write site compares batch lengths, so it cannot be read per input.
+CONSUMED_INTO_OUTPUT = "consumed_into_output"
 
 # -- Empty output ------------------------------------------------------------
 EMPTY_OUTPUT = "empty_output"

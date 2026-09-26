@@ -278,6 +278,278 @@ class TestBuildCarryForward:
         assert [r["row"] for r in found] == ["b-only", "a-last"]
         assert missing == set()
 
+    def test_a_carry_id_resolves_through_the_rows_it_produced(self):
+        """An action minting an identity per row holds none carrying its input's,
+        so matching on source_guid alone finds nothing and the input is re-queued
+        and re-split. Every row the input produced comes back, not one."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
+            {"source_guid": "m2", "producer_source_guids": ["r1"]},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "m1"]
+        assert missing == set()
+
+    def test_rows_matched_either_way_come_back_in_stored_order(self):
+        """One carry id names a stored row and another names a producer. The rows
+        are written back into the file they came from, so a producer match must not
+        append after the direct ones."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
+            {"source_guid": "r1"},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r0", "r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0", "r1"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "r1", "m1"]
+
+    def test_a_carry_id_no_row_accounts_for_is_still_reported_missing(self):
+        """The caller re-queues what comes back missing. Counting a producer match
+        the store does not hold would drop the record silently instead."""
+        prior = [{"source_guid": "m0", "producer_source_guids": ["r0"]}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0", "r9"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0", "r9"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0"]
+        assert missing == {"r9"}
+
+    def test_two_rows_sharing_an_identity_still_collapse_to_the_last(self):
+        """The rule the direct match states and the producer match must not break: two
+        stored rows can share a source_guid, and handing back both writes a duplicate
+        identity the checkpoint table cannot even hold. The repair path documents
+        producing exactly that state."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "stale"},
+            {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "fresh"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r1"},
+        )
+
+        assert [r["row"] for r in found] == ["fresh"]
+
+    def test_a_producers_several_rows_all_come_back(self):
+        """Collapsing by identity must not collapse a producer's distinct rows: they
+        carry different guids, and the input is the whole group's only identity."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "m1"]
+
+    def test_a_stored_row_identity_does_not_resolve_through_producers(self):
+        """The two callers pass different kinds of id. A repair names stored ROWS; the
+        gate names INPUTS. A producer index is only meaningful for inputs, so a repair's
+        ids must not match one, or a row is handed back while the repair rewrites it —
+        two stored rows under one source_guid."""
+        prior = [
+            {"source_guid": "in0", "producer_source_guids": ["in1"], "v": "TOTAL"},
+            {"source_guid": "in1", "v": "row"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        # `in1` here is a stored row identity the repair named, NOT an input of this run.
+        found, _missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["in1"]
+
+    def test_a_row_is_not_carried_when_only_some_of_its_producers_are(self):
+        """A collapse row is rebuilt by whichever of its inputs this run reprocesses, so
+        carrying it while one producer is re-queued leaves the stale row beside the fresh
+        one."""
+        prior = [{"source_guid": "in0", "producer_source_guids": ["in1", "in2"], "v": "TOTAL"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+            reprocessing={"in2"},
+        )
+
+        assert found == [], f"carried a row a re-queued producer rebuilds: {found}"
+
+    def test_a_dropped_rows_other_producers_are_re_queued(self):
+        """A row whose producers straddle the boundary is not carried — the tool sees only
+        the reprocessed half, so it cannot rebuild it. Its carried producers must then be
+        re-queued, or the row is never rebuilt and is gone from stored output. Re-queueing
+        one makes every row naming it rebuilt in turn, so a sibling row that would carry
+        it must be dropped too, or the rebuild duplicates."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+            {"source_guid": "m1", "producer_source_guids": ["in1", "in2"], "v": "in1+in2"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+            reprocessing={"in2"},
+        )
+
+        assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"
+        assert found == [], f"carried a row the rebuild will produce again: {found}"
+
+    def test_a_producer_absent_from_this_run_also_disables_resolution(self):
+        """A row is just as unresolvable when its other producer is gone from the input as
+        when it is being reprocessed: the tool cannot rebuild it either way. Keying the
+        guard on the reprocessed set alone let this one through, and the row was dropped
+        while a sibling credited its carried producer."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+            {"source_guid": "m1", "producer_source_guids": ["in1", "in2"], "v": "in1+in2"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        # in2 is not being reprocessed — it is simply not an input of this run at all.
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+        )
+
+        assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"
+        assert found == []
+
+    def test_a_guidless_row_can_disable_resolution_too(self):
+        """The guard has to see every stored row, not only the ones carrying an identity:
+        a guid-less row still names producers, and a row nothing can rebuild is a row
+        nothing can rebuild."""
+        prior = [
+            {"producer_source_guids": ["in1", "in2"], "v": "no guid"},
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+        )
+
+        assert missing == {"in1"}
+        assert found == []
+
+    def test_a_row_carrying_no_identity_is_skipped_not_raised(self):
+        """Guid-less prior-output rows are an expected input, as the test below pins. One
+        naming producers must not abort the action on a subscript."""
+        prior = [{"producer_source_guids": ["r0"], "v": "no guid"}, {"source_guid": "r0"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0"},
+        )
+
+        assert [r.get("source_guid") for r in found] == ["r0"]
+        assert missing == set()
+
+    def test_a_row_is_returned_once_when_it_matches_both_ways(self):
+        """A row whose own identity is carried and whose producer is carried too —
+        a repair naming an input beside a row of it. Returned twice it would be
+        written twice, duplicating the row the rewrite is meant to replace."""
+        prior = [{"source_guid": "m0", "producer_source_guids": ["r0"]}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"m0", "r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"r0"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0"]
+        assert missing == set()
+
+    def test_an_ordinary_one_to_one_row_still_resolves_by_its_own_identity(self):
+        """The 1:1 path, which is most rows: no producer recorded, and resolution by
+        source_guid unchanged. A regression guard on the common case, not on the
+        producer logic — it passes before and after the fix."""
+        prior = [{"source_guid": "r1", "data": "ok"}, {"source_guid": "r2"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["r1"]
+        assert missing == set()
+
     def test_reads_from_prior_output(self):
         """Spec test 11: carry-forward reads from action's prior output."""
         prior = [

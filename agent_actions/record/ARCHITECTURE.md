@@ -35,6 +35,7 @@ Every record that flows through the pipeline is a plain dict with this shape:
     },
     "source_guid": "abc-123-...",        ← stable identity (first-stage: UUID5 content hash)
     "parent_source_guid": "xyz-789-...", ← original pool identity, set wherever a minted row knows its producer
+    "producer_source_guids": ["def-456"], ← inputs this row consumed but does not carry (per-stage)
     "version_correlation_id": "def-...", ← links versions across re-runs
     "_state": "processed",               ← current lifecycle state
     "_state_history": [                  ← audit trail (capped at 64)
@@ -85,6 +86,13 @@ RECORD_LIFECYCLE_FIELDS (carried forward; _state_history is appended to)
                            than the row alone
 
 RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
+├── repeat_of_source_guid ← the staged identity this record repeats
+├── producer_source_guids ← the inputs of THIS action the row consumed whose
+│                           identity it does not itself carry. Plural: a
+│                           many-to-one output has several. Carry-forward
+│                           resolves such an input through the rows it produced.
+│                           Not tracking: carried on, it would name records the
+│                           next action never received
 ├── target_id
 ├── node_id
 ├── lineage
