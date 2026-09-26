@@ -1,15 +1,17 @@
 """A staged file the filesystem will not describe is a loss, not a skip (1026).
 
-``Path.is_file()`` catches the ``OSError`` from the underlying ``stat()`` and
-answers ``False``, so a dangling symlink or a permission failure is
-indistinguishable from a directory and the walk drops it silently — without the
-``_lose_file`` call that every other per-file failure makes, leaving the action a
-record count that is short.
+``Path.is_file()`` answers ``False`` for ``ENOENT``, ``ENOTDIR``, ``EBADF`` and
+``ELOOP``, so a dangling symlink is indistinguishable from a directory and the walk
+drops it silently — without the ``_lose_file`` call and the found-count that every
+other per-file failure makes, leaving the action short. A permission failure was
+never silent: ``is_file()`` re-raises it, from the middle of a walk with no file
+attached, and it is folded into the same named loss here.
 
 Both walkers that decide it that way are covered: ``should_skip_item``, and
 ``collect_files_from_upstream``, which inlines the same checks for the merge walk.
 """
 
+import errno
 import json
 import stat
 from pathlib import Path
@@ -85,9 +87,25 @@ def _staging(tmp_path, *, names=("a.json",), dangling=()):
     for name in names:
         (input_dir / name).write_text(json.dumps([{"id": name}]))
     for name in dangling:
-        (input_dir / name).symlink_to(input_dir / "does-not-exist.json")
+        target = input_dir / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(input_dir / "does-not-exist.json")
     (tmp_path / "output").mkdir(exist_ok=True)
     return input_dir
+
+
+def _unreadable(input_dir, name="locked/denied.json"):
+    """A real file whose parent directory denies traversal, so ``stat()`` is EACCES.
+
+    ``rglob`` still lists it at mode 0o444, which is what makes this reach the walk
+    at all. Returned so the caller can restore the mode; pytest cannot clean up a
+    directory it may not enter.
+    """
+    target = input_dir / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("[]")
+    target.parent.chmod(0o444)
+    return target.parent
 
 
 class TestTheHelperSeparatesNotAFileFromCannotTell:
@@ -170,12 +188,18 @@ class TestTheStagingWalkReportsTheLoss:
         assert slice_observation(backend, ACTION) is None
 
     def test_the_loss_is_recorded_against_the_file(self, tmp_path):
-        """Named, so an operator can tell which file went missing."""
+        """Named by the path the walk resolved, not merely mentioned.
+
+        Asserted as a prefix of the message rather than a substring: ``str(OSError)``
+        from a failed ``stat()`` embeds the absolute path, so "the file's name appears
+        somewhere" is satisfied by the exception's own text even when the loss is
+        recorded against a completely different file.
+        """
         backend = _Backend()
 
-        _found, _processed, errors = self._walk(tmp_path, backend)
+        _found, _processed, errors = self._walk(tmp_path, backend, dangling=("sub/gone.json",))
 
-        assert any("gone.json" in message for message in errors.messages), errors.messages
+        assert any(m.startswith("sub/gone.json:") for m in errors.messages), errors.messages
 
     def test_the_walk_still_finishes_the_healthy_files(self, tmp_path):
         """A per-file loss is not fatal to the action — paired with the two above so
@@ -200,9 +224,107 @@ class TestTheStagingWalkReportsTheLoss:
         backend = _Backend()
 
         with caplog.at_level("WARNING"):
-            self._walk(tmp_path, backend)
+            self._walk(tmp_path, backend, dangling=("sub/gone.json",))
 
-        assert "gone.json" in caplog.text
+        assert "staged file sub/gone.json" in caplog.text, caplog.text
+
+
+class TestAWalkThatLosesEverything:
+    """The case the report is actually about, and the one the first fix missed.
+
+    ``process_files`` raises only when ``files_found > 0``; with nothing found it
+    warns instead, and ``warn_no_files_found`` stays quiet because the directory
+    does have content. So a lost file has to count as found, exactly as a file that
+    fails while being read does — otherwise a walk whose every entry was unreadable
+    completes green with no output, which is the silence under repair.
+    """
+
+    def _run(self, tmp_path, backend, *, names=(), dangling=("gone.json",)):
+        input_dir = _staging(tmp_path, names=names, dangling=dangling)
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
+        return process_directory_files(
+            runner, input_dir, tmp_path / "output", str(input_dir), _params(tmp_path), set()
+        )
+
+    def test_a_lost_file_counts_as_found(self, tmp_path):
+        found, processed, _errors = self._run(tmp_path, _Backend())
+
+        assert (found, processed) == (1, 0)
+
+    def test_a_file_that_fails_while_being_read_counts_the_same_way(self, tmp_path):
+        """The equivalence the code comment claims. Pinned, because the first
+        version of this fix asserted it in a comment while breaking it."""
+        backend = _Backend()
+        input_dir = _staging(tmp_path, names=("a.json",))
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = ValueError("unreadable input")
+
+        found, processed, _errors = process_directory_files(
+            runner, input_dir, tmp_path / "output", str(input_dir), _params(tmp_path), set()
+        )
+
+        assert (found, processed) == (1, 0)
+
+    def test_the_merge_walk_counts_a_lost_file_as_found_too(self, tmp_path):
+        up = _staging(tmp_path, names=(), dangling=("gone.json",))
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
+
+        found, processed, _errors = process_merged_files(
+            runner, _params(tmp_path, upstream_dirs=[str(up)])
+        )
+
+        assert (found, processed) == (1, 0)
+
+
+class TestAnErrnoOtherThanEnoent:
+    """``is_file()`` hides only ENOENT, ENOTDIR, EBADF and ELOOP; it re-raises the
+    rest, so EACCES already escaped — from the middle of a walk, as an error with
+    no file attached. Catching ``OSError`` here is deliberately wider than the
+    silent set, which turns that into the same named, counted loss.
+
+    Without this, narrowing the handler to ``except FileNotFoundError`` passes the
+    whole suite while restoring the unattributed failure for the cause the report
+    names first.
+    """
+
+    def test_a_permission_failure_is_reported_like_any_other_loss(self, tmp_path):
+        input_dir = _staging(tmp_path, names=("a.json",))
+        locked = _unreadable(input_dir)
+        try:
+            backend = _Backend()
+            runner = MagicMock()
+            runner.retried_records = frozenset()
+            runner.storage_backend = backend
+            runner._process_single_file.side_effect = _slices(backend)
+
+            found, processed, errors = process_directory_files(
+                runner, input_dir, tmp_path / "output", str(input_dir), _params(tmp_path), set()
+            )
+        finally:
+            locked.chmod(0o755)
+
+        assert (found, processed) == (2, 1), "the readable file still ran; the locked one counted"
+        assert any(f"[Errno {errno.EACCES}]" in m for m in errors.messages), errors.messages
+        assert slice_observation(backend, ACTION) is None
+
+    def test_the_collector_hands_back_the_permission_errno(self, tmp_path):
+        up = _staging(tmp_path, names=("a.json",))
+        locked = _unreadable(up)
+        try:
+            _collected, lost = collect_files_from_upstream([str(up)])
+        finally:
+            locked.chmod(0o755)
+
+        assert [e.errno for _path, e in lost] == [errno.EACCES], lost
 
 
 class TestTheLimitStillAnnouncesAShortenedRun:
@@ -257,8 +379,7 @@ class TestTheMergeWalkReportsItToo:
 
         _collected, lost = collect_files_from_upstream([str(up)])
 
-        assert isinstance(lost[0][1], OSError)
-        assert "No such file" in str(lost[0][1])
+        assert lost[0][1].errno == errno.ENOENT, lost[0][1]
 
     def test_the_merge_walk_names_the_reason_in_its_error(self, tmp_path):
         """And the reason survives into the action's collected errors, not just the log."""
@@ -273,7 +394,7 @@ class TestTheMergeWalkReportsItToo:
             runner, _params(tmp_path, upstream_dirs=[str(up)])
         )
 
-        assert any("No such file" in message for message in errors.messages), errors.messages
+        assert any(f"[Errno {errno.ENOENT}]" in m for m in errors.messages), errors.messages
 
     def test_the_collector_still_returns_the_healthy_files(self, tmp_path):
         up = _staging(tmp_path, names=("a.json",), dangling=("gone.json",))
