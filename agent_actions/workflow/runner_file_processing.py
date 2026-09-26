@@ -529,6 +529,8 @@ def process_merged_files(
     # Not files_seen, which also counts losses: the limit probe asks how far through
     # the groups the walk is, and a loss-inclusive count compared against the group
     # total suppresses the truncation announcement by exactly the number of losses.
+    # Answering in pure group terms is only correct because every loss is drained
+    # below before the group loop starts, so none is ever still to come.
     groups_seen = 0
 
     for item, error in lost:
