@@ -101,10 +101,10 @@ class TestTheCarriedValueMustBeANamespace:
 
         assert record_mode_source(row) == {"url": "POOL"}
 
-    def test_a_scalar_under_source_does_not_expose_the_records_own_content(self):
-        """``a1`` is this record's upstream output, not its source document. Served as
-        the source namespace it is both wrong and a wider disclosure than the field asked
-        for, so the miss must resolve to nothing instead."""
+    def test_a_scalar_under_source_resolves_to_nothing_not_the_records_own_content(self):
+        """``a1`` and ``secret`` are this record's own content, not its source document.
+        Served as the source namespace they are both wrong and a wider disclosure than
+        the reference asked for, so an identity miss must resolve to nothing instead."""
         row = {
             "content": {"source": "not-a-namespace", "a1": {"n": 1}, "secret": "X"},
             "source_guid": "GHOST",
@@ -112,7 +112,7 @@ class TestTheCarriedValueMustBeANamespace:
 
         observed = record_mode_source(row)
 
-        assert observed is None or "secret" not in observed
+        assert observed is None, f"the record's own content was served as its source: {observed}"
 
     def test_a_record_carrying_no_source_key_at_all_still_resolves_by_identity(self):
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
