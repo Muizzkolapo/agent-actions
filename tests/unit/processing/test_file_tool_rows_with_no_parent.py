@@ -493,3 +493,68 @@ class TestWhenTheToolReturnsMoreRowsThanInputs:
 
         assert enriched[0]["source_guid"]
         assert enriched[0].get("parent_source_guid") is None
+
+
+class TestAnEmptyContributorList:
+    """``source_index: []`` is a many-to-one output whose contributor list came out
+    empty — a tool that filtered, deduped or dropped its way to no survivors. It means
+    what ``source_index: None`` means, and every other reader in the module already
+    agrees: ``_parent_index`` returns None for both, and
+    ``add_lineage_tracking_from_sources`` gives an empty source list fresh lineage.
+
+    Only the reader that runs first disagreed, by indexing the list bare.
+    """
+
+    RECORDS = [{"source_guid": g, "content": dict(UPSTREAM)} for g in ("G0", "G1")]
+
+    def test_reconciling_it_does_not_raise(self):
+        rows, _mapping = reconcile_outputs(
+            FileUDFResult(outputs=[{"source_index": [], "data": {"note": "no survivors"}}]),
+            "act",
+            list(self.RECORDS),
+        )
+
+        assert len(rows) == 1
+
+    def test_the_stored_mapping_says_no_input(self):
+        """Normalised where it is stored, not only where it is read. Every consumer keys
+        off this value — the one that decides whether a result holds a row no input
+        produced reads it as `is None`, so an empty list left in place is invisible to it.
+        """
+        _rows, mapping = reconcile_outputs(
+            FileUDFResult(outputs=[{"source_index": [], "data": {"note": "no survivors"}}]),
+            "act",
+            list(self.RECORDS),
+        )
+
+        assert mapping == {0: None}
+
+    def test_the_row_names_no_parent_and_no_producer(self):
+        rows, _mapping = reconcile_outputs(
+            FileUDFResult(outputs=[{"source_index": [], "data": {"note": "no survivors"}}]),
+            "act",
+            list(self.RECORDS),
+        )
+
+        assert rows[0].get("parent_source_guid") is None
+        assert not rows[0].get("producer_source_guids")
+
+    def test_it_is_minted_like_any_row_with_nothing_to_inherit(self):
+        rows, _mapping = reconcile_outputs(
+            FileUDFResult(outputs=[{"source_index": [], "data": {"note": "no survivors"}}]),
+            "act",
+            list(self.RECORDS),
+        )
+
+        assert rows[0]["source_guid"] not in {"G0", "G1"}
+        assert rows[0]["_delta_mode"] == "full"
+
+    def test_a_populated_list_is_untouched(self):
+        """The guard must not reach a list that has contributors."""
+        _rows, mapping = reconcile_outputs(
+            FileUDFResult(outputs=[{"source_index": [0, 1], "data": {"note": "merged"}}]),
+            "act",
+            list(self.RECORDS),
+        )
+
+        assert mapping == {0: [0, 1]}

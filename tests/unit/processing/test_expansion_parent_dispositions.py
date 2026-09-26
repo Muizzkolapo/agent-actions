@@ -707,3 +707,50 @@ class TestAnInventedRowDoesNotCostTheCollapseItsAccounting:
 
         rows = _by_id(backend)
         assert [rows["r0"]["reason"], rows["r2"]["reason"]] == [None, None]
+
+
+class TestAnEmptyContributorListIsTheSameShape:
+    """`source_index: []` says what `source_index: None` says — no input produced this
+    row — so a result holding one cannot be rebuilt by carrying either, and crediting its
+    inputs drops the row on the next run.
+
+    The predicate that decides this reads the stored mapping as `is None`, so an empty
+    list left in place is invisible to it and the row is lost exactly as it was before
+    #1081. These pin the shape end to end rather than at reconcile alone.
+    """
+
+    @staticmethod
+    def _passthrough_and_empty_fold(given: list[str]) -> list[dict]:
+        out: list[dict] = [
+            {"source_index": i, "data": {"amount": 10 * (i + 1)}} for i, _ in enumerate(given)
+        ]
+        # A many-to-one output whose contributors all dropped out.
+        out.append({"source_index": [], "data": {"summary": f"nothing survived of {len(given)}"}})
+        return out
+
+    def _summaries(self, output: list[dict]) -> list[str]:
+        return [
+            row["content"][ACTION]["summary"]
+            for row in output
+            if "summary" in (row["content"].get(ACTION) or {})
+        ]
+
+    def test_no_input_is_recorded_as_consumed(self, run, backend):
+        run(_records("r0", "r1"), self._passthrough_and_empty_fold)
+
+        credited = [
+            r["record_id"] for r in _rows(backend) if r.get("reason") == "consumed_into_output"
+        ]
+        assert credited == []
+
+    def test_the_row_survives_a_rerun(self, run):
+        run(_records("r0", "r1"), self._passthrough_and_empty_fold)
+        second = run(_records("r0", "r1"), self._passthrough_and_empty_fold)
+
+        assert len(self._summaries(second)) == 1
+
+    def test_it_survives_a_third_run_too(self, run):
+        for _ in range(3):
+            output = run(_records("r0", "r1"), self._passthrough_and_empty_fold)
+
+        assert len(self._summaries(output)) == 1
