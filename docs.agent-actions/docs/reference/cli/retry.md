@@ -114,7 +114,7 @@ re-run, and nothing it holds is removed.
 
 ## Retrying an action that runs in batch mode
 
-An action configured [`run_mode: batch`](../configuration/run-mode) is repaired
+An action configured [`run_mode: batch`](../execution/run-modes.md) is repaired
 the same way, with one difference in timing: the retry submits a new batch
 holding only the records it named, then pauses and asks to be run again, and the
 next run collects it. The records the retry did not name are not in that batch,
