@@ -218,14 +218,20 @@ class TestABoundaryThatIsAPeerWithAnAncestorAboveIt:
 class TestWhichWholeRowBecomesTheBoundary:
     """Two upstream actions hold a whole row for one identity. Storage offers them
     in no defined order, so the choice has to come from the graph — and it is the
-    shallower one, which supersedes the least."""
+    shallower one, which supersedes the least.
+
+    `z_merge` sorts after both roots while sitting below them in the graph, so a
+    choice made by the order storage happens to return rows in lands on the deeper
+    action and cuts `r1` away. Naming it `m` would hide that: sorted last would
+    then be `r2`, which is the action the graph rule picks anyway.
+    """
 
     @pytest.fixture
     def two_boundaries(self, tmp_path):
         b = _backend(
             tmp_path,
-            ["r1", "r2", "m", "c"],
-            {"r1": [], "r2": [], "m": ["r1", "r2"], "c": ["r1", "r2", "m"]},
+            ["r1", "r2", "z_merge", "c"],
+            {"r1": [], "r2": [], "z_merge": ["r1", "r2"], "c": ["r1", "r2", "z_merge"]},
         )
         b.write_target(
             "r1", "f.json", _row({"source": {"t": 1}, "r1": {"v": 1}}), is_first_action=True
@@ -234,7 +240,7 @@ class TestWhichWholeRowBecomesTheBoundary:
         b.write_target("r2", "f.json", _row({"source": {"t": 1}, "r2": {"v": 2}}))
         # A correlated merge stores its rows whole, and this one never read r1.
         b.write_target(
-            "m",
+            "z_merge",
             "f.json",
             [
                 {
@@ -242,7 +248,7 @@ class TestWhichWholeRowBecomesTheBoundary:
                     "_state": "processed",
                     "_schema_version": 1,
                     "_delta_mode": "full",
-                    "content": {"source": {"t": 1}, "r2": {"v": 2}, "m": {"v": 3}},
+                    "content": {"source": {"t": 1}, "r2": {"v": 2}, "z_merge": {"v": 3}},
                 }
             ],
         )
@@ -254,7 +260,7 @@ class TestWhichWholeRowBecomesTheBoundary:
                     "source": {"t": 1},
                     "r1": {"v": 1},
                     "r2": {"v": 2},
-                    "m": {"v": 3},
+                    "z_merge": {"v": 3},
                     "c": {"v": 4},
                 }
             ),
@@ -262,13 +268,13 @@ class TestWhichWholeRowBecomesTheBoundary:
         return b
 
     def test_the_deeper_boundary_does_not_supersede_the_root_it_never_read(self, two_boundaries):
-        """Bounding at `m` would drop `r1`, which `m`'s row does not carry."""
+        """Bounding at `z_merge` would drop `r1`, which its row does not carry."""
         assert sorted(two_boundaries.read_target("c", "f.json")[0]["content"]) == [
             "c",
-            "m",
             "r1",
             "r2",
             "source",
+            "z_merge",
         ]
 
 
