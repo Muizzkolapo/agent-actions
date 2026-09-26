@@ -41,12 +41,21 @@ def record_mode_source(record, pool=POOL, scope=None):
     ).get("source")
 
 
+SKIPPED = "<record skipped>"
+
+
 def file_mode_source(record, pool=POOL, scope=None):
-    """The ``source`` namespace a FILE-granularity action observes, or None if skipped."""
+    """The ``source`` namespace a FILE-granularity action observes.
+
+    Returns the ``SKIPPED`` sentinel rather than None when the record was dropped,
+    so a parity assertion cannot pass by both sides answering "nothing".
+    """
     enriched, _ = apply_context_scope_for_records(
         [dict(record)], scope or SCOPE, action_name="a2", source_data=pool
     )
-    return enriched[0]["content"].get("source") if enriched else None
+    if not enriched:
+        return SKIPPED
+    return enriched[0]["content"].get("source")
 
 
 def carrying(url, **kwargs):
@@ -116,21 +125,21 @@ class TestTheCarriedValueMustBeANamespace:
 
         assert observed is None, f"the record's own content was served as its source: {observed}"
 
-    @pytest.mark.parametrize("carried", [None, [{"url": "L"}], 0, ""])
-    def test_no_other_non_namespace_shape_shadows_a_resolving_identity(self, carried):
-        """The scalar is not a special case — anything that is not a namespace loses
-        to an identity that resolves."""
-        row = {"content": {"source": carried, "a1": {"n": 1}}, "source_guid": "G0"}
+    @pytest.mark.parametrize("carried", ["a string", None, [{"url": "L"}], 0, ""])
+    def test_no_non_namespace_shape_is_accepted_as_the_record_own_document(self, carried):
+        """A pool-miss guid, so the type check is what decides: with the key-presence
+        gate each of these returned the record and published ``a1`` as ``source.*``."""
+        row = {"content": {"source": carried, "a1": {"n": 1}}, "source_guid": "GHOST"}
 
-        assert record_mode_source(row) == {"url": "POOL"}
+        assert resolve_source_content(row, "GHOST", POOL, "a2") is None
 
-    def test_an_emptied_namespace_is_not_treated_as_a_missing_one(self):
-        """``{}`` is a namespace, so it does not fall through to the pool — but it
-        carries no fields, so an observe on one resolves to nothing rather than to
-        the pool's value."""
+    def test_an_emptied_namespace_is_still_a_namespace(self):
+        """``{}`` passes the type check, so the record is still its own answer. Asserted
+        at the resolver: the namespace builder collapses ``{}`` and "no source key" to
+        the same thing one layer down, which would hide the distinction."""
         row = {"content": {"source": {}, "a1": {"n": 1}}, "source_guid": "GHOST"}
 
-        assert record_mode_source(row) is None
+        assert resolve_source_content(row, "GHOST", POOL, "a2") is row
 
     def test_a_record_carrying_no_source_key_at_all_still_resolves_by_identity(self):
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
@@ -143,34 +152,6 @@ class TestTheCarriedValueMustBeANamespace:
         assert resolve_source_content(row, "GHOST", POOL, "a2") is None
 
 
-class TestAPoolThatIsTheActionsOwnInputSet:
-    """A workflow with no staging data of its own resolves against its input records,
-    so a record matches itself by guid. That is not a resolved source document."""
-
-    def test_a_self_hit_does_not_bypass_the_namespace_check(self):
-        row = {"content": {"a1": {"n": 1}, "secret": "X"}, "source_guid": "G0"}
-
-        assert resolve_source_content(row, "G0", [row], "a2") is None
-
-    def test_a_self_hit_still_yields_the_namespace_the_record_carries(self):
-        row = carrying("CARRIED", source_guid="G0")
-
-        resolved = resolve_source_content(row, "G0", [row], "a2")
-
-        assert resolved is not None
-        assert resolved["content"]["source"] == {"url": "CARRIED"}
-
-    def test_another_record_sharing_the_guid_is_still_resolved(self):
-        """Only a hit that *is* this record is skipped; a different row under the
-        same guid is a real pool entry and must still answer."""
-        row = carrying("CARRIED", source_guid="G0")
-        other = {"source_guid": "G0", "content": {"source": {"url": "OTHER-ROW"}}}
-
-        resolved = resolve_source_content(row, "G0", [other, row], "a2")
-
-        assert resolved["content"]["source"] == {"url": "OTHER-ROW"}
-
-
 class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
     """A repair concatenates every staged path, so one guid can appear twice."""
 
@@ -181,7 +162,11 @@ class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
         ]
         row = carrying("CARRIED", source_guid="G0")
 
-        assert record_mode_source(row, pool=pool) == file_mode_source(row, pool=pool)
+        assert (
+            record_mode_source(row, pool=pool)
+            == file_mode_source(row, pool=pool)
+            == {"url": "FIRST"}
+        )
 
     def test_that_row_is_the_first_one(self):
         pool = [
@@ -191,3 +176,36 @@ class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
         row = carrying("CARRIED", source_guid="G0")
 
         assert file_mode_source(row, pool=pool) == {"url": "FIRST"}
+
+
+class TestEveryReaderOfThePoolBreaksADuplicateTheSameWay:
+    """Three places index the same pool: both source resolvers and the lineage
+    enricher, which picks a record's parent off it. Opposite tie-breaks would
+    attribute one record's source namespace and its lineage to different rows."""
+
+    DUPLICATED = [
+        {"source_guid": "G0", "content": {"source": {"url": "FIRST"}}, "lineage": ["first"]},
+        {"source_guid": "G0", "content": {"source": {"url": "LAST"}}, "lineage": ["last"]},
+    ]
+
+    def test_the_lineage_enricher_takes_the_first_row(self):
+        from agent_actions.processing.enrichment import LineageEnricher
+
+        index = LineageEnricher._index_by_source_guid(self.DUPLICATED)
+
+        assert index["G0"]["lineage"] == ["first"]
+
+    def test_it_agrees_with_the_record_mode_resolver(self):
+        from agent_actions.processing.enrichment import LineageEnricher
+
+        index = LineageEnricher._index_by_source_guid(self.DUPLICATED)
+        resolved = resolve_source_content(
+            carrying("CARRIED", source_guid="G0"), "G0", self.DUPLICATED, "a2"
+        )
+
+        assert index["G0"] is resolved
+
+    def test_an_empty_pool_still_yields_no_index(self):
+        from agent_actions.processing.enrichment import LineageEnricher
+
+        assert LineageEnricher._index_by_source_guid([]) is None

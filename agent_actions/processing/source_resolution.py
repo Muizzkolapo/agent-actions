@@ -26,19 +26,21 @@ def resolve_source_content(
 
     1. Own source_guid, then the record's carried parent_source_guid (a pool
        identity a minted row carries — its producer, or the ancestor inherited
-       from the input standing in for its namespaces) -> look up by guid,
-       ignoring a hit that is the record itself. The pool is the run's current
-       source set; the namespace a record carries is a copy taken when it was
-       written, so identity is read first.
+       from the input standing in for its namespaces) -> look up by guid. The
+       pool is the run's current source set; the namespace a record carries is
+       a copy taken when it was written, so identity is read first.
     2. Neither identity resolves -> the record itself, when it carries a
        ``source`` namespace. That is all a record the pool cannot place has,
-       and it must be a namespace: returning the record on the strength of the
-       key alone exposes its own action-output namespaces as the source
-       document, which is case 3's failure wearing a resolved answer's clothes.
+       and it must be a namespace: returned on the strength of the key alone,
+       a record whose ``source`` holds a scalar has its own action-output
+       namespaces published as the source document instead.
     3. Neither identity resolves against a non-empty pool and the record
-       carries no namespace -> None. Never the item's own content as its source
-       document -- that is why case 1 skips a self-hit rather than trusting the
-       pool to hold someone else's row.
+       carries no namespace -> None, rather than the record's own content.
+
+    A workflow with no staging data of its own passes its input records as the
+    pool (``pipeline.py``: "the input data IS the source"). A record then
+    resolves to itself at case 1 by design, and its own content is the source
+    document — so case 3's rule binds only where the pool is a separate set.
     """
     if source_data:
         from agent_actions.input.preprocessing.transformation.transformer import (
@@ -47,17 +49,13 @@ def resolve_source_content(
 
         if source_guid:
             result = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            # Not when the pool *is* this action's input set, which is what a
-            # workflow with no staging data of its own resolves against: the
-            # record then matches itself, and returning it here would bypass the
-            # namespace check below and publish its own output as its source.
-            if result is not None and result is not item:
+            if result is not None:
                 return result
 
         parent_source_guid = item.get("parent_source_guid")
         if parent_source_guid:
             result = DataTransformer.get_content_by_source_guid(source_data, parent_source_guid)
-            if result is not None and result is not item:
+            if result is not None:
                 return result
 
     record_content = item.get("content", {})
