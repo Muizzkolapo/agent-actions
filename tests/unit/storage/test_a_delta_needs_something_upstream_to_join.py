@@ -1,19 +1,10 @@
 """A row is only storable as a delta if its identity joins something upstream.
 
-``_extract_delta`` decides the mode from the record alone. Whether the row's
-identity is joinable is not a property of the record — it needs the upstream
-guid set, which the backend has and the extractor did not consult. Two ways a
-row reaches the delta branch with nothing to join:
-
-* its identity was minted, so no upstream action holds it. Every mint site in
-  the tree stamps ``_delta_mode: full`` itself, so this is the stamp nobody
-  remembered rather than a path in use — and a forgotten stamp is silent.
-* the action has no upstream at all, yet is not ``execution_order[0]``, so the
-  ``first`` mode that keeps ``source`` does not apply to it either. A second
-  independent root is exactly that, and needs no minting to get there.
-
-Either way the stored row keeps only its own namespace, and reconstruction has
-nothing to restore the rest from.
+Two ways a row reaches the delta branch with nothing to join: its identity was
+minted, so no upstream action holds it; or the action has no upstream at all yet
+is not ``execution_order[0]``, so the ``first`` mode that keeps ``source`` does
+not apply to it either. A second independent root is the latter, and needs no
+minting to get there. Either way the stored row keeps its own namespace alone.
 """
 
 from __future__ import annotations

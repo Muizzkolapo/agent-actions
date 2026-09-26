@@ -187,13 +187,24 @@ class StorageBackend(ABC):
                 execution_order = self._get_execution_order()
                 is_first_action = bool(execution_order) and execution_order[0] == action_name
 
+            # Read once for the batch, and only if some row might be stored as a
+            # delta: a write whose every row is already marked whole — an
+            # expansion, a FILE tool's invented rows — pays nothing for the check.
+            upstream_guids: set[str] | None = None
             delta_records = []
             for record in data:
                 if record.get("_delta_mode") == "full":
                     delta_records.append(record)
                 else:
+                    if upstream_guids is None:
+                        upstream_guids = self._joinable_identities(action_name, relative_path)
                     delta_records.append(
-                        self._extract_delta(record, action_name, is_first_action=is_first_action)
+                        self._extract_delta(
+                            record,
+                            action_name,
+                            is_first_action=is_first_action,
+                            upstream_guids=upstream_guids,
+                        )
                     )
 
         # Refuse to persist namespaces that are the compiled JSON Schema instead of
@@ -380,10 +391,45 @@ class StorageBackend(ABC):
         """Return all metadata keys starting with `prefix`, sorted lexically."""
         raise NotImplementedError(f"{type(self).__name__} must implement list_metadata_prefix()")
 
+    def _joinable_identities(self, action_name: str, relative_path: str) -> set[str]:
+        """Identities the upstream actions hold for this file.
+
+        Measures at write time what :meth:`_reconstruct_from_deltas` will try to
+        rejoin at read time, over the same actions and the same file. An action
+        with no upstream returns the empty set, which is the same answer as an
+        upstream holding nothing: either way a delta would rejoin nothing.
+
+        A missing upstream file counts as holding nothing rather than raising —
+        it is what reconstruction will find too.
+        """
+        upstream_actions = self._get_upstream_actions(action_name)
+        if not upstream_actions:
+            return set()
+
+        identities: set[str] = set()
+        for records in self._read_target_raw_batch(upstream_actions, relative_path).values():
+            for record in records:
+                if isinstance(record, dict):
+                    guid = record.get("source_guid")
+                    if guid:
+                        identities.add(guid)
+        return identities
+
     def _extract_delta(
-        self, record: dict[str, Any], action_name: str, *, is_first_action: bool = False
+        self,
+        record: dict[str, Any],
+        action_name: str,
+        *,
+        is_first_action: bool = False,
+        upstream_guids: set[str],
     ) -> dict[str, Any]:
-        """Extract delta: preserve entire envelope, strip content to this action's namespace."""
+        """Extract delta: preserve entire envelope, strip content to this action's namespace.
+
+        ``upstream_guids`` is required because whether a row is storable as a
+        delta is not a property of the row: storing one discards every namespace
+        above this action, and only the identities upstream holds say whether
+        reconstruction could put them back.
+        """
         content = record.get("content")
         if not isinstance(content, dict):
             return {**record, "_delta_mode": "full"}
@@ -400,6 +446,10 @@ class StorageBackend(ABC):
                 delta_content["source"] = content["source"]
             delta_content[action_name] = content[action_name]
             mode = "first"
+        elif record["source_guid"] not in upstream_guids:
+            # Dropping the other namespaces promises they can be rejoined under
+            # this identity, and nothing upstream holds it to rejoin them from.
+            return {**record, "_delta_mode": "full"}
         else:
             delta_content = {action_name: content[action_name]}
             mode = "delta"

@@ -4,6 +4,9 @@
 missing, and that guard cannot fire because ``_extract_delta`` stores anything
 without usable content as a full record instead. These tests pin the invariant
 so the guard stays explicable rather than looking like dead code.
+
+Each passes an upstream that holds the identity, so what makes these rows whole
+is their content shape and not an identity nothing joins.
 """
 
 from __future__ import annotations
@@ -35,12 +38,16 @@ NOT_USABLE_AS_A_DELTA = [
 
 @pytest.mark.parametrize("record", NOT_USABLE_AS_A_DELTA)
 def test_a_record_without_usable_content_is_stored_whole(backend, record):
-    assert backend._extract_delta(dict(record), "act")["_delta_mode"] == "full"
+    assert (
+        backend._extract_delta(dict(record), "act", upstream_guids={"g"})["_delta_mode"] == "full"
+    )
 
 
 def test_a_well_formed_record_becomes_a_delta(backend):
     stored = backend._extract_delta(
-        {"source_guid": "g", "content": {"act": {"x": 1}, "upstream": {"y": 2}}}, "act"
+        {"source_guid": "g", "content": {"act": {"x": 1}, "upstream": {"y": 2}}},
+        "act",
+        upstream_guids={"g"},
     )
 
     assert stored["_delta_mode"] == "delta"
@@ -49,7 +56,7 @@ def test_a_well_formed_record_becomes_a_delta(backend):
 
 @pytest.mark.parametrize("record", NOT_USABLE_AS_A_DELTA)
 def test_no_shape_produces_a_delta_row_the_reconstruction_guard_would_catch(backend, record):
-    stored = backend._extract_delta(dict(record), "act")
+    stored = backend._extract_delta(dict(record), "act", upstream_guids={"g"})
     is_delta = stored.get("_delta_mode") not in ("first", "full", None)
 
     assert not (is_delta and stored.get("content") is None)

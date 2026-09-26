@@ -57,6 +57,24 @@ class TestDeltaExtraction:
 
     def test_subsequent_action_strips_to_delta(self, backend):
         """Non-first action stores only its own namespace."""
+        # action_1 holds g1 first: what the stripped namespaces are rejoined
+        # from, and what makes stripping them lossless rather than a discard.
+        backend.write_target(
+            "action_1",
+            "file.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"title": "SQL Intro"},
+                        "action_1": {"question": "What is SQL?"},
+                    },
+                }
+            ],
+            is_first_action=True,
+        )
         data = [
             {
                 "source_guid": "g1",
@@ -77,6 +95,13 @@ class TestDeltaExtraction:
         # source and action_1 are NOT stored — they're in upstream deltas
         assert "source" not in raw[0]["content"]
         assert "action_1" not in raw[0]["content"]
+        # And they come back, which is what makes the strip above a delta
+        # rather than a loss.
+        assert backend.read_target("action_2", "file.json")[0]["content"] == {
+            "source": {"title": "SQL Intro"},
+            "action_1": {"question": "What is SQL?"},
+            "action_2": {"difficulty": "easy"},
+        }
 
     def test_full_mode_preserves_all_content(self, backend):
         """Records tagged _delta_mode=full are stored as-is."""
