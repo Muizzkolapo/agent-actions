@@ -43,10 +43,10 @@ from agent_actions import udf_tool
 
 
 @udf_tool
-def flatten_pages(data: Any, *args) -> list[dict]:
+def retry_exit_flatten(data: Any, *args) -> list[dict]:
     text = str(((data or {}).get("source") or {}).get("page_content", ""))
-    marker = Path(os.environ["RETRY_EXIT_BREAK"])
-    if marker.exists() and text in marker.read_text().split(";"):
+    marker = Path(os.environ.get("RETRY_EXIT_BREAK", os.devnull))
+    if marker.is_file() and text in marker.read_text().split(";"):
         raise RuntimeError("the tool blew up on " + text)
     return [{"summary": text, "exam_density": "low"}]
 """
@@ -56,7 +56,7 @@ SECOND_ACTION = """  - name: enrich
     dependencies: [flatten]
     intent: "Tag"
     schema: tool_action_output
-    impl: tag_density
+    impl: retry_exit_tag
     context_scope: { observe: [flatten.summary] }
     expect: { repair: none }
 """
@@ -67,7 +67,7 @@ from agent_actions import udf_tool
 
 
 @udf_tool
-def tag_density(data: Any, *args) -> list[dict]:
+def retry_exit_tag(data: Any, *args) -> list[dict]:
     return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
 """
 
@@ -108,7 +108,7 @@ class Project:
     def add_second_action(self) -> None:
         config = self.root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
         config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
-        (self.root / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
+        (self.root / "tools" / WORKFLOW / "retry_exit_tag.py").write_text(TAG_TOOL)
         assert self.run("--fresh").exit_code == 0
 
 
@@ -122,7 +122,10 @@ def project(tmp_path, monkeypatch):
     staging.joinpath("pages.json").write_text(
         json.dumps([{"page_content": f"page {i}"} for i in range(PAGES)])
     )
-    (root / "tools" / WORKFLOW / "flatten.py").write_text(BREAKABLE_TOOL)
+    (root / "tools" / WORKFLOW / "flatten.py").unlink()
+    (root / "tools" / WORKFLOW / "retry_exit_probe.py").write_text(BREAKABLE_TOOL)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace("impl: flatten_pages", "impl: retry_exit_flatten"))
     marker = tmp_path / "BREAK"
     monkeypatch.setenv("RETRY_EXIT_BREAK", str(marker))
     monkeypatch.chdir(root)
