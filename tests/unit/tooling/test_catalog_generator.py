@@ -4,7 +4,11 @@ import json
 import random
 from collections import Counter
 
-from agent_actions.tooling.docs.generator import CatalogGenerator, _merge_event_tails
+from agent_actions.tooling.docs.generator import (
+    CatalogGenerator,
+    _merge_event_tails,
+    _round_robin,
+)
 from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
 from agent_actions.tooling.docs.scanner.data_scanners import scan_runs
 
@@ -544,6 +548,31 @@ class TestEventWindowInvariants:
         levels = Counter(e["level"] for e in window)
 
         assert levels == {"info": 99, "error": 1}
+
+
+class TestRoundRobinIsPrefixStable:
+    """The merge fills each problem level up to its share, then offers the unspent
+    remainder back by asking for more and slicing off what it already took. That
+    is only sound because a larger budget extends the same sequence rather than
+    reordering it — so the property is pinned here, not left implicit."""
+
+    def test_a_larger_budget_extends_the_same_sequence(self):
+        rng = random.Random(7)
+        for _ in range(500):
+            queues = [
+                [{"x": f"{q}:{i}"} for i in range(rng.randint(0, 12))]
+                for q in range(rng.randint(0, 6))
+            ]
+            total = sum(len(q) for q in queues)
+            taken = rng.randint(0, max(total, 1))
+            extra = rng.randint(0, max(total, 1))
+
+            full = _round_robin(queues, taken + extra)
+
+            assert full[:taken] == _round_robin(queues, taken)
+            assert len(full) <= taken + extra
+            ids = [e["x"] for e in full]
+            assert len(set(ids)) == len(ids)
 
 
 class TestEventWindowUnderRandomShapes:
