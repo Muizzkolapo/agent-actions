@@ -63,7 +63,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
 )
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.output.writer import FileWriter
+from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
 from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
@@ -446,7 +446,9 @@ class BatchProcessingService:
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = self._resolve_action_name(action_name)
-        main_output = self._merge_carry_forward(effective_action, main_output)
+        main_output = self._merge_carry_forward(
+            effective_action, main_output, target_relative_path(output_file, output_directory)
+        )
 
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
@@ -461,25 +463,33 @@ class BatchProcessingService:
         self,
         action_name: str | None,
         batch_output: list[dict[str, Any]],
+        relative_path: str,
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
+
+        *relative_path* is the file being written, and the only file read: the
+        rows are handed straight to the write, so gathering them across the
+        action's other files puts those files' records into this one.
+
+        A store this cannot read raises rather than returning the batch's answers
+        alone — those answers replace the file, so swallowing the error here
+        deletes every row the batch did not answer for.
 
         The output is replaced whole, so what decides is whether the row exists,
         not what disposition it holds: `failed` is not terminal, and a batch
         narrowed to one record would drop the rest. Same rule as
-        ``DispositionGate.carried_past_repair`` online. The walk spans every
-        target file of the action, not only the one being collected — pre-existing,
-        see the #1017 follow-up.
+        ``DispositionGate.carried_past_repair`` online.
         """
         if not self._storage_backend or not action_name:
             return batch_output
 
         try:
-            stored_guids = set(self._storage_backend.target_rows_per_source_guid(action_name))
-        except Exception:
-            logger.debug("Could not read stored rows for %s", action_name, exc_info=True)
+            stored = self._storage_backend.read_target_for_rewrite(action_name, relative_path)
+        except FileNotFoundError:
+            # Nothing stored for this file yet, so nothing to carry.
             return batch_output
 
+        stored_guids = {row["source_guid"] for row in stored if row.get("source_guid")}
         if not stored_guids:
             return batch_output
 
@@ -491,12 +501,13 @@ class BatchProcessingService:
 
         from agent_actions.processing.disposition_gate import build_carry_forward
 
-        carry_records: list[dict[str, Any]] = []
-        for rel_path in self._storage_backend.list_target_files(action_name):
-            found, _missing = build_carry_forward(
-                carry_guids, action_name, rel_path, self._storage_backend
-            )
-            carry_records.extend(found)
+        # Re-reads the same file, which the reconstruction cache answers, and in
+        # exchange keeps the one-row-per-identity rule in the place that owns it.
+        # Not its checkpoint fallback: a file with no stored rows has returned
+        # above, so that branch is unreachable from here.
+        carry_records, _missing = build_carry_forward(
+            carry_guids, action_name, relative_path, self._storage_backend
+        )
 
         if carry_records:
             logger.info(
