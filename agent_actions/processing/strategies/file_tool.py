@@ -37,12 +37,12 @@ def _collapse_contributor_guids(
     *,
     re_keyed: bool = False,
 ) -> list[str]:
-    """Guids an output consumed but does not carry.
+    """Guids of inputs an output consumed but does not carry.
 
-    Such an input leaves no disposition row at the consuming action and is
-    reprocessed on every retry. *re_keyed* when every row will be minted a fresh
-    identity below this strategy, as lineage enrichment does for an expansion: no
-    guid a row carries now survives, so none accounts for an input.
+    An input missing from the result leaves no disposition row at the consuming action
+    and is reprocessed on every retry. *re_keyed* when every row will be minted a fresh
+    identity below this strategy, as lineage enrichment does for an expansion: no guid
+    a row carries now survives, so none accounts for an input.
     """
     carried = set() if re_keyed else {item.get("source_guid") for item in structured_data}
     contributors: set[str] = set()

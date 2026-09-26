@@ -347,13 +347,6 @@ NOT terminal (reprocessed on re-run):
   ✗ DEFERRED   ← in-flight batch/HITL, not done yet
 ```
 
-On resume, `build_carry_forward()` reads prior output for carried records. A record
-resolves either by its own `source_guid` or through the rows it produced, matched on
-their `producer_source_guid`: an action that mints an identity per output row holds
-none carrying its input's, so an input resolvable only the second way would otherwise
-be re-queued and reprocessed on every run. Every row a producer made comes back, since
-the input is the whole group's only identity.
-
 On resume, `build_carry_forward()` reads prior output for carried records:
 
 ```
@@ -363,6 +356,12 @@ except FileNotFoundError:
     if found → use as carry-forward data
     else → reprocess all
 ```
+
+A record resolves either by its own `source_guid` or through the rows it produced,
+matched on their `producer_source_guid`: an action that mints an identity per output
+row holds none carrying its input's, so an input resolvable only the second way would
+be re-queued and reprocessed on every run. Every row a producer made comes back, since
+the input is the whole group's only identity.
 
 ---
 
