@@ -346,6 +346,52 @@ class TestARepairArrivingWhileABatchIsInFlight:
 
         assert _dispositions(project)["p0"] == "failed"
 
+    def test_a_dry_run_says_the_repair_would_be_refused(self, submitted_not_collected):
+        """`--dry-run` is the documented way to see what a retry would do, so it is
+        the one place the refusal has to appear before it costs anything. Reporting
+        a plan the real command declines is the answer it must not give."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", "p0", "--dry-run")
+
+        assert "in flight" in output, output
+        assert code == 0, "a dry run reports; it does not fail"
+
+    def test_a_dry_run_still_changes_nothing(self, submitted_not_collected):
+        """Surfacing the refusal must not cost the dry run its one guarantee."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        _agac(project, "retry", "-a", WORKFLOW, "--record", "p0", "--dry-run")
+
+        assert _dispositions(project)["p0"] == "failed"
+
+    def test_the_repair_can_be_let_through_deliberately(self, submitted_not_collected):
+        """A batch the provider has forgotten — an expired id — leaves an entry that
+        reads in flight forever, and every remedy the refusal names needs the
+        provider to answer. The way out is explicit rather than absent."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        code, output = _agac(
+            project, "retry", "-a", WORKFLOW, "--record", "p0", "--abandon-in-flight"
+        )
+
+        assert code == 0, output
+
+    def test_abandoning_names_what_it_gives_up(self, submitted_not_collected):
+        """Abandoning is a loss, so it is reported rather than performed quietly."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        _code, output = _agac(
+            project, "retry", "-a", WORKFLOW, "--record", "p0", "--abandon-in-flight"
+        )
+
+        assert "abandon" in output.lower(), output
+        assert "batch_" in output, f"the batch id being given up is not named: {output}"
+
     def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
         """The refusal names a way forward, so the way forward has to work."""
         project = submitted_not_collected
