@@ -267,7 +267,10 @@ RetryCommand.execute()
   ├─ Reset downstream ActionStatus → PENDING
   ├─ workflow.run()
   │
-  └─ _delete_manifest()                             ← only after successful completion
+  ├─ State check: is_workflow_complete / is_workflow_done / has_any_failed
+  ├─ _delete_manifest()                             ← the repair reached the end, either way
+  │
+  └─ SystemExit(1) if a downstream action failed    ← same contract as `run`
 ```
 
 ### `inspect` -- Command Group
@@ -471,7 +474,7 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 
 3. **`project_root` injection.** `@requires_project` injects `project_root` as a keyword argument. The wrapped function's signature must accept `project_root: Path | None = None` or the call will fail with a `TypeError`. Commands that do not need project root (like `init new`) must not use `@requires_project`.
 
-4. **Retry manifest crash safety.** `RetryCommand` writes a manifest of snapshotted dispositions BEFORE clearing them from the database. If the process crashes between clearing and re-run completion, the next `retry` invocation detects the manifest, restores the dispositions, deletes the manifest, and proceeds. The manifest is only deleted on successful completion.
+4. **Retry manifest crash safety.** `RetryCommand` writes a manifest of snapshotted dispositions BEFORE clearing them from the database. If the process crashes between clearing and re-run completion, the next `retry` invocation detects the manifest, restores the dispositions, deletes the manifest, and proceeds. The manifest is deleted once the re-run reaches the end, whether or not an action failed: the dispositions on disk are then the current truth, and restoring the snapshot over them would reinstate failures the re-run has just re-decided. A re-run that dies partway leaves the manifest behind, which is the case it exists for.
 
 5. **`NODE_LEVEL_RECORD_ID` clearing.** During retry, in addition to clearing per-record dispositions, the code clears `NODE_LEVEL_RECORD_ID` -- a synthetic record ID used for action-level status. Without this, the executor would see a stale action-level FAILED signal and skip the action entirely.
 

@@ -73,8 +73,22 @@ def _read_manifest(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _classify_outcome(state_mgr: Any) -> str:
+    """Decide the finished workflow the way ``run.py`` decides it.
+
+    Both commands hand this status to the run tracker and turn it into an exit
+    code, so a caller reading one reads the other. An action that completed with
+    record-level failures is a complete action, and so a success.
+    """
+    if state_mgr.is_workflow_complete():
+        return "SUCCESS"
+    if not state_mgr.is_workflow_done():
+        return "PAUSED"
+    return "FAILED" if state_mgr.has_any_failed() else "SUCCESS"
+
+
 def _delete_manifest(path: Path) -> None:
-    """Delete the retry manifest after successful completion."""
+    """Delete the retry manifest once the re-run has reached the end, failed or not."""
     try:
         path.unlink(missing_ok=True)
     except OSError as e:
@@ -268,13 +282,7 @@ class RetryCommand:
         error_message = None
         try:
             workflow.run()
-
-            if state_mgr.is_workflow_complete():
-                status = "SUCCESS"
-            elif state_mgr.is_workflow_done() and not state_mgr.has_any_failed():
-                status = "SUCCESS"
-            elif state_mgr.get_batch_submitted_actions(workflow.execution_order):
-                status = "PAUSED"
+            status = _classify_outcome(state_mgr)
         except Exception:
             error_message = traceback.format_exc()
             raise
@@ -295,10 +303,24 @@ class RetryCommand:
             except Exception as e:
                 logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
 
-        # Retry completed successfully — delete the manifest.
+        # The repair ran to the end, so the dispositions on disk are the current
+        # truth whatever the outcome; replaying the snapshot over them would
+        # reinstate the failures this run just re-decided.
         _delete_manifest(manifest_file)
 
+        if status == "FAILED":
+            self._report_failures(state_mgr, list(workflow.execution_order))
+            raise SystemExit(1)
+
         self.console.print("\n[green]Retry complete.[/green]")
+
+    def _report_failures(self, state_mgr, execution_order: list[str]) -> None:
+        failed = state_mgr.get_failed_actions(execution_order)
+        skipped = state_mgr.get_skipped_actions(execution_order)
+        self.console.print(f"\n[red]Retry finished with failures for: {self.agent_name}[/red]")
+        self.console.print(f"  Failed actions: {', '.join(failed)}")
+        if skipped:
+            self.console.print(f"  Skipped actions: {', '.join(skipped)}")
 
     def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
         """Decide what a batch still out at the provider means for this repair.
