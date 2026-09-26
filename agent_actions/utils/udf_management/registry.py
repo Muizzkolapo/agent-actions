@@ -37,6 +37,14 @@ class FileUDFResult:
                     f"FileUDFResult output[{i}] source_index must be int, list[int], or None. "
                     f"Got {type(src).__name__}."
                 )
+            # Refused rather than read as None: a contributor list that came out empty is
+            # as likely a filter that dropped everything as a row meant to be invented.
+            if isinstance(src, list) and not src:
+                raise ValueError(
+                    f"FileUDFResult output[{i}] source_index is an empty list. "
+                    f"Use None to declare that no single input produced this row, "
+                    f"or list the inputs that contributed to it."
+                )
             if "data" not in out or not isinstance(out["data"], dict):
                 raise ValueError(
                     f"FileUDFResult output[{i}] missing 'data' dict. "

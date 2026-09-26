@@ -98,3 +98,41 @@ class TestFileUDFResultValidation:
             ]
         )
         assert result.outputs[0]["source_index"] == [0, 1]
+
+    def test_empty_source_index_list_is_refused(self):
+        """An empty contributor list says no input produced the row — which is what
+        `None` already says, per this class's own missing-source_index message. Accepted,
+        it reached `reconcile_outputs` and raised `IndexError` on a bare `src_idx[0]`.
+        """
+        with pytest.raises(ValueError) as caught:
+            FileUDFResult(outputs=[{"source_index": [], "data": {"q": "Q1"}}])
+
+        message = str(caught.value)
+        assert "output[0]" in message, message
+        assert "empty list" in message, (
+            f"the refusal has to name what was wrong with the input, or it reads as the "
+            f"missing-source_index error and misdiagnoses it: {message}"
+        )
+        assert "None" in message, (
+            f"the refusal has to name the way to say a row had no input, or the author "
+            f"retries with the same empty list: {message}"
+        )
+
+    def test_the_refusal_names_which_output_carried_it(self):
+        """A tool returns many rows at once; a refusal that does not say which one
+        sends the author reading all of them."""
+        with pytest.raises(ValueError, match=r"output\[2\]"):
+            FileUDFResult(
+                outputs=[
+                    {"source_index": 0, "data": {"q": "Q1"}},
+                    {"source_index": [0, 1], "data": {"merged": True}},
+                    {"source_index": [], "data": {"q": "Q3"}},
+                ]
+            )
+
+    def test_none_is_still_how_a_row_says_no_input_produced_it(self):
+        """Control: the refusal must not catch the documented synthetic form, which is
+        the one it tells the author to use."""
+        result = FileUDFResult(outputs=[{"source_index": None, "data": {"q": "Q1"}}])
+
+        assert result.outputs[0]["source_index"] is None

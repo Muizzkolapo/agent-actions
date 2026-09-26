@@ -228,3 +228,52 @@ def test_a_row_carried_past_a_retry_keeps_what_came_before_it(inventing):
     namespaces = [sorted(r.get("content", {})) for r in _read_back(inventing, "roll_up")]
     assert namespaces == [["flatten", "roll_up", "source"]] * len(namespaces)
     assert len(namespaces) == 4
+
+
+EMPTY_CONTRIBUTORS_TOOL = '''from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_up_nothing(data: Any, *args) -> Any:
+    """A contributor list computed down to nothing — the shape a filter leaves."""
+    return FileUDFResult(
+        [
+            {"source_index": [0], "data": {"summary": "kept", "exam_density": "high"}},
+            {"source_index": [], "data": {"summary": "dropped", "exam_density": "high"}},
+        ]
+    )
+'''
+
+EMPTY_CONTRIBUTORS_ACTION = """  - name: roll_up_nothing
+    kind: tool
+    granularity: File
+    dependencies: [flatten]
+    intent: "Declare one output's contributors as an empty list"
+    schema: tool_action_output
+    impl: roll_up_nothing
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+def test_an_empty_contributor_list_fails_the_run_and_says_why(project):  # noqa: F811
+    """The refusal has to reach the operator, not just the constructor.
+
+    It is raised inside the tool now rather than by the framework after the tool
+    returned, so it leaves through a different wrapper — and a tool-side error that
+    got absorbed would turn this into tombstones with a warning.
+    """
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + EMPTY_CONTRIBUTORS_ACTION)
+    (project / "tools" / WORKFLOW / "roll_up_nothing.py").write_text(EMPTY_CONTRIBUTORS_TOOL)
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+
+    assert result.exit_code != 0, result.output
+    assert "output[1]" in result.output, result.output
+    assert "empty list" in result.output, result.output
+    # Not the IndexError a bare src_idx[0] raised from framework internals before.
+    assert "list index out of range" not in result.output, result.output
