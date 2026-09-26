@@ -56,6 +56,12 @@ def _consumed_guids(
     Read off the mapping rather than off the guid the row is replacing: that guid may
     itself have been minted by this action a step earlier, and would name no input.
     """
+    if source_mapping is not None and source_mapping.get(output_index, False) is None:
+        # Mapped to no input: the row is the tool's own invention. Resolving it to one
+        # anyway — as the neighbouring _resolve_input_record does for namespaces — would
+        # hand that input's carry a row it never produced.
+        return []
+
     source_idx: int | list[int] | None = None
     if source_mapping is not None:
         if output_index in source_mapping:

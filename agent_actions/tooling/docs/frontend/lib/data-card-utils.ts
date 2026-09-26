@@ -14,6 +14,7 @@ export const METADATA_KEYS = new Set([
   "source_guid",
   "parent_source_guid",
   "producer_source_guids",
+  "repeat_of_source_guid",
   "lineage",
   "node_id",
   "metadata",

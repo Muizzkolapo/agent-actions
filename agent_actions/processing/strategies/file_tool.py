@@ -251,9 +251,13 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            result.collapse_contributor_guids = _collapse_contributor_guids(
-                structured_data, source_mapping, records, re_keyed=is_expansion
-            )
+            # Not when a row belongs to no input: the result cannot be rebuilt by
+            # carrying, so crediting its inputs stops the recompute and the invented
+            # row is dropped from the rewrite. Same reason the sweep above is gated.
+            if not has_synthetic:
+                result.collapse_contributor_guids = _collapse_contributor_guids(
+                    structured_data, source_mapping, records, re_keyed=is_expansion
+                )
 
             return [result] + missing_results
 
