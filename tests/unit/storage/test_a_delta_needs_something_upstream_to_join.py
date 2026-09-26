@@ -276,3 +276,32 @@ class TestTheRuleIsNotKeyedToOneActionName:
         assert _namespaces(deeper, "stage_three") == [
             ["source", "stage_one", "stage_three", "stage_two"]
         ]
+
+
+class TestAnUpstreamRowHoldingTheIdentityButNoContent:
+    """Presence of the identity upstream is not the question — whether anything
+    would be rejoined under it is. A row stored without this action's namespace is
+    stored whole with no content, so it answers the first and not the second."""
+
+    @pytest.fixture
+    def empty_upstream(self, tmp_path):
+        b = _backend(tmp_path, ["a1", "a2"], {"a1": [], "a2": ["a1"]})
+        b.write_target(
+            "a1",
+            "f.json",
+            [{"source_guid": "G0", "_state": "processed", "_schema_version": 1, "content": {}}],
+            is_first_action=True,
+        )
+        return b
+
+    def test_the_row_below_it_is_stored_whole(self, empty_upstream):
+        empty_upstream.write_target("a2", "f.json", [_row("G0", "a2")])
+
+        assert _modes(empty_upstream, "a2") == ["full"]
+
+    def test_its_namespaces_survive_the_round_trip(self, empty_upstream):
+        """Stored as a delta it would rejoin an empty namespace and come back
+        holding a2 alone."""
+        empty_upstream.write_target("a2", "f.json", [_row("G0", "a2")])
+
+        assert _namespaces(empty_upstream, "a2") == [["a1", "a2", "source"]]

@@ -143,3 +143,171 @@ class TestThreeParallelStartNodes:
         content = three_roots.read_target("c1", "f.json")[0]["content"]
 
         assert (content["b1"], content["b2"]) == ({"v": 2}, {"v": 3})
+
+
+class TestABoundaryThatIsAPeerWithAnAncestorAboveIt:
+    """The shape a 1->N expansion fanning back in actually makes: one root, three
+    expanding peers, a fan-in below them. The boundary is a peer of two actions
+    and a descendant of a third, so neither cutting at its position nor refusing
+    to cut at all is right — only cutting at what it supersedes.
+    """
+
+    @pytest.fixture
+    def expansion_fan_in(self, tmp_path):
+        b = _backend(
+            tmp_path,
+            ["s", "e1", "e2", "e3", "c"],
+            {"s": [], "e1": ["s"], "e2": ["s"], "e3": ["s"], "c": ["s", "e1", "e2", "e3"]},
+        )
+        b.write_target(
+            "s", "f.json", _row({"source": {"t": 1}, "s": {"v": 0}}), is_first_action=True
+        )
+        b.write_target("e1", "f.json", _row({"source": {"t": 1}, "s": {"v": 0}, "e1": {"v": 1}}))
+        # The whole row: an expansion stores its minted rows this way, and this one
+        # carries everything above e2 and nothing of e1 or e3.
+        b.write_target(
+            "e2",
+            "f.json",
+            [
+                {
+                    "source_guid": "G0",
+                    "_state": "processed",
+                    "_schema_version": 1,
+                    "_delta_mode": "full",
+                    "content": {"source": {"t": 1}, "s": {"v": 0}, "e2": {"v": 2}},
+                }
+            ],
+        )
+        b.write_target("e3", "f.json", _row({"source": {"t": 1}, "s": {"v": 0}, "e3": {"v": 3}}))
+        b.write_target(
+            "c",
+            "f.json",
+            _row(
+                {
+                    "source": {"t": 1},
+                    "s": {"v": 0},
+                    "e1": {"v": 1},
+                    "e2": {"v": 2},
+                    "e3": {"v": 3},
+                    "c": {"v": 4},
+                }
+            ),
+        )
+        return b
+
+    def test_the_peers_above_and_below_the_boundary_both_survive(self, expansion_fan_in):
+        """Cutting at the boundary's position keeps e3 and drops e1."""
+        assert sorted(expansion_fan_in.read_target("c", "f.json")[0]["content"]) == [
+            "c",
+            "e1",
+            "e2",
+            "e3",
+            "s",
+            "source",
+        ]
+
+    def test_the_root_the_boundary_supersedes_still_arrives_through_it(self, expansion_fan_in):
+        """`s` is not merged — the boundary supersedes it — so the boundary's own
+        row is what carries it, which is the premise the cut relies on."""
+        content = expansion_fan_in.read_target("c", "f.json")[0]["content"]
+
+        assert content["s"] == {"v": 0}
+        assert content["source"] == {"t": 1}
+
+
+class TestWhichWholeRowBecomesTheBoundary:
+    """Two upstream actions hold a whole row for one identity. Storage offers them
+    in no defined order, so the choice has to come from the graph — and it is the
+    shallower one, which supersedes the least."""
+
+    @pytest.fixture
+    def two_boundaries(self, tmp_path):
+        b = _backend(
+            tmp_path,
+            ["r1", "r2", "m", "c"],
+            {"r1": [], "r2": [], "m": ["r1", "r2"], "c": ["r1", "r2", "m"]},
+        )
+        b.write_target(
+            "r1", "f.json", _row({"source": {"t": 1}, "r1": {"v": 1}}), is_first_action=True
+        )
+        # r2 has no upstream, so it is stored whole in its own right.
+        b.write_target("r2", "f.json", _row({"source": {"t": 1}, "r2": {"v": 2}}))
+        # A correlated merge stores its rows whole, and this one never read r1.
+        b.write_target(
+            "m",
+            "f.json",
+            [
+                {
+                    "source_guid": "G0",
+                    "_state": "processed",
+                    "_schema_version": 1,
+                    "_delta_mode": "full",
+                    "content": {"source": {"t": 1}, "r2": {"v": 2}, "m": {"v": 3}},
+                }
+            ],
+        )
+        b.write_target(
+            "c",
+            "f.json",
+            _row(
+                {
+                    "source": {"t": 1},
+                    "r1": {"v": 1},
+                    "r2": {"v": 2},
+                    "m": {"v": 3},
+                    "c": {"v": 4},
+                }
+            ),
+        )
+        return b
+
+    def test_the_deeper_boundary_does_not_supersede_the_root_it_never_read(self, two_boundaries):
+        """Bounding at `m` would drop `r1`, which `m`'s row does not carry."""
+        assert sorted(two_boundaries.read_target("c", "f.json")[0]["content"]) == [
+            "c",
+            "m",
+            "r1",
+            "r2",
+            "source",
+        ]
+
+
+class TestAGraphEntryThatNamesItself:
+    """Nothing the coordinator writes looks like this, but the graph is metadata a
+    store can hold, and superseding the boundary itself empties the merge."""
+
+    @pytest.fixture
+    def self_naming(self, tmp_path):
+        b = _backend(
+            tmp_path, ["a1", "b1", "c1"], {"a1": [], "b1": ["a1", "b1"], "c1": ["a1", "b1"]}
+        )
+        b.write_target(
+            "a1", "f.json", _row({"source": {"t": 1}, "a1": {"v": 1}}), is_first_action=True
+        )
+        b.write_target(
+            "b1",
+            "f.json",
+            [
+                {
+                    "source_guid": "G0",
+                    "_state": "processed",
+                    "_schema_version": 1,
+                    "_delta_mode": "full",
+                    "content": {"source": {"t": 1}, "a1": {"v": 1}, "b1": {"v": 2}},
+                }
+            ],
+        )
+        b.write_target(
+            "c1",
+            "f.json",
+            _row({"source": {"t": 1}, "a1": {"v": 1}, "b1": {"v": 2}, "c1": {"v": 3}}),
+        )
+        return b
+
+    def test_the_boundary_still_merges_itself(self, self_naming):
+        assert sorted(self_naming.read_target("c1", "f.json")[0]["content"]) == [
+            "a1",
+            "b1",
+            "c1",
+            "source",
+        ]

@@ -483,11 +483,12 @@ class StorageBackend(ABC):
 
         upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
 
-        # Index upstream deltas by (action_name, source_guid).
-        # Track which guids have a "full" record — those are self-contained
-        # and we don't need to look further upstream for that guid.
+        # A guid's "full" record is self-contained above the action that stored it,
+        # so it bounds that guid's merge — the shallowest such action, because a
+        # position in this list is not proof of being an ancestor.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
+        position = {act: i for i, act in enumerate(upstream_actions)}
         for act, records in upstream_data.items():
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
@@ -499,13 +500,17 @@ class StorageBackend(ABC):
                         rec_content = {}
                     guid_map[guid] = rec_content
                     if rec.get("_delta_mode") == "full":
-                        full_boundary_guids[guid] = act
+                        held = full_boundary_guids.get(guid)
+                        # Storage hands these back in no defined order, and which
+                        # one is chosen decides what the merge drops, so choose by
+                        # the graph rather than by arrival.
+                        if held is None or position.get(act, 0) < position.get(held, 0):
+                            full_boundary_guids[guid] = act
             upstream[act] = guid_map
 
-        # For each current record, determine how far back to reconstruct.
-        # If a "full" upstream record exists for this guid, only merge from
-        # that point forward — the full record already contains everything
-        # before it (expansion records embed upstream content).
+        # For each current record, determine how far back to reconstruct: a guid
+        # whose boundary is upstream skips that boundary's own upstream, which the
+        # boundary's row already carries.
         reconstructed: list[dict[str, Any]] = []
         for record in delta_records:
             mode = record.get("_delta_mode")
@@ -522,6 +527,7 @@ class StorageBackend(ABC):
             boundary_action = full_boundary_guids.get(guid) if guid else None
             if boundary_action and boundary_action in upstream_actions:
                 superseded = set(self._get_upstream_actions(boundary_action))
+                superseded.discard(boundary_action)
                 merge_actions = [a for a in upstream_actions if a not in superseded]
             else:
                 merge_actions = upstream_actions
@@ -560,8 +566,10 @@ class StorageBackend(ABC):
     def _get_upstream_actions(self, action_name: str) -> list[str]:
         """Get the transitive upstream actions for a given action.
 
-        Uses the dependency graph if available (correct for DAGs with parallel actions).
-        Falls back to execution_order[:idx] if no graph stored (legacy).
+        Uses the dependency graph if available, falling back to
+        execution_order[:idx]. Either way the answer is a superset of the action's
+        true ancestors: the stored graph records every action of every earlier
+        execution level, so it includes actions this one never reads.
         """
         # Try dependency graph first (correct for parallel pipelines)
         if self._dependency_graph_cache is None:
