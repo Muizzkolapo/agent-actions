@@ -115,10 +115,10 @@ class TestCheckBatchSubmission:
     def test_a_collected_batch_is_not_reported_as_a_submission(
         self, mock_job_manager, mock_processing_service, mock_storage_backend
     ):
-        """A COMPLETED entry is spent — `finalize_batch_output` is the only writer
-        of that status and it writes it after the results are collected. Reporting
-        it as a submission pauses the run to collect a batch with nothing left to
-        give, and the action never reaches its completion handling."""
+        """An entry stamped collected is spent. Reporting it as a submission pauses
+        the run to collect a batch with nothing left to give, and the action never
+        reaches its completion handling. The stamp is what says so — see the test
+        below for why the COMPLETED status cannot."""
         import json
 
         mock_storage_backend.load_metadata.return_value = json.dumps(
