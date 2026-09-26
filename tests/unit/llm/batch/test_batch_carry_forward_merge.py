@@ -1,8 +1,9 @@
 """Tests for batch carry-forward merge at retrieve time.
 
 Tests cover: parent spec items 6, 17 (cleanup part).
-Carry-forward is now derived from terminal dispositions in the storage
-backend, not from a filesystem file.
+What is carried is every row the action holds that the batch did not answer
+for — the rows exist and the output is replaced whole, so a row left out is a
+row deleted. Their dispositions do not enter into it.
 """
 
 from __future__ import annotations
@@ -36,11 +37,20 @@ def _make_service(
 def _mock_backend(
     target_files: list[str] | None = None,
     prior_output: dict[str, list[dict]] | None = None,
-    terminal_guids: set[str] | None = None,
+    stored_guids: set[str] | None = None,
 ) -> MagicMock:
+    """*stored_guids* defaults to the identities *prior_output* holds rows for.
+
+    Given explicitly only where the two must differ — a backend that reports a
+    row it then cannot hand over.
+    """
     backend = MagicMock()
     backend.list_target_files.return_value = target_files or []
-    backend.get_terminal_record_ids.return_value = terminal_guids or set()
+    if stored_guids is None:
+        stored_guids = {
+            row["source_guid"] for rows in (prior_output or {}).values() for row in rows
+        }
+    backend.target_rows_per_source_guid.return_value = dict.fromkeys(stored_guids, 1)
 
     def read_target(action_name: str, rel_path: str) -> list[dict]:
         if prior_output and rel_path in prior_output:
@@ -62,7 +72,6 @@ class TestMergeCarryForward:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={f"r{i}" for i in range(9)},
         )
         service = _make_service(storage_backend=backend)
 
@@ -74,9 +83,9 @@ class TestMergeCarryForward:
         guids = {r["source_guid"] for r in result}
         assert guids == {f"r{i}" for i in range(10)}
 
-    def test_no_terminal_guids_returns_unchanged(self):
-        """No terminal dispositions -> output unchanged."""
-        backend = _mock_backend(terminal_guids=set())
+    def test_no_stored_rows_returns_unchanged(self):
+        """The action holds no rows of its own -> nothing to carry."""
+        backend = _mock_backend(stored_guids=set())
         service = _make_service(storage_backend=backend)
 
         batch_output = [{"source_guid": "r0"}]
@@ -91,7 +100,6 @@ class TestMergeCarryForward:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={"r0"},
         )
         service = _make_service(storage_backend=backend)
 
@@ -108,7 +116,7 @@ class TestCarryForwardEdgeCases:
         backend = _mock_backend(
             target_files=["data1.json", "data2.json"],
             prior_output={"data1.json": [{"source_guid": "r0", "data": "ok"}]},
-            terminal_guids={"r0", "r1"},
+            stored_guids={"r0", "r1"},
         )
         service = _make_service(storage_backend=backend)
 
@@ -125,7 +133,6 @@ class TestCarryForwardEdgeCases:
         backend = _mock_backend(
             target_files=["data.json"],
             prior_output={"data.json": prior_records},
-            terminal_guids={"r0", "r1"},
         )
         service = _make_service(storage_backend=backend)
 
@@ -136,6 +143,21 @@ class TestCarryForwardEdgeCases:
         r0s = [r for r in result if r["source_guid"] == "r0"]
         assert len(r0s) == 1
         assert r0s[0]["data"] == "new"
+
+    def test_a_non_terminal_row_is_carried(self):
+        """The half a terminal-disposition rule gets wrong. `failed` is not a
+        terminal disposition, so a rule reading dispositions drops this row and
+        leaves its disposition naming a record with no data."""
+        backend = _mock_backend(
+            target_files=["data.json"],
+            prior_output={"data.json": [{"source_guid": "r0", "data": "kept"}]},
+        )
+        service = _make_service(storage_backend=backend)
+
+        result = service._merge_carry_forward("test_action", [{"source_guid": "r1"}])
+
+        assert [r["source_guid"] for r in result] == ["r1", "r0"]
+        backend.get_terminal_record_ids.assert_not_called()
 
     def test_no_storage_backend_returns_unchanged(self):
         """No storage backend -> output unchanged."""

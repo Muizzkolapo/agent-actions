@@ -176,6 +176,9 @@ class RetryCommand:
         downstream_actions = execution_order[from_idx:]
         record_ids = {r["record_id"] for r in target_records}
 
+        # Before the manifest, so a refusal costs nothing: nothing is cleared yet.
+        self._refuse_while_a_batch_is_in_flight(backend, downstream_actions)
+
         logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
             "If the re-run fails, run 'retry' again to resume.",
@@ -212,6 +215,10 @@ class RetryCommand:
             # Clear checkpoint records so stale partial output from a prior
             # interrupted run is not carried forward instead of reprocessing.
             backend.clear_checkpoint_records(action)
+            # Spent registry entries are not marked spent, so left in place they
+            # hand this repair the prior batch id instead of its own narrowed
+            # submission, and the collecting run replays that batch whole.
+            backend.clear_batch_state(action)
 
         self.console.print(
             f"\n[cyan]Cleared {cleared} disposition(s) for {len(record_ids)} record(s) "
@@ -286,6 +293,32 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self.console.print("\n[green]Retry complete.[/green]")
+
+    @staticmethod
+    def _refuse_while_a_batch_is_in_flight(backend, actions: list[str]) -> None:
+        """Abort if any action this repair re-runs still has a batch out at the provider.
+
+        That batch is authoritative for a rewrite of the file it was submitted
+        for. A repair starting on top of it submits a second one over the same
+        file, and whichever is collected last wins — the other is paid for and
+        its answers are discarded. Collecting first costs a command and settles
+        it, so the repair says that rather than guessing.
+        """
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        for action in actions:
+            in_flight = [
+                entry.batch_id
+                for entry in BatchRegistryManager(backend, action).get_all_jobs().values()
+                if entry.is_in_flight
+            ]
+            if in_flight:
+                raise click.ClickException(
+                    f"Action '{action}' has {len(in_flight)} batch job(s) in flight "
+                    f"({', '.join(sorted(in_flight))}). Their results would be lost to "
+                    f"this repair's own submission. Collect them first — run the "
+                    f"workflow again — then retry."
+                )
 
     def _records_this_repair_may_process(
         self,

@@ -1,12 +1,10 @@
-"""A repair under `run_mode: batch` does not narrow, and this is where that shows.
+"""A repair under `run_mode: batch` submits and collects only what it named.
 
-Two links, either alone enough. The repair's own process never submits:
-`submit_batch_job` finds the prior COMPLETED registry entry and returns its id
-above the gate, dropping the selection — yet the run still reports a pause, since
-`managers/batch.py` only checks that some entry exists. Collection is then a
-separate process, where `retried_records` is empty and which walks the registry
-rather than the repair. The xfails carry one claim each, so a partial fix cannot
-hold them red for a new reason.
+One claim per test, so a partial fix cannot hold the file green for a new
+reason. The repair's own process must hand the provider its selection rather
+than the prior batch's id; the separate collecting process must rebuild each
+file from that narrow batch plus the rows it did not answer for, whatever
+disposition those rows carry.
 """
 
 import json
@@ -26,14 +24,6 @@ FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
 WORKFLOW = "batch_field_rules"
 ACTION = "summarize"
 RECORDS = 4
-
-# Strict, so a fix turns these into unexpected passes rather than quiet greens.
-SUPPRESSED = pytest.mark.xfail(
-    strict=True, reason="a completed registry entry suppresses the repair's own submission"
-)
-REPLAYED = pytest.mark.xfail(
-    strict=True, reason="the collecting run replays the prior batch with an empty selection"
-)
 
 
 def _project(tmp_path):
@@ -168,8 +158,8 @@ def two_files(tmp_path):
     """The same cycle over two staged files, two records each.
 
     A repair narrows its file walk to the files holding the records it named, so
-    the second file's registry entry is never replaced — and collection walks the
-    registry, not the walk.
+    the second file is never re-submitted — and collection must not reach it
+    either, however the prior cycle left the registry.
     """
     root = _project(tmp_path)
     staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
@@ -191,10 +181,9 @@ def _guids_in(project, relative_path):
 
 
 class TestTheRepairSubmitsWhatItNamed:
-    @SUPPRESSED
     def test_the_provider_is_asked_for_the_named_record(self, submitted_and_collected):
-        """Fails inside the repair's own process, before any collection: the
-        completed entry short-circuits `submit_batch_job` and nothing is sent."""
+        """Asserted inside the repair's own process, before any collection: what
+        the provider is handed is the selection, not the prior batch again."""
         project = submitted_and_collected
         before = _submitted_batches(project)
         selected = _guids(project)[0]
@@ -209,7 +198,7 @@ class TestTheRepairSubmitsWhatItNamed:
         )
 
     def test_the_named_record_is_repaired(self, submitted_and_collected):
-        """The control: the replay does repair the named record, so the failures
+        """The control: the repair does repair the named record, so the claims
         below are about what else it touches, not about the repair not running."""
         project = submitted_and_collected
         selected = _guids(project)[0]
@@ -233,10 +222,9 @@ class TestTheRepairSubmitsWhatItNamed:
 
 
 class TestARecordTheRepairDidNotName:
-    """One claim per test. Bundling the disposition and the row under one xfail
-    lets a partial fix keep the test red for an entirely different reason."""
+    """One claim per test. Bundling the disposition and the row into one test
+    lets a partial fix keep it red for an entirely different reason."""
 
-    @REPLAYED
     def test_an_exhausted_record_keeps_its_disposition(self, submitted_and_collected):
         """`exhausted` is terminal like `success`. Pinned online by
         `test_an_exhausted_record_is_not_erased_by_a_capped_retry`."""
@@ -249,7 +237,6 @@ class TestARecordTheRepairDidNotName:
 
         assert _dispositions(project)[unnamed] == "exhausted"
 
-    @REPLAYED
     def test_a_failed_record_keeps_its_disposition(self, submitted_and_collected):
         """Two records failed and the repair names one — the shape
         `test_named_retry_preserves_other_failure_and_output` pins online."""
@@ -267,7 +254,7 @@ class TestARecordTheRepairDidNotName:
         narrowing fix gets wrong. Rebuilding the file from the records the batch
         answered for plus the *terminal* ones drops this row — `failed` is not in
         `TERMINAL_DISPOSITIONS` — leaving a disposition naming a record with no
-        data. Passes today only because the replay answers for everything.
+        data.
         """
         project = submitted_and_collected
         selected, unnamed = _guids(project)[0], _guids(project)[-1]
@@ -278,11 +265,10 @@ class TestARecordTheRepairDidNotName:
 
         assert unnamed in _guids(project)
 
-    @REPLAYED
     def test_its_row_is_not_rewritten(self, submitted_and_collected):
         """Separate from the disposition claims above, and the half that catches a
-        submission-only fix: the row is re-stamped by the replay even when the
-        answer it carries comes back identical."""
+        submission-only fix: a replay re-stamps the row even when the answer it
+        carries comes back identical."""
         project = submitted_and_collected
         before = _rows(project)
         selected, unnamed = _guids(project)[0], _guids(project)[-1]
@@ -294,11 +280,10 @@ class TestARecordTheRepairDidNotName:
 
 
 class TestAFileTheRepairNeverNamed:
-    """The defect is not an artifact of having one input file. The walk narrows to
-    the files holding the named records, so a second file's registry entry is never
-    replaced — and collection walks the registry, not the walk."""
+    """Not an artifact of having one input file. The walk narrows to the files
+    holding the named records, so a second file is never re-submitted — and
+    collection must not reach it on the strength of the prior cycle's registry."""
 
-    @REPLAYED
     def test_it_keeps_its_dispositions(self, two_files):
         selected = _guids_in(two_files, "a_pages.json")[0]
         unnamed = _guids_in(two_files, "b_pages.json")[0]
@@ -309,7 +294,6 @@ class TestAFileTheRepairNeverNamed:
 
         assert _dispositions(two_files)[unnamed] == "exhausted"
 
-    @REPLAYED
     def test_its_rows_are_not_rewritten(self, two_files):
         selected = _guids_in(two_files, "a_pages.json")[0]
         unnamed = _guids_in(two_files, "b_pages.json")[0]
@@ -319,3 +303,56 @@ class TestAFileTheRepairNeverNamed:
         _cycle(two_files, "retry", "-a", WORKFLOW, "--record", selected)
 
         assert _rows(two_files)[unnamed] == before[unnamed]
+
+
+class TestARepairArrivingWhileABatchIsInFlight:
+    """A batch nobody has collected still owns its records.
+
+    Letting a repair start here submits a second batch over the same file: two
+    batches, each authoritative for a rewrite of it, and whichever is collected
+    last wins. The first is paid for and its answers are thrown away. So the
+    repair is refused, before it clears anything, and says how to proceed.
+    """
+
+    @pytest.fixture
+    def submitted_not_collected(self, tmp_path):
+        root = _project(tmp_path)
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json"
+        staging.write_text(
+            json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
+        )
+        code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
+        assert code == 0, output
+        assert "run again" in output, "the fixture collected the batch instead of pausing on it"
+        return root
+
+    def test_the_repair_is_refused(self, submitted_not_collected):
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", "p0")
+
+        assert code != 0, output
+        assert "in flight" in output, output
+
+    def test_the_refusal_leaves_the_disposition_alone(self, submitted_not_collected):
+        """Refusing is only safe if it refuses before it clears. A repair that
+        wiped the dispositions and then aborted would leave the record with no
+        failure to find and no repair in progress."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        _agac(project, "retry", "-a", WORKFLOW, "--record", "p0")
+
+        assert _dispositions(project)["p0"] == "failed"
+
+    def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
+        """The refusal names a way forward, so the way forward has to work."""
+        project = submitted_not_collected
+        _cycle(project, "run", "-a", WORKFLOW)
+        selected = _guids(project)[0]
+        _set_disposition(project, selected, "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
+
+        assert code == 0, output
