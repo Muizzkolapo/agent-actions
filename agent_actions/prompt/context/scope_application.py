@@ -401,14 +401,20 @@ def format_llm_context(llm_context: dict) -> str:
 
 
 def _build_source_index(source_data: list[dict] | None) -> dict[str | None, dict]:
-    """Build source_guid -> source record index for cross-record source resolution."""
+    """Build source_guid -> source record index for cross-record source resolution.
+
+    First row wins a repeated guid, matching the linear scan the RECORD-mode
+    resolver uses. The pool is unique per guid within one staged path, but a
+    repair concatenates every path, so the two granularities would otherwise
+    pick different rows for the same record.
+    """
     index: dict[str | None, dict] = {}
     if not source_data:
         return index
     for src in source_data:
         sguid = src.get("source_guid") if isinstance(src, dict) else None
         if sguid:
-            index[sguid] = src
+            index.setdefault(sguid, src)
     return index
 
 

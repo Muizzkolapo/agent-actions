@@ -16,6 +16,8 @@ namespace builder then exposed that record's other content — its upstream acti
 under ``source.*``.
 """
 
+import pytest
+
 from agent_actions.processing.guard_context import build_guard_context
 from agent_actions.processing.source_resolution import resolve_source_content
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
@@ -65,7 +67,7 @@ class TestIdentityOutranksTheCarriedNamespace:
         granularity of the action that happens to read the record."""
         row = carrying("CARRIED", source_guid="G0")
 
-        assert record_mode_source(row) == file_mode_source(row)
+        assert record_mode_source(row) == file_mode_source(row) == {"url": "POOL"}
 
     def test_the_resolver_returns_the_pool_record_not_the_item(self):
         """At the resolver boundary, so a caller reading ``content`` directly sees it too."""
@@ -85,7 +87,7 @@ class TestACarriedNamespaceStillResolvesARecordThePoolCannotPlace:
     def test_both_granularities_agree_on_that_record_too(self):
         row = carrying("CARRIED", source_guid="GHOST")
 
-        assert record_mode_source(row) == file_mode_source(row)
+        assert record_mode_source(row) == file_mode_source(row) == {"url": "CARRIED"}
 
     def test_an_empty_pool_leaves_the_carried_namespace_as_the_answer(self):
         row = carrying("CARRIED", source_guid="G0")
@@ -114,6 +116,22 @@ class TestTheCarriedValueMustBeANamespace:
 
         assert observed is None, f"the record's own content was served as its source: {observed}"
 
+    @pytest.mark.parametrize("carried", [None, [{"url": "L"}], 0, ""])
+    def test_no_other_non_namespace_shape_shadows_a_resolving_identity(self, carried):
+        """The scalar is not a special case — anything that is not a namespace loses
+        to an identity that resolves."""
+        row = {"content": {"source": carried, "a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert record_mode_source(row) == {"url": "POOL"}
+
+    def test_an_emptied_namespace_is_not_treated_as_a_missing_one(self):
+        """``{}`` is a namespace, so it does not fall through to the pool — but it
+        carries no fields, so an observe on one resolves to nothing rather than to
+        the pool's value."""
+        row = {"content": {"source": {}, "a1": {"n": 1}}, "source_guid": "GHOST"}
+
+        assert record_mode_source(row) is None
+
     def test_a_record_carrying_no_source_key_at_all_still_resolves_by_identity(self):
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
 
@@ -123,3 +141,53 @@ class TestTheCarriedValueMustBeANamespace:
         row = {"content": {"a1": {"n": 1}}, "source_guid": "GHOST"}
 
         assert resolve_source_content(row, "GHOST", POOL, "a2") is None
+
+
+class TestAPoolThatIsTheActionsOwnInputSet:
+    """A workflow with no staging data of its own resolves against its input records,
+    so a record matches itself by guid. That is not a resolved source document."""
+
+    def test_a_self_hit_does_not_bypass_the_namespace_check(self):
+        row = {"content": {"a1": {"n": 1}, "secret": "X"}, "source_guid": "G0"}
+
+        assert resolve_source_content(row, "G0", [row], "a2") is None
+
+    def test_a_self_hit_still_yields_the_namespace_the_record_carries(self):
+        row = carrying("CARRIED", source_guid="G0")
+
+        resolved = resolve_source_content(row, "G0", [row], "a2")
+
+        assert resolved is not None
+        assert resolved["content"]["source"] == {"url": "CARRIED"}
+
+    def test_another_record_sharing_the_guid_is_still_resolved(self):
+        """Only a hit that *is* this record is skipped; a different row under the
+        same guid is a real pool entry and must still answer."""
+        row = carrying("CARRIED", source_guid="G0")
+        other = {"source_guid": "G0", "content": {"source": {"url": "OTHER-ROW"}}}
+
+        resolved = resolve_source_content(row, "G0", [other, row], "a2")
+
+        assert resolved["content"]["source"] == {"url": "OTHER-ROW"}
+
+
+class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
+    """A repair concatenates every staged path, so one guid can appear twice."""
+
+    def test_both_granularities_take_the_first_row(self):
+        pool = [
+            {"source_guid": "G0", "content": {"source": {"url": "FIRST"}}},
+            {"source_guid": "G0", "content": {"source": {"url": "LAST"}}},
+        ]
+        row = carrying("CARRIED", source_guid="G0")
+
+        assert record_mode_source(row, pool=pool) == file_mode_source(row, pool=pool)
+
+    def test_that_row_is_the_first_one(self):
+        pool = [
+            {"source_guid": "G0", "content": {"source": {"url": "FIRST"}}},
+            {"source_guid": "G0", "content": {"source": {"url": "LAST"}}},
+        ]
+        row = carrying("CARRIED", source_guid="G0")
+
+        assert file_mode_source(row, pool=pool) == {"url": "FIRST"}

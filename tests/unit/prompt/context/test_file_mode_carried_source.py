@@ -1,10 +1,10 @@
 """A FILE-mode record that carries its own ``source`` namespace resolves against it
 when neither identity hop matches the pool, as the RECORD-mode twin already does.
 
-``resolve_source_content`` reads the record's content before any guid; the FILE-mode
-resolver had no such rule, so a row already holding the namespace the scope asked for
-was skipped ``source_unresolved`` — and a batch where that hits every row then fails
-the action on a ``prefilter_by_guard`` length mismatch.
+The FILE-mode resolver had no such rule, so a row already holding the namespace the
+scope asked for was skipped ``source_unresolved`` — and a batch where that hits every
+row then fails the action on a ``prefilter_by_guard`` length mismatch. Both resolvers
+now read identity first and treat the carried namespace as the last resort.
 
 The fallback is last, not first: a row whose guid resolves still takes the pool's.
 """
@@ -57,8 +57,9 @@ class TestTheCarriedNamespaceIsTheLastResort:
         assert observed_urls(enriched) == ["http://mine.com"]
 
     def test_the_two_resolvers_agree_on_the_same_input(self):
-        """The parity the issue is about. RECORD-mode returns the record itself, so the
-        namespace it hands on is the carried one; FILE mode must observe that same one."""
+        """The parity the issue is about, on a row whose guid misses the pool: both
+        resolvers fall through to the namespace the row carries, so RECORD mode hands
+        on the record itself and FILE mode must observe that same namespace."""
         row = carrying("http://carried.com")
 
         record_mode = resolve_source_content(row, row["source_guid"], POOL, "test")
