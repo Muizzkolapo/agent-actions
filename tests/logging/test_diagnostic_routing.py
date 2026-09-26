@@ -270,12 +270,12 @@ class TestEnrichmentDiagnostics:
     def test_a_one_to_one_index_overrun_is_kept_off_the_console(self, tmp_path):
         events = _warns_from(self._enrich({0: 5}), tmp_path)
 
-        _assert_kept_off_the_console(events, "is out of bounds")
+        _assert_kept_off_the_console(events, "is not an input position")
 
     def test_a_many_to_one_index_overrun_is_kept_off_the_console(self, tmp_path):
         events = _warns_from(self._enrich({0: [0, 5]}), tmp_path)
 
-        _assert_kept_off_the_console(events, "indices out of bounds")
+        _assert_kept_off_the_console(events, "indices name no input")
 
 
 class TestScopeApplicationDiagnostics:

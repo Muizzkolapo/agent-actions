@@ -14,6 +14,7 @@ from agent_actions.logging.events import (
     EnrichmentPipelineCompleteEvent,
     EnrichmentPipelineStartedEvent,
 )
+from agent_actions.record.tracking import is_input_position
 
 from .types import ProcessingContext, ProcessingResult, ProcessingStatus
 
@@ -126,7 +127,9 @@ class LineageEnricher(Enricher):
                 if isinstance(source_idx, list):
                     # Many-to-one: multiple input records merged into one output
                     source_items = [
-                        context.source_data[idx] for idx in source_idx if idx < source_data_len
+                        context.source_data[idx]
+                        for idx in source_idx
+                        if is_input_position(idx, source_data_len)
                     ]
                     source_items = [
                         self._with_parent_fallback(s, parent_index) for s in source_items
@@ -134,7 +137,7 @@ class LineageEnricher(Enricher):
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
                         logger.warning(
-                            "source_mapping[%d]: %d of %d indices out of bounds "
+                            "source_mapping[%d]: %d of %d indices name no input "
                             "(source_data has %d items, action=%s)",
                             i,
                             skipped,
@@ -154,13 +157,13 @@ class LineageEnricher(Enricher):
                     parent_item = None
                 else:
                     # One-to-one: single input record
-                    if source_idx < source_data_len:
+                    if is_input_position(source_idx, source_data_len):
                         parent_item = self._with_parent_fallback(
                             context.source_data[source_idx], parent_index
                         )
                     else:
                         logger.warning(
-                            "source_mapping[%d] -> %d is out of bounds "
+                            "source_mapping[%d] -> %r is not an input position "
                             "(source_data has %d items, action=%s)",
                             i,
                             source_idx,

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from agent_actions.config.types import Granularity
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
+from agent_actions.record.tracking import is_input_position
 
 
 class FileUDFResult:
@@ -45,6 +46,21 @@ class FileUDFResult:
                     f"Use None to declare that no single input produced this row, "
                     f"or list the inputs that contributed to it."
                 )
+            # Refused where the tool wrote it: only the tool knows which input it
+            # meant. An index past the end stays accepted — every reader drops it.
+            if src is None:
+                elements: list[tuple[str, Any]] = []
+            elif isinstance(src, list):
+                elements = [(f"[{j}]", element) for j, element in enumerate(src)]
+            else:
+                elements = [("", src)]
+            for where, element in elements:
+                if not is_input_position(element):
+                    raise ValueError(
+                        f"FileUDFResult output[{i}] source_index{where} must be a "
+                        f"non-negative int naming an input position. Got {element!r}. "
+                        f"Use source_index=None for a row no single input produced."
+                    )
             if "data" not in out or not isinstance(out["data"], dict):
                 raise ValueError(
                     f"FileUDFResult output[{i}] missing 'data' dict. "

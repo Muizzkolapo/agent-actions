@@ -1,16 +1,9 @@
 """A contributor index has to be one, at the boundary that declares it.
 
-``source_index`` says which input produced an output. A scalar ``None`` means no
-single input did. Anything else is a position in the input list, and four
-consumers read it: reconciliation takes the first element as the parent,
-disposition accounting takes every element, and lineage takes every element
-again under its own bounds rule. Only the tool knows what it meant, so an
-element that names no input is refused where the tool wrote it rather than
-improvised over four times.
-
-Too-big stays tolerant — a tool cannot always know how many records the guard
-left it, every consumer already drops an index past the end, and the row still
-resolves against the inputs that do exist.
+``source_index`` names which input produced a row. Four readers take it apart
+under three different bounds rules, so an element naming no input is refused
+where the tool wrote it rather than guessed at four times. Too-big stays
+tolerant: every reader already drops it.
 """
 
 from __future__ import annotations

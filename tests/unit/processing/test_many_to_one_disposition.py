@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.record.reasons import TOOL_MISSING_RECORD
@@ -131,7 +133,12 @@ class TestTheOneToOneCasesAreUnchanged:
 
 
 class TestAnIndexTheToolNamedButCannotResolve:
-    """The accounting reads indices the tool wrote; a bad one must not excuse a record."""
+    """The accounting reads indices the tool wrote; a bad one must not excuse a
+    record. An index past the end is tolerated — every reader drops it and the
+    row still resolves against the inputs that exist. A negative or non-integer
+    one is refused where the tool declared it, because the readers disagreed
+    about it: accounting dropped it while lineage read it from the end.
+    """
 
     def test_an_out_of_range_index_accounts_for_nobody(self):
         records = _records("r0", "r1", "r2")
@@ -143,22 +150,10 @@ class TestAnIndexTheToolNamedButCannotResolve:
 
         assert _tombstoned(results) == ["r1", "r2"]
 
-    def test_a_negative_index_accounts_for_nobody(self):
-        records = _records("r0", "r1", "r2")
+    def test_a_negative_index_never_reaches_the_accounting(self):
+        with pytest.raises(ValueError, match="non-negative int"):
+            FileUDFResult(outputs=[{"source_index": [0, -1], "data": {"group": "a"}}])
 
-        results = _invoke(
-            records,
-            FileUDFResult(outputs=[{"source_index": [0, -1], "data": {"group": "a"}}]),
-        )
-
-        assert _tombstoned(results) == ["r1", "r2"]
-
-    def test_a_non_integer_index_accounts_for_nobody(self):
-        records = _records("r0", "r1", "r2")
-
-        results = _invoke(
-            records,
-            FileUDFResult(outputs=[{"source_index": [1, "0"], "data": {"group": "a"}}]),
-        )
-
-        assert _tombstoned(results) == ["r0", "r2"]
+    def test_a_non_integer_index_never_reaches_the_accounting(self):
+        with pytest.raises(ValueError, match="non-negative int"):
+            FileUDFResult(outputs=[{"source_index": [1, "0"], "data": {"group": "a"}}])

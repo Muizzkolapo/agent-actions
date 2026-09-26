@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeGuard
 
 
 class TrackedItem(dict):
@@ -19,3 +19,15 @@ class TrackedItem(dict):
     def __init__(self, data: dict[str, Any], source_index: int):
         super().__init__(data)
         self._source_index = source_index
+
+
+def is_input_position(value: Any, count: int | None = None) -> TypeGuard[int]:
+    """Whether *value* names a position in an input list of *count* records.
+
+    A ``bool`` is refused although it is an ``int``: ``True`` would name position
+    1, a real row and the wrong one. Omit *count* where the upper bound is
+    unknown, which is all the declaring boundary can check.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return False
+    return count is None or value < count

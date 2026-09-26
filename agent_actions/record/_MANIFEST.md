@@ -9,7 +9,7 @@ Single authority for record content assembly. Every action type, granularity, an
 | Name | Type | Exports | Signals |
 |------|------|---------|---------|
 | `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
-| `tracking.py` | Module | `TrackedItem` | - |
+| `tracking.py` | Module | `TrackedItem`, `is_input_position` | - |
 | `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `CASCADE_BLOCKING_VALUES` | - |
 | `reasons.py` | Module | Canonical reason string constants for disposition writes, tombstones, and telemetry (`SUCCESS`, `GUARD_SKIP`, `OBSERVE_FIELD_MISSING`, `SOURCE_UNRESOLVED`, ...). The exhaustion family names which recovery layer gave up: `RETRY_EXHAUSTED`, `EXPECTATIONS_EXHAUSTED`. | - |
 | `__init__.py` | Re-export | `RecordState` | - |
