@@ -293,6 +293,26 @@ class TestCatalogGeneratorProblemsFirst:
         assert len(events) == EVENT_TAIL_LIMIT
         assert sorted(e["seq"] for e in events if e["level"] == "error") == [0, 1]
 
+    def test_errors_do_not_crowd_out_warnings_either(self):
+        """Rarest-first must not become winner-takes-all. Once errors alone can
+        fill the problem half, strict priority leaves no room for a warning —
+        while routine rows keep the other half, which inverts the rule the
+        per-log budgets exist to enforce."""
+        sources = [
+            (
+                f"w{i}",
+                _stream_rows(f"w{i}", "error", 500)
+                + _stream_rows(f"w{i}", "warn", 500)
+                + _stream_rows(f"w{i}", "debug", 500),
+            )
+            for i in range(15)
+        ]
+
+        levels = Counter(e["level"] for e in _merge_event_tails(sources, 2000))
+
+        assert levels["error"] > 0
+        assert levels["warn"] > 0
+
     def test_problems_cannot_spend_the_whole_window(self):
         """A problem-heavy project would otherwise fill the window with warnings
         and leave the page that promises recent events showing none."""
