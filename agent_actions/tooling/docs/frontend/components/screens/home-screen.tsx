@@ -136,10 +136,16 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
             <EmptyState message="No validation or runtime issues in the loaded logs." />
           ) : (
             healthItems.map((item) => (
+              // A validation finding is not a log row, so offering to open it in
+              // Logs lands the reader on an empty stream.
               <button
                 key={`${item.tone}-${item.target}`}
-                onClick={() => onOpenLogs({ q: item.target })}
-                className="flex w-full items-start gap-2.5 border-t border-border-soft px-[18px] py-2.5 text-left hover:bg-hover"
+                onClick={item.inEventStream ? () => onOpenLogs({ q: item.target }) : undefined}
+                disabled={!item.inEventStream}
+                title={item.inEventStream ? "Show these events in Logs" : undefined}
+                className={`flex w-full items-start gap-2.5 border-t border-border-soft px-[18px] py-2.5 text-left ${
+                  item.inEventStream ? "hover:bg-hover" : "cursor-default"
+                }`}
               >
                 <span title={`${item.count.toLocaleString()} occurrences`}>
                   <StatusBadge tone={item.tone} label={`×${item.count.toLocaleString()}`} />

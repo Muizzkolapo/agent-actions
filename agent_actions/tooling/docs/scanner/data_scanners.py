@@ -164,6 +164,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             if yml_files:
                 workflow_name = yml_files[0].stem
 
+        is_workflow = workflow_name is not None
         if not workflow_name:
             workflow_name = workflow_dir.name
 
@@ -228,6 +229,7 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
             "run_results_path": str(run_results_path) if run_results_path.exists() else None,
             "events_path": str(events_path) if events_path.exists() else None,
             "manifest_path": str(manifest_path) if manifest_path.exists() else None,
+            "is_workflow": is_workflow,
         }
 
     return runs_data

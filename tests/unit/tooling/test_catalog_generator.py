@@ -465,7 +465,7 @@ class TestCatalogGeneratorProblemsFirst:
         filter by, and attributes its rows to a workflow that does not exist."""
         gen = _make_generator()
         inputs = _empty_inputs()
-        inputs["runs_data"] = {"agent_io": _wf_events("agent_io", [0])}
+        inputs["runs_data"] = {"agent_io": {**_wf_events("agent_io", [0]), "is_workflow": False}}
 
         events = gen.generate(**inputs)["logs"]["events"]
 

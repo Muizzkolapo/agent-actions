@@ -95,11 +95,12 @@ function searchIndex(e: LogEvent): string {
 
 const HISTOGRAM_BUCKETS = 36
 
-// The window samples every log by recency and then keeps every warning and error
-// it found, so its level mix is not the project's. Saying so once here stops each
-// count on the page from reading as a proportion of the whole log.
+// The window samples every log by recency and then holds back budgets for the
+// problem levels, so its mix is not the project's and its problem counts are not
+// the project's totals either. Saying so once here stops each count on the page
+// from reading as a proportion of the whole log.
 const LOGS_SUBTITLE =
-  "Recent events from every log, plus every warning and error retained from further back"
+  "Recent events from every log, plus warnings and errors kept from further back"
 
 export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   const data = useCatalogData()
@@ -181,14 +182,23 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
       else byCode.set(e.code, [e])
     }
     return [...byCode.entries()]
-      .map(([code, list]) => ({
-        code,
-        eventType: list[0].eventType,
-        level: list[0].level,
-        count: list.length,
-        workflows: new Set(list.map((e) => e.workflow).filter(Boolean)).size,
-        last: list[0].timestamp,
-      }))
+      .map(([code, list]) => {
+        // A code carries rows of several levels — the logging bridge emits most
+        // of the window under one. Labelling the group by its newest row hides
+        // every error underneath it, on the view whose job is to surface them.
+        const counts = { error: 0, warn: 0, info: 0, debug: 0 }
+        for (const e of list) counts[e.level]++
+        return {
+          code,
+          eventType: list[0].eventType,
+          level: LEVELS.find((l) => counts[l] > 0) ?? "info",
+          counts,
+          mixed: LEVELS.filter((l) => counts[l] > 0).length > 1,
+          count: list.length,
+          workflows: new Set(list.map((e) => e.workflow).filter(Boolean)).size,
+          last: list[0].timestamp,
+        }
+      })
       .sort((a, b) => b.count - a.count)
   }, [rows])
 
@@ -303,7 +313,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   // The window is a recent slice of each log, so a search can legitimately match
   // nothing that is still in it. Saying so beats an unexplained blank panel.
   const emptyMessage = filtersActive
-    ? `No events match these filters. This window holds ${events.length.toLocaleString()} events — every log's recent activity plus its warnings and errors — so an older routine event will not be in it.`
+    ? `No events match these filters. This window holds ${events.length.toLocaleString()} events — each log's recent activity plus a budget of its warnings and errors — so an older event may not be in it.`
     : "No events in the loaded window."
 
   const copy = (id: string, text: string) => {
@@ -362,7 +372,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
         <StatCard
           label="Top event code"
           value={groups[0]?.code || EM_DASH}
-          valueClass="text-warning-t"
+          valueClass={groups[0] ? LEVEL_STYLE[groups[0].level].text : undefined}
           note={
             groups[0] && rows.length
               ? `${Math.round((groups[0].count / rows.length) * 100)}% of the rows shown`
@@ -431,7 +441,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
         <span className="flex-1" />
         <span
           className="font-mono text-[11px] text-muted-2"
-          title="Chip counts are the window's, not the project's — the window keeps every warning and error it found, so its mix is deliberately not the log's mix."
+          title="Chip counts are the window's, not the project's — each level is admitted on its own budget, so the mix here is deliberately not the log's mix. The cards above give the project totals."
         >
           {rows.length.toLocaleString()}/{events.length.toLocaleString()} in window ·{" "}
           {totalLogged.toLocaleString()} logged
@@ -549,6 +559,13 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
                   <span className="shrink-0">
                     {g.workflows} workflow{g.workflows === 1 ? "" : "s"}
                   </span>
+                  {g.mixed && (
+                    <span className="shrink-0">
+                      {LEVELS.filter((l) => g.counts[l] > 0)
+                        .map((l) => `${g.counts[l].toLocaleString()} ${l}`)
+                        .join(" · ")}
+                    </span>
+                  )}
                   <span className="shrink-0">last {fmtClock(g.last)}</span>
                 </span>
               </span>

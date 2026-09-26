@@ -102,3 +102,22 @@ class TestScanRunsSurfacesTheEventTail:
                 f.write(json.dumps(_warn_event("step", "m", level=level)) + "\n")
 
         assert scan_runs(tmp_path)["wf"]["level_counts"] == {"error": 1, "warn": 2, "info": 1}
+
+
+class TestScanRunsNamesOnlyRealWorkflows:
+    def test_a_directory_with_no_workflow_config_is_not_a_workflow(self, tmp_path):
+        """A nested agent_io directory names its run entry after itself. The
+        dashboard must not offer that to a reader as a workflow."""
+        (tmp_path / "agent_config").mkdir()
+        (tmp_path / "agent_config" / "wf.yml").write_text("name: wf\n")
+        real = tmp_path / "agent_io" / "logs"
+        real.mkdir(parents=True)
+        (real / "events.json").write_text(json.dumps(_action_event("step")) + "\n")
+        stray = tmp_path / "agent_io" / "agent_io" / "logs"
+        stray.mkdir(parents=True)
+        (stray / "events.json").write_text(json.dumps(_action_event("step")) + "\n")
+
+        result = scan_runs(tmp_path)
+
+        assert result["wf"]["is_workflow"] is True
+        assert result["agent_io"]["is_workflow"] is False

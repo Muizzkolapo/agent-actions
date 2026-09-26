@@ -1,12 +1,16 @@
 import type { CatalogData } from "./transformers"
 import type { ValidationGroup } from "./mock-data"
 
+/** `inEventStream` marks a group the Logs page can actually find: runtime
+ *  findings are log rows, validation findings are not written to the log at all. */
+export type HealthGroup = ValidationGroup & { inEventStream: boolean }
+
 export interface HealthSummary {
   errors: number
   warnings: number
   total: number
-  errorGroups: ValidationGroup[]
-  warningGroups: ValidationGroup[]
+  errorGroups: HealthGroup[]
+  warningGroups: HealthGroup[]
 }
 
 function sum(groups: ValidationGroup[]): number {
@@ -25,8 +29,16 @@ function sum(groups: ValidationGroup[]): number {
  * rather than being labelled "errors" twice.
  */
 export function deriveHealth(data: CatalogData): HealthSummary {
-  const errorGroups = [...data.validationErrorGroups, ...data.runtimeErrorGroups]
-  const warningGroups = [...data.validationWarningGroups, ...data.runtimeWarningGroups]
+  const fromLog = (g: ValidationGroup) => ({ ...g, inEventStream: true })
+  const fromValidation = (g: ValidationGroup) => ({ ...g, inEventStream: false })
+  const errorGroups = [
+    ...data.validationErrorGroups.map(fromValidation),
+    ...data.runtimeErrorGroups.map(fromLog),
+  ]
+  const warningGroups = [
+    ...data.validationWarningGroups.map(fromValidation),
+    ...data.runtimeWarningGroups.map(fromLog),
+  ]
   const errors = sum(errorGroups)
   const warnings = sum(warningGroups)
   return { errors, warnings, total: errors + warnings, errorGroups, warningGroups }

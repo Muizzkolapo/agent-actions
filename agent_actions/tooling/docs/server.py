@@ -28,7 +28,9 @@ class DocsServer(ThreadingHTTPServer):
 
     def handle_error(self, request, client_address):
         """A client that closes mid-download is routine, not a server error."""
-        if isinstance(sys.exc_info()[1], ConnectionError):
+        error = sys.exc_info()[1]
+        if isinstance(error, ConnectionError):
+            logger.debug("Client %s closed the connection: %s", client_address, error)
             return
         super().handle_error(request, client_address)
 

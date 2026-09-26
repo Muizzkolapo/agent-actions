@@ -37,7 +37,7 @@ def _event_sort_key(event: dict) -> tuple[str, int]:
 
 
 # Scanner projections that exist to be folded into the catalog, not shipped in it.
-_PER_LOG_ONLY = frozenset({"events", "level_counts"})
+_PER_LOG_ONLY = frozenset({"events", "level_counts", "is_workflow"})
 
 # Rarest first: a level that outnumbers another by ~780:1 would otherwise spend
 # the shared problem budget before the rarer one is reached.
@@ -75,12 +75,27 @@ def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> lis
     recent = [[e for e in q if not is_problem(e)] for q in stamped]
 
     budget = max(limit // 2, limit - sum(len(q) for q in recent))
+    by_level = {
+        level: [[e for e in q if e.get("level") == level] for q in stamped]
+        for level in PROBLEM_PRIORITY
+    }
+
+    # Each level owns a share of the problem half, for the reason the per-log
+    # budgets are per level: whichever level is loudest would otherwise take it
+    # all. Rarest first, then whatever a level could not fill is offered back.
+    share = budget // len(PROBLEM_PRIORITY)
     merged: list[dict] = []
+    taken = {}
+    for level in PROBLEM_PRIORITY:
+        rows = _round_robin(by_level[level], share)
+        taken[level] = len(rows)
+        merged += rows
     for level in PROBLEM_PRIORITY:
         if len(merged) >= budget:
             break
-        by_level = [[e for e in q if e.get("level") == level] for q in stamped]
-        merged += _round_robin(by_level, budget - len(merged))
+        want = taken[level] + (budget - len(merged))
+        merged += _round_robin(by_level[level], want)[taken[level] :]
+
     merged += _round_robin(recent, limit - len(merged))
     merged.sort(key=_event_sort_key, reverse=True)
     return merged
@@ -519,8 +534,13 @@ class CatalogGenerator:
         event_sources: list[tuple[str, list[dict]]] = [
             ("project:logs", (logs_data or {}).get("events", []))
         ]
+        # A stray directory yields a run entry named after itself, and only the
+        # scanner knows whether it read a workflow config for it.
         event_sources += [
-            (f"workflow:{name}", data.get("events", []))
+            (
+                f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}",
+                data.get("events", []),
+            )
             for name, data in sorted((runs_data or {}).items())
         ]
         catalog["logs"]["events"] = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
