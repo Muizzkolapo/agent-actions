@@ -1,14 +1,11 @@
 """A staged file the filesystem will not describe is a loss, not a skip (1026).
 
-``Path.is_file()`` answers ``False`` for ``ENOENT``, ``ENOTDIR``, ``EBADF`` and
-``ELOOP``, so a dangling symlink is indistinguishable from a directory and the walk
-drops it silently — without the ``_lose_file`` call and the found-count that every
-other per-file failure makes, leaving the action short. A permission failure was
-never silent: ``is_file()`` re-raises it, from the middle of a walk with no file
-attached, and it is folded into the same named loss here.
-
-Both walkers that decide it that way are covered: ``should_skip_item``, and
-``collect_files_from_upstream``, which inlines the same checks for the merge walk.
+``Path.is_file()`` answers ``False`` for ``ENOENT``/``ENOTDIR``/``EBADF``/``ELOOP``,
+so a dangling symlink reads as a directory and the walk drops it — without the
+``_lose_file`` and the found-count every other per-file failure makes, which leaves
+an all-lost walk completing green and empty. A permission failure was never silent:
+``is_file()`` re-raises it mid-walk with no file attached, and it is folded into the
+same named loss here.
 """
 
 import errno

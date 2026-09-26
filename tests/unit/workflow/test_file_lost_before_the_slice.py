@@ -11,9 +11,8 @@ output is vouched for, which is the direction 610 exists to exclude.
 
 There are three walkers and five ways to lose a file between them, so each is
 covered here: losing one is enough to under-count, and an under-count is the
-only error that reads as "a smaller limit is safe". A sixth way — an entry whose
-own ``stat()`` fails — reaches two of these walkers and is covered in
-``test_a_file_the_walk_cannot_stat.py``.
+only error that reads as "a smaller limit is safe". A sixth way, an entry whose own
+``stat()`` fails, is covered in ``test_a_file_the_walk_cannot_stat.py``.
 """
 
 import json
