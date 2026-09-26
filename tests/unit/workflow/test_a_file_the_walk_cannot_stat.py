@@ -10,6 +10,7 @@ same named loss here.
 
 import errno
 import json
+import logging
 import stat
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -382,23 +383,55 @@ class TestALostFileDoesNotSilenceTheLimit:
         )
 
     def test_a_truncated_merge_still_says_so_when_a_file_was_lost(self, tmp_path, caplog):
-        with caplog.at_level("INFO"):
+        with caplog.at_level(logging.INFO):
             self._merge(tmp_path, dangling=1, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
 
     def test_the_same_walk_without_a_loss_still_says_so(self, tmp_path, caplog):
         """Control: isolates the loss as the cause rather than the limit."""
-        with caplog.at_level("INFO"):
+        with caplog.at_level(logging.INFO):
             self._merge(tmp_path, dangling=0, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
 
     def test_a_limit_that_reached_every_group_stays_quiet(self, tmp_path, caplog):
-        """And the announcement is not simply always made."""
-        with caplog.at_level("INFO"):
+        """And the announcement is not simply always made.
+
+        The loss warning is asserted first because this test's real assertion is an
+        absence: capture that silently saw nothing would satisfy it while proving
+        nothing. The same walk must emit that warning, so it doubles as evidence the
+        records reached ``caplog`` at all.
+        """
+        with caplog.at_level(logging.INFO):
             self._merge(tmp_path, dangling=1, good=1, limit=1)
 
+        assert "went unmerged" in caplog.text, f"nothing captured: {caplog.text!r}"
+        assert "stopped after" not in caplog.text, caplog.text
+
+    def test_a_group_that_failed_is_not_reported_as_one_left_behind(self, tmp_path, caplog):
+        """The mirror image: `groups_seen` must count a group the walk *attempted*, not
+        one it merged, or a failed merge reads as a limit that cut the run short and
+        sends an operator to raise the limit instead of investigating the failure.
+        """
+        up = tmp_path / "up"
+        up.mkdir(parents=True)
+        for i in range(2):
+            (up / f"good{i}.json").write_text(json.dumps([{"id": i}]))
+        (tmp_path / "output").mkdir()
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = ValueError("merge failed")
+
+        with caplog.at_level(logging.INFO):
+            process_merged_files(
+                runner,
+                _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": 1}),
+            )
+
+        assert "merge failed" in caplog.text, f"nothing captured: {caplog.text!r}"
         assert "stopped after" not in caplog.text, caplog.text
 
 
@@ -439,7 +472,7 @@ class TestTheGuaranteeWhereItActuallyLives:
         backend = _Backend()
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner.storage_backend = None
+        runner.storage_backend = backend
         runner._process_single_file.side_effect = _slices(backend)
         params = _params(tmp_path, upstream_dirs=[str(up)])
         process_files(runner, params)
