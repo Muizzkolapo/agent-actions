@@ -239,7 +239,10 @@ class BatchLifecycleManager:
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
         registry_manager = BatchRegistryManager(self.storage_backend, agent_name)
-        if registry_manager.has_jobs():
+        # Uncollected, not merely present: a spent entry is left in the registry
+        # after its results are written, and pausing on one sends the run back
+        # for a batch that has nothing left to give.
+        if registry_manager.has_uncollected_jobs():
             return "batch_submitted"
 
         # Check passthrough disposition
