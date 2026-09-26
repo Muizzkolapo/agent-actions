@@ -1,20 +1,13 @@
 """A staged file the filesystem will not describe is a loss, not a skip (1026).
 
-``Path.is_file()`` answers a question it cannot always answer: it catches the
-``OSError`` from the underlying ``stat()`` and returns ``False``. So a
-permission-denied file, a dangling symlink and a transient I/O error are
-indistinguishable from "this is a directory", and the walk drops them with no
-exception, no error record and no log line.
+``Path.is_file()`` catches the ``OSError`` from the underlying ``stat()`` and
+answers ``False``, so a dangling symlink or a permission failure is
+indistinguishable from a directory and the walk drops it silently — without the
+``_lose_file`` call that every other per-file failure makes, leaving the action a
+record count that is short.
 
-Every other skip in the walk is deliberate — a batch directory, a dotfile, an
-already-processed path, a filtered suffix. This one is not, and #1027 gave the
-walk the mechanism it needs: a per-file failure calls ``_lose_file`` and takes
-the action's record count out of service, because an under-count is the one
-error that reads as "a smaller limit could not have bitten".
-
-Two walkers decide "not a file" that way, so both are covered: the staging walk
-through ``should_skip_item``, and ``collect_files_from_upstream``, which inlines
-the same three checks for the merge walk.
+Both walkers that decide it that way are covered: ``should_skip_item``, and
+``collect_files_from_upstream``, which inlines the same checks for the merge walk.
 """
 
 import json
