@@ -55,21 +55,21 @@ def test_producer_stamps_synthetic_file_record():
     # source_index=None (tool-synthesized row) is left blank today; the producer
     # must give it an identity (born at the producer, tracing to the source file).
     structured = [{"content": "new-row"}]
-    _reattach_source_guid(structured, {0: None}, [{"source_guid": "file-parent"}])
+    _reattach_source_guid(structured, {0: None}, [{"source_guid": "file-parent"}], "a2")
     assert structured[0].get("source_guid")
 
 
 def test_producer_stamps_when_parent_lacks_guid():
     # Mapped to a parent that itself has no guid → child left blank today.
     structured = [{"content": "child"}]
-    _reattach_source_guid(structured, {0: 0}, [{"content": "parent-without-guid"}])
+    _reattach_source_guid(structured, {0: 0}, [{"content": "parent-without-guid"}], "a2")
     assert structured[0].get("source_guid")
 
 
 def test_producer_inherits_parent_guid_when_available():
     # The happy path stays intact: a mapped parent's guid is inherited verbatim.
     structured = [{"content": "child"}]
-    _reattach_source_guid(structured, {0: 0}, [{"source_guid": "parent-1"}])
+    _reattach_source_guid(structured, {0: 0}, [{"source_guid": "parent-1"}], "a2")
     assert structured[0]["source_guid"] == "parent-1"
 
 
@@ -78,7 +78,7 @@ def test_producer_propagates_parent_source_guid_chain():
     # attribution) must hand the attribution on, or source resolution dead-ends.
     structured = [{"content": "child"}]
     parents = [{"source_guid": "minted-gen1", "parent_source_guid": "original-staged-guid"}]
-    _reattach_source_guid(structured, {0: 0}, parents)
+    _reattach_source_guid(structured, {0: 0}, parents, "a2")
     assert structured[0]["source_guid"] == "minted-gen1"
     assert structured[0]["parent_source_guid"] == "original-staged-guid"
 
