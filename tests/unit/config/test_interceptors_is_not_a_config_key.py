@@ -4,6 +4,10 @@ Pinned on the declaration, the expander's copy, and the two agent models that
 allow extras, because any one left open still loses the value in silence. The
 copy is the worst of them: the value reaches the agent config, so a reader
 dumping it sees the block present and apparently applied.
+
+Each surface is asserted to give the reason, not just to fail. A user who reads
+"unknown key" relocates the block, and relocating it is how it reached every
+agent unread in the first place.
 """
 
 import pytest
@@ -20,6 +24,11 @@ BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"
 # The shape the deleted runtime took, so the probe is refused for being the key
 # it is rather than for being malformed.
 BLOCK = [{"type": "validation", "name": "schema_check"}]
+
+# What the refusal has to say on every surface. Without this the message may
+# degrade to a generic unknown-key error and the tests would not notice — and a
+# generic error is what sends a user to move the block somewhere it still dies.
+GUIDANCE = ("is no longer read", "configures nothing", "remove it")
 
 
 def _workflow(defaults=None, action=None):
@@ -49,16 +58,62 @@ def _expand(action):
     return expanded["wf"][0]
 
 
+def _bare_manager() -> ConfigManager:
+    cm = ConfigManager.__new__(ConfigManager)
+    cm.default_config = {}
+    cm.tool_path = None
+    cm.agent_configs = {}
+    return cm
+
+
+def _project(tmp_path, agent_defaults):
+    """A project whose agent_actions.yml carries *agent_defaults*."""
+    (tmp_path / "agent_actions.yml").write_text(
+        yaml.safe_dump({"project_name": "p", "default_agent_config": agent_defaults})
+    )
+    config_dir = tmp_path / "agent_config"
+    config_dir.mkdir()
+    # Named for the workflow it holds: the loader refuses a mismatch, which would
+    # fail these tests before they reached the refusal they are here to prove.
+    (config_dir / "wf.yml").write_text(yaml.safe_dump(_workflow()))
+    manager = ConfigManager(
+        str(config_dir / "wf.yml"), str(tmp_path / "agent_actions.yml"), project_root=tmp_path
+    )
+    manager.load_configs()
+    manager.validate_agent_name()
+    return manager
+
+
+def _assert_says_why(message, surface):
+    for phrase in GUIDANCE:
+        assert phrase in message, (
+            f"the {surface} refusal does not say why, so it reads as a typo: {message!r}"
+        )
+
+
 @pytest.mark.parametrize("level", ["action", "defaults"])
-def test_a_workflow_carrying_interceptors_is_refused_at_load(level):
-    """A workflow naming a retired key fails, rather than loading and doing nothing."""
+def test_a_workflow_carrying_interceptors_is_refused_with_the_reason(level):
+    """The strict surfaces. `defaults:` never declared the key, but a refusal that
+    only lists valid keys sends the author to try another level."""
     written = {"interceptors": BLOCK}
     config = _workflow(action=written) if level == "action" else _workflow(defaults=written)
 
     with pytest.raises(ValidationError) as caught:
         WorkflowConfig.model_validate(config)
 
-    assert "interceptors" in str(caught.value)
+    message = str(caught.value)
+    assert "interceptors" in message
+    _assert_says_why(message, level)
+
+
+def test_the_refusal_names_the_action_it_came_from():
+    """pydantic locates the error as `actions.0`; a workflow of thirty needs the name."""
+    with pytest.raises(ValidationError) as caught:
+        WorkflowConfig.model_validate(
+            _workflow(action={"name": "review_extraction", "interceptors": BLOCK})
+        )
+
+    assert "review_extraction" in str(caught.value).split("input_value")[0]
 
 
 def test_the_expander_hands_no_interceptors_to_the_agent():
@@ -88,43 +143,51 @@ def test_the_legacy_agents_block_refuses_interceptors_too():
     """`agents:` configs validate against a model that allows extras, so dropping
     the declaration refuses nothing here — the key would still be carried onto the
     agent, which is the silence it was removed for."""
-    manager = ConfigManager.__new__(ConfigManager)
-    manager.default_config = {}
-    manager.tool_path = None
-    manager.agent_configs = {}
+    manager = _bare_manager()
 
     with pytest.raises(ConfigurationError) as caught:
         manager.merge_agent_configs(
             [{"agent_type": "a1", **BASE_DEFAULTS, "chunk_config": {}, "interceptors": BLOCK}]
         )
 
-    assert "interceptors" in str(caught.value)
+    message = str(caught.value)
+    assert "interceptors" in message
+    _assert_says_why(message, "agent")
+    assert "a1" in message, "a list of agents needs to say which one carried it"
 
 
 def test_the_project_files_agent_defaults_refuse_interceptors_too(tmp_path):
     """`default_agent_config:` is merged into every agent and validated against a
     model that allows extras, so a block written there reached all of them at once
     and was read by none."""
-    (tmp_path / "agent_actions.yml").write_text(
-        yaml.safe_dump(
-            {
-                "project_name": "p",
-                "default_agent_config": {**BASE_DEFAULTS, "interceptors": BLOCK},
-            }
-        )
-    )
-    config_dir = tmp_path / "agent_config"
-    config_dir.mkdir()
-    # Named for the workflow it holds: the loader refuses a mismatch, which would
-    # fail this test before it reached the refusal it is here to prove.
-    (config_dir / "wf.yml").write_text(yaml.safe_dump(_workflow()))
-    manager = ConfigManager(
-        str(config_dir / "wf.yml"), str(tmp_path / "agent_actions.yml"), project_root=tmp_path
-    )
-    manager.load_configs()
-    manager.validate_agent_name()
+    manager = _project(tmp_path, {**BASE_DEFAULTS, "interceptors": BLOCK})
 
     with pytest.raises(ConfigurationError) as caught:
         manager.merge_agent_configs(manager.get_user_agents())
 
-    assert "interceptors" in str(caught.value)
+    message = str(caught.value)
+    assert "interceptors" in message
+    _assert_says_why(message, "default_agent_config")
+
+
+def test_a_clean_project_still_reaches_every_agent(tmp_path):
+    """Control: the block really is merged into each agent, so the refusal above
+    guards a value that arrived there — and the new check refuses nothing else.
+
+    Asserted on a setting the workflow does not also carry, since one it does
+    would be the action's own value arriving rather than the project's.
+    """
+    manager = _project(tmp_path, {**BASE_DEFAULTS, "temperature": 0.42})
+
+    manager.merge_agent_configs(manager.get_user_agents())
+
+    assert manager.agent_configs["a1"].model_dump()["temperature"] == 0.42
+
+
+def test_a_clean_legacy_agent_still_merges():
+    """Control for the other call site: a legacy entry naming nothing retired loads."""
+    manager = _bare_manager()
+
+    manager.merge_agent_configs([{"agent_type": "a1", **BASE_DEFAULTS, "chunk_config": {}}])
+
+    assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4"
