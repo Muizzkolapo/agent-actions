@@ -841,7 +841,15 @@ class TestRunEventsProblemRetention:
         logs_dir.mkdir()
         events_path = logs_dir / "events.json"
         with open(events_path, "w") as f:
-            for i in range(3):
+            first = _stream_event(0, level="error")
+            first["event_type"] = "CLIArgumentParsingEvent"
+            first["meta"] = {
+                **first["meta"],
+                "invocation_id": "inv0",
+                "timestamp": "2026-09-22T10:00:00Z",
+            }
+            f.write(json.dumps(first) + "\n")
+            for i in range(1, 3):
                 f.write(json.dumps(_stream_event(i, level="error")) + "\n")
 
         real_open = builtins.open
@@ -876,6 +884,7 @@ class TestRunEventsProblemRetention:
         assert seen["n"] == 1
         assert [r["seq"] for r in logs["events"]] == [0]
         assert logs["level_counts"] == {"error": 1}
+        assert [i["invocation_id"] for i in logs["recent_invocations"]] == ["inv0"]
 
     def test_a_row_with_no_level_is_not_counted_under_one(self, tmp_path):
         """A missing level counted under `None` serialises as the string "null"

@@ -94,7 +94,7 @@ def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> lis
     # Each level owns a share of the problem half, for the reason the per-log
     # budgets are per level: whichever level is loudest would otherwise take it
     # all. Rarest first, then whatever a level could not fill is offered back.
-    share = budget // len(PROBLEM_PRIORITY)
+    share = budget // len(PROBLEM_PRIORITY) if PROBLEM_PRIORITY else 0
     merged: list[dict] = []
     taken = {}
     for level in PROBLEM_PRIORITY:
@@ -539,9 +539,8 @@ class CatalogGenerator:
         catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
         catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
 
-        # One reverse-chronological stream over every log the project wrote. The
-        # kind prefix keeps a workflow named `logs` from colliding with the
-        # project-level log.
+        # One reverse-chronological stream over every log the project wrote.
+        # Names decide row ids, so they are made distinct as they are built.
         taken_names: set[str] = set()
 
         def distinct(name: str) -> str:

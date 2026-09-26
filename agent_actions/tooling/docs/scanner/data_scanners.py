@@ -369,17 +369,15 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
                     }
                 )
 
-        # Get recent invocations (last 10)
-        logs_data["recent_invocations"] = list(invocations.values())[-10:]
-
     except OSError as e:
         logger.debug("Could not read events log from %s: %s", events_path, e)
 
     # Outside the read: a log that fails partway has still told us about every
     # row it did yield, and discarding those leaves the page emptier than the
-    # truth. The per-workflow scan keeps its partial window for the same reason.
+    # truth. Every projection, or the claim only holds for some of them.
     logs_data["events"] = _window(tail, problems)
     logs_data["level_counts"] = levels
+    logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
     return logs_data
 
