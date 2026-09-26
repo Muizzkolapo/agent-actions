@@ -430,7 +430,7 @@ def _resolve_source_content(
     or the ancestor inherited from the input standing in for its namespaces). A miss
     on both against a non-empty pool returns None — substituting another record's
     source would attribute the wrong document. The caller then tries the namespace
-    the record carries itself, where the RECORD-mode resolver starts, and keeps that
+    the record carries itself, where the RECORD-mode resolver also ends, and keeps that
     step out of its cache because this one is keyed on identity.
     """
     matched = source_index.get(source_guid)
@@ -696,8 +696,8 @@ def apply_context_scope_for_records(
                 )
             source_content = source_cache[cache_key]
             if source_content is None:
-                # The row may still carry the namespace itself — what the
-                # RECORD-mode resolver reads first. Not cached: that key is an
+                # The row may still carry the namespace itself — the last resort
+                # in the RECORD-mode resolver too. Not cached: that key is an
                 # identity, and this answer is the record's own content.
                 carried = content.get("source")
                 source_content = carried if isinstance(carried, dict) else None

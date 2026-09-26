@@ -168,15 +168,6 @@ class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
             == {"url": "FIRST"}
         )
 
-    def test_that_row_is_the_first_one(self):
-        pool = [
-            {"source_guid": "G0", "content": {"source": {"url": "FIRST"}}},
-            {"source_guid": "G0", "content": {"source": {"url": "LAST"}}},
-        ]
-        row = carrying("CARRIED", source_guid="G0")
-
-        assert file_mode_source(row, pool=pool) == {"url": "FIRST"}
-
 
 class TestEveryReaderOfThePoolBreaksADuplicateTheSameWay:
     """Three places index the same pool: both source resolvers and the lineage
@@ -209,3 +200,36 @@ class TestEveryReaderOfThePoolBreaksADuplicateTheSameWay:
         from agent_actions.processing.enrichment import LineageEnricher
 
         assert LineageEnricher._index_by_source_guid([]) is None
+
+
+class TestAPoolThatIsTheActionsOwnInputSet:
+    """A workflow with no staging data of its own passes its input records as the pool
+    (``workflow/pipeline.py``: "the input data IS the source"). A record then resolves to
+    itself at the identity step, and its own content *is* the source document — so the
+    rule that a record is never handed its own content applies only where the pool is a
+    separate set. Pinned because it reads like a bug and is not one."""
+
+    def test_a_record_in_its_own_pool_resolves_to_itself(self):
+        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert resolve_source_content(row, "G0", [row], "a2") is row
+
+    def test_its_own_content_becomes_the_source_namespace(self):
+        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert record_mode_source(row, pool=[row], scope={"observe": ["source.a1"]}) == {
+            "a1": {"n": 1}
+        }
+
+    def test_a_record_carrying_a_namespace_still_resolves_to_that_namespace(self):
+        """Its self-hit returns itself, and the namespace builder then unwraps
+        ``content.source`` — so carrying one is not overridden by being its own pool row."""
+        row = carrying("CARRIED", source_guid="G0")
+
+        assert record_mode_source(row, pool=[row]) == {"url": "CARRIED"}
+
+    def test_a_separate_pool_row_is_still_preferred_over_the_records_own_content(self):
+        """The boundary: once the pool is a separate set, identity answers from it."""
+        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert record_mode_source(row) == {"url": "POOL"}

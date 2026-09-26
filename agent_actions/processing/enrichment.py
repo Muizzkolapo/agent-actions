@@ -206,9 +206,12 @@ class LineageEnricher(Enricher):
     ) -> dict[str, dict] | None:
         """Build a {source_guid: record} dict, or None when *records* is empty.
 
-        First row wins a repeated guid, as both source resolvers do. A record's
-        source namespace and its lineage are read off the same pool, so opposite
-        tie-breaks would attribute the two to different rows.
+        First row wins a repeated guid, as both source resolvers do. Called for
+        ``context.source_data``, where that matters directly — a record's source
+        namespace and its lineage are then read off the same pool, and opposite
+        tie-breaks would attribute the two to different rows — and for
+        ``context.parent_records``, which takes the same tie-break so that one
+        record's ancestry is not assembled from two rows sharing a guid.
         """
         if not records:
             return None
