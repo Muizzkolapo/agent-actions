@@ -358,6 +358,10 @@ def finalize_batch_output(
     )
 
     context.manager.update_status(identity.batch_id, BatchStatus.COMPLETED)
+    # Separate from the status: a provider poll writes COMPLETED as soon as the
+    # batch finishes, so only a stamp set here distinguishes results that were
+    # written from results that merely exist.
+    context.manager.mark_collected(identity.batch_id)
     return str(output_file)
 
 

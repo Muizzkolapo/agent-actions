@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
@@ -257,6 +258,38 @@ class BatchRegistryManager:
         """Return True if the registry has any jobs."""
         with self._lock:
             return bool(self._get_cache())
+
+    def mark_collected(self, batch_id: str, when: str | None = None) -> bool:
+        """Record that this batch's results have been written."""
+        with self._lock:
+            cache = self._get_cache()
+            if self._batch_id_index is None:
+                self._rebuild_batch_id_index()
+            assert self._batch_id_index is not None
+            file_name = self._batch_id_index.get(batch_id)
+            if not file_name or file_name not in cache:
+                logger.warning("Batch ID %s not in registry — cannot mark collected", batch_id)
+                return False
+            stamp = when or datetime.now(UTC).isoformat()
+            cache[file_name] = dataclasses.replace(cache[file_name], collected_at=stamp)
+            self._persist_registry(cache)
+            return True
+
+    def has_uncollected_jobs(self) -> bool:
+        """Whether any entry still owes results.
+
+        Keyed on ``collected_at``, not on COMPLETED: ``are_all_jobs_completed``
+        persists whatever a provider poll returned, so an entry reads COMPLETED
+        from the moment the batch finishes — before anything is retrieved.
+        Reading that as spent completes the action with none of its records and
+        strands the batch, which nothing collects afterwards.
+
+        An entry written before this field existed has no stamp and so reads as
+        uncollected. That is the pre-existing behaviour and the safe direction:
+        waiting on a finished batch costs a run, assuming a spent one loses it.
+        """
+        with self._lock:
+            return any(entry.collected_at is None for entry in self._get_cache().values())
 
     # ============================================================
     # PRIVATE METHODS
