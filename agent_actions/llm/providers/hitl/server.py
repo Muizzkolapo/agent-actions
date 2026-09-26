@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.serving import make_server
 
 from agent_actions.errors import NetworkError
+from agent_actions.record.tracking import is_input_position
 from agent_actions.tooling.rendering.data_card import METADATA_KEYS
 
 # `^secret$` matches the bare key only; the remaining alternates are
@@ -234,13 +235,15 @@ class HitlServer:
 
         payload = self._get_request_payload()
         raw_index = payload.get("index")
-        if not isinstance(raw_index, int):
+        # A bool is an int to isinstance, so `true` would file the decision
+        # against record 1 and answer success.
+        if isinstance(raw_index, bool) or not isinstance(raw_index, int):
             return (
                 jsonify({"success": False, "error": "Record index must be an integer."}),
                 400,
             )
 
-        if raw_index < 0 or raw_index >= self.record_count:
+        if not is_input_position(raw_index, self.record_count):
             return (
                 jsonify(
                     {

@@ -335,7 +335,7 @@ UNPROCESSED, PARSE_ERROR, GUARD_FILTERED_ALL
 |------|------|
 | `envelope.py` | `RecordEnvelope` (build, build_skipped, build_content, transition, can_transition), field category frozensets, `RecordEnvelopeError` |
 | `state.py` | `RecordState` enum, state sets (PROCESSABLE, SETTLED, RESETTABLE_DOWNSTREAM, CASCADE_BLOCKING, RETRIABLE), predicate functions |
-| `tracking.py` | `TrackedItem` dict subclass with hidden `_source_index` for FILE mode provenance |
+| `tracking.py` | `TrackedItem` dict subclass with hidden `_source_index` for FILE mode provenance; `is_input_position()` — the shared rule for whether a declared `source_index` names an input |
 | `disposition.py` | `derive_disposition()` — maps `_state` to storage `Disposition` value |
 | `lifecycle_read.py` | `validate_lifecycle()`, `validate_lifecycle_batch()`, `reset_for_downstream()` — load-time validation and downstream reset |
 | `reasons.py` | Canonical reason string constants for all lifecycle events |

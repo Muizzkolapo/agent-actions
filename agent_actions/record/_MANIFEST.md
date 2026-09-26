@@ -31,6 +31,8 @@ Single authority for record content assembly. Every action type, granularity, an
 | **Depended on by** | `utils/content.py` | `get_existing_content()` synthesizes first-stage content via the envelope model |
 | **Depended on by** | `utils/transformation/passthrough.py` | (Phase 2) record assembly after strategy |
 | **Depended on by** | `workflow/pipeline_file_mode.py` | FILE mode tool + HITL assembly; TrackedItem wrapping |
+| **Depended on by** | `utils/udf_management/registry.py` | `is_input_position` validates each declared contributor index |
+| **Depended on by** | `processing/enrichment.py` | `is_input_position` bounds each contributor before lineage reads it |
 | **Depends on** | `logging/diagnostics.py` | `envelope.py` marks the state-history truncation notice as framework-internal |
 | **Depended on by** | `llm/providers/tools/client.py` | TrackedItem preservation in `_strip_internal_fields` |
 | **Depended on by** | `processing/record_processor.py` | (Phase 2) tombstone builder |

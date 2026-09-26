@@ -159,7 +159,7 @@ def deduplicate_records(data: list[dict]) -> list[dict]:
 Return rules:
 - Returning input items (filter/enrich): `list[dict]` — TrackedItem provenance automatic
 - Constructing new dicts (merge/expand): `FileUDFResult(outputs=[{"source_index": i, "data": {...}}])`
-  - `source_index` names which input produced the row: a position, a list of them for a many-to-one output, or `None` when no single input did. Positions are non-negative; a negative one, a bool or a `None` inside the list is refused.
+  - `source_index` names which input produced the row: a position, a list of them for a many-to-one output, or `None` when no single input did. A position is a non-negative built-in `int` — cast a numpy/pandas index with `int()`. A negative one, a bool, or a `None` inside the list is refused.
 
 ### Versioned Action + Merge
 

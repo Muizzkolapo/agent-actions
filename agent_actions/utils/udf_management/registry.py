@@ -46,8 +46,9 @@ class FileUDFResult:
                     f"Use None to declare that no single input produced this row, "
                     f"or list the inputs that contributed to it."
                 )
-            # Refused where the tool wrote it: only the tool knows which input it
-            # meant. An index past the end stays accepted — every reader drops it.
+            # Refused where the tool wrote it: only the tool knows which input it meant.
+            # One past the end is still accepted — the tool may not know the count — but
+            # a parent that does not resolve fails rather than being invented.
             if src is None:
                 elements: list[tuple[str, Any]] = []
             elif isinstance(src, list):
