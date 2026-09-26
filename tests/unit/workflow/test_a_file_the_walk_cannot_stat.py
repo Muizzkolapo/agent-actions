@@ -28,6 +28,11 @@ from agent_actions.workflow.runner_file_processing import (
 )
 
 ACTION = "flatten"
+# Named, not left to the root: `at_level` raises the level of the logger it is
+# given, and an effective level comes from the nearest ancestor that sets one. With
+# only the root raised, an `agent_actions` WARNING would keep every INFO assertion
+# below from seeing anything — and the two that assert an *absence* would pass.
+WALK_LOGGER = "agent_actions.workflow.runner_file_processing"
 
 
 class _Backend:
@@ -51,8 +56,14 @@ class _Backend:
 
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
-    monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
+    """Clear the limits an ambient export could impose, including the file limit.
+
+    `AGAC_FILE_LIMIT` is the one every limit test here depends on and was the one
+    missing; `AGAC_MAX_RECORDS` is the retired name, cleared so a stale export cannot
+    trip the retirement path.
+    """
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _params(tmp_path, upstream_dirs=None, action_config=None):
@@ -383,14 +394,14 @@ class TestALostFileDoesNotSilenceTheLimit:
         )
 
     def test_a_truncated_merge_still_says_so_when_a_file_was_lost(self, tmp_path, caplog):
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
             self._merge(tmp_path, dangling=1, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
 
     def test_the_same_walk_without_a_loss_still_says_so(self, tmp_path, caplog):
         """Control: isolates the loss as the cause rather than the limit."""
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
             self._merge(tmp_path, dangling=0, good=2, limit=1)
 
         assert "stopped after 1 file" in caplog.text, caplog.text
@@ -403,7 +414,7 @@ class TestALostFileDoesNotSilenceTheLimit:
         nothing. The same walk must emit that warning, so it doubles as evidence the
         records reached ``caplog`` at all.
         """
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
             self._merge(tmp_path, dangling=1, good=1, limit=1)
 
         assert "went unmerged" in caplog.text, f"nothing captured: {caplog.text!r}"
@@ -423,16 +434,42 @@ class TestALostFileDoesNotSilenceTheLimit:
         runner = MagicMock()
         runner.retried_records = frozenset()
         runner.storage_backend = backend
-        runner._process_single_file.side_effect = ValueError("merge failed")
+        # The first group fails and the second succeeds, so the limit is actually
+        # reached and `_unread` is actually consulted. With every group failing the
+        # walk never reaches the limit and this asserts nothing about `groups_seen`.
+        runner._process_single_file.side_effect = [ValueError("merge failed"), _slices(backend)]
 
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
+            found, processed, _errors = process_merged_files(
+                runner,
+                _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": 1}),
+            )
+
+        assert (found, processed) == (2, 1), "both groups attempted, one merged"
+        assert "merge failed" in caplog.text, f"nothing captured: {caplog.text!r}"
+        assert "stopped after" not in caplog.text, caplog.text
+
+    def test_a_failed_group_does_not_hide_one_the_limit_did_leave(self, tmp_path, caplog):
+        """The other side: with a third group the limit genuinely cuts the run short,
+        and the failure must not suppress the announcement."""
+        up = tmp_path / "up"
+        up.mkdir(parents=True)
+        for i in range(3):
+            (up / f"good{i}.json").write_text(json.dumps([{"id": i}]))
+        (tmp_path / "output").mkdir()
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = [ValueError("merge failed"), _slices(backend)]
+
+        with caplog.at_level(logging.INFO, logger=WALK_LOGGER):
             process_merged_files(
                 runner,
                 _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": 1}),
             )
 
-        assert "merge failed" in caplog.text, f"nothing captured: {caplog.text!r}"
-        assert "stopped after" not in caplog.text, caplog.text
+        assert caplog.text.count("stopped after") == 1, caplog.text
 
 
 class TestALostUpstreamFileIsNamedByItsGroupPath:
@@ -476,6 +513,7 @@ class TestTheGuaranteeWhereItActuallyLives:
         runner._process_single_file.side_effect = _slices(backend)
         params = _params(tmp_path, upstream_dirs=[str(up)])
         process_files(runner, params)
+        return backend
 
     def test_a_walk_that_lost_everything_fails_the_action(self, tmp_path):
         with pytest.raises(DependencyError, match="gone.json"):
@@ -485,6 +523,12 @@ class TestTheGuaranteeWhereItActuallyLives:
         """Paired with it: a per-file loss is not fatal, so the raise above must not
         come from "any loss at all"."""
         self._run(tmp_path, names=("a.json",), dangling=("gone.json",))
+
+    def test_the_completing_walk_still_has_its_count_taken_out_of_service(self, tmp_path):
+        """The backend this class wires is real, so it should be asked something."""
+        backend = self._run(tmp_path, names=("a.json",), dangling=("gone.json",))
+
+        assert slice_observation(backend, ACTION) is None
 
 
 class TestTheMergeWalkReportsItToo:
