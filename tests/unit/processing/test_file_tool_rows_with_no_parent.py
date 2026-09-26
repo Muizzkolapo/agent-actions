@@ -128,9 +128,9 @@ class TestARowThatNamesNoParent:
     """``parent_source_guid`` is read two ways — as a fallback identity by source
     lookup, and as the row's *producer* by the gate deciding which stored rows a
     repair may replace. A synthetic row has no producer to name, and nothing is
-    added for it here; what the envelope carried is left alone, because the
-    FILE-mode resolver has no rule for a record's own ``source`` and skips a row
-    that names nothing (#1046). Reconciling the two readers is #1022."""
+    added for it here; what the envelope carried is left alone. The FILE-mode
+    resolver now reads a record's own ``source`` (#1046), so clearing it no longer
+    skips the row — reconciling the two readers is still #1022."""
 
     @pytest.mark.parametrize("version_merge", [False, True])
     def test_it_claims_no_producer(self, version_merge):
@@ -145,11 +145,10 @@ class TestARowThatNamesNoParent:
         carries that record's tracking fields with them, so an input that is itself
         an expansion child hands its ancestor to a row with no producer of its own.
 
-        Clearing it is the honest answer and breaks the run: the FILE-mode resolver
-        (``scope_application._resolve_source_content``) has no rule for a record's
-        own carried ``source``, so every row below is skipped ``source_unresolved``
-        and the action then fails on a length mismatch. Pinned as the behaviour
-        this branch deliberately leaves as it found it — see #1046 and #1022.
+        Clearing it is the honest answer. The resolver half no longer blocks it —
+        the FILE-mode resolver reads a record's own carried ``source`` (#1046) — but
+        the producer reading of ``parent_source_guid`` is still #1022, so the value
+        stays as the envelope carried it and this pins that, not the resolver.
         """
         expansion_children = [
             {
