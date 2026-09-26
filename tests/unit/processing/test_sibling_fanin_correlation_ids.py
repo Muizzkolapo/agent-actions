@@ -1,14 +1,12 @@
 """A minted row's derived correlation id names the action that minted it.
 
-``_reattach_source_guid`` suffixes the inherited id with the row's output index,
-``f"{inherited}#{i}"``. The index carries no action identity, so two different FILE
-actions expanding one upstream record mint the same ids, and a fan-in over both keys
-on ``version_correlation_id`` and pairs row 0 of one with row 0 of the other.
+The suffix was the row's output index alone, so two FILE actions expanding one
+upstream record mint the same ids and a fan-in over both pairs row 0 of one with
+row 0 of the other.
 
-The suffix cannot simply carry ``action_name``: in a version fan-out the branches are
-``summarize_1`` and ``summarize_2``, and their matching rows must keep one id or the
-fan-in halves. ``version_base_name`` is the value stable across branches and distinct
-across actions; a plain action has none and its own name already is its base.
+It cannot simply carry ``action_name``: a version fan-out's branches are
+``summarize_1`` and ``summarize_2`` and their matching rows must keep one id.
+``version_base_name`` is stable across branches and distinct across actions.
 """
 
 from agent_actions.utils.udf_management.registry import FileUDFResult
