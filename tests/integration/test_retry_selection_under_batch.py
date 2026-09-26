@@ -145,6 +145,21 @@ def _submitted_batches(project):
     }
 
 
+def _deferred_ids(project):
+    """Real record identities of a submitted-but-uncollected batch.
+
+    The fixture has no target rows yet, so `_guids` is empty there — the batch's
+    records exist only as DEFERRED disposition rows.
+    """
+    backend = _backend(project)
+    try:
+        return sorted(
+            r["record_id"] for r in backend.get_disposition(ACTION, disposition="deferred")
+        )
+    finally:
+        backend.close()
+
+
 def _set_disposition(project, record_id, disposition):
     backend = _backend(project)
     try:
@@ -370,15 +385,39 @@ class TestARepairArrivingWhileABatchIsInFlight:
     def test_the_repair_can_be_let_through_deliberately(self, submitted_not_collected):
         """A batch the provider has forgotten — an expired id — leaves an entry that
         reads in flight forever, and every remedy the refusal names needs the
-        provider to answer. The way out is explicit rather than absent."""
+        provider to answer. The way out is explicit rather than absent.
+
+        Named on a real identity of the abandoned batch, not a synthetic one: a
+        record that matches no staged row is repaired by processing nothing, which
+        a flag that merely exited 0 would satisfy just as well.
+        """
         project = submitted_not_collected
-        _set_disposition(project, "p0", "failed")
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
 
-        code, output = _agac(
-            project, "retry", "-a", WORKFLOW, "--record", "p0", "--abandon-in-flight"
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        assert _dispositions(project)[named] == "success"
+
+    def test_the_rest_of_an_abandoned_batch_stays_reachable(self, submitted_not_collected):
+        """The trap this flag would otherwise set. Its co-records are DEFERRED, and
+        `deferred` is excluded from FAILURE_DISPOSITIONS because it means a batch is
+        in flight that will resolve them. Abandoning ends the flight, not the wait —
+        so unless they are moved, `agac retry` cannot see them, `agac run` is a
+        no-op, and only `--fresh` recovers them: the loss this flag exists to avoid.
+        """
+        project = submitted_not_collected
+        deferred = _deferred_ids(project)
+        named, others = deferred[0], deferred[1:]
+        assert others, "the fixture batch holds only one record; nothing to strand"
+        _set_disposition(project, named, "failed")
+
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        after = _dispositions(project)
+        assert [after[r] for r in others] == ["failed"] * len(others), (
+            f"co-records of the abandoned batch are unreachable: { {r: after[r] for r in others} }"
         )
-
-        assert code == 0, output
 
     def test_abandoning_names_what_it_gives_up(self, submitted_not_collected):
         """Abandoning is a loss, so it is reported rather than performed quietly."""
@@ -391,6 +430,9 @@ class TestARepairArrivingWhileABatchIsInFlight:
 
         assert "abandon" in output.lower(), output
         assert "batch_" in output, f"the batch id being given up is not named: {output}"
+        assert "record" in output.lower(), (
+            f"abandoning strands the batch's other records; the count is not reported: {output}"
+        )
 
     def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
         """The refusal names a way forward, so the way forward has to work."""
