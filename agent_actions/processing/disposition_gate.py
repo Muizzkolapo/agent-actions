@@ -241,10 +241,13 @@ def build_carry_forward(
         if produced_for:
             produced_indices.add(index)
             producers_found |= produced_for
-    # Indices, so a row carried both ways is written once and a producer's rows keep
-    # their place in the file rather than being appended after the direct matches.
-    indices = sorted(set(chosen.values()) | produced_indices)
-    found: list[dict[str, Any]] = [prior_output[index] for index in indices]
+    # Indices, so a row matched both ways is written once and keeps its place. Then one
+    # row per identity, as the direct match states: a producer can name two stored rows
+    # sharing a guid, and handing back both would write a duplicate.
+    last_for_guid: dict[str, int] = {}
+    for index in sorted(set(chosen.values()) | produced_indices):
+        last_for_guid[prior_output[index]["source_guid"]] = index
+    found: list[dict[str, Any]] = [prior_output[index] for index in sorted(last_for_guid.values())]
     missing: set[str] = carry_ids - set(chosen) - producers_found
     if missing:
         logger.warning(

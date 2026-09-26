@@ -338,6 +338,46 @@ class TestBuildCarryForward:
         assert [r["source_guid"] for r in found] == ["m0"]
         assert missing == {"r9"}
 
+    def test_two_rows_sharing_an_identity_still_collapse_to_the_last(self):
+        """The rule the direct match states and the producer match must not break: two
+        stored rows can share a source_guid, and handing back both writes a duplicate
+        identity the checkpoint table cannot even hold. The repair path documents
+        producing exactly that state."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "stale"},
+            {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "fresh"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["row"] for r in found] == ["fresh"]
+
+    def test_a_producers_several_rows_all_come_back(self):
+        """Collapsing by identity must not collapse a producer's distinct rows: they
+        carry different guids, and the input is the whole group's only identity."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "m1"]
+
     def test_a_row_is_returned_once_when_it_matches_both_ways(self):
         """A row whose own identity is carried and whose producer is carried too —
         a repair naming an input beside a row of it. Returned twice it would be

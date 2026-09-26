@@ -56,6 +56,18 @@ def _collapse_contributor_guids(
     return sorted(contributors)
 
 
+def _unnamed_inputs(
+    structured_data: list[dict[str, Any]],
+    source_mapping: dict[int, int | list[int] | None] | None,
+    records: list[dict[str, Any]],
+) -> list[str]:
+    """Inputs no output row names. A tool may expand while naming only some of them."""
+    accounted = _accounted_source_guids(structured_data, source_mapping, records)
+    return [
+        guid for record in records if (guid := record.get("source_guid")) and guid not in accounted
+    ]
+
+
 def _accounted_source_guids(
     structured_data: list[dict[str, Any]],
     source_mapping: dict[int, int | list[int] | None] | None,
@@ -251,10 +263,13 @@ class FileToolStrategy:
             )
             result.executed = executed
             result.source_mapping = source_mapping
-            # Not when a row belongs to no input: the result cannot be rebuilt by
-            # carrying, so crediting its inputs stops the recompute and the invented
-            # row is dropped from the rewrite. Same reason the sweep above is gated.
-            if not has_synthetic:
+            # Credited only where the next run could reproduce the result: every row
+            # belongs to an input and every input is named. Otherwise the rewrite drops a
+            # row it cannot resolve, or narrows to inputs the tool emits nothing for.
+            reproducible = not has_synthetic and not _unnamed_inputs(
+                structured_data, source_mapping, records
+            )
+            if not is_expansion or reproducible:
                 result.collapse_contributor_guids = _collapse_contributor_guids(
                     structured_data, source_mapping, records, re_keyed=is_expansion
                 )
