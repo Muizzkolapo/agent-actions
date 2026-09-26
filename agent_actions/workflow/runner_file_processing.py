@@ -110,10 +110,12 @@ def _lose_file(runner: Any, action_name: str) -> None:
 def _is_regular_file(item: Path) -> bool:
     """Whether *item* is a regular file, raising when the filesystem will not say.
 
-    ``Path.is_file()`` cannot be used for this: it catches the ``OSError`` from
-    the underlying ``stat()`` and answers ``False``, which a walk reads as a
-    deliberate "not a file" and drops the entry silently. A caller that needs to
-    tell a directory from a file it could not look at has to see the error.
+    ``Path.is_file()`` cannot be used for this: it answers ``False`` for the errnos
+    in ``pathlib``'s ``_IGNORED_ERRNOS`` — ``ENOENT``, ``ENOTDIR``, ``EBADF``,
+    ``ELOOP`` — which a walk reads as a deliberate "not a file" and drops silently.
+    It re-raises the rest, so ``EACCES`` already escaped; catching ``OSError`` here
+    is deliberately wider than the silent set, so that a permission failure becomes
+    the same named, counted loss rather than an error from the middle of a walk.
     """
     return stat_module.S_ISREG(item.stat().st_mode)
 
@@ -314,6 +316,20 @@ def _build_file_params(
     return SingleFileProcessParams(**kwargs)
 
 
+def _upstream_relative(item: Path, upstream_data_dirs: list[str]) -> Path:
+    """*item* as a path under whichever upstream holds it, falling back to its name.
+
+    A bare basename collides: two upstreams each holding ``sub/a.json`` both record
+    as ``a.json``, naming neither the upstream nor the subdirectory.
+    """
+    for directory in upstream_data_dirs:
+        try:
+            return item.relative_to(Path(directory))
+        except ValueError:
+            continue
+    return Path(item.name)
+
+
 def collect_files_from_upstream(
     upstream_data_dirs: list[str],
 ) -> tuple[dict[Path, list[Path]], list[tuple[Path, OSError]]]:
@@ -400,9 +416,10 @@ def process_directory_files(
             if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
                 continue
         except OSError as e:
-            # Reported, not skipped: the file was staged and its records never
-            # reach a slice, so the count has to go out of service exactly as it
-            # does for a file that fails while being read.
+            # Counted as found because `files_found == 0` is the one path where
+            # process_files neither raises nor warns: a walk that lost every entry
+            # would otherwise complete green and empty.
+            files_seen += 1
             errors.record(item.relative_to(input_path), e)
             _lose_file(runner, params.action_name)
             logger.warning(
@@ -509,7 +526,8 @@ def process_merged_files(
     files_seen = 0
 
     for item, error in lost:
-        errors.record(Path(item.name), error)
+        files_seen += 1
+        errors.record(_upstream_relative(item, params.upstream_data_dirs), error)
         _lose_file(runner, params.action_name)
         logger.warning("Could not read the upstream file %s, so it went unmerged: %s", item, error)
 
