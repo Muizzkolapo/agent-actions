@@ -20,6 +20,7 @@ from agent_actions.config.schema import (
     ChunkConfig,
     WorkflowConfig,
     refuse_context_scope_siblings,
+    refuse_retired_keys,
 )
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.logging.core.manager import fire_event
@@ -39,10 +40,6 @@ _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
     "skip_if": "skip_condition",
 }
-
-# Refused on the same surfaces and for the same reason, except that the runtime
-# these configured is gone, so there is nothing to redirect a user to.
-_RETIRED_AGENT_KEYS = frozenset({"interceptors"})
 
 
 def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
@@ -88,18 +85,12 @@ def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
 
 
-def _refuse_retired_keys(block: Any, surface: str, operation: str) -> None:
-    """Refuse a key that configures nothing, naming no replacement because none exists."""
-    if not isinstance(block, dict):
-        return
-    retired = sorted(_RETIRED_AGENT_KEYS & block.keys())
-    if retired:
-        raise ConfigurationError(
-            f"{surface}: "
-            + "; ".join(f"'{key}' is no longer read and configures nothing" for key in retired)
-            + "; remove it",
-            context={"operation": operation},
-        )
+def _refuse_retired_or_raise(block: Any, surface: str, operation: str) -> None:
+    """Raise the framework's own error for a key whose runtime is gone."""
+    try:
+        refuse_retired_keys(block, surface)
+    except ValueError as e:
+        raise ConfigurationError(str(e), context={"operation": operation}) from e
 
 
 class ConfigManager:
@@ -329,12 +320,14 @@ class ConfigManager:
             self.default_config.get("default_agent_config", {}) if self.default_config else {}
         )
         _refuse_or_raise(project_agent_defaults, "default_agent_config", "merge_agent_configs")
-        _refuse_retired_keys(project_agent_defaults, "default_agent_config", "merge_agent_configs")
+        _refuse_retired_or_raise(
+            project_agent_defaults, "default_agent_config", "merge_agent_configs"
+        )
         default_model = DefaultAgentConfig.model_validate(project_agent_defaults)
         default_agent_config = default_model.model_dump()
         for agent in user_agents:
             _refuse_or_raise(agent, "agent", "merge_agent_configs")
-            _refuse_retired_keys(agent, "agent", "merge_agent_configs")
+            _refuse_retired_or_raise(agent, "agent", "merge_agent_configs")
             removed = _REMOVED_AGENT_SPELLINGS.keys() & agent.keys()
             if removed:
                 raise ConfigurationError(
