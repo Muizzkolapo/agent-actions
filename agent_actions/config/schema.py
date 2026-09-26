@@ -449,9 +449,6 @@ class ActionConfig(_RetryValidators):
     )
 
     # --- Expander-consumed keys ---
-    interceptors: list[dict[str, Any]] | None = Field(
-        default=None, description="Interceptor configuration"
-    )
     chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
     chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
     chunk_overlap: int | None = Field(default=None, ge=0, description="Chunk overlap")
