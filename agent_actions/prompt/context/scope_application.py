@@ -420,12 +420,12 @@ def _resolve_source_content(
 ) -> dict | None:
     """Resolve source namespace content for a record by identity.
 
-    Tries the record's own source_guid, then its carried parent_source_guid
-    (a pool identity a minted row carries — its producer, or the ancestor
-    inherited from the input standing in for its namespaces).
-    A miss on both against a non-empty pool returns None — substituting any
-    other record's source would attribute the wrong document, so the caller
-    must skip the record instead.
+    Own source_guid, then the carried parent_source_guid (a minted row's producer,
+    or the ancestor inherited from the input standing in for its namespaces). A miss
+    on both against a non-empty pool returns None — substituting another record's
+    source would attribute the wrong document. The caller then tries the namespace
+    the record carries itself, where the RECORD-mode resolver starts, and keeps that
+    step out of its cache because this one is keyed on identity.
     """
     matched = source_index.get(source_guid)
     if not matched and parent_source_guid:
@@ -681,6 +681,7 @@ def apply_context_scope_for_records(
 
         # Build field_context with source namespace resolved
         field_context = dict(content)
+        source_content: dict | None = None
         if has_source_refs:
             cache_key = (sguid, psguid)
             if cache_key not in source_cache:
@@ -689,9 +690,15 @@ def apply_context_scope_for_records(
                 )
             source_content = source_cache[cache_key]
             if source_content is None:
+                # The row may still carry the namespace itself — what the
+                # RECORD-mode resolver reads first. Not cached: that key is an
+                # identity, and this answer is the record's own content.
+                carried = content.get("source")
+                source_content = carried if isinstance(carried, dict) else None
+            if source_content is None:
                 logger.debug(
                     "[%s] Skipping record %s — source_guid matches no record in the "
-                    "%d-record source pool",
+                    "%d-record source pool and the record carries no source namespace",
                     action_name,
                     sguid,
                     len(source_data or []),
@@ -719,8 +726,8 @@ def apply_context_scope_for_records(
         # Rebuild enriched record: ALL namespaces preserved, drops applied. Flat
         # keys wait for pass 2 — their names depend on the whole batch.
         enriched_content = deepcopy(content)
-        if has_source_refs and source_cache.get((sguid, psguid)):
-            enriched_content["source"] = deepcopy(source_cache[(sguid, psguid)])
+        if source_content:
+            enriched_content["source"] = deepcopy(source_content)
         _apply_drops_to_content(enriched_content, drop_refs)
         prepared.append((record, enriched_content))
 
