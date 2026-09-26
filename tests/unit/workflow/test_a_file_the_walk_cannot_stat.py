@@ -16,10 +16,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import DependencyError
 from agent_actions.utils.limits import record_indices_to_process, slice_observation
 from agent_actions.workflow.runner_file_processing import (
     collect_files_from_upstream,
     process_directory_files,
+    process_files,
     process_merged_files,
     should_skip_item,
 )
@@ -351,6 +353,105 @@ class TestTheLimitStillAnnouncesAShortenedRun:
             )
 
         assert "stopped after 1 file" in caplog.text
+
+
+class TestALostFileDoesNotSilenceTheLimit:
+    """Counting a loss as found gave ``files_seen`` two readers with two questions:
+    the caller's "how many were found", and the limit probe's "how far through the
+    groups am I". Compared against the group total, a loss-inclusive count suppresses
+    the truncation announcement by exactly the number of losses — a walk stopping
+    short of a file while saying nothing, which is the failure this branch removes.
+    """
+
+    def _merge(self, tmp_path, *, dangling, good, limit):
+        up = tmp_path / "up"
+        up.mkdir(parents=True, exist_ok=True)
+        for i in range(good):
+            (up / f"good{i}.json").write_text(json.dumps([{"id": i}]))
+        for i in range(dangling):
+            (up / f"gone{i}.json").symlink_to(up / f"missing{i}.json")
+        (tmp_path / "output").mkdir(exist_ok=True)
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
+        return process_merged_files(
+            runner,
+            _params(tmp_path, upstream_dirs=[str(up)], action_config={"file_limit": limit}),
+        )
+
+    def test_a_truncated_merge_still_says_so_when_a_file_was_lost(self, tmp_path, caplog):
+        with caplog.at_level("INFO"):
+            self._merge(tmp_path, dangling=1, good=2, limit=1)
+
+        assert "stopped after 1 file" in caplog.text, caplog.text
+
+    def test_the_same_walk_without_a_loss_still_says_so(self, tmp_path, caplog):
+        """Control: isolates the loss as the cause rather than the limit."""
+        with caplog.at_level("INFO"):
+            self._merge(tmp_path, dangling=0, good=2, limit=1)
+
+        assert "stopped after 1 file" in caplog.text, caplog.text
+
+    def test_a_limit_that_reached_every_group_stays_quiet(self, tmp_path, caplog):
+        """And the announcement is not simply always made."""
+        with caplog.at_level("INFO"):
+            self._merge(tmp_path, dangling=1, good=1, limit=1)
+
+        assert "stopped after" not in caplog.text, caplog.text
+
+
+class TestALostUpstreamFileIsNamedByItsGroupPath:
+    """``_upstream_relative`` exists so a lost file is keyed like every other record
+    in the merge walk. Staged at the top level its answer and its basename coincide,
+    so the helper is only pinned by a file in a subdirectory.
+    """
+
+    def test_the_subdirectory_survives_into_the_recorded_key(self, tmp_path):
+        up = tmp_path / "up"
+        (up / "sub").mkdir(parents=True)
+        (up / "sub" / "gone.json").symlink_to(up / "sub" / "missing.json")
+        (up / "ok.json").write_text(json.dumps([{"id": 1}]))
+        (tmp_path / "output").mkdir()
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
+
+        _found, _processed, errors = process_merged_files(
+            runner, _params(tmp_path, upstream_dirs=[str(up)])
+        )
+
+        assert any(m.startswith("sub/gone.json:") for m in errors.messages), errors.messages
+
+
+class TestTheGuaranteeWhereItActuallyLives:
+    """``(found, processed) == (1, 0)`` from the walker is the mechanism; the promise
+    is that ``process_files`` then fails rather than completing green and empty. That
+    coupling is the thing a later change could break while the walker's numbers stay
+    right, so it is asserted here through ``process_files`` itself.
+    """
+
+    def _run(self, tmp_path, *, names, dangling):
+        up = _staging(tmp_path, names=names, dangling=dangling)
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = None
+        runner._process_single_file.side_effect = _slices(backend)
+        params = _params(tmp_path, upstream_dirs=[str(up)])
+        process_files(runner, params)
+
+    def test_a_walk_that_lost_everything_fails_the_action(self, tmp_path):
+        with pytest.raises(DependencyError, match="gone.json"):
+            self._run(tmp_path, names=(), dangling=("gone.json",))
+
+    def test_a_walk_that_lost_only_some_completes(self, tmp_path):
+        """Paired with it: a per-file loss is not fatal, so the raise above must not
+        come from "any loss at all"."""
+        self._run(tmp_path, names=("a.json",), dangling=("gone.json",))
 
 
 class TestTheMergeWalkReportsItToo:
