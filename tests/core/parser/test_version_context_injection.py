@@ -36,7 +36,7 @@ class TestVersionContextCompilation:
 
     def test_version_context_added_to_agent_config(self):
         """Verify _version_context is added to each versioned agent."""
-        agents = self._expand_versioned({"range": [1, 3], "mode": "parallel"}, "classify")
+        agents = self._expand_versioned({"range": [1, 3]}, "classify")
         assert len(agents) == 3
         for agent in agents:
             assert "_version_context" in agent

@@ -10,7 +10,7 @@ import yaml
 from pydantic import ValidationError
 
 from agent_actions.config import schema as schema_module
-from agent_actions.config.schema import WorkflowConfig
+from agent_actions.config.schema import VersionConfig, WorkflowConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -43,13 +43,23 @@ def _workflow(defaults=None, actions=None):
     }
 
 
-def _render(tmp_path, workflow):
-    """Load *workflow* the way every real config load does."""
+def _render(tmp_path, workflow, validate=True):
+    """Load *workflow* the way every real config load does.
+
+    Validation is part of the path, not an extra: the loader renders and then
+    validates the rendered config, and a versioned workflow that expands cleanly
+    can still be refused by the dependency check the second step runs.
+    """
     path = tmp_path / "wf.yml"
     path.write_text(yaml.safe_dump(workflow))
     templates = tmp_path / "templates"
     templates.mkdir(exist_ok=True)
-    return yaml.safe_load(render_pipeline_with_templates(path, templates, compile_schemas=False))
+    rendered = yaml.safe_load(
+        render_pipeline_with_templates(path, templates, compile_schemas=False)
+    )
+    if validate:
+        WorkflowConfig.model_validate(rendered)
+    return rendered
 
 
 def _agents(rendered):
@@ -89,8 +99,66 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
     def test_a_range_that_is_not_a_range_is_refused(self, tmp_path):
         workflow = _workflow(actions=[_action(versions={"range": "one to three"})])
 
-        with pytest.raises(ConfigurationError):
+        with pytest.raises(ConfigurationError) as caught:
             _render(tmp_path, workflow)
+
+        assert "range" in str(caught.value), "the refusal has to name the key at fault"
+
+    def test_a_range_of_names_still_expands_over_them(self, tmp_path):
+        """The documented non-numeric form: the values become the version suffixes."""
+        workflow = _workflow(
+            actions=[
+                _action(
+                    name="translate",
+                    versions={"param": "strategy", "range": ["literal", "idiomatic", "domain"]},
+                )
+            ]
+        )
+
+        rendered = _render(tmp_path, workflow)
+
+        assert [a["name"] for a in rendered["actions"]] == [
+            "translate_literal",
+            "translate_idiomatic",
+            "translate_domain",
+        ]
+
+    def test_a_pair_of_names_cannot_be_counted_between(self, tmp_path):
+        """Two elements are a start and an end, which names cannot be."""
+        workflow = _workflow(actions=[_action(versions={"range": ["literal", "idiomatic"]})])
+
+        with pytest.raises(ConfigurationError) as caught:
+            _render(tmp_path, workflow)
+
+        assert "list all of them" in str(caught.value)
+
+    @pytest.mark.parametrize("bad", [[], [3, 1]], ids=["empty", "descending"])
+    def test_a_range_that_expands_to_nothing_is_refused(self, tmp_path, bad):
+        """Expanding to zero versions deletes the action, reported only as a
+        dangling dependency against whatever needed it."""
+        workflow = _workflow(actions=[_action(versions={"range": bad})])
+
+        with pytest.raises(ConfigurationError) as caught:
+            _render(tmp_path, workflow)
+
+        assert "removes the action" in str(caught.value)
+
+    def test_a_key_only_the_static_analyser_looked_for_is_refused(self, tmp_path):
+        """`items_from` was read out of this block and written by no workflow."""
+        workflow = _workflow(
+            actions=[_action(versions={"range": [1, 2], "items_from": "src.items"})]
+        )
+
+        with pytest.raises(ConfigurationError) as caught:
+            _render(tmp_path, workflow)
+
+        assert "items_from" in str(caught.value)
+
+    def test_a_block_with_no_range_expands_to_one_version(self, tmp_path):
+        """`range` carries the default the expansion already applied."""
+        rendered = _render(tmp_path, _workflow(actions=[_action(versions={"param": "round"})]))
+
+        assert [a["name"] for a in rendered["actions"]] == ["a1_1"]
 
 
 class TestVersionModeOnAnActionIsRefused:
@@ -164,7 +232,12 @@ class TestTheExpanderHandsNeitherKeyToTheAgent:
 
 class TestTheOrderingThatDoesWork:
     def test_chained_versions_still_run_one_at_a_time(self, tmp_path):
-        """What `mode: sequential` claimed, done by the dependency graph."""
+        """What `mode: sequential` claimed, done by the dependency graph.
+
+        `_render` validates, which is the point: the first version's `${i-1}`
+        resolves to no predecessor, and the stub it leaves behind used to fail the
+        workflow's dependency check before any of this could run.
+        """
         rendered = _render(
             tmp_path,
             _workflow(
@@ -202,7 +275,10 @@ class TestTheEnumThatPromisedIt:
     def test_the_schema_no_longer_names_a_version_execution_mode(self):
         """`VersionMode.SEQUENTIAL` was the spelled promise behind the key."""
         assert not hasattr(schema_module, "VersionMode")
-        assert "VersionMode" not in schema_module.__all__
+
+    def test_the_block_declares_only_what_it_reads(self):
+        """The authoring surfaces read this, so a stray field is offered to users."""
+        assert set(VersionConfig.model_fields) == {"param", "range"}
 
 
 class TestAWorkflowThatAsksForNothingRetiredStillLoads:

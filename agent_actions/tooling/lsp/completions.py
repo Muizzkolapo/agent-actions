@@ -4,6 +4,8 @@ from pathlib import Path
 
 from lsprotocol import types as lsp
 
+from agent_actions.config.schema import VersionConfig
+
 from .models import ProjectIndex
 
 
@@ -37,6 +39,22 @@ def is_in_versions_block(lines: list[str], line_number: int) -> bool:
         if line_indent <= current_indent and line.strip().startswith("versions:"):
             return True
     return False
+
+
+def build_versions_completions() -> list[lsp.CompletionItem]:
+    """Suggest the keys a `versions:` block declares.
+
+    Read off the model so the two cannot drift: this list outlived three keys,
+    and a suggestion the loader refuses is worse than no suggestion.
+    """
+    return [
+        lsp.CompletionItem(
+            label=key,
+            kind=lsp.CompletionItemKind.Property,
+            detail="Versions key",
+        )
+        for key in VersionConfig.model_fields
+    ]
 
 
 def build_context_scope_completions(

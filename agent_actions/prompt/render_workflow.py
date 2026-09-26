@@ -392,12 +392,20 @@ def _validate_version_block(version_config: Any, action_name: str) -> None:
     try:
         VersionConfig.model_validate(version_config)
     except ValidationError as e:
-        reasons = "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
+        # Raised without a cause because the user-facing message is taken from the
+        # root of the chain: chaining the pydantic error would print its dump and
+        # drop the action name, which is the only way to find the block.
         raise ConfigurationError(
-            f"action '{action_name}': {reasons}",
+            "; ".join(_version_reason(action_name, err) for err in e.errors()),
             context={"action_name": action_name, "operation": "expand_versioned_action"},
-            cause=e,
-        ) from e
+        ) from None
+
+
+def _version_reason(action_name: str, error: Any) -> str:
+    """One pydantic error as a sentence naming the action and the key at fault."""
+    message = str(error["msg"]).removeprefix("Value error, ")
+    where = ".".join(str(part) for part in error["loc"])
+    return f"action '{action_name}': " + (f"versions.{where}: {message}" if where else message)
 
 
 def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
@@ -437,6 +445,16 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
     for idx, i in enumerate(range_values):
         # Create a copy of the action without the versions key
         expanded = {k: v for k, v in action.items() if k != "versions"}
+
+        if idx == 0 and isinstance(expanded.get("dependencies"), list):
+            # The first version has no predecessor, so a `${param-1}` dependency
+            # names nothing: substitution leaves a bare `<action>_` that the
+            # workflow's dangling-dependency check then refuses.
+            expanded["dependencies"] = [
+                dep
+                for dep in expanded["dependencies"]
+                if not (isinstance(dep, str) and f"${{{param_name}-1}}" in dep)
+            ]
 
         # Apply template substitution to all fields
         expanded = _apply_version_template(expanded, param_name, i, idx, range_values)

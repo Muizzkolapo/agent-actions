@@ -2,7 +2,7 @@
 
 import difflib
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
@@ -175,9 +175,40 @@ class VersionConfig(BaseModel):
         return _refuse_undeclared_keys(_refuse_retired_version_keys(data), cls, "versions")
 
     param: str = Field(default="i", description="Parameter name for version variable")
-    range: list[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
-        ..., description="Range of values for version parameter"
+    range: list[int | str] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
+        default_factory=lambda: cast(list[int | str], [1, 1]),
+        description="Two ints for an inclusive range, or the values to expand over",
     )
+
+    @field_validator("range")
+    @classmethod
+    def _a_range_expands_to_something(cls, value: list[int | str]) -> list[int | str]:
+        """Reject a range that expands to no versions, or a pair that cannot count.
+
+        Two elements are a start and an end; three or more are the values
+        themselves, which may be names. Either way an empty expansion deletes the
+        action from the workflow, and the only report is a dangling-dependency
+        error against whatever depended on it.
+        """
+        if not value:
+            raise ValueError(
+                "an empty range expands to no versions, which removes the action; "
+                "give the range at least one value"
+            )
+        if len(value) == 2:
+            if not all(isinstance(v, int) for v in value):
+                raise ValueError(
+                    f"a two-element range is an inclusive [start, end] of integers; got "
+                    f"{value!r} — to expand over these values rather than count between "
+                    f"them, list all of them"
+                )
+            start, end = value
+            if start > end:  # type: ignore[operator]
+                raise ValueError(
+                    f"an inclusive [start, end] range counts upwards, so it expands to "
+                    f"no versions and removes the action; got {value!r}"
+                )
+        return value
 
 
 class ChunkConfig(BaseModel):

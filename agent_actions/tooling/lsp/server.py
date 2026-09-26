@@ -12,6 +12,7 @@ from agent_actions.errors import ConfigValidationError
 from .completions import (
     build_context_scope_completions,
     build_guard_completions,
+    build_versions_completions,
     is_in_context_scope_block,
     is_in_versions_block,
 )
@@ -299,14 +300,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Versions block completions
     elif is_in_versions_block(lines, params.position.line):
-        for key in ("param", "range", "mode", "source", "pattern"):
-            items.append(
-                lsp.CompletionItem(
-                    label=key,
-                    kind=lsp.CompletionItemKind.Property,
-                    detail="Versions key",
-                )
-            )
+        items.extend(build_versions_completions())
 
     return lsp.CompletionList(is_incomplete=False, items=items)
 

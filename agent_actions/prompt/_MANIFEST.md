@@ -37,6 +37,7 @@ and service wiring used by CLI commands and runtime agents.
 | `PromptPreparationService._load_seed_data()` | `seed_data/*.json` | Reads | `actions[].context_scope.seed` |
 | `PromptUtils.inject_function_outputs_into_prompt()` | `tools/{workflow}/*.py` | Reads | `actions[].prompt` |
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt`, `actions[].schema_name` |
+| `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` — the block is expanded away here, so this is the only point it can be refused |
 | `render_pipeline_with_templates()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema_name`, `actions[].schema` |
 | `ConfigRenderingService.render_and_load_config()` | `agent_config/{workflow}.yml` | Validates | `actions[]` |
 | `MessageBuilder.build()` | `.env` | Reads | — |

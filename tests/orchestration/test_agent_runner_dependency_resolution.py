@@ -145,7 +145,6 @@ class TestDependencyPatterns:
           - name: research
             versions:
               range: [1, 3]
-              mode: parallel
 
           - name: synthesize
             dependencies: [research_1, research_2, research_3]

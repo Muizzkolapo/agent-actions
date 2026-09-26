@@ -1,5 +1,7 @@
 """Tests for LSP action hover card rendering."""
 
+from agent_actions.config.schema import VersionConfig
+from agent_actions.tooling.lsp.completions import build_versions_completions
 from agent_actions.tooling.lsp.handlers import _build_action_hover
 from agent_actions.tooling.lsp.models import ActionMetadata, Location
 
@@ -27,9 +29,9 @@ class TestBuildActionHover:
         assert "**Dependencies**" in result
 
     def test_shows_versions_summary(self):
-        result = _build_action_hover(_make_meta(versions_summary="range [1,3], mode parallel"))
+        result = _build_action_hover(_make_meta(versions_summary="param `round`, range `[1, 3]`"))
         assert "**Versions**" in result
-        assert "range [1,3], mode parallel" in result
+        assert "param `round`, range `[1, 3]`" in result
 
     def test_shows_prompt_ref(self):
         result = _build_action_hover(_make_meta(prompt_ref="$incident_triage.Classify"))
@@ -68,3 +70,19 @@ class TestBuildActionHover:
         assert "**Reprompt**" not in result
         assert "**Observe**" not in result
         assert "**Passthrough**" not in result
+
+
+class TestTheVersionsBlockCompletions:
+    """The editor must not offer a key the loader refuses."""
+
+    def test_it_offers_exactly_the_keys_the_block_declares(self):
+        offered = [item.label for item in build_versions_completions()]
+
+        assert offered == list(VersionConfig.model_fields)
+
+    def test_every_key_it_offers_is_accepted_by_the_loader(self):
+        """The suggestions used to include three keys, and `mode` now aborts a load."""
+        defaults = VersionConfig().model_dump()
+
+        for key in (item.label for item in build_versions_completions()):
+            VersionConfig.model_validate({key: defaults[key]})

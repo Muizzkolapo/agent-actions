@@ -22,7 +22,8 @@ actions:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `range` | array | Required | `[start, end]` - inclusive range |
+| `param` | string | `i` | Name of the version variable used in templates |
+| `range` | array | `[1, 1]` | Two integers for an inclusive `[start, end]`, or the values to expand over |
 
 ## Template Variables
 
