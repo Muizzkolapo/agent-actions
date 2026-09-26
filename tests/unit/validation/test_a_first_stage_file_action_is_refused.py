@@ -1,14 +1,8 @@
-"""FILE granularity needs an upstream action, and preflight says so.
+"""FILE granularity needs an upstream action to read a file of, and preflight says so.
 
-The first stage runs its own pipeline (`input/preprocessing/staging/initial_pipeline.py`),
-which hardcodes `OnlineLLMStrategy` and dispatches on granularity nowhere. So a
-`granularity: File` action with no dependency is processed per record, and a tool
-returning `FileUDFResult` reaches the output writer as an object it cannot serialize.
-The config validated, so the shape read as supported (#1076).
-
-Checked in the static analyzer rather than in the action-entry validators: the entry
-those see is rebuilt by `prompt/renderer.py`, which hardcodes `dependencies: []`, so
-every action looks first-stage there. The analyzer reads the workflow as written.
+Checked in the static analyzer, not the action-entry validators: the entry those see is
+rebuilt by `prompt/renderer.py`, which hardcodes `dependencies: []`, so every action
+looks first-stage there (#1076).
 """
 
 import pytest
