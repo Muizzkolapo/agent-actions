@@ -140,15 +140,17 @@ class TestFileUDFResultValidation:
     @pytest.mark.parametrize(
         ("source_index", "shown"),
         [
-            ([None], "None"),
-            ([None, 0], "None"),
-            ([True], "True"),
-            (True, "True"),
-            (False, "False"),
-            (["0"], "'0'"),
-            ([1.0], "1.0"),
-            ([-1], "-1"),
-            (-1, "-1"),
+            ([None], "got [None]"),
+            ([None, 0], "got [None]"),
+            ([True], "got [True]"),
+            (True, "got True"),
+            (False, "got False"),
+            (["0"], "got ['0']"),
+            ([1.0], "got [1.0]"),
+            ([-1], "got [-1]"),
+            (-1, "got -1"),
+            ([[0, 1]], "got [[0, 1]]"),
+            ([(0,)], "got [(0,)]"),
         ],
         ids=[
             "none-in-a-list",
@@ -160,12 +162,18 @@ class TestFileUDFResultValidation:
             "float",
             "negative",
             "negative-scalar",
+            "a-list-of-positions-double-wrapped",
+            "a-tuple-of-positions",
         ],
     )
     def test_a_position_that_cannot_be_one_is_refused(self, source_index, shown):
-        """None and the bools were the quiet ones: a None took the first input's
-        namespaces under a minted guid, and True indexed input 1 — both with no error,
-        and `[None, 0]` discarded the real contributor it was given."""
+        """The bools were the silent ones: `True` is an int to `isinstance`, so the row
+        took input 1's `source_guid` outright. A `None` in a list got as far as lineage
+        enrichment and died there on a `<` against an int. The last two cases are
+        unreachable through any pool; they pin the allowlist against being rewritten as a
+        denylist, which would pass a double-wrapped index list through to `IndexError`.
+        `shown` is the rendered offender because the message's own guidance says "None".
+        """
         with pytest.raises(ValueError) as caught:
             FileUDFResult(outputs=[{"source_index": source_index, "data": {"q": "Q1"}}])
 

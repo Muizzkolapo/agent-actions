@@ -103,6 +103,7 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 - **Read business data from `record["content"]["action_name"]["field"]`** — not `record["field"]`
 - **Return the original record for passthrough** (filter, dedup, sort, transform) — preserves `node_id` and lineage
 - **Return `FileUDFResult` with `source_index: None` for aggregation** — says no single input produced the row; the framework mints it an identity and fresh lineage. A plain new dict in a list is rejected
+- **A position must be a non-negative `int`** — `source_index` takes one position, a list of them for a many-to-one output, or `None`. A list may not contain `None` or a bool, and a numpy integer is not a Python `int`; use `int(idx)`. Say `None` to mean no single input produced the row, never an empty list. An index past the end is not refused here, because the tool's output is built before the input count is known
 - **Output flexibility** — return an array of any size (N→M transformation)
 
 See [Granularity](../execution/granularity.md) for detailed documentation.
