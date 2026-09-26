@@ -424,6 +424,31 @@ class TestBuildCarryForward:
 
         assert found == [], f"carried a row a re-queued producer rebuilds: {found}"
 
+    def test_a_dropped_rows_other_producers_are_re_queued(self):
+        """A row whose producers straddle the boundary is not carried — the tool sees only
+        the reprocessed half, so it cannot rebuild it. Its carried producers must then be
+        re-queued, or the row is never rebuilt and is gone from stored output. Re-queueing
+        one makes every row naming it rebuilt in turn, so a sibling row that would carry
+        it must be dropped too, or the rebuild duplicates."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+            {"source_guid": "m1", "producer_source_guids": ["in1", "in2"], "v": "in1+in2"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+            reprocessing={"in2"},
+        )
+
+        assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"
+        assert found == [], f"carried a row the rebuild will produce again: {found}"
+
     def test_a_row_carrying_no_identity_is_skipped_not_raised(self):
         """Guid-less prior-output rows are an expected input, as the test below pins. One
         naming producers must not abort the action on a subscript."""

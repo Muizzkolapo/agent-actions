@@ -233,21 +233,28 @@ def build_carry_forward(
     # Which of them ought to survive a rewrite is 615's question, not this one, so the
     # answer is left exactly where it was.
     inputs_carried = frozenset(produced_by) & carry_ids
+    rows = [
+        (index, rid, frozenset(record.get("producer_source_guids") or ()))
+        for index, record in enumerate(prior_output)
+        if (rid := record.get("source_guid"))
+    ]
     rebuilding = frozenset(reprocessing)
+    # A row naming both a carried input and a reprocessed one can be neither carried nor
+    # rebuilt, and a repair narrows the input above this so re-queueing the rest is not
+    # always possible. The file then falls back to identity matching, and loses nothing.
+    straddles = any(
+        producers & inputs_carried and producers & rebuilding for _i, _rid, producers in rows
+    )
+
     chosen: dict[str, int] = {}
     produced_indices: set[int] = set()
     producers_found: set[str] = set()
-    for index, record in enumerate(prior_output):
-        rid = record.get("source_guid")
-        if not rid:
-            continue
+    for index, rid, producers in rows:
         if rid in carry_ids:
             chosen[rid] = index
-        # An action minting an identity per row holds none carrying its input's. Carried
-        # only when every input it names is carried too and its own identity is not being
-        # rebuilt: a split producer group comes back from the half being reprocessed.
-        producers = frozenset(record.get("producer_source_guids") or ())
-        if producers and producers <= inputs_carried and rid not in rebuilding:
+        # An action minting an identity per row holds none carrying its input's, so the
+        # rows it produced are the only place that input is named.
+        if producers and not straddles and producers <= inputs_carried and rid not in rebuilding:
             produced_indices.add(index)
             producers_found |= producers
     # Indices, so a row matched both ways is written once and keeps its place. Then one
