@@ -10,17 +10,12 @@ pins the second against the first.
 import json
 import pathlib
 import tempfile
-from unittest.mock import MagicMock
 
 import pytest
 
 from agent_actions.processing.enrichment import LineageEnricher, VersionIdEnricher
 from agent_actions.processing.source_resolution import resolve_source_content
-from agent_actions.processing.types import (
-    ProcessingContext,
-    ProcessingResult,
-    ProcessingStatus,
-)
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.merge import _select_universal_key, merge_records_by_key
@@ -392,38 +387,109 @@ class TestWhatTheDerivedCorrelationIdBuys:
 
 
 class TestWhenTheToolReturnsMoreRowsThanInputs:
-    """``file_tool`` calls that an expansion, and ``LineageEnricher`` then re-mints
-    every row and backfills ``parent_source_guid`` from the guid it replaced. A row
-    that named no producer is given one there — unresolvable, and read as absent by
-    every consumer, but no longer absent. Pinned so the deviation from what this
-    module writes is visible here rather than only in #1044."""
+    """``file_tool`` calls that an expansion, and ``LineageEnricher`` re-mints every
+    row of one, handing the guid it replaced to ``parent_source_guid``. A row that
+    named no input was already minted *here* and names no producer on purpose, so
+    re-minting it there attributed it to its own previous mint — a guid no source
+    pool holds (#1044). ``source_mapping`` is what the enricher reads to tell the two
+    apart: the tool's own statement of which input produced a row, which the lineage
+    step further down already reads the same way.
+    """
 
-    def _expanded(self):
+    POOL = records("G0")
+
+    def _expanded(self, outputs=None):
+        """Two rows from one input: a passthrough and an invented row."""
         raw = FileUDFResult(
-            [{"source_index": 0, "data": {"o": 0}}, {"source_index": None, "data": {"o": 1}}]
+            outputs
+            or [
+                {"source_index": 0, "data": {"o": 0}},
+                {"source_index": None, "data": {"o": 1}},
+            ]
         )
-        return reconcile_outputs(raw, "a2", records("G0"))[0]
+        return reconcile_outputs(raw, "a2", self.POOL)
+
+    def _enrich(self, rows, mapping, source_data=None):
+        """Enrich as ``file_tool`` hands the result over — mapping included.
+
+        Built through the real result rather than a mock: the mapping is the whole
+        signal under test, and a mock that omitted it would exercise the path no
+        production caller takes (``file_tool``/``hitl`` both set it).
+        """
+        result = ProcessingResult.success(data=rows, source_guid=None, is_expansion=True)
+        result.source_mapping = mapping
+        context = ProcessingContext(
+            agent_config={"agent_type": "a2"},
+            agent_name="a2",
+            source_data=list(self.POOL if source_data is None else source_data),
+            is_first_stage=False,
+        )
+        return LineageEnricher().enrich(result, context).data
 
     def test_this_module_leaves_the_invented_row_unattributed(self):
-        rows = self._expanded()
+        rows, _ = self._expanded()
 
         assert rows[1].get("parent_source_guid") is None
 
-    def test_lineage_enrichment_then_gives_it_one_that_resolves_to_nothing(self):
-        rows = self._expanded()
+    def test_the_invented_row_keeps_the_identity_it_was_minted(self):
+        """Nothing is gained by minting twice: the first mint is already unique, so
+        the second only costs the row the identity anything upstream recorded."""
+        rows, mapping = self._expanded()
         minted = rows[1]["source_guid"]
-        context = MagicMock(spec=ProcessingContext)
-        context.action_name = context.agent_name = "a2"
-        context.is_first_stage = False
-        context.source_data = None
-        context.parent_records = []
-        context.record_index = 0
-        context.agent_config = {}
 
-        enriched = LineageEnricher().enrich(
-            ProcessingResult(data=rows, status=ProcessingStatus.SUCCESS, is_expansion=True),
-            context,
-        )
+        assert self._enrich(rows, mapping)[1]["source_guid"] == minted
 
-        assert enriched.data[1]["parent_source_guid"] == minted
-        assert resolve_source_content(enriched.data[1], None, [{"source_guid": "G0"}]) is None
+    def test_the_invented_row_still_claims_no_producer(self):
+        rows, mapping = self._expanded()
+
+        assert self._enrich(rows, mapping)[1].get("parent_source_guid") is None
+
+    def test_no_row_ends_up_claiming_a_producer_the_pool_cannot_resolve(self):
+        """The defect as the invariant it breaks. ``parent_source_guid`` is a
+        source-pool identity (``record/envelope.py``), so one that resolves nowhere
+        asserts a lineage edge to an entity that never existed — and every consumer
+        reads it as absent, which is what kept it quiet.
+        """
+        rows, mapping = self._expanded()
+        pool = {r["source_guid"] for r in self.POOL}
+
+        claimed = {
+            row["parent_source_guid"]
+            for row in self._enrich(rows, mapping)
+            if row.get("parent_source_guid")
+        }
+
+        assert claimed <= pool, f"claims no pool record holds: {sorted(claimed - pool)}"
+
+    def test_the_row_that_named_an_input_is_still_re_minted_and_attributed(self):
+        """Guard on the guard: every assertion above also passes if the expansion
+        re-mint stopped happening at all, and it is what keeps two children of one
+        input off a single identity."""
+        enriched = self._enrich(*self._expanded())
+
+        assert enriched[0]["source_guid"] != "G0"
+        assert enriched[0]["parent_source_guid"] == "G0"
+
+    def test_the_invented_row_is_still_given_its_own_target_id(self):
+        """The rest of the block still runs for it. target_id is per-stage, so every
+        row arrives without one and two rows sharing one collide downstream."""
+        enriched = self._enrich(*self._expanded())
+
+        assert enriched[1]["target_id"]
+        assert enriched[1]["target_id"] != enriched[0]["target_id"]
+
+    def test_an_ancestor_the_row_already_carried_is_still_left_alone(self):
+        """Nested expansion: the attribution the outer mint wrote is the
+        pool-resolvable one, and must not be replaced by the intermediate guid."""
+        rows, mapping = self._expanded()
+        rows[1]["parent_source_guid"] = "G0"
+
+        assert self._enrich(rows, mapping)[1]["parent_source_guid"] == "G0"
+
+    def test_an_invented_row_arriving_with_no_identity_is_still_given_one(self):
+        """Not minting at all would hand ``RequiredFieldsEnricher`` a nameless row
+        and fail the action, where today it is merely minted unattributed."""
+        enriched = self._enrich([{"content": {"a2": {"o": 0}}}], {0: None}, source_data=[])
+
+        assert enriched[0]["source_guid"]
+        assert enriched[0].get("parent_source_guid") is None
