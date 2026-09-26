@@ -18,7 +18,7 @@ from agent_actions.processing.types import (
     ProcessingResult,
 )
 from agent_actions.record.reasons import EMPTY_OUTPUT, TOOL_MISSING_RECORD
-from agent_actions.record.tracking import TrackedItem
+from agent_actions.record.tracking import TrackedItem, is_input_position
 from agent_actions.utils.content import is_version_merge
 from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.workflow.pipeline_file_mode import (
@@ -49,7 +49,7 @@ def _collapse_contributor_guids(
     for src in (source_mapping or {}).values():
         indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
         for idx in indices:
-            if isinstance(idx, int) and 0 <= idx < len(records):
+            if is_input_position(idx, len(records)):
                 guid = records[idx].get("source_guid")
                 if guid and guid not in carried:
                     contributors.add(guid)
@@ -83,7 +83,7 @@ def _accounted_source_guids(
     for src in (source_mapping or {}).values():
         indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
         for idx in indices:
-            if isinstance(idx, int) and 0 <= idx < len(records):
+            if is_input_position(idx, len(records)):
                 accounted.add(records[idx].get("source_guid"))
     return accounted
 

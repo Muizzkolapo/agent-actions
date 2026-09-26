@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from agent_actions.record.tracking import TrackedItem
+from agent_actions.record.tracking import TrackedItem, is_input_position
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _parent_index(
     if isinstance(source_idx, list):
         source_idx = source_idx[0] if source_idx else None  # Many-to-one: first parent
 
-    if isinstance(source_idx, int) and original_data and 0 <= source_idx < len(original_data):
+    if original_data and is_input_position(source_idx, len(original_data)):
         return source_idx
     return None
 
@@ -156,15 +156,15 @@ def _resolve_input_record(
 
     When *input_idx* is ``None`` (synthetic record), falls back to
     ``original_data[0]`` — all records in a batch share upstream namespaces.
-    Raises ``IndexError`` for out-of-bounds non-None indices.
+    Raises ``IndexError`` when *input_idx* names no input position.
     """
     if not original_data:
         return None
     if input_idx is None:
         return original_data[0]
-    if not isinstance(input_idx, int) or input_idx < 0 or input_idx >= len(original_data):
+    if not is_input_position(input_idx, len(original_data)):
         raise IndexError(
-            f"source_index {input_idx} is out of bounds for {len(original_data)} input records"
+            f"source_index {input_idx!r} does not name one of the {len(original_data)} input records"
         )
     return original_data[input_idx]
 
