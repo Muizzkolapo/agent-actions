@@ -13,10 +13,13 @@ import sys
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 _sentinel = object()
 if sys.modules.get("agent_actions.workflow.pipeline_file_mode", _sentinel) is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 
 
@@ -185,6 +188,19 @@ class TestCarryForwardEdgeCases:
 
         assert [r["source_guid"] for r in result] == ["r1", "r0"]
         backend.get_terminal_record_ids.assert_not_called()
+
+    def test_a_corrupt_store_is_not_swallowed_into_row_loss(self):
+        """`read_target_for_rewrite` reconstructs and lifecycle-validates, and raises
+        on a store it cannot read — the loud "delete agent_io/target/ and re-run"
+        error. Catching that and returning the batch's answers hands them to a write
+        that replaces the file, so every row the batch did not answer for is deleted,
+        reported at debug. The error has to reach the caller."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.side_effect = ConfigurationError("corrupt store")
+        service = _make_service(storage_backend=backend)
+
+        with pytest.raises(ConfigurationError):
+            service._merge_carry_forward("test_action", [{"source_guid": "a0"}], "a.json")
 
     def test_no_storage_backend_returns_unchanged(self):
         """No storage backend -> output unchanged."""
