@@ -19,7 +19,6 @@ These workflows showcase **production-ready patterns** inspired by [Incident.io]
   versions:
     param: classifier_id
     range: [1, 2, 3]
-    mode: parallel
   schema:
     severity: string
     confidence: number

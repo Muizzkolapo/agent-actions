@@ -610,7 +610,6 @@ actions:
     versions:
       param: strategy
       range: ["literal", "idiomatic", "domain_adapted"]
-      mode: parallel
     schema:
       translated_text: string
       strategy_used: string
@@ -940,7 +939,6 @@ flowchart LR
   versions:
     param: voter_id
     range: [1, 2, 3]
-    mode: parallel
   prompt: $my_workflow.Vote_Quality
   schema: quality_vote
 ```

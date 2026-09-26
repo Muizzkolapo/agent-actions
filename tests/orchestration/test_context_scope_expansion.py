@@ -40,17 +40,14 @@ class TestContextScopeExpansion:
             "extract_raw_qa_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 1,
             },
             "extract_raw_qa_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 2,
             },
             "extract_raw_qa_3": {
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 3,
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # Will be expanded to version variants
@@ -90,12 +87,10 @@ class TestContextScopeExpansion:
             "loop_action_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 1,
             },
             "loop_action_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 2,
             },
             "consumer": {
                 "dependencies": ["loop_action"],
@@ -148,12 +143,10 @@ class TestContextScopeExpansion:
             "loop_action_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 1,
             },
             "loop_action_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 2,
             },
             "regular_action": {},
             "consumer": {
@@ -185,12 +178,10 @@ class TestContextScopeExpansion:
             "loop_action_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 1,
             },
             "loop_action_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop_action",
-                "version_number": 2,
             },
             "consumer": {
                 "dependencies": ["loop_action"]

@@ -72,13 +72,6 @@ class ReferenceExtractor:
                     self._extract_from_context_scope(refs, agent_name, f"context_scope.{directive}")
                 )
 
-        versions = agent_config.get("versions", {})
-        items_from = versions.get("items_from", "")
-        if items_from:
-            requirements.extend(
-                self._extract_from_template(str(items_from), agent_name, "versions.items_from")
-            )
-
         conditional = agent_config.get("conditional_clause", "")
         if conditional:
             requirements.extend(

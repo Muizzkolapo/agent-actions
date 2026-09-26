@@ -435,7 +435,6 @@ class TestLoopCorrelatorWithSequentialMode:
                     "source_guid": "test-guid",
                     "version_correlation_id": "test-corr",
                     "loop_mode": "sequential",
-                    "version_number": i,
                     **lifecycle,
                     "content": {action_name: {"step": i, "result": f"step_{i}_result"}},
                 }

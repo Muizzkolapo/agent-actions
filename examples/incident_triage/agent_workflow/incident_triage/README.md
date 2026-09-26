@@ -57,7 +57,6 @@ The input record may contain fields irrelevant to extraction. Listing only `sour
   intent: "Classify incident severity using multiple independent evaluators"
   versions:
     range: [1, 3]
-    mode: parallel
   schema: classify_severity
   prompt: $incident_triage.Classify_Severity
   context_scope:
@@ -223,10 +222,9 @@ The `versions` block creates multiple instances of the same action. Each instanc
 ```yaml
 versions:
   range: [1, 3]
-  mode: parallel
 ```
 
-This produces three concurrent LLM calls: `classify_severity_1`, `classify_severity_2`, and `classify_severity_3`. `range: [1, 3]` means versions 1 through 3 inclusive. `mode: parallel` means they run concurrently, not sequentially.
+This produces three concurrent LLM calls: `classify_severity_1`, `classify_severity_2`, and `classify_severity_3`. `range: [1, 3]` means versions 1 through 3 inclusive. They run concurrently because nothing makes one depend on another — add a `${i-1}` dependency to run them one at a time.
 
 In the prompt, version-aware templating assigns each classifier a distinct perspective:
 

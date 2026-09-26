@@ -35,7 +35,7 @@ actions:
     impl: cast_vote
     dependencies: [split_words]
     intent: "Cast one vote per version on each word record"
-    versions: { param: voter_id, range: [1, 2], mode: parallel }
+    versions: { param: voter_id, range: [1, 2] }
     schema: { vote: string, voted_word: string }
     context_scope:
       observe: [split_words.*]
@@ -92,7 +92,7 @@ actions:
     impl: cast_vote_direct
     dependencies: [stage_items]
     intent: "Vote directly on pre-expansion records (vc born at the merge below)"
-    versions: { param: voter_id, range: [1, 2], mode: parallel }
+    versions: { param: voter_id, range: [1, 2] }
     schema: { vote: string, voted_item: string }
     context_scope:
       observe: [stage_items.*]

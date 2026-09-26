@@ -52,10 +52,21 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
     )
 
 
-# Keys whose runtime was deleted. Nothing to redirect to, so the refusal says the
-# feature is gone: a bare unknown-key error reads as a misspelling, and sends the
-# author to try the same block one level up.
-_RETIRED_CONFIG_KEYS = frozenset({"interceptors"})
+# Version fan-out puts each version in the dependency graph as its own action, so
+# what order they run in is the graph's answer and no key can change it.
+_VERSION_ORDER_HINT = (
+    "version fan-out is always parallel — run versions one at a time by chaining "
+    'them with dependencies: ["<action>_${i-1}"], or serialise a whole run with '
+    "--execution-mode sequential"
+)
+
+# Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
+# and sends the author to try the same block one level up. A value is where the
+# behaviour the key named is reachable another way.
+_RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "interceptors": "",
+    "version_mode": _VERSION_ORDER_HINT,
+}
 
 
 def refuse_retired_keys(data: Any, surface: str) -> Any:
@@ -77,10 +88,23 @@ def refuse_retired_keys(data: Any, surface: str) -> Any:
     # reader to the wrong one.
     named = data.get("name") or data.get("agent_type")
     where = f"{surface} '{named}': " if isinstance(named, str) and named else f"{surface}: "
-    raise ValueError(
-        where
-        + "; ".join(f"'{key}' is no longer read and configures nothing; remove it" for key in stray)
-    )
+    raise ValueError(where + "; ".join(_retired_key_reason(key) for key in stray))
+
+
+def _retired_key_reason(key: str) -> str:
+    hint = _RETIRED_CONFIG_KEYS[key]
+    reason = f"'{key}' is no longer read and configures nothing; remove it"
+    return f"{reason} — {hint}" if hint else reason
+
+
+def _refuse_retired_version_keys(data: Any) -> Any:
+    """Refuse `mode:` in a `versions:` block, which named an order nothing read."""
+    if isinstance(data, dict) and "mode" in data:
+        raise ValueError(
+            "versions: 'mode' is no longer read and configures nothing; remove it "
+            f"— {_VERSION_ORDER_HINT}"
+        )
+    return data
 
 
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
@@ -136,32 +160,24 @@ class ActionKind(str, Enum):
         return None
 
 
-class VersionMode(str, Enum):
-    """Version execution modes."""
-
-    PARALLEL = "parallel"
-    SEQUENTIAL = "sequential"
-
-    @classmethod
-    def _missing_(cls, value):
-        if isinstance(value, str):
-            lower = value.lower()
-            for member in cls:
-                if member.value == lower:
-                    return member
-        return None
-
-
 class VersionConfig(BaseModel):
-    """Configuration for version-based actions."""
+    """Configuration for version-based actions.
+
+    Validated by the render step rather than by the workflow model: the block is
+    stripped from the action as it expands, so nothing downstream ever sees it.
+    """
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return _refuse_undeclared_keys(_refuse_retired_version_keys(data), cls, "versions")
 
     param: str = Field(default="i", description="Parameter name for version variable")
     range: list[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
         ..., description="Range of values for version parameter"
     )
-    mode: VersionMode = Field(default=VersionMode.PARALLEL, description="Execution mode")
 
 
 class ChunkConfig(BaseModel):
@@ -488,7 +504,6 @@ class ActionConfig(_RetryValidators):
     context_scope: dict[str, Any] | None = Field(
         default=None, description="Context scope configuration"
     )
-    version_mode: VersionMode | None = Field(default=None, description="Version execution mode")
 
     # --- Internal (injected by render step) ---
     version_context: dict[str, Any] | None = Field(

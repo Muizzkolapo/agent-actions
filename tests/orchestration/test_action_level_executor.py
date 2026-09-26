@@ -76,19 +76,16 @@ class TestLoopDependencyExpansion:
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 1,
             },
             "extract_raw_qa_2": {
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 2,
             },
             "extract_raw_qa_3": {
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 3,
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],
@@ -142,19 +139,16 @@ class TestLoopDependencyExpansion:
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 1,
             },
             "extract_raw_qa_2": {
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 2,
             },
             "extract_raw_qa_3": {
                 "dependencies": [],
                 "is_versioned_agent": True,
                 "version_base_name": "extract_raw_qa",
-                "version_number": 3,
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # References the base name

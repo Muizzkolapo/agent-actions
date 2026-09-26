@@ -130,8 +130,6 @@ class ActionExpander:
             agent["name"] = f"{action.get('name')}_{i}"
             agent["is_versioned_agent"] = True
             agent["version_base_name"] = action.get("name", "unknown")
-            agent["version_number"] = i
-            agent["version_mode"] = version_config.get("mode", "parallel")
 
             # Compile version context for Jinja2 template rendering
             # This enables {{ i }}, {{ idx }}, {{ version.length }}, etc. in prompts
@@ -336,8 +334,6 @@ class ActionExpander:
                     version_ctx = action["_version_context"]
                     agent["is_versioned_agent"] = True
                     agent["version_base_name"] = version_ctx.get("base_name", action.get("name"))
-                    agent["version_number"] = version_ctx.get("i")
-                    agent["version_mode"] = action.get("version_mode", "parallel")
                     agent["_version_context"] = version_ctx
 
                 created_agent = ActionExpander._create_agent_from_action(

@@ -55,7 +55,6 @@ Three independent scorers evaluate each review against the same rubric. The enti
 versions:
   param: scorer_id
   range: [1, 2, 3]
-  mode: parallel
 ```
 
 Each scorer is context-isolated -- it sees the extracted claims and the seed rubric, but never another scorer's output. That prevents herding (scorer 2 anchoring on scorer 1's number). The prompt template uses version metadata to shift each scorer's focus:
@@ -214,7 +213,6 @@ Three independent scorers produce three opinions. None can see the others:
   versions:
     param: scorer_id
     range: [1, 2, 3]
-    mode: parallel
 
 - name: aggregate_scores
   version_consumption:

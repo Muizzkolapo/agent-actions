@@ -9,8 +9,10 @@ from typing import Any
 import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader
+from pydantic import ValidationError
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.schema import VersionConfig
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -380,6 +382,24 @@ def _apply_version_template(
     return value
 
 
+def _validate_version_block(version_config: Any, action_name: str) -> None:
+    """Validate a `versions:` block here, the last point anything holds it.
+
+    The expansion below drops the block, so a workflow reaches the runtime with no
+    trace of what it asked for — an undeclared or retired key would otherwise be
+    replaced by a default and never reported.
+    """
+    try:
+        VersionConfig.model_validate(version_config)
+    except ValidationError as e:
+        reasons = "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
+        raise ConfigurationError(
+            f"action '{action_name}': {reasons}",
+            context={"action_name": action_name, "operation": "expand_versioned_action"},
+            cause=e,
+        ) from e
+
+
 def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Expand a versioned action into multiple actions.
@@ -398,6 +418,7 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
         Output: 3 actions with names action_1, action_2, action_3
     """
     version_config = action.get("versions", {})
+    _validate_version_block(version_config, action.get("name", "unknown"))
     param_name = version_config.get("param", "i")
     version_range = version_config.get("range", [1, 1])
 

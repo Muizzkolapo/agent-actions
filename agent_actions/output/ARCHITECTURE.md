@@ -289,9 +289,7 @@ versions:
   Each gets:
     is_versioned_agent: true
     version_base_name: original action name
-    version_number: 1/2/3
-    version_mode: parallel (default)
-    _version_context: {i, idx, length, first, last}
+    _version_context: {i, idx, length, first, last, base_name, param_name}
 
   Template variables available:
     ${round}   → current iteration value

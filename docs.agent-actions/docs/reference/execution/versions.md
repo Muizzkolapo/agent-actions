@@ -14,7 +14,6 @@ actions:
   - name: extract_raw_qa
     versions:
       range: [1, 3]         # Inclusive range - creates _1, _2, _3
-      mode: parallel        # or "sequential"
     prompt: |
       Extract questions using strategy {{ i }}
 ```
@@ -24,7 +23,6 @@ actions:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `range` | array | Required | `[start, end]` - inclusive range |
-| `mode` | string | `parallel` | `parallel` or `sequential` |
 
 ## Template Variables
 
@@ -64,7 +62,6 @@ Version variables work with prompt store references, enabling reusable versioned
 - name: classify_severity
   versions:
     range: [1, 3]
-    mode: parallel
   prompt: $incident_triage.Classify_Severity
 ```
 
@@ -183,7 +180,6 @@ Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.
 - name: refine_iteration
   versions:
     range: [1, 3]
-    mode: sequential
   dependencies:
     # Version 1 has no predecessor; the framework drops the empty stub.
     # Versions 2 and 3 depend on refine_iteration_1 and refine_iteration_2.
@@ -200,11 +196,20 @@ Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.
     {% if i == 1 %}openai{% elif i == 2 %}anthropic{% else %}google{% endif %}
 ```
 
-## Execution Modes
+## Execution Order
 
-**Parallel (default)**: All iterations run simultaneously. Use when iterations are independent.
+Each version becomes its own action in the dependency graph, so the graph decides
+the order and there is no per-action setting for it.
 
-**Sequential**: Iterations run one at a time. Use when later iterations depend on earlier ones or to control API rate limits.
+**Independent versions run together.** With no dependency between them, all
+iterations sit in one execution level and run simultaneously.
+
+**Chained versions run one at a time.** A `${i-1}` dependency, as in Sequential
+Refinement above, puts each iteration in its own level, so iteration 2 starts once
+iteration 1 has finished.
+
+To serialise a whole run regardless of the graph, use `--execution-mode sequential`;
+to cap how many actions run at once, use `--concurrency-limit`.
 
 ## Context Scope with Versions
 
