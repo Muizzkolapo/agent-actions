@@ -207,48 +207,28 @@ class TestARepairThatNamesAStoredRow:
 
 
 class TestAnInputThatWasItselfExpanded:
-    """``parent_source_guid`` is the original pool ancestor, so rows of a chained
-    expansion name the grandparent and cannot be attributed through it. The rows now
-    also name the input that produced them, which resolves exactly — so a repair here
-    replaces the named input's rows instead of carrying every row beside its
-    replacement."""
+    """``parent_source_guid`` is the original pool ancestor, not the immediate
+    producer (issue #1022), so rows of a chained expansion name the grandparent
+    and cannot be attributed to the input that made them. Nothing here asks for
+    that to work — only that it is not made worse, and that it is not silent."""
 
-    def test_the_rows_of_the_named_input_are_replaced_not_duplicated(self, run):
+    def test_no_row_is_lost(self, run):
         r = run({"m0": 2})
         first = r(_records("m0", "m1", ancestor="s0"))
-        assert {row.get("parent_source_guid") for row in first} == {"s0"}, (
-            "the shape under test: parent_source_guid names the grandparent, not m0"
-        )
-        stale = {
-            row["source_guid"] for row in first if "m0" in (row.get("producer_source_guids") or [])
-        }
-        assert len(stale) == 2, "m0 produced two rows and names itself on both"
+        assert {row.get("parent_source_guid") for row in first} == {"s0"}
 
         r.repair(_records("m0", "m1", ancestor="s0"), {"m0"})
 
-        stored = {row["source_guid"] for row in r.stored()}
-        assert stale.isdisjoint(stored), "m0's stale rows were carried beside its fresh ones"
-        assert len(r.stored()) == 3
+        assert {row["source_guid"] for row in first} <= {row["source_guid"] for row in r.stored()}
 
-    def test_the_row_of_an_unnamed_input_still_stands(self, run):
-        r = run({"m0": 2})
-        first = r(_records("m0", "m1", ancestor="s0"))
-        untouched = next(row for row in first if "m1" in (row.get("producer_source_guids") or []))
-
-        r.repair(_records("m0", "m1", ancestor="s0"), {"m0"})
-
-        assert untouched["source_guid"] in {row["source_guid"] for row in r.stored()}
-
-    def test_nothing_is_reported_as_unattributable(self, caplog, run):
-        """The warning counted rows the run could not place. They are placeable now,
-        so raising it would tell a reader to act on a repair that duplicated nothing."""
+    def test_a_row_it_cannot_attribute_is_reported(self, caplog, run):
         r = run({"m0": 2})
         r(_records("m0", "m1", ancestor="s0"))
 
         with caplog.at_level("WARNING"):
             r.repair(_records("m0", "m1", ancestor="s0"), {"m0"})
 
-        assert "cannot be attributed" not in caplog.text
+        assert "cannot be attributed" in caplog.text
 
 
 class TestWhatAOneToOneRepairDoes:
