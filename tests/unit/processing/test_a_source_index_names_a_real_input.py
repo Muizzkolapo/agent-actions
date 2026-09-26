@@ -87,6 +87,24 @@ class TestAnElementThatIsNotAnInteger:
         with pytest.raises(ValueError, match="output\\[0\\]"):
             FileUDFResult(outputs=_outputs([0, 1.5]))
 
+    @pytest.mark.parametrize(
+        "source_index",
+        [[[0, 1]], [(0,)], [{0}], [b"0"]],
+        ids=["a-list", "a-tuple", "a-set", "bytes"],
+    )
+    def test_a_container_of_positions_is_refused(self, source_index):
+        """A tool that wraps its index list once too often writes ``[[0, 1]]``, which
+        reads as one contributor that is itself a list. Nothing named that shape, though
+        the rule already refuses it.
+
+        These add breadth rather than closing a hole: ``test_a_value_that_is_only_index_like_is_refused``
+        above already fails if the rule is rewritten as a denylist of the refused types,
+        which is how a container would get through to ``_resolve_input_record`` and be
+        reported as an index out of a range it was never in.
+        """
+        with pytest.raises(ValueError, match="non-negative int"):
+            FileUDFResult(outputs=_outputs(source_index))
+
 
 class TestWhatStaysAccepted:
     def test_an_index_past_the_end_is_still_accepted(self):
