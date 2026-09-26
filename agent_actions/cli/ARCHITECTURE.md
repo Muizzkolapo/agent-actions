@@ -267,7 +267,10 @@ RetryCommand.execute()
   ├─ Reset downstream ActionStatus → PENDING
   ├─ workflow.run()
   │
-  └─ _delete_manifest()                             ← only after successful completion
+  ├─ State check: is_workflow_complete / is_workflow_done / has_any_failed
+  ├─ _delete_manifest()                             ← the repair reached the end, either way
+  │
+  └─ SystemExit(1) if a downstream action failed    ← same contract as `run`
 ```
 
 ### `inspect` -- Command Group
