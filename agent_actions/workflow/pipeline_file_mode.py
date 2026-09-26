@@ -246,7 +246,12 @@ def reconcile_outputs(
 
     if isinstance(raw_response, FileUDFResult):
         for i, out in enumerate(raw_response.outputs):
+            # An empty contributor list says what None says: no input produced this row.
+            # Normalised at the store, not per reader: the predicate for "holds such a
+            # row" tests `is None`, so a [] left in place is invisible to it.
             src_idx = out["source_index"]
+            if isinstance(src_idx, list) and not src_idx:
+                src_idx = None
             if src_idx is None:
                 input_idx = None
             elif isinstance(src_idx, list):
