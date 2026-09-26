@@ -1,13 +1,9 @@
 """`interceptors:` is not a config key — the system it configured was deleted.
 
-Pinned on the declaration, the expander's copy, and the two agent models that
-allow extras, because any one left open still loses the value in silence. The
-copy is the worst of them: the value reaches the agent config, so a reader
-dumping it sees the block present and apparently applied.
-
-Each surface is asserted to give the reason, not just to fail. A user who reads
-"unknown key" relocates the block, and relocating it is how it reached every
-agent unread in the first place.
+Every surface is asserted to give the reason, not just to fail: a user who reads
+"unknown key" relocates the block, and relocating it is how the key reached every
+agent unread to begin with. The expander's copy is the worst of the sites, since
+the value arrives on the agent config and so looks applied to anyone dumping it.
 """
 
 import pytest
