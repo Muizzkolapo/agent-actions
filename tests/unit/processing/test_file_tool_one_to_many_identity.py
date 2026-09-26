@@ -105,7 +105,7 @@ class TestTheRowsSurviveBeingStored:
         the input was itself expanded, when it names the grandparent instead."""
         rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
 
-        assert [r.get("producer_source_guid") for r in rows] == ["G0", "G0", None]
+        assert [r.get("producer_source_guids") for r in rows] == [["G0"], ["G0"], None]
 
     def test_a_checkpoint_round_trip_returns_every_row(self):
         """The checkpoint table is unique per identity, so two rows sharing one

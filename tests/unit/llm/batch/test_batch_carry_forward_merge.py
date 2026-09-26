@@ -116,6 +116,51 @@ class TestCarryForwardEdgeCases:
         assert len(result) == 1
         assert result[0]["source_guid"] == "r0"
 
+    def test_a_producer_resolved_row_is_not_resurrected_beside_its_replacement(self):
+        """The same invariant as test_overlap_deduplication, for a row carried through
+        the input that produced it. An action minting an identity per row holds none
+        carrying its input's, so the "already in the batch output" guard cannot see
+        such a row by source_guid and the stale pair is merged back in beside the
+        fresh one."""
+        prior_records = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"], "data": "old"},
+            {"source_guid": "m1", "producer_source_guids": ["r0"], "data": "old"},
+        ]
+        backend = _mock_backend(
+            target_files=["data.json"],
+            prior_output={"data.json": prior_records},
+            terminal_guids={"r0"},
+        )
+        service = _make_service(storage_backend=backend)
+
+        # This run reprocessed r0 and minted a fresh pair for it.
+        batch_output = [
+            {"source_guid": "n0", "producer_source_guids": ["r0"], "data": "new"},
+            {"source_guid": "n1", "producer_source_guids": ["r0"], "data": "new"},
+        ]
+        result = service._merge_carry_forward("test_action", batch_output)
+
+        guids = [r.get("source_guid") for r in result]
+        assert guids == ["n0", "n1"], f"stale rows resurrected: {guids}"
+
+    def test_a_producer_resolved_row_is_still_carried_when_not_reprocessed(self):
+        """The other half: if this run produced nothing for r0, its stored rows must
+        still come back, or narrowing the batch deletes them."""
+        prior_records = [
+            {"source_guid": "m0", "producer_source_guids": ["r0"], "data": "old"},
+            {"source_guid": "m1", "producer_source_guids": ["r0"], "data": "old"},
+        ]
+        backend = _mock_backend(
+            target_files=["data.json"],
+            prior_output={"data.json": prior_records},
+            terminal_guids={"r0"},
+        )
+        service = _make_service(storage_backend=backend)
+
+        result = service._merge_carry_forward("test_action", [{"source_guid": "other"}])
+
+        assert [r.get("source_guid") for r in result] == ["other", "m0", "m1"]
+
     def test_overlap_deduplication(self):
         """Overlapping GUIDs between batch and carry-forward -> deduplicated."""
         prior_records = [

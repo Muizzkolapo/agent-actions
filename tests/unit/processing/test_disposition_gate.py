@@ -283,9 +283,9 @@ class TestBuildCarryForward:
         so matching on source_guid alone finds nothing and the input is re-queued
         and re-split. Every row the input produced comes back, not one."""
         prior = [
-            {"source_guid": "m0", "producer_source_guid": "r0"},
-            {"source_guid": "m1", "producer_source_guid": "r0"},
-            {"source_guid": "m2", "producer_source_guid": "r1"},
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
+            {"source_guid": "m2", "producer_source_guids": ["r1"]},
         ]
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = prior
@@ -305,9 +305,9 @@ class TestBuildCarryForward:
         are written back into the file they came from, so a producer match must not
         append after the direct ones."""
         prior = [
-            {"source_guid": "m0", "producer_source_guid": "r0"},
+            {"source_guid": "m0", "producer_source_guids": ["r0"]},
             {"source_guid": "r1"},
-            {"source_guid": "m1", "producer_source_guid": "r0"},
+            {"source_guid": "m1", "producer_source_guids": ["r0"]},
         ]
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = prior
@@ -324,7 +324,7 @@ class TestBuildCarryForward:
     def test_a_carry_id_no_row_accounts_for_is_still_reported_missing(self):
         """The caller re-queues what comes back missing. Counting a producer match
         the store does not hold would drop the record silently instead."""
-        prior = [{"source_guid": "m0", "producer_source_guid": "r0"}]
+        prior = [{"source_guid": "m0", "producer_source_guids": ["r0"]}]
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = prior
 
@@ -342,7 +342,7 @@ class TestBuildCarryForward:
         """A row whose own identity is carried and whose producer is carried too —
         a repair naming an input beside a row of it. Returned twice it would be
         written twice, duplicating the row the rewrite is meant to replace."""
-        prior = [{"source_guid": "m0", "producer_source_guid": "r0"}]
+        prior = [{"source_guid": "m0", "producer_source_guids": ["r0"]}]
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = prior
 
@@ -356,9 +356,10 @@ class TestBuildCarryForward:
         assert [r["source_guid"] for r in found] == ["m0"]
         assert missing == set()
 
-    def test_a_row_naming_no_producer_resolves_only_by_its_own_identity(self):
-        """The ordinary 1:1 row, which is most of them. A None producer must not
-        collide with a carry id that is also absent."""
+    def test_an_ordinary_one_to_one_row_still_resolves_by_its_own_identity(self):
+        """The 1:1 path, which is most rows: no producer recorded, and resolution by
+        source_guid unchanged. A regression guard on the common case, not on the
+        producer logic — it passes before and after the fix."""
         prior = [{"source_guid": "r1", "data": "ok"}, {"source_guid": "r2"}]
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = prior

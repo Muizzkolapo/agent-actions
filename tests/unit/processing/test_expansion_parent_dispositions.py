@@ -2,7 +2,7 @@
 
 Enrichment mints a fresh identity for every output row of an expansion, so no row
 carries the input's own ``source_guid``: the input needs a disposition row, and
-carry-forward needs to find the rows it produced. ``producer_source_guid`` closes
+carry-forward needs to find the rows it produced. ``producer_source_guids`` closes
 the second half — not ``parent_source_guid``, which is the pool ancestor and names
 the grandparent once an input has itself been expanded.
 """
@@ -216,7 +216,7 @@ class TestWhichInputARowNames:
     def test_a_minted_row_names_the_input_that_produced_it(self, run):
         output = run(_records("r0", "r1"), EXPANSION)
 
-        assert [o.get("producer_source_guid") for o in output] == ["r0", "r0", "r1"]
+        assert [o.get("producer_source_guids") for o in output] == [["r0"], ["r0"], ["r1"]]
 
     def test_it_is_the_immediate_input_and_not_the_ancestor(self, run):
         """The whole reason the field exists. `parent_source_guid` degrades to the
@@ -225,7 +225,7 @@ class TestWhichInputARowNames:
         output = run(_records("m0", "m1", ancestor="s0"), EXPANSION)
 
         assert [o.get("parent_source_guid") for o in output] == ["s0", "s0", "s0"]
-        assert [o.get("producer_source_guid") for o in output] == ["m0", "m0", "m1"]
+        assert [o.get("producer_source_guids") for o in output] == [["m0"], ["m0"], ["m1"]]
 
     def test_a_row_the_tool_invented_names_no_producer(self, run):
         """A synthetic row maps to no input, so there is nothing to name. Writing
@@ -241,7 +241,7 @@ class TestWhichInputARowNames:
 
         invented = [o for o in output if o["content"][ACTION].get("part") == "invented"]
         assert len(invented) == 1
-        assert invented[0].get("producer_source_guid") is None
+        assert not invented[0].get("producer_source_guids")
 
 
 class TestTheProducerSurvivesStorage:
@@ -282,7 +282,7 @@ class TestTheSameGapReachedWithMatchingCounts:
 
     def test_its_rows_keep_the_identities_they_were_given(self, run):
         first = run(_records("r0", "r1", "r2"), self._matched)
-        split = {o["source_guid"] for o in first if o.get("producer_source_guid") == "r0"}
+        split = {o["source_guid"] for o in first if "r0" in (o.get("producer_source_guids") or [])}
         assert len(split) == 2, "the split rows are the ones minted an identity"
 
         second = run(_records("r0", "r1", "r2"), self._matched)
@@ -335,7 +335,7 @@ class TestARecordModeExpansion:
     def test_every_minted_row_names_the_record_it_came_from(self):
         rows = self._enriched("r0", 3)
 
-        assert [r.get("producer_source_guid") for r in rows] == ["r0", "r0", "r0"]
+        assert [r.get("producer_source_guids") for r in rows] == [["r0"], ["r0"], ["r0"]]
         assert all(r["source_guid"] != "r0" for r in rows), "each row is minted its own"
 
     def test_the_record_resolves_through_them_for_carry_forward(self):
@@ -347,3 +347,103 @@ class TestARecordModeExpansion:
 
         assert [r["source_guid"] for r in found] == [r["source_guid"] for r in rows]
         assert missing == set()
+
+
+class TestAnExpansionThatAlsoCollapses:
+    """A tool may merge some inputs and split others in one call. If the totals come
+    out higher it is an expansion, and every row is re-keyed — so a merged row has to
+    name every input it consumed, not just the first. Naming one writes a terminal row
+    for the others that nothing can resolve, and the next run reprocesses them beside
+    the row already holding their content.
+    """
+
+    @staticmethod
+    def _merge_and_split(given: list[str]) -> list[dict]:
+        out: list[dict] = []
+        merged = [i for i, g in enumerate(given) if g in ("r0", "r1")]
+        if merged:
+            out.append(
+                {"source_index": merged, "data": {"group": "+".join(given[i] for i in merged)}}
+            )
+        for i, g in enumerate(given):
+            if g == "r2":
+                out += [{"source_index": i, "data": {"part": n}} for n in range(3)]
+        return out
+
+    def test_a_merged_row_names_every_input_it_consumed(self, run):
+        output = run(_records("r0", "r1", "r2"), self._merge_and_split)
+        merged = next(o for o in output if "group" in o["content"][ACTION])
+
+        assert merged.get("producer_source_guids") == ["r0", "r1"]
+
+    def test_the_output_does_not_grow_on_a_rerun(self, run):
+        first = run(_records("r0", "r1", "r2"), self._merge_and_split)
+        second = run(_records("r0", "r1", "r2"), self._merge_and_split)
+        third = run(_records("r0", "r1", "r2"), self._merge_and_split)
+
+        assert [len(first), len(second), len(third)] == [4, 4, 4]
+
+    def test_no_input_is_reprocessed(self, run):
+        run(_records("r0", "r1", "r2"), self._merge_and_split)
+        run(_records("r0", "r1", "r2"), self._merge_and_split)
+
+        assert len(run.seen) == 1, f"the tool ran again on: {run.seen[1:]}"
+
+    def test_the_merged_inputs_content_appears_once(self, run):
+        """The harm, stated as data rather than as invocations: r1 was folded into a
+        row with r0, so a second row built from r1 alone is its content twice."""
+        run(_records("r0", "r1", "r2"), self._merge_and_split)
+        output = run(_records("r0", "r1", "r2"), self._merge_and_split)
+
+        groups = sorted(
+            o["content"][ACTION]["group"] for o in output if "group" in o["content"][ACTION]
+        )
+        assert groups == ["r0+r1"]
+
+
+class TestAPlainCollapseIsAlsoResolvable:
+    """The same defect without an expansion: a many-to-one output carries only its
+    first contributor's guid, so the rest get a terminal row nothing names. Their
+    content is then rebuilt beside the row already holding it.
+    """
+
+    @staticmethod
+    def _merge_all(given: list[str]) -> list[dict]:
+        return [{"source_index": list(range(len(given))), "data": {"merged": "+".join(given)}}]
+
+    def test_the_carrier_names_the_contributors_it_does_not_carry(self, run):
+        output = run(_records("r0", "r1"), self._merge_all)
+
+        assert output[0]["source_guid"] == "r0"
+        assert output[0].get("producer_source_guids") == ["r0", "r1"]
+
+    def test_a_contributor_is_not_reprocessed(self, run):
+        run(_records("r0", "r1"), self._merge_all)
+        run(_records("r0", "r1"), self._merge_all)
+
+        assert len(run.seen) == 1, f"the tool ran again on: {run.seen[1:]}"
+
+    def test_the_output_does_not_grow(self, run):
+        first = run(_records("r0", "r1"), self._merge_all)
+        third = (
+            run(_records("r0", "r1"), self._merge_all),
+            run(_records("r0", "r1"), self._merge_all),
+        )[1]
+
+        assert [len(first), len(third)] == [1, 1]
+
+
+class TestAProducerIsAlwaysARealInput:
+    def test_a_row_whose_input_carries_no_identity_names_no_producer(self, run):
+        """An input with no source_guid leaves the row nothing real to name. Writing
+        the intermediate guid this action minted a step earlier would hand a consumer
+        an identity no input holds."""
+        records = [
+            {"content": {"prev": {"id": "x"}}},
+            {"source_guid": "r1", "content": {"prev": {"id": "r1"}}},
+        ]
+        output = run(records, EXPANSION)
+
+        for row in output:
+            for guid in row.get("producer_source_guids") or []:
+                assert guid in {"r1"}, f"{guid} names no input of this action"
