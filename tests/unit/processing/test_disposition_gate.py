@@ -449,6 +449,52 @@ class TestBuildCarryForward:
         assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"
         assert found == [], f"carried a row the rebuild will produce again: {found}"
 
+    def test_a_producer_absent_from_this_run_also_disables_resolution(self):
+        """A row is just as unresolvable when its other producer is gone from the input as
+        when it is being reprocessed: the tool cannot rebuild it either way. Keying the
+        guard on the reprocessed set alone let this one through, and the row was dropped
+        while a sibling credited its carried producer."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+            {"source_guid": "m1", "producer_source_guids": ["in1", "in2"], "v": "in1+in2"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        # in2 is not being reprocessed — it is simply not an input of this run at all.
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+        )
+
+        assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"
+        assert found == []
+
+    def test_a_guidless_row_can_disable_resolution_too(self):
+        """The guard has to see every stored row, not only the ones carrying an identity:
+        a guid-less row still names producers, and a row nothing can rebuild is a row
+        nothing can rebuild."""
+        prior = [
+            {"producer_source_guids": ["in1", "in2"], "v": "no guid"},
+            {"source_guid": "m0", "producer_source_guids": ["in1"], "v": "in1 alone"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"in1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"in1"},
+        )
+
+        assert missing == {"in1"}
+        assert found == []
+
     def test_a_row_carrying_no_identity_is_skipped_not_raised(self):
         """Guid-less prior-output rows are an expected input, as the test below pins. One
         naming producers must not abort the action on a subscript."""

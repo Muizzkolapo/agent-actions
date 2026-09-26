@@ -239,11 +239,13 @@ def build_carry_forward(
         if (rid := record.get("source_guid"))
     ]
     rebuilding = frozenset(reprocessing)
-    # A row naming both a carried input and a reprocessed one can be neither carried nor
-    # rebuilt, and a repair narrows the input above this so re-queueing the rest is not
-    # always possible. The file then falls back to identity matching, and loses nothing.
+    # A row naming a carried input and anything else — reprocessed, gone, or re-identified
+    # — can be neither carried nor rebuilt. Read off every stored row, guid-less included.
     straddles = any(
-        producers & inputs_carried and producers & rebuilding for _i, _rid, producers in rows
+        (producers := frozenset(record.get("producer_source_guids") or ()))
+        and producers & inputs_carried
+        and not producers <= inputs_carried
+        for record in prior_output
     )
 
     chosen: dict[str, int] = {}
