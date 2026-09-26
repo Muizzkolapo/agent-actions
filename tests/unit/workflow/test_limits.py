@@ -1531,7 +1531,13 @@ class TestTheBatchPauseIsAProcessBoundary:
         return executor.deps.state_manager.get_status_details("act")
 
     def _collect(self, status_file, rows_written):
-        """The later run, which slices nothing of its own."""
+        """The later run, which slices nothing of its own.
+
+        *rows_written* is never the count the slice admitted, so a stamp read off
+        the stored rows cannot pass for one carried across the pause. The two
+        diverge in production whenever a guard filters, a version action fans
+        out, or carry-forward collapses identities.
+        """
         executor = self._process(status_file, rows_written)
         assert slice_observation(executor.deps.action_runner.storage_backend, "act") is None, (
             "a collecting process holding the submission's observation would prove nothing"
@@ -1546,7 +1552,7 @@ class TestTheBatchPauseIsAProcessBoundary:
         status_file = tmp_path / ".agent_status.json"
         assert self._submit(status_file, 6)["records_processed"] == 6
 
-        stored = self._collect(status_file, 6)
+        stored = self._collect(status_file, 3)
 
         assert stored["records_processed"] == 6
         assert stored["truncated"] is False
@@ -1559,9 +1565,9 @@ class TestTheBatchPauseIsAProcessBoundary:
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
         status_file = tmp_path / ".agent_status.json"
         self._submit(status_file, 6)
-        self._collect(status_file, 6)
+        self._collect(status_file, 3)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2000")
-        executor = self._process(status_file, 6)
+        executor = self._process(status_file, 3)
 
         status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
 
@@ -1575,13 +1581,13 @@ class TestTheBatchPauseIsAProcessBoundary:
         status_file = tmp_path / ".agent_status.json"
         self._submit(status_file, 5)
 
-        stored = self._collect(status_file, 2)
+        stored = self._collect(status_file, 5)
 
         assert stored["records_processed"] == 2
         assert stored["truncated"] is True
 
         monkeypatch.delenv("AGAC_RECORD_LIMIT")
-        executor = self._process(status_file, 2)
+        executor = self._process(status_file, 5)
         assert (
             executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
             == ActionStatus.PENDING
