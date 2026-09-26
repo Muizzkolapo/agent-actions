@@ -189,6 +189,10 @@ class WorkflowStaticAnalyzer:
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
+        # Step 3b-2: FILE granularity needs an upstream action to read a file of
+        for error in self._check_first_stage_file_granularity():
+            result.add_error(error)
+
         # Step 3c: context_scope validation (already ran in Step 0 before normalization)
         for error in context_scope_errors:
             result.add_error(error)
@@ -416,6 +420,38 @@ class WorkflowStaticAnalyzer:
                         hint="Rename the action to avoid reserved namespaces.",
                     )
                 )
+        return errors
+
+    def _check_first_stage_file_granularity(self) -> list[StaticTypeError]:
+        """Return errors for FILE-granularity actions that depend on nothing.
+
+        The first stage runs its own pipeline, which selects a strategy by neither
+        granularity nor kind, so such an action is processed per record and a tool's
+        ``FileUDFResult`` reaches the output writer unconverted.
+        """
+        errors: list[StaticTypeError] = []
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            if action.get("dependencies") or not self._is_file_mode_bus_action(action):
+                continue
+            name = action.get("name", "workflow")
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{name}' reads at FILE granularity but declares no "
+                        f"'dependencies'. A first action reads the staged input and is "
+                        f"always processed one record at a time."
+                    ),
+                    location=FieldLocation(agent_name=name, config_field="dependencies"),
+                    referenced_agent=name,
+                    referenced_field="",
+                    hint=(
+                        "Put a RECORD action in front and depend on it, so this one "
+                        "receives a file of its output."
+                    ),
+                )
+            )
         return errors
 
     def _check_context_scope_required(self) -> list[StaticTypeError]:

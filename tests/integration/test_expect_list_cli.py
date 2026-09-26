@@ -152,23 +152,47 @@ def test_listing_one_action_does_not_speak_for_the_whole_workflow(monkeypatch):
     assert "publish" in result.output
 
 
+FILE_GRANULARITY_ACTION = """  - name: roll_up
+    kind: tool
+    granularity: File
+    dependencies: [flatten]
+    intent: "Roll the file up"
+    schema: tool_action_output
+    impl: flatten_pages
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
 @pytest.fixture
 def file_granularity_tool(tmp_path, monkeypatch):
-    """A tool action at file granularity — a strategy that never runs expectations."""
+    """A tool action at file granularity — a strategy that never runs expectations.
+
+    Added downstream of `flatten` rather than by flipping the workflow's default
+    granularity: FILE granularity reads a file of an upstream action's output, so a
+    first action cannot have it, and preflight refuses that (#1076).
+    """
     import shutil
 
     root = tmp_path / "inert"
     shutil.copytree(PROJECT, root, ignore=shutil.ignore_patterns("logs"))
     cfg = root / "agent_workflow" / "tool_action" / "agent_config" / "tool_action.yml"
-    cfg.write_text(cfg.read_text().replace("granularity: Record", "granularity: File"))
+    cfg.write_text(cfg.read_text().rstrip("\n") + "\n" + FILE_GRANULARITY_ACTION)
     monkeypatch.chdir(root)
     return root
+
+
+def _entry(payload, action):
+    """The listing entry for *action*, by name — the file-granularity one is not first."""
+    matches = [e for e in payload["actions"] if e["action"] == action]
+    assert matches, f"{action} missing from {[e['action'] for e in payload['actions']]}"
+    return matches[0]
 
 
 def test_rules_that_the_strategy_will_never_run_are_not_listed_as_live(file_granularity_tool):
     result = CliRunner().invoke(cli, ["expect", "list", "-a", "tool_action", "--json"])
     assert result.exit_code == 0, result.output
-    entry = json.loads(result.stdout)["actions"][0]
+    entry = _entry(json.loads(result.stdout), "roll_up")
     assert entry["executes"] is False
     assert entry["rules"], "the rules are still shown — they are authored, just inert"
 
