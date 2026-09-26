@@ -20,7 +20,7 @@ flowchart LR
 
 ```yaml
 - name: verify
-  versions: { param: verifier_id, range: [1, 2, 3], mode: parallel }
+  versions: { param: verifier_id, range: [1, 2, 3]}
   schema:
     selected_answer: string
     reasoning: string

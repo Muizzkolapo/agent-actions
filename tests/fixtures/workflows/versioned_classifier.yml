@@ -33,7 +33,6 @@ actions:
     versions:
       param: classifier_id
       range: [1, 3]
-      mode: parallel
     prompt: |
       You are classifier {{ i }} of {{ version.length }}.
       {% if version.first %}Be conservative in your assessment.{% endif %}

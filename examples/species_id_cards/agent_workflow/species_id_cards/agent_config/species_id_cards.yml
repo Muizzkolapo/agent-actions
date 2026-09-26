@@ -52,7 +52,7 @@ actions:
     intent: "Extract candidate field marks from the entry"
     schema: extracted_marks
     prompt: $species_id.Extract_Field_Marks
-    versions: { param: iteration, range: [1, 2, 3], mode: parallel }
+    versions: { param: iteration, range: [1, 2, 3] }
     guard:
       condition: 'summarize_entry.detail_level == "high" or summarize_entry.detail_level == "medium"'
       on_false: "filter"
@@ -97,7 +97,7 @@ actions:
     intent: "Judge whether a mark actually separates this species from its look-alikes"
     schema: diagnostic_vote
     prompt: $species_id.Rank_Diagnostic_Value
-    versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
+    versions: { param: voter_id, range: [1, 2, 3] }
     context_scope:
       observe: [dedupe_across_guides.*]
 
@@ -134,7 +134,7 @@ actions:
     intent: "Draft an identification note for the mark, quoting the entry it came from"
     schema: id_note_draft
     prompt: $species_id.Draft_Id_Note
-    versions: { param: drafter_id, range: [1, 2], mode: parallel }
+    versions: { param: drafter_id, range: [1, 2] }
     context_scope:
       observe:
         - select_approved_marks.*

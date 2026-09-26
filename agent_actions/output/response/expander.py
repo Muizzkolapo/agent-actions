@@ -15,6 +15,7 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
+from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_FILE_GRANULARITY_ERROR
 
@@ -106,16 +107,20 @@ class ActionExpander:
             List of expanded agent configurations
         """
         agents: list[dict[str, Any]] = []
-        param_name = version_config.get("param", "i")
-        version_range = version_config.get("range", [1, 1])
+        # Validated here too: this is a second expansion, reached by callers that hand
+        # over an unstripped block, and without it one block has two behaviours.
+        validated = validate_version_block(version_config, action.get("name", "unknown"))
+        param_name = validated.param
+        version_range = validated.range
 
+        range_values_list: list[int | str]
         if len(version_range) == 2:
-            start, end = version_range
-            range_values = range(start, end + 1)
+            # A pair is a start and an end; the block's validator has already refused
+            # a pair that is not integers.
+            start, end = int(version_range[0]), int(version_range[1])
+            range_values_list = list(range(start, end + 1))
         else:
-            range_values = version_range
-
-        range_values_list = list(range_values)
+            range_values_list = list(version_range)
         total_versions = len(range_values_list)
 
         for idx, i in enumerate(range_values_list):
@@ -130,8 +135,6 @@ class ActionExpander:
             agent["name"] = f"{action.get('name')}_{i}"
             agent["is_versioned_agent"] = True
             agent["version_base_name"] = action.get("name", "unknown")
-            agent["version_number"] = i
-            agent["version_mode"] = version_config.get("mode", "parallel")
 
             # Compile version context for Jinja2 template rendering
             # This enables {{ i }}, {{ idx }}, {{ version.length }}, etc. in prompts
@@ -336,8 +339,6 @@ class ActionExpander:
                     version_ctx = action["_version_context"]
                     agent["is_versioned_agent"] = True
                     agent["version_base_name"] = version_ctx.get("base_name", action.get("name"))
-                    agent["version_number"] = version_ctx.get("i")
-                    agent["version_mode"] = action.get("version_mode", "parallel")
                     agent["_version_context"] = version_ctx
 
                 created_agent = ActionExpander._create_agent_from_action(

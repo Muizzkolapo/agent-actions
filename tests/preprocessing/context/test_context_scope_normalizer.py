@@ -196,12 +196,10 @@ class TestBuildVersionBaseNameMap:
             "action_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "action",
-                "version_number": 1,
             },
             "action_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "action",
-                "version_number": 2,
             },
             "regular": {},
         }
@@ -230,7 +228,6 @@ class TestNormalizeAllAgentConfigs:
             "loop_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "loop",
-                "version_number": 1,
             },
             "consumer": {"context_scope": {"observe": ["loop.*"], "seed": {"key": "value.json"}}},
         }
@@ -270,12 +267,10 @@ class TestSeedPathPreservation:
             "extract_1": {
                 "is_versioned_agent": True,
                 "version_base_name": "extract",
-                "version_number": 1,
             },
             "extract_2": {
                 "is_versioned_agent": True,
                 "version_base_name": "extract",
-                "version_number": 2,
             },
             "consumer": {
                 "context_scope": {

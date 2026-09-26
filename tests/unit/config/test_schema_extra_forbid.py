@@ -155,7 +155,6 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.versions.param == "i"
         assert config.versions.range == [1, 3]
-        assert config.versions.mode.value == "parallel"
 
     def test_versions_with_explicit_param(self):
         data = {

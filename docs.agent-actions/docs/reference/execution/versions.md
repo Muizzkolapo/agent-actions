@@ -14,7 +14,6 @@ actions:
   - name: extract_raw_qa
     versions:
       range: [1, 3]         # Inclusive range - creates _1, _2, _3
-      mode: parallel        # or "sequential"
     prompt: |
       Extract questions using strategy {{ i }}
 ```
@@ -23,8 +22,10 @@ actions:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `range` | array | Required | `[start, end]` - inclusive range |
-| `mode` | string | `parallel` | `parallel` or `sequential` |
+| `param` | string | `i` | Name of the version variable used in templates |
+| `range` | array | `[1, 1]` | Two integers for an inclusive `[start, end]`, or the values to expand over |
+
+Values that are not integers become the suffixes directly — `range: ["literal", "idiomatic"]` gives `translate_literal` and `translate_idiomatic`. Version consumption cannot collect those: fan-in groups versions by a numeric suffix, so a consumer of a non-integer range finds no versions and logs a warning. Use an integer range where a downstream action consumes the versions.
 
 ## Template Variables
 
@@ -64,7 +65,6 @@ Version variables work with prompt store references, enabling reusable versioned
 - name: classify_severity
   versions:
     range: [1, 3]
-    mode: parallel
   prompt: $incident_triage.Classify_Severity
 ```
 
@@ -99,6 +99,10 @@ Downstream actions consume outputs from all version iterations. The `version_con
 |-------|------|-------------|
 | `source` | string | Name of the upstream versioned action to consume |
 | `pattern` | string | `merge` — combine all version outputs into one record (fan-in); `match` — pair each version output 1:1 with the consumer |
+
+:::note
+Consumption requires the source's versions to carry numeric suffixes, which means an integer `range`.
+:::
 
 ### merge (Fan-In)
 
@@ -175,20 +179,18 @@ When observe uses wildcards (`score_quality.*`), fields are also expanded as qua
     pattern: merge
 ```
 
-### Sequential Refinement
+### Dollar-brace substitution
 
 Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.). Inside the prompt body, Jinja2 is also evaluated as usual — but dependency strings themselves are dollar-brace only.
 
-```yaml
-- name: refine_iteration
-  versions:
-    range: [1, 3]
-    mode: sequential
-  dependencies:
-    # Version 1 has no predecessor; the framework drops the empty stub.
-    # Versions 2 and 3 depend on refine_iteration_1 and refine_iteration_2.
-    - "refine_iteration_${i-1}"
-```
+:::warning
+`${i-1}` cannot be used to chain one version to the previous one. On the first version
+it resolves to nothing, leaving a dependency on a bare `<action>_` that does not exist,
+and the workflow is refused. Referencing the previous version through `context_scope`
+instead reports a cyclic dependency, because every version of an action is one node to
+the dependency graph. There is no supported way to make versions of one action run in
+order; see Execution Order below.
+:::
 
 ### Parallel Model Comparison
 
@@ -200,11 +202,21 @@ Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.
     {% if i == 1 %}openai{% elif i == 2 %}anthropic{% else %}google{% endif %}
 ```
 
-## Execution Modes
+## Execution Order
 
-**Parallel (default)**: All iterations run simultaneously. Use when iterations are independent.
+Each version becomes its own action in the dependency graph, so the graph decides
+the order and there is no per-action setting for it.
 
-**Sequential**: Iterations run one at a time. Use when later iterations depend on earlier ones or to control API rate limits.
+**Independent versions run together.** With no dependency between them, all
+iterations sit in one execution level and run simultaneously.
+
+**Versions of one action cannot be ordered against each other.** They share their
+dependencies by construction, so they land in the same level, and nothing in the block
+changes that. Where later work must see earlier work, use pooling — separate actions,
+each able to observe the ones before it — rather than versions.
+
+To serialise a whole run, use `--execution-mode sequential`; to cap how many actions
+run at once, use `--concurrency-limit`.
 
 ## Context Scope with Versions
 

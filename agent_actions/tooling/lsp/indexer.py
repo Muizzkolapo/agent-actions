@@ -457,17 +457,11 @@ def _populate_versions_summary(action_meta: ActionMetadata, action_data: dict) -
             if param:
                 params.append(param)
             range_value = version.get("range")
-            mode = version.get("mode")
-            source = version.get("source")
             parts = []
             if param:
                 parts.append(f"param `{param}`")
             if range_value:
                 parts.append(f"range `{range_value}`")
-            if mode:
-                parts.append(f"mode `{mode}`")
-            if source:
-                parts.append(f"source `{source}`")
             if parts:
                 summaries.append(", ".join(parts))
 

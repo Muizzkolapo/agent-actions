@@ -11,6 +11,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -341,7 +342,7 @@ def _compile_workflow_schemas(
 
 
 def _apply_version_template(
-    value: Any, param_name: str, current_val: int, idx: int, values: list[int]
+    value: Any, param_name: str, current_val: int | str, idx: int, values: list[int | str]
 ) -> Any:
     """
     Apply version template substitution to a value.
@@ -397,13 +398,16 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
         Input action with versions: {param: i, range: [1, 3]}
         Output: 3 actions with names action_1, action_2, action_3
     """
-    version_config = action.get("versions", {})
-    param_name = version_config.get("param", "i")
-    version_range = version_config.get("range", [1, 1])
+    validated = validate_version_block(action.get("versions", {}), action.get("name", "unknown"))
+    param_name = validated.param
+    version_range = validated.range
 
     # Calculate range values
+    range_values: list[int | str]
     if len(version_range) == 2:
-        start, end = version_range
+        # A pair is a start and an end; the block's validator has already refused a
+        # pair that is not integers, so counting between them cannot fail here.
+        start, end = int(version_range[0]), int(version_range[1])
         range_values = list(range(start, end + 1))
     else:
         range_values = list(version_range)
@@ -457,6 +461,15 @@ def _expand_workflow_versions(data: dict[str, Any]) -> None:
 
     expanded_actions = []
     for action in actions:
+        if "versions" in action and not action.get("versions"):
+            # Declared and empty: it fans out nothing, and until `range` carried a
+            # default the missing field was the only thing refusing it.
+            name = action.get("name", "unknown")
+            raise ConfigurationError(
+                f"action '{name}': versions: the block is empty, so it declares no "
+                f"versions and fans out nothing; remove it, or give it a range",
+                context={"action_name": name, "operation": "expand_versioned_action"},
+            )
         if action.get("versions"):
             # Expand versioned action into multiple
             expanded = _expand_versioned_action(action)

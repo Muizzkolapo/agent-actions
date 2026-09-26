@@ -117,7 +117,6 @@ actions:
     versions:
       param: scorer_id                          # ← 3 parallel scorers
       range: [1, 2, 3]
-      mode: parallel
     context_scope:
       observe:
         - extract_claims.factual_claims           # ← Scorers see extracted claims

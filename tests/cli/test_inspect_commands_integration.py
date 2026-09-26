@@ -481,7 +481,6 @@ def _build_versioned_merge_project(root: Path) -> str:
             versions:
               param: iteration
               range: [1, 2]
-              mode: parallel
             context_scope:
               observe: ["source.*"]
             schema:

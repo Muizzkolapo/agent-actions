@@ -74,7 +74,7 @@ flowchart LR
 ```yaml
 - name: generate_alternative
   dependencies: [source_action]
-  versions: { param: variant_id, range: [1, 2, 3], mode: parallel }
+  versions: { param: variant_id, range: [1, 2, 3]}
   schema:
     alternative_code: string
     issue_description: string

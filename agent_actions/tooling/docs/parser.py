@@ -203,7 +203,7 @@ class WorkflowParser:
 
             # Versions configuration (parallel execution)
             if "versions" in action_data:
-                action["versions"] = action_data["versions"]  # {param, range, mode}
+                action["versions"] = action_data["versions"]  # {param, range}
             if "version_consumption" in action_data:
                 action["version_consumption"] = action_data[
                     "version_consumption"

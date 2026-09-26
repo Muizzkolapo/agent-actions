@@ -17,7 +17,7 @@ flowchart LR
 
 ```yaml
 - name: extract_raw
-  versions: { param: iteration, range: [1, 2, 3], mode: parallel }
+  versions: { param: iteration, range: [1, 2, 3]}
   schema: { items: array }
 
 - name: canonicalize
@@ -95,7 +95,7 @@ flowchart LR
 
 ```yaml
 - name: vote
-  versions: { param: voter_id, range: [1, 2, 3], mode: parallel }
+  versions: { param: voter_id, range: [1, 2, 3]}
   schema: { vote: string, reasoning: string }
 
 - name: aggregate_votes
@@ -124,7 +124,7 @@ flowchart LR
 
 ```yaml
 - name: generate_output
-  versions: { param: variant_id, range: [1, 2], mode: parallel }
+  versions: { param: variant_id, range: [1, 2]}
 
 - name: consolidate_outputs
   version_consumption: { source: generate_output, pattern: merge }
@@ -179,7 +179,7 @@ flowchart LR
 
 ```yaml
 - name: verify
-  versions: { param: verifier_id, range: [1, 2, 3], mode: parallel }
+  versions: { param: verifier_id, range: [1, 2, 3]}
   schema: { passed: boolean, failure_reasons: string }
 
 - name: aggregate_verification

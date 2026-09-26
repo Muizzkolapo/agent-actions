@@ -68,7 +68,7 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
 │  │  ActionExpander.expand_actions_to_agents()              │     │
-│  │    → expands versions, chunks, etc. into agent dicts    │     │
+│  │    → chunks etc.; versions already expanded at Step 1   │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
 │                             │                                    │
 │  Step 4: merge_agent_configs()                                  │
@@ -102,7 +102,7 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 Config validation happens in two distinct Pydantic passes with different `extra` policies. This is deliberate, not accidental.
 
 ```
-Stage 1: WorkflowConfig (pre-expansion)
+Stage 1: WorkflowConfig (post-render, pre-agent-expansion)
   ├── ActionConfig    → extra="forbid"
   │   Typos in YAML action fields raise immediately.
   │   e.g. "temperture" instead of "temperature" → ValidationError

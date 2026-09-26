@@ -289,8 +289,6 @@ versions:
   Each gets:
     is_versioned_agent: true
     version_base_name: original action name
-    version_number: 1/2/3
-    version_mode: parallel (default)
     _version_context: {i, idx, length, first, last}
 
   Template variables available:

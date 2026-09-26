@@ -168,7 +168,7 @@ Return rules:
 ```yaml
 - name: evaluate
   dependencies: [prepare_input]
-  versions: { param: evaluator_id, range: [1, 2, 3], mode: parallel }
+  versions: { param: evaluator_id, range: [1, 2, 3]}
   intent: "Independently evaluate the input"
   schema:
     verdict: string

@@ -216,20 +216,24 @@ class TestReferenceExtractor:
         refs = self.extractor.extract_from_agent(config)
         assert len(refs) == 0
 
-    def test_extract_from_versions_items_from(self):
-        """Test extracting from versions.items_from."""
+    def test_nothing_is_extracted_from_a_versions_block(self):
+        """The block takes a range and a param name; neither can name an action.
+
+        The fixture still carries the key this used to read, so restoring that read
+        fails here rather than passing on a fixture that never had it.
+        """
         config = {
             "name": "version_agent",
             "prompt": "Process item",
             "versions": {
+                "param": "round",
+                "range": [1, 3],
                 "items_from": "{{ action.data_source.items }}",
             },
         }
         refs = self.extractor.extract_from_agent(config)
 
-        version_refs = [r for r in refs if r.location == "versions.items_from"]
-        assert len(version_refs) == 1
-        assert version_refs[0].source_agent == "data_source"
+        assert [r.location for r in refs] == []
 
     def test_extract_from_conditional_clause(self):
         """Test extracting from conditional_clause."""

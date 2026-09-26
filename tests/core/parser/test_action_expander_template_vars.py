@@ -46,7 +46,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Refine with previous reference",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Refine output from stage ${stage-1}",
-                    "versions": {"param": "stage", "range": [1, 4], "mode": "sequential"},
+                    "versions": {"param": "stage", "range": [1, 4]},
                 }
             ],
             "plan": ["refine"],
@@ -189,7 +189,7 @@ class TestTemplateVariableReplacement:
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Refine v${i}",
                     "dependencies": ["refine_${i-1}"],
-                    "versions": {"param": "i", "range": [1, 3], "mode": "sequential"},
+                    "versions": {"param": "i", "range": [1, 3]},
                 }
             ],
             "plan": ["refine"],
