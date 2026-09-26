@@ -1,16 +1,10 @@
 """An input a FILE tool expanded is accounted for, and not re-split on a rerun.
 
 Enrichment mints a fresh identity for every output row of an expansion, so no row
-carries the input's own ``source_guid``. Two things follow, and both are covered
-here: the input needs a disposition row of its own, and carry-forward has to be
-able to find the rows it produced — it reads prior output by ``source_guid``,
-which none of them carries.
-
-``producer_source_guid`` is what closes the second half: the input that produced
-this row, at this action. It is deliberately *not* ``parent_source_guid``, which
-is the original pool-resolvable ancestor and so names the grandparent once an
-input has itself been expanded, and deliberately not a tracking field, since a
-producer carried into the next action names an input that action never saw.
+carries the input's own ``source_guid``: the input needs a disposition row, and
+carry-forward needs to find the rows it produced. ``producer_source_guid`` closes
+the second half — not ``parent_source_guid``, which is the pool ancestor and names
+the grandparent once an input has itself been expanded.
 """
 
 from __future__ import annotations
