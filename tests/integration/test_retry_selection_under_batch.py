@@ -187,6 +187,18 @@ def two_files(tmp_path):
     return root
 
 
+def _rows_per_file(project):
+    """How many stored rows each target file holds."""
+    backend = _backend(project)
+    try:
+        return {
+            path: len(backend._read_target_raw(ACTION, path))
+            for path in backend.list_target_files(ACTION)
+        }
+    finally:
+        backend.close()
+
+
 def _guids_in(project, relative_path):
     backend = _backend(project)
     try:
@@ -318,6 +330,35 @@ class TestAFileTheRepairNeverNamed:
         _cycle(two_files, "retry", "-a", WORKFLOW, "--record", selected)
 
         assert _rows(two_files)[unnamed] == before[unnamed]
+
+
+class TestEachFileKeepsItsOwnRows:
+    """A batch writes the file it was submitted for, and only that file.
+
+    Carry-forward rebuilds the file being collected from the rows the batch did
+    not answer for. Gathered across every target file of the action rather than
+    the one being written, those rows land in a file they do not belong to — so
+    a second staged file ends up holding the first's records as well as its own.
+
+    Asserted on counts per file, which is what the identity and disposition
+    checks elsewhere in this module cannot see: a row in the wrong file still
+    has the right identity and the right disposition.
+    """
+
+    def test_a_collected_file_holds_only_its_own_records(self, two_files):
+        """No repair involved — this is a plain `--fresh` run over two files."""
+        per_file = _rows_per_file(two_files)
+
+        assert per_file == {"a_pages.json": 2, "b_pages.json": 2}, (
+            f"two records were staged into each file; the store holds {per_file}"
+        )
+
+    def test_no_file_holds_another_file_s_identities(self, two_files):
+        """Counts alone would pass if a file lost one row and gained a stranger."""
+        a = set(_guids_in(two_files, "a_pages.json"))
+        b = set(_guids_in(two_files, "b_pages.json"))
+
+        assert not (a & b), f"identities appear in both files: {sorted(a & b)}"
 
 
 class TestARepairArrivingWhileABatchIsInFlight:
