@@ -252,7 +252,35 @@ class TestTheMergeWalkReportsItToo:
 
         _collected, lost = collect_files_from_upstream([str(up)])
 
-        assert [path.name for path in lost] == ["gone.json"]
+        assert [path.name for path, _error in lost] == ["gone.json"]
+
+    def test_the_collector_hands_back_why_it_could_not(self, tmp_path):
+        """Paired with the test above: the staging walk records the real exception,
+        so the merge walk must too. A bare list of paths tells an operator a file
+        went missing without saying whether it was a permission or a missing target,
+        which is the diagnostic half of the same silence this fixes.
+        """
+        up = _staging(tmp_path, names=("a.json",), dangling=("gone.json",))
+
+        _collected, lost = collect_files_from_upstream([str(up)])
+
+        assert isinstance(lost[0][1], OSError)
+        assert "No such file" in str(lost[0][1])
+
+    def test_the_merge_walk_names_the_reason_in_its_error(self, tmp_path):
+        """And the reason survives into the action's collected errors, not just the log."""
+        up = _staging(tmp_path, names=("a.json",), dangling=("gone.json",))
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
+
+        _found, _processed, errors = process_merged_files(
+            runner, _params(tmp_path, upstream_dirs=[str(up)])
+        )
+
+        assert any("No such file" in message for message in errors.messages), errors.messages
 
     def test_the_collector_still_returns_the_healthy_files(self, tmp_path):
         up = _staging(tmp_path, names=("a.json",), dangling=("gone.json",))
