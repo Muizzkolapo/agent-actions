@@ -267,11 +267,6 @@ class ActionExpander:
         else:
             agent["version_consumption_config"] = None
 
-        # Process interceptors
-        interceptors = action.get("interceptors")
-        if interceptors:
-            agent["interceptors"] = interceptors
-
         # The workflow's block under the action's, key by key: the repair policy
         # is set once for the workflow and the rules belong to each action.
         # ExpectConfig validated both shapes already, and AgentConfig

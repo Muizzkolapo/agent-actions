@@ -52,6 +52,37 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
     )
 
 
+# Keys whose runtime was deleted. Nothing to redirect to, so the refusal says the
+# feature is gone: a bare unknown-key error reads as a misspelling, and sends the
+# author to try the same block one level up.
+_RETIRED_CONFIG_KEYS = frozenset({"interceptors"})
+
+
+def refuse_retired_keys(data: Any, surface: str) -> Any:
+    """Refuse a key that configures nothing, naming no replacement because none exists.
+
+    Called by every block that carries agent settings, for the same reason as
+    `refuse_context_scope_siblings`: the models that allow extras refuse nothing
+    by leaving a field undeclared, and the strict ones say only that the key is
+    unknown.
+    """
+    if not isinstance(data, dict):
+        return data
+    stray = sorted(str(key) for key in data if str(key) in _RETIRED_CONFIG_KEYS)
+    if not stray:
+        return data
+
+    # Named even when the block has none of its own: `default_agent_config:` lives
+    # in a different file from the workflow, and an error that omits it sends the
+    # reader to the wrong one.
+    named = data.get("name") or data.get("agent_type")
+    where = f"{surface} '{named}': " if isinstance(named, str) and named else f"{surface}: "
+    raise ValueError(
+        where
+        + "; ".join(f"'{key}' is no longer read and configures nothing; remove it" for key in stray)
+    )
+
+
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
     """Name every undeclared key, what each resembles, and the keys *surface* takes.
 
@@ -337,7 +368,7 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return refuse_context_scope_siblings(data, "action")
+        return refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action")
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -449,9 +480,6 @@ class ActionConfig(_RetryValidators):
     )
 
     # --- Expander-consumed keys ---
-    interceptors: list[dict[str, Any]] | None = Field(
-        default=None, description="Interceptor configuration"
-    )
     chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
     chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
     chunk_overlap: int | None = Field(default=None, ge=0, description="Chunk overlap")
@@ -499,7 +527,9 @@ class DefaultsConfig(_RetryValidators):
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(
-            refuse_context_scope_siblings(data, "defaults"), cls, "defaults"
+            refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+            cls,
+            "defaults",
         )
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
@@ -748,6 +778,7 @@ __all__ = [
     "ActionKind",
     "ChunkConfig",
     "refuse_context_scope_siblings",
+    "refuse_retired_keys",
     "Granularity",
     "HitlConfig",
     "VersionConfig",
