@@ -74,7 +74,7 @@ export function SchemasScreen() {
   const selected = filtered.find((s) => s.id === selectedId) ?? filtered[0] ?? null
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <PageTitle title="Schemas" subtitle={`${schemas.length} schemas · showing ${filtered.length}`} />
       <div className={PANE}>
         <div className={LIST}>
@@ -244,7 +244,7 @@ export function PromptsScreen() {
   const selected = filtered.find((p) => p.id === selectedId) ?? filtered[0] ?? null
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <PageTitle title="Prompts" subtitle={`${prompts.length} prompts · showing ${filtered.length}`} />
       <div className={PANE}>
         <div className={LIST}>
@@ -391,7 +391,7 @@ export function ToolsScreen() {
   const fileCount = new Set(filtered.map((t) => t.file)).size
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <PageTitle
         title="Tools"
         subtitle={`${udfTools.length} UDF tools · ${fileCount} file${fileCount === 1 ? "" : "s"}`}

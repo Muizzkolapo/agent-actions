@@ -131,15 +131,22 @@ function Dashboard() {
         </header>
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-14 pt-6">
-          {activeSection === "home" && <HomeScreen onNavigate={handleNavigate} onOpenLogs={openLogs} />}
-          {activeSection === "workflows" && <WorkflowsScreen key={navKeys.workflows} onOpenLogs={openLogs} />}
-          {activeSection === "actions" && <ActionsScreen key={navKeys.actions} onOpenLogs={openLogs} />}
-          {activeSection === "runs" && <RunsScreen key={navKeys.runs} />}
-          {activeSection === "data" && <DataScreen key={navKeys.data} />}
-          {activeSection === "logs" && <LogsScreen key={navKeys.logs} intent={logsIntent} />}
-          {activeSection === "schemas" && <SchemasScreen key={navKeys.schemas} />}
-          {activeSection === "prompts" && <PromptsScreen key={navKeys.prompts} />}
-          {activeSection === "tools" && <ToolsScreen key={navKeys.tools} />}
+          {/* The reading measure lives here, not in each screen, so none of them
+              can drift from the others, and it is centred — left-aligned, every
+              screen hugs the sidebar with the gutter all on one side. It steps
+              up on a large display: 1180px is a measure for prose, and the run
+              and event tables have columns to spend it on. */}
+          <div className="mx-auto w-full max-w-[1180px] 2xl:max-w-[1440px] min-[2100px]:max-w-[1680px]">
+            {activeSection === "home" && <HomeScreen onNavigate={handleNavigate} onOpenLogs={openLogs} />}
+            {activeSection === "workflows" && <WorkflowsScreen key={navKeys.workflows} onOpenLogs={openLogs} />}
+            {activeSection === "actions" && <ActionsScreen key={navKeys.actions} onOpenLogs={openLogs} />}
+            {activeSection === "runs" && <RunsScreen key={navKeys.runs} />}
+            {activeSection === "data" && <DataScreen key={navKeys.data} />}
+            {activeSection === "logs" && <LogsScreen key={navKeys.logs} intent={logsIntent} />}
+            {activeSection === "schemas" && <SchemasScreen key={navKeys.schemas} />}
+            {activeSection === "prompts" && <PromptsScreen key={navKeys.prompts} />}
+            {activeSection === "tools" && <ToolsScreen key={navKeys.tools} />}
+          </div>
         </main>
       </div>
     </div>

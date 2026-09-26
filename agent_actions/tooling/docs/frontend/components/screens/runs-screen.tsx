@@ -61,7 +61,7 @@ export function RunsScreen() {
   ]
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-4">
+    <div className="flex animate-view-in flex-col gap-4">
       <PageTitle
         title="Runs"
         subtitle={`${runs.length} total runs · ${counts.FAILED} failed · ${counts.PAUSED} paused`}
@@ -171,7 +171,7 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
         : RUN_LABEL[run.status]
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <div className="flex items-center gap-3.5">
         <BackButton onClick={onBack} title="Back to runs" />
         <div className="min-w-0">

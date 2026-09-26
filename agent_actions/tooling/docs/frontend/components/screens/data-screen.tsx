@@ -46,7 +46,7 @@ export function DataScreen() {
   }
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-4">
+    <div className="flex animate-view-in flex-col gap-4">
       <PageTitle
         title="Data Explorer"
         subtitle={
@@ -135,7 +135,7 @@ function WorkflowDataDetail({
   const totalRecords = wf.nodes.reduce((s, n) => s + n.recordCount, 0)
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <div className="flex items-center gap-3.5">
         <BackButton onClick={onBack} title="Back to workflows" />
         <div className="min-w-0">
@@ -326,7 +326,7 @@ function NodeDetail({
   const pageRecords = node.preview.slice(page * RECORDS_PER_PAGE, (page + 1) * RECORDS_PER_PAGE)
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <div className="flex items-center gap-3.5">
         <BackButton onClick={onBack} title={`Back to ${workflow.workflow}`} />
         <div className="min-w-0">

@@ -325,7 +325,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
 
   if (events.length === 0) {
     return (
-      <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+      <div className="flex animate-view-in flex-col gap-3.5">
         <PageTitle
           title="Logs & Events"
           subtitle={LOGS_SUBTITLE}
@@ -338,7 +338,7 @@ export function LogsScreen({ intent }: { intent?: LogsIntent | null }) {
   }
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <PageTitle
         title="Logs & Events"
         subtitle={LOGS_SUBTITLE}

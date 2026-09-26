@@ -67,7 +67,7 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
   )
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <PageTitle title="Home" />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">

@@ -122,7 +122,7 @@ export function WorkflowsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsInten
   const running = workflows.filter((w) => w.manifestStatus === "running").length
 
   return (
-    <div className="flex max-w-[1180px] animate-view-in flex-col gap-4">
+    <div className="flex animate-view-in flex-col gap-4">
       <PageTitle
         title="Workflows"
         subtitle={`${workflows.length} registered · ${running} running`}
