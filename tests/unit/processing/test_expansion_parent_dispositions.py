@@ -1,23 +1,29 @@
-"""An input a FILE tool expanded is left unaccounted, and re-split on every run.
+"""An input a FILE tool expanded is accounted for, and not re-split on a rerun.
 
-Enrichment mints a fresh identity for every output row of an expansion, so each
-disposition is keyed by a minted guid and the input that produced them has none.
-Carry-forward cannot resolve it either: it reads prior output by ``source_guid``,
-which no row of an expansion carries for its input. Closing the gap needs a
-per-action record of which input produced a row — ``parent_source_guid`` is the
-*original* pool identity, not the immediate producer. Design in issue #1022.
+Enrichment mints a fresh identity for every output row of an expansion, so no row
+carries the input's own ``source_guid``. Two things follow, and both are covered
+here: the input needs a disposition row of its own, and carry-forward has to be
+able to find the rows it produced — it reads prior output by ``source_guid``,
+which none of them carries.
+
+``producer_source_guid`` is what closes the second half: the input that produced
+this row, at this action. It is deliberately *not* ``parent_source_guid``, which
+is the original pool-resolvable ancestor and so names the grandparent once an
+input has itself been expanded, and deliberately not a tracking field, since a
+producer carried into the next action names an input that action never saw.
 """
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.processing.disposition_gate import DispositionGate
+from agent_actions.processing.disposition_gate import DispositionGate, build_carry_forward
+from agent_actions.processing.enrichment import LineageEnricher
 from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
-from agent_actions.processing.types import ProcessingContext
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
@@ -32,14 +38,6 @@ EXPANSION = [
     {"source_index": 0, "data": {"part": 2}},
     {"source_index": 1, "data": {"part": 3}},
 ]
-
-# Strict, so closing the gap turns these into unexpected passes rather than
-# quiet greens. Two reasons because they fail at different layers: the row is
-# never written, and separately the input is never resolvable for carry-forward.
-UNACCOUNTED = pytest.mark.xfail(strict=True, reason="an expanded input leaves no disposition row")
-REDONE = pytest.mark.xfail(
-    strict=True, reason="carry-forward cannot resolve an expanded input, so it is re-split"
-)
 
 
 @pytest.fixture
@@ -72,7 +70,7 @@ class _Run:
         self.tmp_path = tmp_path
         self.seen: list[list[str]] = []
 
-    def __call__(self, records: list[dict], outputs: list[dict]) -> list[dict]:
+    def __call__(self, records: list[dict], outputs) -> list[dict]:
         context = ProcessingContext(agent_config=AGENT_CONFIG, agent_name=ACTION)
         context.source_data = records
         context.storage_backend = self.backend
@@ -80,8 +78,12 @@ class _Run:
         context.output_directory = str(self.tmp_path / "out")
 
         def _tool(*_args, **kwargs):
-            self.seen.append([list(item.values())[0] for item in kwargs.get("context", [])])
-            return FileUDFResult(outputs=outputs), True
+            given = [list(item.values())[0] for item in kwargs.get("context", [])]
+            self.seen.append(given)
+            # Callable when the shape depends on what the run was handed: a rerun
+            # that carries correctly gets a shorter input, and a fixed output list
+            # would then map past its end and hide the pass as an error.
+            return FileUDFResult(outputs=outputs(given) if callable(outputs) else outputs), True
 
         with patch(
             "agent_actions.processing.strategies.file_tool.run_dynamic_agent", side_effect=_tool
@@ -109,13 +111,11 @@ def _by_id(backend) -> dict[str, dict]:
 
 
 class TestAnInputThatWasExpanded:
-    @UNACCOUNTED
     def test_the_parent_of_several_rows_has_a_row(self, run, backend):
         run(_records("r0", "r1"), EXPANSION)
 
         assert "r0" in _by_id(backend)
 
-    @UNACCOUNTED
     def test_the_parent_of_a_single_row_has_one_too(self, run, backend):
         """Every output row is minted on an expansion, not only the split ones, so
         the one-to-one parent loses its identity alongside the split one."""
@@ -123,7 +123,6 @@ class TestAnInputThatWasExpanded:
 
         assert "r1" in _by_id(backend)
 
-    @UNACCOUNTED
     def test_every_input_is_accounted_exactly_once(self, run, backend):
         """Cardinality, not membership: one row per input beside the minted ones,
         and never two rows for one input."""
@@ -138,28 +137,25 @@ class TestAnInputThatWasExpanded:
 class TestTheParentIsNotRedone:
     """The row is only half of it. A terminal input goes to carry-forward, which
     reads prior output by `source_guid` — an expanded input's identity is on no
-    row of it — so it is re-queued and re-split into a fresh set of identities
-    while the rows written for the last set stay behind."""
+    row of it. Resolved through the rows' `producer_source_guid`, so the input is
+    neither re-queued nor re-split and the rows it made stand."""
 
-    @REDONE
     def test_an_identical_rerun_does_not_invoke_the_tool(self, run):
         run(_records("r0", "r1"), EXPANSION)
         run(_records("r0", "r1"), EXPANSION)
 
         assert len(run.seen) == 1, f"the tool ran again on: {run.seen[1:]}"
 
-    @REDONE
     def test_the_children_keep_the_identities_they_were_given(self, run):
         first = run(_records("r0", "r1"), EXPANSION)
         second = run(_records("r0", "r1"), EXPANSION)
 
         assert [o["source_guid"] for o in second] == [o["source_guid"] for o in first]
 
-    @REDONE
     def test_it_holds_for_an_input_that_was_itself_expanded(self, run):
         """The case that rules out resolving this through `parent_source_guid`: an
         input produced by an upstream expansion passes its *own* ancestor to its
-        children, never its own guid, so no row of the output names it."""
+        children, never its own guid, so no row of the output names it there."""
         first = run(_records("m0", "m1", ancestor="s0"), EXPANSION)
         # The shape itself, asserted: the children name the grandparent, so no row
         # of the output names m0 or m1 and matching on this field cannot find them.
@@ -171,7 +167,7 @@ class TestTheParentIsNotRedone:
 
 
 class TestWhatMustNotChangeWhileClosingThis:
-    """A guard on today's behaviour, for whoever closes the gap above. An attempt
+    """A guard on the behaviour closing the gap above must leave alone. An attempt
     that ungated the missing-record sweep for expansions broke exactly this."""
 
     def test_an_input_the_tool_did_not_name_is_left_alone(self, run, backend):
@@ -192,3 +188,168 @@ class TestWhatMustNotChangeWhileClosingThis:
         assert all(o.get("source_guid") != "r1" for o in output), (
             "an unnamed input must not gain a tombstone row of its own"
         )
+
+
+class TestTheReasonAnAccountedInputCarries:
+    def test_a_consumed_input_says_why_it_has_no_row_of_its_own(self, run, backend):
+        """One reason for both directions. An expanded input is not collapsed, and
+        the batch-length flag at the write site cannot tell one input's direction
+        from another's, so the row says what is true of every such input: it was
+        consumed and its content lives in rows keyed elsewhere."""
+        run(_records("r0", "r1"), EXPANSION)
+
+        rows = _by_id(backend)
+        assert [rows["r0"]["disposition"], rows["r0"]["reason"]] == [
+            "success",
+            "consumed_into_output",
+        ]
+        assert [rows["r1"]["disposition"], rows["r1"]["reason"]] == [
+            "success",
+            "consumed_into_output",
+        ]
+
+    def test_the_minted_rows_carry_no_reason(self, run, backend):
+        """A row that exists produced a record; only an input without one needs to
+        say so. Asserting this stops the reason being written to every row."""
+        output = run(_records("r0", "r1"), EXPANSION)
+        minted = {o["source_guid"] for o in output}
+
+        rows = _by_id(backend)
+        assert minted and all(rows[guid]["reason"] is None for guid in minted)
+
+
+class TestWhichInputARowNames:
+    def test_a_minted_row_names_the_input_that_produced_it(self, run):
+        output = run(_records("r0", "r1"), EXPANSION)
+
+        assert [o.get("producer_source_guid") for o in output] == ["r0", "r0", "r1"]
+
+    def test_it_is_the_immediate_input_and_not_the_ancestor(self, run):
+        """The whole reason the field exists. `parent_source_guid` degrades to the
+        pool ancestor once an input has itself been expanded; the producer must
+        not, or a chained expansion resolves to a record this action never saw."""
+        output = run(_records("m0", "m1", ancestor="s0"), EXPANSION)
+
+        assert [o.get("parent_source_guid") for o in output] == ["s0", "s0", "s0"]
+        assert [o.get("producer_source_guid") for o in output] == ["m0", "m0", "m1"]
+
+    def test_a_row_the_tool_invented_names_no_producer(self, run):
+        """A synthetic row maps to no input, so there is nothing to name. Writing
+        one anyway would hand a real input's carry a row it did not make."""
+        output = run(
+            _records("r0", "r1"),
+            [
+                {"source_index": 0, "data": {"part": 1}},
+                {"source_index": 0, "data": {"part": 2}},
+                {"source_index": None, "data": {"part": "invented"}},
+            ],
+        )
+
+        invented = [o for o in output if o["content"][ACTION].get("part") == "invented"]
+        assert len(invented) == 1
+        assert invented[0].get("producer_source_guid") is None
+
+
+class TestTheProducerSurvivesStorage:
+    def test_a_third_run_still_carries_the_expansion(self, run):
+        """The interaction the two halves meet in: the rows are written, read back
+        for carry-forward, and written again. A producer that does not survive the
+        round trip re-splits the input on the third run, not the second — so two
+        runs would not catch it."""
+        first = run(_records("r0", "r1"), EXPANSION)
+        run(_records("r0", "r1"), EXPANSION)
+        third = run(_records("r0", "r1"), EXPANSION)
+
+        assert len(run.seen) == 1, f"the tool ran again on: {run.seen[1:]}"
+        assert [o["source_guid"] for o in third] == [o["source_guid"] for o in first]
+
+
+class TestTheSameGapReachedWithMatchingCounts:
+    """r0 splits into two, r1 gives one, r2 is dropped: as many rows out as records
+    in, so `is_expansion` is false and the input keeps its disposition row through
+    the contributor sweep. The second half is shared — no row carries r0's identity
+    either, so carry-forward could not resolve it and the input was re-split on
+    every run, reordering a FILE-mode input that is mapped by position.
+    """
+
+    @staticmethod
+    def _matched(given: list[str]) -> list[dict]:
+        out: list[dict] = []
+        for index, guid in enumerate(given):
+            for part in range(2 if guid == "r0" else 1 if guid == "r1" else 0):
+                out.append({"source_index": index, "data": {"part": part}})
+        return out
+
+    def test_the_split_input_is_not_re_invoked(self, run):
+        run(_records("r0", "r1", "r2"), self._matched)
+        run(_records("r0", "r1", "r2"), self._matched)
+
+        assert run.seen[1] == ["r2"], f"re-invoked on: {run.seen[1]}"
+
+    def test_its_rows_keep_the_identities_they_were_given(self, run):
+        first = run(_records("r0", "r1", "r2"), self._matched)
+        split = {o["source_guid"] for o in first if o.get("producer_source_guid") == "r0"}
+        assert len(split) == 2, "the split rows are the ones minted an identity"
+
+        second = run(_records("r0", "r1", "r2"), self._matched)
+
+        assert split <= {o["source_guid"] for o in second}
+
+    def test_the_disposition_rows_do_not_accumulate_across_runs(self, run, backend):
+        """The target file is replaced whole, so counting its rows cannot fail. The
+        rows that pile up are the dispositions: every re-split mints two more
+        identities and writes a row for each, and the previous pair stays."""
+        run(_records("r0", "r1", "r2"), self._matched)
+        after_one = len(_rows(backend))
+
+        run(_records("r0", "r1", "r2"), self._matched)
+        run(_records("r0", "r1", "r2"), self._matched)
+
+        assert len(_rows(backend)) == after_one
+
+    def test_the_dropped_input_is_not_claimed_as_consumed(self, run, backend):
+        """r2 produced nothing. Its row must stay the `unprocessed` tombstone —
+        a sweep that credited every named input would add a success row beside it,
+        and the UNIQUE key lets both rows coexist."""
+        run(_records("r0", "r1", "r2"), self._matched)
+
+        r2_rows = [r for r in _rows(backend) if r["record_id"] == "r2"]
+        assert [r["disposition"] for r in r2_rows] == ["unprocessed"]
+
+
+class TestARecordModeExpansion:
+    """`online_llm` and the batch result strategy also set `is_expansion`, for one
+    record whose output became several. The input gets its disposition row from the
+    result level there, so only the second half is missing — no row carries its
+    identity, so carry-forward re-queues and re-expands it on every run.
+    """
+
+    @staticmethod
+    def _enriched(source_guid: str, count: int) -> list[dict]:
+        context = ProcessingContext(agent_config={"kind": "llm"}, agent_name=ACTION)
+        context.source_data = [{"source_guid": source_guid, "content": {}}]
+        context.is_first_stage = False
+        result = ProcessingResult.success(
+            data=[
+                {"source_guid": source_guid, "content": {ACTION: {"i": i}}} for i in range(count)
+            ],
+            source_guid=source_guid,
+            is_expansion=True,
+        )
+        return LineageEnricher().enrich(result, context).data
+
+    def test_every_minted_row_names_the_record_it_came_from(self):
+        rows = self._enriched("r0", 3)
+
+        assert [r.get("producer_source_guid") for r in rows] == ["r0", "r0", "r0"]
+        assert all(r["source_guid"] != "r0" for r in rows), "each row is minted its own"
+
+    def test_the_record_resolves_through_them_for_carry_forward(self):
+        rows = self._enriched("r0", 3)
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = rows
+
+        found, missing = build_carry_forward({"r0"}, ACTION, "f.json", backend)
+
+        assert [r["source_guid"] for r in found] == [r["source_guid"] for r in rows]
+        assert missing == set()

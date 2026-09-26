@@ -46,6 +46,13 @@ class TestFieldSets:
     def test_target_id_not_in_tracking(self):
         assert "target_id" not in RECORD_TRACKING_FIELDS
 
+    def test_producer_source_guid_is_a_stage_field(self):
+        """It names which input of *this* action produced the row. Carried forward
+        it would name, at the next action, a record that action never received —
+        the degradation that already makes parent_source_guid unusable as one."""
+        assert "producer_source_guid" in RECORD_STAGE_FIELDS
+        assert "producer_source_guid" not in RECORD_TRACKING_FIELDS
+
 
 class TestEnvelopeBuildCarriesTrackingFields:
     def test_carries_version_correlation_id(self):
@@ -71,6 +78,11 @@ class TestEnvelopeBuildCarriesTrackingFields:
         inp = {"source_guid": "g1", "target_id": "t1", "content": {}}
         result = RecordEnvelope.build("act", {"x": 1}, inp)
         assert "target_id" not in result
+
+    def test_does_not_carry_producer_source_guid(self):
+        inp = {"source_guid": "g1", "producer_source_guid": "r0", "content": {}}
+        result = RecordEnvelope.build("act", {"x": 1}, inp)
+        assert "producer_source_guid" not in result
 
     def test_does_not_carry_lineage(self):
         inp = {"source_guid": "g1", "lineage": ["n1", "n2"], "content": {}}

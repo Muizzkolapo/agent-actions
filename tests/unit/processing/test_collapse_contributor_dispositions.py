@@ -2,8 +2,10 @@
 
 A collapsed output carries only its first parent's guid, so the other N-1
 consumed inputs would leave no row at the consuming action; they get
-``success`` + ``reason=collapsed_into_output`` under the one-row-per-input
-contract, distinguishing "produced a record" from "was folded into one".
+``success`` + ``reason=consumed_into_output`` under the one-row-per-input
+contract, distinguishing "produced a record" from "was consumed into one". The
+reason names neither direction: an expanding tool consumes its input the same way
+and the write site cannot tell one input's direction from another's.
 """
 
 from __future__ import annotations
@@ -120,7 +122,7 @@ class TestEveryContributorHasARow:
         # The folded contributors say so.
         for guid in ("r2", "r3"):
             assert rows[guid]["disposition"] == "success"
-            assert rows[guid]["reason"] == "collapsed_into_output"
+            assert rows[guid]["reason"] == "consumed_into_output"
 
     def test_two_groups_account_their_own_contributors(self, backend):
         _run_pipeline(
@@ -136,8 +138,8 @@ class TestEveryContributorHasARow:
 
         rows = _rows(backend)
         assert sorted(rows) == ["r1", "r2", "r3", "r4"]
-        collapsed = sorted(g for g, r in rows.items() if r["reason"] == "collapsed_into_output")
-        assert collapsed == ["r2", "r4"]
+        consumed = sorted(g for g, r in rows.items() if r["reason"] == "consumed_into_output")
+        assert consumed == ["r2", "r4"]
 
     def test_the_carrier_gets_exactly_one_row(self, backend):
         """The carrier must not also be written as a contributor row."""
@@ -153,8 +155,8 @@ class TestEveryContributorHasARow:
 
 
 class TestTheSafetyNetsStillHold:
-    def test_a_genuinely_dropped_record_is_not_marked_collapsed(self, backend):
-        """A record no output accounts for stays unprocessed — collapse rows
+    def test_a_genuinely_dropped_record_is_not_marked_consumed(self, backend):
+        """A record no output accounts for stays unprocessed — consumed rows
         must never absorb the missing-record tombstone path."""
         _run_pipeline(
             _records("r1", "r2", "r3"),
@@ -172,9 +174,9 @@ class TestTheSafetyNetsStillHold:
         assert len(all_rows) == 3
 
         rows = _rows(backend)
-        assert rows["r2"]["reason"] == "collapsed_into_output"
+        assert rows["r2"]["reason"] == "consumed_into_output"
 
-    def test_one_to_one_passthrough_writes_no_collapsed_rows(self, backend):
+    def test_one_to_one_passthrough_writes_no_consumed_rows(self, backend):
         _run_pipeline(
             _records("r1", "r2"),
             [TrackedItem({"v": 1}, source_index=0), TrackedItem({"v": 2}, source_index=1)],
@@ -183,11 +185,11 @@ class TestTheSafetyNetsStillHold:
 
         rows = _rows(backend)
         assert sorted(rows) == ["r1", "r2"]
-        assert all(r["reason"] != "collapsed_into_output" for r in rows.values())
+        assert all(r["reason"] != "consumed_into_output" for r in rows.values())
 
     def test_a_failed_collapse_writes_no_contributor_rows(self, backend):
         """A parse-error collapse is converted to FAILED before collection —
-        its contributors must not be recorded as successfully collapsed."""
+        its contributors must not be recorded as successfully consumed."""
         _run_pipeline(
             _records("r1", "r2", "r3"),
             FileUDFResult(
@@ -197,7 +199,7 @@ class TestTheSafetyNetsStillHold:
         )
 
         all_rows = backend.get_disposition(ACTION)
-        assert all(r["reason"] != "collapsed_into_output" for r in all_rows)
+        assert all(r["reason"] != "consumed_into_output" for r in all_rows)
         rows = {r["record_id"]: r for r in all_rows}
         assert rows["r1"]["disposition"] == "failed"
 

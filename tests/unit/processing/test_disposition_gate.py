@@ -278,6 +278,101 @@ class TestBuildCarryForward:
         assert [r["row"] for r in found] == ["b-only", "a-last"]
         assert missing == set()
 
+    def test_a_carry_id_resolves_through_the_rows_it_produced(self):
+        """An action minting an identity per row holds none carrying its input's,
+        so matching on source_guid alone finds nothing and the input is re-queued
+        and re-split. Every row the input produced comes back, not one."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guid": "r0"},
+            {"source_guid": "m1", "producer_source_guid": "r0"},
+            {"source_guid": "m2", "producer_source_guid": "r1"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "m1"]
+        assert missing == set()
+
+    def test_rows_matched_either_way_come_back_in_stored_order(self):
+        """One carry id names a stored row and another names a producer. The rows
+        are written back into the file they came from, so a producer match must not
+        append after the direct ones."""
+        prior = [
+            {"source_guid": "m0", "producer_source_guid": "r0"},
+            {"source_guid": "r1"},
+            {"source_guid": "m1", "producer_source_guid": "r0"},
+        ]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, _missing = build_carry_forward(
+            carry_ids={"r0", "r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0", "r1", "m1"]
+
+    def test_a_carry_id_no_row_accounts_for_is_still_reported_missing(self):
+        """The caller re-queues what comes back missing. Counting a producer match
+        the store does not hold would drop the record silently instead."""
+        prior = [{"source_guid": "m0", "producer_source_guid": "r0"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r0", "r9"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0"]
+        assert missing == {"r9"}
+
+    def test_a_row_is_returned_once_when_it_matches_both_ways(self):
+        """A row whose own identity is carried and whose producer is carried too —
+        a repair naming an input beside a row of it. Returned twice it would be
+        written twice, duplicating the row the rewrite is meant to replace."""
+        prior = [{"source_guid": "m0", "producer_source_guid": "r0"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"m0", "r0"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["m0"]
+        assert missing == set()
+
+    def test_a_row_naming_no_producer_resolves_only_by_its_own_identity(self):
+        """The ordinary 1:1 row, which is most of them. A None producer must not
+        collide with a carry id that is also absent."""
+        prior = [{"source_guid": "r1", "data": "ok"}, {"source_guid": "r2"}]
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = prior
+
+        found, missing = build_carry_forward(
+            carry_ids={"r1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+        )
+
+        assert [r["source_guid"] for r in found] == ["r1"]
+        assert missing == set()
+
     def test_reads_from_prior_output(self):
         """Spec test 11: carry-forward reads from action's prior output."""
         prior = [
