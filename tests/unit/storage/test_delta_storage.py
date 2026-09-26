@@ -283,6 +283,25 @@ class TestDeltaReconstruction:
             ],
             is_first_action=True,
         )
+        # action_2 holds g1, so the upstream union does: the row below stays a
+        # delta, which is what makes action_1's miss a partition rather than an
+        # identity nothing upstream holds (that is stored whole and joins nothing).
+        backend.write_target(
+            "action_2",
+            "file.json",
+            [
+                {
+                    "source_guid": "g1",
+                    "_state": "processed",
+                    "_state_schema_version": 1,
+                    "content": {
+                        "source": {"title": "SQL"},
+                        "action_1": {"question": "What is SQL?"},
+                        "action_2": {"difficulty": "easy"},
+                    },
+                }
+            ],
+        )
         # Write action_3 with guid g1 — action_1 has data but NOT for g1
         backend.write_target(
             "action_3",
@@ -301,6 +320,9 @@ class TestDeltaReconstruction:
                 }
             ],
         )
+
+        raw = backend._read_target_raw("action_3", "file.json")
+        assert raw[0]["_delta_mode"] == "delta", "the partitioned path needs a delta row"
 
         result = backend.read_target("action_3", "file.json")
         # Partitioned: upstream has other guids, not g1 — not flagged

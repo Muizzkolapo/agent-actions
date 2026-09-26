@@ -96,7 +96,25 @@ class TestAnActionWithNoUpstreamThatIsNotTheFirst:
 
     @pytest.fixture
     def two_roots(self, tmp_path):
-        return _backend(tmp_path, ["a1", "b1"], {"a1": [], "b1": []})
+        b = _backend(tmp_path, ["a1", "b1"], {"a1": [], "b1": []})
+        # The peer holds G0 too, from the same staged input — source_guid is a
+        # content hash. So "does any action hold it" and "is it in the previous
+        # action" both answer yes here, and only "does b1's own upstream hold
+        # it" answers no.
+        b.write_target(
+            "a1",
+            "f.json",
+            [
+                {
+                    "source_guid": "G0",
+                    "_state": "processed",
+                    "_schema_version": 1,
+                    "content": {"source": {"t": "v1"}, "a1": {"v": 1}},
+                }
+            ],
+            is_first_action=True,
+        )
+        return b
 
     def test_its_row_is_stored_whole(self, two_roots):
         two_roots.write_target(

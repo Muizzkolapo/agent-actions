@@ -264,9 +264,11 @@ class StorageBackend(ABC):
         which is the truth for a consumer reading forward and a lie about an action
         whose output for that record already exists.
 
-        Rows stored whole are handed back marked so: reconstruction drops the mark
-        and re-deriving it picks ``delta``, which for an identity joining nothing
-        upstream loses every namespace above this action.
+        Rows stored whole are handed back marked so, because a rewrite must not
+        change how a row is stored. Re-deriving the mode covers the row whose
+        identity nothing upstream holds, but not the row stored whole under an
+        identity its upstream does hold — a producer's own stamp, which the
+        re-derivation cannot see and would rewrite as a delta.
 
         Raises:
             FileNotFoundError: If the target data doesn't exist.
@@ -278,12 +280,12 @@ class StorageBackend(ABC):
         # guid set would mark a delta row stored beside a whole one.
         if len(stored) != len(rows):
             # Reconstruction is one row out per row in, so this cannot happen; say
-            # so rather than skip quietly, because skipping means a row stored
-            # whole is rewritten as a delta and loses everything above it.
+            # so rather than skip quietly, because skipping changes how a row is
+            # stored on the way back in.
             logger.warning(
                 "Action '%s': %d stored row(s) reconstructed to %d for %s, so how each "
-                "was stored cannot be carried into a rewrite; rows whose identity joins "
-                "nothing upstream will lose their upstream namespaces",
+                "was stored cannot be carried into a rewrite; a row stored whole under "
+                "an identity its upstream holds will be rewritten as a delta",
                 action_name,
                 len(stored),
                 len(rows),
@@ -512,12 +514,17 @@ class StorageBackend(ABC):
 
             guid = record.get("source_guid")
 
-            # Find the boundary: if this guid has a full record upstream,
-            # start merging from that action (inclusive), not from the beginning.
+            # A row stored whole carries the content of everything above the
+            # action that stored it, so merging that action's own ancestors again
+            # would resurrect namespaces the whole row was stored without. Its
+            # peers are not above it and hold namespaces it never carried, so
+            # they still merge: every earlier level is upstream of every later
+            # action, which makes a fan-in over parallel start nodes the ordinary
+            # shape rather than a corner of one.
             boundary_action = full_boundary_guids.get(guid) if guid else None
             if boundary_action and boundary_action in upstream_actions:
-                boundary_idx = upstream_actions.index(boundary_action)
-                merge_actions = upstream_actions[boundary_idx:]
+                superseded = set(self._get_upstream_actions(boundary_action))
+                merge_actions = [a for a in upstream_actions if a not in superseded]
             else:
                 merge_actions = upstream_actions
 

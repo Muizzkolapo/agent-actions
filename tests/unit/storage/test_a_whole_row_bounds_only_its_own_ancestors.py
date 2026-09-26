@@ -98,3 +98,51 @@ class TestAnAncestorStoredWholeStillBounds:
             "a3",
             "source",
         ]
+
+
+class TestThreeParallelStartNodes:
+    """Two roots stored whole, not one: whichever becomes the boundary, neither
+    supersedes the other, so no peer may be cut."""
+
+    @pytest.fixture
+    def three_roots(self, tmp_path):
+        b = _backend(
+            tmp_path,
+            ["a1", "b1", "b2", "c1"],
+            {"a1": [], "b1": [], "b2": [], "c1": ["a1", "b1", "b2"]},
+        )
+        b.write_target(
+            "a1", "f.json", _row({"source": {"t": 1}, "a1": {"v": 1}}), is_first_action=True
+        )
+        b.write_target("b1", "f.json", _row({"source": {"t": 1}, "b1": {"v": 2}}))
+        b.write_target("b2", "f.json", _row({"source": {"t": 1}, "b2": {"v": 3}}))
+        b.write_target(
+            "c1",
+            "f.json",
+            _row(
+                {
+                    "source": {"t": 1},
+                    "a1": {"v": 1},
+                    "b1": {"v": 2},
+                    "b2": {"v": 3},
+                    "c1": {"v": 4},
+                }
+            ),
+        )
+        return b
+
+    def test_both_whole_peers_and_the_first_action_all_reach_the_fan_in(self, three_roots):
+        assert sorted(three_roots.read_target("c1", "f.json")[0]["content"]) == [
+            "a1",
+            "b1",
+            "b2",
+            "c1",
+            "source",
+        ]
+
+    def test_which_peer_is_chosen_as_the_boundary_cannot_change_the_answer(self, three_roots):
+        """Two upstream actions hold a whole row for one identity, and the pick
+        between them follows storage row order."""
+        content = three_roots.read_target("c1", "f.json")[0]["content"]
+
+        assert (content["b1"], content["b2"]) == ({"v": 2}, {"v": 3})
