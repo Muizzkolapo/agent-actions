@@ -65,15 +65,19 @@ class LineageEnricher(Enricher):
                 item["target_id"] = IDGenerator.generate_target_id()
                 if old_target_id:
                     item["parent_target_id"] = old_target_id
+                # Minting again would attribute it to its own previous guid, which no
+                # pool holds — and that guid is already unique.
+                minted_at_producer = item.get("source_guid") and self._named_no_input(result, i)
                 # Each expansion child gets its own source_guid to prevent
                 # UNIQUE constraint collisions when written to source_data.
                 # parent_source_guid keeps the original pool-resolvable identity:
                 # on nested expansion it is preserved, not overwritten with the
                 # intermediate minted guid (which matches nothing in the pool).
-                old_source_guid = item.get("source_guid")
-                item["source_guid"] = IDGenerator.generate_source_guid()
-                if old_source_guid and not item.get("parent_source_guid"):
-                    item["parent_source_guid"] = old_source_guid
+                if not minted_at_producer:
+                    old_source_guid = item.get("source_guid")
+                    item["source_guid"] = IDGenerator.generate_source_guid()
+                    if old_source_guid and not item.get("parent_source_guid"):
+                        item["parent_source_guid"] = old_source_guid
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 
@@ -143,6 +147,19 @@ class LineageEnricher(Enricher):
 
         result.node_id = base_node_id
         return result
+
+    @staticmethod
+    def _named_no_input(result: ProcessingResult, index: int) -> bool:
+        """Whether the producer mapped output *index* to no input record.
+
+        ``source_mapping[index] is None`` is the FILE tool's own statement that no
+        single input produced the row — the same reading the lineage step below
+        gives it. Set by every producer that mints ahead of this enricher
+        (``file_tool``, ``hitl``); absent on the online and batch expansion paths,
+        where a child inherits its one input's identity and so does need re-minting.
+        """
+        mapping = result.source_mapping
+        return mapping is not None and index in mapping and mapping[index] is None
 
     @staticmethod
     def _index_by_source_guid(
