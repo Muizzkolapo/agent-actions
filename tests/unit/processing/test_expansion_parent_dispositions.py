@@ -170,6 +170,43 @@ class TestTheParentIsNotRedone:
         assert [o["source_guid"] for o in second] == [o["source_guid"] for o in first]
 
 
+class TestAnExpansionThatNamesOnlySomeOfItsInputs:
+    """A tool may expand while naming only part of what it consumed. The un-named input
+    is deliberately not tombstoned, so it stays offerable — which means crediting the
+    inputs the result DOES name narrows the next run to exactly the inputs this tool
+    emits nothing for. An empty response from a non-empty input is the empty-output
+    failure, so the second run of an unchanged workflow fails the action.
+    """
+
+    @staticmethod
+    def _splits_only_the_first(given: list[str]) -> list[dict]:
+        return [
+            {"source_index": i, "data": {"part": n}}
+            for i, g in enumerate(given)
+            if g == "r0"
+            for n in range(3)
+        ]
+
+    def test_a_second_run_still_offers_the_whole_input(self, run):
+        run(_records("r0", "r1"), self._splits_only_the_first)
+        run(_records("r0", "r1"), self._splits_only_the_first)
+
+        assert run.seen[1] == ["r0", "r1"], f"the rerun narrowed to: {run.seen[1]}"
+
+    def test_a_second_run_does_not_fail_the_action(self, run):
+        first = run(_records("r0", "r1"), self._splits_only_the_first)
+        second = run(_records("r0", "r1"), self._splits_only_the_first)
+
+        assert len(second) == len(first) == 3
+
+    def test_the_unnamed_input_is_not_marked_failed(self, run, backend):
+        run(_records("r0", "r1"), self._splits_only_the_first)
+        run(_records("r0", "r1"), self._splits_only_the_first)
+
+        rows = _by_id(backend)
+        assert rows.get("r1", {}).get("disposition") != "failed"
+
+
 class TestWhatMustNotChangeWhileClosingThis:
     """A guard on the behaviour closing the gap above must leave alone. An attempt
     that ungated the missing-record sweep for expansions broke exactly this."""
@@ -517,10 +554,15 @@ class TestAResultHoldingARowNoInputProduced:
         assert self._summaries(output) == ["total of 2"]
 
     def test_it_survives_when_the_counts_match(self, run):
+        """Presence only. The value is NOT asserted: at matching counts the rows keep
+        their inherited guids, so those inputs are terminal from their own per-item rows
+        and the rerun recomputes the aggregate over a proper subset — "total of 1" where
+        a from-scratch run gives "total of 2". That is true of main too and is not what
+        this change fixes; pinning the narrowed value would enshrine it as correct."""
         for _ in range(3):
             output = run(_records("r0", "r1"), self._one_passthrough_and_summarise)
 
-        assert self._summaries(output) == ["total of 1"]
+        assert len(self._summaries(output)) == 1
 
     def test_no_input_is_recorded_as_consumed(self, run, backend):
         """The cause, asserted directly rather than through the row count: crediting an
