@@ -5,12 +5,13 @@ import random
 from collections import Counter
 
 from agent_actions.tooling.docs.generator import (
+    PROBLEM_PRIORITY,
     CatalogGenerator,
     _merge_event_tails,
     _round_robin,
 )
 from agent_actions.tooling.docs.scanner import EVENT_TAIL_LIMIT
-from agent_actions.tooling.docs.scanner.data_scanners import scan_runs
+from agent_actions.tooling.docs.scanner.data_scanners import PROBLEM_LEVELS, scan_runs
 
 
 def _make_generator(workflows_data=None, project_path="/tmp"):
@@ -497,6 +498,37 @@ class TestCatalogGeneratorProblemsFirst:
 
         assert [e["seq"] for e in logs_data["events"]] == [0]
         assert "id" not in logs_data["events"][0]
+
+
+class TestProblemLevelsAndPriorityAgree:
+    """A level the scanner retains but the merge never asks for is excluded from
+    the recent half as a problem and from the problem half as an unknown level —
+    it does not lose its reserve, it vanishes."""
+
+    def test_every_retained_level_gets_a_pass(self):
+        assert set(PROBLEM_PRIORITY) == set(PROBLEM_LEVELS)
+
+    def test_a_retained_level_reaches_the_window(self):
+        for level in PROBLEM_LEVELS:
+            window = _merge_event_tails([("a", _stream_rows("a", level, 5))], 100)
+            assert len(window) == 5, level
+
+
+class TestSourceNamesStayDistinct:
+    """A row's id is its React key, its scroll target and what a permalink looks
+    up. Two sources sharing a name give two rows the same id, and the permalink
+    opens whichever the lookup happens to reach first."""
+
+    def test_a_run_directory_named_logs_does_not_collide_with_the_project_log(self):
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        inputs["logs_data"] = {**inputs["logs_data"], "events": _wf_events("logs", [0])["events"]}
+        inputs["runs_data"] = {"logs": {**_wf_events("logs", [0]), "is_workflow": False}}
+
+        ids = [e["id"] for e in gen.generate(**inputs)["logs"]["events"]]
+
+        assert len(ids) == 2
+        assert len(set(ids)) == 2
 
 
 class TestEventWindowInvariants:
