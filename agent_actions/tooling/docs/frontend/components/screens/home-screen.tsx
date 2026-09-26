@@ -52,12 +52,17 @@ export function HomeScreen({ onNavigate, onOpenLogs }: HomeScreenProps) {
   // matches nothing would land the reader on an empty stream.
   const healthItems = useMemo(
     () =>
+      // Errors first, then warnings — the same rule the event window uses. A
+      // single count-ordered list buries them: warning groups run far larger,
+      // so the card that exists to surface failures showed one of them in six.
       [
-        ...health.errorGroups.map((g) => ({ ...g, tone: "failed" as Tone })),
-        ...health.warningGroups.map((g) => ({ ...g, tone: "warning" as Tone })),
-      ]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 6),
+        ...health.errorGroups
+          .map((g) => ({ ...g, tone: "failed" as Tone }))
+          .sort((a, b) => b.count - a.count),
+        ...health.warningGroups
+          .map((g) => ({ ...g, tone: "warning" as Tone }))
+          .sort((a, b) => b.count - a.count),
+      ].slice(0, 6),
     [health],
   )
 

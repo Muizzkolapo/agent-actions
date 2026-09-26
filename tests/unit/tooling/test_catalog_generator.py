@@ -365,6 +365,66 @@ class TestCatalogGeneratorProblemsFirst:
         assert "level_counts" not in catalog["logs"]
         assert "level_counts" not in catalog["runs"]["alpha"]
 
+    def test_a_quiet_log_keeps_its_errors_beside_a_busy_one(self):
+        """The problems pass is shared round-robin, not first-come. A busy log
+        holds enough errors to fill the half on its own, and the rare errors of
+        a quiet workflow are the ones a reader came for."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        busy = _wf_events("busy", list(range(EVENT_TAIL_LIMIT)), hour=10, level="error")
+        inputs["runs_data"] = {
+            "busy": busy,
+            "quiet": _wf_events("quiet", [0, 1, 2], hour=9, level="error"),
+        }
+
+        events = gen.generate(**inputs)["logs"]["events"]
+        by_source = Counter(e["id"].rsplit(":", 1)[0] for e in events if e["level"] == "error")
+
+        assert by_source["workflow:quiet"] == 3
+
+    def test_problems_may_spend_the_share_recency_cannot_fill(self):
+        """The reserve runs both ways. Tested the other way round elsewhere; a
+        project with few routine rows must not lose retained problems to a half
+        that has nothing to put in it."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        wf = _wf_events("alpha", list(range(EVENT_TAIL_LIMIT)), hour=9, level="warn")
+        wf["events"] += _wf_events("alpha", [9001, 9002], hour=11, level="info")["events"]
+        inputs["runs_data"] = {"alpha": wf}
+
+        events = gen.generate(**inputs)["logs"]["events"]
+        levels = Counter(e["level"] for e in events)
+
+        assert levels["info"] == 2
+        assert levels["warn"] > EVENT_TAIL_LIMIT // 2
+
+    def test_a_log_with_no_timestamps_still_reads_newest_first(self):
+        """Every row collapses to one sort key, so the order the merge hands the
+        sort is the order that survives it."""
+        gen = _make_generator()
+        inputs = _empty_inputs()
+        wf = _wf_events("alpha", [0, 1, 2])
+        for row in wf["events"]:
+            row["meta"] = {}
+        inputs["runs_data"] = {"alpha": wf}
+
+        seqs = [e["seq"] for e in gen.generate(**inputs)["logs"]["events"]]
+
+        assert seqs == [2, 1, 0]
+
+    def test_source_order_does_not_depend_on_dict_insertion(self):
+        """Source order decides who wins a budget exhausted mid-cycle, so it is
+        sorted rather than however the scanner happened to build its mapping."""
+        gen = _make_generator()
+        forward, backward = _empty_inputs(), _empty_inputs()
+        wfs = {n: _wf_events(n, [0, 1]) for n in ("alpha", "beta", "gamma")}
+        forward["runs_data"] = dict(wfs)
+        backward["runs_data"] = dict(reversed(list(wfs.items())))
+
+        assert [e["id"] for e in gen.generate(**forward)["logs"]["events"]] == [
+            e["id"] for e in gen.generate(**backward)["logs"]["events"]
+        ]
+
     def test_level_totals_describe_every_log_not_the_window(self):
         gen = _make_generator()
         inputs = _empty_inputs()

@@ -39,6 +39,10 @@ def _event_sort_key(event: dict) -> tuple[str, int]:
 # Scanner projections that exist to be folded into the catalog, not shipped in it.
 _PER_LOG_ONLY = frozenset({"events", "level_counts"})
 
+# Rarest first: a level that outnumbers another by ~780:1 would otherwise spend
+# the shared problem budget before the rarer one is reached.
+PROBLEM_PRIORITY = ("error", "warn")
+
 
 def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
     """Take from each queue in turn until the budget runs out."""
@@ -55,13 +59,12 @@ def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
 def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> list[dict]:
     """Merge per-log event tails into one reverse-chronological window.
 
-    Problems and recent rows each hold half the window, and either may spend
-    what the other cannot fill. Neither alone is the answer: a budget spent by
-    recency holds none of the rare old errors, and one spent by problems shows
-    nothing of what just happened. Within each half the share is round-robin,
-    newest first, because a project-level log accumulates across every CLI
-    invocation and a straight global sort hands it everything. Sources are
-    pairs because a workflow may share a name with the project log.
+    Problems and recent rows each hold half, either spending what the other
+    cannot fill; the problem half is filled rarest level first, or warnings
+    crowd out errors here as they do inside one log's budget. Each pass is
+    round-robin because a project-level log accumulates across every CLI
+    invocation and a global sort hands it everything. Sources are pairs: a
+    workflow may share a name with the project log.
     """
     stamped = [
         [{**evt, "id": f"{name}:{evt.get('seq')}"} for evt in reversed(rows)]
@@ -69,11 +72,15 @@ def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> lis
         if rows
     ]
     is_problem = lambda evt: evt.get("level") in PROBLEM_LEVELS  # noqa: E731
-    problems = [[e for e in q if is_problem(e)] for q in stamped]
     recent = [[e for e in q if not is_problem(e)] for q in stamped]
 
-    reserve = limit // 2
-    merged = _round_robin(problems, max(reserve, limit - sum(len(q) for q in recent)))
+    budget = max(limit // 2, limit - sum(len(q) for q in recent))
+    merged: list[dict] = []
+    for level in PROBLEM_PRIORITY:
+        if len(merged) >= budget:
+            break
+        by_level = [[e for e in q if e.get("level") == level] for q in stamped]
+        merged += _round_robin(by_level, budget - len(merged))
     merged += _round_robin(recent, limit - len(merged))
     merged.sort(key=_event_sort_key, reverse=True)
     return merged

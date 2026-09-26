@@ -77,7 +77,7 @@ This value was previously duplicated in three files. It can be overridden at run
 |----------|------|-------|-------------|
 | `README_MAX_BYTES` | int | `100 * 1024` | Maximum README content included in catalog.json (100 KB) |
 | `EVENT_TAIL_LIMIT` | int | `2000` | Most recent events each log keeps for catalog.json; every log shares one window of this size |
-| `EVENT_PROBLEM_LIMIT` | int | `500` | Warnings and errors each log keeps on top of its recency window, so rare old problems still reach the window |
+| `EVENT_PROBLEM_LIMIT` | int | `500` | Kept per level, per log, on top of the recency window — so a log retains up to 500 warnings *and* 500 errors, and rare old problems still reach the window |
 
 ## Naming Conventions
 

@@ -833,6 +833,18 @@ class TestRunEventsProblemRetention:
         assert logs["level_counts"]["error"] == 1
         assert logs["level_counts"]["debug"] == EVENT_TAIL_LIMIT + 19
 
+    def test_a_row_with_no_level_is_not_counted_under_one(self, tmp_path):
+        """A missing level counted under `None` serialises as the string "null"
+        and is then folded into info by the reader, inflating that total."""
+        events_path = tmp_path / "events.json"
+        with open(events_path, "w") as f:
+            f.write(json.dumps({"event_type": "E", "meta": {}, "data": {}}) + "\n")
+            f.write(json.dumps(_stream_event(1, level="info")) + "\n")
+
+        counts = extract_run_events(events_path).level_counts
+
+        assert counts == {"info": 1}
+
     def test_a_row_with_no_timestamp_does_not_abort_the_window(self, tmp_path):
         """A row may carry a meta object with no timestamp in it. The merge sorts
         on that value, and None against str is a TypeError that takes the whole
