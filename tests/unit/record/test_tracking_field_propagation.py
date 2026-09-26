@@ -254,6 +254,25 @@ class TestTheProducerIsNotOfferedAsBusinessData:
 
         assert content == {"question": "what is 2+2?"}
 
+    def test_every_identity_field_the_prompt_list_excludes_is_also_a_card_field(self):
+        """Two hand-kept lists, one purpose: a framework identity is not business data.
+        Whatever the prompt list excludes, the card must classify as metadata too, or
+        the same field is hidden from the model and shown to a human reviewer."""
+        from agent_actions.prompt.context.scope_namespace import _RECORD_METADATA_KEYS
+        from agent_actions.tooling.rendering.data_card import METADATA_KEYS
+
+        assert sorted(_RECORD_METADATA_KEYS - METADATA_KEYS) == []
+
+    def test_a_parent_identity_is_classified_as_metadata_not_content(self):
+        from agent_actions.tooling.rendering.data_card import classify_field
+
+        assert classify_field("parent_source_guid") == "metadata"
+
+    def test_a_repeat_identity_is_classified_as_metadata_not_content(self):
+        from agent_actions.tooling.rendering.data_card import classify_field
+
+        assert classify_field("repeat_of_source_guid") == "metadata"
+
     def test_it_is_not_rendered_as_a_data_card_field(self):
         """data_card.METADATA_KEYS calls itself the single source of truth, mirrored in
         the frontend and the HITL approval template; an unlisted key renders as business

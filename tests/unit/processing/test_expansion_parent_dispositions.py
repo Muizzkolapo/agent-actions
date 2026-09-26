@@ -56,7 +56,9 @@ class _Run:
 
     The gate and the persisted output are both required: carry-forward reads the
     action's own prior output, so a harness that does not write it makes every
-    record look un-carryable and hides the half about re-splitting.
+    record look un-carryable and hides the half about re-splitting. Written and read
+    back through the real storage path, so what a test asserts on is what the next
+    run will actually see.
     """
 
     def __init__(self, backend, tmp_path):
@@ -86,9 +88,17 @@ class _Run:
                 disposition_gate=DispositionGate(self.backend)
             ).process(list(records), context, FileToolStrategy(), raw_records=list(records))
 
+        # Through the real writer, not _write_target_raw: delta extraction and
+        # lifecycle validation are on this path, and the reconstruction cache has to be
+        # dropped between runs or a later run reads the first run's rows back.
         relative = derive_relative_path(context.file_path, context.output_directory)
-        self.backend._write_target_raw(ACTION, relative, output)
-        return output
+        self.backend.write_target(
+            ACTION,
+            relative,
+            [{**row, "_state": "processed", "_schema_version": 1} for row in output],
+        )
+        self.backend._reconstruction_cache.clear()
+        return self.backend.read_target_for_rewrite(ACTION, relative)
 
 
 @pytest.fixture
@@ -131,7 +141,7 @@ class TestAnInputThatWasExpanded:
 class TestTheParentIsNotRedone:
     """The row is only half of it. A terminal input goes to carry-forward, which
     reads prior output by `source_guid` — an expanded input's identity is on no
-    row of it. Resolved through the rows' `producer_source_guid`, so the input is
+    row of it. Resolved through the rows' `producer_source_guids`, so the input is
     neither re-queued nor re-split and the rows it made stand."""
 
     def test_an_identical_rerun_does_not_invoke_the_tool(self, run):
@@ -438,9 +448,12 @@ class TestAPlainCollapseIsAlsoResolvable:
 
 class TestAProducerIsAlwaysARealInput:
     def test_a_row_whose_input_carries_no_identity_names_no_producer(self, run):
-        """An input with no source_guid leaves the row nothing real to name. Writing
-        the intermediate guid this action minted a step earlier would hand a consumer
-        an identity no input holds."""
+        """An input with no source_guid leaves the row nothing real to name.
+
+        Narrow by construction: with nothing on input 0 the FILE-mode value is empty
+        either way, so this pins the enrichment half. The mapping-vs-pre-mint-guid
+        question is pinned by test_it_is_the_immediate_input_and_not_the_ancestor.
+        """
         records = [
             {"content": {"prev": {"id": "x"}}},
             {"source_guid": "r1", "content": {"prev": {"id": "r1"}}},
@@ -450,3 +463,97 @@ class TestAProducerIsAlwaysARealInput:
         for row in output:
             for guid in row.get("producer_source_guids") or []:
                 assert guid in {"r1"}, f"{guid} names no input of this action"
+
+
+class TestAResultHoldingARowNoInputProduced:
+    """`source_index: None` is the documented aggregation shape: the row belongs to no
+    input, and the framework mints it an identity. Such a result cannot be rebuilt by
+    carrying — nothing names the invented row — so no input of it may be recorded as
+    consumed, or the next run carries what it can and drops what it cannot.
+    """
+
+    @staticmethod
+    def _passthrough_and_summarise(given: list[str]) -> list[dict]:
+        out: list[dict] = [
+            {"source_index": i, "data": {"amount": 10 * (i + 1)}} for i, _ in enumerate(given)
+        ]
+        out.append({"source_index": None, "data": {"summary": f"total of {len(given)}"}})
+        return out
+
+    @staticmethod
+    def _one_passthrough_and_summarise(given: list[str]) -> list[dict]:
+        """Equal counts rather than more out than in, so `is_expansion` is false and the
+        row still belongs to no input."""
+        if not given:
+            return []
+        return [
+            {"source_index": 0, "data": {"amount": 10}},
+            {"source_index": None, "data": {"summary": f"total of {len(given)}"}},
+        ]
+
+    def _summaries(self, output: list[dict]) -> list[str]:
+        return [
+            row["content"][ACTION]["summary"]
+            for row in output
+            if "summary" in (row["content"].get(ACTION) or {})
+        ]
+
+    def test_the_invented_row_survives_a_rerun(self, run):
+        run(_records("r0", "r1"), self._passthrough_and_summarise)
+        second = run(_records("r0", "r1"), self._passthrough_and_summarise)
+
+        assert self._summaries(second) == ["total of 2"]
+
+    def test_it_survives_a_third_run_too(self, run):
+        for _ in range(3):
+            output = run(_records("r0", "r1"), self._passthrough_and_summarise)
+
+        assert self._summaries(output) == ["total of 2"]
+
+    def test_it_survives_when_the_counts_match(self, run):
+        for _ in range(3):
+            output = run(_records("r0", "r1"), self._one_passthrough_and_summarise)
+
+        assert self._summaries(output) == ["total of 1"]
+
+    def test_no_input_is_recorded_as_consumed(self, run, backend):
+        """The cause, asserted directly rather than through the row count: crediting an
+        input of such a result is what stops the recompute that rebuilds the row."""
+        run(_records("r0", "r1"), self._passthrough_and_summarise)
+
+        consumed = [
+            r["record_id"] for r in _rows(backend) if r.get("reason") == "consumed_into_output"
+        ]
+        assert consumed == []
+
+
+class TestTheFileModeValueForAnInventedRow:
+    """3 in, 3 out, so `is_expansion` is false and lineage enrichment does not re-key.
+    That makes `_reattach_source_guid`'s own answer the one that reaches storage — the
+    expansion cases overwrite it, so they cannot pin it. A row mapped to no input must
+    name no producer: resolving it to an input would hand that input's carry a row it
+    never produced, and under-report what is missing.
+    """
+
+    MAPPED_PLUS_INVENTED = [
+        {"source_index": 0, "data": {"amount": 1}},
+        {"source_index": 1, "data": {"amount": 2}},
+        {"source_index": None, "data": {"summary": "invented"}},
+    ]
+
+    def test_the_invented_row_names_no_producer(self, run):
+        output = run(_records("r0", "r1", "r2"), self.MAPPED_PLUS_INVENTED)
+        invented = next(o for o in output if "summary" in (o["content"].get(ACTION) or {}))
+
+        assert not invented.get("producer_source_guids")
+
+    def test_carry_forward_does_not_hand_an_input_the_invented_row(self, run, backend):
+        output = run(_records("r0", "r1", "r2"), self.MAPPED_PLUS_INVENTED)
+        relative = derive_relative_path(
+            str(run.tmp_path / "in" / "f.json"), str(run.tmp_path / "out")
+        )
+        found, missing = build_carry_forward({"r0"}, ACTION, relative, backend)
+
+        assert [r["source_guid"] for r in found] == ["r0"]
+        assert missing == set()
+        assert len(output) == 3
