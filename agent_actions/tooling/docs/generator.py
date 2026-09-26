@@ -19,9 +19,97 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 from . import scanner
 from .parser import WorkflowParser
 from .run_tracker import _empty_runs_data
-from .scanner import ReadmeData
+from .scanner import PROBLEM_LEVELS, ReadmeData
 
 logger = logging.getLogger(__name__)
+
+
+def _event_sort_key(event: dict) -> tuple[str, int]:
+    """Order by emit time, then by position in the log the row came from.
+
+    Defensive about shape: these rows are read back from a file on disk, and one
+    malformed row must not abort the whole catalog build.
+    """
+    meta = event.get("meta")
+    timestamp = meta.get("timestamp") if isinstance(meta, dict) else None
+    seq = event.get("seq")
+    return (str(timestamp or ""), seq if isinstance(seq, int) else 0)
+
+
+# Scanner projections that exist to be folded into the catalog, not shipped in it.
+_PER_LOG_ONLY = frozenset({"events", "level_counts", "is_workflow"})
+
+# Derived, so a level the scanner retains always has a pass here — without one
+# its rows are a problem nothing asks for, and they vanish. The equal share, not
+# this order, is what protects a rare level from a common one.
+_SEVERITY = ("error", "warn")
+
+
+def problem_priority(levels: tuple[str, ...]) -> tuple[str, ...]:
+    """Rarest known severity first; anything unranked still gets its own pass."""
+    return tuple(
+        sorted(levels, key=lambda lv: _SEVERITY.index(lv) if lv in _SEVERITY else len(_SEVERITY))
+    )
+
+
+PROBLEM_PRIORITY = problem_priority(PROBLEM_LEVELS)
+
+
+def _round_robin(queues: list[list[dict]], budget: int) -> list[dict]:
+    """Take from each queue in turn until the budget runs out."""
+    taken: list[dict] = []
+    for depth in range(max((len(q) for q in queues), default=0)):
+        if len(taken) >= budget:
+            break
+        for queue in queues:
+            if depth < len(queue) and len(taken) < budget:
+                taken.append(queue[depth])
+    return taken
+
+
+def _merge_event_tails(sources: list[tuple[str, list[dict]]], limit: int) -> list[dict]:
+    """Merge per-log event tails into one reverse-chronological window.
+
+    Problems and recent rows each hold half, either spending what the other
+    cannot fill; the problem half is filled rarest level first, or warnings
+    crowd out errors here as they do inside one log's budget. Each pass is
+    round-robin because a project-level log accumulates across every CLI
+    invocation and a global sort hands it everything. Sources are pairs: a
+    workflow may share a name with the project log.
+    """
+    stamped = [
+        [{**evt, "id": f"{name}:{evt.get('seq')}"} for evt in reversed(rows)]
+        for name, rows in sources
+        if rows
+    ]
+    is_problem = lambda evt: evt.get("level") in PROBLEM_LEVELS  # noqa: E731
+    recent = [[e for e in q if not is_problem(e)] for q in stamped]
+
+    budget = max(limit // 2, limit - sum(len(q) for q in recent))
+    by_level = {
+        level: [[e for e in q if e.get("level") == level] for q in stamped]
+        for level in PROBLEM_PRIORITY
+    }
+
+    # Each level owns a share of the problem half, for the reason the per-log
+    # budgets are per level: whichever level is loudest would otherwise take it
+    # all. Rarest first, then whatever a level could not fill is offered back.
+    share = budget // len(PROBLEM_PRIORITY) if PROBLEM_PRIORITY else 0
+    merged: list[dict] = []
+    taken = {}
+    for level in PROBLEM_PRIORITY:
+        rows = _round_robin(by_level[level], share)
+        taken[level] = len(rows)
+        merged += rows
+    for level in PROBLEM_PRIORITY:
+        if len(merged) >= budget:
+            break
+        want = taken[level] + (budget - len(merged))
+        merged += _round_robin(by_level[level], want)[taken[level] :]
+
+    merged += _round_robin(recent, limit - len(merged))
+    merged.sort(key=_event_sort_key, reverse=True)
+    return merged
 
 
 def _copy_readme_images(
@@ -234,8 +322,15 @@ class CatalogGenerator:
             "prompts": prompts_with_refs,
             "schemas": schemas_with_refs,
             "tool_functions": tool_functions_data or {},
-            "runs": runs_data or {},  # Workflow run data and metrics
-            "logs": logs_data or {},  # Global CLI logs and validation events
+            # Each workflow's event tail is merged into logs.events below; keeping
+            # the per-workflow copy here too would ship the same rows twice.
+            "runs": {
+                name: {k: v for k, v in data.items() if k not in _PER_LOG_ONLY}
+                for name, data in (runs_data or {}).items()
+            },
+            # Global CLI logs and validation events. Copied, not aliased: the
+            # caller's dict is still read below to build the event window.
+            "logs": {k: v for k, v in (logs_data or {}).items() if k not in _PER_LOG_ONLY},
             "vendors": vendors_data or {},  # LLM vendor configurations
             "error_types": error_types_data or {},  # Error class hierarchy
             "event_types": event_types_data or {},  # Event type definitions
@@ -443,6 +538,41 @@ class CatalogGenerator:
         catalog["logs"]["runtime_errors"] = runtime_error_entries
         catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
         catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
+
+        # One reverse-chronological stream over every log the project wrote.
+        # Names decide row ids, so they are made distinct as they are built.
+        taken_names: set[str] = set()
+
+        def distinct(name: str) -> str:
+            """Ids are built from these, and two logs may want the same name."""
+            candidate, suffix = name, 2
+            while candidate in taken_names:
+                candidate, suffix = f"{name}~{suffix}", suffix + 1
+            taken_names.add(candidate)
+            return candidate
+
+        event_sources: list[tuple[str, list[dict]]] = [
+            (distinct("project:logs"), (logs_data or {}).get("events", []))
+        ]
+        # A stray directory yields a run entry named after itself, and only the
+        # scanner knows whether it read a workflow config for it.
+        event_sources += [
+            (
+                distinct(f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}"),
+                data.get("events", []),
+            )
+            for name, data in sorted((runs_data or {}).items())
+        ]
+        catalog["logs"]["events"] = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
+
+        # Totals over every log, so "N in view" can be read against the whole.
+        event_levels: dict[str, int] = {}
+        for counts in [(logs_data or {}).get("level_counts", {})] + [
+            data.get("level_counts", {}) for data in (runs_data or {}).values()
+        ]:
+            for level, n in counts.items():
+                event_levels[level] = event_levels.get(level, 0) + n
+        catalog["stats"]["event_levels"] = event_levels
 
         # Update stats for new categories
         catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0

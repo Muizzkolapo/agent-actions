@@ -90,9 +90,6 @@ export function buildDAGNodesAndEdges(actions: Record<string, Action>, workflowI
         id: `e${edgeId++}`,
         source: depKey,
         target: key,
-        type: "default",
-        animated: false,
-        style: { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1.5, opacity: 0.7 },
       })
     }
   }

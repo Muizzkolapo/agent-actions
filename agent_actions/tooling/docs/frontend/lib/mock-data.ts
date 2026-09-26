@@ -161,15 +161,26 @@ export interface WorkflowDataSummary {
   nodes: DataNode[]
 }
 
-// Keep for base log compatibility
-export interface LogEntry {
-  id: string
-  timestamp: string
-  level: "info" | "warn" | "error" | "debug"
-  category: "invocation" | "validation" | "event" | "system"
-  message: string
-  workflowId?: string
-  runId?: string
-}
+// ─── Event stream (catalog.json logs.events) ─────────────────────────────
 
-// ─── Data (fetched from catalog.json workflow_data — no mock data) ───────
+export type EventLevel = "error" | "warn" | "info" | "debug"
+
+/** One row of the NDJSON the logging subsystem writes, as the catalog carries it. */
+export interface LogEvent {
+  id: string
+  seq: number
+  eventType: string
+  code: string
+  level: EventLevel
+  category: string
+  message: string
+  /** Framework mechanics. The console hides these unless the run is verbose. */
+  diagnostic: boolean
+  timestamp: string
+  /** From data.action_name, or meta.action_name when the emit site set it there. */
+  actionName: string | null
+  invocationId: string | null
+  correlationId: string | null
+  workflow: string | null
+  data: Record<string, unknown>
+}

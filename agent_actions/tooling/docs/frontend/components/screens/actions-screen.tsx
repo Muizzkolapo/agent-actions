@@ -1,787 +1,656 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Search, Filter, ArrowRight, X, LayoutGrid, List, Shield, ArrowLeft } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { useMemo, useState } from "react"
 import { useCatalogData } from "@/lib/catalog-context"
-import type { Action } from "@/lib/mock-data"
+import { EM_DASH, fmtClock, fmtSeconds } from "@/lib/format"
+import {
+  Card,
+  EmptyState,
+  Kbd,
+  PageTitle,
+  SearchInput,
+  Segmented,
+  TypeTag,
+} from "@/components/graphite"
+import type { LogsIntent } from "@/components/screens/logs-screen"
+import type { Action, LogEvent, Run } from "@/lib/mock-data"
 
-type SortKey = "name" | "type" | "workflow" | "deps"
-type SortDir = "asc" | "desc"
+type SortKey = "issues" | "dur" | "wf" | "name"
 
-export function ActionsScreen() {
-  const { actions } = useCatalogData()
-  const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<string[]>([])
-  const [depFilter, setDepFilter] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<SortKey>("name")
-  const [sortDir, setSortDir] = useState<SortDir>("asc")
-  const [view, setView] = useState<"list" | "grid">("list")
-  const [showFilters, setShowFilters] = useState(false)
-  const [selectedAction, setSelectedAction] = useState<string | null>(null)
+const PLACEMENTS_SHOWN = 8
 
-  const allActions = useMemo(
-    () => Object.entries(actions).map(([key, a]) => ({
+/** What this action looks like inside the workflow scope the reader has chosen. */
+function scopeOf(entry: ActionEntry, workflow: string) {
+  const events =
+    workflow === "all" ? entry.events : (entry.eventsByWf.get(workflow) ?? [])
+  return {
+    events,
+    errors: events.filter((e) => e.level === "error").length,
+    warnings: events.filter((e) => e.level === "warn").length,
+  }
+}
+
+interface Member {
+  key: string
+  name: string
+  wf: string
+  sec: number | null
+  running: boolean
+}
+
+interface ActionEntry {
+  name: string
+  type: "llm" | "tool" | null
+  wfs: string[]
+  schema: string | null
+  deps: number | null
+  guard: boolean
+  intent: string
+  impl?: string
+  promptName: string | null
+  members: Member[]
+  /** Events per workflow: two workflows can each declare an action of this name,
+   *  and showing one's failures against the other is how a reader is misled. */
+  eventsByWf: Map<string, LogEvent[]>
+  events: LogEvent[]
+  errors: number
+  warnings: number
+  running: boolean
+  sec: number | null
+  source: string
+  sample: Action
+}
+
+/** Fan-out placements (extract_1..3) collapse onto their base definition. */
+const baseName = (name: string) => name.replace(/_\d+$/, "")
+
+function buildCatalog(
+  actions: Record<string, Action>,
+  events: LogEvent[],
+  runs: Run[],
+): ActionEntry[] {
+  // Keyed by workflow: an action named `extract` running in one workflow says
+  // nothing about the `extract` of another.
+  const running = new Set<string>()
+  for (const run of runs) {
+    if (run.status !== "running") continue
+    for (const [name, a] of Object.entries(run.actions)) {
+      if (a.status === "running") running.add(`${run.wf}/${name}`)
+    }
+  }
+
+  const byBase = new Map<string, ActionEntry>()
+  for (const [key, a] of Object.entries(actions)) {
+    const name = key.split("/").pop() ?? key
+    const base = baseName(name)
+    let entry = byBase.get(base)
+    if (!entry) {
+      entry = {
+        name: base,
+        type: a.type,
+        wfs: [],
+        schema: a.schema,
+        deps: a.deps.length,
+        guard: Boolean(a.guard),
+        intent: a.intent,
+        impl: a.impl,
+        promptName: a.promptName,
+        members: [],
+        eventsByWf: new Map(),
+        events: [],
+        errors: 0,
+        warnings: 0,
+        running: false,
+        sec: null,
+        source: "",
+        sample: a,
+      }
+      byBase.set(base, entry)
+    }
+    if (!entry.schema) entry.schema = a.schema
+    if (!entry.intent) entry.intent = a.intent
+    if (!entry.impl) entry.impl = a.impl
+    if (!entry.promptName) entry.promptName = a.promptName
+    entry.guard = entry.guard || Boolean(a.guard)
+    if (!entry.wfs.includes(a.wf)) entry.wfs.push(a.wf)
+    entry.members.push({
       key,
-      name: key.includes("/") ? key.split("/").pop()! : key,
-      ...a,
-    })),
-    [actions],
-  )
-
-  const filtered = useMemo(() => {
-    let list = allActions.filter((a) => {
-      if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.intent.toLowerCase().includes(search.toLowerCase())) return false
-      if (typeFilter.length > 0 && !typeFilter.includes(a.type)) return false
-      if (depFilter === "has" && a.deps.length === 0) return false
-      if (depFilter === "none" && a.deps.length > 0) return false
-      return true
+      name,
+      wf: a.wf,
+      sec: a.metrics.execution_time,
+      running: running.has(`${a.wf}/${name}`),
     })
-    list.sort((a, b) => {
-      let cmp = 0
-      if (sortKey === "name") cmp = a.name.localeCompare(b.name)
-      else if (sortKey === "type") cmp = a.type.localeCompare(b.type)
-      else if (sortKey === "deps") cmp = a.deps.length - b.deps.length
-      else if (sortKey === "workflow") cmp = a.wf.localeCompare(b.wf)
-      return sortDir === "desc" ? -cmp : cmp
-    })
-    return list
-  }, [allActions, search, typeFilter, depFilter, sortKey, sortDir])
-
-  const activeFilterCount = typeFilter.length + (depFilter ? 1 : 0)
-
-  const toggleType = (t: string) =>
-    setTypeFilter((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    else { setSortKey(key); setSortDir("asc") }
   }
 
-  /* Detail view: full-page layout when an action is selected */
-  if (selectedAction && actions[selectedAction]) {
-    return (
-      <ActionDetail
-        name={selectedAction.includes("/") ? selectedAction.split("/").pop()! : selectedAction}
-        action={actions[selectedAction]}
-        onBack={() => setSelectedAction(null)}
-        onSelectAction={(name) => setSelectedAction(name)}
-      />
-    )
+  for (const e of events) {
+    if (!e.actionName || !e.workflow) continue
+    const entry = byBase.get(baseName(e.actionName))
+    if (!entry || !entry.wfs.includes(e.workflow)) continue
+    const forWf = entry.eventsByWf.get(e.workflow)
+    if (forWf) forWf.push(e)
+    else entry.eventsByWf.set(e.workflow, [e])
   }
 
-  /* List view */
+  for (const entry of byBase.values()) {
+    for (const list of entry.eventsByWf.values()) {
+      list.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    }
+    entry.events = [...entry.eventsByWf.values()]
+      .flat()
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    entry.errors = entry.events.filter((e) => e.level === "error").length
+    entry.warnings = entry.events.filter((e) => e.level === "warn").length
+    entry.running = entry.members.some((m) => m.running)
+    const timed = entry.members.map((m) => m.sec).filter((s): s is number => s != null && s > 0)
+    entry.sec = timed.length ? Math.max(...timed) : null
+    entry.source =
+      entry.members.length > 1 ? `wall, ×${entry.members.length} placements` : "last recorded run"
+  }
+
+  return [...byBase.values()]
+}
+
+export function ActionsScreen({ onOpenLogs }: { onOpenLogs: (intent: LogsIntent) => void }) {
+  const { actions, logEvents, runs, workflows } = useCatalogData()
+  const [search, setSearch] = useState("")
+  const [type, setType] = useState("all")
+  const [workflow, setWorkflow] = useState("all")
+  const [sort, setSort] = useState<SortKey>("issues")
+  const [issuesOnly, setIssuesOnly] = useState(false)
+  const [selectedName, setSelectedName] = useState<string | null>(null)
+
+  const catalog = useMemo(() => buildCatalog(actions, logEvents, runs), [actions, logEvents, runs])
+
+  const scoped = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return catalog.filter((c) => {
+      if (workflow !== "all" && !c.wfs.includes(workflow)) return false
+      if (issuesOnly && scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings === 0)
+        return false
+      if (!q) return true
+      return [c.name, c.intent, c.schema, c.impl, c.wfs.join(" ")].join(" ").toLowerCase().includes(q)
+    })
+  }, [catalog, search, workflow, issuesOnly])
+
+  const rows = useMemo(() => {
+    const list = scoped.filter((c) => type === "all" || c.type === type)
+    const issuesOf = (c: ActionEntry) => scopeOf(c, workflow)
+    const sorters: Record<SortKey, (a: ActionEntry, b: ActionEntry) => number> = {
+      issues: (a, b) =>
+        issuesOf(b).errors - issuesOf(a).errors ||
+        issuesOf(b).warnings - issuesOf(a).warnings ||
+        Number(b.running) - Number(a.running) ||
+        a.name.localeCompare(b.name),
+      dur: (a, b) => (b.sec ?? -1) - (a.sec ?? -1),
+      wf: (a, b) => b.wfs.length - a.wfs.length || a.name.localeCompare(b.name),
+      name: (a, b) => a.name.localeCompare(b.name),
+    }
+    return [...list].sort(sorters[sort])
+  }, [scoped, type, sort, workflow])
+
+  const selected = rows.find((c) => c.name === selectedName) ?? rows[0] ?? null
+  const maxSec = Math.max(1, ...catalog.map((c) => c.sec ?? 0))
+  const placements = Object.keys(actions).length
+
+  const runningNow = catalog.find((c) => c.running) ?? null
+  const slowest = [...catalog].filter((c) => !c.running && c.sec != null).sort((a, b) => b.sec! - a.sec!)[0] ?? null
+  const withIssues = catalog.filter((c) => scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings > 0)
+
+  const typeTabs = [
+    { value: "all", label: "All", count: scoped.length },
+    { value: "llm", label: "LLM", count: scoped.filter((c) => c.type === "llm").length },
+    { value: "tool", label: "Tool", count: scoped.filter((c) => c.type === "tool").length },
+  ]
+
+  const filtersActive = search !== "" || type !== "all" || workflow !== "all" || issuesOnly
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">All Actions</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Browse all {allActions.length} actions across workflows
+    <div className="flex max-w-[1280px] animate-view-in flex-col gap-4">
+      <PageTitle
+        title="All Actions"
+        subtitle={`${catalog.length} distinct actions in loaded configs · ${placements} placements across ${workflows.length} workflows`}
+      />
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-2.5">
+        <SummaryCard
+          label="Running now"
+          onClick={() => runningNow && setSelectedName(runningNow.name)}
+          value={runningNow ? runningNow.name : "nothing running"}
+          valueClass={runningNow ? "text-accent-t" : "text-muted-foreground"}
+          dot={runningNow ? "bg-info" : undefined}
+          sub={runningNow ? `${runningNow.members.length} placement(s)` : "no in-flight run"}
+        />
+        <SummaryCard
+          label="Slowest recorded"
+          onClick={() => slowest && setSelectedName(slowest.name)}
+          value={slowest ? slowest.name : EM_DASH}
+          sub={slowest ? fmtSeconds(slowest.sec) : "no timings recorded"}
+        />
+        <SummaryCard
+          label="With errors or warnings"
+          onClick={() => setIssuesOnly(true)}
+          value={withIssues.length ? String(withIssues.length) : "0"}
+          valueClass={withIssues.length ? "text-warning-t" : "text-foreground"}
+          sub={`${withIssues.reduce((n, c) => n + scopeOf(c, workflow).errors, 0)} err · ${withIssues.reduce((n, c) => n + scopeOf(c, workflow).warnings, 0)} warn`}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search name, intent, schema, tool or workflow…"
+          className="min-w-[200px] flex-1"
+        />
+        <Segmented options={typeTabs} value={type} onChange={setType} />
+        <select
+          value={workflow}
+          onChange={(e) => setWorkflow(e.target.value)}
+          aria-label="Workflow"
+          className="max-w-[180px] cursor-pointer rounded-control border border-border bg-surface px-2.5 py-[7px] font-mono text-[11.5px] text-foreground-2 outline-none"
+        >
+          <option value="all">all workflows</option>
+          {workflows.map((w) => (
+            <option key={w.id} value={w.id}>{w.name}</option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey)}
+          title="Sort"
+          className="cursor-pointer rounded-control border border-border bg-surface px-2.5 py-[7px] text-[11.5px] text-foreground-2 outline-none"
+        >
+          <option value="issues">Sort: issues first</option>
+          <option value="dur">Sort: slowest</option>
+          <option value="wf">Sort: most reused</option>
+          <option value="name">Sort: name</option>
+        </select>
+        <button
+          onClick={() => setIssuesOnly((v) => !v)}
+          aria-pressed={issuesOnly}
+          className={`shrink-0 rounded-control border border-border px-2.5 py-[7px] text-[11.5px] ${
+            issuesOnly ? "bg-accent-a12 text-accent-t" : "bg-surface text-muted-foreground"
+          }`}
+        >
+          Issues only
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-3.5">
+        <Card className="min-w-0 flex-[1_1_520px]">
+          <div className="grid grid-cols-[44px_minmax(0,1fr)_40px_116px_40px] gap-2.5 bg-surface-2 px-3.5 py-2 text-xs font-medium text-muted-foreground">
+            <span>Type</span>
+            <span>Action</span>
+            <span className="text-right">WFs</span>
+            <span>Last run</span>
+            <span className="text-right">Issues</span>
+          </div>
+          {rows.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => setSelectedName(c.name)}
+              className={`grid w-full grid-cols-[44px_minmax(0,1fr)_40px_116px_40px] items-center gap-2.5 border-t border-border-soft px-3.5 py-2 text-left hover:bg-hover ${
+                selected?.name === c.name ? "bg-accent-a12" : ""
+              }`}
+            >
+              <TypeTag type={c.type ?? ""} />
+              <span className="min-w-0">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-mono text-xs text-foreground">{c.name}</span>
+                  {c.members.length > 1 && (
+                    <span
+                      title="Placements across workflows and fan-outs"
+                      className="shrink-0 rounded-sm border border-border-2 px-1 font-mono text-[9.5px] text-foreground-3"
+                    >
+                      ×{c.members.length}
+                    </span>
+                  )}
+                  {c.guard && (
+                    <span
+                      title="Has a guard condition"
+                      className="shrink-0 rounded-sm border border-border-2 px-1 font-mono text-[9.5px] text-foreground-3"
+                    >
+                      guard
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                  {c.intent || (c.impl ? `${c.impl}()` : "No intent in loaded config")}
+                </span>
+              </span>
+              <span className="text-right font-mono text-[11px] text-foreground-3">{c.wfs.length}</span>
+              <span className="flex flex-col gap-1">
+                <span className={`font-mono text-[10.5px] ${c.running ? "text-info-t" : c.sec != null ? "text-foreground-3" : "text-muted-2"}`}>
+                  {c.running ? `${fmtSeconds(c.sec)}…` : fmtSeconds(c.sec)}
+                </span>
+                <span className="h-[3px] overflow-hidden rounded-sm bg-surface-2">
+                  <span
+                    className={`block h-full rounded-sm ${c.running ? "bg-info" : c.type === "tool" ? "bg-tool" : "bg-llm"}`}
+                    style={{
+                      width: c.sec
+                        ? `${Math.max(3, (Math.log1p(c.sec) / Math.log1p(maxSec)) * 100).toFixed(1)}%`
+                        : "0%",
+                    }}
+                  />
+                </span>
+              </span>
+              <span className="flex justify-end">
+                {scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings > 0 ? (
+                  <span
+                    className={`rounded-sm px-1.5 py-px font-mono text-[10px] font-bold ${
+                      scopeOf(c, workflow).errors
+                        ? "bg-danger-a12 text-danger-t"
+                        : "bg-warning-a12 text-warning-t"
+                    }`}
+                  >
+                    {scopeOf(c, workflow).errors + scopeOf(c, workflow).warnings}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[11px] text-muted-2">{EM_DASH}</span>
+                )}
+              </span>
+            </button>
+          ))}
+          {rows.length === 0 && (
+            <EmptyState
+              message="No actions match these filters"
+              actionLabel={filtersActive ? "Clear filters" : undefined}
+              onAction={
+                filtersActive
+                  ? () => { setSearch(""); setType("all"); setWorkflow("all"); setIssuesOnly(false) }
+                  : undefined
+              }
+            />
+          )}
+          <div className="flex items-center gap-3 border-t border-border-soft px-3.5 py-2 text-[10.5px] text-muted-foreground">
+            <span className="flex items-center gap-1"><Kbd>j</Kbd><Kbd>k</Kbd>move</span>
+            <span className="flex-1" />
+            <span className="font-mono">{rows.length.toLocaleString()} shown</span>
+          </div>
+        </Card>
+
+        {selected && (
+          <ActionDetailPanel
+            entry={selected}
+            scope={workflow}
+            workflowCount={workflows.length}
+            onOpenLogs={onOpenLogs}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SummaryCard({
+  label,
+  value,
+  valueClass = "text-foreground",
+  dot,
+  sub,
+  onClick,
+}: {
+  label: string
+  value: string
+  valueClass?: string
+  dot?: string
+  sub: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded-card border border-border bg-surface px-4 py-3 text-left hover:border-border-2"
+    >
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-2 flex items-center gap-2">
+        {dot && <span className={`h-[7px] w-[7px] shrink-0 animate-breathe rounded-pill ${dot}`} />}
+        <span className={`truncate font-mono text-[13px] ${valueClass}`}>{value}</span>
+      </div>
+      <div className="mt-1 font-mono text-[11px] text-muted-foreground">{sub}</div>
+    </button>
+  )
+}
+
+function ActionDetailPanel({
+  entry,
+  scope,
+  workflowCount,
+  onOpenLogs,
+}: {
+  entry: ActionEntry
+  scope: string
+  workflowCount: number
+  onOpenLogs: (intent: LogsIntent) => void
+}) {
+  const a = entry.sample
+  const { events, errors, warnings } = scopeOf(entry, scope)
+  const status = entry.running
+    ? { label: "running", text: "text-info-t", dot: "bg-info" }
+    : errors > 0
+      ? { label: "errors in window", text: "text-danger-t", dot: "bg-danger" }
+      : entry.sec != null
+        ? { label: "succeeded last", text: "text-success-t", dot: "bg-success" }
+        : { label: "not in loaded runs", text: "text-muted-foreground", dot: "bg-muted-2" }
+
+  const memberMax = Math.max(1, ...entry.members.map((m) => m.sec ?? 0))
+  // A widely reused action has dozens of placements; the slow ones are the story.
+  const shownMembers = [...entry.members]
+    .sort((a, b) => Number(b.running) - Number(a.running) || (b.sec ?? -1) - (a.sec ?? -1))
+    .slice(0, PLACEMENTS_SHOWN)
+
+  const known = (v: string | undefined, skip: string[] = []) =>
+    v && v !== "unknown" && !skip.includes(v) ? v : null
+  const model = known(a.model)
+  const provider = known(a.provider, [entry.type ?? ""])
+
+  const config: [string, string][] = [
+    ["kind", entry.type ?? EM_DASH],
+    ...(model ? ([["model", model]] as [string, string][]) : []),
+    ...(provider ? ([["provider", provider]] as [string, string][]) : []),
+    ...(entry.impl ? ([["function", `${entry.impl}()`]] as [string, string][]) : []),
+    ...(a.guard ? ([["guard on_false", a.guard.on_false]] as [string, string][]) : []),
+    ...(a.inputs.length ? ([["inputs", a.inputs.join(", ")]] as [string, string][]) : []),
+    ...(a.outputs.length ? ([["outputs", a.outputs.join(", ")]] as [string, string][]) : []),
+    ...(a.drops.length ? ([["drops", a.drops.join(", ")]] as [string, string][]) : []),
+    ...(a.observe.length ? ([["observe", a.observe.join(", ")]] as [string, string][]) : []),
+  ]
+
+  return (
+    <div className="sticky top-0 flex min-w-0 max-w-[480px] flex-[1_1_360px] animate-panel-in flex-col rounded-card border border-border bg-surface">
+      <div className="flex flex-col gap-2 border-b border-border-soft px-[18px] pb-3.5 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <TypeTag type={entry.type ?? ""} />
+          <span className={`flex items-center gap-1.5 text-[11px] ${status.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-pill ${status.dot}`} />
+            {status.label}
+          </span>
+        </div>
+        <div className="overflow-x-auto whitespace-nowrap font-mono text-base font-semibold">{entry.name}</div>
+        <p className="m-0 text-[12.5px] leading-[1.5] text-foreground-3 [text-wrap:pretty]">
+          {entry.intent || "No intent declared in the loaded workflow configs."}
         </p>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search actions by name or intent..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
-          />
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 gap-2 border-border text-muted-foreground bg-transparent"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="h-3.5 w-3.5" />
-          Filters
-          {activeFilterCount > 0 && (
-            <Badge variant="secondary" className="ml-1 h-5 min-w-5 justify-center rounded-md text-[10px]">
-              {activeFilterCount}
-            </Badge>
-          )}
-        </Button>
-        <div className="flex gap-1 border border-border rounded-lg p-0.5">
-          <button
-            onClick={() => setView("list")}
-            className={`p-1.5 rounded-md transition-colors ${view === "list" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            <List className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setView("grid")}
-            className={`p-1.5 rounded-md transition-colors ${view === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-          </button>
-        </div>
+      <div className="grid grid-cols-3 border-b border-border-soft">
+        <PanelStat
+          label="Last run"
+          value={entry.running ? `${fmtSeconds(entry.sec)}…` : fmtSeconds(entry.sec)}
+          sub={entry.sec != null ? entry.source : "no run data"}
+        />
+        <PanelStat label="Workflows" value={String(entry.wfs.length)} sub={`of ${workflowCount}`} />
+        <PanelStat
+          label="Issues"
+          value={String(errors + warnings)}
+          valueClass={errors ? "text-danger-t" : warnings ? "text-warning-t" : "text-foreground"}
+          sub={errors + warnings ? `${errors} err · ${warnings} warn` : "in loaded window"}
+          last
+        />
       </div>
 
-      {/* Filter panel */}
-      {showFilters && (
-        <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-6 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Type</span>
-            {["llm", "tool"].map((t) => (
-              <button
-                key={t}
-                onClick={() => toggleType(t)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium capitalize transition-all ${
-                  typeFilter.includes(t)
-                    ? t === "llm"
-                      ? "bg-purple-500/15 text-purple-400 ring-1 ring-purple-500/20"
-                      : "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <div className="h-6 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Dependencies</span>
-            {[
-              { label: "All", value: null },
-              { label: "Has deps", value: "has" },
-              { label: "No deps", value: "none" },
-            ].map((opt) => (
-              <button
-                key={opt.label}
-                onClick={() => setDepFilter(opt.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                  depFilter === opt.value
-                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <div className="h-6 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Sort</span>
-            {(["name", "type", "workflow", "deps"] as SortKey[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => toggleSort(key)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium capitalize transition-all ${
-                  sortKey === key
-                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {key}
-                {sortKey === key && (sortDir === "asc" ? " \u2191" : " \u2193")}
-              </button>
-            ))}
-          </div>
-          {activeFilterCount > 0 && (
-            <button
-              onClick={() => { setTypeFilter([]); setDepFilter(null) }}
-              className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="h-3 w-3" />
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Action list or grid */}
-      {view === "list" ? (
-        <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
-          {/* Table header */}
-          <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-2.5 bg-secondary/30">
-            <span className="w-14 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Type</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Name</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Workflow</span>
-            <span className="w-16 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold text-center">Deps</span>
-            <span className="w-20 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Guard</span>
-            <span className="w-4" />
-          </div>
-          {filtered.map((action) => (
-            <button
-              key={action.name}
-              className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
-              onClick={() => setSelectedAction(action.key)}
-            >
-              <TypeBadge type={action.type} />
-              <div className="min-w-0">
-                <span className="text-sm font-mono font-medium text-foreground truncate block">{action.name}</span>
-                <span className="text-[11px] text-muted-foreground line-clamp-1">{action.intent}</span>
-              </div>
-              <span className="text-xs font-mono text-muted-foreground truncate">{action.wf}</span>
-              <span className="w-16 text-center text-xs font-mono text-muted-foreground tabular-nums">
-                {action.deps.length}
-              </span>
-              <span className="w-20">
-                {action.guard && (
-                  <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20">
-                    <Shield className="h-3 w-3 mr-1" />
-                    guard
-                  </Badge>
-                )}
-              </span>
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-              No actions match the current filters
+      <div className="flex flex-col gap-4 px-[18px] py-3.5">
+        <div className="flex flex-wrap gap-[18px]">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="text-xs font-medium text-muted-foreground">
+              {entry.type === "llm" ? "Prompt" : "Implementation"}
             </div>
-          )}
+            <span className="whitespace-nowrap font-mono text-[11px] text-accent-t">
+              {entry.type === "llm"
+                ? (entry.promptName ?? "inline")
+                : entry.impl
+                  ? `${entry.impl}()`
+                  : "not resolved"}
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="text-xs font-medium text-muted-foreground">Output schema</div>
+            <span className={`font-mono text-[11px] ${entry.schema ? "text-accent-t" : "text-muted-foreground"}`}>
+              {entry.schema ?? "none"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-xs font-medium text-muted-foreground">Deps</div>
+            <span className="font-mono text-[11px] text-foreground-3">
+              {entry.deps === 0 ? "root" : String(entry.deps ?? EM_DASH)}
+            </span>
+          </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {filtered.map((action) => (
+
+        {entry.members.length > 1 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Placements</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {entry.members.length} total, slowest first
+              </span>
+            </div>
+            {shownMembers.map((m) => (
+              <div key={m.key} className="grid grid-cols-[minmax(0,1fr)_88px_62px] items-center gap-2.5">
+                <span
+                  title={m.key}
+                  className={`truncate font-mono text-[11px] ${m.running ? "text-info-t" : "text-foreground-2"}`}
+                >
+                  {m.wf}/{m.name}
+                </span>
+                <span className="h-[5px] overflow-hidden rounded-sm bg-surface-2">
+                  <span
+                    className={`block h-full rounded-sm ${m.running ? "bg-info" : entry.type === "tool" ? "bg-tool" : "bg-llm"}`}
+                    style={{ width: `${Math.max(2, ((m.sec ?? 0) / memberMax) * 100).toFixed(1)}%` }}
+                  />
+                </span>
+                <span className={`text-right font-mono text-[10.5px] ${m.running ? "text-info-t" : "text-muted-foreground"}`}>
+                  {m.running ? `${fmtSeconds(m.sec)}…` : fmtSeconds(m.sec)}
+                </span>
+              </div>
+            ))}
+            {entry.members.length > shownMembers.length && (
+              <span className="font-mono text-[10.5px] text-muted-foreground">
+                +{entry.members.length - shownMembers.length} more
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-medium text-muted-foreground">Used in</div>
+          <div className="flex flex-wrap gap-1.5">
+            {entry.wfs.map((w) => (
+              <span
+                key={w}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-control border border-border bg-surface px-2 py-1 font-mono text-[10.5px] text-foreground-2"
+              >
+                {w}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Recent events</span>
+            <span className="flex-1" />
+            {events.length > 0 && (
+              <button
+                onClick={() => onOpenLogs({ q: entry.name })}
+                className="border-0 bg-transparent p-0 text-[11px] text-accent-t hover:underline"
+              >
+                All in Logs →
+              </button>
+            )}
+          </div>
+          {events.slice(0, 4).map((e) => (
             <button
-              key={action.name}
-              className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/25 transition-all"
-              onClick={() => setSelectedAction(action.key)}
+              key={e.id}
+              onClick={() => onOpenLogs({ q: entry.name })}
+              title="Open in Logs"
+              className="flex w-full flex-col gap-1 rounded-control border border-border-soft bg-well px-2.5 py-2 text-left hover:border-border-2"
             >
-              <div
-                className="absolute top-0 left-0 right-0 h-px"
-                style={{
-                  backgroundColor: action.type === "llm" ? "hsl(var(--chart-5))" : "hsl(var(--success))",
-                  opacity: 0.5,
-                }}
-              />
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2.5">
-                  <TypeBadge type={action.type} />
-                  <h3 className="text-sm font-mono font-medium text-foreground">{action.name}</h3>
-                </div>
-                {action.guard && (
-                  <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20">
-                    guard
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed line-clamp-2">{action.intent}</p>
-              <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-border/50">
-                <span className="text-[10px] font-mono text-muted-foreground">{action.wf}</span>
-                <span className="text-[10px] text-muted-foreground">{action.deps.length} deps</span>
-                {action.schema && (
-                  <span className="text-[10px] font-mono text-[hsl(var(--primary))]">{action.schema}</span>
-                )}
-                {action.metrics.success_count > 0 && (
-                  <span className="ml-auto text-[10px] font-mono text-[hsl(var(--success))]">
-                    {action.metrics.success_count} runs
-                  </span>
-                )}
-              </div>
+              <span className="flex items-center gap-2 font-mono text-[10.5px] text-muted-foreground">
+                <span className="text-foreground-3">{e.level.toUpperCase()}</span>
+                <span>{e.code}</span>
+                <span className="flex-1" />
+                <span>{fmtClock(e.timestamp)}</span>
+              </span>
+              <span className="line-clamp-2 text-[11.5px] leading-[1.45] text-foreground-2">{e.message}</span>
             </button>
           ))}
+          {events.length === 0 && (
+            <span className="text-[11.5px] text-muted-foreground">No events for this action in the loaded window.</span>
+          )}
         </div>
-      )}
-    </div>
-  )
-}
 
-/* --- Source code block (expandable) --- */
-
-function SourceBlock({ fn, name }: { fn: NonNullable<Action["toolFunction"]>; name: string }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-          Implementation
-        </span>
-        <span className="text-[10px] font-mono text-muted-foreground/60">{fn.file}</span>
-      </div>
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 border-b border-border/50">
-          <span className="text-xs font-mono text-[hsl(var(--success))]">{fn.signature || `${name}()`}</span>
-        </div>
-        {fn.docstring && (
-          <div className="px-3 py-1.5 border-b border-border/30 text-xs text-muted-foreground italic">
-            {fn.docstring}
+        {a.guard && (
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-medium text-muted-foreground">Guard</div>
+            <div className="rounded-control border border-border-soft bg-well px-2.5 py-2 font-mono text-[11px] leading-[1.5] text-warning-t">
+              {a.guard.condition}
+            </div>
           </div>
         )}
-        {fn.sourceCode && expanded && (
-          <div className="px-3 py-2 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-96 overflow-auto">
-            {fn.sourceCode}
+
+        <div className="flex flex-col overflow-hidden rounded-control border border-border-soft">
+          {config.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3 border-t border-border-soft px-2.5 py-1.5 text-[11px] first:border-t-0">
+              <span className="shrink-0 text-muted-foreground">{k}</span>
+              <span className="truncate font-mono text-foreground-3">{v}</span>
+            </div>
+          ))}
+        </div>
+
+        {a.toolFunction?.signature && (
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-medium text-muted-foreground">Signature</div>
+            <div className="overflow-x-auto rounded-control border border-border-soft bg-well px-2.5 py-2 font-mono text-[11px] text-accent-bright">
+              {a.toolFunction.signature}
+            </div>
+            {a.toolFunction.docstring && (
+              <p className="m-0 text-[11.5px] leading-[1.5] text-muted-foreground">{a.toolFunction.docstring}</p>
+            )}
           </div>
         )}
-        {fn.sourceCode && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            aria-expanded={expanded}
-            className="w-full text-center py-1.5 text-[10px] text-[hsl(var(--primary))] hover:bg-secondary/80 border-t border-border/50 transition-colors"
-          >
-            {expanded ? "Hide source" : "Show source code"}
-          </button>
-        )}
       </div>
     </div>
   )
 }
 
-/* --- Prompt block (expandable) --- */
-
-function PromptBlock({ content, name }: { content: string; name: string | null }) {
-  const [expanded, setExpanded] = useState(false)
-  const isLong = content.length > 300
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-          Prompt
-        </span>
-        {name && (
-          <span className="text-[10px] font-mono text-[hsl(var(--primary))]">{name}</span>
-        )}
-      </div>
-      <div className="rounded-lg bg-secondary/50 border border-border/50 overflow-hidden">
-        <div
-          className={`px-3 py-2 font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap ${
-            !expanded && isLong ? "max-h-32 overflow-hidden" : ""
-          }`}
-        >
-          {content}
-        </div>
-        {isLong && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            aria-expanded={expanded}
-            className="w-full text-center py-1.5 text-[10px] text-[hsl(var(--primary))] hover:bg-secondary/80 border-t border-border/50 transition-colors"
-          >
-            {expanded ? "Collapse" : `Show full prompt (${content.length.toLocaleString()} chars)`}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/* --- Helpers --- */
-
-function formatFieldType(t: unknown): string {
-  if (typeof t === "string") return t
-  if (Array.isArray(t)) return `array[${t.length}]`
-  if (t && typeof t === "object") {
-    const obj = t as Record<string, unknown>
-    if ("type" in obj && typeof obj.type === "string") return obj.type
-    const keys = Object.keys(obj)
-    return keys.length <= 3 ? `{${keys.join(", ")}}` : `{${keys.slice(0, 2).join(", ")}, +${keys.length - 2}}`
-  }
-  return String(t ?? "\u2014")
-}
-
-function fieldTypeColor(t: unknown): string {
-  const s = typeof t === "string" ? t.toLowerCase() : ""
-  if (s === "string") return "bg-sky-500/10 text-sky-400"
-  if (s === "number" || s === "integer" || s === "float") return "bg-amber-500/10 text-amber-300"
-  if (s === "boolean" || s === "bool") return "bg-rose-500/10 text-rose-300"
-  if (s === "array" || Array.isArray(t)) return "bg-blue-500/10 text-blue-300"
-  if (s === "object" || s === "dict" || (t && typeof t === "object")) return "bg-purple-500/10 text-purple-300"
-  return "bg-secondary text-muted-foreground"
-}
-
-function formatExecTime(seconds: number | null | undefined): string {
-  if (seconds == null || seconds <= 0) return "\u2014"
-  if (seconds < 0.1) return `${Math.round(seconds * 1000)}ms`
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
-  const rounded = Math.round(seconds)
-  return `${Math.floor(rounded / 60)}m ${rounded % 60}s`
-}
-
-/* --- Full-page Action Detail --- */
-
-function ActionDetail({
-  name,
-  action,
-  onBack,
-  onSelectAction,
+function PanelStat({
+  label,
+  value,
+  valueClass = "text-foreground",
+  sub,
+  last = false,
 }: {
-  name: string
-  action: Action
-  onBack: () => void
-  onSelectAction: (name: string) => void
+  label: string
+  value: string
+  valueClass?: string
+  sub: string
+  last?: boolean
 }) {
-  const m = action.metrics
-  const hasMetrics = m.execution_time != null || m.success_count > 0 || m.failed_count > 0
-    || m.filtered_count > 0 || m.skipped_count > 0
-    || m.tokens?.prompt_tokens != null || m.tokens?.completion_tokens != null
-
-  // Skip output badges when outputFields covers the same names (table is more informative)
-  const outputFieldNames = new Set(action.outputFields.map((f) => f.name))
-  const outputBadgesRedundant = action.outputs.length > 0 && action.outputFields.length > 0
-    && action.outputs.every((o) => outputFieldNames.has(o))
-
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg font-mono font-semibold text-foreground truncate">{name}</h1>
-            <TypeBadge type={action.type} />
-            {action.schema && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] border-[hsl(var(--primary))]/20">
-                {action.schema}
-              </Badge>
-            )}
-            {action.guard && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/20">
-                <Shield className="h-3 w-3 mr-1" />
-                guarded
-              </Badge>
-            )}
-            {action.model && action.model !== "unknown" && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
-                {action.model}
-              </Badge>
-            )}
-            {action.provider && action.provider !== action.type && action.provider !== "unknown" && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
-                {action.provider}
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5 font-mono">{action.wf}</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <Tabs defaultValue="overview">
-        <TabsList className="h-8 bg-secondary/50 p-0.5">
-          <TabsTrigger value="overview" className="text-xs px-3 py-1 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="config" className="text-xs px-3 py-1 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-            Config
-          </TabsTrigger>
-          <TabsTrigger value="metrics" className="text-xs px-3 py-1 data-[state=active]:bg-card data-[state=active]:shadow-sm">
-            Metrics
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tab: Overview */}
-        <TabsContent value="overview" className="mt-3">
-          <div className="flex flex-col gap-4">
-            {/* Intent */}
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Intent
-              </span>
-              <p className="text-xs text-foreground leading-relaxed">{action.intent}</p>
-            </div>
-
-            {/* Implementation */}
-            {action.type === "tool" && action.impl && (
-              action.toolFunction
-                ? <SourceBlock fn={action.toolFunction} name={action.impl} />
-                : (
-                  <div className="rounded-lg border border-border bg-secondary/50 px-3 py-2">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                      Implementation
-                    </span>
-                    <span className="text-xs font-mono text-[hsl(var(--success))]">{action.impl}()</span>
-                  </div>
-                )
-            )}
-
-            {/* Guard */}
-            {action.guard && (
-              <div className="rounded-lg bg-[hsl(var(--warning))]/5 border border-[hsl(var(--warning))]/15 px-3 py-2">
-                <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--warning))]/70 font-semibold block mb-1">
-                  Guard
-                </span>
-                <div className="font-mono text-xs text-[hsl(var(--warning))] leading-relaxed">
-                  <div>condition: {action.guard.condition}</div>
-                  <div className="mt-0.5">on_false: {action.guard.on_false}</div>
-                </div>
-              </div>
-            )}
-
-            {action.prompt && <PromptBlock content={action.prompt} name={action.promptName} />}
-
-            {/* Dependencies / Inputs / Outputs / Drops / Observe */}
-            <div className="flex flex-col gap-4">
-                  {/* Dependencies (always shown — root actions get a "none" label) */}
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                      Dependencies
-                    </span>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {action.deps.length === 0 ? (
-                        <span className="text-xs text-muted-foreground italic">none (root action)</span>
-                      ) : (
-                        action.deps.map((d) => (
-                          <button
-                            key={d}
-                            onClick={() => onSelectAction(`${action.wf}/${d}`)}
-                            className="rounded-md bg-secondary px-2 py-0.5 text-xs font-mono text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
-                          >
-                            {d}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Inputs */}
-                  {action.inputs.length > 0 && (
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                        Inputs
-                      </span>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {action.inputs.map((f) => (
-                          <span key={f} className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-mono text-blue-400">
-                            {f}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Outputs */}
-                  {action.outputs.length > 0 && (
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                        Outputs
-                      </span>
-                      {!outputBadgesRedundant && (
-                        <div className="flex gap-1.5 flex-wrap mb-2">
-                          {action.outputs.map((f) => (
-                            <span key={f} className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-mono text-emerald-400">
-                              {f}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {action.outputFields.length > 0 && (
-                        <div className="rounded-lg border border-border divide-y divide-border text-xs font-mono">
-                          {action.outputFields.map((field) => (
-                            <div key={field.name} className="flex items-center justify-between px-2.5 py-1.5">
-                              <span className="text-foreground">{field.name}</span>
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] ${fieldTypeColor(field.type)}`}>
-                                {formatFieldType(field.type)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Drops / Observe */}
-                  {action.drops.length > 0 && (
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                        Drops
-                      </span>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {action.drops.map((d) => (
-                          <span key={d} className="rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-mono text-rose-400">{d}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {action.observe.length > 0 && (
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                        Observe
-                      </span>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {action.observe.map((o) => (
-                          <span key={o} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-mono text-amber-400">{o}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-              </div>
-          </div>
-        </TabsContent>
-
-        {/* Tab: Config */}
-        <TabsContent value="config" className="mt-3">
-          <div className="rounded-lg border border-border divide-y divide-border text-xs font-mono">
-            {([
-              ["Type", action.type],
-              ["Workflow", action.wf],
-              ["Schema", action.schema],
-              ["Model", action.model],
-              ["Provider", action.provider],
-              ["Implementation", action.impl],
-              ["Guard condition", action.guard?.condition],
-              ["Guard on_false", action.guard?.on_false],
-            ] as [string, string | null | undefined][])
-              .filter(([, v]) => v != null && v !== "")
-              .map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-muted-foreground font-sans">{label}</span>
-                  <span className="text-foreground">{value}</span>
-                </div>
-              ))}
-          </div>
-          {/* List-type config fields */}
-          {(action.inputs.length > 0 || action.outputs.length > 0 || action.drops.length > 0 || action.observe.length > 0) && (
-            <div className="rounded-lg border border-border divide-y divide-border text-xs font-mono mt-3">
-              {([
-                ["Inputs", action.inputs],
-                ["Outputs", action.outputs],
-                ["Drops", action.drops],
-                ["Observe", action.observe],
-              ] as [string, string[]][])
-                .filter(([, arr]) => arr.length > 0)
-                .map(([label, arr]) => (
-                  <div key={label} className="flex items-start gap-3 px-3 py-2">
-                    <span className="text-muted-foreground font-sans shrink-0 pt-0.5">{label}</span>
-                    <div className="flex gap-1.5 flex-wrap justify-end flex-1">
-                      {arr.map((v) => (
-                        <span key={v} className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] text-foreground">{v}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Tab: Metrics */}
-        <TabsContent value="metrics" className="mt-3">
-          {hasMetrics ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                  Execution Time
-                </span>
-                <span className="text-sm font-mono text-foreground">
-                  {formatExecTime(m.execution_time)}
-                </span>
-              </div>
-              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                  Successes
-                </span>
-                <span className={`text-sm font-mono ${m.success_count > 0 ? "text-[hsl(var(--success))]" : "text-foreground"}`}>
-                  {m.success_count}
-                </span>
-              </div>
-              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                  Failures
-                </span>
-                <span className={`text-sm font-mono ${m.failed_count > 0 ? "text-[hsl(var(--destructive))]" : "text-foreground"}`}>
-                  {m.failed_count}
-                </span>
-              </div>
-              {(m.tokens?.prompt_tokens != null || m.tokens?.completion_tokens != null) && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Tokens
-                  </span>
-                  <span className="text-sm font-mono text-foreground">
-                    {m.tokens?.prompt_tokens != null ? m.tokens.prompt_tokens.toLocaleString() : "\u2014"} prompt / {m.tokens?.completion_tokens != null ? m.tokens.completion_tokens.toLocaleString() : "\u2014"} completion
-                  </span>
-                </div>
-              )}
-              {m.filtered_count > 0 && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Filtered
-                  </span>
-                  <span className="text-sm font-mono text-amber-500">
-                    {m.filtered_count}
-                  </span>
-                </div>
-              )}
-              {m.skipped_count > 0 && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Skipped
-                  </span>
-                  <span className="text-sm font-mono text-muted-foreground">
-                    {m.skipped_count}
-                  </span>
-                </div>
-              )}
-              {m.exhausted_count > 0 && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Exhausted
-                  </span>
-                  <span className="text-sm font-mono text-[hsl(var(--destructive))]">
-                    {m.exhausted_count}
-                  </span>
-                </div>
-              )}
-              {m.latency_ms > 0 && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Avg LLM Latency
-                  </span>
-                  <span className="text-sm font-mono text-foreground">
-                    {m.latency_ms.toLocaleString()}ms
-                  </span>
-                </div>
-              )}
-              {m.provider && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Provider
-                  </span>
-                  <span className="text-sm font-mono text-foreground">
-                    {m.provider}{m.model ? ` / ${m.model}` : ""}
-                  </span>
-                </div>
-              )}
-              {m.cache_miss_count > 0 && (
-                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                    Cache Misses
-                  </span>
-                  <span className="text-sm font-mono text-muted-foreground">
-                    {m.cache_miss_count}
-                  </span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-              No metrics recorded for this action
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+    <div className={`px-[18px] py-2.5 ${last ? "" : "border-r border-border-soft"}`}>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className={`mt-1 font-mono text-[15px] ${valueClass}`}>{value}</div>
+      <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{sub}</div>
     </div>
   )
 }
-
-/* --- Helper components --- */
-
-function TypeBadge({ type }: { type: string }) {
-  const isLlm = type === "llm"
-  return (
-    <Badge
-      variant="outline"
-      className={`w-14 justify-center text-[10px] font-normal rounded-md ${
-        isLlm
-          ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-          : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-      }`}
-    >
-      {type}
-    </Badge>
-  )
-}
-

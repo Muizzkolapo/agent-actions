@@ -1,6 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100" fill="none">
-  <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
-  <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
-  <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
-  <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <style>
+    .tile { fill: #E9E9EC; stroke: #D4D4D8; }
+    .b1 { fill: #18181B; } .b2 { fill: #71717A; } .b3 { fill: #52525B; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #27272A; stroke: #3F3F46; }
+      .b1 { fill: #F4F4F5; } .b2 { fill: #8B8B94; } .b3 { fill: #A1A1AA; }
+    }
+  </style>
+  <rect class="tile" x="0.5" y="0.5" width="31" height="31" rx="5.5"/>
+  <rect class="b1" x="7.5" y="13" width="4" height="10" rx="2"/>
+  <rect class="b2" x="14" y="7" width="4" height="16" rx="2"/>
+  <rect class="b3" x="20.5" y="10" width="4" height="13" rx="2"/>
 </svg>
