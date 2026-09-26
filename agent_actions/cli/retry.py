@@ -88,7 +88,7 @@ def _classify_outcome(state_mgr: Any) -> str:
 
 
 def _delete_manifest(path: Path) -> None:
-    """Delete the retry manifest after successful completion."""
+    """Delete the retry manifest once the re-run has reached the end, failed or not."""
     try:
         path.unlink(missing_ok=True)
     except OSError as e:
