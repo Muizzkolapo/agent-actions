@@ -471,6 +471,10 @@ class BatchProcessingService:
         rows are handed straight to the write, so gathering them across the
         action's other files puts those files' records into this one.
 
+        A store this cannot read raises rather than returning the batch's answers
+        alone — those answers replace the file, so swallowing the error here
+        deletes every row the batch did not answer for.
+
         The output is replaced whole, so what decides is whether the row exists,
         not what disposition it holds: `failed` is not terminal, and a batch
         narrowed to one record would drop the rest. Same rule as
@@ -482,11 +486,7 @@ class BatchProcessingService:
         try:
             stored = self._storage_backend.read_target_for_rewrite(action_name, relative_path)
         except FileNotFoundError:
-            return batch_output
-        except Exception:
-            logger.debug(
-                "Could not read stored rows for %s/%s", action_name, relative_path, exc_info=True
-            )
+            # Nothing stored for this file yet, so nothing to carry.
             return batch_output
 
         stored_guids = {row["source_guid"] for row in stored if row.get("source_guid")}
@@ -502,8 +502,9 @@ class BatchProcessingService:
         from agent_actions.processing.disposition_gate import build_carry_forward
 
         # Re-reads the same file, which the reconstruction cache answers, and in
-        # exchange keeps the checkpoint fallback and the one-row-per-identity rule
-        # in the single place that owns them.
+        # exchange keeps the one-row-per-identity rule in the place that owns it.
+        # Not its checkpoint fallback: a file with no stored rows has returned
+        # above, so that branch is unreachable from here.
         carry_records, _missing = build_carry_forward(
             carry_guids, action_name, relative_path, self._storage_backend
         )
