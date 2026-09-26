@@ -20,6 +20,7 @@ agac retry -a <workflow-name> [options]
 | `--from TEXT` | Action to retry from. If omitted, retries from the earliest failure |
 | `--record TEXT` | Restrict retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what would be retried without executing |
+| `--abandon-in-flight` | Retry even though a batch is still in flight, giving up its results |
 
 ## Examples
 
@@ -126,9 +127,9 @@ of the one it just submitted.
 That is also why a retry is refused while a batch is still out at the provider:
 
 ```
-Action 'summarize' has 1 batch job(s) in flight (batch_abc123). Their results
-would be lost to this repair's own submission. Collect them first — run the
-workflow again — then retry.
+1 batch job(s) in flight (batch_abc123 (summarize)). Their results would be lost
+to this repair's own submission. Collect them first — run the workflow again —
+then retry. If the provider no longer has them, pass --abandon-in-flight.
 ```
 
 The batch already out owns the records it was submitted for. Starting a repair
@@ -136,6 +137,32 @@ on top of it would put a second batch over the same file, and whichever came
 back last would win while the other was paid for and discarded. Run the workflow
 again to collect the batch in flight, then retry. Nothing is cleared when a
 retry is refused, so the failures it would have repaired are still there to find.
+
+`--dry-run` reports the refusal rather than raising it, so the plan you are shown
+is the one that would actually run.
+
+### When the batch cannot be collected
+
+Collecting is the way forward whenever the provider can still answer about the
+batch — including when it has finished, or failed, and the registry has not
+caught up yet. The case it does not cover is a batch the provider no longer
+recognises at all, usually because it expired. Then the entry reads in flight for
+good and every remedy above needs an answer that is not coming.
+
+`--abandon-in-flight` proceeds anyway, and says what it costs:
+
+```
+Abandoning 1 batch job(s) still in flight: batch_abc123 (summarize). Whatever
+they return will not be collected. 3 record(s) waiting on them are marked failed
+so a later retry can still reach them.
+```
+
+Those three are the rest of the batch. They were waiting on results that are
+never arriving, and a record left waiting is not one `retry` can find — so they
+are marked failed instead, which it can. They do not join the repair you asked
+for: run `agac retry` again to pick them up.
+
+Paired with `--dry-run`, the same figures are reported and nothing is written.
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.

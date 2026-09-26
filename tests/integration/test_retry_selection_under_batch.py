@@ -145,6 +145,21 @@ def _submitted_batches(project):
     }
 
 
+def _deferred_ids(project):
+    """Real record identities of a submitted-but-uncollected batch.
+
+    The fixture has no target rows yet, so `_guids` is empty there — the batch's
+    records exist only as DEFERRED disposition rows.
+    """
+    backend = _backend(project)
+    try:
+        return sorted(
+            r["record_id"] for r in backend.get_disposition(ACTION, disposition="deferred")
+        )
+    finally:
+        backend.close()
+
+
 def _set_disposition(project, record_id, disposition):
     backend = _backend(project)
     try:
@@ -345,6 +360,136 @@ class TestARepairArrivingWhileABatchIsInFlight:
         _agac(project, "retry", "-a", WORKFLOW, "--record", "p0")
 
         assert _dispositions(project)["p0"] == "failed"
+
+    def test_a_dry_run_says_the_repair_would_be_refused(self, submitted_not_collected):
+        """`--dry-run` is the documented way to see what a retry would do, so it is
+        the one place the refusal has to appear before it costs anything. Reporting
+        a plan the real command declines is the answer it must not give."""
+        project = submitted_not_collected
+        _set_disposition(project, "p0", "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", "p0", "--dry-run")
+
+        assert "in flight" in output, output
+        assert code == 0, "a dry run reports; it does not fail"
+
+    def test_a_dry_run_still_changes_nothing(self, submitted_not_collected):
+        """Surfacing the refusal must not cost the dry run its one guarantee.
+
+        Compared over the whole disposition map, not one synthetic id: the record
+        the command names is the one a dry run is least likely to touch, so an
+        assertion about it alone holds however much else was written.
+        """
+        project = submitted_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        before = _dispositions(project)
+
+        _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--dry-run")
+
+        assert _dispositions(project) == before
+
+    def test_a_dry_run_that_would_abandon_still_changes_nothing(self, submitted_not_collected):
+        """The combination that writes if the dry-run check sits below the abandon
+        branch: abandoning strands the batch's other records, so a dry run reaching
+        that branch marks them failed and then reports 'no changes made'."""
+        project = submitted_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        before = _dispositions(project)
+
+        code, output = _agac(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--dry-run",
+            "--abandon-in-flight",
+        )
+
+        assert code == 0, output
+        assert _dispositions(project) == before, "a dry run wrote to the disposition store"
+
+    def test_a_dry_run_says_what_abandoning_would_cost(self, submitted_not_collected):
+        """Reporting it is the point of surfacing it — the count has to be real."""
+        project = submitted_not_collected
+        deferred = _deferred_ids(project)
+        named = deferred[0]
+        _set_disposition(project, named, "failed")
+
+        _code, output = _agac(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--dry-run",
+            "--abandon-in-flight",
+        )
+
+        assert f"would mark {len(deferred) - 1} record(s)" in output, output
+
+    def test_the_repair_can_be_let_through_deliberately(self, submitted_not_collected):
+        """A batch the provider has forgotten — an expired id — leaves an entry that
+        reads in flight forever, and every remedy the refusal names needs the
+        provider to answer. The way out is explicit rather than absent.
+
+        Named on a real identity of the abandoned batch, not a synthetic one: a
+        record that matches no staged row is repaired by processing nothing, which
+        a flag that merely exited 0 would satisfy just as well.
+        """
+        project = submitted_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        assert _dispositions(project)[named] == "success"
+
+    def test_the_rest_of_an_abandoned_batch_stays_reachable(self, submitted_not_collected):
+        """The trap this flag would otherwise set. Its co-records are DEFERRED, and
+        `deferred` is excluded from FAILURE_DISPOSITIONS because it means a batch is
+        in flight that will resolve them. Abandoning ends the flight, not the wait —
+        so unless they are moved, `agac retry` cannot see them, `agac run` is a
+        no-op, and only `--fresh` recovers them: the loss this flag exists to avoid.
+        """
+        project = submitted_not_collected
+        deferred = _deferred_ids(project)
+        named, others = deferred[0], deferred[1:]
+        assert others, "the fixture batch holds only one record; nothing to strand"
+        _set_disposition(project, named, "failed")
+
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        after = _dispositions(project)
+        assert [after[r] for r in others] == ["failed"] * len(others), (
+            f"co-records of the abandoned batch are unreachable: { {r: after[r] for r in others} }"
+        )
+
+    def test_abandoning_names_what_it_gives_up(self, submitted_not_collected):
+        """Abandoning is a loss, so it is reported rather than performed quietly."""
+        project = submitted_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+        # Counted before the command: abandoning is what ends their deferral, so
+        # asking afterwards finds none of them.
+        stranded = len(_deferred_ids(project))
+
+        _code, output = _agac(
+            project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight"
+        )
+
+        assert "abandon" in output.lower(), output
+        assert "batch_" in output, f"the batch id being given up is not named: {output}"
+        # The number, not the word: `_display_retry_plan` already prints
+        # "Records to retry: 1" above this, so a substring check for "record"
+        # passes whether or not the strand is reported at all.
+        assert f"{stranded} record(s) waiting on them" in output, (
+            f"the count of records stranded by abandoning is not reported: {output}"
+        )
 
     def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
         """The refusal names a way forward, so the way forward has to work."""
