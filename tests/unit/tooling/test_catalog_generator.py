@@ -1,6 +1,7 @@
-"""I-6: Coverage of CatalogGenerator.generate() — happy path and empty input."""
+"""Coverage of CatalogGenerator.generate() and the event window it assembles."""
 
 import json
+import random
 from collections import Counter
 
 from agent_actions.tooling.docs.generator import CatalogGenerator, _merge_event_tails
@@ -543,6 +544,74 @@ class TestEventWindowInvariants:
         levels = Counter(e["level"] for e in window)
 
         assert levels == {"info": 99, "error": 1}
+
+
+class TestEventWindowUnderRandomShapes:
+    """Fixed-seed sweep over log counts, level mixes and limits. Each scenario
+    test pins one path; the starvation bugs in this window were all found at a
+    mix no scenario happened to describe."""
+
+    LEVELS = ("error", "warn", "info", "debug")
+
+    def _sources(self, rng):
+        sources = []
+        for log in range(rng.randint(1, 12)):
+            rows, seq = [], 0
+            for level in self.LEVELS:
+                for _ in range(rng.choice([0, 0, 1, 3, 40, 300, 700])):
+                    rows.append(
+                        {
+                            "seq": seq,
+                            "level": level,
+                            "message": f"w{log} {level} {seq}",
+                            "meta": {
+                                "timestamp": f"2026-09-22T10:{seq // 60 % 60:02d}:{seq % 60:02d}.{seq:06d}Z"
+                            },
+                            "data": {},
+                        }
+                    )
+                    seq += 1
+            sources.append((f"w{log}", rows))
+        return sources
+
+    def _trials(self):
+        rng = random.Random(20260926)
+        for _ in range(200):
+            sources = self._sources(rng)
+            limit = rng.choice([1, 2, 7, 50, 100, 500, 2000])
+            yield sources, limit, _merge_event_tails(sources, limit)
+
+    def test_the_window_never_exceeds_the_limit_or_repeats_a_row(self):
+        for sources, limit, window in self._trials():
+            ids = [e["id"] for e in window]
+            assert len(window) == min(limit, sum(len(r) for _, r in sources))
+            assert len(set(ids)) == len(ids)
+
+    def test_the_window_is_always_newest_first(self):
+        for _, _, window in self._trials():
+            stamps = [e["meta"]["timestamp"] for e in window]
+            assert stamps == sorted(stamps, reverse=True)
+
+    def test_no_problem_level_is_starved_while_routine_rows_take_the_room(self):
+        """Both starvation bugs looked like this: a level the scanner retained
+        appearing nowhere in the window while debug rows filled it."""
+        for sources, limit, window in self._trials():
+            if limit < 8 or len(window) < limit:
+                continue
+            available = Counter(e["level"] for _, rows in sources for e in rows)
+            present = Counter(e["level"] for e in window)
+            routine = present["info"] + present["debug"]
+            problems = present["error"] + present["warn"]
+            for level in ("error", "warn"):
+                assert not (available[level] and present[level] == 0 and routine), (
+                    level,
+                    dict(present),
+                    limit,
+                )
+            # And the mirror: a window of nothing but problems is the same bug
+            # wearing the other hat, since the page promises recent activity too.
+            if available["info"] + available["debug"]:
+                assert not (routine == 0 and problems), (dict(present), limit)
 
 
 class TestCatalogContractWithTheDashboard:
