@@ -1,14 +1,13 @@
 """A staging directory the walk cannot open must not lose its files in silence (1096).
 
-``Path.rglob`` swallows the ``OSError`` that ``scandir`` raises for a directory it
-cannot open. The directory entry itself comes back — so the per-entry regular-file
-check answers "not a file" correctly and the loss path never fires — while every
-file beneath it is dropped with no exception, no log line and no error row.
-
-That is an under-count, and since 610/625 an under-count is the one error that
-reads as "a smaller record limit could not have bitten": the action is skipped on
-the next run and its short output is vouched for. Permission is normally set on a
-directory rather than on each file, so this is the common shape of the loss.
+``Path.rglob`` swallows the ``OSError`` ``scandir`` raises for such a directory:
+the entry itself comes back, so the per-entry regular-file check answers "not a
+file" correctly and the loss path never fires, while every file beneath it is
+dropped with no exception, no log line and no error row. Since 610/625 that
+under-count reads as "a smaller record limit could not have bitten", so the
+action is skipped next run and its short output vouched for. Permission is
+normally set on a directory rather than on each file, so this is the common
+shape of the loss.
 """
 
 import json
@@ -171,6 +170,31 @@ class TestTheStagingWalk:
         self._walk(tmp_path, locked_dirs, backend, _slices(backend))
 
         assert slice_observation(backend, ACTION) is None
+
+    def test_a_batch_directory_it_cannot_open_is_not_a_loss(self, tmp_path, locked_dirs):
+        """`batch` is skipped whether or not it opens, so reporting it would fail
+        an action that lost nothing — the one direction this fix must not add."""
+        backend = _Backend()
+        root = tmp_path / "staging"
+        root.mkdir()
+        (root / "a.json").write_text(json.dumps([{"id": "a"}]))
+        batch = root / "batch"
+        batch.mkdir()
+        (batch / "queued.json").write_text(json.dumps([{"id": "queued"}]))
+        locked_dirs(batch)
+        (tmp_path / "output").mkdir()
+
+        found, processed, errors = process_directory_files(
+            _runner(backend, _slices(backend, 3)),
+            root,
+            tmp_path / "output",
+            str(root),
+            _params(tmp_path),
+            set(),
+        )
+
+        assert (found, processed, errors.messages) == (1, 1, [])
+        assert slice_observation(backend, ACTION) == (3, False)
 
     def test_a_readable_tree_keeps_its_count(self, tmp_path, locked_dirs):
         """The guard: a walk that lost nothing must not pay for this."""

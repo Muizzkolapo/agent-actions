@@ -1,18 +1,12 @@
 """A file lost from the walk must make the action's record count unknown (625).
 
-610 made a completed action's stamp carry what the run processed, so a later
-limit at or above that count can be shown to leave the record set whole. The
-count is summed only from chunks that reach the slice — but a file can be lost
-before its slice and the action still completes, because a per-file failure is
-never inferred to be fatal to the action. Those records are never counted, the
-stamp still says ``truncated: False``, and a later limit below the true total
-reads as one that could not have bitten. The action is skipped and its short
-output is vouched for, which is the direction 610 exists to exclude.
-
-There are three walkers and five ways to lose a file between them, so each is
-covered here: losing one is enough to under-count, and an under-count is the
-only error that reads as "a smaller limit is safe". A sixth way, an entry whose own
-``stat()`` fails, is covered in ``test_a_file_the_walk_cannot_stat.py``.
+A per-file failure is never fatal to the action, so the run completes holding
+records that never reached a slice. They go uncounted while the stamp still
+reads ``truncated: False``, so a later limit below the true total reads as one
+that could not have bitten: the action is skipped and its short output vouched
+for. Three walkers, five ways to lose a file between them, each covered here;
+two more have their own files, ``test_a_file_the_walk_cannot_stat.py`` and
+``test_unreadable_directory_in_the_walk.py``.
 """
 
 import json
