@@ -173,9 +173,15 @@ class TestTheFirstStageBatchPathRecordsItTheSameWay:
             )
         return captured["ctx"]
 
-    def test_a_repair_narrows_the_chunk_but_not_the_recording(self, tmp_path):
+    def test_an_unnarrowed_chunk_is_recorded_whole(self, tmp_path):
+        """The floor: staging forks with a recording, and it holds every staged row.
+
+        The narrowing property is pinned by the record_limit case below — both
+        narrowings sit under the same capture line, so one of them proves the line's
+        position.
+        """
         rows = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
-        ctx = self._stage(tmp_path, rows, retried=frozenset())
+        ctx = self._stage(tmp_path, rows)
 
         assert ctx.run_inputs is not None, "staging forked without recording its input"
         assert len(ctx.run_inputs) == 3, (
@@ -247,3 +253,40 @@ class TestAFileReadIsItsOwnRecording:
         recorded = self._submit_from_file(tmp_path, rows, retried=frozenset({"i2"}))
 
         assert [r["source_guid"] for r in recorded] == ["i1", "i2"]
+
+
+class TestStagingHandsTheRecordingToTheSubmission:
+    """The capture is only worth as much as the handoff below it."""
+
+    def test_process_batch_mode_forwards_the_recording(self, tmp_path):
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
+            BatchProcessingContext,
+            _process_batch_mode,
+        )
+
+        base = tmp_path / "base"
+        base.mkdir()
+        (tmp_path / "out").mkdir()
+        (base / "page.json").write_text(json.dumps([{"text": "x"}]))
+        recorded_input = [{"source_guid": "i1"}, {"source_guid": "i2"}]
+
+        captured: dict[str, Any] = {}
+        with patch("agent_actions.llm.batch.services.submission.BatchSubmissionService") as MockSvc:
+            MockSvc.return_value.submit_batch_job.side_effect = lambda *a, **k: captured.update(
+                k
+            ) or SubmissionResult(batch_id="b1")
+            _process_batch_mode(
+                BatchProcessingContext(
+                    agent_config={"run_mode": "batch"},
+                    agent_name=ACTION,
+                    data_chunk=[{"batch_id": "b1", "batch_uuid": "b1_0", "content": "x"}],
+                    file_path=str(base / "page.json"),
+                    base_directory=str(base),
+                    output_directory=str(tmp_path / "out"),
+                    run_inputs=recorded_input,
+                )
+            )
+
+        assert captured.get("run_inputs") == recorded_input, (
+            "the staged recording never reached the submission, so nothing is recorded"
+        )

@@ -182,3 +182,55 @@ def test_an_action_that_mints_nothing_below_an_expansion_still_accumulates():
     carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"})
 
     assert carry == set(), f"the previous generation was carried beside its replacement: {carry}"
+
+
+class TestAReplacedGenerationDoesNotTakeItsNeighboursWithIt:
+    """The exclusions only bite while a generation IS being replaced.
+
+    Every test above puts one row shape in *stored* at a time, so where the row is a
+    merge or carries its own identity there is no mint in the set at all and the
+    inference is off for everyone. These mix the shapes, which is the only state
+    where excluding them decides anything.
+    """
+
+    def test_a_merge_row_and_a_self_identified_row_survive_beside_it(self):
+        stored = [
+            _stored("x1", producers=["r"]),  # the gone generation's mint
+            _stored("m1", producers=["p", "q"]),  # a merge row: content of its own
+            _stored("z1"),  # carries its input's own identity
+        ]
+        produced = [_stored("y1", producers=["u"])]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"u"})
+
+        assert carry == {"m1", "z1"}, (
+            f"replacing a generation took a neighbouring row shape with it: {carry}"
+        )
+
+    def test_a_merge_producer_still_an_input_does_not_join_the_mints(self):
+        """A merge row's producers are not mints, so they cannot block the inference.
+
+        `p` is still an input and this run answered for it, so the settlement gate is
+        satisfied and only the mint set decides. Counting `p` as a mint would read the
+        generation as still present and carry a row that has been replaced.
+        """
+        stored = [
+            _stored("x1", producers=["r"]),
+            _stored("m1", producers=["p", "q"]),
+        ]
+        produced = [_stored("y1", producers=["u"]), _stored("y2", producers=["p"])]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"u", "p"})
+
+        assert carry == {"m1"}, (
+            f"a merge row's producer was read as a mint and blocked the inference: {carry}"
+        )
+
+    def test_stored_may_be_a_one_shot_iterable(self):
+        """The signature says Iterable, and the rule reads it twice."""
+        stored = [_stored("x1", producers=["r"]), _stored("m1", producers=["p", "q"])]
+        produced = [_stored("y1", producers=["u"])]
+
+        carry = stored_rows_not_reproduced(iter(stored), produced, batch_inputs={"u"})
+
+        assert carry == {"m1"}

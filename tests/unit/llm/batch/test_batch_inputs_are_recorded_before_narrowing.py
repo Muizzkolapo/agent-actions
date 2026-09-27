@@ -217,3 +217,67 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
         )
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1"}
+
+
+class TestTheRecordingIsReadUnderTheActionThatWroteIt:
+    """The key names the action, not the workflow, and the two differ per run.
+
+    A workflow holds many actions and one store. Reading under the workflow's name
+    finds nothing on every multi-action workflow, which disables the rule silently —
+    the fallback for "nothing recorded" is to carry.
+    """
+
+    def test_finalize_reads_the_recording_keyed_on_the_action(self, backend, tmp_path):
+        import json as _json
+
+        from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+        from agent_actions.llm.batch.services.processing_recovery import finalize_batch_output
+
+        relative = "page.json"
+        row = lambda guid, producer: {  # noqa: E731
+            "source_guid": guid,
+            "producer_source_guids": [producer],
+            "answer": guid,
+            "_delta_mode": "full",
+            "_state": "processed",
+        }
+        backend._write_target_raw(ACTION, relative, [row("b1", "a1"), row("b2", "a2")])
+        backend._reconstruction_cache.clear()
+        backend.save_metadata(f"batch_inputs:{ACTION}:{relative}", _json.dumps(["a3", "a4"]))
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+            # Deliberately NOT the action name: this is the workflow's.
+            workflow_name="quiz_maker_workflow",
+            storage_backend=backend,
+        )
+        produced = [row("b5", "a3"), row("b6", "a4")]
+        service._convert_batch_results_to_workflow_format = MagicMock(  # type: ignore[method-assign]
+            return_value=(produced, MagicMock(), None)
+        )
+        out = tmp_path / "out"
+        out.mkdir()
+        finalize_batch_output(
+            RecoveryContext(
+                service=service,
+                manager=MagicMock(),
+                provider=MagicMock(),
+                agent_config={"kind": "llm"},
+                output_directory=str(out),
+                action_name=ACTION,
+                start_time=0.0,
+            ),
+            BatchIdentity(batch_id="b1", file_name=relative, entry=MagicMock()),
+            batch_results=[],
+            context_map={},
+        )
+
+        backend._reconstruction_cache.clear()
+        written = [r["source_guid"] for r in backend.read_target_for_rewrite(ACTION, relative)]
+        assert written == ["b5", "b6"], (
+            f"the recording was not found under the action's own name: {written}"
+        )
