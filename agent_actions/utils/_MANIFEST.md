@@ -36,7 +36,7 @@ pathways.
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
-| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only: logging, os, pathlib — `resolve_project_root` is imported inside `get_agent_paths` on purpose, since a module-level `config` import would put this module on an import cycle through every caller that must stay import-light). Moved from `output/`. `walk_files` is the enumeration every caller that must not lose files uses instead of `Path.rglob`, which drops a whole subtree it cannot read and raises nothing. | `file_io` |
+| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only at module level: logging, os, pathlib — `resolve_project_root` is imported inside `get_agent_paths`, which is what keeps that claim true and lets import-light callers such as `tooling.code_scanner` depend on this module). Moved from `output/`. `walk_files` is the enumeration every caller that must not lose files uses instead of `Path.rglob`, which drops a whole subtree it cannot read and raises nothing. | `file_io` |
 | `project_root.py` | Module | Project root detection utilities (`find_project_root`, `ensure_in_project`). Moved from `cli/`. | `errors` |
 
 ## Project Surface

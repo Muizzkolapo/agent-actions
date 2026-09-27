@@ -448,13 +448,9 @@ def process_directory_files(
     # Sorted, not raw walk order: file_limit truncates this sequence, so an
     # unordered walk makes "the first N files" mean whatever the filesystem
     # happened to enumerate first.
-    walked = sorted(_walk_files(input_path, unreadable))
-    items, resolved_from_store = _files_holding_retried_records(runner, walked, input_path)
-    if resolved_from_store:
-        # Every file the store named was seen, so a directory that would not open
-        # holds none of them and charging the loss would fail a repair over a
-        # directory it was never going to read.
-        unreadable.clear()
+    items = _files_holding_retried_records(
+        runner, sorted(_walk_files(input_path, unreadable)), input_path
+    )
     # Same reason the walk above is sorted: `errors` keeps only the first
     # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
     unreadable.sort(key=lambda pair: pair[0])
@@ -534,19 +530,16 @@ def process_directory_files(
 
 def _files_holding_retried_records(
     runner: ActionRunner, items: list[Path], input_path: Path
-) -> tuple[list[Path], bool]:
-    """The subset of *items* a repair needs → (files, whether the store resolved them).
+) -> list[Path]:
+    """The subset of *items* a repair needs, or all of them when not repairing.
 
     A repair names records, not files, and walking every staged file lets
     `file_limit` spend its budget on ones holding none of them. Falls back to
     walking everything when the selection is unresolvable, or when a named record
     shares a repeat chain with another file, which needs every sibling present.
-    The flag is True only when the walk saw every file the store named, so that a
-    caller may conclude a directory it could not open holds none of them — one it
-    never enumerated may be sitting inside that very directory.
     """
     if not runner.retried_records or runner.storage_backend is None:
-        return items, False
+        return items
     retried = runner.retried_records
     if runner.storage_backend.records_share_a_repeat_chain(retried):
         logger.info(
@@ -555,7 +548,7 @@ def _files_holding_retried_records(
             "with the context it needs",
             len(retried),
         )
-        return items, False
+        return items
     wanted = runner.storage_backend.source_files_for_records(retried)
     if not wanted:
         logger.warning(
@@ -563,7 +556,7 @@ def _files_holding_retried_records(
             "walking every staged file",
             len(retried),
         )
-        return items, False
+        return items
     narrowed = [
         item for item in items if str(item.relative_to(input_path).with_suffix("")) in wanted
     ]
@@ -571,8 +564,7 @@ def _files_holding_retried_records(
         logger.info(
             "Repair narrowed the walk to %d of %d staged file(s)", len(narrowed), len(items)
         )
-    seen = {str(item.relative_to(input_path).with_suffix("")) for item in narrowed}
-    return narrowed, seen >= wanted
+    return narrowed
 
 
 def process_merged_files(
