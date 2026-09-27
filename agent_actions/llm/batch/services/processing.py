@@ -494,7 +494,22 @@ class BatchProcessingService:
             return batch_output
 
         batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
-        carry_guids = stored_guids - batch_guids
+        # An expansion mints uuid4 per child, so a re-run's rows carry none of the
+        # identities they replace: resolved through the producers the output names
+        # instead, and all of them, so a row only partly reprocessed stays (1083).
+        reprocessed = {
+            producer
+            for record in batch_output
+            for producer in (record.get("producer_source_guids") or ())
+        }
+        answered_for = {
+            rid
+            for row in stored
+            if (rid := row.get("source_guid"))
+            and (producers := frozenset(row.get("producer_source_guids") or ()))
+            and producers <= reprocessed
+        }
+        carry_guids = stored_guids - batch_guids - answered_for
 
         if not carry_guids:
             return batch_output
