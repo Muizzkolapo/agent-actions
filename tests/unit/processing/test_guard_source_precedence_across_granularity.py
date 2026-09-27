@@ -366,8 +366,7 @@ class TestOnlyANamespaceIsDisplacedByANamespace:
       a string they staged;
     - a version-merge tool spreads its output flat instead of under its action name, so
       ``version`` or ``source`` can be that tool's own output field;
-    - a dependency's ``output_field`` is promoted into the context by name, putting a key
-      there that no resolver produced — so presence in the context does not mean resolved.
+    A promotion cannot put one there — that is refused outright, asserted separately.
 
     Taking such a key away leaves the clause reading a missing field, which counts as *not
     matched*, so the record is silently filtered rather than erroring.
@@ -443,16 +442,6 @@ class TestOnlyANamespaceIsDisplacedByANamespace:
             )
             is True
         )
-
-    def test_a_promoted_output_field_does_not_count_as_resolved(self):
-        """``build_guard_context`` promotes a dependency's ``output_field`` to a top-level
-        key by name. Treating that as a resolved namespace made a clause read a different
-        action's output — a clause's answer changing because of config elsewhere, which is
-        the shape this fix exists to remove."""
-        content = self._merged_content()
-        deps = {"a1": {"output_field": "version", "idx": 0}}
-
-        assert self._kept(content, "version == 'v2'", scope=self.A1, deps=deps) is True
 
     @pytest.mark.parametrize("carried", ["flat-string", [1, 2], 0, ""])
     def test_a_carried_source_that_is_not_a_namespace_is_readable(self, carried):
@@ -548,20 +537,20 @@ class TestAVersionedActionDoesNotDisplaceAToolsOwnField:
 
     POOL = [{"source_guid": "G0", "content": {"source": {"u": 1}}}]
 
-    def _kept(self, version_context):
+    def _kept(self, version_context, field="v2"):
         content = apply_version_merge(
             {
                 "kind": "tool",
                 "action_name": "pick",
                 "version_consumption_config": {"mode": "merge"},
             },
-            {"version": "v2", "winner": "gen_1"},
+            {"version": field, "winner": "gen_1"},
             {"source": {"u": 1}, "gen_1": {"n": 1}},
         )
         config = {
             "granularity": "file",
             "context_scope": {"observe": ["gen_1.n"]},
-            "guard": guard("version == 'v2'"),
+            "guard": guard(f"version == {field!r}"),
         }
         passing, _s, _o, _f = prefilter_by_guard(
             [{"source_guid": "G0", "content": deepcopy(content)}],
@@ -581,6 +570,13 @@ class TestAVersionedActionDoesNotDisplaceAToolsOwnField:
         """A version context exists here, so a name-only rule would prefer the iteration
         and this clause would stop matching."""
         assert self._kept({"i": 1, "idx": 0}) is True
+
+    @pytest.mark.parametrize("field", [3, 2.5, True, [1, 2]])
+    def test_a_non_string_field_is_read_too(self, field):
+        """Not only strings. "Anything but a string" is the tempting shortcut for "not a
+        namespace", and it silently filters these while a string passes — so the shapes a
+        tool can actually emit are asserted, not just the readable one."""
+        assert self._kept({"i": 1, "idx": 0}, field=field) is True
 
 
 class TestAPromotionCannotClaimAFrameworkNamespacesName:
@@ -638,3 +634,48 @@ class TestAPromotionCannotClaimAFrameworkNamespacesName:
         )
 
         assert context["severity"] == "high"
+
+
+class TestAResolvedFrameworkNamespaceIsAlwaysANamespace:
+    """Why the resolved side of the check is belt-and-braces rather than load-bearing: every
+    writer of one of these keys into the guard context writes a namespace or nothing.
+
+    That makes ``isinstance(resolved.get(key), dict)`` equivalent to ``key in resolved``
+    today, so a probe swapping one for the other survives. It is worth asserting rather than
+    leaving to a comment, because it is exactly what a future writer would break — and the
+    check is what keeps that breakage from silently displacing a record's key.
+    """
+
+    POOL = [{"source_guid": "G0", "content": {"source": {"url": "POOL"}}}]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            pytest.param({}, id="later-stage"),
+            pytest.param({"is_first_stage": True}, id="first-stage"),
+            pytest.param({"version_context": {"i": 1, "idx": 0}}, id="in-a-fan-out"),
+            pytest.param({"workflow_metadata": {"name": "wf"}}, id="with-run-metadata"),
+            pytest.param(
+                {"dependency_configs": {"a1": {"output_field": "seed", "idx": 0}}},
+                id="with-a-promotion-named-for-one",
+            ),
+        ],
+    )
+    def test_every_bus_namespace_the_context_carries_is_a_dict(self, kwargs):
+        record = {
+            "source_guid": "G0",
+            "content": {"source": {"url": "CARRIED"}, "a1": {"n": 1, "seed": "SCALAR"}},
+        }
+
+        context = build_guard_context(
+            record,
+            agent_name="a2",
+            agent_config={"granularity": "record", "context_scope": {"observe": ["a1.n"]}},
+            agent_indices=INDICES,
+            source_data=self.POOL,
+            **kwargs,
+        )
+
+        carried = {k: v for k, v in context.items() if k in RUNTIME_BUS_NAMESPACES}
+        assert carried, "no bus namespace resolved at all — the case would prove nothing"
+        assert all(isinstance(v, dict) for v in carried.values()), carried

@@ -42,6 +42,10 @@ def _record_namespaces(content: dict[str, Any], resolved: dict[str, Any]) -> dic
 
     Taking such a key away leaves the clause reading a missing field, which counts as
     *not matched* — a silent filter rather than an error.
+
+    The *resolved* side of the shape test is defensive: every writer of one of these keys
+    into the context writes a namespace or nothing, so today it only restates presence. It
+    is what keeps a future writer of a scalar from displacing a record's key silently.
     """
     return {
         key: value
