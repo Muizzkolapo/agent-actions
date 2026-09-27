@@ -220,25 +220,12 @@ class TestASkippedRecordNamesItsInputPosition:
         assert [s["source_guid"] for s in skipped] == [None]
         assert len(enriched) == 1
 
-    def test_pairing_by_surviving_guid_would_readmit_a_guidless_drop(self):
-        """The rationale for position stated as something that can fail rather than as
-        a comment: with two guid-less records a surviving-guid set holds ``None``, so
-        it re-admits the dropped one and hands the guard a longer list again — the
-        mismatch this fix removes."""
-        records = [{"content": {"d": {}}}, {"content": {"d": {"x": 1}}}]
-
-        enriched, skipped = self._pass(records)
-        surviving = {r.get("source_guid") for r in enriched}
-        by_guid = [r for r in records if r.get("source_guid") in surviving]
-        dropped = {s["position"] for s in skipped}
-        by_position = [r for at, r in enumerate(records) if at not in dropped]
-
-        assert len(by_guid) == 2, "the guid pairing was expected to re-admit the drop"
-        assert len(by_position) == len(enriched) == 1
-
     def test_a_repeated_source_guid_is_still_separated_by_position(self):
-        """The other half of the rationale: a concatenated multi-dependency input can
-        carry one guid twice, and a guid cannot then say which copy was dropped."""
+        """Why the pairing is positional: a concatenated multi-dependency input can
+        carry one guid three times, and the surviving-guid set is then ``{"same"}``
+        either way — it cannot say which copy was dropped. The position can, and the
+        middle copy is the one that has to go.
+        """
         records = [
             {"source_guid": "same", "content": {"d": {"x": 1}}},
             {"source_guid": "same", "content": {"d": {}}},
@@ -246,14 +233,9 @@ class TestASkippedRecordNamesItsInputPosition:
         ]
 
         enriched, skipped = self._pass(records)
-        dropped = {s["position"] for s in skipped}
 
-        assert dropped == {1}
+        assert {s["position"] for s in skipped} == {1}
         assert [r["content"]["d"] for r in enriched] == [{"x": 1}, {"x": 3}]
-        surviving = {r.get("source_guid") for r in enriched}
-        assert len([r for r in records if r.get("source_guid") in surviving]) == 3, (
-            "the guid pairing was expected to keep every copy"
-        )
 
     def test_a_pass_that_drops_nothing_reports_no_positions(self):
         _enriched, skipped = self._pass([{"source_guid": "keep", "content": {"d": {"x": 1}}}])
