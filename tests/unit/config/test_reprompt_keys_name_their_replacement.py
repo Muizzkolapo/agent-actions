@@ -17,6 +17,7 @@ from agent_actions.config.schema import (
     WorkflowConfig,
 )
 from agent_actions.errors import ConfigurationError
+from agent_actions.expectations.loader import build_inline_suite
 from agent_actions.output.response.expander import ActionExpander
 
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
@@ -208,7 +209,13 @@ class TestTheMigrationTheRefusalPrescribes:
     @pytest.mark.parametrize("key", KEYS)
     def test_every_expect_block_the_refusal_quotes_actually_loads(self, key):
         """Parsed out of the message, not listed beside the test: the block a reader
-        pastes is the one the message holds, so that is what has to validate."""
+        pastes is the one the message holds, so that is what has to validate.
+
+        Config validation is not enough on its own. `ExpectConfig.expectations` keeps
+        raw dicts, so a quoted rule reaches the run unchecked by the schema — a
+        misspelt type, or a real one missing its required `field:`, loads here and dies
+        where the suite is built. Both layers, or the rule half of the hint is unpinned.
+        """
         message = _refusal_for(key)
         blocks = _quoted_expect_blocks(message)
 
@@ -216,6 +223,8 @@ class TestTheMigrationTheRefusalPrescribes:
         for block in blocks:
             WorkflowConfig.model_validate(_workflow(action={"expect": block}))
             DefaultsConfig.model_validate({**BASE_DEFAULTS, "expect": block})
+            if block.get("expectations"):
+                build_inline_suite(block["expectations"], "a1")
 
     @pytest.mark.parametrize("key", KEYS)
     def test_the_refusal_quotes_the_block_that_replaces_this_key(self, key):
@@ -351,17 +360,19 @@ class TestWhatTheRefusalMustNotSwallow:
         assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4"
 
     @pytest.mark.parametrize("key", KEYS)
-    def test_a_retired_name_inside_a_free_form_rule_is_not_refused(self, key):
-        """An `expectations:` entry is a free-form dict, so a rule may legitimately
-        carry a field named like a retired key. The check reads the block's own keys;
-        matching recursively would refuse the very migration it prescribes.
+    def test_a_retired_name_inside_a_rules_params_is_not_refused(self, key):
+        """A rule's `params:` takes type-specific arguments under any name, so one may
+        legitimately be spelled like a retired key — and matching recursively would
+        refuse the migration this refusal prescribes.
 
-        The fixture has to contain the name at depth — a block that merely omits it
-        cannot fail for this reason and would pass whatever the check did.
+        The fixture carries the name at depth and is a rule the run accepts: one level
+        higher is refused by `Expectation`, so pinning that would assert the config
+        layer taking something the run throws out.
         """
-        rule = {"type": "no_null_fields", key: WRITTEN[key]}
+        rule = {"type": "no_null_fields", "params": {key: WRITTEN[key]}}
         config = _workflow(action={"expect": {"expectations": [rule]}})
 
         validated = WorkflowConfig.model_validate(config)
+        build_inline_suite([rule], "a1")
 
         assert validated.actions[0].expect.expectations == [rule]

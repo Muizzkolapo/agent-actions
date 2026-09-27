@@ -94,7 +94,7 @@ _RETIRED_CONFIG_KEYS: dict[str, str] = {
 
 
 def refuse_retired_keys(data: Any, surface: str) -> Any:
-    """Refuse a key that configures nothing, naming no replacement because none exists.
+    """Refuse a key that configures nothing, naming where its behaviour moved if it did.
 
     Called by every block that carries agent settings, for the same reason as
     `refuse_context_scope_siblings`: the models that allow extras refuse nothing
