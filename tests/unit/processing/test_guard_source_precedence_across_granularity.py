@@ -9,6 +9,8 @@ pass writes the resolved namespace onto the record first, so a FILE action decla
 under one of them in record content is never an action's output to prefer.
 """
 
+from copy import deepcopy
+
 import pytest
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
@@ -191,14 +193,16 @@ class TestAnActionNamespaceStillComesFromTheRecord:
         assert merged["a1"] == {"n": 1}
 
 
-class TestAFirstStageRecordsSourceIsNotNestedTwice:
-    """A first-stage action's source is the record itself. The namespace builder unwraps a
-    record's own ``source``, but it was handed the bare content instead — so a record that
-    had one got it wrapped a second time and ``source.field`` resolved to nothing, silently.
+class TestAFirstStageGuardReadsTheResolvedNamespaceToo:
+    """A first-stage action's source is the record itself, resolved by
+    ``resolve_first_stage_source``. Asserted here at the guard outcome, which the resolver's
+    own tests in ``test_source_resolution.py`` do not reach.
 
-    Only reachable once a guard stops reading the record's carried copy: the copy is
-    correctly shaped, so it was overriding the doubled one and a first-stage guard worked by
-    accident. Pinned separately because either defect alone changes the answer.
+    Worth its own class because these two fixes were masking each other: while the resolver
+    handed the namespace builder a record's bare content, a record carrying its own
+    ``source`` had it nested twice and every ``source.*`` clause read a missing field — and
+    the carried copy, which is correctly shaped, was overriding it, so first-stage guards
+    worked by accident. Neither defect was visible while the other stood.
     """
 
     FIRST_STAGE = {
@@ -279,3 +283,71 @@ class TestBothItemShapesFollowTheSameRule:
 
         assert merged["source"] == {"url": "POOL"}
         assert merged["a1"] == {"n": 1}
+
+
+class TestWhatADropDoesNotHideFromAGuard:
+    """The resolved namespace is the pool's document, which ``context_scope.drop`` never
+    touched — so a dropped ``source`` field is still readable by a guard clause.
+
+    This is a change on the FILE side and it closes a divergence rather than opening one:
+    FILE mode used to hide the field, because the writeback put the scoped copy on the
+    record, while RECORD mode never did. Measured on the parent commit, FILE answered
+    ``kept=0`` and RECORD ``kept=True`` for the same clause. They now agree on RECORD's
+    answer, which is also the one that matches a guard's job — it gates the action before
+    it runs, and ``drop`` shapes what the action then receives.
+
+    A dependency namespace still comes from the record, so a FILE-mode drop still hides
+    one. That asymmetry is characterized here, not endorsed.
+    """
+
+    POOL = [{"source_guid": "G0", "content": {"source": {"tier": "secret", "url": "u"}}}]
+    CONTENT = {"source": {"tier": "secret", "url": "u"}, "a1": {"tier": "secret", "n": 1}}
+
+    def _file(self, scope, clause):
+        record = {"source_guid": "G0", "content": deepcopy(self.CONTENT)}
+        enriched, _ = apply_context_scope_for_records(
+            [record], scope, action_name="a2", source_data=self.POOL
+        )
+        passing, _skipped, _originals, _filtered = prefilter_by_guard(
+            enriched,
+            {"granularity": "file", "context_scope": scope, "guard": guard(clause)},
+            "a2",
+            agent_indices=INDICES,
+            source_data=self.POOL,
+            is_first_stage=False,
+        )
+        return len(passing) == 1
+
+    def _record(self, scope, clause):
+        context = PreparationContext(
+            agent_config={"granularity": "record", "context_scope": scope, "guard": guard(clause)},
+            agent_name="a2",
+            source_data=self.POOL,
+            agent_indices=INDICES,
+            is_first_stage=False,
+        )
+        record = {"source_guid": "G0", "content": deepcopy(self.CONTENT)}
+        return TaskPreparer().prepare(record, context).should_execute
+
+    DROP_SOURCE = {"observe": ["source.url"], "drop": ["source.tier"]}
+
+    def test_both_granularities_agree_a_dropped_source_field_is_still_readable(self):
+        clause = "source.tier == 'secret'"
+
+        assert self._file(self.DROP_SOURCE, clause) is True
+        assert self._record(self.DROP_SOURCE, clause) is True
+
+    def test_dropping_it_does_not_change_the_answer_either(self):
+        """Against the no-drop run, so the test above cannot pass by the clause simply
+        never matching."""
+        no_drop = {"observe": ["source.url"]}
+        clause = "source.tier == 'secret'"
+
+        assert self._file(no_drop, clause) == self._file(self.DROP_SOURCE, clause)
+
+    def test_a_dropped_dependency_field_is_still_hidden_from_a_file_mode_guard(self):
+        """Unchanged by the fix and inconsistent with the rows above — a dependency
+        namespace comes from the record, which the scope pass did strip."""
+        scope = {"observe": ["source.url"], "drop": ["a1.tier"]}
+
+        assert self._file(scope, "a1.tier == 'secret'") is False

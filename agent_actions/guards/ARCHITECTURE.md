@@ -272,7 +272,12 @@ Guard condition uses dotted paths:
 
 If `_build_evaluation_context()` is used (Phase 2 evaluation with full context), the item's content is merged with context data (passthrough fields, source data). Content fields take precedence over top-level fields on collision.
 
-The framework namespaces — `source`, `version`, `workflow`, `seed` — are the exception: they come from the context, which holds the answer the resolver picked, and a copy of one in the record's content does not override it. A record's copy was taken when the record was written and the pool can have moved past it, and since these are reserved action names a key under one is never an action's output. Without the exception a guard read the carried copy, so the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record.
+The framework namespaces — `source`, `version`, `workflow`, `seed` — are the exception: they come from the context, which holds the answer the resolver picked, and a copy of one in the record's content does not override it. A record's copy was taken when the record was written and the pool can have moved past it, and since these are reserved action names a key under one is never an action's output. Without the exception a guard read the carried copy, so the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record. Only `source` is produced in record content by anything today; `version`, `workflow` and `seed` are covered because they share the merge, not because a writer for them exists.
+
+Two consequences of taking these from the context:
+
+- **`context_scope.drop` does not hide a `source` field from a guard.** The resolved namespace is the source document, which `drop` never touched. FILE mode used to hide such a field, because the scope pass wrote its own stripped copy onto the record; RECORD mode never did. The two now agree on RECORD's answer, which matches a guard's job — it gates the action, and `drop` shapes what the action then receives. A **dependency** namespace still comes from the record, so a FILE-mode `drop` does still hide one of those; that asymmetry predates this rule and is not addressed by it.
+- A record the source pool cannot place is unaffected: the resolver returns the record itself in that case, so the resolved namespace and the carried copy are the same value.
 
 ---
 
