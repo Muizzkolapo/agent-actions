@@ -1,0 +1,25 @@
+kind: Bug Fix
+body: >-
+  A `context_scope.drop` aimed at an upstream field no longer removes a field of
+  that name from the declaring action's own output. `drop` hides a field from one
+  action's prompt and leaves it on the record bus, and the runtime pops it per
+  namespace (`prompt_context[ns][field]`), but the static analyzer recorded the
+  bare field name with the namespace discarded — so `drop: [OptionsCombiner.answer_reasoning]`
+  on an action that also declares `answer_reasoning` itself cancelled its own
+  output field. `agac validate` then rejected a downstream `{{ action.field }}`
+  with "Field 'answer_reasoning' has been dropped from action ... output" for a
+  reference the runtime serves, `agac inspect`, `agac schema` and the docs
+  catalog omitted the field from Outputs, and an `expect:` block naming it
+  refused the whole run with `PreFlightValidationError` because preflight reads
+  the same flag. Forwarding and drop directives now keep their namespace, so a
+  forwarded name is withheld only when every namespace supplying it drops it, a
+  produced name never is, and `ns.*` withholds the namespace it names. Each
+  directive parses through the runtime's own `parse_field_reference`, so a
+  spelling the runtime skips is no longer modelled as forwarded — with the one
+  asymmetry that `drop` alone rejects a nested path, since its pop is flat while
+  `observe` and `passthrough` resolve a path. `prompt/ARCHITECTURE.md` and
+  `llm/ARCHITECTURE.md` described `drop` as a redaction that removes a field from
+  the output and used PII as the worked example; the second wrote the refs
+  without namespaces, a spelling the runtime refuses outright. Both now describe
+  the per-action scoping the other docs and the shipped examples already did.
+time: 2026-09-27T15:30:00Z
