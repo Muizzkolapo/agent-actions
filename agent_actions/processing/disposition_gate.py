@@ -190,6 +190,8 @@ def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[
 def stored_rows_not_reproduced(
     stored: Iterable[dict[str, Any]],
     produced: Iterable[dict[str, Any]],
+    *,
+    batch_inputs: Collection[str] = (),
 ) -> set[str]:
     """Identities in *stored* that *produced* did not write again.
 
@@ -208,6 +210,11 @@ def stored_rows_not_reproduced(
     a row consumed *minus* its own, so a two-input merge keeps one identity and names
     one producer. Inferred away there, its own input's content goes with it, and a
     caller reading those rows wants the stricter reading ``build_carry_forward`` has.
+
+    *batch_inputs* is the input before any narrowing, which settles what matching
+    cannot: below an expansion the upstream children are minted again every run, so a
+    producer named by no input is a generation that is gone rather than one this run did
+    not answer for. Left empty nothing is inferred, the inference being one that deletes.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -225,6 +232,7 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
+    inputs = frozenset(batch_inputs)
     carry: set[str] = set()
     for row in stored:
         guid = row.get("source_guid")
@@ -236,17 +244,23 @@ def stored_rows_not_reproduced(
         # twice. A minted identity is never rewritten, so this decides nothing there.
         if guid in rewritten:
             continue
+        superseded = False
         if len(producers) == 1:
             # On this path one producer means a mint, because a batch row that names any
             # is re-keyed. It does not mean that in general — see the docstring.
             reproduced = producers <= answered
+            # Named by no input this run took: the producer is gone rather than
+            # unanswered for, so the row it minted has a replacement in this write.
+            superseded = bool(inputs) and producers.isdisjoint(inputs)
         elif producers:
             # Several: the row holds what each input gave it, and its own identity is an
             # input's rather than a mint's. Never inferred away.
             reproduced = False
         else:
+            # The identity is the input's own, so a run that did not take it simply
+            # narrowed past it. Absence from the input is no evidence here.
             reproduced = guid in answered
-        if not reproduced:
+        if not reproduced and not superseded:
             carry.add(guid)
     return carry
 

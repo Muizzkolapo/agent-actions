@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -443,11 +443,16 @@ class BatchProcessingService:
         main_output: list[dict[str, Any]],
         output_directory: str,
         action_name: str | None = None,
+        *,
+        batch_inputs: Collection[str] = (),
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = self._resolve_action_name(action_name)
         main_output = self._merge_carry_forward(
-            effective_action, main_output, target_relative_path(output_file, output_directory)
+            effective_action,
+            main_output,
+            target_relative_path(output_file, output_directory),
+            batch_inputs=batch_inputs,
         )
 
         if self._storage_backend is None:
@@ -464,6 +469,8 @@ class BatchProcessingService:
         action_name: str | None,
         batch_output: list[dict[str, Any]],
         relative_path: str,
+        *,
+        batch_inputs: Collection[str] = (),
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
@@ -476,6 +483,9 @@ class BatchProcessingService:
         is not terminal, and a batch narrowed to one record would drop the rest. What
         the run *produced* is read the other way round — only a settled row answers for
         an input, and for the inputs it names rather than the identity it carries.
+
+        *batch_inputs* is the input before narrowing: once the action above mints its
+        own identities, the rows alone cannot say which producers still exist.
         """
         if not self._storage_backend or not action_name:
             return batch_output
@@ -488,7 +498,7 @@ class BatchProcessingService:
 
         from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
 
-        carry_guids = stored_rows_not_reproduced(stored, batch_output)
+        carry_guids = stored_rows_not_reproduced(stored, batch_output, batch_inputs=batch_inputs)
         if not carry_guids:
             return batch_output
 

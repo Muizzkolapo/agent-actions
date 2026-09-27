@@ -1,0 +1,33 @@
+kind: Bug Fix
+body: >-
+  Batch carry-forward no longer writes both generations of an expansion whose own
+  input is an expansion child — the nested-expansion gap the previous entry named
+  as remaining. `producer_source_guids` names the immediate inputs a row consumed,
+  and where the action above is itself an expansion those inputs are its minted
+  children, re-minted every run. The stored rows named producers that no longer
+  existed anywhere, this run's rows named the current ones, the two sets never
+  intersected, and nothing marked the stored generation as replaced. Measured
+  against a real store: two runs of `A(expand) → B(expand)` over one staged record
+  with nothing changed between them wrote eight rows where four were right, and
+  each further run added four more. What separates a producer that is gone from one
+  this run did not answer for is whether it still stands in the action's input, so
+  submission now records the identities it took as input and the merge reads them
+  back: a stored row whose single producer is named by none of them is a generation
+  that has been replaced, and one whose producer is still an input is carried as
+  before. Only where one producer already reads as a mint — a row naming several
+  still holds content of its own and is never inferred away. That input is
+  deliberately not the batch context map, which several readings of this bug
+  assume it is: the disposition gate narrows the input before the map is built, so
+  the map holds only what was submitted, and a rule reading it would have deleted
+  the stored rows of every already-done input on every ordinary incremental run.
+  The recording is therefore taken before the gate, and "nothing recorded" stays
+  distinct from "recorded as empty" and infers nothing — a batch submitted by an
+  earlier version carries its rows forward exactly as it did. Reachability is
+  narrower than the issue describes. It claimed every run, by way of an upstream
+  defect in how an expansion's dispositions are keyed; that issue was closed as
+  invalid, because the function it rests on (`write_record_dispositions`) has no
+  production caller and a completed batch expansion is in fact narrowed away on the
+  next run. What reaches this is the same window the previous fix addressed — a
+  clearing that leaves stored rows behind: `agac retry`, or a reset of a failed,
+  interrupted or config-changed action.
+time: 2026-09-27T16:00:00Z

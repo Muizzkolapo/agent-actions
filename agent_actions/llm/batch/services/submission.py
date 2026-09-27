@@ -230,6 +230,9 @@ class BatchSubmissionService:
                     entry.batch_id,
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
+        # Read before the gate narrows `data`: what it carries reaches no context map,
+        # and carry-forward needs the wider set to resolve a stored row's producer.
+        run_input_guids = [guid for row in data if (guid := row.get("source_guid"))]
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
@@ -259,6 +262,9 @@ class BatchSubmissionService:
         if output_directory and self._storage_backend:
             self._context_manager.save_batch_context_map(
                 self._storage_backend, action_name, context_map, batch_name
+            )
+            self._context_manager.save_batch_inputs(
+                self._storage_backend, action_name, run_input_guids, batch_name
             )
 
         result = self._submit_to_provider(
