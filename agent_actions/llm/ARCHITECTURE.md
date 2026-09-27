@@ -50,9 +50,14 @@ This is the simpler path. A single record goes in, an LLM response comes out.
 │              run_dynamic_agent()                         │
 │              (processing/helpers.py)                     │
 │                                                          │
-│   1. Guard check — should this record be processed?      │
-│   2. Call create_dynamic_agent()                         │
-│   3. Validate LLM output against schema                  │
+│   1. Call create_dynamic_agent()                         │
+│   2. Validate LLM output against schema                  │
+│                                                          │
+│   No guard check. prefilter_by_guard has already run     │
+│   on every path reaching here; the online record path    │
+│   also runs TaskPreparer.prepare, the authoritative one.  │
+│   Both build context via build_guard_context. Batch       │
+│   never reaches this function.                            │
 └──────────────────────┬───────────────────────────────────┘
                        │
                        ▼

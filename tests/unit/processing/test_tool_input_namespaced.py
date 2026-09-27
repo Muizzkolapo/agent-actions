@@ -88,7 +88,6 @@ class TestRunDynamicAgentNamespaced:
             "test_action",
             namespaced,
             "prompt text",
-            skip_guard_eval=True,
         )
 
         call_args = mock_builder.call_args
@@ -109,7 +108,6 @@ class TestRunDynamicAgentNamespaced:
             "test_action",
             data,
             "prompt text",
-            skip_guard_eval=True,
         )
 
         call_args = mock_builder.call_args
@@ -131,7 +129,6 @@ class TestRunDynamicAgentNamespaced:
             original,
             "prompt text",
             llm_context=llm_ctx,
-            skip_guard_eval=True,
         )
 
         call_args = mock_builder.call_args
@@ -154,7 +151,6 @@ class TestRunDynamicAgentNamespaced:
             "test_action",
             data,
             "",
-            skip_guard_eval=True,
         )
 
         call_args = mock_builder.call_args

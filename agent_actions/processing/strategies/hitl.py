@@ -105,7 +105,6 @@ class HITLStrategy:
                     context=filtered_records,
                     formatted_prompt="",
                     tools_path=resolve_tools_path(hitl_agent_config),
-                    skip_guard_eval=True,
                 )
 
             # Unwrap single-item list from invocation service

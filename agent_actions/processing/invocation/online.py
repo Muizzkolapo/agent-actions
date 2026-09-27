@@ -143,7 +143,6 @@ class OnlineStrategy(InvocationStrategy):
             prompt,
             tools_path=tools_path,
             llm_context=task.llm_context,
-            skip_guard_eval=True,
         )
 
     def _track_retry_metadata(

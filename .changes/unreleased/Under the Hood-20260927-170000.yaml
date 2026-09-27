@@ -1,0 +1,18 @@
+kind: Under the Hood
+body: >-
+  `run_dynamic_agent` no longer carries a guard-evaluation branch. It ran when
+  `skip_guard_eval` was false, the parameter defaulted to false, and every call
+  site passed true — so the branch was reachable only by a caller that does not
+  exist. It was a third guard surface with different semantics from the two real
+  ones: it called `evaluate()` with no `context`, so `_build_evaluation_context`
+  never ran and the guard saw the bare item rather than one carrying the resolved
+  `source`, `version`/`workflow` and promoted output fields. Both real surfaces,
+  `prefilter_by_guard` and `TaskPreparer`, build theirs through
+  `build_guard_context`, which its own module docstring names the single source of
+  truth and says duplicating is a merge-blocking anti-pattern. `prefilter_by_guard`
+  has already run on every path that reaches this function, so a caller that omitted
+  the flag would have got a silent second evaluation whose answer could differ from
+  the first. The parameter is gone with the branch, and a regression test pins that no
+  guard is evaluated here — across a filtering guard, a falsy `conditional_clause`
+  resolved through a registered UDF, and both the tool and LLM action shapes.
+time: 2026-09-27T17:00:00Z

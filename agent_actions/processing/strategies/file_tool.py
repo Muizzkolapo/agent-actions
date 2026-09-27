@@ -132,7 +132,6 @@ class FileToolStrategy:
                 context=clean_input,
                 formatted_prompt="",
                 tools_path=resolve_tools_path(agent_config),
-                skip_guard_eval=True,
             )
 
             if is_empty_response(raw_response) and records:
