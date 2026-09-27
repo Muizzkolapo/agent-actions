@@ -209,3 +209,99 @@ class TestCarryForwardEdgeCases:
         batch_output = [{"source_guid": "r1"}]
         result = service._merge_carry_forward("test_action", batch_output, "data.json")
         assert result == batch_output
+
+
+class TestAStoredRowIsNotResurrectedBesideItsReplacement:
+    """An expansion mints ``uuid4`` per child, so a re-run's rows never carry the
+    identities the last run's did, and subtraction by identity hands the replaced
+    rows to a write already given their replacements.
+
+    Reachable without an interrupted write: a prompt, schema, guard, model or limit
+    change clears the action's dispositions (``executor.py``'s reset-to-pending), so
+    every input is submitted again with its previous rows still stored. Online drops
+    them — a producer being reprocessed carries nothing (1083).
+    """
+
+    @staticmethod
+    def _backend(stored: list[dict]) -> MagicMock:
+        return _mock_backend(target_files=["data.json"], prior_output={"data.json": stored})
+
+    def test_a_replaced_expansion_row_is_not_carried(self):
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i0"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [
+                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
+                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+            ],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "n1"], (
+            f"the previous generation was merged back beside its replacement: {result}"
+        )
+        assert {r["gen"] for r in result} == {"new"}
+
+    def test_a_row_whose_producer_this_run_did_not_touch_is_still_carried(self):
+        """The other half, and the reason this is a subtraction and not a purge: a
+        run narrowed to one input still holds rows for every other."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i1"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m1"]
+
+    def test_a_row_naming_no_producer_is_still_carried(self):
+        """A row that carries its input's own identity, or one a tool invented, names
+        no producer. Nothing about this run answers for it, so it stays."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "m0", "gen": "old"}, {"source_guid": "invented", "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m0", "invented"]
+
+    def test_a_row_only_partly_reprocessed_is_still_carried(self):
+        """A collapse names every input it consumed. With one of them reprocessed and
+        the other not, the row is neither answered for nor reproducible — dropping it
+        loses the untouched input's content, so it is carried and the duplicate is
+        accepted. Same refusal to guess as ``build_carry_forward``'s straddle rule."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "m0", "producer_source_guids": ["i0", "i1"], "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m0"]
