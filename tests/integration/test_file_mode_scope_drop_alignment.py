@@ -1,0 +1,149 @@
+"""A record the context scope drops must not take the whole file down.
+
+FILE mode carries the pre-observe records beside the scoped ones, so the guard can
+restore upstream fields that observe filtering stripped. The two lists are handed
+to ``prefilter_by_guard`` as ``data`` and ``original_data`` and must line up
+position for position.
+
+``apply_context_scope_for_records`` drops any record whose observed field it cannot
+resolve, and the pipeline handed the guard the list from *before* those drops. So
+one unresolvable record left the two lists a different length and the action failed
+outright — every other record in the file with it. Two dependencies is the easy way
+to get there, because some records then carry both namespaces and some only one, but
+a single dependency and one incomplete record is enough.
+"""
+
+import pytest
+from click.testing import CliRunner
+
+from agent_actions.cli.main import cli
+from tests.integration.test_retry_ignores_record_cap import (
+    ACTION,
+    RECORDS,
+    WORKFLOW,
+    _backend,
+    _disposition,
+    _record_ids,
+    _stored_records,
+    project,  # noqa: F401
+)
+
+SECOND = "enrich"
+
+# FILE mode hands the UDF the whole file's records and requires the input items
+# back — a fresh dict is rejected as an unattributable output.
+FILE_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def tag_every_record(data: Any, *args) -> list[dict]:
+    for record in data or []:
+        record["exam_density"] = "high"
+        record["summary"] = str(record.get("summary") or "tagged")
+    return data
+"""
+
+SECOND_ACTION = """  - name: enrich
+    kind: tool
+    granularity: File
+    dependencies: [flatten]
+    intent: "Tag"
+    schema: tool_action_output
+    impl: tag_every_record
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+def _declare_file_action(project):  # noqa: F811
+    """Append the FILE-granularity action without running it yet.
+
+    Not run here: the fixture's tool fills the observed field for every record, so
+    a run before the upstream is edited would leave nothing for the scope to drop.
+    """
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
+    # Not `tag.py` or `file_tag.py`: tool discovery imports by module name and two
+    # other fixtures already claim those, so the second module to load is served
+    # the first one out of sys.modules and its UDF is never found.
+    (project / "tools" / WORKFLOW / "aligned_tag.py").write_text(FILE_TOOL)
+    return project
+
+
+def _unobservable(project, record_id):  # noqa: F811
+    """Leave *record_id*'s upstream row without the field the scope observes.
+
+    What upstream drift looks like from below: the row is still stored and still
+    terminal at its own action, but ``enrich``'s ``observe: [flatten.summary]``
+    can no longer resolve against it, so the scope drops it.
+    """
+    backend = _backend(project)
+    try:
+        rows = backend._read_target_raw(ACTION, "pages.json")
+        # Asserted, not assumed: a guid or shape drift would make this a silent
+        # no-op and every test below would pass while pinning nothing.
+        targeted = [r for r in rows if r.get("source_guid") == record_id]
+        assert targeted, f"no stored row for {record_id} — the construction did not land"
+        for row in targeted:
+            del row["content"][ACTION]["summary"]
+        backend._write_target_raw(ACTION, "pages.json", rows)
+    finally:
+        backend.close()
+
+
+@pytest.fixture
+def one_unobservable(project):  # noqa: F811
+    """Six upstream records, one of which the scope can no longer resolve."""
+    _declare_file_action(project)
+    dropped = _record_ids(project)[-1]
+    _unobservable(project, dropped)
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+    return project, dropped, result
+
+
+class TestOneDroppedRecordDoesNotFailTheFile:
+    def test_the_action_runs(self, one_unobservable):
+        _project, _dropped, result = one_unobservable
+
+        assert result.exit_code == 0, result.output
+
+    def test_the_length_mismatch_is_not_reported(self, one_unobservable):
+        """Named because the mismatch is the symptom the issue reported, and a
+        run can exit non-zero for unrelated reasons."""
+        _project, _dropped, result = one_unobservable
+
+        assert "length mismatch" not in result.output
+
+    def test_every_resolvable_record_is_processed(self, one_unobservable):
+        """The point of the fix: the other five records are not collateral."""
+        project, _dropped, _result = one_unobservable  # noqa: F811
+
+        assert _stored_records(project, SECOND) == RECORDS - 1
+
+    def test_the_unresolvable_record_alone_is_left_out(self, one_unobservable):
+        project, dropped, _result = one_unobservable  # noqa: F811
+
+        assert _disposition(project, dropped, SECOND) != "success"
+
+    def test_the_others_succeed(self, one_unobservable):
+        """A count alone would pass if five records landed with a failed
+        disposition, which is not the file completing."""
+        project, dropped, _result = one_unobservable  # noqa: F811
+        others = [r for r in _record_ids(project) if r != dropped]
+
+        assert [_disposition(project, r, SECOND) for r in others] == ["success"] * (RECORDS - 1)
+
+
+class TestTheControlRunWithNothingDropped:
+    """So the tests above cannot pass by the action never having worked."""
+
+    def test_all_six_records_are_processed(self, project):  # noqa: F811
+        _declare_file_action(project)
+
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+
+        assert result.exit_code == 0, result.output
+        assert _stored_records(project, SECOND) == RECORDS
