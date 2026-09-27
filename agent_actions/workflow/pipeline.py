@@ -601,8 +601,16 @@ class ProcessingPipeline:
                             len(batch),
                             self.config.action_name,
                         )
+            # Matched to `filtered`, not to `data`: the guard pairs the two lists by
+            # position, so the pre-drop list failed the whole file over one drop.
+            dropped = {skip["position"] for skip in scope_skipped}
+            pre_observe = [record for at, record in enumerate(data) if at not in dropped]
             output, stats = self._unified_processor.process(
-                filtered, context, strategy, raw_records=data, repair_inputs=offered_to_repair
+                filtered,
+                context,
+                strategy,
+                raw_records=pre_observe,
+                repair_inputs=offered_to_repair,
             )
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect

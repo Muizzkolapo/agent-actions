@@ -1,0 +1,17 @@
+kind: Bug Fix
+body: >-
+  A FILE-granularity `kind: tool` action no longer fails outright when its
+  `context_scope` cannot resolve one record. FILE mode carries the pre-observe
+  records beside the scoped ones so the guard can restore fields the scope
+  removed, and `prefilter_by_guard` pairs the two lists by position. The scope
+  drops any record whose observed field it cannot resolve, and the pipeline
+  handed the guard the list from before those drops — so one unresolvable record
+  left the two a different length and killed the whole action, every other
+  record in the file with it (`prefilter_by_guard received 18 original_data for
+  12 input records`). The scope now names the input position of each record it
+  drops and the pipeline slices the pre-observe list to match; position rather
+  than `source_guid`, since a record need not carry one and a concatenated
+  multi-dependency input can repeat one. #1033 reports it with two dependencies,
+  which is the easy way to make some records resolve and others not, but one
+  dependency and one incomplete record was enough.
+time: 2026-09-27T10:20:00Z

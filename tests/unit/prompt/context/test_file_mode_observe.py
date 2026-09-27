@@ -210,7 +210,9 @@ class TestApplyContextScopeForRecords:
             source_data=source_data,
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "sg-unknown", "reason": "source_unresolved"}]
+        assert skipped == [
+            {"source_guid": "sg-unknown", "reason": "source_unresolved", "position": 0}
+        ]
 
     def test_source_data_flat_format(self):
         """source_data in flat format (no content wrapper) still works."""

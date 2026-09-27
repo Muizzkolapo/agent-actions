@@ -307,8 +307,11 @@ run_mode == BATCH and not tool/HITL?
          │     └── else → OnlineLLMStrategy
          │
          ├── FILE mode:
-         │     apply_context_scope_for_records()
-         │     UnifiedProcessor.process(filtered, raw_records=data)
+         │     apply_context_scope_for_records() → filtered + skipped
+         │     raw_records = data minus the positions skipped named
+         │     UnifiedProcessor.process(filtered, raw_records=raw_records)
+         │       (the two must stay paired position-for-position —
+         │        prefilter_by_guard refuses a length mismatch)
          │
          └── RECORD mode:
                UnifiedProcessor.process(data)

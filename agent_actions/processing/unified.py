@@ -110,6 +110,16 @@ class UnifiedProcessor:
         Returns:
             Tuple of (output_records, stats).
         """
+        # Refused here rather than at the guard: a repair narrows both lists by one
+        # position list, so an already-mispaired caller arrives at the guard the same
+        # length and is paired record-to-wrong-original instead of refused.
+        if raw_records is not None and len(raw_records) != len(records):
+            raise ProcessingError(
+                f"Action '{context.action_name}' was given {len(raw_records)} pre-observe "
+                f"records for {len(records)} records. The two are read position for "
+                f"position and there is no way to pair them once they differ."
+            )
+
         # Stamp first-stage records at the source BEFORE the guard split, so
         # guard-skipped records carry a (deterministic, content-hash) identity too
         # and are not downgraded to failures at enrichment.
@@ -133,15 +143,13 @@ class UnifiedProcessor:
                     "action's own making from one minted upstream, and carries every "
                     "stored row — the duplication that rule exists to prevent."
                 )
-            # raw_records is asked separately rather than sliced by the same
-            # positions: a context-scope skip drops records from `records` and not
-            # from `raw_records`, so the two are not always position-for-position.
+            # One position list for both: the caller matches raw_records to records,
+            # so narrowing them apart is what would pull them out of step.
             kept = positions_named_by_repair(records, repairing)
             if kept is not None:
                 records = [records[i] for i in kept]
-            raw_kept = positions_named_by_repair(raw_records, repairing)
-            if raw_kept is not None and raw_records is not None:
-                raw_records = [raw_records[i] for i in raw_kept]
+                if raw_records is not None:
+                    raw_records = [raw_records[i] for i in kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
                 context.action_name, self._get_carry_forward_path(context), repair_inputs
             )
