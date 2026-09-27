@@ -409,12 +409,31 @@ class TestARepairThatNarrowedItsWalk:
 
         assert (found, processed, errors.messages) == (1, 1, [])
 
-    def test_narrowing_to_nothing_does_not_fail_the_repair(self, tmp_path):
-        """The sharp case: without this the repair raises DependencyError over an
-        unrelated directory, where before the fix it completed."""
+    def test_a_named_file_the_walk_never_saw_is_reported(self, tmp_path):
+        """Where the two safe directions collide, and why this one wins.
+
+        Not charging a repair for a directory it would never read argues for
+        staying quiet here. But the store names staging paths, and a file the walk
+        did not enumerate is indistinguishable from one sitting inside the
+        directory that would not open — so silence risks a repair that completes
+        green having repaired nothing. The directory is genuinely unreadable
+        either way, which is a fault worth naming.
+        """
         found, processed, errors = self._walk(tmp_path, _RepairBackend({"nowhere"}))
 
-        assert (found, processed, errors.messages) == (0, 0, [])
+        assert (found, processed) == (1, 0)
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
+
+    def test_a_named_file_under_the_unreadable_directory_is_still_reported(self, tmp_path):
+        """The exemption's one unsafe shape. The store names staging paths, so a
+        record's file can be *inside* the directory that will not open: the walk
+        never enumerated it, the narrowing drops it without comment, and clearing
+        the loss would leave the repair completing green having repaired nothing —
+        the very silence this change exists to end."""
+        found, processed, errors = self._walk(tmp_path, _RepairBackend({"locked/hidden"}))
+
+        assert (found, processed) == (1, 0)
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
     def test_a_repair_that_fell_back_to_walking_everything_still_reports(self, tmp_path):
         """Unnarrowed, the walk is the full walk again — and an unreadable
