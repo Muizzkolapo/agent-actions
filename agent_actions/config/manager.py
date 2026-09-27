@@ -93,6 +93,31 @@ def _refuse_retired_or_raise(block: Any, surface: str, operation: str) -> None:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
 
 
+def _refuse_removed_spellings_or_raise(
+    block: Any, surface: str, operation: str, agent_type: str | None = None
+) -> None:
+    """Raise the framework's own error for a field spelling that was renamed.
+
+    Called on the project block as well as each agent: refused per-agent but
+    accepted in `default_agent_config:`, a removed spelling is an escape hatch
+    rather than a gap — hoisting the key to silence the per-agent error applies
+    it to every agent instead, and the canonical `dependencies` stays empty, so
+    DAG ordering changes silently rather than merely losing a setting (1065).
+    """
+    if not isinstance(block, dict):
+        return
+    removed = _REMOVED_AGENT_SPELLINGS.keys() & block.keys()
+    if not removed:
+        return
+    context: dict[str, Any] = {
+        "replacements": {k: _REMOVED_AGENT_SPELLINGS[k] for k in sorted(removed)},
+        "operation": operation,
+    }
+    if agent_type is not None:
+        context["agent_type"] = agent_type
+    raise ConfigurationError(f"{surface} uses a removed field spelling", context=context)
+
+
 class ConfigManager:
     def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
         self.constructor_path = constructor_path
@@ -323,21 +348,20 @@ class ConfigManager:
         _refuse_retired_or_raise(
             project_agent_defaults, "default_agent_config", "merge_agent_configs"
         )
+        _refuse_removed_spellings_or_raise(
+            project_agent_defaults, "default_agent_config", "merge_agent_configs"
+        )
         default_model = DefaultAgentConfig.model_validate(project_agent_defaults)
         default_agent_config = default_model.model_dump()
         for agent in user_agents:
             _refuse_or_raise(agent, "agent", "merge_agent_configs")
             _refuse_retired_or_raise(agent, "agent", "merge_agent_configs")
-            removed = _REMOVED_AGENT_SPELLINGS.keys() & agent.keys()
-            if removed:
-                raise ConfigurationError(
-                    "Agent configuration uses a removed field spelling",
-                    context={
-                        "agent_type": agent.get("agent_type") or "NOT_SET",
-                        "replacements": {k: _REMOVED_AGENT_SPELLINGS[k] for k in sorted(removed)},
-                        "operation": "merge_agent_configs",
-                    },
-                )
+            _refuse_removed_spellings_or_raise(
+                agent,
+                "Agent configuration",
+                "merge_agent_configs",
+                agent.get("agent_type") or "NOT_SET",
+            )
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:
