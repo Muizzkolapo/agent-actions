@@ -6,6 +6,9 @@ Observe refs select fields from these namespaces — no storage lookup needed.
 The only cross-record reference is ``source.*`` (resolved from source_data).
 """
 
+import pytest
+
+from agent_actions.errors import DataValidationError
 from agent_actions.prompt.context.scope_application import (
     _resolve_observe_refs_for_flat_keys,
     apply_context_scope_for_records,
@@ -214,19 +217,27 @@ class TestApplyContextScopeForRecords:
             {"source_guid": "sg-unknown", "reason": "source_unresolved", "position": 0}
         ]
 
-    def test_source_data_flat_format(self):
-        """source_data in flat format (no content wrapper) still works."""
+    def test_source_data_in_flat_format_is_refused(self):
+        """A pool row with no content wrapper is refused rather than read (#1130).
+
+        This asserted that the flat format "still works", and it did — but only because
+        ``url`` and ``title`` happen not to collide with a framework key. A row whose
+        document field is named ``metadata`` or ``lineage`` lost it silently, because
+        reading a flat row means guessing which of its keys are the user's. #584 removed
+        that same guess from identity derivation by putting the payload under
+        ``content.source``; nothing writes a flat pool row any more.
+        """
         data = [{"source_guid": "sg-flat", "content": {"extract": {"text": "Q"}}}]
         source_data = [{"source_guid": "sg-flat", "url": "https://example.com", "title": "Example"}]
         context_scope = {"observe": ["extract.text", "source.url"]}
-        result, _ = apply_context_scope_for_records(
-            records=data,
-            context_scope=context_scope,
-            action_name="classify",
-            source_data=source_data,
-        )
-        assert result[0]["content"]["text"] == "Q"
-        assert result[0]["content"]["url"] == "https://example.com"
+
+        with pytest.raises(DataValidationError, match="sg-flat"):
+            apply_context_scope_for_records(
+                records=data,
+                context_scope=context_scope,
+                action_name="classify",
+                source_data=source_data,
+            )
 
     def test_explicit_ref_to_missing_namespace_skips_record(self):
         """Explicit ref to absent namespace skips the record (not enriched).

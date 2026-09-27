@@ -76,3 +76,26 @@ def get_existing_content(
         if raw:
             return {"source": raw}
     return {}
+
+
+def require_content_envelope(row: dict[str, Any], *, action_name: str) -> None:
+    """Refuse a source-pool row that carries no ``content`` namespace dict.
+
+    Without the envelope nothing separates the user's keys from the framework's, so each
+    reader guessed — and they guessed differently: one deleted a document field named
+    ``metadata``, the other published ``source_guid`` to the model. #584 deleted the same
+    name-based subtraction from identity derivation rather than curating a better list.
+    """
+    if not isinstance(row.get("content"), dict):
+        from agent_actions.errors import DataValidationError
+
+        raise DataValidationError(
+            f"Source-pool row '{row.get('source_guid')}' carries no 'content' namespace "
+            f"dict, so which of its keys are the document's cannot be known; re-stage "
+            f"the input for '{action_name}' rather than have the framework guess",
+            context={
+                "action_name": action_name,
+                "source_guid": row.get("source_guid"),
+                "row_keys": sorted(k for k in row if isinstance(k, str)),
+            },
+        )

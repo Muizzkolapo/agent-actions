@@ -31,7 +31,8 @@ def resolve_source_content(
        identity a minted row carries — its producer, or the ancestor inherited
        from the input standing in for its namespaces) -> look up by guid. The
        pool is the run's current source set; the namespace a record carries is
-       a copy taken when it was written, so identity is read first.
+       a copy taken when it was written, so identity is read first. A matched
+       row with no envelope is refused rather than guessed at.
     2. Neither identity resolves -> the record itself, when it carries a
        ``source`` namespace. That is all a record the pool cannot place has,
        and it must be a namespace: returned on the strength of the key alone,
@@ -49,16 +50,14 @@ def resolve_source_content(
         from agent_actions.input.preprocessing.transformation.transformer import (
             DataTransformer,
         )
+        from agent_actions.utils.content import require_content_envelope
 
-        if source_guid:
-            result = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+        for guid in (source_guid, item.get("parent_source_guid")):
+            if not guid:
+                continue
+            result = DataTransformer.get_content_by_source_guid(source_data, guid)
             if result is not None:
-                return result
-
-        parent_source_guid = item.get("parent_source_guid")
-        if parent_source_guid:
-            result = DataTransformer.get_content_by_source_guid(source_data, parent_source_guid)
-            if result is not None:
+                require_content_envelope(result, action_name=action_name)
                 return result
 
     record_content = item.get("content", {})

@@ -22,7 +22,7 @@ from agent_actions.prompt.context.scope_parsing import (
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
-from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.content import get_existing_content, require_content_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +423,7 @@ def _resolve_source_content(
     source_index: dict[str | None, dict],
     source_data: list[dict] | None,
     parent_source_guid: str | None = None,
+    action_name: str = "unknown",
 ) -> dict | None:
     """Resolve source namespace content for a record by identity.
 
@@ -431,7 +432,8 @@ def _resolve_source_content(
     on both against a non-empty pool returns None — substituting another record's
     source would attribute the wrong document. The caller then tries the namespace
     the record carries itself, where the RECORD-mode resolver also ends, and keeps that
-    step out of its cache because this one is keyed on identity.
+    step out of its cache because this one is keyed on identity. Only the row actually
+    read is required to carry an envelope.
     """
     matched = source_index.get(source_guid)
     if not matched and parent_source_guid:
@@ -439,6 +441,7 @@ def _resolve_source_content(
     if not matched and source_data:
         return None
     if matched:
+        require_content_envelope(matched, action_name=action_name)
         content = _extract_content_data(matched)
         # First-stage records nest the user payload under content.source; return that so
         # source.<field> resolves to the user field, not {"source": {...}}. Online source
@@ -687,7 +690,7 @@ def apply_context_scope_for_records(
             cache_key = (sguid, psguid)
             if cache_key not in source_cache:
                 source_cache[cache_key] = _resolve_source_content(
-                    sguid, source_index, source_data, psguid
+                    sguid, source_index, source_data, psguid, action_name
                 )
             source_content = source_cache[cache_key]
             if source_content is None:
