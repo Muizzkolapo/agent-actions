@@ -379,15 +379,17 @@ class TestRepairNarrowsAboveTheGuard:
 
         assert sorted(r["source_guid"] for r in output) == ["r0", "r1", "r2"]
 
-    def test_raw_records_are_narrowed_independently_of_records(self):
-        """A context-scope skip drops a record from `records` and not from
-        `raw_records`, so the two are not position-for-position and slicing both
-        by one set of positions would pair a record with another record's original."""
+    def test_a_repair_takes_the_same_records_out_of_both_lists(self):
+        """The caller hands the scoped records and their pre-observe originals matched
+        position for position. The repair has to take the same slice out of each, or a
+        record is paired with another record's original — so each original carries a
+        marker naming which record it belongs to, and the pairing is asserted on that
+        rather than on a guid both lists share."""
         backend = _mock_backend(terminal_ids=set())
         gate = DispositionGate(storage_backend=backend, repairing={"r2"})
         processor = UnifiedProcessor(disposition_gate=gate)
-        scoped = [_make_record("r1"), _make_record("r2")]
-        raw = [_make_record("r0"), _make_record("r1"), _make_record("r2")]
+        scoped = [_make_record(f"r{i}") for i in range(3)]
+        raw = [_make_record(f"r{i}", pre_observe=f"original-of-r{i}") for i in range(3)]
 
         seen: dict[str, list[dict]] = {}
 
@@ -405,4 +407,30 @@ class TestRepairNarrowsAboveTheGuard:
             )
 
         assert [r["source_guid"] for r in seen["records"]] == ["r2"]
-        assert [r["source_guid"] for r in seen["raw"]] == ["r2"]
+        assert [r["pre_observe"] for r in seen["raw"]] == ["original-of-r2"]
+
+    def test_the_two_lists_stay_the_same_length_through_the_narrowing(self):
+        """What prefilter_by_guard refuses a mismatch on, one layer up."""
+        backend = _mock_backend(terminal_ids=set())
+        gate = DispositionGate(storage_backend=backend, repairing={"r0", "r2"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        scoped = [_make_record(f"r{i}") for i in range(3)]
+        raw = [_make_record(f"r{i}", pre_observe=f"original-of-r{i}") for i in range(3)]
+
+        seen: dict[str, list[dict]] = {}
+
+        def _guard_file_mode(recs, _context, originals):
+            seen["records"], seen["raw"] = list(recs), list(originals)
+            return recs, [], originals
+
+        with patch.object(processor, "_guard_filter_file_mode", side_effect=_guard_file_mode):
+            processor.process(
+                scoped,
+                _make_context(storage_backend=backend),
+                _TrackingStrategy(),
+                raw_records=raw,
+                repair_inputs=raw,
+            )
+
+        assert [r["source_guid"] for r in seen["records"]] == ["r0", "r2"]
+        assert [r["pre_observe"] for r in seen["raw"]] == ["original-of-r0", "original-of-r2"]

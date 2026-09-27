@@ -215,7 +215,7 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved", "position": 0}]
 
     def test_source_pool_without_guids_skips_all_records(self):
         """Multi-record pool with no source_guid keys → empty index, every record skipped."""
@@ -242,7 +242,7 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert [r["content"]["url"] for r in enriched] == ["http://2.com"]
-        assert skipped == [{"source_guid": "ghost", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "ghost", "reason": "source_unresolved", "position": 1}]
 
     def test_single_source_pool_guid_miss_skips_record(self):
         """Even a one-record pool never substitutes — resolution is by guid match only."""
@@ -252,7 +252,7 @@ class TestSourceResolution:
             records, {"observe": ["source.url", "dep.f"]}, action_name="test", source_data=pool
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved", "position": 0}]
 
     def test_unresolved_guid_resolves_via_parent_source_guid(self):
         """Expansion children resolve through their carried attribution, each to its own parent."""
@@ -305,7 +305,9 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "minted-1", "reason": "source_unresolved"}]
+        assert skipped == [
+            {"source_guid": "minted-1", "reason": "source_unresolved", "position": 0}
+        ]
 
     def test_no_source_data_with_source_refs_skips_record(self):
         """Explicit source ref without source_data → record skipped (source namespace absent)."""

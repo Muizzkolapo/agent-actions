@@ -133,15 +133,13 @@ class UnifiedProcessor:
                     "action's own making from one minted upstream, and carries every "
                     "stored row — the duplication that rule exists to prevent."
                 )
-            # raw_records is asked separately rather than sliced by the same
-            # positions: a context-scope skip drops records from `records` and not
-            # from `raw_records`, so the two are not always position-for-position.
+            # One position list for both: the caller matches raw_records to records,
+            # so narrowing them apart is what would pull them out of step.
             kept = positions_named_by_repair(records, repairing)
             if kept is not None:
                 records = [records[i] for i in kept]
-            raw_kept = positions_named_by_repair(raw_records, repairing)
-            if raw_kept is not None and raw_records is not None:
-                raw_records = [raw_records[i] for i in raw_kept]
+                if raw_records is not None:
+                    raw_records = [raw_records[i] for i in kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
                 context.action_name, self._get_carry_forward_path(context), repair_inputs
             )

@@ -642,18 +642,13 @@ def apply_context_scope_for_records(
 ) -> tuple[list[dict], list[dict]]:
     """Apply context_scope to a list of records (FILE mode).
 
-    For each record:
-    1. Extract namespaced content
-    2. Resolve source namespace via source_guid cross-reference
-    3. Call apply_context_scope() for observe/drop/passthrough processing
-    4. Rebuild enriched record: original content + drops applied + flat observed keys
-
-    Unlike apply_context_scope() which gates prompt_context to observed namespaces
-    only (correct for Jinja), this function preserves ALL original namespaces in the
-    enriched record because downstream guards need full namespace visibility.
+    Unlike apply_context_scope(), this preserves ALL original namespaces in the
+    enriched record: downstream guards need full namespace visibility.
 
     Returns (enriched_records, skipped_records); skipped entries carry
-    ``{"source_guid": ..., "reason": OBSERVE_FIELD_MISSING | SOURCE_UNRESOLVED}``.
+    ``{"source_guid": ..., "reason": ..., "position": ...}``. *position* indexes
+    *records* — how a caller pairs a second list matched to the input, which
+    ``source_guid`` cannot do when it is absent or repeated.
     """
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
@@ -680,7 +675,7 @@ def apply_context_scope_for_records(
     prepared: list[tuple[dict, dict]] = []
     skipped: list[dict] = []
 
-    for record in records:
+    for position, record in enumerate(records):
         content = get_existing_content(record)
         sguid = record.get("source_guid")
         psguid = record.get("parent_source_guid")
@@ -709,7 +704,9 @@ def apply_context_scope_for_records(
                     sguid,
                     len(source_data or []),
                 )
-                skipped.append({"source_guid": sguid, "reason": SOURCE_UNRESOLVED})
+                skipped.append(
+                    {"source_guid": sguid, "reason": SOURCE_UNRESOLVED, "position": position}
+                )
                 continue
             if source_content:
                 field_context["source"] = source_content
@@ -726,7 +723,9 @@ def apply_context_scope_for_records(
                 sguid,
                 e,
             )
-            skipped.append({"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING})
+            skipped.append(
+                {"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING, "position": position}
+            )
             continue
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied. Flat

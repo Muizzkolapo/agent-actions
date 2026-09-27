@@ -1,16 +1,12 @@
 """A record the context scope drops must not take the whole file down.
 
-FILE mode carries the pre-observe records beside the scoped ones, so the guard can
-restore upstream fields that observe filtering stripped. The two lists are handed
-to ``prefilter_by_guard`` as ``data`` and ``original_data`` and must line up
-position for position.
+FILE mode hands ``prefilter_by_guard`` the scoped records and their pre-observe
+originals, which must line up position for position. The scope drops any record
+whose observed field it cannot resolve and the pipeline passed the list from
+*before* those drops, so one unresolvable record failed the action outright.
 
-``apply_context_scope_for_records`` drops any record whose observed field it cannot
-resolve, and the pipeline handed the guard the list from *before* those drops. So
-one unresolvable record left the two lists a different length and the action failed
-outright — every other record in the file with it. Two dependencies is the easy way
-to get there, because some records then carry both namespaces and some only one, but
-a single dependency and one incomplete record is enough.
+Two dependencies is the easy way there — some records then carry both namespaces
+and some only one — but one dependency and one incomplete record is enough.
 """
 
 import pytest
@@ -147,3 +143,50 @@ class TestTheControlRunWithNothingDropped:
 
         assert result.exit_code == 0, result.output
         assert _stored_records(project, SECOND) == RECORDS
+
+
+class TestASkippedRecordNamesItsInputPosition:
+    """What the pipeline pairs the two lists by. Positions index the input, so they
+    stay usable against it however many records before them were dropped."""
+
+    @staticmethod
+    def _pass(records):
+        from agent_actions.prompt.context.scope_application import (
+            apply_context_scope_for_records,
+        )
+
+        return apply_context_scope_for_records(
+            records, {"observe": ["d.x"]}, action_name="a2", source_data=None
+        )
+
+    def test_positions_index_the_input_not_the_skipped_list(self):
+        """First and third dropped: 0 and 2. Numbering the skips instead gives 0 and 1
+        and takes the wrong records out of the caller's second list."""
+        records = [
+            {"source_guid": "drop-a", "content": {"d": {}}},
+            {"source_guid": "keep", "content": {"d": {"x": 1}}},
+            {"source_guid": "drop-b", "content": {"d": {}}},
+        ]
+
+        _enriched, skipped = self._pass(records)
+
+        assert [s["position"] for s in skipped] == [0, 2]
+
+    def test_the_positions_left_over_are_the_records_that_survived(self):
+        """The slice the pipeline takes, asserted as the identity it has to have."""
+        records = [
+            {"source_guid": "drop-a", "content": {"d": {}}},
+            {"source_guid": "keep", "content": {"d": {"x": 1}}},
+            {"source_guid": "drop-b", "content": {"d": {}}},
+        ]
+
+        enriched, skipped = self._pass(records)
+        dropped = {s["position"] for s in skipped}
+        survivors = [r for at, r in enumerate(records) if at not in dropped]
+
+        assert [r["source_guid"] for r in survivors] == [r["source_guid"] for r in enriched]
+
+    def test_a_pass_that_drops_nothing_reports_no_positions(self):
+        _enriched, skipped = self._pass([{"source_guid": "keep", "content": {"d": {"x": 1}}}])
+
+        assert skipped == []

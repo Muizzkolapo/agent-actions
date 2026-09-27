@@ -94,7 +94,7 @@ class TestRowsWithNothingToFallBackOnStillSkip:
         enriched, skipped = scope_pass([{"source_guid": "GHOST", "content": {"a1": {"i": 1}}}])
 
         assert enriched == []
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}]
 
     def test_a_carried_source_that_is_not_a_namespace_is_not_used(self):
         """``source`` holding a scalar is malformed, not a namespace to read fields off."""
@@ -103,7 +103,7 @@ class TestRowsWithNothingToFallBackOnStillSkip:
         enriched, skipped = scope_pass([row])
 
         assert enriched == []
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}]
 
 
 class TestOneRowsCarriedSourceIsNeverServedToAnother:
@@ -141,4 +141,4 @@ class TestTheRecordSurvivesTheWholeScopePass:
         enriched, skipped = scope_pass([carrying("http://carried.com"), bare])
 
         assert observed_urls(enriched) == ["http://carried.com"]
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved"}]
+        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 1}]
