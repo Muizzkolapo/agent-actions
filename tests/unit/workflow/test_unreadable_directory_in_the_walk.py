@@ -148,7 +148,7 @@ class TestTheStagingWalk:
             tmp_path, locked_dirs, backend, _slices(backend)
         )
 
-        assert any("locked" in message for message in errors.messages), errors.messages
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
     def test_it_is_counted_among_the_files_found(self, tmp_path, locked_dirs):
         """Counted as found and never as processed: that gap is what makes an
@@ -169,6 +169,30 @@ class TestTheStagingWalk:
         self._walk(tmp_path, locked_dirs, backend, _slices(backend))
 
         assert slice_observation(backend, ACTION) is None
+
+    def test_several_are_reported_in_a_stable_order(self, tmp_path, locked_dirs):
+        """`errors` keeps only the first _MAX_TRACKED_ERRORS, so without a sort it
+        is filesystem order that decides which losses get named at all."""
+        backend = _Backend()
+        root = tmp_path / "staging"
+        root.mkdir()
+        (root / "a.json").write_text(json.dumps([{"id": "a"}]))
+        for name in ("m_two", "z_three", "b_one"):
+            directory = root / name
+            directory.mkdir()
+            locked_dirs(directory)
+        (tmp_path / "output").mkdir()
+
+        _found, _processed, errors = process_directory_files(
+            _runner(backend, _slices(backend)),
+            root,
+            tmp_path / "output",
+            str(root),
+            _params(tmp_path),
+            set(),
+        )
+
+        assert [m.split(":")[0] for m in errors.messages] == ["b_one", "m_two", "z_three"]
 
     def test_a_batch_directory_it_cannot_open_is_not_a_loss(self, tmp_path, locked_dirs):
         """`batch` is skipped whether or not it opens, so reporting it would fail
@@ -237,7 +261,7 @@ class TestAnInputNothingCanRead:
         with pytest.raises(DependencyError) as raised:
             self._run(tmp_path, locked_dirs, _Backend())
 
-        assert "staging" in str(raised.value)
+        assert str(raised.value).startswith("Action 'flatten': staging: [Errno 13]")
 
 
 class TestTheMergedWalk:
@@ -263,7 +287,7 @@ class TestTheMergedWalk:
 
         _found, _processed, errors = self._walk(tmp_path, locked_dirs, backend, _slices(backend))
 
-        assert any("locked" in message for message in errors.messages), errors.messages
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
     def test_it_is_counted_among_the_files_found(self, tmp_path, locked_dirs):
         """One merged group from the two `f.json` files, plus the directory."""
@@ -296,6 +320,109 @@ class TestTheMergedWalk:
 
         assert (found, processed, errors.messages) == (1, 1, [])
         assert slice_observation(backend, ACTION) == (3, False)
+
+
+class TestAnUnreadableUpstreamRoot:
+    """A fan-in whose whole upstream will not open. The label has to name that
+    upstream: the DependencyError's text is the only place its identity appears,
+    since `upstream_dirs` goes to the error's context rather than its message."""
+
+    def _dirs(self, tmp_path, locked_dirs, lock=("up_b",)):
+        dirs = []
+        for name in ("up_a", "up_b"):
+            upstream = tmp_path / name
+            upstream.mkdir()
+            (upstream / "f.json").write_text(json.dumps([{"id": name}]))
+            dirs.append(str(upstream))
+        for name in lock:
+            locked_dirs(tmp_path / name)
+        (tmp_path / "output").mkdir()
+        return dirs
+
+    def test_the_error_names_the_upstream_rather_than_a_bare_dot(self, tmp_path, locked_dirs):
+        backend = _Backend()
+        dirs = self._dirs(tmp_path, locked_dirs)
+
+        _found, _processed, errors = process_merged_files(
+            _runner(backend, _slices(backend)), _params(tmp_path, dirs)
+        )
+
+        assert [message.split(":")[0] for message in errors.messages] == ["up_b"]
+
+    def test_the_readable_upstream_still_merges(self, tmp_path, locked_dirs):
+        backend = _Backend()
+        dirs = self._dirs(tmp_path, locked_dirs)
+
+        found, processed, _errors = process_merged_files(
+            _runner(backend, _slices(backend)), _params(tmp_path, dirs)
+        )
+
+        assert (found, processed) == (2, 1)
+
+    def test_losing_every_upstream_fails_the_action(self, tmp_path, locked_dirs):
+        from agent_actions.errors import DependencyError
+
+        backend = _Backend()
+        dirs = self._dirs(tmp_path, locked_dirs, lock=("up_a", "up_b"))
+
+        with pytest.raises(DependencyError) as raised:
+            process_files(_runner(backend, _slices(backend)), _params(tmp_path, dirs))
+
+        assert "up_a" in str(raised.value) and "up_b" in str(raised.value)
+
+
+class _RepairBackend(_Backend):
+    """Enough backend for the repair narrowing: which files hold the named records."""
+
+    def __init__(self, wanted, shares_chain=False):
+        self._wanted = wanted
+        self._shares_chain = shares_chain
+
+    def records_share_a_repeat_chain(self, _retried):
+        return self._shares_chain
+
+    def source_files_for_records(self, _retried):
+        return self._wanted
+
+
+class TestARepairThatNarrowedItsWalk:
+    """A repair reads only the files holding the records it named, and the store
+    said where those live — so a directory that will not open holds none of them.
+    Charging the loss would void the count, and where the narrowing left nothing
+    else, fail a repair outright over a directory it was never going to read."""
+
+    def _walk(self, tmp_path, backend, *, retried=frozenset({"rec1"}), readable=("a.json",)):
+        root = _staging(tmp_path, self._lock, readable=readable, hidden=("x.json",))
+        (tmp_path / "output").mkdir()
+        runner = _runner(backend, lambda _p: None)
+        runner.retried_records = retried
+        return process_directory_files(
+            runner, root, tmp_path / "output", str(root), _params(tmp_path), set()
+        )
+
+    @pytest.fixture(autouse=True)
+    def _lock_fixture(self, locked_dirs):
+        self._lock = locked_dirs
+
+    def test_it_is_not_charged_for_a_directory_it_would_not_have_read(self, tmp_path):
+        found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}))
+
+        assert (found, processed, errors.messages) == (1, 1, [])
+
+    def test_narrowing_to_nothing_does_not_fail_the_repair(self, tmp_path):
+        """The sharp case: without this the repair raises DependencyError over an
+        unrelated directory, where before the fix it completed."""
+        found, processed, errors = self._walk(tmp_path, _RepairBackend({"nowhere"}))
+
+        assert (found, processed, errors.messages) == (0, 0, [])
+
+    def test_a_repair_that_fell_back_to_walking_everything_still_reports(self, tmp_path):
+        """Unnarrowed, the walk is the full walk again — and an unreadable
+        directory there may well hold a file carrying a named record."""
+        found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}, shares_chain=True))
+
+        assert (found, processed) == (2, 1)
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
 
 class TestTheCollector:
