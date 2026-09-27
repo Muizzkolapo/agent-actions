@@ -36,7 +36,7 @@ pathways.
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
-| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only at module level: logging, os, pathlib — `resolve_project_root` is imported inside `get_agent_paths`, which is what keeps that claim true and lets import-light callers such as `tooling.code_scanner` depend on this module). Moved from `output/`. `walk_files` is the enumeration every caller that must not lose files uses instead of `Path.rglob`, which drops a whole subtree it cannot read and raises nothing. | `file_io` |
+| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery. Imports `logging`, `os`, `collections.abc` and `config.path_config`. Moved from `output/`. `walk_files` enumerates a tree the way `Path.rglob` cannot: rglob drops a whole subtree it cannot read and raises nothing, so `walk_files` requires an `on_error` callback — no default, because a default would reinstate that silence. The two staging walks in `workflow/runner_file_processing.py` and the tool scan in `tooling/code_scanner.py` use it; other `rglob` callers in the tree are discovery paths where a missing file surfaces by name and have not been converted. | `file_io` |
 | `project_root.py` | Module | Project root detection utilities (`find_project_root`, `ensure_in_project`). Moved from `cli/`. | `errors` |
 
 ## Project Surface

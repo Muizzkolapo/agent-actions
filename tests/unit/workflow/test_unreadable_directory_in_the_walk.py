@@ -386,21 +386,14 @@ class _RepairBackend(_Backend):
 
 
 class TestARepairIsReportedLikeAnyOtherWalk:
-    """A repair narrows its walk to the files holding the records it named, and it
-    is tempting to exempt it from the report: the directory it could not open is
-    probably unrelated. It is not exempt.
+    """A repair is not exempt from the report, though its walk is narrowed.
 
-    The store resolves record ids to staging paths with a set union, so an id that
-    resolves to nothing leaves no trace — "unrelated to what the store named" is
-    not "unrelated to what the repair needs", and the file behind the lock may be
-    exactly the one being repaired.
-
-    Reporting is not free: the loss counts toward `files_found`, so a repair whose
-    every other file is skipped raises rather than completing. That is the trade
-    this ticket takes deliberately — a named permission fault over a repair that
-    silently does nothing. (`_lose_file`'s own effect *is* inert here, since
-    `_stamped_slice_outcome` short-circuits on `retried_records`, but the report
-    and the count are not.)
+    The store resolves ids to staging paths with a set union, so an id resolving to
+    nothing leaves no trace: "unrelated to what the store named" is not "unrelated
+    to what the repair needs", and the file behind the lock may be the one being
+    repaired. Reporting is not free — the loss counts toward `files_found`, so a
+    repair whose other files are all skipped raises rather than completing. That
+    trade is deliberate: a named permission fault over a silent no-op repair.
     """
 
     def _walk(self, tmp_path, backend, *, readable=("a.json",)):

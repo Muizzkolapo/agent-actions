@@ -135,7 +135,7 @@ def _walk_label(directory: Path, root: Path) -> Path:
         return directory
 
 
-def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]] | None = None) -> list[Path]:
+def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]]) -> list[Path]:
     """Every file under *root*, collecting the directories it could not open.
 
     Not ``rglob``: it drops such a directory's whole subtree and raises nothing,
@@ -145,8 +145,6 @@ def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]] | None = None
     """
 
     def _note(exc: OSError) -> None:
-        if unreadable is None:
-            return
         failed = Path(exc.filename) if exc.filename else root
         if "batch" not in failed.parts:
             unreadable.append((failed, exc))

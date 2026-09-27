@@ -7,6 +7,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+from agent_actions.config.path_config import resolve_project_root
+
 logger = logging.getLogger(__name__)
 
 # Directory names that never hold a user's workflow, prompt or config.
@@ -29,14 +31,15 @@ def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> Non
     ]
 
 
-def walk_files(root: Path, on_error: Callable[[OSError], None] | None = None) -> list[Path]:
+def walk_files(root: Path, on_error: Callable[[OSError], None]) -> list[Path]:
     """Every file under *root*, reporting directories the walk could not open.
 
     ``Path.rglob`` swallows the ``OSError`` that ``scandir`` raises for a directory
     it cannot read. The directory entry itself comes back, so a per-entry check
     answers "not a regular file" correctly, while every file beneath it is dropped
     with nothing raised and nothing logged. *on_error* is a caller's only way to
-    tell a result that is short from an input that really was that small.
+    tell a result that is short from an input that really was that small, and is
+    required for that reason — a default would reinstate the silence.
     """
     found: list[Path] = []
     for parent, _dirs, names in os.walk(root, onerror=on_error):
@@ -98,7 +101,6 @@ class FileHandler:
     @staticmethod
     def get_agent_paths(agent_name, project_root: Path | None = None):
         """Return (agent_config_dir, io_dir), raising when the agent name is ambiguous."""
-        from agent_actions.config.path_config import resolve_project_root
         from agent_actions.errors.validation import AmbiguousAgentName
 
         search_dir = resolve_project_root(project_root)
