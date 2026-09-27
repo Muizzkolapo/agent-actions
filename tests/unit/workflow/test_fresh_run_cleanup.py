@@ -1,8 +1,8 @@
 """Tests for _clear_for_fresh_run completeness.
 
-Verifies that --fresh clears source_data, batch recovery state files,
-batch registry files, and batch carry-forward files in addition to
-the existing target_data/disposition/prompt_trace cleanup.
+Verifies that --fresh clears source_data, batch recovery state files and batch
+registry files in addition to the existing
+target_data/disposition/prompt_trace cleanup.
 """
 
 from __future__ import annotations

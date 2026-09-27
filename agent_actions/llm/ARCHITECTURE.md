@@ -1054,9 +1054,6 @@ Logging levels:
   │     Survives crashes — each run picks up where the last left off
   │     Deleted after successful finalization
   │
-  ├── .batch_carry_forward.json     ← GUIDs with terminal dispositions
-  │     Merged back into output at finalization
-  │
   ├── {name}_batch_input.jsonl      ← tasks sent to provider
   └── {batch_id}_results.jsonl      ← raw results from provider
 

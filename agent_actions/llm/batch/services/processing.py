@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -443,19 +443,11 @@ class BatchProcessingService:
         main_output: list[dict[str, Any]],
         output_directory: str,
         action_name: str | None = None,
-        submitted_guids: Collection[str] = (),
     ) -> None:
-        """Write batch output file, merging any carry-forward records first.
-
-        *submitted_guids* names the inputs this batch carried, so a row held for
-        one it did not answer for is kept rather than inferred away.
-        """
+        """Write batch output file, merging any carry-forward records first."""
         effective_action = self._resolve_action_name(action_name)
         main_output = self._merge_carry_forward(
-            effective_action,
-            main_output,
-            target_relative_path(output_file, output_directory),
-            submitted_guids,
+            effective_action, main_output, target_relative_path(output_file, output_directory)
         )
 
         if self._storage_backend is None:
@@ -472,7 +464,6 @@ class BatchProcessingService:
         action_name: str | None,
         batch_output: list[dict[str, Any]],
         relative_path: str,
-        submitted_guids: Collection[str] = (),
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
@@ -480,9 +471,11 @@ class BatchProcessingService:
         go straight to the write, so gathering them across the action's other files
         puts those files' records into this one. A store this cannot read raises
         rather than returning the batch's answers alone, which replace the file.
-        Dispositions never decide — `failed` is not terminal and a batch narrowed to
-        one record would drop the rest, same rule as
-        ``DispositionGate.carried_past_repair`` online.
+
+        A *stored* row's disposition does not decide whether it comes back: `failed`
+        is not terminal, and a batch narrowed to one record would drop the rest. What
+        the run *produced* is read the other way round — only a settled row answers for
+        an input, and for the inputs it names rather than the identity it carries.
         """
         if not self._storage_backend or not action_name:
             return batch_output
@@ -493,51 +486,9 @@ class BatchProcessingService:
             # Nothing stored for this file yet, so nothing to carry.
             return batch_output
 
-        # Rows grouped by identity, because several can share one and they need
-        # not share producers: dropping the identity on one row's account deletes
-        # the others' content.
-        producers_by_guid: dict[str, list[frozenset[str]]] = {}
-        for row in stored:
-            if rid := row.get("source_guid"):
-                producers_by_guid.setdefault(rid, []).append(
-                    frozenset(row.get("producer_source_guids") or ())
-                )
-        if not producers_by_guid:
-            return batch_output
+        from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
 
-        # What this run answered for: the identities the output carries, plus the
-        # inputs it names as producers. Which of the two names an input turns on the
-        # row count, so a re-run that crosses that line is named by one only (1083).
-        reprocessed = {r["source_guid"] for r in batch_output if r.get("source_guid")}
-        reprocessed |= {
-            producer
-            for record in batch_output
-            for producer in (record.get("producer_source_guids") or ())
-        }
-        submitted = frozenset(submitted_guids)
-
-        def answered_for(rid: str, producers: list[frozenset[str]]) -> bool:
-            """Did this run replace everything the rows under *rid* hold?
-
-            Never on the strength of the identity alone: `producer_source_guids`
-            is the consumed set *minus* the row's own guid, so a row also holds
-            whatever its identity accounts for, and a row that named producers
-            the run left alone keeps them both (1083).
-            """
-            if all(p <= reprocessed for p in producers):
-                # Replaced under its own identity, holding nothing else.
-                if rid in reprocessed:
-                    return True
-                # Or minted by a producer this run redid. An input the batch
-                # carried is never that, so one it did not answer for stays.
-                if rid not in submitted and all(producers):
-                    return True
-            return False
-
-        carry_guids = {
-            rid for rid, producers in producers_by_guid.items() if not answered_for(rid, producers)
-        }
-
+        carry_guids = stored_rows_not_reproduced(stored, batch_output)
         if not carry_guids:
             return batch_output
 

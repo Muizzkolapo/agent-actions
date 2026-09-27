@@ -14,8 +14,10 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from typing import TYPE_CHECKING, Any
+
+from agent_actions.record.state import RecordState
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -183,6 +185,70 @@ def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[
         for index, record in enumerate(records)
         if isinstance(record, dict) and record.get("source_guid") in repairing
     ]
+
+
+def stored_rows_not_reproduced(
+    stored: Iterable[dict[str, Any]],
+    produced: Iterable[dict[str, Any]],
+) -> set[str]:
+    """Identities in *stored* that *produced* did not write again.
+
+    Matching is by input: two runs of a minting action share no identity, and how many
+    rows an input yields is decided per run, so the same input mints several rows one
+    run and keeps its own identity the next — each direction a replacement.
+
+    Only a row settled as processed answers for an input, and what it answers for is
+    the producers it names, else the identity it carries. Both halves need that test: a
+    failed row is keyed on its input too, and a row can be stamped unsettled after
+    enrichment named its producers.
+
+    A stored row naming one input is inferred away; naming several, never. That reads
+    one producer as a mint, which holds where this is called from — a batch row naming
+    producers has been re-keyed — and not in general: the FILE writer records the inputs
+    a row consumed *minus* its own, so a two-input merge keeps one identity and names
+    one producer. Inferred away there, its own input's content goes with it, and a
+    caller reading those rows wants the stricter reading ``build_carry_forward`` has.
+    """
+    answered: set[str] = set()
+    rewritten: set[str] = set()
+    for row in produced:
+        guid = row.get("source_guid")
+        if guid:
+            rewritten.add(guid)
+        if row.get("_state") != RecordState.PROCESSED.value:
+            continue
+        # Producers are named during enrichment, before collection settles the state,
+        # so an unsettled row can name an input it holds nothing for. Its own identity
+        # is an input's only where it minted none of its own.
+        if producers := (row.get("producer_source_guids") or ()):
+            answered.update(producers)
+        elif guid:
+            answered.add(guid)
+
+    carry: set[str] = set()
+    for row in stored:
+        guid = row.get("source_guid")
+        if not guid:
+            continue
+        producers = frozenset(row.get("producer_source_guids") or ())
+        # A row the run rewrote under this identity replaces it whatever else it says,
+        # or the carried copy is appended beside that one and the identity is written
+        # twice. A minted identity is never rewritten, so this decides nothing there.
+        if guid in rewritten:
+            continue
+        if len(producers) == 1:
+            # On this path one producer means a mint, because a batch row that names any
+            # is re-keyed. It does not mean that in general — see the docstring.
+            reproduced = producers <= answered
+        elif producers:
+            # Several: the row holds what each input gave it, and its own identity is an
+            # input's rather than a mint's. Never inferred away.
+            reproduced = False
+        else:
+            reproduced = guid in answered
+        if not reproduced:
+            carry.add(guid)
+    return carry
 
 
 def build_carry_forward(
