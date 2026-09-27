@@ -1,7 +1,10 @@
 """Shared source content resolution for a record, at either stage.
 
 Single implementation used by task_preparer.py and guard_context.py.
-Resolution by identity: own guid -> carried parent_source_guid -> the source
+
+A first-stage record IS the input, so resolve_first_stage_source returns it
+enveloped. At every later stage resolve_source_content reads by identity: own
+guid -> carried parent_source_guid -> the source
 namespace the record carries -> None. Same order as the FILE-mode resolver in
 prompt/context/scope_application.py, so a record resolves to one document
 whichever granularity reads it. The source contract is enforced downstream in

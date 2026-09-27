@@ -20,10 +20,7 @@ import pytest
 
 from agent_actions.processing.guard_context import build_guard_context
 from agent_actions.processing.prepared_task import PreparationContext
-from agent_actions.processing.source_resolution import (
-    resolve_first_stage_source,
-    resolve_source_content,
-)
+from agent_actions.processing.source_resolution import resolve_source_content
 from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 
@@ -357,15 +354,3 @@ class TestAFirstStageItemThatIsNotARecord:
     @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7, 0.5, True])
     def test_a_non_record_item_resolves_to_no_source_namespace(self, item):
         assert prompt_source(item, WILDCARD) is None
-
-    @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7])
-    def test_the_resolver_returns_a_non_record_item_unchanged(self, item):
-        """At the resolver, so the reason is visible where the guard lives rather than
-        two layers down where the builder happens to ignore it."""
-        assert resolve_first_stage_source(item) is item
-
-    def test_a_record_still_comes_back_enveloped(self):
-        """The other side of the guard: a dict is normalized, not passed through."""
-        row = {"title": "T", "source_guid": "G"}
-
-        assert resolve_first_stage_source(row) == {"content": {"source": {"title": "T"}}}

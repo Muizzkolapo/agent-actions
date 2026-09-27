@@ -1,6 +1,11 @@
 """Tests for shared source content resolution."""
 
-from agent_actions.processing.source_resolution import resolve_source_content
+import pytest
+
+from agent_actions.processing.source_resolution import (
+    resolve_first_stage_source,
+    resolve_source_content,
+)
 
 
 class TestResolveSourceContent:
@@ -88,3 +93,32 @@ class TestResolveSourceContent:
         item: dict = {}
         result = resolve_source_content(item, None, None)
         assert result is None
+
+
+class TestResolveFirstStageSource:
+    """A first-stage record IS the input, so its own content is the source document."""
+
+    def test_a_record_comes_back_enveloped(self):
+        """The namespace builder reads an envelope; handed the inner dict it publishes
+        the namespace one level too deep."""
+        assert resolve_first_stage_source({"title": "T", "source_guid": "G"}) == {
+            "content": {"source": {"title": "T"}}
+        }
+
+    def test_the_framework_keys_of_a_flat_record_are_not_document_fields(self):
+        row = {"title": "T", "source_guid": "G", "node_id": "n", "lineage": ["a0"]}
+
+        assert resolve_first_stage_source(row) == {"content": {"source": {"title": "T"}}}
+
+    def test_an_enveloped_record_keeps_the_document_it_carries(self):
+        """Its user fields already sit under content.source, including one that shares a
+        framework name — the envelope is what makes that safe."""
+        row = {"content": {"source": {"lineage": "user value"}}, "source_guid": "G"}
+
+        assert resolve_first_stage_source(row) == {"content": {"source": {"lineage": "user value"}}}
+
+    @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7, 0.5, True])
+    def test_a_non_record_item_is_returned_unchanged(self, item):
+        """``_normalize_input`` returns the item unchanged at first stage whatever its
+        type, so normalizing one unconditionally raises AttributeError on .get."""
+        assert resolve_first_stage_source(item) is item
