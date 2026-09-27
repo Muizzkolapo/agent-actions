@@ -42,6 +42,7 @@ from .expander_validation import (
     validate_action_name,
     validate_required_fields,
     validate_vendor_exists,
+    validate_version_merge_output_namespaces,
 )
 
 logger = logging.getLogger(__name__)
@@ -269,6 +270,8 @@ class ActionExpander:
             }
         else:
             agent["version_consumption_config"] = None
+
+        validate_version_merge_output_namespaces(agent, action.get("name", "unknown"))
 
         # The workflow's block under the action's, key by key: the repair policy
         # is set once for the workflow and the rules belong to each action.

@@ -1,0 +1,33 @@
+kind: Bug Fix
+body: >-
+  A version-merge tool's output field no longer replaces a record content namespace
+  without saying so, and can no longer be declared with a framework namespace's name.
+  A FILE-granularity action that is a tool — by `kind: tool` or by `model_vendor: tool` —
+  and declares `version_consumption` has its output spread flat over record content
+  instead of nested under its own name, which is what lets a fan-in publish its merged
+  fields beside the versions it consumed. Those field names are therefore content's own
+  top-level keys, shared with the framework's namespaces (`source`, `version`,
+  `workflow`, `seed`) and with every upstream action's, and a field whose name matched a
+  key already there replaced it with no warning and no error. Where that key was
+  `source` the cost was not one field: content's `source` is what the source resolver
+  falls back to when neither the record's own `source_guid` nor its carried
+  `parent_source_guid` resolves against the run's source pool, and it is accepted only
+  as a dict — so a record whose `source` had been overwritten with a scalar resolved to
+  no source namespace at all from that point on, and one overwritten with the tool's own
+  dict published that output as the source document. A record the pool could still place
+  by identity was unaffected, because identity is read first. Every replacement is now
+  reported, naming the action and the key and saying when the key is a framework
+  namespace. The output still wins at runtime: such a field is the tool's own data and a
+  guard clause reading it has to keep finding it, since a clause that reads a missing
+  field counts as *not matched* and filters the record silently — trading a lost
+  namespace for a lost record. Instead the name is refused where it is declared: a
+  FILE-granularity version-merge tool whose output schema names a framework namespace is
+  rejected when the workflow config is expanded, while renaming the field still costs
+  nothing, and whichever way the schema was written — shorthand, compiled, JSON Schema,
+  a root-level array, or a separate schema file, which rendering inlines first. A
+  record-granularity action nests its output under its own name, so a field sharing a
+  namespace's name collides with nothing there and is left alone. The flat merge was
+  written out separately at three places, only one of them reachable in a run — the FILE
+  path, since a tool action cannot run in batch mode at all; all three now share one
+  function, so the rule cannot drift between them.
+time: 2026-09-27T16:35:00Z

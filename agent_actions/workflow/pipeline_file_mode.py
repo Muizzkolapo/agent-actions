@@ -212,10 +212,12 @@ def _build_record(
 ) -> dict[str, Any]:
     """Build a single output record, either namespaced or version-merge spread."""
     if version_merge:
-        from agent_actions.utils.content import get_existing_content
+        from agent_actions.utils.content import get_existing_content, merge_version_content
 
         existing = get_existing_content(matched) if matched else {}
-        record: dict[str, Any] = {"content": {**existing, **data_fields}}
+        record: dict[str, Any] = {
+            "content": merge_version_content(existing, data_fields, action_name)
+        }
     else:
         from agent_actions.record.envelope import RecordEnvelope
 

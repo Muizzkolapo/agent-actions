@@ -277,7 +277,7 @@ A framework namespace — `source`, `version`, `workflow`, `seed` — is the exc
 Both sides must be a namespace. These are reserved **action** names, which does not make a plain field spelled that way the framework's, and three things put one there:
 
 - a first-stage record's content is the user's own staging row, so `source` can be a string they staged — and first-stage resolution builds the namespace *out of that same content*, so the key is present on both sides;
-- `apply_version_merge` spreads a version-merge **tool**'s output flat over content rather than nesting it under the action name, so `version` or `source` can be that tool's own output field;
+- a version-merge **tool**'s output is spread flat over content rather than nested under the action name, so `version` or `source` can be that tool's own output field — refused now where the action's schema declares such a field, and reported where it replaces a key, but the shape still arrives from a tool that declares no output schema;
 - a dependency's `output_field` is promoted into the context by name, so a key being present in the context does not mean a resolver produced it.
 
 Comparing shapes rather than names keeps all three: a scalar is somebody's field and is left alone. Removing such a key would leave the clause reading a missing field, which `reclassify_missing_field_error` turns into *not matched* — a silent filter rather than an error.
