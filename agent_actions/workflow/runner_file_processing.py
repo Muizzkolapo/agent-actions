@@ -451,11 +451,9 @@ def process_directory_files(
     walked = sorted(_walk_files(input_path, unreadable))
     items, resolved_from_store = _files_holding_retried_records(runner, walked, input_path)
     if resolved_from_store:
-        # The store named the files holding this repair's records, so a directory
-        # that will not open holds none of them. Charging the loss would void the
-        # count, and where the resolved set is empty, fail a repair outright over a
-        # directory it was never going to read. A repair that fell back to walking
-        # everything resolved nothing, and keeps the report.
+        # Every file the store named was seen, so a directory that would not open
+        # holds none of them and charging the loss would fail a repair over a
+        # directory it was never going to read.
         unreadable.clear()
     # Same reason the walk above is sorted: `errors` keeps only the first
     # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
@@ -541,14 +539,11 @@ def _files_holding_retried_records(
 
     A repair names records, not files, and walking every staged file lets
     `file_limit` spend its budget on ones holding none of them. Falls back to
-    walking everything when the selection is unresolvable, or when a named
-    record shares a repeat chain with another file: re-deriving identity needs
-    every sibling file present, and a narrowed walk missing one re-derives a
-    colliding identity instead.
-
-    The flag is False on every one of those fall-backs. A caller needs it because a
-    resolved set also says where the named records live, so a directory the walk
-    could not open provably holds none of them.
+    walking everything when the selection is unresolvable, or when a named record
+    shares a repeat chain with another file, which needs every sibling present.
+    The flag is True only when the walk saw every file the store named, so that a
+    caller may conclude a directory it could not open holds none of them — one it
+    never enumerated may be sitting inside that very directory.
     """
     if not runner.retried_records or runner.storage_backend is None:
         return items, False
@@ -576,7 +571,8 @@ def _files_holding_retried_records(
         logger.info(
             "Repair narrowed the walk to %d of %d staged file(s)", len(narrowed), len(items)
         )
-    return narrowed, True
+    seen = {str(item.relative_to(input_path).with_suffix("")) for item in narrowed}
+    return narrowed, seen >= wanted
 
 
 def process_merged_files(

@@ -36,7 +36,7 @@ pathways.
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
-| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only: logging, os, pathlib). Moved from `output/`. `walk_files` is the enumeration every caller that must not lose files uses instead of `Path.rglob`, which drops a whole subtree it cannot read and raises nothing. | `file_io` |
+| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only: logging, os, pathlib — `resolve_project_root` is imported inside `get_agent_paths` on purpose, since a module-level `config` import would put this module on an import cycle through every caller that must stay import-light). Moved from `output/`. `walk_files` is the enumeration every caller that must not lose files uses instead of `Path.rglob`, which drops a whole subtree it cannot read and raises nothing. | `file_io` |
 | `project_root.py` | Module | Project root detection utilities (`find_project_root`, `ensure_in_project`). Moved from `cli/`. | `errors` |
 
 ## Project Surface
@@ -75,7 +75,7 @@ pathways.
 | `output` | inbound | Response expansion uses constants and FileHandler |
 | `validation` | inbound | Validators use constants, schema utils, and UDF registry |
 | `config` | inbound | Manager uses topological_sort, project_paths uses FileHandler |
-| `tooling` | inbound | Code scanner and LSP use path_utils, file_utils, project_root, and constants |
+| `tooling` | inbound | Code scanner and LSP use path_utils, file_utils, project_root, constants, and `file_handler.walk_files` |
 | `guards` | inbound | Guard parser uses dangerous pattern constants |
 | `prompt` | inbound | Context scope strategies use transformation utilities |
 | `workflow` | inbound | The executor stamps the record limit and what a run processed; the file walk and the version correlator mark that count unknown for a file they lose |

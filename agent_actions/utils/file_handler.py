@@ -7,8 +7,6 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_actions.config.path_config import resolve_project_root
-
 logger = logging.getLogger(__name__)
 
 # Directory names that never hold a user's workflow, prompt or config.
@@ -100,6 +98,7 @@ class FileHandler:
     @staticmethod
     def get_agent_paths(agent_name, project_root: Path | None = None):
         """Return (agent_config_dir, io_dir), raising when the agent name is ambiguous."""
+        from agent_actions.config.path_config import resolve_project_root
         from agent_actions.errors.validation import AmbiguousAgentName
 
         search_dir = resolve_project_root(project_root)

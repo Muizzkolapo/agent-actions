@@ -27,7 +27,7 @@ def _warn_unreadable_tool_dir(exc: OSError) -> None:
     than a failed run. Enumerating with a reporting walk also keeps the tools that
     *did* read, where the previous handler abandoned the whole directory.
     """
-    logger.warning("Cannot list tool directory %s: %s", exc.filename, exc)
+    logger.warning("Cannot list tool directory %s: %s", exc.filename or "(unnamed)", exc)
 
 
 def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None) -> dict[str, Any]:
