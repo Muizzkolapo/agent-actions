@@ -92,8 +92,9 @@ def test_an_input_the_batch_carried_keeps_its_row_through_the_store(backend, ser
     """The guard that stops the producer rule deleting content, against a real store.
 
     `producer_source_guids` is the consumed set minus the row's own guid, so this row
-    does not name `in0` — the input whose content it holds. Reading only the producers
-    calls it answered for once `in1` and `in2` come back, and the rewrite drops it.
+    does not name `in0` — the input whose content it holds. A row naming several inputs
+    is therefore never inferred away: its identity is an input's rather than a mint's,
+    and nothing distinguishes the two.
     """
     collapsed = _row("in0", "in1", "first")
     collapsed["producer_source_guids"] = ["in1", "in2"]
@@ -103,7 +104,6 @@ def test_an_input_the_batch_carried_keeps_its_row_through_the_store(backend, ser
         ACTION,
         [_row("in1", "up", "second"), _row("in2", "up", "second")],
         RELATIVE,
-        {"in0", "in1", "in2"},
     )
 
     assert [r["source_guid"] for r in merged] == ["in1", "in2", "in0"]

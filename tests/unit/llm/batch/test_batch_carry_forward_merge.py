@@ -239,8 +239,18 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         result = service._merge_carry_forward(
             "test_action",
             [
-                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
-                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                },
+                {
+                    "source_guid": "n1",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                },
             ],
             "data.json",
         )
@@ -264,7 +274,14 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            [
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                }
+            ],
             "data.json",
         )
 
@@ -281,7 +298,14 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            [
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                }
+            ],
             "data.json",
         )
 
@@ -300,7 +324,14 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            [
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                }
+            ],
             "data.json",
         )
 
@@ -320,7 +351,7 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         )
 
         result = service._merge_carry_forward(
-            "test_action", [{"source_guid": "i0", "gen": "new"}], "data.json"
+            "test_action", [{"source_guid": "i0", "gen": "new", "_state": "processed"}], "data.json"
         )
 
         assert [r["source_guid"] for r in result] == ["i0"]
@@ -335,8 +366,18 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         result = service._merge_carry_forward(
             "test_action",
             [
-                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
-                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                },
+                {
+                    "source_guid": "n1",
+                    "producer_source_guids": ["i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                },
             ],
             "data.json",
         )
@@ -354,7 +395,14 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         """
         stale = {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "stale"}
         kept = {"source_guid": "t0", "gen": "kept"}
-        batch = [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}]
+        batch = [
+            {
+                "source_guid": "n0",
+                "producer_source_guids": ["i0"],
+                "gen": "new",
+                "_state": "processed",
+            }
+        ]
 
         for order in ([stale, kept], [kept, stale]):
             service = _make_service(storage_backend=self._backend(list(order)))
@@ -393,9 +441,11 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "in1", "gen": "new"}, {"source_guid": "in2", "gen": "new"}],
+            [
+                {"source_guid": "in1", "gen": "new", "_state": "processed"},
+                {"source_guid": "in2", "gen": "new", "_state": "processed"},
+            ],
             "data.json",
-            {"in0", "in1", "in2"},
         )
 
         assert [r["source_guid"] for r in result] == ["in1", "in2", "in0"]
@@ -412,9 +462,15 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "n0", "producer_source_guids": ["p0", "i0"], "gen": "new"}],
+            [
+                {
+                    "source_guid": "n0",
+                    "producer_source_guids": ["p0", "i0"],
+                    "gen": "new",
+                    "_state": "processed",
+                }
+            ],
             "data.json",
-            {"p0", "i0"},
         )
 
         assert [r["source_guid"] for r in result] == ["n0", "p0"], "i9's content was deleted"
