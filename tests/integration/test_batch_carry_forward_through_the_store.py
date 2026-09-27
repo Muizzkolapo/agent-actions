@@ -86,3 +86,25 @@ def test_a_re_run_replaces_its_rows_and_keeps_the_rest(backend, service):
 
     assert [r["source_guid"] for r in merged] == ["n0", "n1", "k0"]
     assert [r["generation"] for r in merged] == ["second", "second", "first"]
+
+
+def test_an_input_the_batch_carried_keeps_its_row_through_the_store(backend, service):
+    """The guard that stops the producer rule deleting content, against a real store.
+
+    `producer_source_guids` is the consumed set minus the row's own guid, so this row
+    does not name `in0` — the input whose content it holds. Reading only the producers
+    calls it answered for once `in1` and `in2` come back, and the rewrite drops it.
+    """
+    collapsed = _row("in0", "in1", "first")
+    collapsed["producer_source_guids"] = ["in1", "in2"]
+    backend.write_target(ACTION, RELATIVE, [collapsed], is_first_action=True)
+
+    merged = service._merge_carry_forward(
+        ACTION,
+        [_row("in1", "up", "second"), _row("in2", "up", "second")],
+        RELATIVE,
+        {"in0", "in1", "in2"},
+    )
+
+    assert [r["source_guid"] for r in merged] == ["in1", "in2", "in0"]
+    assert merged[2]["generation"] == "first", "the row's own content was deleted"
