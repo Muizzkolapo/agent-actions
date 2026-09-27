@@ -193,20 +193,14 @@ def stored_rows_not_reproduced(
 ) -> set[str]:
     """Identities in *stored* that *produced* did not write again.
 
-    Matching is by input, since an action minting an identity per output row shares
-    none with its previous run, and how many rows an input yields is decided per run
-    from what the provider returned — the same input mints several rows one run and
-    keeps its own identity the next, each direction a replacement.
+    Matching is by input: two runs of a minting action share no identity, and how many
+    rows an input yields is decided per run, so the same input mints several rows one
+    run and keeps its own identity the next — each direction a replacement.
 
-    Only a row settled as processed answers for anything, and what it answers for is
-    the producers it names, else the identity it carries. The state test is
-    load-bearing on both: a failed or exhausted row is keyed on its input too, and a
-    row can be stamped unsettled after enrichment already named its producers. Either
-    one credited as an answer deletes what the last run produced.
-
-    Takes a row to either name producers or carry an input's identity, not both. A row
-    doing both is matched on its producers alone; the FILE path writes that shape, so a
-    caller reading those rows needs the stricter reading its own carry-forward has.
+    Only a row settled as processed answers for an input, and what it answers for is
+    the producers it names, else the identity it carries. Both halves need that test: a
+    failed row is keyed on its input too, and a row can be stamped unsettled after
+    enrichment named its producers.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -235,10 +229,14 @@ def stored_rows_not_reproduced(
         # twice. A minted identity is never rewritten, so this decides nothing there.
         if guid in rewritten:
             continue
-        if producers:
-            # Every named input must be reproduced: half an answer replacing a whole
-            # one is a loss, where a duplicate is at least visible.
+        if len(producers) == 1:
+            # The shape a mint makes, and the only one an input answers away.
             reproduced = producers <= answered
+        elif producers:
+            # Several inputs: the row holds what each gave it, and its own identity is
+            # an input's rather than a mint's. Nothing here tells the two apart, so it
+            # is never inferred away.
+            reproduced = False
         else:
             reproduced = guid in answered
         if not reproduced:

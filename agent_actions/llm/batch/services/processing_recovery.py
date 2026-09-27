@@ -336,13 +336,6 @@ def finalize_batch_output(
         processed_data,
         context.output_directory,
         context.action_name,
-        # The inputs this batch carried. A row held for one of them that the
-        # results did not answer for is kept rather than inferred away (1083).
-        submitted_guids={
-            guid
-            for entry in context_map.values()
-            if isinstance(entry, dict) and (guid := entry.get("source_guid"))
-        },
     )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.

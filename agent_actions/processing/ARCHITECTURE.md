@@ -363,6 +363,30 @@ row holds none carrying its input's, so an input resolvable only the second way 
 be re-queued and reprocessed on every run. Every row a producer made comes back, since
 the input is the whole group's only identity.
 
+The batch path rewrites its output file whole and asks the mirrored question — which
+*stored* rows the run did not write again — through `stored_rows_not_reproduced()`. Two
+runs of a minting action share no identity, so comparing identities carries every stale
+row back beside its replacement. Matching is therefore by input, and only a row settled
+as `processed` answers for one: the producers it names, else the identity it carries.
+
+Both readings are needed because how many rows an input yields is decided per run from
+what the provider returned. The same input mints several rows one run and keeps its own
+identity the next, and each direction is a replacement: read only the producers and a
+count falling to one leaves the minted rows behind, read only the identities and a count
+rising leaves the single row behind.
+
+The `processed` condition guards both. A failed or exhausted row is keyed on its input
+and holds no answer; and because producers are named during enrichment, before
+collection settles the state, a row can name an input it holds nothing for. Either
+credited as an answer deletes what the last run produced. Such a row does still replace
+a stored row of its own identity, which is decided first — carried rows are appended to
+the run's own output, so an identity in both lists would be written twice.
+
+Only a stored row naming exactly one input is inferred away, that being the shape a mint
+makes. Naming several means the row also holds what its other inputs gave it, and the
+identity it carries is an input's rather than a mint's, which no field distinguishes — so
+it is handed back, a duplicate being visible where a dropped row is not.
+
 ---
 
 ## Evaluation Loop (Batch Only)
@@ -584,7 +608,7 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `invocation/result.py` | `InvocationResult` — immediate / filtered / queued |
 | `enrichment.py` | `EnrichmentPipeline` and 6 enrichers |
 | `result_collector.py` | Flatten results → output records + dispositions |
-| `disposition_gate.py` | `DispositionGate` + `build_carry_forward` |
+| `disposition_gate.py` | `DispositionGate` + `build_carry_forward` + `stored_rows_not_reproduced` |
 | `cascade_filter.py` | Quarantine upstream-failed records |
 | `guard_context.py` | Build field context for guard evaluation |
 | `task_preparer.py` | `TaskPreparer.prepare()` — normalize, guard, prompt |
