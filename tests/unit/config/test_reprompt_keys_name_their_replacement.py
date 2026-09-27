@@ -19,6 +19,7 @@ from agent_actions.config.schema import (
 from agent_actions.errors import ConfigurationError
 from agent_actions.expectations.loader import build_inline_suite
 from agent_actions.output.response.expander import ActionExpander
+from agent_actions.validation.expectations_validator import find_expectation_defects
 
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
 
@@ -360,19 +361,38 @@ class TestWhatTheRefusalMustNotSwallow:
         assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4"
 
     @pytest.mark.parametrize("key", KEYS)
-    def test_a_retired_name_inside_a_rules_params_is_not_refused(self, key):
-        """A rule's `params:` takes type-specific arguments under any name, so one may
-        legitimately be spelled like a retired key — and matching recursively would
-        refuse the migration this refusal prescribes.
+    def test_a_field_named_like_a_retired_key_is_still_excludable(self, key):
+        """A project may have a field named like a retired key, and naming it in a
+        rule's arguments must keep working.
 
-        The fixture carries the name at depth and is a rule the run accepts: one level
-        higher is refused by `Expectation`, so pinning that would assert the config
-        layer taking something the run throws out.
+        Checked at all three layers the rule passes through, because each accepts a
+        different shape: the config models keep rule dicts raw, `Expectation` forbids
+        extras, and preflight refuses an argument the type does not declare. A fixture
+        legal at only one of them pins the framework taking something it rejects.
         """
-        rule = {"type": "no_null_fields", "params": {key: WRITTEN[key]}}
+        rule = {"type": "no_null_fields", "params": {"exclude": [key]}}
         config = _workflow(action={"expect": {"expectations": [rule]}})
 
         validated = WorkflowConfig.model_validate(config)
         build_inline_suite([rule], "a1")
+        defects = find_expectation_defects(
+            {"a1": {"expect": {"expectations": [rule]}}}, {"a1": set()}
+        )
 
         assert validated.actions[0].expect.expectations == [rule]
+        assert not defects, defects
+
+    @pytest.mark.parametrize("key", KEYS)
+    def test_the_refusal_names_only_the_key_the_block_itself_holds(self, key):
+        """The check reads the block's own keys. A `reprompt:` block spells
+        `on_schema_mismatch` inside it, so a refusal listing both would be reporting a
+        key the author did not write at that level — and removing the one named would
+        not clear it."""
+        message = _refusal_for(key)
+        other = next(k for k in KEYS if k != key)
+
+        assert f"'{key}'" in message
+        assert f"'{other}'" not in message, (
+            f"the refusal names '{other}', which appears only inside the value of "
+            f"'{key}' — the author wrote one key here, not two: {message!r}"
+        )
