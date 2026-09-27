@@ -794,154 +794,130 @@ def _catalog_from_workflow(tmp_path, workflow: dict) -> dict:
     return gen.generate(**_empty_inputs())
 
 
-# `redact` drops one of its own schema fields (`verdict`), one field it observed
-# (`upstream.body`), and one name that belongs to nothing (`ghost_field`). `fanin`
-# observes a wildcard, the shape 148 of the sample project's 515 actions use.
-REDACT_FLOW = {
-    "name": "redact_flow",
+# Shapes taken from `qana_quiz`, the only workflow in the sample project that drops
+# anything. `redact` declares a field of its own named `body` while dropping the
+# upstream's `body`: the runtime pops `upstream.body` and leaves the action's own
+# field alone, so a report that discards the namespace cannot tell the two apart.
+# `clear_ns` drops a whole namespace, which the runtime supports. `bare_ref` writes a
+# ref with no dot, which the runtime refuses to act on.
+DROP_FLOW = {
+    "name": "drop_flow",
     "description": "d",
     "actions": [
         {
             "name": "upstream",
             "intent": "i",
-            "schema": {"headline": {"type": "string"}, "body": {"type": "string"}},
+            "schema": {
+                "headline": {"type": "string"},
+                "body": {"type": "string"},
+                "secret": {"type": "string"},
+            },
         },
         {
             "name": "redact",
             "intent": "i",
             "dependencies": ["upstream"],
-            "schema": {"verdict": {"type": "string"}},
+            "schema": {"verdict": {"type": "string"}, "body": {"type": "string"}},
             "context_scope": {
-                "observe": ["upstream.headline", "upstream.body"],
-                "drop": ["verdict", "ghost_field", "upstream.body"],
+                "observe": ["upstream.*"],
+                "drop": ["upstream.body", "upstream.secret"],
             },
         },
         {
-            "name": "fanin",
+            "name": "clear_ns",
             "intent": "i",
             "dependencies": ["redact"],
             "schema": {"summary": {"type": "string"}},
-            "context_scope": {"observe": ["redact.*"]},
+            "context_scope": {"observe": ["redact.verdict"], "drop": ["redact.*"]},
+        },
+        {
+            "name": "bare_ref",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"note": {"type": "string"}},
+            "context_scope": {"observe": ["redact.verdict"], "drop": ["verdict", "redact.body"]},
         },
     ],
 }
 
-RAW_DROP = REDACT_FLOW["actions"][1]["context_scope"]["drop"]
 
+class TestTheCatalogNamesWhatAnActionDrops:
+    """`drops` is read off every catalog action by the docs frontend and emitted by nothing.
 
-class TestTheCatalogNamesWhatAnActionDropsAndObserves:
-    """`drops` and `observe` are read by the docs frontend and were emitted by nothing.
-
-    `transformers.ts:146-147` takes both off the catalog action, so an absent key
-    renders as an empty panel rather than as an error. The two are sourced
-    differently on purpose: `drops` from the resolved ActionSchema, because the raw
-    directive names fields that are not dropped; `observe` from the directive,
-    because the resolved side cannot enumerate a wildcard.
+    The shipped bundle does `a.drops??[]`, so the panel rendered empty for every
+    action. The key reports the `context_scope.drop` directive as the runtime reads
+    it — refs kept whole, and only the ones the runtime will act on. It is not built
+    from the resolved output schema, which cannot distinguish a dropped upstream field
+    from an own field of the same name.
     """
 
     def _actions(self, tmp_path) -> dict:
-        return _catalog_from_workflow(tmp_path, REDACT_FLOW)["actions"]
+        return _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]
 
-    def test_a_dropped_field_is_named_rather_than_vanishing(self, tmp_path):
-        redact = self._actions(tmp_path)["redact_flow.redact"]
+    def test_a_drop_ref_keeps_the_namespace_it_names(self, tmp_path):
+        """`upstream.body`, not `body`: the runtime pops one namespace, not every field."""
+        redact = self._actions(tmp_path)["drop_flow.redact"]
 
-        assert redact.get("drops") == ["body", "verdict"], redact.get("drops")
+        assert redact.get("drops") == ["upstream.body", "upstream.secret"], redact.get("drops")
 
-    def test_the_dropped_name_is_carried_by_no_other_key(self, tmp_path):
-        """Why the key has to exist: `outputs` and `output_fields` hold the survivors."""
-        redact = self._actions(tmp_path)["redact_flow.redact"]
+    def test_a_drop_the_runtime_refuses_to_parse_is_not_reported(self, tmp_path):
+        """A dotless ref is logged and NOT removed, so reporting it claims a drop that
+        never happens. The dotted ref beside it proves the action is reached at all."""
+        bare = self._actions(tmp_path)["drop_flow.bare_ref"]
 
-        assert "verdict" not in redact["outputs"], redact["outputs"]
-        assert "verdict" not in [f["name"] for f in redact["output_fields"]]
-        assert "verdict" in redact.get("drops", []), redact.get("drops")
+        assert bare.get("drops") == ["redact.body"], bare.get("drops")
+        assert "verdict" not in bare["drops"], bare["drops"]
 
-    def test_drops_names_only_fields_that_were_really_dropped(self, tmp_path):
-        """The raw directive names a ghost and a namespaced wildcard; neither is a field."""
-        redact = self._actions(tmp_path)["redact_flow.redact"]
+    def test_a_whole_namespace_drop_is_reported(self, tmp_path):
+        """`redact.*` clears the namespace at runtime, so it is a real drop."""
+        clear_ns = self._actions(tmp_path)["drop_flow.clear_ns"]
 
-        assert "ghost_field" in RAW_DROP and "upstream.body" in RAW_DROP, RAW_DROP
-        assert redact.get("drops") == ["body", "verdict"], redact.get("drops")
-        assert "ghost_field" not in redact["drops"]
-        assert "upstream.body" not in redact["drops"]
+        assert clear_ns.get("drops") == ["redact.*"], clear_ns.get("drops")
 
-    def test_observe_is_the_directive_as_the_workflow_wrote_it(self, tmp_path):
-        redact = self._actions(tmp_path)["redact_flow.redact"]
-
-        assert redact.get("observe") == ["upstream.headline", "upstream.body"], redact.get(
-            "observe"
-        )
-
-    def test_observe_keeps_a_wildcard_the_resolved_side_cannot_expand(self, tmp_path):
-        """Sourcing `observe` from resolved output fields yields [] here — the common shape."""
-        fanin = self._actions(tmp_path)["redact_flow.fanin"]
-
-        assert fanin.get("observe") == ["redact.*"], fanin.get("observe")
-
-    def test_an_action_with_no_context_scope_gains_no_observe_key(self, tmp_path):
+    def test_an_action_that_drops_nothing_gains_no_key(self, tmp_path):
         actions = self._actions(tmp_path)
 
-        assert "observe" not in actions["redact_flow.upstream"], sorted(
-            actions["redact_flow.upstream"]
-        )
-        assert "observe" in actions["redact_flow.redact"], "fixture proves the key is reachable"
+        assert "drops" not in actions["drop_flow.upstream"], sorted(actions["drop_flow.upstream"])
+        assert "drops" in actions["drop_flow.redact"], "fixture proves the key is reachable"
 
-    def test_an_action_that_drops_nothing_gains_no_drops_key(self, tmp_path):
-        actions = self._actions(tmp_path)
+    def test_the_key_is_not_the_resolved_dropped_output_set(self, tmp_path):
+        """The resolved set is namespace-blind and misses wildcard-observed fields.
 
-        assert "drops" not in actions["redact_flow.upstream"], sorted(
-            actions["redact_flow.upstream"]
-        )
-        assert "drops" in actions["redact_flow.redact"], "fixture proves the key is reachable"
+        Pinned because it is the alternative this key deliberately does not use: for
+        `redact` it answers `['body']` — the action's own field, which is not dropped.
+        """
+        from agent_actions.workflow.schema_service import WorkflowSchemaService
 
+        configs = {a["name"]: a for a in DROP_FLOW["actions"]}
+        resolved = WorkflowSchemaService.from_action_configs("drop_flow", configs)
+        redact_schema = resolved.get_action_schema("redact")
 
-WILDCARD_DROP_FLOW = {
-    "name": "wildcard_drop_flow",
-    "description": "d",
-    "actions": [
-        {
-            "name": "upstream",
-            "intent": "i",
-            "schema": {"headline": {"type": "string"}, "secret": {"type": "string"}},
-        },
-        {
-            "name": "consume",
-            "intent": "i",
-            "dependencies": ["upstream"],
-            "schema": {"verdict": {"type": "string"}},
-            "context_scope": {"observe": ["upstream.*"], "drop": ["upstream.secret"]},
-        },
-    ],
-}
+        assert redact_schema is not None
+        assert redact_schema.dropped_outputs == ["body"], redact_schema.dropped_outputs
+        assert self._actions(tmp_path)["drop_flow.redact"]["drops"] == [
+            "upstream.body",
+            "upstream.secret",
+        ]
 
 
-class TestADropBehindAWildcardIsNotNamed:
-    """A field the analyzer never enumerated cannot be reported as dropped.
+class TestObserveIsNotAddedBecauseInputsAlreadyCarriesIt:
+    """`inputs` is `observe + passthrough` unchanged, so an `observe` key duplicates it.
 
-    `observe: [upstream.*]` records the wildcard's source name, not its fields, so
-    the action's output schema has no entry for `drop` to mark. This is not specific
-    to the new key: the same blindness already shortens `outputs`, which is the
-    assertion below that would hold with or without it.
+    Measured over the sample project: byte-identical for 505 of 515 actions, and the
+    10 that differ do so only by a `passthrough` entry the panel does not label. The
+    frontend declares an `observe` field and renders a config row from it, so filling
+    it would put two rows of identical text side by side. Removing that row is a
+    frontend change, which needs an `out/` rebuild and is deferred.
     """
 
-    def _consume(self, tmp_path) -> dict:
-        return _catalog_from_workflow(tmp_path, WILDCARD_DROP_FLOW)["actions"][
-            "wildcard_drop_flow.consume"
+    def test_inputs_already_reports_every_observed_ref(self, tmp_path):
+        redact = _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]["drop_flow.redact"]
+
+        assert redact["inputs"] == ["upstream.*"], redact["inputs"]
+
+    def test_no_observe_key_is_emitted(self, tmp_path):
+        actions = _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]
+
+        assert all("observe" not in a for a in actions.values()), [
+            k for k, a in actions.items() if "observe" in a
         ]
-
-    def test_the_observed_fields_reach_neither_outputs_nor_drops(self, tmp_path):
-        consume = self._consume(tmp_path)
-
-        assert consume["outputs"] == ["verdict"], consume["outputs"]
-        assert "drops" not in consume, consume.get("drops")
-
-    def test_the_same_drop_is_named_when_the_observe_is_explicit(self, tmp_path):
-        """The gap is the wildcard, not the drop — spelling the field out reports it."""
-        explicit = json.loads(json.dumps(WILDCARD_DROP_FLOW))
-        explicit["name"] = "explicit_drop_flow"
-        explicit["actions"][1]["context_scope"]["observe"] = ["upstream.secret"]
-
-        consume = _catalog_from_workflow(tmp_path, explicit)["actions"][
-            "explicit_drop_flow.consume"
-        ]
-
-        assert consume.get("drops") == ["secret"], consume.get("drops")
