@@ -1,13 +1,12 @@
 """A staging directory the walk cannot open must not lose its files in silence (1096).
 
 ``Path.rglob`` swallows the ``OSError`` ``scandir`` raises for such a directory:
-the entry itself comes back, so the per-entry regular-file check answers "not a
-file" correctly and the loss path never fires, while every file beneath it is
-dropped with no exception, no log line and no error row. Since 610/625 that
-under-count reads as "a smaller record limit could not have bitten", so the
-action is skipped next run and its short output vouched for. Permission is
-normally set on a directory rather than on each file, so this is the common
-shape of the loss.
+the entry comes back, so the regular-file check answers "not a file" correctly
+and the loss path never fires, while every file beneath it is dropped with no
+exception, no log line and no error row. Since 610/625 that under-count reads
+as "a smaller record limit could not have bitten", so the action is skipped
+next run and its short output vouched for — and permission is normally set on
+a directory, not on each file, so this is the common shape of the loss.
 """
 
 import json
@@ -301,21 +300,20 @@ class TestTheMergedWalk:
 
 class TestTheCollector:
     """collect_files_from_upstream — reached by the merged walk, and the second
-    of the two enumerations the report has to come out of."""
+    of the two enumerations the report has to come out of. Its losses ride in
+    the same list a file the walk cannot stat uses, so the caller drains one."""
 
     def test_it_reports_the_directory_it_could_not_open(self, tmp_path, locked_dirs):
         root = _staging(tmp_path, locked_dirs)
-        unreadable: list = []
 
-        collect_files_from_upstream([str(root)], unreadable)
+        _collected, lost = collect_files_from_upstream([str(root)])
 
-        assert [str(where) for where, _exc in unreadable] == ["locked"]
+        assert [path.name for path, _exc in lost] == ["locked"]
 
     def test_it_still_returns_the_files_it_could_read(self, tmp_path, locked_dirs):
         root = _staging(tmp_path, locked_dirs)
-        unreadable: list = []
 
-        collected = collect_files_from_upstream([str(root)], unreadable)
+        collected, _lost = collect_files_from_upstream([str(root)])
 
         assert sorted(str(path) for path in collected) == ["a.json", "b.json"]
 
@@ -323,8 +321,7 @@ class TestTheCollector:
         root = tmp_path / "staging"
         root.mkdir()
         (root / "a.json").write_text("[]")
-        unreadable: list = []
 
-        collected = collect_files_from_upstream([str(root)], unreadable)
+        collected, lost = collect_files_from_upstream([str(root)])
 
-        assert (sorted(str(path) for path in collected), unreadable) == (["a.json"], [])
+        assert (sorted(str(path) for path in collected), lost) == (["a.json"], [])
