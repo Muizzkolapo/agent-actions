@@ -794,11 +794,9 @@ def _catalog_from_workflow(tmp_path, workflow: dict) -> dict:
     return gen.generate(**_empty_inputs())
 
 
-# Every action here is a shape the runtime executes — pinned by
-# test_every_fixture_action_is_a_shape_the_runtime_runs, because DROP runs before
-# OBSERVE and an exact observe of a dropped field raises. `redact` mirrors the only
-# drop shape the sample project uses: wildcard observe, exact drop, and a field of its
-# own (`body`) named like the upstream one it drops.
+# Every action here runs — pinned below, because DROP precedes OBSERVE and an exact
+# observe of a dropped field raises. `redact` mirrors the sample project's only drop
+# shape: wildcard observe, exact drop, and a field of its own named like the one it drops.
 DROP_FLOW = {
     "name": "drop_flow",
     "description": "d",
