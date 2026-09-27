@@ -165,8 +165,6 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
             variables.add(observed)
         for passthrough in action.context_passthrough:
             variables.add(passthrough)
-        for dropped in action.context_drop:
-            variables.add(dropped)
         if action.schema_ref:
             schema = index.get_schema_definition(action.schema_ref)
             if schema:
@@ -176,19 +174,19 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
 
 
 def _action_guard_variables(action) -> set[str]:
-    """Variables a specific action's guard condition can read.
+    """Variables reported as available to a specific action's guard condition.
 
-    A guard runs before the action, which is why it reads the record as stored rather
-    than the view ``context_scope`` shaped for the prompt — so a field the action
-    ``drop``s still answers a clause, and is listed here.
+    Narrower than what a guard can actually read, which is the stored record's own
+    namespaces: running before the action is why a guard reads the record rather than the
+    ``context_scope`` view of it. So a clause on a field the action does not observe, or
+    drops, is flagged although the runtime answers it. Tracked in #1147; the bare-name
+    suggestion below is the part that is correct.
     """
     variables: set[str] = set()
     for observed in action.context_observe:
         variables.add(observed)
     for passthrough in action.context_passthrough:
         variables.add(passthrough)
-    for dropped in action.context_drop:
-        variables.add(dropped)
     return variables
 
 

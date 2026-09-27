@@ -185,18 +185,12 @@ class TestNamespaceProtectionIsBatchStable:
             {"source_guid": "r1", "content": {"a": {"c": "TARGET"}, "c": {"z": 1}}},
             {"source_guid": "r2", "content": {"a": {"c": "TARGET"}}},
         ]
-        originals = deepcopy(records)
         enriched, _ = apply_context_scope_for_records(
             records=records, context_scope=cs, action_name="agg"
         )
 
-        # The pre-scope records go alongside, as the pipeline passes them: they are what
-        # the guard reads, so leaving them out models a call it never makes.
         passing, _, _, filtered = prefilter_by_guard(
-            enriched,
-            {"guard": {"clause": "c == 'TARGET'", "behavior": "filter"}},
-            "agg",
-            original_data=originals,
+            enriched, {"guard": {"clause": "c == 'TARGET'", "behavior": "filter"}}, "agg"
         )
 
         # Both records observed the identical value under the identical ref;

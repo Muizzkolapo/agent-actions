@@ -113,10 +113,12 @@ class TestNoSurfaceAnswersTheSameClauseDifferently:
         assert surface(carrying(), RESOLVED) is True
         assert surface(carrying(), CARRIED) is False
 
-    def test_the_file_surfaces_are_not_the_same_surface(self):
-        """Guards the parametrization above: the no-scope case exists because the scope
-        writeback is what made FILE mode look correct, so a fixture that silently ran the
-        writeback in both would test one thing twice."""
+    def test_the_scope_pass_still_rewrites_the_record_it_is_given(self):
+        """The two FILE parameters above no longer answer differently, and that is the fix
+        rather than a fixture collapsing: the guard reads the stored record, so declaring a
+        ``context_scope`` cannot move a verdict. What must stay true is that the pass still
+        rewrites the record the *action* receives — asserted directly here, because the
+        guard's answer can no longer observe it."""
         scoped, _ = apply_context_scope_for_records(
             [carrying()], SCOPE, action_name="a2", source_data=POOL
         )

@@ -31,6 +31,8 @@ body: >-
 
   A guard's verdict is the limit of the guarantee: the scope pass can still remove a record
   before any guard runs, when it cannot resolve the record's `source` or a field an `observe`
-  names is missing. RECORD mode has no equivalent pass, so that much still depends on
-  granularity — filed as a separate decision rather than folded in here.
+  names is missing. Record granularity runs the same pass after the guard rather than before,
+  and raises on such a record instead of skipping it — so which records a guard judges, and what
+  becomes of the rest, still depends on granularity. Filed as a separate decision rather than
+  folded in here.
 time: 2026-09-27T16:05:00Z

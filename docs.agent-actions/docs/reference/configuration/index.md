@@ -174,7 +174,8 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 - **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)
 - **Guards** are supported with File granularity; the guard is evaluated per record before the
   action receives the file, against the record as stored rather than the `context_scope`-shaped
-  view. See [Guards](../guards.md).
+  view — so a field the action drops still answers a clause. See
+  [Guards](../execution/guards.md).
 :::
 
 ### Input Source
