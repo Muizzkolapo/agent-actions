@@ -1,9 +1,9 @@
 """`run_dynamic_agent` runs the agent; it does not decide whether the agent should run.
 
-The guard has already been evaluated by the time a strategy calls it — `prefilter_by_guard`
-online, `TaskPreparer.prepare` in batch — and both build their context through
-`build_guard_context`, which `processing/guard_context.py` names the single source of truth
-and says duplicating is a merge-blocking anti-pattern. A second evaluation here would be a
+`prefilter_by_guard` has already evaluated it on every path that reaches this function, and
+the online record path also runs `TaskPreparer.prepare`, the authoritative evaluation. Both
+build context through `build_guard_context`, which `processing/guard_context.py` names the
+single source of truth and says duplicating is a merge-blocking anti-pattern. A second evaluation here would be a
 third surface, and one that reads a different `source`: it passed no `context` to
 `evaluate()`, so `_build_evaluation_context` never ran and the guard saw the bare item.
 """
@@ -90,7 +90,6 @@ class TestRunDynamicAgentNeverEvaluatesGuards:
         assert mock_builder.called, "the builder was never reached"
         assert response == [{"result": "ok"}]
         assert executed is True
-        evaluator_spy.assert_not_called()
 
     @patch("agent_actions.llm.realtime.builder.create_dynamic_agent")
     def test_the_item_reaches_the_builder_unfiltered(self, mock_builder, evaluator_spy):

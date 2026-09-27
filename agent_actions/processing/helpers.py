@@ -39,10 +39,11 @@ def run_dynamic_agent(
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
-    The guard has already run by the time a strategy calls this — `prefilter_by_guard`
-    online, `TaskPreparer.prepare` in batch — so this does not evaluate one. The flag is
-    always ``True``; callers keep it because `ProcessingResult.executed` is set ``False``
-    by other producers (a guard filter, a skip, a failure).
+    `prefilter_by_guard` has already run on every path that reaches here, and the online
+    record path additionally runs `TaskPreparer.prepare`, the authoritative evaluation
+    (`online_llm.py:411`); batch never reaches this function. So it evaluates no guard.
+    ``was_executed`` is therefore always ``True`` here — callers keep it because
+    `ProcessingResult.executed` is set ``False`` by other producers.
 
     ``context`` is the original data and ``llm_context`` the transformed data with
     ``context_scope.drop`` applied; the latter is what the LLM sees when present.
