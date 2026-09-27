@@ -1,0 +1,19 @@
+kind: Bug Fix
+body: >-
+  A guard condition now reads the `source` namespace the resolver picked, not the copy the
+  record carries. The guard's context already held the resolved answer, and the evaluator
+  merged the record's own content over it, so a record whose guid resolves to a pool row was
+  judged against a snapshot taken when the record was written. The visible symptom was a
+  granularity split — the same clause kept a record at FILE granularity and filtered it at
+  RECORD granularity — but the split was a side effect: a FILE-mode `context_scope` pass
+  writes the resolved namespace onto the record before the guard runs, and a FILE action
+  declaring no `context_scope` read the stale copy exactly like a RECORD one. A guard's
+  answer no longer depends on which granularity reads the record or on whether an unrelated
+  `context_scope` happened to materialise the namespace. `version`, `workflow` and `seed`
+  were clobbered by the same merge and are covered by the same rule; these four are reserved
+  action names, so a key under one of them in record content is never an action's output. An
+  action's own namespace still comes from the record, which is where the in-flight value
+  lives. Nothing is lost for a record the pool cannot place: the resolver already falls back
+  to what such a record carries, so the resolved answer and the carried one are the same
+  value in exactly those cases.
+time: 2026-09-27T12:47:37Z

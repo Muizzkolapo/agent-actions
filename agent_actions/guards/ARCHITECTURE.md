@@ -272,6 +272,8 @@ Guard condition uses dotted paths:
 
 If `_build_evaluation_context()` is used (Phase 2 evaluation with full context), the item's content is merged with context data (passthrough fields, source data). Content fields take precedence over top-level fields on collision.
 
+The framework namespaces — `source`, `version`, `workflow`, `seed` — are the exception: they come from the context, which holds the answer the resolver picked, and a copy of one in the record's content does not override it. A record's copy was taken when the record was written and the pool can have moved past it, and since these are reserved action names a key under one is never an action's output. Without the exception a guard read the carried copy, so the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record.
+
 ---
 
 ## File Index

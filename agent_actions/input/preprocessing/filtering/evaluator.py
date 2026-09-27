@@ -19,9 +19,22 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     GuardFilter,
     get_global_guard_filter,
 )
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
+
+
+def _record_namespaces(content: dict[str, Any]) -> dict[str, Any]:
+    """Record content minus the namespaces the framework resolves for itself.
+
+    A record's content can hold its own ``source`` (and, for a record written
+    inside a fan-out, ``version``) — a copy taken when the record was written,
+    which the pool can since have moved past. The resolved namespace reaches the
+    guard in its context, and these names are reserved action names, so a key
+    under one of them is never an action's output to prefer.
+    """
+    return {key: value for key, value in content.items() if key not in RUNTIME_BUS_NAMESPACES}
 
 
 @dataclass
@@ -289,6 +302,10 @@ class GuardEvaluator:
 
         Namespaced content in ``item["content"]`` is promoted to top-level keys
         so guard conditions can use dotted paths (e.g., ``action.field``).
+
+        An action's own namespace comes from the record, which holds the in-flight
+        value. The framework namespaces come from *context*, which holds the
+        resolved one — see ``_record_namespaces``.
         """
         eval_data = {}
 
@@ -301,9 +318,9 @@ class GuardEvaluator:
                 for k, v in item.items():
                     if k != "content":
                         eval_data[k] = v
-                eval_data.update(item["content"])
+                eval_data.update(_record_namespaces(item["content"]))
             else:
-                eval_data.update(item)
+                eval_data.update(_record_namespaces(item))
         elif item is not None:
             eval_data["_raw"] = item
 
