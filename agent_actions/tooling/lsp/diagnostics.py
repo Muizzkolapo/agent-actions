@@ -174,10 +174,13 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
 
 
 def _action_guard_variables(action) -> set[str]:
-    """Variables available to a specific action's guard condition.
+    """Variables reported as available to a specific action's guard condition.
 
-    An action's guard runs before the action, so it can only see what
-    that action declares in its own context_scope (observe + passthrough).
+    Narrower than what a guard can actually read, which is the stored record's own
+    namespaces: running before the action is why a guard reads the record rather than the
+    ``context_scope`` view of it. So a clause on a field the action does not observe, or
+    drops, is flagged although the runtime answers it. Tracked in #1147; the bare-name
+    suggestion below is the part that is correct.
     """
     variables: set[str] = set()
     for observed in action.context_observe:

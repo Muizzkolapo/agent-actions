@@ -356,27 +356,15 @@ def prefilter_by_guard(
     workflow_metadata: dict[str, Any] | None = None,
     dependency_configs: dict[str, Any] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    """Evaluate guard per-record and split into passing, skipped, and filtered arrays.
+    """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered)``.
 
-    Called before FILE-mode processing to apply per-record guard logic
-    on the full array.  ``behavior: filter`` records are excluded from
-    both returned lists.  ``behavior: skip`` records land in *skipped*
-    so the caller can merge them back into output with original content.
+    A ``filter`` record appears in none of the first three; a ``skip`` record appears in
+    *skipped* with its original content, for the caller to merge back into output.
 
-    When ``original_data`` is provided (e.g. pre-observe-filter records),
-    the third return value contains the corresponding original items for
-    each passing record.  This preserves upstream fields that observe
-    filtering may have stripped.
-
-    When pipeline context parameters are provided (agent_indices, source_data,
-    etc.), guard evaluation uses full field_context — identical to
-    TaskPreparer.prepare() — so guards referencing source, version, workflow,
-    or promoted output_fields produce correct decisions.
-
-    When no guard is configured, returns ``(data, [], original_data or data, [])``.
-
-    Returns:
-        (passing, skipped, original_passing, filtered)
+    *original_data* holds the pre-scope records and is what the guard reads, so
+    ``context_scope`` shapes what the action receives without deciding how it is judged;
+    given none it is *data*. The pipeline context parameters buy the same ``field_context``
+    ``TaskPreparer.prepare`` builds.
     """
     originals = original_data if original_data is not None else data
 
@@ -412,10 +400,14 @@ def prefilter_by_guard(
     original_passing: list[dict] = []
     filtered: list[dict] = []
     for idx, item in enumerate(data):
-        eval_item = get_existing_content(item)
+        # The guard reads the record as stored. *data* is the scope pass's prompt-shaped
+        # view -- drops applied, observed fields flattened -- and gating on that answered
+        # the same clause differently per granularity.
+        stored_record = originals[idx]
+        eval_item = get_existing_content(stored_record)
 
         context = build_guard_context(
-            item,
+            stored_record,
             agent_name=agent_name,
             agent_config=agent_config,
             agent_indices=agent_indices,

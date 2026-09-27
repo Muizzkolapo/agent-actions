@@ -367,7 +367,7 @@ Field names are case-sensitive. Verify the exact field name in your data:
 
 **3. Default passthrough behavior**
 
-With `passthrough_on_error: true` (the default), if the guard condition **errors** (e.g., field not found), the item passes through. But if the field resolves to `None` and the comparison simply evaluates to `False`, that's not an error — the `on_false` behavior applies to all items.
+`passthrough_on_error: true` (the default) does **not** rescue a field the clause cannot find. A missing field is reclassified as *not matched*, so `on_false` applies; and a bare field name that exists inside a namespace is a semantic error, which bypasses `passthrough_on_error` altogether. Either way the item is filtered or skipped, not passed through. The same is true when the field resolves to `None` and the comparison merely evaluates to `False`.
 
 ### Check Server Logs
 

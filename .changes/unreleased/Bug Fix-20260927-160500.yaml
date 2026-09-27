@@ -1,0 +1,38 @@
+kind: Bug Fix
+body: >-
+  A guard condition now reads the record as the pipeline stored it, on every granularity.
+  FILE mode applies `context_scope` before the guard runs, so the record reaching the guard
+  had `drop` applied and its observed fields flattened to bare top-level keys, and the guard
+  was gating on that prompt-shaped view. Three clause shapes answered differently depending
+  on granularity as a result: a clause on a dropped dependency field filtered the record at
+  FILE granularity and kept it at RECORD granularity, while a clause naming an observed field
+  by its bare name (`n` rather than `a1.n`) did the opposite — it resolved only at FILE
+  granularity, because only there had the scope pass flattened it. A guard gates the action
+  before the action receives anything, so `drop` describes what the action is then handed; it
+  is not a redaction the framework may not gate on.
+
+  `prefilter_by_guard` already received the pre-scope records, index-aligned and
+  length-checked, and already handed them back for tombstones and the enricher — its own
+  contract describes them as preserving "upstream fields that observe filtering may have
+  stripped". The guard read the other list. It now reads the stored one, and the scope pass
+  keeps shaping what the action receives: a passing record still reaches the tool with its
+  dropped fields gone. Where no originals are supplied, which is every RECORD-mode route
+  into the same function, the two lists are the same object and nothing changes.
+
+  `run_dynamic_agent` already documented this rule for the path it guards — "uses `context`
+  (original data) for guard evaluation and `llm_context` (transformed data with
+  `context_scope.drop` applied) for LLM execution". The FILE prefilter was the path that
+  diverged from it.
+
+  What this changes for an existing File-granularity workflow is recorded as a breaking change
+  of its own, since a guard's verdict can move in either direction: a clause on a dropped field
+  now admits records it discarded, and a clause naming an observed field by its bare name stops
+  resolving. No bundled or sample workflow is affected.
+
+  A guard's verdict is the limit of the guarantee: the scope pass can still remove a record
+  before any guard runs, when it cannot resolve the record's `source` or a field an `observe`
+  names is missing. Record granularity runs the same pass after the guard rather than before,
+  and raises on such a record instead of skipping it — so which records a guard judges, and what
+  becomes of the rest, still depends on granularity. Filed as a separate decision rather than
+  folded in here.
+time: 2026-09-27T16:05:00Z

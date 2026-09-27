@@ -171,8 +171,11 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 | `retry` | object | Retry configuration for transport-layer failures |
 
 :::note Granularity Constraints
-- **File granularity** is only supported for tool actions (`kind: tool`)
-- **Guards** are not supported with File granularity
+- **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)
+- **Guards** are supported with File granularity; the guard is evaluated per record before the
+  action receives the file, against the record as stored rather than the `context_scope`-shaped
+  view — so a field the action drops still answers a clause. See
+  [Guards](../execution/guards.md).
 :::
 
 ### Input Source

@@ -12,12 +12,12 @@ body: >-
   misses a multi-record pool being skipped rather than given another record's document. A
   record the pool cannot place is unaffected: own `source_guid`, then the carried
   `parent_source_guid`, then the namespace the record carries, which is all such a record has.
-  This governs what the prompt and the observe/passthrough output fields see. It does not
-  reach a guard condition: the guard evaluator promotes `item["content"]` over the resolved
-  context, so a RECORD-mode guard still reads the namespace the record carries while a
-  FILE-mode guard reads the resolved one, because the FILE path writes the resolved namespace
-  back onto the record before the guard runs. That split predates this change and is unchanged
-  by it.
+  This governs what the prompt and the observe/passthrough output fields see. It reaches a
+  guard condition too, by way of two companion fixes in this release: the evaluator no longer
+  promotes a carried framework namespace over the resolved one, and the FILE-mode prefilter
+  evaluates the guard against the stored record rather than the `context_scope`-shaped copy.
+  Both granularities therefore read the resolved namespace, and the split this entry
+  originally recorded as surviving is closed.
   Two kinds of record change what they observe. One is a record that carries a `source`
   namespace and also resolves in the pool, where the two hold different values; it now
   observes the pool's. Measured across the eleven stores of this repo's sample project, no
