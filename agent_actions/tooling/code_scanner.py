@@ -12,10 +12,22 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.path_utils import resolve_relative_to
 
 logger = logging.getLogger(__name__)
+
+
+def _warn_unreadable_tool_dir(exc: OSError) -> None:
+    """Report a tool directory the scan could not open.
+
+    This catalog feeds schema inference and the docs, not the runtime registry, so
+    the cost of staying quiet is a tool whose schema is silently unknown rather
+    than a failed run. Enumerating with a reporting walk also keeps the tools that
+    *did* read, where the previous handler abandoned the whole directory.
+    """
+    logger.warning("Cannot list tool directory %s: %s", exc.filename or "(unnamed)", exc)
 
 
 def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None) -> dict[str, Any]:
@@ -35,14 +47,12 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
         if not user_code_dir.exists():
             continue
 
-        # rglob itself raises OSError (e.g. PermissionError) during iteration
-        # when it descends into a subtree the process cannot read. Catch it
-        # here so one unreadable subdirectory cannot abort the whole scan.
-        try:
-            py_files = list(user_code_dir.rglob("*.py"))
-        except OSError as e:
-            logger.debug("Failed to enumerate Python files under %s: %s", user_code_dir, e)
-            continue
+        # Not rglob: it drops a subtree it cannot read and raises nothing.
+        # Sorted because the catalog is a dict keyed on function name, so
+        # filesystem order would otherwise pick the winner among duplicates.
+        py_files = sorted(
+            f for f in walk_files(user_code_dir, _warn_unreadable_tool_dir) if f.suffix == ".py"
+        )
 
         for py_file in py_files:
             try:
@@ -68,8 +78,8 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
                             tool_functions[func_name] = func_data
 
             except (OSError, SyntaxError, ValueError) as e:
-                # OSError covers broken symlinks, file deleted between rglob
-                # and read_text, permission errors. One bad file must not
+                # OSError covers broken symlinks, a file deleted between the
+                # walk and read_text, permission errors. One bad file must not
                 # abort the whole catalog generation.
                 logger.debug("Failed to parse tool file %s: %s", py_file, e)
                 continue

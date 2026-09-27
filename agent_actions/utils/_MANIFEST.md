@@ -36,7 +36,7 @@ pathways.
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
-| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only: logging, os, pathlib). Moved from `output/`. | `file_io` |
+| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery. Imports `logging`, `os`, `collections.abc` and `config.path_config`. Moved from `output/`. `walk_files` enumerates a tree the way `Path.rglob` cannot: rglob drops a whole subtree it cannot read and raises nothing, so `walk_files` requires an `on_error` callback — no default, because a default would reinstate that silence. The two staging walks in `workflow/runner_file_processing.py` and the tool scan in `tooling/code_scanner.py` use it; other `rglob` callers in the tree are discovery paths where a missing file surfaces by name and have not been converted. | `file_io` |
 | `project_root.py` | Module | Project root detection utilities (`find_project_root`, `ensure_in_project`). Moved from `cli/`. | `errors` |
 
 ## Project Surface
@@ -75,7 +75,7 @@ pathways.
 | `output` | inbound | Response expansion uses constants and FileHandler |
 | `validation` | inbound | Validators use constants, schema utils, and UDF registry |
 | `config` | inbound | Manager uses topological_sort, project_paths uses FileHandler |
-| `tooling` | inbound | Code scanner and LSP use path_utils, file_utils, project_root, and constants |
+| `tooling` | inbound | Code scanner and LSP use path_utils, file_utils, project_root, constants, and `file_handler.walk_files` |
 | `guards` | inbound | Guard parser uses dangerous pattern constants |
 | `prompt` | inbound | Context scope strategies use transformation utilities |
 | `workflow` | inbound | The executor stamps the record limit and what a run processed; the file walk and the version correlator mark that count unknown for a file they lose |
