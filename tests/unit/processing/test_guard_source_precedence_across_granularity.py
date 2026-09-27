@@ -246,3 +246,36 @@ class TestAFirstStageRecordsSourceIsNotNestedTwice:
 
         assert len(passing) == 0
         assert len(filtered) == 1
+
+
+class TestBothItemShapesFollowTheSameRule:
+    """The evaluator takes either a record's content or a whole record, and merges each of
+    them over the context. Production passes the content; other callers pass the record.
+    The rule has to hold on both or a guard's answer depends on which shape reached it.
+    """
+
+    RESOLVED_CONTEXT = {"source": {"url": "POOL"}}
+
+    def test_a_whole_record_takes_the_resolved_namespace(self):
+        record = {"source_guid": "G0", "content": {"source": {"url": "CARRIED"}, "a1": {"n": 1}}}
+
+        merged = GuardEvaluator()._build_evaluation_context(record, self.RESOLVED_CONTEXT)
+
+        assert merged["source"] == {"url": "POOL"}
+
+    def test_a_whole_record_still_supplies_its_action_namespaces(self):
+        """So the assertion above cannot be satisfied by dropping the record's content."""
+        record = {"source_guid": "G0", "content": {"source": {"url": "CARRIED"}, "a1": {"n": 1}}}
+
+        merged = GuardEvaluator()._build_evaluation_context(record, self.RESOLVED_CONTEXT)
+
+        assert merged["a1"] == {"n": 1}
+        assert merged["source_guid"] == "G0"
+
+    def test_the_bare_content_shape_agrees(self):
+        content = {"source": {"url": "CARRIED"}, "a1": {"n": 1}}
+
+        merged = GuardEvaluator()._build_evaluation_context(content, self.RESOLVED_CONTEXT)
+
+        assert merged["source"] == {"url": "POOL"}
+        assert merged["a1"] == {"n": 1}
