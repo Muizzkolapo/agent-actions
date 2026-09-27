@@ -1,7 +1,10 @@
-"""Shared source content resolution for non-first-stage records.
+"""Shared source content resolution for a record, at either stage.
 
 Single implementation used by task_preparer.py and guard_context.py.
-Resolution by identity: own guid -> carried parent_source_guid -> the source
+
+A first-stage record IS the input, so resolve_first_stage_source returns it
+enveloped. At every later stage resolve_source_content reads by identity: own
+guid -> carried parent_source_guid -> the source
 namespace the record carries -> None. Same order as the FILE-mode resolver in
 prompt/context/scope_application.py, so a record resolves to one document
 whichever granularity reads it. The source contract is enforced downstream in
@@ -71,3 +74,22 @@ def resolve_source_content(
         "available" if source_data else "None",
     )
     return None
+
+
+def resolve_first_stage_source(item: Any) -> Any:
+    """Resolve source content for a first-stage record, as a record envelope.
+
+    The record IS the input, so its own content is the source document. It is returned
+    enveloped because the namespace builder reads an envelope: handed the inner content
+    dict it finds no ``content`` key, takes its flat branch and publishes
+    ``{"source": payload}`` one level too deep. A record whose user fields sit at the top
+    level is normalized first, so ``RECORD_FRAMEWORK_FIELDS`` separates them from the
+    framework's own keys -- the boundary such a record does not carry, and without which a
+    wildcard ``observe`` sends ``source_guid``, ``node_id`` and ``lineage`` to the model as
+    document fields. A non-dict item is returned unchanged; the builder ignores it.
+    """
+    from agent_actions.utils.content import get_existing_content
+
+    if not isinstance(item, dict):
+        return item
+    return {"content": get_existing_content(item, is_first_stage=True)}

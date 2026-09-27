@@ -19,7 +19,9 @@ under ``source.*``.
 import pytest
 
 from agent_actions.processing.guard_context import build_guard_context
+from agent_actions.processing.prepared_task import PreparationContext
 from agent_actions.processing.source_resolution import resolve_source_content
+from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 
 POOL = [
@@ -200,3 +202,155 @@ class TestAPoolThatIsTheActionsOwnInputSet:
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
 
         assert record_mode_source(row) == {"url": "POOL"}
+
+
+class TestAFirstStageGuardReadsTheSameNamespaceAsTheActionItGuards:
+    """``prefilter_by_guard`` builds guard context without a resolved ``source_content``,
+    so a first-stage record was answered from ``get_existing_content`` — the inner content
+    dict, one level below the record envelope the namespace builder reads. The builder
+    found no ``content`` key, took its flat branch and published ``{"source": payload}``
+    as the source namespace, so a guard on ``source.<field>`` resolved for every other
+    action and not for the first one: the "works in batch, fails online" class
+    ``guard_context`` exists to close.
+
+    The same call also skipped the normalizer's first-stage mode, so a record whose user
+    fields sit at the top level resolved to no source namespace at all.
+    """
+
+    def first_stage_guard_source(self, record, scope=None):
+        """The ``source`` namespace a FILE-mode first-stage guard sees.
+
+        Mirrors ``prefilter_by_guard``'s call: no ``source_content``, no pool,
+        ``is_first_stage=True``.
+        """
+        return build_guard_context(
+            dict(record),
+            agent_name="a1",
+            agent_config={"context_scope": scope or SCOPE},
+            is_first_stage=True,
+        ).get("source")
+
+    def test_a_first_stage_guard_reads_the_records_own_source_fields(self):
+        row = {"content": {"source": {"url": "CARRIED"}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row) == {"url": "CARRIED"}
+
+    def test_the_first_stage_guard_agrees_with_every_later_action(self):
+        """The invariant as a relationship: which action reads the record may not
+        decide what ``source.*`` means. A first-stage record is its own input, so the
+        later-action reading is the same record resolving against a pool of itself."""
+        row = {"content": {"source": {"url": "CARRIED"}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row) == record_mode_source(row, pool=[row])
+
+    def test_a_payload_field_named_content_is_not_read_as_the_envelope(self):
+        """``content`` is a framework key at the envelope level and an ordinary user
+        field inside the document. Reading the inner dict as an envelope conflated them."""
+        row = {
+            "content": {"source": {"content": {"body": "user text"}, "url": "U"}},
+            "source_guid": "G0",
+        }
+        scope = {"observe": ["source.content", "source.url"]}
+
+        assert self.first_stage_guard_source(row, scope=scope) == {
+            "content": {"body": "user text"},
+            "url": "U",
+        }
+
+    def test_a_record_carrying_no_source_namespace_is_still_its_own_namespace(self):
+        """Unchanged by the fix, and the reason the builder cannot simply be handed the
+        record: a first-stage record without a ``source`` sub-namespace has its whole
+        content as the source document."""
+        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row, scope={"observe": ["source.a1"]}) == {
+            "a1": {"n": 1}
+        }
+
+    def test_a_flat_record_offers_its_user_fields_and_not_the_frameworks(self):
+        """A first-stage record whose user fields sit at the top level. The normalizer
+        synthesizes the namespace from the keys ``RECORD_FRAMEWORK_FIELDS`` does not
+        claim; skipping its first-stage mode resolved the whole record to nothing."""
+        row = {
+            "source_guid": "G0",
+            "node_id": "n",
+            "lineage": ["a0"],
+            "url": "U",
+            "title": "T",
+        }
+        scope = {"observe": ["source.url", "source.title"]}
+
+        assert self.first_stage_guard_source(row, scope=scope) == {"url": "U", "title": "T"}
+
+
+FLAT = {"source_guid": "G0", "node_id": "n", "lineage": ["a0"], "title": "T", "keep": "yes"}
+WILDCARD = {"observe": ["source.*"]}
+
+
+def prompt_source(record, scope):
+    """The ``source`` namespace that reaches the model, through the real batch preparer."""
+    config = {
+        "agent_type": "llm_agent",
+        "prompt": "Title: {{ source.title }}",
+        "context_scope": scope,
+    }
+    context = PreparationContext(agent_config=config, agent_name="a1", is_first_stage=True)
+    item = dict(record) if isinstance(record, dict) else record
+    task = TaskPreparer().prepare(item, context)
+    return (task.llm_context or {}).get("source")
+
+
+class TestAFlatFirstStageRecordDoesNotSendFrameworkKeysToTheModel:
+    """A record whose user fields sit at the top level carries no boundary between them
+    and the framework's own keys, so the namespace builder's flat branch published the
+    whole record as the source document. An ``observe`` naming fields hid it; a wildcard
+    did not, and ``source_guid``, ``node_id`` and ``lineage`` went to the model as fields
+    of the user's document. ``RECORD_FRAMEWORK_FIELDS`` is the list that draws the
+    boundary, and the first-stage path did not consult it.
+    """
+
+    def test_a_wildcard_does_not_offer_framework_keys_as_document_fields(self):
+        assert prompt_source(FLAT, WILDCARD) == {"title": "T", "keep": "yes"}
+
+    def test_a_wildcard_still_offers_every_user_field(self):
+        """The other half: withholding must not cost the user a field they staged."""
+        observed = prompt_source(FLAT, WILDCARD)
+
+        assert observed is not None and observed.get("title") == "T"
+
+    def test_naming_the_fields_explicitly_is_unchanged(self):
+        """Already correct, because the observe list never named a framework key."""
+        scope = {"observe": ["source.title", "source.keep"]}
+
+        assert prompt_source(FLAT, scope) == {"title": "T", "keep": "yes"}
+
+    def test_an_enveloped_record_under_a_wildcard_is_unchanged(self):
+        """The only shape the staging pipeline writes: the envelope already draws the
+        boundary, so the wildcard was always safe there and must stay so."""
+        row = {
+            "content": {"source": {"title": "T", "keep": "yes"}},
+            "source_guid": "G0",
+            "node_id": "n",
+        }
+
+        assert prompt_source(row, WILDCARD) == {"title": "T", "keep": "yes"}
+
+    def test_the_envelope_is_what_lets_a_user_field_share_a_framework_name(self):
+        """``lineage`` inside the document is the user's and survives a wildcard. That is
+        the whole value of the envelope: a flat record cannot make this distinction, and
+        the framework withholds the name rather than guess."""
+        row = {"content": {"source": {"lineage": "user value", "title": "T"}}, "source_guid": "G0"}
+
+        assert prompt_source(row, WILDCARD) == {"lineage": "user value", "title": "T"}
+
+
+class TestAFirstStageItemThatIsNotARecord:
+    """``_normalize_input`` returns the item unchanged at first stage whatever its type, so
+    a str, list or scalar reaches source resolution. Normalizing one unconditionally raises
+    ``AttributeError`` on ``record.get("content")``; these pin the shapes that keep the
+    resolver from being written that way.
+    """
+
+    @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7, 0.5, True])
+    def test_a_non_record_item_resolves_to_no_source_namespace(self, item):
+        assert prompt_source(item, WILDCARD) is None

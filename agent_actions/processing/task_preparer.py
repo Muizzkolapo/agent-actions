@@ -13,6 +13,10 @@ from agent_actions.processing.prepared_task import (
     PreparationContext,
     PreparedTask,
 )
+from agent_actions.processing.source_resolution import (
+    resolve_first_stage_source,
+    resolve_source_content,
+)
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
@@ -63,10 +67,8 @@ class TaskPreparer:
         target_id = existing_target_id or self._generate_target_id()
 
         if context.is_first_stage:
-            source_content = content
+            source_content = resolve_first_stage_source(item)
         else:
-            from agent_actions.processing.source_resolution import resolve_source_content
-
             source_content = resolve_source_content(
                 item if isinstance(item, dict) else {},
                 source_guid,

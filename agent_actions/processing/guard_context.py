@@ -35,7 +35,7 @@ def build_guard_context(
     identical context structures.
 
     Args:
-        record: The input record (must have "content" dict).
+        record: The input record; a first-stage record's flat fields are normalized.
         agent_name: Current action name.
         agent_config: Action configuration (contains context_scope, guard, etc.).
         agent_indices: Map of action names to workflow positions (enables dep loading).
@@ -50,18 +50,17 @@ def build_guard_context(
         Full field_context dict with source, dependency, version, and workflow
         namespaces — identical to what TaskPreparer.prepare() provides.
     """
+    from agent_actions.processing.source_resolution import (
+        resolve_first_stage_source,
+        resolve_source_content,
+    )
     from agent_actions.prompt.context.scope_builder import build_field_context_with_history
-    from agent_actions.utils.content import get_existing_content
-
-    content = get_existing_content(record)
 
     if source_content is not None:
         resolved_source = source_content
     elif is_first_stage:
-        resolved_source = content
+        resolved_source = resolve_first_stage_source(record)
     else:
-        from agent_actions.processing.source_resolution import resolve_source_content
-
         resolved_source = resolve_source_content(
             record,
             record.get("source_guid"),
