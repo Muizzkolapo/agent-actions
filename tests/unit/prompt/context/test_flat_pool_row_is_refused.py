@@ -125,10 +125,28 @@ class TestNeitherGranularityGuessesAtAFlatPoolRow:
     def test_a_flat_row_the_pool_never_matches_changes_nothing(self):
         """The refusal fires on the row that is read, not on the pool's mere presence: a
         record resolving to an enveloped row must not fail because some other row in the
-        same pool is flat."""
+        same pool is flat.
+
+        Asserts the document both paths answer with, not merely that they agree — two
+        ``None``s agree too, and a pool-wide check would produce exactly that.
+        """
         pool = ENVELOPED_POOL + [{"source_guid": "G9", "url": "NEVER READ"}]
 
-        assert record_mode_source(consumer(), pool) == file_mode_source(consumer(), pool)
+        assert record_mode_source(consumer(), pool) == DOCUMENT
+        assert file_mode_source(consumer(), pool) == DOCUMENT
+
+    def test_a_record_that_is_its_own_flat_pool_row_is_refused(self):
+        """A workflow with no staging data of its own passes its input records as the pool
+        (``pipeline.py``: "the input data IS the source"), so a record resolves to itself.
+
+        A record with no ``content`` is the pre-envelope shape ``_normalize_input``
+        tolerates for identity — a branch #584 added while migrating away from it — so the
+        refusal reaching it here is the same store, not a second population.
+        """
+        flat_record = {"source_guid": "SELF", "question": "q?", "metadata": {"k": "v"}}
+
+        with pytest.raises(DataValidationError):
+            resolve_source_content(flat_record, "SELF", [flat_record], "a2")
 
 
 class TestTheEnvelopeIsWhatDrawsTheBoundary:
