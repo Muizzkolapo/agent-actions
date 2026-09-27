@@ -200,3 +200,82 @@ class TestAPoolThatIsTheActionsOwnInputSet:
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
 
         assert record_mode_source(row) == {"url": "POOL"}
+
+
+class TestAFirstStageGuardReadsTheSameNamespaceAsTheActionItGuards:
+    """``prefilter_by_guard`` builds guard context without a resolved ``source_content``,
+    so a first-stage record was answered from ``get_existing_content`` — the inner content
+    dict, one level below the record envelope the namespace builder reads. The builder
+    found no ``content`` key, took its flat branch and published ``{"source": payload}``
+    as the source namespace, so a guard on ``source.<field>`` resolved for every other
+    action and not for the first one: the "works in batch, fails online" class
+    ``guard_context`` exists to close.
+
+    The same call also skipped the normalizer's first-stage mode, so a record whose user
+    fields sit at the top level resolved to no source namespace at all.
+    """
+
+    def first_stage_guard_source(self, record, scope=None):
+        """The ``source`` namespace a FILE-mode first-stage guard sees.
+
+        Mirrors ``prefilter_by_guard``'s call: no ``source_content``, no pool,
+        ``is_first_stage=True``.
+        """
+        return build_guard_context(
+            dict(record),
+            agent_name="a1",
+            agent_config={"context_scope": scope or SCOPE},
+            is_first_stage=True,
+        ).get("source")
+
+    def test_a_first_stage_guard_reads_the_records_own_source_fields(self):
+        row = {"content": {"source": {"url": "CARRIED"}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row) == {"url": "CARRIED"}
+
+    def test_the_first_stage_guard_agrees_with_every_later_action(self):
+        """The invariant as a relationship: which action reads the record may not
+        decide what ``source.*`` means. A first-stage record is its own input, so the
+        later-action reading is the same record resolving against a pool of itself."""
+        row = {"content": {"source": {"url": "CARRIED"}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row) == record_mode_source(row, pool=[row])
+
+    def test_a_payload_field_named_content_is_not_read_as_the_envelope(self):
+        """``content`` is a framework key at the envelope level and an ordinary user
+        field inside the document. Reading the inner dict as an envelope conflated them."""
+        row = {
+            "content": {"source": {"content": "user text", "url": "U"}},
+            "source_guid": "G0",
+        }
+        scope = {"observe": ["source.content", "source.url"]}
+
+        assert self.first_stage_guard_source(row, scope=scope) == {
+            "content": "user text",
+            "url": "U",
+        }
+
+    def test_a_record_carrying_no_source_namespace_is_still_its_own_namespace(self):
+        """Unchanged by the fix, and the reason the builder cannot simply be handed the
+        record: a first-stage record without a ``source`` sub-namespace has its whole
+        content as the source document."""
+        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
+
+        assert self.first_stage_guard_source(row, scope={"observe": ["source.a1"]}) == {
+            "a1": {"n": 1}
+        }
+
+    def test_a_flat_record_offers_its_user_fields_and_not_the_frameworks(self):
+        """A first-stage record whose user fields sit at the top level. The normalizer
+        synthesizes the namespace from the keys ``RECORD_FRAMEWORK_FIELDS`` does not
+        claim; skipping its first-stage mode resolved the whole record to nothing."""
+        row = {
+            "source_guid": "G0",
+            "node_id": "n",
+            "lineage": ["a0"],
+            "url": "U",
+            "title": "T",
+        }
+        scope = {"observe": ["source.url", "source.title"]}
+
+        assert self.first_stage_guard_source(row, scope=scope) == {"url": "U", "title": "T"}
