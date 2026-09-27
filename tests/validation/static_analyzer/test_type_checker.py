@@ -53,6 +53,7 @@ class TestStaticTypeChecker:
                     agent_kind=agent.get("kind", ActionKind.LLM),
                     output_schema=OutputSchema(
                         schema_fields=agent.get("fields", set()),
+                        passthrough_fields=agent.get("passthrough", set()),
                         is_schemaless=agent.get("schemaless", False),
                         is_dynamic=agent.get("dynamic", False),
                         dropped_fields=agent.get("dropped", set()),
@@ -176,7 +177,10 @@ class TestStaticTypeChecker:
             [
                 {
                     "name": "extractor",
-                    "fields": {"text", "metadata"},
+                    "fields": {"text"},
+                    # Forwarded, then dropped — drop beats passthrough, so the field
+                    # really is absent from this action's output.
+                    "passthrough": {"metadata"},
                     "dropped": {"metadata"},
                 },
                 {

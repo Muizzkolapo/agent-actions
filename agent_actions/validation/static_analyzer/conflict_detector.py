@@ -165,17 +165,17 @@ class ConflictDetector:
 
             # Track schema fields
             for field_name in output.schema_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "schema")
 
             # Track observe fields
             for field_name in output.observe_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "observe")
 
             # Track passthrough fields
             for field_name in output.passthrough_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "passthrough")
 
     def _add_producer(self, field_name: str, action: str, source: str) -> None:

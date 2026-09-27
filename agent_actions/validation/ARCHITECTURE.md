@@ -123,7 +123,7 @@ WorkflowStaticAnalyzer.analyze()
   |          - referenced actions exist
   |          - referenced actions are in dependencies
   |          - referenced fields exist in upstream output schema
-  |          - fields not dropped from output
+  |          - forwarded fields not dropped from output
   |          - unused dependency warnings
   |
   Step 3+: Additional checks

@@ -298,7 +298,7 @@ class TestConflictDetector:
             name="action1",
             agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
-                schema_fields={"field1"},
+                passthrough_fields={"field1"},
                 dropped_fields={"field1"},
             ),
         )

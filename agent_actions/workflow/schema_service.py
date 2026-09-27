@@ -282,7 +282,7 @@ class WorkflowSchemaService:
                     name=field_name,
                     source=FieldSource.SCHEMA,
                     is_required=req,
-                    is_dropped=field_name in out.dropped_fields,
+                    is_dropped=out.drops_field(field_name),
                     field_type=ft,
                     description=desc,
                 )
@@ -292,7 +292,7 @@ class WorkflowSchemaService:
                 seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.OBSERVE,
-                    is_dropped=field_name in out.dropped_fields,
+                    is_dropped=out.drops_field(field_name),
                 )
 
         for field_name in out.passthrough_fields:
@@ -300,7 +300,7 @@ class WorkflowSchemaService:
                 seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.PASSTHROUGH,
-                    is_dropped=field_name in out.dropped_fields,
+                    is_dropped=out.drops_field(field_name),
                 )
 
         output_fields = list(seen.values())

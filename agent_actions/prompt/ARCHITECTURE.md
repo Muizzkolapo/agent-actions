@@ -76,30 +76,54 @@ PromptFormatter.get_raw_prompt(agent_config)
 
 ---
 
-## Context Scope System (Security-Critical)
+## Context Scope System
 
-`context_scope` is the security boundary that controls what data the LLM sees in its prompt and what data appears in its output. Every action must declare one.
+`context_scope` controls what data the LLM sees in its prompt and what this action
+contributes to its own output record. Every action must declare one.
 
 ```
 context_scope:
   observe:      ["extract.title", "extract.body"]
   passthrough:  ["source.customer_id"]
-  drop:         ["source.ssn", "source.salary"]
+  drop:         ["score_quality.prior_score"]
   seed:
     rules: "grading_rubric.json"
 ```
 
 ### The three directives
 
-| Directive | LLM sees it? | Output gets it? | Purpose |
-|-----------|-------------|-----------------|---------|
+Each directive governs **the declaring action only**. The record is an append-only
+bus: every namespace an action adds stays on it for the rest of the run.
+
+| Directive | LLM sees it? | This action forwards it? | Purpose |
+|-----------|-------------|--------------------------|---------|
 | `observe` | YES (in prompt context + "Additional context" injection) | NO (unless also in passthrough) | Feed data to the LLM for reasoning |
 | `passthrough` | NO (not in LLM context) | YES (merged into output record) | Carry identifiers through without LLM exposure |
-| `drop` | NO | NO | **Remove from BOTH input AND output** |
+| `drop` | NO | NO | Hide an upstream field from this action's prompt |
+
+### Drop is not a redaction
+
+`drop` hides an upstream field from *this* action's prompt and keeps it out of what
+*this* action forwards. It does not delete the field: the namespace that produced it
+stays on the bus, and a later action may observe it. Use it for bias prevention —
+keeping a prior score or a star rating out of an independent evaluation — not as a
+privacy control.
+
+Three separate mechanisms make this so, and none of them is a bug to be fixed: a
+FILE-mode output record is rebuilt from the pre-drop input (`file_tool.py`,
+`hitl.py`), delta storage rejoins an ancestor's namespace on read
+(`_reconstruct_from_deltas`), and `source` is a *view* on the durable source table
+that `SourceDataLoader` re-reads at every action, overwriting whatever the incoming
+record carried. To keep a field out of the run entirely, keep it out of the staged
+source.
+
+The action's own namespace does not exist yet when drop runs, so a drop can never
+remove a field the action produces — not even one whose name matches the dropped
+upstream field.
 
 ### Drop wins over passthrough
 
-Drop is applied **after** passthrough extraction. If a field appears in both `passthrough` and `drop`, it is removed from the passthrough dict. This is intentional: drop is the security override.
+Drop is applied **after** passthrough extraction. If a field appears in both `passthrough` and `drop`, it is removed from the passthrough dict. This is intentional: within the declaring action, drop is the final word.
 
 ```
 Processing order inside apply_context_scope():
@@ -116,17 +140,18 @@ Processing order inside apply_context_scope():
 
 ```
 Input Record:
-  {name: "Alice", age: 30, ssn: "123-45-6789", dept: "Eng", salary: 90000}
+  {name: "Alice", tenure: 4, prior_score: 9, dept: "Eng", user_rating: 5}
 
 context_scope:
-  drop: [source.ssn, source.salary]
+  drop: [source.prior_score, source.user_rating]
   observe: [source.dept]
   passthrough: [source.name]
 
-                    +--- What the LLM prompt gets ---+
-                    | {name: "Alice", age: 30,       |
+                    +--- What the LLM prompt gets ----+
+                    | {name: "Alice", tenure: 4,      |
                     |  dept: "Eng"}                   |
-                    | (ssn and salary dropped)        |
+                    | (the two scores cannot anchor   |
+                    |  this action's judgement)       |
                     |                                 |
                     | Additional context:             |
                     |   source.dept: "Eng"            |
@@ -135,7 +160,14 @@ context_scope:
                     +--- What the OUTPUT gets --------+
                     | {<llm_output>, name: "Alice"}   |
                     | (passthrough merged, LLM wins   |
-                    |  on key collision)               |
+                    |  on key collision)              |
+                    +---------------------------------+
+
+                    +--- What the NEXT action sees ---+
+                    | source.prior_score = 9          |
+                    | source.user_rating = 5          |
+                    | (still on the bus — the drop    |
+                    |  bound only the action above)   |
                     +---------------------------------+
 ```
 
@@ -403,7 +435,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 
 ## Caveats
 
-1. **context_scope is a security boundary.** It controls what the LLM sees and what appears in output. A misconfigured scope can leak PII (missing drop) or silently lose data (over-aggressive drop). Every action must declare one; omitting it raises `ConfigurationError`.
+1. **context_scope controls prompt content, not data retention.** It decides what the LLM sees and what an action forwards. A misconfigured scope can put a field in front of a model that should not have influenced it (missing `drop`) or starve an action of context it needed (over-aggressive `drop`). It cannot remove data from the run — see "Drop is not a redaction" above. Every action must declare one; omitting it raises `ConfigurationError`.
 
 2. **apply_context_scope deep-copies field_context.** The original input dict is never mutated. This is load-bearing: the same field_context may be reused across records in FILE mode, and mutation would corrupt subsequent records.
 
@@ -421,7 +453,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 
 9. **StrictUndefined has no exceptions.** Jinja2 uses `StrictUndefined` so typos in template references fail loudly. Dereferencing a guard-skipped namespace fails loudly too — silently rendering `""` would send a half-empty prompt to the provider. The failure is made actionable instead: `null_namespace_hints` names the null namespace the template touched, lists the non-null namespaces available, and points at `ns.*` null-safe access or a guard on the consuming action.
 
-10. **Drop order matters for passthrough.** Passthrough fields are extracted from the pre-drop prompt_context, then drop is applied to both prompt_context and passthrough_fields. This means passthrough captures the value before drop, but drop still removes it. If the order were reversed (drop then passthrough), passthrough would never see the field. The current order ensures drop is the final authority.
+10. **Drop order matters for passthrough.** Passthrough fields are extracted from the pre-drop prompt_context, then drop is applied to both prompt_context and passthrough_fields. This means passthrough captures the value before drop, but drop still removes it. If the order were reversed (drop then passthrough), passthrough would never see the field. The current order ensures drop is the final word on what the declaring action forwards.
 
 11. **Seed data path traversal prevention is delegated.** `StaticDataLoader._resolve_path()` delegates to `resolve_seed_path()` from `utils/path_security.py`. This validates that the resolved path stays within `static_data_dir` after symlink resolution. The loader also rejects absolute paths as a first-pass check before delegation.
 

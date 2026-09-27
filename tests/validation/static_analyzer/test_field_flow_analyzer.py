@@ -83,8 +83,10 @@ def create_graph_with_transformations():
             output_schema=OutputSchema(
                 schema_fields={"result", "score"},
                 observe_fields={"original_content"},
-                passthrough_fields={"metadata"},
-                dropped_fields={"score"},  # Drop score field
+                passthrough_fields={"metadata", "prior_score"},
+                # `score` is named by a drop AND produced by this action: the drop
+                # applies to the forwarded `prior_score` only.
+                dropped_fields={"prior_score", "score"},
             ),
             dependencies=set(),
             input_requirements=[
@@ -172,7 +174,8 @@ class TestFieldFlowAnalyzer:
         [
             pytest.param("original_content", "observe", False, id="observe"),
             pytest.param("metadata", "passthrough", False, id="passthrough"),
-            pytest.param("score", None, True, id="dropped"),
+            pytest.param("prior_score", "passthrough", True, id="dropped"),
+            pytest.param("score", "schema", False, id="produced_field_not_dropped"),
         ],
     )
     def test_field_lineage_tracks_field_types(self, field, expected_type, expected_dropped):

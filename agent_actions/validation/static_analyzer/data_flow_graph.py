@@ -25,8 +25,18 @@ class OutputSchema:
     @property
     def available_fields(self) -> set[str]:
         """Compute available fields after applying drops."""
-        all_fields = self.schema_fields | self.observe_fields | self.passthrough_fields
-        return all_fields - self.dropped_fields
+        forwarded = (self.observe_fields | self.passthrough_fields) - self.dropped_fields
+        return self.schema_fields | forwarded
+
+    def drops_field(self, field_name: str) -> bool:
+        """Whether ``drop`` keeps *field_name* out of what this action forwards.
+
+        A drop filters upstream namespaces on their way into the action's context, so
+        it can only remove a field the action forwards. The action's own namespace does
+        not exist yet when drop runs, so a field it produces is never dropped — not
+        even when a dropped upstream ref happens to share its bare name.
+        """
+        return field_name in self.dropped_fields and field_name not in self.schema_fields
 
     def has_field(self, field_name: str) -> bool:
         """Check if field is available in output."""

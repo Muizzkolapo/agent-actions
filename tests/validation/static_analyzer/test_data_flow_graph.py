@@ -29,9 +29,20 @@ class TestOutputSchema:
                 id="with_observe",
             ),
             pytest.param(
-                {"schema_fields": {"name", "age", "email"}, "dropped_fields": {"email"}},
+                {
+                    "schema_fields": {"name"},
+                    "passthrough_fields": {"age", "email"},
+                    "dropped_fields": {"email"},
+                },
                 {"name", "age"},
                 id="with_drops",
+            ),
+            pytest.param(
+                # A drop names an upstream field. The action's own namespace does not
+                # exist when drop runs, so a produced field of that name is untouched.
+                {"schema_fields": {"email"}, "dropped_fields": {"email"}},
+                {"email"},
+                id="produced_field_survives_a_same_named_drop",
             ),
             pytest.param(
                 {
@@ -39,7 +50,7 @@ class TestOutputSchema:
                     "observe_fields": {"c", "d"},
                     "dropped_fields": {"b", "c"},
                 },
-                {"a", "d"},
+                {"a", "b", "d"},
                 id="formula",
             ),
         ],

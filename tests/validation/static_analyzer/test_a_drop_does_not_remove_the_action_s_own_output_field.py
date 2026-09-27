@@ -1,14 +1,9 @@
 """A `context_scope.drop` filters what an action forwards, not what it produces.
 
-`drop` hides an upstream field from the declaring action's LLM context and leaves it
-on the bus (`skills/agac-agent-skills/references/context-scoping.md`: "hides a field
-from this action's context without deleting it"). The declaring action's own namespace
-does not exist yet when drop is applied, so a drop can never remove a field the action
-itself produces.
-
-The static analyzer discarded the namespace when recording drops, so a drop aimed at an
-upstream field removed a same-named field from the declaring action's OWN output — the
-shape every real `drop:` in `examples/` and the sample project uses.
+The declaring action's own namespace does not exist when drop runs, so a drop can never
+remove a field the action produces. The analyzer discarded the namespace when recording
+drops, so a drop aimed at an upstream field removed a same-named field from the
+declaring action's own output — the shape every real `drop:` in `examples/` uses.
 """
 
 from __future__ import annotations

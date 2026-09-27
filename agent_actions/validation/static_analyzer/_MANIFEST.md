@@ -25,7 +25,8 @@
 | `data_flow_graph.py` | Module | Data flow graph for workflow static analysis. | - |
 | `ActionKind` | Class | Type of agent node (LLM, TOOL, HITL, SOURCE, SEED). | - |
 | `OutputSchema` | Class | Represents the output schema of an agent. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields: everything the action produces, plus what it forwards minus its drops. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `drops_field` | Method | Whether `drop` keeps a field out of what the action forwards. Never true for a field the action produces — the action's own namespace does not exist when drop runs. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `has_field` | Method | Check if field is available in output. | - |
 | `InputSchema` | Class | Represents the input schema of an agent. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `all_fields` | Method | Get all input fields (required + optional). | - |
