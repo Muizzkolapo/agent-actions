@@ -216,26 +216,6 @@ class TestIsOperationalFromConfig:
         assert result["is_operational"] is False
 
 
-class TestRepromptPrecedenceForToolHitl:
-    """Tool/hitl actions must not inherit reprompt from workflow defaults.
-
-    reprompt is an LLM-recovery directive: re-running a deterministic UDF (or a
-    HITL step) on the same input can't change the outcome, so a defaults-level
-    reprompt must not bleed onto tool/hitl actions. An explicit action-level
-    reprompt is still honoured.
-    """
-
-    _DEFAULTS = {"reprompt": {"on_schema_mismatch": "reprompt", "max_attempts": 3}}
-
-    def _tool_action(self):
-        return {
-            "name": "my_tool",
-            "kind": "tool",
-            "impl": "pkg.some_fn",
-            "schema": {"fields": [{"name": "x", "type": "string"}]},
-        }
-
-
 class TestVendorCompatibilityValidatorRunModeCoercion:
     """Verify VendorCompatibilityValidator coerces raw run_mode strings to RunMode."""
 
