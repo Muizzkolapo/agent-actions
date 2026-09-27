@@ -50,19 +50,17 @@ def build_guard_context(
         Full field_context dict with source, dependency, version, and workflow
         namespaces — identical to what TaskPreparer.prepare() provides.
     """
+    from agent_actions.processing.source_resolution import (
+        resolve_first_stage_source,
+        resolve_source_content,
+    )
     from agent_actions.prompt.context.scope_builder import build_field_context_with_history
-    from agent_actions.utils.content import get_existing_content
 
     if source_content is not None:
         resolved_source = source_content
     elif is_first_stage:
-        # The namespace builder reads a record envelope, not the inner content dict.
-        # Handed the inner dict it finds no "content" key, takes its flat branch and
-        # publishes {"source": payload} as the namespace, one level too deep.
-        resolved_source = {"content": get_existing_content(record, is_first_stage=True)}
+        resolved_source = resolve_first_stage_source(record)
     else:
-        from agent_actions.processing.source_resolution import resolve_source_content
-
         resolved_source = resolve_source_content(
             record,
             record.get("source_guid"),
