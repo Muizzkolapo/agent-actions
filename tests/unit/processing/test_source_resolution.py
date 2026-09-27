@@ -6,14 +6,16 @@ from agent_actions.processing.source_resolution import resolve_source_content
 class TestResolveSourceContent:
     """Tests for resolve_source_content()."""
 
-    def test_returns_item_when_source_in_content(self):
-        """Tier 1: record content has 'source' key -> return record."""
+    def test_returns_item_for_a_carried_namespace_when_there_is_no_pool(self):
+        """With no pool there is no identity to read first, so the namespace the
+        record carries is the answer."""
         item = {"content": {"source": {"field": "val"}}, "source_guid": "sg"}
         result = resolve_source_content(item, "sg", None)
         assert result is item
 
-    def test_guid_lookup_when_no_source_key(self):
-        """Tier 2: source_guid + source_data -> look up by guid."""
+    def test_guid_lookup_resolves_first(self):
+        """The guid lookup is the first step, not a fallback for a record with no
+        source key — this record happens to have none, which is incidental."""
         item = {"content": {"upstream": {"x": 1}}, "source_guid": "sg-123"}
         source_data = [{"source_guid": "sg-123", "content": {"source": {"a": 1}}}]
         result = resolve_source_content(item, "sg-123", source_data)

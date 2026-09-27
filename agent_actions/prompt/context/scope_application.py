@@ -401,14 +401,20 @@ def format_llm_context(llm_context: dict) -> str:
 
 
 def _build_source_index(source_data: list[dict] | None) -> dict[str | None, dict]:
-    """Build source_guid -> source record index for cross-record source resolution."""
+    """Build source_guid -> source record index for cross-record source resolution.
+
+    First row wins a repeated guid, matching the linear scan the RECORD-mode
+    resolver uses. The pool is unique per guid within one staged path, but a
+    repair concatenates every path, so the two granularities would otherwise
+    pick different rows for the same record.
+    """
     index: dict[str | None, dict] = {}
     if not source_data:
         return index
     for src in source_data:
         sguid = src.get("source_guid") if isinstance(src, dict) else None
         if sguid:
-            index[sguid] = src
+            index.setdefault(sguid, src)
     return index
 
 
@@ -424,7 +430,7 @@ def _resolve_source_content(
     or the ancestor inherited from the input standing in for its namespaces). A miss
     on both against a non-empty pool returns None — substituting another record's
     source would attribute the wrong document. The caller then tries the namespace
-    the record carries itself, where the RECORD-mode resolver starts, and keeps that
+    the record carries itself, where the RECORD-mode resolver also ends, and keeps that
     step out of its cache because this one is keyed on identity.
     """
     matched = source_index.get(source_guid)
@@ -690,8 +696,8 @@ def apply_context_scope_for_records(
                 )
             source_content = source_cache[cache_key]
             if source_content is None:
-                # The row may still carry the namespace itself — what the
-                # RECORD-mode resolver reads first. Not cached: that key is an
+                # The row may still carry the namespace itself — the last resort
+                # in the RECORD-mode resolver too. Not cached: that key is an
                 # identity, and this answer is the record's own content.
                 carried = content.get("source")
                 source_content = carried if isinstance(carried, dict) else None
