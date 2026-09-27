@@ -442,6 +442,57 @@ class TestTheRowShapesTheseTestsRelyOn:
         assert [r.get("producer_source_guids") for r in rows] == [["i1"], ["i1"]]
         assert [r.get("_state") for r in rows] == ["processed", "processed"]
 
+    def test_a_produced_row_with_no_settled_state_answers_for_nothing(self, tmp_path):
+        """The strict reading, pinned: absent is not processed.
+
+        Every row the collector emits is stamped, so this cannot arrive today — but
+        defaulting the missing case to processed would read a stripped row as an answer,
+        and the guard exists to fail the other way.
+        """
+        stored = [_row("m1", producers=["i1"]), _row("m2", producers=["i1"])]
+        produced = [{"source_guid": "i1", "answer": "no state stamped"}]
+
+        result = _rerun(tmp_path, stored, produced)
+
+        assert [r["source_guid"] for r in result] == ["i1", "m1", "m2"]
+
+    def test_the_rows_handed_to_the_write_still_carry_their_state(self):
+        """The seam the whole rule rests on, and the one test that can see it.
+
+        `_state` is a framework field, and framework fields are stripped between stages
+        by design. Strip it anywhere between the collector and the write and `answered`
+        goes empty, every re-run returns to doubling the file, and nothing else goes red.
+        """
+        context = ProcessingContext(
+            agent_config={"kind": "llm"}, agent_name=ACTION, mode=RunMode.BATCH
+        )
+        context.source_data = [{"source_guid": "i1", "page_content": "text"}]
+
+        result = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"source_guid": "i1", "answer": "a"}, {"source_guid": "i1", "answer": "b"}],
+            source_guid="i1",
+        )
+        result.is_expansion = True
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+            workflow_name=ACTION,
+            storage_backend=MagicMock(),
+        )
+        service._result_processor.process.return_value = [result]
+
+        handed, _stats, _halt = service._convert_batch_results_to_workflow_format(
+            [],
+            agent_config={"action_name": ACTION, "workflow_session_id": "s1"},
+        )
+
+        assert [r.get("_state") for r in handed] == ["processed", "processed"]
+        assert [r.get("producer_source_guids") for r in handed] == [["i1"], ["i1"]]
+
     def test_the_fields_survive_a_store_round_trip(self, tmp_path):
         backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
         backend.initialize()

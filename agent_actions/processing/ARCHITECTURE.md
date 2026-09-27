@@ -382,10 +382,14 @@ credited as an answer deletes what the last run produced. Such a row does still 
 a stored row of its own identity, which is decided first — carried rows are appended to
 the run's own output, so an identity in both lists would be written twice.
 
-Only a stored row naming exactly one input is inferred away, that being the shape a mint
-makes. Naming several means the row also holds what its other inputs gave it, and the
-identity it carries is an input's rather than a mint's, which no field distinguishes — so
-it is handed back, a duplicate being visible where a dropped row is not.
+A stored row naming exactly one input is inferred away; naming several, never. That
+reads one producer as a mint, which holds on this path — a batch row that names producers
+has been re-keyed — but not in general. The FILE writer records the inputs a row consumed
+*minus* its own, so a two-input merge keeps one identity and names one producer; inferred
+away, its own input's content goes with it. `build_carry_forward` carries the stricter
+reading for rows of that shape, and a future caller reading them wants it rather than
+this. Where several inputs are named the row is handed back regardless, a duplicate being
+visible where a dropped row is not.
 
 ---
 

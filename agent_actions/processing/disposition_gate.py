@@ -201,6 +201,13 @@ def stored_rows_not_reproduced(
     the producers it names, else the identity it carries. Both halves need that test: a
     failed row is keyed on its input too, and a row can be stamped unsettled after
     enrichment named its producers.
+
+    A stored row naming one input is inferred away; naming several, never. That reads
+    one producer as a mint, which holds where this is called from — a batch row naming
+    producers has been re-keyed — and not in general: the FILE writer records the inputs
+    a row consumed *minus* its own, so a two-input merge keeps one identity and names
+    one producer. Inferred away there, its own input's content goes with it, and a
+    caller reading those rows wants the stricter reading ``build_carry_forward`` has.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -230,12 +237,12 @@ def stored_rows_not_reproduced(
         if guid in rewritten:
             continue
         if len(producers) == 1:
-            # The shape a mint makes, and the only one an input answers away.
+            # On this path one producer means a mint, because a batch row that names any
+            # is re-keyed. It does not mean that in general — see the docstring.
             reproduced = producers <= answered
         elif producers:
-            # Several inputs: the row holds what each gave it, and its own identity is
-            # an input's rather than a mint's. Nothing here tells the two apart, so it
-            # is never inferred away.
+            # Several: the row holds what each input gave it, and its own identity is an
+            # input's rather than a mint's. Never inferred away.
             reproduced = False
         else:
             reproduced = guid in answered
