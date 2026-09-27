@@ -8,6 +8,7 @@ from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.tooling.code_scanner import scan_tool_functions
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_OUTPUT_JSON_SCHEMA
 
@@ -415,7 +416,7 @@ class SchemaExtractor:
         for ref in passthrough:
             field_name = self._extract_field_name(ref)
             if field_name:
-                output.passthrough_fields.add(field_name)
+                output.passthrough_refs.add((self._extract_namespace(ref), field_name))
             elif isinstance(ref, str) and ".*" in ref:
                 # Wildcard passthrough: "source.*" → record the source name
                 source_name = ref.split(".", 1)[0]
@@ -426,13 +427,13 @@ class SchemaExtractor:
         for ref in scope_observe:
             field_name = self._extract_field_name(ref)
             if field_name:
-                output.observe_fields.add(field_name)
+                output.observe_refs.add((self._extract_namespace(ref), field_name))
 
         scope_drops = context_scope.get("drop")
         for ref in scope_drops or []:  # or [] guards against explicit null (drop: null in config)
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.dropped_fields.add(field_name)
+            parsed = self._parse_drop_ref(ref)
+            if parsed:
+                output.dropped_refs.add(parsed)
 
         if config.get("return_collection"):
             output.schema_fields.add("input_data")
@@ -503,6 +504,32 @@ class SchemaExtractor:
                 fields.update(items["properties"].keys())
 
         return fields
+
+    @staticmethod
+    def _extract_namespace(reference: str) -> str | None:
+        """Namespace of a `ns.field` reference, or None when it names none."""
+        if not reference or "." not in reference:
+            return None
+        return reference.split(".", 1)[0] or None
+
+    @staticmethod
+    def _parse_drop_ref(reference: Any) -> tuple[str, str] | None:
+        """A drop ref as ``(namespace, field)``, or None when the runtime won't act on it.
+
+        Mirrors `_apply_drops_to_content`: refs the runtime's own parser rejects are
+        logged as "Field will NOT be removed" and skipped, and a nested field path
+        matches no key because the pop is flat. Recording either would withhold a field
+        the run still forwards.
+        """
+        if not isinstance(reference, str):
+            return None
+        try:
+            namespace, field_name = parse_field_reference(reference)
+        except ValueError:
+            return None
+        if field_name != "*" and ("." in field_name or "*" in field_name):
+            return None
+        return (namespace, field_name)
 
     def _extract_field_name(self, reference: str) -> str | None:
         """Extract field name from a reference string."""

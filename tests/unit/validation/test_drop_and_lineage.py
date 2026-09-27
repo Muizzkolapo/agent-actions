@@ -45,8 +45,8 @@ class TestCheckDropDirectives:
                 agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(
                     schema_fields=schema_fields or set(),
-                    observe_fields=observe_fields or set(),
-                    passthrough_fields=passthrough_fields or set(),
+                    observe_refs={("source", f) for f in observe_fields or set()},
+                    passthrough_refs={("source", f) for f in passthrough_fields or set()},
                     is_dynamic=is_dynamic,
                     is_schemaless=is_schemaless,
                 ),
@@ -464,7 +464,7 @@ class TestExpandWildcards:
                 (
                     "A",
                     ActionKind.LLM,
-                    OutputSchema(schema_fields={"s1"}, observe_fields={"o1"}),
+                    OutputSchema(schema_fields={"s1"}, observe_refs={("source", "o1")}),
                     {"source"},
                 ),
             ]
@@ -607,7 +607,7 @@ class TestCheckLineageReachability:
                 agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(
                     schema_fields={"result"},
-                    passthrough_fields={"field_x"},
+                    passthrough_refs={("A", "field_x")},
                 ),
                 dependencies={"A"},
             )

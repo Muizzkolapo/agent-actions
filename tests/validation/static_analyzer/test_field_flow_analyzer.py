@@ -82,11 +82,11 @@ def create_graph_with_transformations():
             agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"result", "score"},
-                observe_fields={"original_content"},
-                passthrough_fields={"metadata", "prior_score"},
+                observe_refs={("up", "original_content")},
+                passthrough_refs={("up", "metadata"), ("up", "prior_score")},
                 # `score` is named by a drop AND produced by this action: the drop
                 # applies to the forwarded `prior_score` only.
-                dropped_fields={"prior_score", "score"},
+                dropped_refs={("up", "prior_score"), ("up", "score")},
             ),
             dependencies=set(),
             input_requirements=[

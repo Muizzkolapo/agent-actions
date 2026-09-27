@@ -53,10 +53,10 @@ class TestStaticTypeChecker:
                     agent_kind=agent.get("kind", ActionKind.LLM),
                     output_schema=OutputSchema(
                         schema_fields=agent.get("fields", set()),
-                        passthrough_fields=agent.get("passthrough", set()),
+                        passthrough_refs=agent.get("passthrough", set()),
                         is_schemaless=agent.get("schemaless", False),
                         is_dynamic=agent.get("dynamic", False),
-                        dropped_fields=agent.get("dropped", set()),
+                        dropped_refs=agent.get("dropped", set()),
                     ),
                     dependencies=agent.get("deps", set()),
                     input_requirements=reqs,
@@ -180,8 +180,8 @@ class TestStaticTypeChecker:
                     "fields": {"text"},
                     # Forwarded, then dropped — drop beats passthrough, so the field
                     # really is absent from this action's output.
-                    "passthrough": {"metadata"},
-                    "dropped": {"metadata"},
+                    "passthrough": {("up", "metadata")},
+                    "dropped": {("up", "metadata")},
                 },
                 {
                     "name": "summarizer",

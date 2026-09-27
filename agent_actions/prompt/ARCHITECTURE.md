@@ -411,10 +411,10 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 | `handler.py` | `PromptLoader` -- loads and validates prompts from `prompt_store/*.md` files. Extracts named blocks, validates uniqueness and closure. |
 | `message_builder.py` | `MessageBuilder` -- assembles vendor-specific `LLMMessageEnvelope` from prompt + context. `PROVIDER_MESSAGE_CONFIGS` registry. |
 
-### Context scope (security-critical)
+### Context scope
 | File | Role |
 |------|------|
-| `context/scope_application.py` | `apply_context_scope()` -- the security gate. Observe/drop/passthrough filtering, prompt_context gating, FILE mode variant. |
+| `context/scope_application.py` | `apply_context_scope()` -- the prompt gate. Observe/drop/passthrough filtering, prompt_context gating, FILE mode variant. It decides what reaches the model, not what the run retains. |
 | `context/scope_builder.py` | `build_field_context_with_history()` -- assembles field_context from 4 namespace builders: source, dependency, version, workflow. |
 | `context/scope_inference.py` | `infer_dependencies()` -- auto-infers input/context sources from action config, fan-in detection, version branch expansion. |
 | `context/scope_parsing.py` | `parse_field_reference()` -- parses "action.field" references. `extract_action_names_from_template()` -- AST-based Jinja2 dependency extraction. |

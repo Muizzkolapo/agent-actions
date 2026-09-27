@@ -71,7 +71,6 @@ EXAMPLES: list[Example] = [
             GuardCheck(action="generate_response", behavior="filter"),
             GuardCheck(action="extract_product_insights", behavior="filter"),
             ExpectationCheck(action="score_quality"),
-            ContextScope(action="generate_response", dropped_fields=["source.star_rating"]),
         ],
     ),
     Example(
@@ -115,9 +114,14 @@ EXAMPLES: list[Example] = [
             ParallelVersions(action="extract_field_marks", versions=3),
             ParallelVersions(action="rank_diagnostic_value", versions=3),
             ParallelVersions(action="draft_id_note", versions=2),
+            # `draft_id_note` observes `select_approved_marks.*`, so the wildcard puts
+            # both fields in reach and the drop is the only thing keeping them out.
             ContextScope(
                 action="draft_id_note",
-                dropped_fields=["vote_summary", "decision"],
+                dropped_fields=[
+                    "select_approved_marks.vote_summary",
+                    "select_approved_marks.decision",
+                ],
             ),
             # Only the grounding guard is asserted. The extraction guard reads a
             # field the mock fills from an enum, so whether it filters is a coin

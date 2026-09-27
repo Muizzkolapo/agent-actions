@@ -24,31 +24,49 @@ class TestOutputSchema:
                 id="schema_only",
             ),
             pytest.param(
-                {"schema_fields": {"name"}, "observe_fields": {"age", "email"}},
+                {"schema_fields": {"name"}, "observe_refs": {("up", "age"), ("up", "email")}},
                 {"name", "age", "email"},
                 id="with_observe",
             ),
             pytest.param(
                 {
                     "schema_fields": {"name"},
-                    "passthrough_fields": {"age", "email"},
-                    "dropped_fields": {"email"},
+                    "passthrough_refs": {("up", "age"), ("up", "email")},
+                    "dropped_refs": {("up", "email")},
                 },
                 {"name", "age"},
                 id="with_drops",
             ),
             pytest.param(
-                # A drop names an upstream field. The action's own namespace does not
-                # exist when drop runs, so a produced field of that name is untouched.
-                {"schema_fields": {"email"}, "dropped_fields": {"email"}},
+                # The action's own namespace does not exist when drop runs, so a
+                # produced field is untouched by a drop naming that bare name.
+                {"schema_fields": {"email"}, "dropped_refs": {("up", "email")}},
                 {"email"},
                 id="produced_field_survives_a_same_named_drop",
             ),
             pytest.param(
+                # The drop names `a`'s copy; `b` still forwards its own.
+                {
+                    "passthrough_refs": {("a", "score"), ("b", "score")},
+                    "dropped_refs": {("a", "score")},
+                },
+                {"score"},
+                id="sibling_namespace_still_forwards_it",
+            ),
+            pytest.param(
+                # A whole-namespace drop takes every field forwarded from it.
+                {
+                    "passthrough_refs": {("a", "score"), ("b", "note")},
+                    "dropped_refs": {("a", "*")},
+                },
+                {"note"},
+                id="wildcard_drop_takes_the_namespace",
+            ),
+            pytest.param(
                 {
                     "schema_fields": {"a", "b"},
-                    "observe_fields": {"c", "d"},
-                    "dropped_fields": {"b", "c"},
+                    "observe_refs": {("up", "c"), ("up", "d")},
+                    "dropped_refs": {("up", "b"), ("up", "c")},
                 },
                 {"a", "b", "d"},
                 id="formula",

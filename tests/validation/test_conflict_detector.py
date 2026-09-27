@@ -215,8 +215,8 @@ class TestConflictDetector:
             name="action1",
             agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
-                schema_fields={"temp_field"},
-                dropped_fields={"temp_field"},
+                passthrough_refs={("up", "temp_field")},
+                dropped_refs={("up", "temp_field")},
             ),
         )
         graph.add_node(action1)
@@ -252,7 +252,7 @@ class TestConflictDetector:
         action2 = DataFlowNode(
             name="action2",
             agent_kind=ActionKind.LLM,
-            output_schema=OutputSchema(observe_fields={"shared"}),
+            output_schema=OutputSchema(observe_refs={("up", "shared")}),
         )
         graph.add_node(action1)
         graph.add_node(action2)
@@ -278,7 +278,7 @@ class TestConflictDetector:
         action2 = DataFlowNode(
             name="action2",
             agent_kind=ActionKind.LLM,
-            output_schema=OutputSchema(passthrough_fields={"field1"}),
+            output_schema=OutputSchema(passthrough_refs={("up", "field1")}),
         )
         graph.add_node(action1)
         graph.add_node(action2)
@@ -298,8 +298,8 @@ class TestConflictDetector:
             name="action1",
             agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
-                passthrough_fields={"field1"},
-                dropped_fields={"field1"},
+                passthrough_refs={("up", "field1")},
+                dropped_refs={("up", "field1")},
             ),
         )
         action2 = DataFlowNode(
