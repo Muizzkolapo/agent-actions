@@ -448,9 +448,18 @@ def process_directory_files(
     # Sorted, not raw walk order: file_limit truncates this sequence, so an
     # unordered walk makes "the first N files" mean whatever the filesystem
     # happened to enumerate first.
-    items = _files_holding_retried_records(
-        runner, sorted(_walk_files(input_path, unreadable)), input_path
-    )
+    walked = sorted(_walk_files(input_path, unreadable))
+    items, resolved_from_store = _files_holding_retried_records(runner, walked, input_path)
+    if resolved_from_store:
+        # The store named the files holding this repair's records, so a directory
+        # that will not open holds none of them. Charging the loss would void the
+        # count, and where the resolved set is empty, fail a repair outright over a
+        # directory it was never going to read. A repair that fell back to walking
+        # everything resolved nothing, and keeps the report.
+        unreadable.clear()
+    # Same reason the walk above is sorted: `errors` keeps only the first
+    # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
+    unreadable.sort(key=lambda pair: pair[0])
     for directory, error in unreadable:
         where = _walk_label(directory, input_path)
         files_seen += 1
@@ -527,8 +536,8 @@ def process_directory_files(
 
 def _files_holding_retried_records(
     runner: ActionRunner, items: list[Path], input_path: Path
-) -> list[Path]:
-    """The subset of *items* a repair needs, or all of them when not repairing.
+) -> tuple[list[Path], bool]:
+    """The subset of *items* a repair needs → (files, whether the store resolved them).
 
     A repair names records, not files, and walking every staged file lets
     `file_limit` spend its budget on ones holding none of them. Falls back to
@@ -536,9 +545,13 @@ def _files_holding_retried_records(
     record shares a repeat chain with another file: re-deriving identity needs
     every sibling file present, and a narrowed walk missing one re-derives a
     colliding identity instead.
+
+    The flag is False on every one of those fall-backs. A caller needs it because a
+    resolved set also says where the named records live, so a directory the walk
+    could not open provably holds none of them.
     """
     if not runner.retried_records or runner.storage_backend is None:
-        return items
+        return items, False
     retried = runner.retried_records
     if runner.storage_backend.records_share_a_repeat_chain(retried):
         logger.info(
@@ -547,7 +560,7 @@ def _files_holding_retried_records(
             "with the context it needs",
             len(retried),
         )
-        return items
+        return items, False
     wanted = runner.storage_backend.source_files_for_records(retried)
     if not wanted:
         logger.warning(
@@ -555,7 +568,7 @@ def _files_holding_retried_records(
             "walking every staged file",
             len(retried),
         )
-        return items
+        return items, False
     narrowed = [
         item for item in items if str(item.relative_to(input_path).with_suffix("")) in wanted
     ]
@@ -563,7 +576,7 @@ def _files_holding_retried_records(
         logger.info(
             "Repair narrowed the walk to %d of %d staged file(s)", len(narrowed), len(items)
         )
-    return narrowed
+    return narrowed, True
 
 
 def process_merged_files(

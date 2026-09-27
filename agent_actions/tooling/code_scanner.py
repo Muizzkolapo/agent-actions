@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 def _warn_unreadable_tool_dir(exc: OSError) -> None:
     """Report a tool directory the scan could not open.
 
-    Unsaid, its tools are simply absent from the catalog and the workflow naming
-    one fails later with "function not found" — a symptom several steps from the
-    permission that caused it.
+    This catalog feeds schema inference and the docs, not the runtime registry, so
+    the cost of staying quiet is a tool whose schema is silently unknown rather
+    than a failed run. Enumerating with a reporting walk also keeps the tools that
+    *did* read, where the previous handler abandoned the whole directory.
     """
     logger.warning("Cannot list tool directory %s: %s", exc.filename, exc)
 
