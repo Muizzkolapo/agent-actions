@@ -19,7 +19,9 @@ under ``source.*``.
 import pytest
 
 from agent_actions.processing.guard_context import build_guard_context
+from agent_actions.processing.prepared_task import PreparationContext
 from agent_actions.processing.source_resolution import resolve_source_content
+from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 
 POOL = [
@@ -245,13 +247,13 @@ class TestAFirstStageGuardReadsTheSameNamespaceAsTheActionItGuards:
         """``content`` is a framework key at the envelope level and an ordinary user
         field inside the document. Reading the inner dict as an envelope conflated them."""
         row = {
-            "content": {"source": {"content": "user text", "url": "U"}},
+            "content": {"source": {"content": {"body": "user text"}, "url": "U"}},
             "source_guid": "G0",
         }
         scope = {"observe": ["source.content", "source.url"]}
 
         assert self.first_stage_guard_source(row, scope=scope) == {
-            "content": "user text",
+            "content": {"body": "user text"},
             "url": "U",
         }
 
@@ -279,3 +281,63 @@ class TestAFirstStageGuardReadsTheSameNamespaceAsTheActionItGuards:
         scope = {"observe": ["source.url", "source.title"]}
 
         assert self.first_stage_guard_source(row, scope=scope) == {"url": "U", "title": "T"}
+
+
+FLAT = {"source_guid": "G0", "node_id": "n", "lineage": ["a0"], "title": "T", "keep": "yes"}
+WILDCARD = {"observe": ["source.*"]}
+
+
+def prompt_source(record, scope):
+    """The ``source`` namespace that reaches the model, through the real batch preparer."""
+    config = {
+        "agent_type": "llm_agent",
+        "prompt": "Title: {{ source.title }}",
+        "context_scope": scope,
+    }
+    context = PreparationContext(agent_config=config, agent_name="a1", is_first_stage=True)
+    task = TaskPreparer().prepare(dict(record), context)
+    return (task.llm_context or {}).get("source")
+
+
+class TestAFlatFirstStageRecordDoesNotSendFrameworkKeysToTheModel:
+    """A record whose user fields sit at the top level carries no boundary between them
+    and the framework's own keys, so the namespace builder's flat branch published the
+    whole record as the source document. An ``observe`` naming fields hid it; a wildcard
+    did not, and ``source_guid``, ``node_id`` and ``lineage`` went to the model as fields
+    of the user's document. ``RECORD_FRAMEWORK_FIELDS`` is the list that draws the
+    boundary, and the first-stage path did not consult it.
+    """
+
+    def test_a_wildcard_does_not_offer_framework_keys_as_document_fields(self):
+        assert prompt_source(FLAT, WILDCARD) == {"title": "T", "keep": "yes"}
+
+    def test_a_wildcard_still_offers_every_user_field(self):
+        """The other half: withholding must not cost the user a field they staged."""
+        observed = prompt_source(FLAT, WILDCARD)
+
+        assert observed is not None and observed.get("title") == "T"
+
+    def test_naming_the_fields_explicitly_is_unchanged(self):
+        """Already correct, because the observe list never named a framework key."""
+        scope = {"observe": ["source.title", "source.keep"]}
+
+        assert prompt_source(FLAT, scope) == {"title": "T", "keep": "yes"}
+
+    def test_an_enveloped_record_under_a_wildcard_is_unchanged(self):
+        """The only shape the staging pipeline writes: the envelope already draws the
+        boundary, so the wildcard was always safe there and must stay so."""
+        row = {
+            "content": {"source": {"title": "T", "keep": "yes"}},
+            "source_guid": "G0",
+            "node_id": "n",
+        }
+
+        assert prompt_source(row, WILDCARD) == {"title": "T", "keep": "yes"}
+
+    def test_the_envelope_is_what_lets_a_user_field_share_a_framework_name(self):
+        """``lineage`` inside the document is the user's and survives a wildcard. That is
+        the whole value of the envelope: a flat record cannot make this distinction, and
+        the framework withholds the name rather than guess."""
+        row = {"content": {"source": {"lineage": "user value", "title": "T"}}, "source_guid": "G0"}
+
+        assert prompt_source(row, WILDCARD) == {"lineage": "user value", "title": "T"}
