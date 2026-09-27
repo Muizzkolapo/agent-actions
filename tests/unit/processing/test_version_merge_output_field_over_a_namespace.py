@@ -65,9 +65,20 @@ def _batch_content(processor: BatchResultStrategy, output: dict[str, Any]) -> di
     return result.data[0]["content"]
 
 
-def _expand(schema: Any, *, kind: str = "tool", version_consumption: bool = True) -> dict[str, Any]:
+def _expand(
+    schema: Any,
+    *,
+    kind: str = "tool",
+    version_consumption: bool = True,
+    granularity: str | None = "file",
+    model_vendor: str | None = None,
+) -> dict[str, Any]:
     """Expand a one-action workflow, as loading a config does."""
     action: dict[str, Any] = {"name": "aggregate", "kind": kind, "schema": schema}
+    if granularity is not None:
+        action["granularity"] = granularity
+    if model_vendor is not None:
+        action["model_vendor"] = model_vendor
     if kind == "tool":
         action["impl"] = "aggregate"
     if version_consumption:
@@ -176,8 +187,35 @@ class TestTheNameIsRefusedWhereItIsDeclared:
         assert "source" in str(caught.value)
         assert "aggregate" in str(caught.value)
 
+    def test_a_root_level_array_schema_is_refused(self):
+        """Compiling an array schema keeps the item's fields only on the compiled copy."""
+        with pytest.raises(ConfigValidationError, match="framework namespace"):
+            _expand({"type": "array", "items": {"properties": {"source": {"type": "string"}}}})
+
+    def test_a_fields_entry_keyed_on_name_is_refused(self):
+        with pytest.raises(ConfigValidationError, match="framework namespace"):
+            _expand({"name": "S", "fields": [{"name": "source", "type": "string"}]})
+
+    def test_the_vendor_spelling_of_a_tool_is_refused_too(self):
+        """The strategy that spreads is chosen on either field, so both must be refused."""
+        with pytest.raises(ConfigValidationError, match="framework namespace"):
+            _expand({"source": "string"}, kind="llm", model_vendor="tool")
+
     def test_a_schema_naming_no_namespace_is_accepted(self):
         agent = _expand({"winner": "string", "count": "integer"})
+        assert agent["version_consumption_config"]["source"] == "voter"
+
+    def test_a_field_merely_containing_a_namespace_name_is_accepted(self):
+        """Only the whole name is the namespace; these are ordinary fields on real schemas."""
+        agent = _expand(
+            {
+                "source_quote": "string",
+                "source_url": "string",
+                "version_notes": "string",
+                "workflow_id": "string",
+                "seed_id": "string",
+            }
+        )
         assert agent["version_consumption_config"]["source"] == "voter"
 
     def test_an_llm_version_consumer_is_unaffected_because_it_nests(self):
@@ -187,6 +225,20 @@ class TestTheNameIsRefusedWhereItIsDeclared:
     def test_a_tool_that_consumes_no_versions_is_unaffected(self):
         agent = _expand({"source": "string"}, version_consumption=False)
         assert agent["version_consumption_config"] is None
+
+    def test_a_record_granularity_tool_is_unaffected_because_it_nests(self):
+        """Only a FILE-granularity tool spreads, so nothing collides at record level."""
+        agent = _expand({"source": "string"}, granularity="record")
+        assert agent["version_consumption_config"]["source"] == "voter"
+
+    def test_granularity_is_read_case_insensitively(self):
+        """Configs in this repo write it capitalised."""
+        with pytest.raises(ConfigValidationError, match="framework namespace"):
+            _expand({"source": "string"}, granularity="File")
+
+    def test_an_absent_granularity_defaults_to_record_and_is_unaffected(self):
+        agent = _expand({"source": "string"}, granularity=None)
+        assert agent["version_consumption_config"]["source"] == "voter"
 
 
 class TestTheShapesTheseTestsRelyOn:

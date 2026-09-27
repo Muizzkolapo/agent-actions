@@ -4,6 +4,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.llm.config.vendor import VendorType
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, RUNTIME_BUS_NAMESPACES
 
 
@@ -130,16 +131,17 @@ def _declared_output_fields(agent: dict[str, Any]) -> set[str]:
 
 
 def validate_version_merge_output_namespaces(agent: dict[str, Any], action_name: str) -> None:
-    """Refuse a version-merge tool whose output declares a framework namespace's name.
+    """Refuse a FILE-granularity version-merge tool declaring a framework namespace's name.
 
-    Such a tool's output is spread flat over record content rather than nested under the
-    action's own name, so its fields are content's own top-level keys. A field named for a
-    framework namespace therefore lands where that namespace goes and replaces it, which
-    for ``source`` leaves the record with nothing a later action can resolve the document
-    from. Both names are legitimate on their own, so the collision is settled here, where
-    renaming the field still costs nothing, rather than per record once data is at stake.
+    Only that action spreads its output flat over record content, making its fields
+    content's own top-level keys, so a field named for a framework namespace replaces it —
+    and for ``source`` the record keeps nothing a later action can resolve the document
+    from. A record-granularity action nests, so the same field collides with nothing.
+    Either ``kind`` or ``model_vendor`` names the tool, as the spreading strategy is chosen.
     """
-    if agent.get("kind") != "tool" or not agent.get("version_consumption_config"):
+    granularity = str(agent.get("granularity") or get_default("granularity")).lower()
+    is_tool = agent.get("kind") == "tool" or agent.get("model_vendor") == "tool"
+    if granularity != "file" or not is_tool or not agent.get("version_consumption_config"):
         return
     taken = sorted(_declared_output_fields(agent) & RUNTIME_BUS_NAMESPACES)
     if not taken:
