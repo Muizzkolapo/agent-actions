@@ -138,11 +138,10 @@ def _walk_label(directory: Path, root: Path) -> Path:
 def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]] | None = None) -> list[Path]:
     """Every file under *root*, collecting the directories it could not open.
 
-    Not ``rglob``, which drops such a directory's whole subtree and raises
-    nothing: the entry comes back, so the regular-file question above is asked
-    of the directory and answered correctly, and the files beneath it are lost
-    with nothing to report. A ``batch`` directory is left out of the report
-    because its files are skipped whether or not it opens.
+    Not ``rglob``: it drops such a directory's whole subtree and raises nothing,
+    handing back the directory entry alone — which the question above answers
+    correctly as "not a regular file", so no loss is ever declared. A ``batch``
+    directory is left out, its files being skipped whether or not it opens.
     """
 
     def _note(exc: OSError) -> None:
@@ -453,13 +452,14 @@ def process_directory_files(
         runner, sorted(_walk_files(input_path, unreadable)), input_path
     )
     for directory, error in unreadable:
+        where = _walk_label(directory, input_path)
         files_seen += 1
-        errors.record(_walk_label(directory, input_path), error)
+        errors.record(where, error)
         _lose_file(runner, params.action_name)
         logger.warning(
             "Could not list the staging directory %s, so every file beneath it "
             "went unprocessed: %s",
-            _walk_label(directory, input_path),
+            where,
             error,
         )
     for position, item in enumerate(items):
