@@ -159,7 +159,13 @@ class TestOnlineStrategy:
     def test_direct_execution_not_executed(
         self, mock_run_agent, basic_prepared_task, basic_context
     ):
-        """Test direct execution with executed=False (LLM guard layer)."""
+        """The strategy still reports a falsy executed flag faithfully.
+
+        No longer reachable from `run_dynamic_agent`, which lost its guard branch and
+        now always returns True; `InvocationResult.filtered()` and the retry-exhaustion
+        paths in `online.py` are the live producers of `executed=False`. Kept as a pin on
+        the strategy's own handling, with the input mocked rather than produced.
+        """
         mock_run_agent.return_value = (None, False)
 
         strategy = OnlineStrategy()

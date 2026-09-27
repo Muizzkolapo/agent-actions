@@ -36,30 +36,17 @@ def run_dynamic_agent(
     tool_args: dict[str, Any] | None = None,
     source_content: Any | None = None,
     llm_context: Any | None = None,
-    skip_guard_eval: bool = False,
 ) -> tuple[Any, bool]:
-    """Execute an agent with guard evaluation, returning (response, was_executed).
+    """Execute an agent, returning ``(response, was_executed)``.
 
-    Uses ``context`` (original data) for guard evaluation and ``llm_context``
-    (transformed data with context_scope.drop applied) for LLM execution.
-    When skip conditions are met, returns the original context without executing.
+    The guard has already run by the time a strategy calls this — `prefilter_by_guard`
+    online, `TaskPreparer.prepare` in batch — so this does not evaluate one. The flag is
+    always ``True``; callers keep it because `ProcessingResult.executed` is set ``False``
+    by other producers (a guard filter, a skip, a failure).
+
+    ``context`` is the original data and ``llm_context`` the transformed data with
+    ``context_scope.drop`` applied; the latter is what the LLM sees when present.
     """
-    if not skip_guard_eval:
-        from agent_actions.guards import GuardBehavior
-        from agent_actions.input.preprocessing.filtering.evaluator import (
-            get_guard_evaluator,
-        )
-
-        guard_result = get_guard_evaluator().evaluate(
-            item=context,
-            guard_config=agent_config.get("guard"),
-            conditional_clause=agent_config.get("conditional_clause"),
-        )
-        if not guard_result.should_execute:
-            if guard_result.behavior == GuardBehavior.FILTER:
-                return (None, False)
-            return (context, False)
-
     from agent_actions.llm.realtime import builder as agent_builder
 
     llm_data = llm_context if llm_context is not None else context
