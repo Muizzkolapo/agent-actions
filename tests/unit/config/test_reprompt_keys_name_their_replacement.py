@@ -213,9 +213,11 @@ class TestTheMigrationTheRefusalPrescribes:
         pastes is the one the message holds, so that is what has to validate.
 
         Config validation is not enough on its own. `ExpectConfig.expectations` keeps
-        raw dicts, so a quoted rule reaches the run unchecked by the schema — a
-        misspelt type, or a real one missing its required `field:`, loads here and dies
-        where the suite is built. Both layers, or the rule half of the hint is unpinned.
+        raw dicts, so a quoted rule reaches preflight unchecked by the schema: an
+        unknown type carrying `field:`, a real type missing a required parameter, or
+        one given a parameter it does not declare all load here and abort the run at
+        preflight instead. `find_expectation_defects` is that gate, and it is checked
+        for every quoted block, not only the ones carrying rules.
         """
         message = _refusal_for(key)
         blocks = _quoted_expect_blocks(message)
@@ -224,8 +226,8 @@ class TestTheMigrationTheRefusalPrescribes:
         for block in blocks:
             WorkflowConfig.model_validate(_workflow(action={"expect": block}))
             DefaultsConfig.model_validate({**BASE_DEFAULTS, "expect": block})
-            if block.get("expectations"):
-                build_inline_suite(block["expectations"], "a1")
+            defects = find_expectation_defects({"a1": {"expect": block}}, {})
+            assert not defects, f"the refusal prescribes a block preflight refuses: {defects}"
 
     @pytest.mark.parametrize("key", KEYS)
     def test_the_refusal_quotes_the_block_that_replaces_this_key(self, key):
