@@ -165,6 +165,8 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
             variables.add(observed)
         for passthrough in action.context_passthrough:
             variables.add(passthrough)
+        for dropped in action.context_drop:
+            variables.add(dropped)
         if action.schema_ref:
             schema = index.get_schema_definition(action.schema_ref)
             if schema:
@@ -174,16 +176,19 @@ def collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> s
 
 
 def _action_guard_variables(action) -> set[str]:
-    """Variables available to a specific action's guard condition.
+    """Variables a specific action's guard condition can read.
 
-    An action's guard runs before the action, so it can only see what
-    that action declares in its own context_scope (observe + passthrough).
+    A guard runs before the action, which is why it reads the record as stored rather
+    than the view ``context_scope`` shaped for the prompt — so a field the action
+    ``drop``s still answers a clause, and is listed here.
     """
     variables: set[str] = set()
     for observed in action.context_observe:
         variables.add(observed)
     for passthrough in action.context_passthrough:
         variables.add(passthrough)
+    for dropped in action.context_drop:
+        variables.add(dropped)
     return variables
 
 

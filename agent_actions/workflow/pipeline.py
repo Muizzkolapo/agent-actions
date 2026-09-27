@@ -566,10 +566,8 @@ class ProcessingPipeline:
         strategy = self._select_strategy()
 
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
-            # FILE mode: apply context scope, then delegate guard + invoke +
-            # enrich + collect to UnifiedProcessor with raw_records for
-            # pre-observe alignment.  UnifiedProcessor sets context.source_data
-            # to original_passing after the guard filter runs.
+            # raw_records is what the guard is evaluated against, paired to the scoped
+            # list by position; UnifiedProcessor then sets context.source_data from it.
             filtered, scope_skipped = apply_context_scope_for_records(
                 records=data,
                 context_scope=cast(dict[str, Any], self.config.action_config).get(

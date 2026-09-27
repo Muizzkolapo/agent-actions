@@ -85,30 +85,13 @@ class UnifiedProcessor:
         raw_records: list[dict[str, Any]] | None = None,
         repair_inputs: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
-        """Run records through the full processing pipeline.
+        """Guard-filter, quarantine, invoke, enrich and collect, in that order.
 
-        Steps:
-            1. Guard filter — split records into passing/skipped/filtered
-            2. Cascade filter — quarantine upstream-failed records
-            3. Invoke strategy — process remaining records
-            4. Enrich — add lineage, metadata, version IDs, passthrough fields
-            5. Collect — flatten results into output records with dispositions
-
-        Args:
-            records: Input records.  For FILE mode these are context-scope-
-                filtered; for RECORD mode they are the raw input.
-            context: Shared processing context.
-            strategy: Strategy that handles the invocation step.
-            raw_records: Pre-context-scope records (FILE mode only).  When
-                provided, the guard filter uses these as ``original_data``
-                so that skipped/passing records reference pre-observe fields.
-                RECORD mode callers should omit this parameter.
-            repair_inputs: The action's input for this file before a repair
-                narrowed it.  Required while one is in flight, and ``records``
-                cannot serve: every caller narrows above this.
-
-        Returns:
-            Tuple of (output_records, stats).
+        *raw_records* is the pre-scope list FILE mode passes alongside the scoped
+        *records*; the guard is evaluated against it, so it decides which records survive
+        rather than only what a survivor carries. RECORD mode omits it. *repair_inputs* is
+        the action's input for this file from before a repair narrowed it, required while
+        one is in flight because *records* is already narrowed by every caller.
         """
         # Refused here rather than at the guard: a repair narrows both lists by one
         # position list, so an already-mispaired caller arrives at the guard the same
@@ -155,7 +138,7 @@ class UnifiedProcessor:
             )
 
         if raw_records is not None:
-            # FILE mode: guard needs original_data for pre-observe alignment
+            # FILE mode: the guard reads these, and they pair to `records` by position
             passing, guard_results, original_passing = self._guard_filter_file_mode(
                 records, context, raw_records
             )
@@ -318,20 +301,14 @@ class UnifiedProcessor:
         context: ProcessingContext,
         raw_records: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], list[ProcessingResult], list[dict[str, Any]]]:
-        """FILE-mode guard filter with original_data alignment.
+        """FILE-mode guard filter, as ``(passing, guard_results, original_passing)``.
 
-        Differs from ``_guard_filter`` in three ways:
-
-        1. Passes ``original_data`` to ``prefilter_by_guard`` so that
-           skipped/passing records reference pre-context-scope fields.
-        2. Skipped records produce ``ProcessingResult.unprocessed()`` with
-           ``RecordEnvelope.build_skipped()`` (adds a null namespace marker)
-           rather than ``ProcessingResult.skipped()`` with a tombstone.
-        3. Returns ``original_passing`` so the caller can set
-           ``context.source_data`` for the enricher.
-
-        Returns:
-            (passing, guard_results, original_passing)
+        Three differences from ``_guard_filter``: *raw_records* goes down as
+        ``original_data``, which is what the guard is evaluated against and what the
+        skipped and passing records then reference; a skipped record becomes an
+        ``unprocessed()`` result carrying a null-namespace marker rather than a tombstone;
+        and ``original_passing`` comes back so the caller can set ``context.source_data``
+        for the enricher.
         """
         config = cast(dict[str, Any], context.agent_config)
         passing, skipped, original_passing, filtered = prefilter_by_guard(

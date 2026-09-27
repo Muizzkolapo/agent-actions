@@ -555,8 +555,9 @@ def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
         label="Available variables: " + ", ".join(sorted(variables)),
         documentation=(
             "Variables collected from every action in this file's "
-            "`context_scope.observe` / `context_scope.passthrough` entries "
-            "plus the output schema fields of any actions they reference. "
+            "`context_scope.observe` / `context_scope.passthrough` / "
+            "`context_scope.drop` entries plus the output schema fields of any "
+            "actions they reference. "
             "Not every variable listed is in scope for every action — use "
             "this list as a discovery aid and rely on per-action diagnostics "
             "for strict scope checking."

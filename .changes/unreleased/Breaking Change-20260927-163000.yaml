@@ -1,0 +1,25 @@
+kind: Breaking Change
+body: >-
+  A guard's verdict at File granularity can change, in both directions, because the guard now
+  reads the record as stored rather than the view `context_scope` shaped for the prompt. Two
+  spellings are affected and both used to depend on the granularity that read them.
+
+  A clause on a field the same action `drop`s used to be answered as if the field were absent,
+  so `on_false: filter` discarded the record; it is now answered from the stored value and the
+  record is judged on its merits. A clause naming an `observe`d field by its **bare** name
+  (`n` rather than `a1.n`) used to resolve, because the observe pass flattens observed fields
+  to top-level keys for the prompt; it no longer resolves, so such a clause now fails to match
+  and `on_false` applies to every record. With a wildcard `observe` that is every field of the
+  namespace, not one.
+
+  Record granularity answered both cases the new way already, so nothing changes there, and no
+  workflow bundled with the framework or in the sample project is affected: of the 12
+  File-granularity guards across them, none declares a `drop` on the same action and none names
+  a field without dotting it. A bare-name clause is not silent about it either — the name has a
+  dotted form, so the guard logs a warning naming the supported spelling ("use dotted paths,
+  e.g. `action_name.field`") and classifies the failure semantic, which bypasses
+  `passthrough_on_error`. The editor's guard diagnostic suggests the dotted form in place.
+
+  To check a workflow before upgrading: for each File-granularity action carrying a `guard`,
+  confirm every field its clause names is written `action.field`, and be aware that a clause
+  reading a field the action drops will now admit records it previously discarded.

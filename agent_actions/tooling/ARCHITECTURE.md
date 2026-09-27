@@ -227,7 +227,7 @@ The index supports multi-root workspaces: `find_all_project_roots()` discovers a
 | Go-to-definition | Jump from `$workflow.PromptName` to the prompt file, `impl: func` to the Python function, `schema: name` to the YAML file, dependency names to their action definitions |
 | Hover | Show prompt previews, tool signatures/docstrings, schema fields, action metadata |
 | Completions | Prompt names (after `$`), tool functions (after `impl:`), schema names (after `schema:`), action names (in `dependencies`), context scope fields, guard variables, versions keys |
-| Diagnostics | Validate references exist, detect duplicate action names, check guard variable availability |
+| Diagnostics | Validate references exist, detect duplicate action names, check guard variable availability (a `drop`ped field counts as available — the guard reads the stored record) |
 | Document symbols | Outline view showing actions in workflow files, sections in prompt markdown |
 | Document highlight | Highlight all references to the symbol under cursor |
 | Semantic tokens | Colorize prompt refs, tool refs, schema refs, action refs, seed file refs, context fields |

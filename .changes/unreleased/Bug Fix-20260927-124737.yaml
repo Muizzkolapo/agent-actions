@@ -25,8 +25,8 @@ body: >-
   clause, because the resolved namespace is the source document and `drop` never touched it;
   this closes a second divergence rather than opening one, since FILE mode used to hide such
   a field and RECORD mode never did, and the two now agree on RECORD's answer. A dropped
-  *dependency* field is still hidden from a FILE-mode guard and not from a RECORD-mode one;
-  that asymmetry predates this change. And while no namespace key is removed, a *field* only
-  the carried copy had becomes unreadable once the resolved document replaces it — inherent
-  to resolving against the pool rather than against the snapshot.
+  *dependency* field behaved the other way round until the companion fix in this release made
+  a guard read the stored record on every granularity. And while no namespace key is removed,
+  a *field* only the carried copy had becomes unreadable once the resolved document replaces
+  it — inherent to resolving against the pool rather than against the snapshot.
 time: 2026-09-27T12:47:37Z
