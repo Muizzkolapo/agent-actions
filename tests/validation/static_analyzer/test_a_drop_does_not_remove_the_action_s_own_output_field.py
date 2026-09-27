@@ -244,6 +244,33 @@ class TestDropStillRemovesWhatItForwards:
         assert schema.passthrough_refs == set()
         assert schema.available_fields == {"note"}
 
+    def test_a_nested_path_is_a_real_forwarding_ref_but_not_a_real_drop(self):
+        """The two directives resolve a nested path differently, so the model must too.
+
+        `passthrough`/`observe` go through `extract_field_value`, which walks a dotted
+        path. `drop` does a flat `content[ns].pop(field)`, which matches no key — the
+        silent no-op filed as #1116. `examples/review_analyzer` really observes
+        `seed.rubric.product_feedback_categories`, so treating both alike would drop a
+        field the run delivers.
+        """
+        from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
+
+        schema = SchemaExtractor().extract_schema(
+            {
+                "name": "insights",
+                "schema": {"type": "object", "properties": {"note": {"type": "string"}}},
+                "context_scope": {
+                    "observe": ["seed.rubric.categories"],
+                    "passthrough": ["up.meta.id"],
+                    "drop": ["up.meta.id"],
+                },
+            }
+        )
+        assert schema.observe_refs == {("seed", "rubric.categories")}
+        assert schema.passthrough_refs == {("up", "meta.id")}
+        assert schema.dropped_refs == set()
+        assert schema.available_fields == {"note", "rubric.categories", "meta.id"}
+
 
 class TestTheCatalogAndPreflightSeeTheWithheldField:
     """The consumers a `drops_field -> False` mutant would otherwise slip past."""

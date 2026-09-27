@@ -431,7 +431,7 @@ class SchemaExtractor:
                 output.observe_refs.add(parsed)
 
         for ref in context_scope.get("drop") or []:  # `or []` guards `drop: null`
-            parsed = self._parse_scope_ref(ref)
+            parsed = self._parse_scope_ref(ref, flat_only=True)
             if parsed:
                 output.dropped_refs.add(parsed)
 
@@ -506,12 +506,12 @@ class SchemaExtractor:
         return fields
 
     @staticmethod
-    def _parse_scope_ref(reference: Any) -> tuple[str, str] | None:
+    def _parse_scope_ref(reference: Any, *, flat_only: bool = False) -> tuple[str, str] | None:
         """A context_scope ref as ``(namespace, field)``, or None if the runtime skips it.
 
-        Uses the runtime's own parser, so a spelling it rejects — no namespace, or a
-        nested path the flat pop can never match — is absent from the model rather than
-        half-present. `field` may be ``"*"``; that is a whole-namespace directive.
+        ``flat_only`` is for ``drop``, whose pop is a flat ``content[ns].pop(field)``: a
+        nested path matches no key there, while observe and passthrough resolve one
+        through ``extract_field_value``. ``field`` may be ``"*"``.
         """
         if not isinstance(reference, str):
             return None
@@ -519,7 +519,12 @@ class SchemaExtractor:
             namespace, field_name = parse_field_reference(reference)
         except ValueError:
             return None
-        if field_name != "*" and ("." in field_name or "*" in field_name):
+        if field_name == "*":
+            return (namespace, field_name)
+        # An inner wildcard is not a key the runtime resolves either way.
+        if "*" in field_name:
+            return None
+        if flat_only and "." in field_name:
             return None
         return (namespace, field_name)
 
