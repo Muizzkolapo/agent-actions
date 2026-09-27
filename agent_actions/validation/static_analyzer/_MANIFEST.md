@@ -24,8 +24,9 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_shadowed_fields` | Method | Get mapping of shadowed fields to their producers. | - |
 | `data_flow_graph.py` | Module | Data flow graph for workflow static analysis. | - |
 | `ActionKind` | Class | Type of agent node (LLM, TOOL, HITL, SOURCE, SEED). | - |
-| `OutputSchema` | Class | Represents the output schema of an agent. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields. | - |
+| `OutputSchema` | Class | Represents the output schema of an agent. Forwarding and drop directives are held as `(namespace, field)` refs (`observe_refs`, `passthrough_refs`, `dropped_refs`) because the runtime pops `prompt_context[ns][field]` — a bare-name set cannot tell `a.score` from `b.score` and cancels every field of that name. `observe_fields` / `passthrough_fields` / `dropped_fields` are bare-name views over them. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields: everything the action produces, plus what it forwards minus the refs it drops. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `drops_field` | Method | Whether `drop` keeps a field out of what the action forwards. Never true for a field the action produces, nor for one a sibling namespace still forwards. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `has_field` | Method | Check if field is available in output. | - |
 | `InputSchema` | Class | Represents the input schema of an agent. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `all_fields` | Method | Get all input fields (required + optional). | - |

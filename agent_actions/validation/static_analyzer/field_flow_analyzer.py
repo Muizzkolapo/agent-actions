@@ -210,7 +210,7 @@ class FieldFlowAnalyzer:
         if field_type is None:
             return None
 
-        is_dropped = field_name in output_schema.dropped_fields
+        is_dropped = output_schema.drops_field(field_name)
         consumers = self._find_field_consumers(agent_name, field_name)
 
         return FieldLineage(

@@ -13,35 +13,10 @@ from agent_actions.validation.preflight.vendor_compatibility_validator import (
 )
 from agent_actions.validation.project_validator import ProjectValidator
 from agent_actions.validation.schema_validator import SchemaValidator
-from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
 
-# ---------------------------------------------------------------------------
-# D-2  ·  SchemaExtractor._extract_field_name — flattened, no dead branch
-# ---------------------------------------------------------------------------
-
-
-class TestExtractFieldName:
-    """D-2 — _extract_field_name handles all edge cases correctly."""
-
-    def setup_method(self):
-        self.extractor = SchemaExtractor()
-
-    def test_simple_reference_no_period(self):
-        assert self.extractor._extract_field_name("noperiod") == "noperiod"
-
-    def test_qualified_reference_returns_field(self):
-        assert self.extractor._extract_field_name("ns.field") == "field"
-
-    def test_malformed_reference_trailing_period_returns_none(self):
-        assert self.extractor._extract_field_name("ns.") is None
-
-    def test_empty_string_returns_none(self):
-        assert self.extractor._extract_field_name("") is None
-
-    def test_dotted_field_name_uses_first_split(self):
-        # split(".", 1) means "a.b.c" → parts = ["a", "b.c"] → returns "b.c"
-        assert self.extractor._extract_field_name("ns.b.c") == "b.c"
-
+# D-2 covered `SchemaExtractor._extract_field_name`, which discarded a ref's namespace.
+# Every directive now parses through the runtime's `parse_field_reference`, the method is
+# gone, and `tests/validation/static_analyzer/test_schema_extractor.py` pins its successor.
 
 # ---------------------------------------------------------------------------
 # D-3  ·  ProjectValidator — _complete_validation fires at all exit points

@@ -13,20 +13,72 @@ class OutputSchema:
     """Represents the output schema of an action."""
 
     schema_fields: set[str] = field(default_factory=set)
-    observe_fields: set[str] = field(default_factory=set)
-    passthrough_fields: set[str] = field(default_factory=set)
+    # Forwarding and drop directives keep their namespace: the runtime pops
+    # ``prompt_context[ns][field]``, so `a.score` and `b.score` are different claims.
+    # A bare-name set cannot tell them apart and cancels every field of that name.
+    observe_refs: set[tuple[str | None, str]] = field(default_factory=set)
+    passthrough_refs: set[tuple[str | None, str]] = field(default_factory=set)
+    # ``(ns, "*")`` is a whole-namespace drop: the runtime deletes the namespace from
+    # passthrough_fields outright.
+    dropped_refs: set[tuple[str, str]] = field(default_factory=set)
     passthrough_wildcard_sources: set[str] = field(default_factory=set)
-    dropped_fields: set[str] = field(default_factory=set)
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False
     load_error: str | None = None
 
     @property
+    def observe_fields(self) -> set[str]:
+        """Bare names this action observes."""
+        return {name for _, name in self.observe_refs}
+
+    @property
+    def passthrough_fields(self) -> set[str]:
+        """Bare names this action passes through."""
+        return {name for _, name in self.passthrough_refs}
+
+    @property
+    def dropped_fields(self) -> set[str]:
+        """Forwarded names that no surviving namespace still supplies."""
+        return {name for name in self._forwarded_names if self.drops_field(name)}
+
+    @property
+    def _forwarded_refs(self) -> set[tuple[str | None, str]]:
+        return self.observe_refs | self.passthrough_refs
+
+    @property
+    def _forwarded_names(self) -> set[str]:
+        return {name for _, name in self._forwarded_refs}
+
+    def _ref_dropped(self, namespace: str | None, field_name: str) -> bool:
+        return (namespace, field_name) in self.dropped_refs or (
+            namespace,
+            "*",
+        ) in self.dropped_refs
+
+    @property
     def available_fields(self) -> set[str]:
         """Compute available fields after applying drops."""
-        all_fields = self.schema_fields | self.observe_fields | self.passthrough_fields
-        return all_fields - self.dropped_fields
+        forwarded = {
+            name
+            for namespace, name in self._forwarded_refs
+            if not self._ref_dropped(namespace, name)
+        }
+        return self.schema_fields | forwarded
+
+    def drops_field(self, field_name: str) -> bool:
+        """Whether ``drop`` keeps *field_name* out of what this action forwards.
+
+        A drop filters upstream namespaces on their way into the action's context, so it
+        can only remove a field the action forwards, and only from the namespace it
+        names. So a produced field is never dropped — the action's own namespace does not
+        exist yet when drop runs — and a forwarded one is dropped only when *every*
+        namespace supplying that name drops it.
+        """
+        if field_name in self.schema_fields:
+            return False
+        supplying = [(ns, name) for ns, name in self._forwarded_refs if name == field_name]
+        return bool(supplying) and all(self._ref_dropped(ns, name) for ns, name in supplying)
 
     def has_field(self, field_name: str) -> bool:
         """Check if field is available in output."""

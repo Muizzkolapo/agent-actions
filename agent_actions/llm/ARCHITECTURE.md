@@ -804,26 +804,31 @@ Online Expectations (per-record):
 
 ### Context Scope: How Input Data is Filtered
 
+Every ref is `namespace.field`. A ref with no namespace is rejected by
+`parse_field_reference`, and a `drop` that fails to parse is logged
+"Field will NOT be removed" and skipped — so `drop: [prior_score]` withholds nothing.
+
 ```
 context_scope controls what the LLM sees:
 
   ┌─────────────────────────────────────────────┐
   │              Input Record                    │
-  │  {name: "Alice", age: 30, ssn: "123-45-6789", │
-  │   department: "Engineering", salary: 90000}  │
+  │  {name: "Alice", tenure: 4, prior_score: 9,  │
+  │   department: "Engineering", user_rating: 5} │
   └──────────────────────┬──────────────────────┘
                          │
            context_scope: │
-             drop: [ssn, salary]
-             observe: [department]
-             passthrough: [name]
+             drop: [source.prior_score, source.user_rating]
+             observe: [source.department]
+             passthrough: [source.name]
              seed: seed_data/rules.json
                          │
                          ▼
   ┌──────────────────────────────────────────────┐
   │  What the LLM prompt gets:                    │
-  │    {name: "Alice", age: 30, department: "Eng"}│
-  │    (ssn and salary dropped)                   │
+  │    {name: "Alice", tenure: 4,                 │
+  │     department: "Eng"}                        │
+  │    (neither score can anchor this action)     │
   │                                               │
   │  Appended as "Additional context:":           │
   │    department: Engineering  (observe fields)  │
@@ -839,6 +844,10 @@ context_scope controls what the LLM sees:
   │     collision)                                │
   └──────────────────────────────────────────────┘
 ```
+
+The drop binds this action only. `source.prior_score` is still on the bus, and a later
+action may observe it — `drop` is bias control, not redaction. See
+`prompt/ARCHITECTURE.md` § "Drop is not a redaction".
 
 ---
 

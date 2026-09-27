@@ -923,12 +923,13 @@ class TestTheCatalogNamesWhatAnActionDrops:
         assert "drops" in actions["drop_flow.redact"], "fixture proves the key is reachable"
 
     def test_the_resolved_dropped_output_set_is_not_the_source(self, tmp_path):
-        """Asserts the contrast, not the resolved value, which issue #1114 will change.
+        """Asserts the contrast, not the resolved value.
 
-        The resolved set is namespace-blind, so for `redact` it answers with a bare
-        name that cannot say whose field was dropped. This key answers with the
-        namespace. Fixing #1114 may change what the resolved set returns; it must not
-        make this key start agreeing with it.
+        `drops` answers "what did this action declare", with the namespace. The resolved
+        set answers "which of this action's own output names is withheld", in bare names.
+        #1114 narrowed the second — `redact` declares two drops and withholds neither,
+        because `body` is its own field and `secret` it never forwarded. The two keys must
+        stay distinct: a namespaced ref must never appear in the resolved set.
         """
         from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -940,9 +941,28 @@ class TestTheCatalogNamesWhatAnActionDrops:
         reported = self._actions(tmp_path)["drop_flow.redact"]["drops"]
         assert reported == ["upstream.body", "upstream.secret"], reported
         assert all("." in ref for ref in reported), reported
-        assert all("." not in name for name in redact_schema.dropped_outputs), (
-            redact_schema.dropped_outputs
-        )
+        # `redact` declares both drops and withholds neither of its own outputs.
+        assert redact_schema.dropped_outputs == [], redact_schema.dropped_outputs
+        assert "body" in redact_schema.available_outputs, redact_schema.available_outputs
+
+        # A non-empty resolved set, so the "no namespace in there" claim can fail:
+        # `carry` forwards one field explicitly and drops that same ref.
+        withheld = WorkflowSchemaService.from_action_configs(
+            "drop_flow",
+            {
+                "up": {"name": "up", "intent": "i", "schema": {"cid": {"type": "string"}}},
+                "carry": {
+                    "name": "carry",
+                    "intent": "i",
+                    "dependencies": ["up"],
+                    "schema": {"note": {"type": "string"}},
+                    "context_scope": {"passthrough": ["up.cid"], "drop": ["up.cid"]},
+                },
+            },
+        ).get_action_schema("carry")
+        assert withheld is not None
+        assert withheld.dropped_outputs == ["cid"], withheld.dropped_outputs
+        assert all("." not in name for name in withheld.dropped_outputs), withheld.dropped_outputs
 
     def test_every_fixture_action_is_a_shape_the_runtime_runs(self):
         """Two review rounds each shipped a fixture action that crashes at runtime.

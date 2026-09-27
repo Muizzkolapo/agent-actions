@@ -165,17 +165,17 @@ class ConflictDetector:
 
             # Track schema fields
             for field_name in output.schema_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "schema")
 
             # Track observe fields
             for field_name in output.observe_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "observe")
 
             # Track passthrough fields
             for field_name in output.passthrough_fields:
-                if field_name not in output.dropped_fields:
+                if not output.drops_field(field_name):
                     self._add_producer(field_name, node.name, "passthrough")
 
     def _add_producer(self, field_name: str, action: str, source: str) -> None:
@@ -299,7 +299,13 @@ class ConflictDetector:
         return conflicts
 
     def _detect_drop_recreate(self) -> list[Conflict]:
-        """Detect fields that are dropped then recreated."""
+        """Detect a name one action withholds and another produces.
+
+        Not a removal from the record: `drop` withholds a field from the declaring
+        action's own forwarding and nothing else, so the two actions genuinely both
+        exist on the bus. Worth reporting only because a bare reference downstream
+        resolves to the producer, not to the action that withheld it.
+        """
         conflicts = []
 
         dropped_by: dict[str, str] = {}
@@ -323,10 +329,13 @@ class ConflictDetector:
                             severity=ConflictSeverity.INFO,
                             field_name=field_name,
                             message=(
-                                f"Field '{field_name}' was dropped by "
-                                f"'{dropped_by[field_name]}' and recreated by '{node.name}'"
+                                f"Field '{field_name}' is withheld by "
+                                f"'{dropped_by[field_name]}' and produced by '{node.name}'"
                             ),
-                            resolution="This may be intentional. Verify the workflow logic.",
+                            resolution=(
+                                "The withheld copy is still on the bus. Reference the "
+                                "namespace you mean rather than the bare name."
+                            ),
                             producers=[FieldProducer(node.name, "schema")],
                             affected_references=[],
                         )

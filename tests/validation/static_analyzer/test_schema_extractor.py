@@ -98,7 +98,7 @@ class TestSchemaExtractor:
         assert "extra_field" in schema.observe_fields or "extra_field" in schema.available_fields
 
     def test_context_scope_drop(self):
-        """Test context_scope drop removes fields."""
+        """A drop is recorded against the namespace it names."""
         config = {
             "name": "agent",
             "schema": {
@@ -109,13 +109,29 @@ class TestSchemaExtractor:
                 },
             },
             "context_scope": {
-                "drop": ["drop_field"],
+                "passthrough": ["upstream.drop_field"],
+                "drop": ["upstream.drop_field"],
             },
         }
         schema = self.extractor.extract_schema(config)
 
+        assert schema.dropped_refs == {("upstream", "drop_field")}
         assert "keep_field" in schema.available_fields
-        assert "drop_field" in schema.dropped_fields
+
+    def test_a_drop_the_runtime_refuses_is_not_recorded(self):
+        """`parse_field_reference` rejects a dotless ref and the runtime skips it."""
+        config = {
+            "name": "agent",
+            "schema": {"type": "object", "properties": {"keep_field": {"type": "string"}}},
+            "context_scope": {
+                "passthrough": ["upstream.keep_field"],
+                "drop": ["keep_field", "upstream.nested.path"],
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert schema.dropped_refs == set()
+        assert "keep_field" in schema.available_fields
 
     def test_context_scope_passthrough(self):
         """Test context_scope passthrough adds fields."""

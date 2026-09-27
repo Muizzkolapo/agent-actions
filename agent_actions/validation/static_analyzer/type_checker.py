@@ -160,7 +160,7 @@ class StaticTypeChecker:
             if snake_field != root_field and snake_field in available:
                 return  # Accepted — runtime will normalize
 
-            if root_field in output_schema.dropped_fields:
+            if output_schema.drops_field(root_field):
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' has been dropped from "
