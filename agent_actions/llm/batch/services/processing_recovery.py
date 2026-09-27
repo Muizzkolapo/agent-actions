@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,
@@ -331,11 +332,19 @@ def finalize_batch_output(
     output_file = service._determine_output_path(
         context.output_directory, identity.file_name, identity.batch_id
     )
+    # Not the context map: the gate narrows before the map is built, so the map holds
+    # only what was submitted and reading it deletes the rows of everything it carried.
+    batch_inputs: set[str] | None = None
+    if service._storage_backend and effective_action_name and identity.file_name:
+        batch_inputs = BatchContextManager.load_batch_inputs(
+            service._storage_backend, effective_action_name, identity.file_name
+        )
     service._write_batch_output(
         output_file,
         processed_data,
         context.output_directory,
         context.action_name,
+        batch_inputs=batch_inputs or (),
     )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.

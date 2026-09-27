@@ -78,6 +78,10 @@ class BatchProcessingContext:
     # Records this run is repairing; carried from the initial stage so the batch
     # path's own disposition gate narrows the same way the online path's does.
     retried_records: frozenset[str] = frozenset()
+    # The chunk above every narrowing, which carry-forward records so a stored row
+    # of a record this run left out is not read as one that is gone. None means
+    # unrecorded, and nothing is inferred from it.
+    run_inputs: list[dict[str, Any]] | None = None
 
 
 def _save_source_items_helper(
@@ -249,6 +253,7 @@ def process_initial_stage(ctx: InitialStageContext):
             action_configs=ctx.action_configs,
             workflow_metadata=ctx.workflow_metadata,
             retried_records=ctx.retried_records,
+            run_inputs=offered_to_repair,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -721,6 +726,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         ctx.output_directory,
         source_data=ctx.data_chunk,
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
+        run_inputs=ctx.run_inputs,
     )
 
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)

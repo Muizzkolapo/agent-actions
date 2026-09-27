@@ -78,6 +78,10 @@ class BatchPipelineParams:
     disposition_gate: Optional["DispositionGate"] = field(default=None)
     # Only used when no gate is injected; a gate built without it never narrows.
     retried_records: frozenset[str] = frozenset()
+    # This action's input above every narrowing, which carry-forward records so a
+    # stored row of a record the run left out is not read as one that is gone.
+    # None means unrecorded, and nothing is inferred from it.
+    run_inputs: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -247,6 +251,10 @@ class ProcessingPipeline:
             file_reader = FileReader(params.batch_file_path)
             data = file_reader.read()
         file_name = Path(params.batch_file_path).name
+        # A file read is the whole input by construction — no narrowing sits above it —
+        # so it is its own recording. Only a caller that narrowed before this has to say
+        # what it narrowed from, and "it did not say" must not be read as "nothing".
+        run_inputs = params.run_inputs if params.data is not None else data
 
         result = submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
@@ -255,6 +263,7 @@ class ProcessingPipeline:
             params.batch_output_directory,
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
+            run_inputs=run_inputs,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -412,6 +421,7 @@ class ProcessingPipeline:
         agent_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, Any] | None = None,
         version_context: dict[str, Any] | None = None,
+        run_inputs: list[dict[str, Any]] | None = None,
     ):
         """Handle batch mode processing.
 
@@ -424,6 +434,7 @@ class ProcessingPipeline:
             agent_indices: Pre-built agent indices from _build_pipeline_context()
             dependency_configs: Pre-built dependency configs from _build_pipeline_context()
             version_context: Pre-built version context from _build_pipeline_context()
+            run_inputs: This action's input above every narrowing — see BatchPipelineParams
         """
         result_path = self._handle_batch_generation(
             BatchPipelineParams(
@@ -441,6 +452,7 @@ class ProcessingPipeline:
                 dependency_configs=dependency_configs,
                 version_context=version_context,
                 disposition_gate=self._disposition_gate,
+                run_inputs=run_inputs,
             )
         )
         return result_path
@@ -498,8 +510,10 @@ class ProcessingPipeline:
                     e,
                 )
 
-        # Above every narrowing, as staging captures it: a record the limit drops
-        # is still one of this action's inputs, and the gate reads these to tell a
+        # Above every narrowing this function makes, as staging captures it — the
+        # runner's drop of guard-filtered records is above even this, which is why the
+        # rules reading it decide generationally rather than per record. A record the
+        # limit drops is still one of this action's inputs, and the gate reads these to tell a
         # stored row of its own making from one minted upstream. Leave it out and
         # a row of that record reads as one of a repaired record's, to be deleted
         # by a rewrite that never makes it again. A limit never drops a repaired
@@ -543,6 +557,7 @@ class ProcessingPipeline:
                 agent_indices,
                 dependency_configs,
                 version_context,
+                run_inputs=offered_to_repair,
             )
             return
 

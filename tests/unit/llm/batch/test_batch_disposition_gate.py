@@ -74,6 +74,9 @@ class TestBatchDispositionGate:
     def test_narrowed_records_reach_preparation_without_carry_forward(self, tmp_path):
         selected = _make_record("selected")
         gate = MagicMock(spec=DispositionGate)
+        # `repairing` is a frozenset on the real gate and empty on an ordinary run;
+        # left as a Mock it is truthy, which reads as a repair to every caller.
+        gate.repairing = frozenset()
         gate.filter.return_value = ([selected], set())
         service = _make_service(
             disposition_gate=gate,
@@ -93,6 +96,7 @@ class TestBatchDispositionGate:
 
     def test_empty_selection_without_carry_forward_never_submits(self, tmp_path):
         gate = MagicMock(spec=DispositionGate)
+        gate.repairing = frozenset()
         gate.filter.return_value = ([], set())
         service = _make_service(disposition_gate=gate, tasks=[{"custom_id": "unselected"}])
 

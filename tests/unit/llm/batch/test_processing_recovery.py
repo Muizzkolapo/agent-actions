@@ -87,6 +87,10 @@ def _mock_service():
     service._context_manager = MagicMock()
     service._client_resolver = MagicMock()
     service._storage_backend = MagicMock()
+    # `load_metadata` returns `str | None`, and the finaliser reads a recorded
+    # input through it. A bare MagicMock hands back a MagicMock, which is not a
+    # shape the real backend can return.
+    service._storage_backend.load_metadata.return_value = None
     service._workflow_name = "test_action"
     service._resolve_action_name = lambda override=None: override or service._workflow_name
     service._apply_workflow_session_id = MagicMock(return_value={"kind": "llm"})

@@ -181,6 +181,7 @@ class BatchSubmissionService:
         force: bool = False,
         source_data: Any | None = None,
         workflow_metadata: dict[str, Any] | None = None,
+        run_inputs: list[dict[str, Any]] | None = None,
     ) -> SubmissionResult:
         """Submit a batch job for processing.
 
@@ -191,6 +192,9 @@ class BatchSubmissionService:
             output_directory: Output directory path
             force: Force new submission even if in-flight batch exists
             workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
+            run_inputs: This action's input above every narrowing. Recorded for
+                carry-forward, which cannot otherwise tell a record the run left
+                out from one that no longer exists. None records nothing.
 
         Returns:
             SubmissionResult with batch_id if submitted, or passthrough dict if no tasks
@@ -230,6 +234,27 @@ class BatchSubmissionService:
                     entry.batch_id,
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
+        # Never off `data`: the record limit, a repair and the gate below all narrow it,
+        # and a record any of them drops still holds rows this action must carry.
+        if (
+            run_inputs is None
+            and self._disposition_gate is not None
+            and self._disposition_gate.repairing
+        ):
+            # As `UnifiedProcessor.process` refuses: recording a repair's own narrowing
+            # as the whole input reads every other record's rows as a generation gone.
+            raise ConfigurationError(
+                f"Action '{action_name}' is repairing records but was given no "
+                "pre-narrowing input. Without it carry-forward cannot tell a record "
+                "this run left out from one that no longer exists, and would delete "
+                "the stored rows of every record the repair did not name.",
+                context={"action_name": action_name, "batch_name": batch_name},
+            )
+        run_input_guids = (
+            [guid for row in run_inputs if (guid := row.get("source_guid"))]
+            if run_inputs is not None
+            else None
+        )
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
@@ -260,6 +285,10 @@ class BatchSubmissionService:
             self._context_manager.save_batch_context_map(
                 self._storage_backend, action_name, context_map, batch_name
             )
+            if run_input_guids is not None:
+                self._context_manager.save_batch_inputs(
+                    self._storage_backend, action_name, run_input_guids, batch_name
+                )
 
         result = self._submit_to_provider(
             agent_config, batch_name, tasks, output_directory, action_name=action_name
