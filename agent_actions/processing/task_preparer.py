@@ -94,13 +94,11 @@ class TaskPreparer:
                     llm_context={},
                     passthrough_fields={},
                     original_content=content,
-                    source_content=source_content,
                     source_snapshot=source_snapshot,
                     guard_status=GuardStatus.SKIPPED
                     if guard_result.behavior == GuardBehavior.SKIP
                     else GuardStatus.FILTERED,
                     guard_behavior=guard_result.behavior,
-                    prompt_context=field_context,
                 )
             if guard_result.behavior == GuardBehavior.WARN:
                 guard_clause = (
@@ -123,10 +121,8 @@ class TaskPreparer:
             llm_context=prep_result.llm_context,
             passthrough_fields=prep_result.passthrough_fields,
             original_content=content,
-            source_content=source_content,
             source_snapshot=source_snapshot,
             guard_status=GuardStatus.PASSED,
-            prompt_context=prep_result.prompt_context,
         )
 
         if context.storage_backend is not None:
