@@ -12,6 +12,7 @@ import click
 
 from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
+from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.schema_service import WorkflowSchemaService
@@ -204,6 +205,33 @@ def _copy_readme_images(
     return content
 
 
+def _reported_drop_refs(context_scope: dict[str, Any]) -> list[str]:
+    """The `context_scope.drop` refs the runtime can perform, in its own spelling.
+
+    The namespace is kept because the runtime pops `prompt_context[ns][field]`, so
+    `upstream.body` and `body` are different claims when an action declares a field of
+    its own by that name. A ref that does not parse is excluded: the runtime logs
+    "Field will NOT be removed" and skips it. So is one whose field part is neither a
+    plain name nor `*` — the pop is flat, so `a.b.c` matches no key and drops nothing,
+    and reporting either would describe a drop that never runs.
+    """
+    refs = context_scope.get("drop")
+    if not isinstance(refs, list):
+        return []
+    reported: list[str] = []
+    for ref in refs:
+        try:
+            namespace, field = parse_field_reference(ref)
+        except ValueError:
+            continue
+        if field != "*" and ("." in field or "*" in field):
+            continue
+        actionable = f"{namespace}.{field}"
+        if actionable not in reported:
+            reported.append(actionable)
+    return reported
+
+
 class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
@@ -269,9 +297,13 @@ class CatalogGenerator:
 
         # Extract input fields from context_scope
         if "context_scope" in action:
-            inputs = self.parser.extract_input_fields(action["context_scope"])
+            context_scope = action["context_scope"]
+            inputs = self.parser.extract_input_fields(context_scope)
             if inputs:
                 enriched["inputs"] = inputs
+            drops = _reported_drop_refs(context_scope)
+            if drops:
+                enriched["drops"] = drops
 
         # Clean up internal fields not needed in catalog
         enriched.pop("context_scope", None)

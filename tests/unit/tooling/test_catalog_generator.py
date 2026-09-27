@@ -780,3 +780,211 @@ class TestCatalogContractWithTheDashboard:
         ids = [row["id"] for row in self._catalog(tmp_path)["logs"]["events"]]
 
         assert len(ids) == len(set(ids))
+
+
+def _catalog_from_workflow(tmp_path, workflow: dict) -> dict:
+    """Drive generate() from a workflow YAML on disk, the way the CLI does."""
+    import yaml
+
+    wf_yml = tmp_path / f"{workflow['name']}.yml"
+    wf_yml.write_text(yaml.dump(workflow))
+    gen = _make_generator(
+        {workflow["name"]: {"rendered": None, "original": str(wf_yml)}}, str(tmp_path)
+    )
+    return gen.generate(**_empty_inputs())
+
+
+# Every action here runs — pinned below, because DROP precedes OBSERVE and an exact
+# observe of a dropped field raises. `redact` mirrors the sample project's only drop
+# shape: wildcard observe, exact drop, and a field of its own named like the one it drops.
+DROP_FLOW = {
+    "name": "drop_flow",
+    "description": "d",
+    "actions": [
+        {
+            "name": "upstream",
+            "intent": "i",
+            "schema": {
+                "headline": {"type": "string"},
+                "body": {"type": "string"},
+                "secret": {"type": "string"},
+            },
+        },
+        {
+            "name": "redact",
+            "intent": "i",
+            "dependencies": ["upstream"],
+            "schema": {"verdict": {"type": "string"}, "body": {"type": "string"}},
+            "context_scope": {
+                "observe": ["upstream.*"],
+                "drop": ["upstream.body", "upstream.secret"],
+            },
+        },
+        {
+            "name": "clear_ns",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"summary": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"], "drop": ["redact.*"]},
+        },
+        {
+            "name": "bare_ref",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"note": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"], "drop": ["verdict", "redact.body"]},
+        },
+        {
+            "name": "nested_ref",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"tally": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"], "drop": ["redact.body.text"]},
+        },
+        {
+            "name": "scoped_no_drop",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"ok": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"]},
+        },
+        {
+            "name": "repeats",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"tag": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"], "drop": [" redact.body ", "redact.body"]},
+        },
+    ],
+}
+
+
+class TestTheCatalogNamesWhatAnActionDrops:
+    """`drops` is read off every catalog action by the docs frontend and emitted by nothing.
+
+    The shipped bundle does `a.drops??[]`, so the panel rendered empty for every
+    action. The key reports the `context_scope.drop` directive as the runtime reads
+    it: references kept whole, and only the ones the runtime's flat pop can perform.
+    """
+
+    def _actions(self, tmp_path) -> dict:
+        return _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]
+
+    def test_a_drop_ref_keeps_the_namespace_it_names(self, tmp_path):
+        """`upstream.body`, not `body`: the runtime pops one namespace, not every field."""
+        redact = self._actions(tmp_path)["drop_flow.redact"]
+
+        assert redact.get("drops") == ["upstream.body", "upstream.secret"], redact.get("drops")
+
+    def test_a_drop_the_runtime_refuses_to_parse_is_not_reported(self, tmp_path):
+        """A dotless ref is logged and NOT removed. The dotted ref beside it is the control."""
+        bare = self._actions(tmp_path)["drop_flow.bare_ref"]
+
+        assert bare.get("drops") == ["redact.body"], bare.get("drops")
+
+    def test_a_nested_ref_is_not_reported_because_the_pop_is_flat(self, tmp_path):
+        """`redact.body.text` parses, so parsing alone is not the test of a real drop.
+
+        The runtime pops `prompt_context[ns][field]` by exact key, with no traversal,
+        so a dotted field part matches nothing and the field survives into the LLM
+        context. Reporting it would claim a drop that never happens.
+        """
+        nested = self._actions(tmp_path)["drop_flow.nested_ref"]
+
+        assert "drops" not in nested, nested.get("drops")
+        assert self._actions(tmp_path)["drop_flow.redact"].get("drops"), "key is reachable"
+
+    def test_a_whole_namespace_drop_is_reported(self, tmp_path):
+        """`redact.*` clears the namespace at runtime, so it is a real drop."""
+        clear_ns = self._actions(tmp_path)["drop_flow.clear_ns"]
+
+        assert clear_ns.get("drops") == ["redact.*"], clear_ns.get("drops")
+
+    def test_a_repeated_ref_is_reported_once_in_the_runtime_s_spelling(self, tmp_path):
+        """The parser strips before acting and the second pop is a no-op, so the panel
+        should not print `redact.body, redact.body`. `inputs` beside it also dedupes."""
+        repeats = self._actions(tmp_path)["drop_flow.repeats"]
+
+        assert repeats.get("drops") == ["redact.body"], repeats.get("drops")
+
+    def test_an_action_whose_scope_declares_no_drop_gains_no_key(self, tmp_path):
+        """The conditional's real case: a `context_scope` is present but has no `drop`."""
+        actions = self._actions(tmp_path)
+
+        scoped = actions["drop_flow.scoped_no_drop"]
+        assert "context_scope" not in scoped, "scope is consumed, so inputs proves it was read"
+        assert scoped.get("inputs") == ["redact.*"], scoped.get("inputs")
+        assert "drops" not in scoped, scoped.get("drops")
+
+    def test_an_action_with_no_scope_at_all_gains_no_key(self, tmp_path):
+        actions = self._actions(tmp_path)
+
+        assert "drops" not in actions["drop_flow.upstream"], sorted(actions["drop_flow.upstream"])
+        assert "drops" in actions["drop_flow.redact"], "fixture proves the key is reachable"
+
+    def test_the_resolved_dropped_output_set_is_not_the_source(self, tmp_path):
+        """Asserts the contrast, not the resolved value, which issue #1114 will change.
+
+        The resolved set is namespace-blind, so for `redact` it answers with a bare
+        name that cannot say whose field was dropped. This key answers with the
+        namespace. Fixing #1114 may change what the resolved set returns; it must not
+        make this key start agreeing with it.
+        """
+        from agent_actions.workflow.schema_service import WorkflowSchemaService
+
+        configs = {a["name"]: a for a in DROP_FLOW["actions"]}
+        resolved = WorkflowSchemaService.from_action_configs("drop_flow", configs)
+        redact_schema = resolved.get_action_schema("redact")
+        assert redact_schema is not None
+
+        reported = self._actions(tmp_path)["drop_flow.redact"]["drops"]
+        assert reported == ["upstream.body", "upstream.secret"], reported
+        assert all("." in ref for ref in reported), reported
+        assert all("." not in name for name in redact_schema.dropped_outputs), (
+            redact_schema.dropped_outputs
+        )
+
+    def test_every_fixture_action_is_a_shape_the_runtime_runs(self):
+        """Two review rounds each shipped a fixture action that crashes at runtime.
+
+        DROP is applied before OBSERVE, so an exact observe of a field dropped from the
+        same namespace raises. A fixture built from unrunnable shapes proves nothing
+        about what the docs should say, so this asserts the shapes before the reporting.
+        """
+        import copy
+
+        from agent_actions.prompt.context.scope_application import apply_context_scope
+
+        namespaces = {}
+        for action in DROP_FLOW["actions"]:
+            fields: dict = {key: f"{key}-value" for key in action.get("schema", {})}
+            if action["name"] == "redact":
+                fields["body"] = {"text": "nested"}
+            namespaces[action["name"]] = fields
+
+        for action in DROP_FLOW["actions"]:
+            scope = action.get("context_scope")
+            if not scope:
+                continue
+            apply_context_scope(copy.deepcopy(namespaces), scope, action_name=action["name"])
+
+
+class TestObserveIsNotAddedBecauseInputsAlreadyCarriesIt:
+    """`inputs` is `observe + passthrough` unchanged, so an `observe` key duplicates it.
+
+    Measured over the sample project: byte-identical for 505 of 515 actions, and the
+    10 that differ do so only by a `passthrough` entry. The frontend renders a config
+    row from each, so filling `observe` would print the same text twice.
+    """
+
+    def test_inputs_already_reports_every_observed_ref(self, tmp_path):
+        redact = _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]["drop_flow.redact"]
+
+        assert redact["inputs"] == ["upstream.*"], redact["inputs"]
+
+    def test_no_observe_key_is_emitted(self, tmp_path):
+        actions = _catalog_from_workflow(tmp_path, DROP_FLOW)["actions"]
+
+        assert all("observe" not in a for a in actions.values()), [
+            k for k, a in actions.items() if "observe" in a
+        ]
