@@ -22,6 +22,7 @@ from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
@@ -118,6 +119,40 @@ def _is_regular_file(item: Path) -> bool:
     the same named, counted loss rather than an error from the middle of a walk.
     """
     return stat_module.S_ISREG(item.stat().st_mode)
+
+
+def _walk_label(directory: Path, root: Path) -> Path:
+    """How *directory* is named in an error about the walk of *root*.
+
+    The root itself is named rather than rendered as ``.``: the views that show
+    these messages truncate at 60-80 characters, so the short end carries it.
+    """
+    if directory == root:
+        return Path(root.name)
+    try:
+        return directory.relative_to(root)
+    except ValueError:
+        return directory
+
+
+def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]] | None = None) -> list[Path]:
+    """Every file under *root*, collecting the directories it could not open.
+
+    Not ``rglob``, which drops such a directory's whole subtree and raises
+    nothing: the entry comes back, so the regular-file question above is asked
+    of the directory and answered correctly, and the files beneath it are lost
+    with nothing to report. A ``batch`` directory is left out of the report
+    because its files are skipped whether or not it opens.
+    """
+
+    def _note(exc: OSError) -> None:
+        if unreadable is None:
+            return
+        failed = Path(exc.filename) if exc.filename else root
+        if "batch" not in failed.parts:
+            unreadable.append((failed, exc))
+
+    return walk_files(root, _note)
 
 
 def _log_processing_errors(
@@ -326,9 +361,10 @@ def _upstream_relative(item: Path, upstream_data_dirs: list[str]) -> Path:
     """
     for directory in upstream_data_dirs:
         try:
-            return item.relative_to(Path(directory))
+            relative = item.relative_to(Path(directory))
         except ValueError:
             continue
+        return Path(item.name) if relative == Path(".") else relative
     return Path(item.name)
 
 
@@ -337,7 +373,7 @@ def collect_files_from_upstream(
 ) -> tuple[dict[Path, list[Path]], list[tuple[Path, OSError]]]:
     """Collect upstream files by relative path → (grouped, the ones it could not read).
 
-    Returned in sorted key order, not raw rglob order: a file limit truncates this
+    Returned in sorted key order, not raw walk order: a file limit truncates this
     mapping, so an unordered walk makes "the first N" mean whatever the filesystem
     happened to enumerate first — a different subset on the next run of the same
     command, and interleaved by first-seen when several upstreams contribute.
@@ -353,7 +389,7 @@ def collect_files_from_upstream(
         if not input_path.exists():
             continue
 
-        for item in input_path.rglob("*"):
+        for item in _walk_files(input_path, lost):
             if "batch" in item.parts:
                 continue
             if item.name.startswith("."):
@@ -409,10 +445,23 @@ def process_directory_files(
     count = 0
     errors = CollectedErrors()
     files_seen = 0
-    # Sorted, not raw rglob order: file_limit truncates this sequence, so an
+    unreadable: list[tuple[Path, OSError]] = []
+    # Sorted, not raw walk order: file_limit truncates this sequence, so an
     # unordered walk makes "the first N files" mean whatever the filesystem
     # happened to enumerate first.
-    items = _files_holding_retried_records(runner, sorted(input_path.rglob("*")), input_path)
+    items = _files_holding_retried_records(
+        runner, sorted(_walk_files(input_path, unreadable)), input_path
+    )
+    for directory, error in unreadable:
+        files_seen += 1
+        errors.record(_walk_label(directory, input_path), error)
+        _lose_file(runner, params.action_name)
+        logger.warning(
+            "Could not list the staging directory %s, so every file beneath it "
+            "went unprocessed: %s",
+            _walk_label(directory, input_path),
+            error,
+        )
     for position, item in enumerate(items):
         try:
             if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
@@ -537,7 +586,7 @@ def process_merged_files(
         files_seen += 1
         errors.record(_upstream_relative(item, params.upstream_data_dirs), error)
         _lose_file(runner, params.action_name)
-        logger.warning("Could not read the upstream file %s, so it went unmerged: %s", item, error)
+        logger.warning("Could not read the upstream path %s, so it went unmerged: %s", item, error)
 
     for relative_path, file_paths in files_by_path.items():
         files_seen += 1

@@ -31,6 +31,21 @@ def prune_non_project_dirs(root: str | os.PathLike[str], dirs: list[str]) -> Non
     ]
 
 
+def walk_files(root: Path, on_error: Callable[[OSError], None] | None = None) -> list[Path]:
+    """Every file under *root*, reporting directories the walk could not open.
+
+    ``Path.rglob`` swallows the ``OSError`` that ``scandir`` raises for a directory
+    it cannot read. The directory entry itself comes back, so a per-entry check
+    answers "not a regular file" correctly, while every file beneath it is dropped
+    with nothing raised and nothing logged. *on_error* is a caller's only way to
+    tell a result that is short from an input that really was that small.
+    """
+    found: list[Path] = []
+    for parent, _dirs, names in os.walk(root, onerror=on_error):
+        found.extend(Path(parent) / name for name in names)
+    return found
+
+
 def find_project_dirs(root: Path, name_matches: Callable[[str], bool]) -> list[Path]:
     """Directories under *root* whose name satisfies *name_matches*.
 
