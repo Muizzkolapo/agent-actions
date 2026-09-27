@@ -5,8 +5,9 @@ symptom was a granularity split, but that was a side effect: a FILE-mode ``conte
 pass writes the resolved namespace onto the record first, so a FILE action declaring no
 ``context_scope`` read the stale copy exactly like a RECORD one.
 
-``source``, ``version``, ``workflow`` and ``seed`` are reserved action names, so a key
-under one of them in record content is never an action's output to prefer.
+A namespace displaces a namespace and nothing else: ``source``, ``version``, ``workflow``
+and ``seed`` are reserved *action* names, which does not make a plain field spelled that way
+the framework's. Both sides must be a namespace before the resolved one wins.
 """
 
 from copy import deepcopy
@@ -340,11 +341,13 @@ class TestWhatADropDoesNotHideFromAGuard:
 
     def test_dropping_it_does_not_change_the_answer_either(self):
         """Against the no-drop run, so the test above cannot pass by the clause simply
-        never matching."""
+        never matching. Asserted as ``is True`` on both sides rather than as an equality:
+        ``False == False`` would satisfy an equality while proving nothing."""
         no_drop = {"observe": ["source.url"]}
         clause = "source.tier == 'secret'"
 
-        assert self._file(no_drop, clause) == self._file(self.DROP_SOURCE, clause)
+        assert self._file(no_drop, clause) is True
+        assert self._file(self.DROP_SOURCE, clause) is True
 
     def test_a_dropped_dependency_field_is_still_hidden_from_a_file_mode_guard(self):
         """Unchanged by the fix and inconsistent with the rows above — a dependency
@@ -354,39 +357,198 @@ class TestWhatADropDoesNotHideFromAGuard:
         assert self._file(scope, "a1.tier == 'secret'") is False
 
 
-class TestAKeyTheFrameworkDidNotAnswerStillReachesTheGuard:
-    """The rule is that a resolved namespace outranks the record's copy — not that these
-    names belong to the framework. Where the resolver produced no answer there is nothing
-    to prefer, and removing the record's key would leave the clause reading a missing
-    field. That reclassifies to *not matched*, so the record is silently filtered.
+class TestOnlyANamespaceIsDisplacedByANamespace:
+    """A namespace shadowing a namespace is the defect; a *field* whose name happens to
+    match a framework one is somebody's data, and both sides must be a dict before the
+    resolved one wins. Three places put a non-namespace under a framework name:
 
-    These names are reserved as *action* names, which does not make every key spelled that
-    way the framework's: a version-merge tool spreads its output flat rather than under its
-    action name, a first-stage record's content is the user's own staging row, and the
-    guard context never carries ``seed`` at all.
+    - a first-stage record's content is the user's staging row, so ``source`` there can be
+      a string they staged;
+    - a version-merge tool spreads its output flat instead of under its action name, so
+      ``version`` or ``source`` can be that tool's own output field;
+    - a dependency's ``output_field`` is promoted into the context by name, putting a key
+      there that no resolver produced — so presence in the context does not mean resolved.
+
+    Taking such a key away leaves the clause reading a missing field, which counts as *not
+    matched*, so the record is silently filtered rather than erroring.
     """
 
-    POOL = [{"source_guid": "G0", "content": {"source": {"url": "POOL"}}}]
+    POOL = [{"source_guid": "G0", "content": {"source": {"u": 1}}}]
 
-    def _guard_context(self, record, *, first=False):
-        return build_guard_context(
-            dict(record),
-            agent_name="a2",
-            agent_config={"granularity": "record", "context_scope": SCOPE},
-            agent_indices=INDICES,
-            source_data=self.POOL,
-            is_first_stage=first,
+    @staticmethod
+    def _merged_content():
+        """Built through the real function so the shape cannot drift from what ships."""
+        return apply_version_merge(
+            {
+                "kind": "tool",
+                "action_name": "pick",
+                "version_consumption_config": {"mode": "merge"},
+            },
+            {"version": "v2", "source": "tool-said-this", "winner": "gen_1"},
+            {"source": {"u": 1}, "gen_1": {"n": 1}},
         )
 
-    def _merged(self, record, *, first=False):
-        context = self._guard_context(record, first=first)
-        return GuardEvaluator()._build_evaluation_context(record["content"], context)
+    def _kept(self, content, clause, *, scope, first=False, guid="G0", deps=None):
+        context = PreparationContext(
+            agent_config={"granularity": "record", "context_scope": scope, "guard": guard(clause)},
+            agent_name="a2",
+            source_data=self.POOL,
+            agent_indices=INDICES,
+            is_first_stage=first,
+            dependency_configs=deps,
+        )
+        record = {"source_guid": guid, "content": deepcopy(content)}
+        return TaskPreparer().prepare(record, context).should_execute
 
-    def test_a_version_merge_tools_flat_output_field_is_readable(self):
-        """``apply_version_merge`` spreads a tool's output over content instead of nesting
-        it under the action name, so an output field named ``version`` is content's own
-        top-level key. Built through that function rather than hand-written, so the shape
-        cannot drift away from what the framework actually produces."""
+    A1 = {"observe": ["a1.n"]}
+    GEN = {"observe": ["gen_1.n"]}
+
+    def test_a_version_merge_tools_flat_version_field_is_readable(self):
+        assert self._kept(self._merged_content(), "version == 'v2'", scope=self.GEN) is True
+
+    def test_a_version_merge_tools_flat_source_field_is_readable(self):
+        """The same spread can name an output field ``source``, and the pool *does* resolve
+        a ``source`` namespace for this record — so presence on both sides is not enough."""
+        assert (
+            self._kept(self._merged_content(), "source == 'tool-said-this'", scope=self.GEN) is True
+        )
+
+    def test_a_first_stage_staging_field_named_source_is_readable(self):
+        """First stage resolves the namespace *out of the record's own content*, so
+        ``source`` is in the context — and the staged string is still the user's data."""
+        content = {"source": "reuters", "body": "hi"}
+
+        assert (
+            self._kept(
+                content,
+                "source == 'reuters'",
+                scope={"observe": ["source.body"]},
+                first=True,
+                guid="S2",
+            )
+            is True
+        )
+
+    @pytest.mark.parametrize("field,value", [("version", 3), ("workflow", "intake"), ("seed", 42)])
+    def test_a_first_stage_staging_field_named_for_a_bus_namespace_is_readable(self, field, value):
+        content = {field: value, "body": "hi"}
+
+        assert (
+            self._kept(
+                content,
+                f"{field} == {value!r}",
+                scope={"observe": ["source.body"]},
+                first=True,
+                guid="S1",
+            )
+            is True
+        )
+
+    def test_a_promoted_output_field_does_not_count_as_resolved(self):
+        """``build_guard_context`` promotes a dependency's ``output_field`` to a top-level
+        key by name. Treating that as a resolved namespace made a clause read a different
+        action's output — a clause's answer changing because of config elsewhere, which is
+        the shape this fix exists to remove."""
+        content = self._merged_content()
+        deps = {"a1": {"output_field": "version", "idx": 0}}
+
+        assert self._kept(content, "version == 'v2'", scope=self.A1, deps=deps) is True
+
+    @pytest.mark.parametrize("carried", ["flat-string", [1, 2], 0, ""])
+    def test_a_carried_source_that_is_not_a_namespace_is_readable(self, carried):
+        content = {"source": carried, "a1": {"n": 1}}
+
+        assert self._kept(content, f"source == {carried!r}", scope=self.A1, guid="MISS") is True
+
+    def test_a_carried_seed_namespace_is_readable_because_no_seed_is_ever_resolved(self):
+        """Asserted with its reason: the guard context has no ``seed``, so there is nothing
+        to prefer. The first assertion is what fails the day that stops being true."""
+        content = {"seed": {"tier": "gold"}, "a1": {"n": 1}}
+        context = build_guard_context(
+            {"source_guid": "G0", "content": content},
+            agent_name="a2",
+            agent_config={"granularity": "record", "context_scope": self.A1},
+            agent_indices=INDICES,
+            source_data=self.POOL,
+        )
+
+        assert "seed" not in context
+        assert self._kept(content, "seed.tier == 'gold'", scope=self.A1) is True
+
+    def test_but_a_carried_namespace_is_still_displaced(self):
+        """The boundary — without this the class is satisfied by reverting the fix."""
+        content = {"source": {"u": 99}, "a1": {"n": 1}}
+        scope = {"observe": ["source.u"]}
+
+        assert self._kept(content, "source.u == 99", scope=scope) is False
+        assert self._kept(content, "source.u == 1", scope=scope) is True
+
+
+class TestAFieldTheResolvedDocumentLacksBecomesUnreadable:
+    """The cost of preferring the resolved namespace, stated where it can be seen. No
+    namespace *key* is removed, but the resolved document is a different document: a field
+    only the carried copy had goes from matched to missing, which counts as *not matched*.
+    That is inherent to resolving against the pool rather than the snapshot, not a
+    separable defect — pinned so nobody reads the guarantee as covering fields.
+    """
+
+    def test_a_field_only_the_carried_copy_had_stops_matching(self):
+        record = {
+            "source_guid": "G0",
+            "content": {"source": {"u": 1, "extra": "E"}, "a1": {"n": 1}},
+        }
+        config = {
+            "granularity": "file",
+            "context_scope": SCOPE,
+            "guard": guard("source.extra == 'E'"),
+        }
+
+        passing, _s, _o, _f = prefilter_by_guard(
+            [record],
+            config,
+            "a2",
+            agent_indices=INDICES,
+            source_data=[{"source_guid": "G0", "content": {"source": {"u": 1}}}],
+            is_first_stage=False,
+        )
+
+        assert len(passing) == 0
+
+    def test_a_field_the_resolved_document_has_is_what_a_clause_reads(self):
+        """The same record, the field the pool does carry — so the test above is about the
+        document differing, not about the clause never matching."""
+        record = {
+            "source_guid": "G0",
+            "content": {"source": {"u": 99, "extra": "E"}, "a1": {"n": 1}},
+        }
+        config = {"granularity": "file", "context_scope": SCOPE, "guard": guard("source.u == 1")}
+
+        passing, _s, _o, _f = prefilter_by_guard(
+            [record],
+            config,
+            "a2",
+            agent_indices=INDICES,
+            source_data=[{"source_guid": "G0", "content": {"source": {"u": 1}}}],
+            is_first_stage=False,
+        )
+
+        assert len(passing) == 1
+
+
+class TestAVersionedActionDoesNotDisplaceAToolsOwnField:
+    """The narrowest overlap there is, and it does not bite. An action declaring both
+    ``versions:`` and ``version_consumption:`` carries a version context *and* has its tool
+    output spread flat, so the loop iteration and an output field named ``version`` claim
+    one key. The field is a string and the iteration is a namespace, so the two are told
+    apart by shape and the field is what a clause reads — with or without the loop.
+
+    Pinned because requiring both sides to be a namespace is what makes this work, and a
+    rule keyed on the name alone would answer these two differently.
+    """
+
+    POOL = [{"source_guid": "G0", "content": {"source": {"u": 1}}}]
+
+    def _kept(self, version_context):
         content = apply_version_merge(
             {
                 "kind": "tool",
@@ -394,40 +556,28 @@ class TestAKeyTheFrameworkDidNotAnswerStillReachesTheGuard:
                 "version_consumption_config": {"mode": "merge"},
             },
             {"version": "v2", "winner": "gen_1"},
-            {"source": {"url": "POOL"}, "gen_1": {"n": 1}},
+            {"source": {"u": 1}, "gen_1": {"n": 1}},
         )
+        config = {
+            "granularity": "file",
+            "context_scope": {"observe": ["gen_1.n"]},
+            "guard": guard("version == 'v2'"),
+        }
+        passing, _s, _o, _f = prefilter_by_guard(
+            [{"source_guid": "G0", "content": deepcopy(content)}],
+            config,
+            "a2",
+            agent_indices=INDICES,
+            source_data=self.POOL,
+            is_first_stage=False,
+            version_context=version_context,
+        )
+        return len(passing) == 1
 
-        merged = self._merged({"source_guid": "G0", "content": content})
+    def test_a_plain_fan_in_reads_the_tools_field(self):
+        assert self._kept(None) is True
 
-        assert merged["version"] == "v2"
-
-    def test_a_first_stage_user_field_named_for_a_bus_namespace_is_readable(self):
-        """A first-stage record's content is the user's staging row, so a field named
-        ``version`` is their data and nothing resolved it."""
-        record = {"source_guid": "S1", "content": {"version": 3, "body": "hi"}}
-
-        assert self._merged(record, first=True)["version"] == 3
-
-    def test_a_carried_seed_is_readable_because_no_seed_is_ever_resolved(self):
-        """``seed`` reaches the prompt context, never the guard's, so including it in the
-        rule can only subtract. Asserted together with its absence from the context, so the
-        test states why rather than just that."""
-        record = {"source_guid": "G0", "content": {"seed": {"tier": "gold"}, "a1": {"n": 1}}}
-
-        assert "seed" not in self._guard_context(record)
-        assert self._merged(record)["seed"] == {"tier": "gold"}
-
-    @pytest.mark.parametrize("carried", ["flat-string", [1, 2], 0, ""])
-    def test_a_carried_source_the_resolver_declines_is_still_readable(self, carried):
-        """The resolver answers only a dict, so for these shapes it returns nothing. Taking
-        the key away would filter the record on a clause that used to match it."""
-        record = {"source_guid": "MISSING", "content": {"source": carried, "a1": {"n": 1}}}
-
-        assert self._merged(record)["source"] == carried
-
-    def test_but_a_resolved_namespace_still_outranks_the_carried_copy(self):
-        """The boundary, and the whole point of the fix — without this the class above
-        would be satisfied by reverting it."""
-        record = {"source_guid": "G0", "content": {"source": {"url": "CARRIED"}, "a1": {"n": 1}}}
-
-        assert self._merged(record)["source"] == {"url": "POOL"}
+    def test_a_versioned_fan_in_reads_it_too(self):
+        """A version context exists here, so a name-only rule would prefer the iteration
+        and this clause would stop matching."""
+        assert self._kept({"i": 1, "idx": 0}) is True

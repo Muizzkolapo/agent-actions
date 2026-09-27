@@ -26,21 +26,31 @@ logger = logging.getLogger(__name__)
 
 
 def _record_namespaces(content: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
-    """Record content minus the framework namespaces *resolved* already answered.
+    """Record content minus the framework namespaces *resolved* answered with its own.
 
-    A record can carry its own copy of one, taken when the record was written and
-    possibly older than the pool; where the framework resolved the namespace itself
-    that answer wins. Only there: a key the framework has no answer for stays, because
-    these names are not always the framework's. A first-stage record's content is the
-    user's own staging row, and a version-merge tool spreads its output flat rather
-    than under its action name, so ``version`` can be that tool's output field.
-    Dropping such a key would leave the clause reading a missing field, which is *not
-    matched* — a silent filter.
+    A record can carry a copy of one, taken when the record was written and possibly
+    older than the pool; the resolved one is the run's current answer and wins. That is
+    a namespace shadowing a namespace, so both sides must be one — a *field* whose name
+    happens to match is somebody's data and is left alone:
+
+    - a first-stage record's content is the user's staging row, so ``source`` there can
+      be a string they staged;
+    - a version-merge tool spreads its output flat instead of under its action name, so
+      ``version`` or ``source`` can be that tool's own output field;
+    - a dependency's ``output_field`` is promoted into the context by name, which puts
+      keys there that no resolver produced.
+
+    Taking such a key away leaves the clause reading a missing field, which counts as
+    *not matched* — a silent filter rather than an error.
     """
     return {
         key: value
         for key, value in content.items()
-        if not (key in RUNTIME_BUS_NAMESPACES and key in resolved)
+        if not (
+            key in RUNTIME_BUS_NAMESPACES
+            and isinstance(value, dict)
+            and isinstance(resolved.get(key), dict)
+        )
     }
 
 

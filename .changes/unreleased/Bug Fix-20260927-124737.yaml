@@ -11,21 +11,22 @@ body: >-
   answer no longer depends on which granularity reads the record or on whether an unrelated
   `context_scope` happened to materialise the namespace.
 
-  The rule is one-directional: a resolved framework namespace outranks the record's copy,
-  and a key the framework resolved no answer for is left alone. `source`, `version`,
-  `workflow` and `seed` are reserved *action* names, which does not make every key spelled
-  that way the framework's — a first-stage record's content is the user's own staging row, a
-  version-merge tool spreads its output flat rather than under its action name so an output
-  field named `version` is content's own key, and the guard context never carries `seed` at
-  all. Taking such a key away would leave the clause reading a missing field, which counts as
-  *not matched* and would silently filter the record. Nothing a guard could read before is
-  removed; only which of two values a clause reads can change.
+  A namespace displaces a namespace and nothing else. `source`, `version`, `workflow` and
+  `seed` are reserved *action* names, which does not make a plain field spelled that way the
+  framework's: a first-stage record's content is the user's own staging row, a version-merge
+  tool spreads its output flat rather than under its action name so `version` or `source` can
+  be that tool's output field, and a dependency's `output_field` is promoted into the context
+  by name so presence there does not mean a resolver produced it. Both sides must be a
+  namespace before the resolved one wins, so a field spelled that way is left alone — taking
+  the key away would leave the clause reading a missing field, which counts as *not matched*
+  and would silently filter the record.
 
-  One behaviour change follows. `context_scope.drop` no longer hides a `source` field from a
-  guard clause, because the resolved namespace is the source document and `drop` never
-  touched it. This closes a second divergence rather than opening one: FILE mode used to
-  hide such a field, because the scope pass wrote its own stripped copy onto the record, and
-  RECORD mode never did. The two now agree on RECORD's answer, which matches a guard gating
-  the action before it receives anything. A dropped *dependency* field is still hidden from a
-  FILE-mode guard and not from a RECORD-mode one; that asymmetry predates this change.
+  Two consequences. `context_scope.drop` no longer hides a `source` field from a guard
+  clause, because the resolved namespace is the source document and `drop` never touched it;
+  this closes a second divergence rather than opening one, since FILE mode used to hide such
+  a field and RECORD mode never did, and the two now agree on RECORD's answer. A dropped
+  *dependency* field is still hidden from a FILE-mode guard and not from a RECORD-mode one;
+  that asymmetry predates this change. And while no namespace key is removed, a *field* only
+  the carried copy had becomes unreadable once the resolved document replaces it — inherent
+  to resolving against the pool rather than against the snapshot.
 time: 2026-09-27T12:47:37Z
