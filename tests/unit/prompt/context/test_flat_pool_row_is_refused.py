@@ -1,36 +1,16 @@
 """A source-pool row carrying no ``content`` envelope is refused, not guessed at.
 
-Each granularity resolves a pool row into the document a prompt sees, and each guesses
-when the row has no envelope to separate the user's keys from the framework's. They guess
-in opposite directions. Measured on the row below, one row read by both:
+Each granularity resolved such a row into a document by guessing which of its keys were
+the user's, and they guessed differently. Measured on one row,
+``{source_guid: G0, url, metadata, lineage}``: FILE answered ``{"url": "POOL"}``, having
+subtracted ``_RECORD_METADATA_KEYS`` and with it the user's own ``metadata`` and
+``lineage``; RECORD answered all four keys, offering ``source_guid`` to the model as a
+document field. #584 met the same question deriving identity and deleted the name-based
+subtraction rather than curating a better list.
 
-* FILE answers ``{"url": "POOL"}`` — ``_extract_content_data`` subtracts
-  ``_RECORD_METADATA_KEYS``, sixteen names, five of which an exported or scraped document
-  may legitimately carry (``metadata``, ``lineage``, ``chunk_info``, ``node_id``,
-  ``target_id``). The user's ``metadata`` and ``lineage`` are gone, with no error and no
-  disposition.
-* RECORD answers all four keys including ``source_guid`` — the namespace builder subtracts
-  nothing, so the framework's identity is offered to the model as a field of the user's
-  document.
-
-Neither guess is better, and the boundary is information the row does not carry. #584
-faced the same question for identity derivation — ``derive_source_guid`` subtracted
-framework field names and collapsed two rows whose user column was called ``node_id`` —
-and deleted the subtraction rather than improving it, wrapping the payload under
-``content.source`` so there is nothing to subtract. ``SOURCE_GUID_EXCLUDED_FIELDS`` went
-with it. The read path keeps the same rule: a row with no envelope is a store this
-version cannot read, said out loud, the way ``write_source`` already refuses a row with
-no ``source_guid`` rather than dropping it silently.
-
-The refusal belongs at the pool boundary and nowhere else. Both flat branches serve a
-second, legitimate population — the namespace builder's takes a bare user payload on the
-first-stage prompt path (379 calls across the suite, none of them a record), and
-``_extract_content_data``'s is also reached with the record being processed. Only a row
-read out of ``source_data`` is promised an envelope.
-
-An enveloped row is untouched, and that is the case a naive fix breaks: #1100 records
-that routing the RECORD path through ``_extract_content_data`` was tried and reverted for
-exactly this reason. #1130, split from #1100.
+The guard belongs at the pool read and nowhere else: both flat branches also serve
+populations that are not pool rows — a bare user payload on the first-stage prompt path
+(386 calls across the suite), and the record being processed. #1130, split from #1100.
 """
 
 import pytest
@@ -183,7 +163,7 @@ class TestTheEnvelopeIsWhatDrawsTheBoundary:
 
 
 class TestTheBareDocumentPathIsUntouched:
-    """The namespace builder's flat branch is reached 379 times across the suite with a
+    """The namespace builder's flat branch is reached 386 times across the suite with a
     bare user payload — the first-stage prompt path hands it the document itself, not a
     record. Refusing there would break every one of those, so the guard sits at the pool
     boundary and this branch keeps working."""
