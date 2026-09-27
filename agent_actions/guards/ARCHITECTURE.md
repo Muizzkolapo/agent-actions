@@ -272,12 +272,17 @@ Guard condition uses dotted paths:
 
 If `_build_evaluation_context()` is used (Phase 2 evaluation with full context), the item's content is merged with context data (passthrough fields, source data). Content fields take precedence over top-level fields on collision.
 
-The framework namespaces — `source`, `version`, `workflow`, `seed` — are the exception: they come from the context, which holds the answer the resolver picked, and a copy of one in the record's content does not override it. A record's copy was taken when the record was written and the pool can have moved past it, and since these are reserved action names a key under one is never an action's output. Without the exception a guard read the carried copy, so the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record. Only `source` is produced in record content by anything today; `version`, `workflow` and `seed` are covered because they share the merge, not because a writer for them exists.
+A framework namespace — `source`, `version`, `workflow`, `seed` — is the exception, in one direction only: **where the context resolved one, the record's copy does not override it.** A record's copy was taken when the record was written and the pool can have moved past it, so the resolved answer is the run's current one. Without this a guard read the carried copy, and the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record.
 
-Two consequences of taking these from the context:
+The rule stops there. A key the framework resolved *no* answer for is left alone and still reaches the clause, because these names are reserved as **action** names, which does not make every key spelled that way the framework's:
 
-- **`context_scope.drop` does not hide a `source` field from a guard.** The resolved namespace is the source document, which `drop` never touched. FILE mode used to hide such a field, because the scope pass wrote its own stripped copy onto the record; RECORD mode never did. The two now agree on RECORD's answer, which matches a guard's job — it gates the action, and `drop` shapes what the action then receives. A **dependency** namespace still comes from the record, so a FILE-mode `drop` does still hide one of those; that asymmetry predates this rule and is not addressed by it.
-- A record the source pool cannot place is unaffected: the resolver returns the record itself in that case, so the resolved namespace and the carried copy are the same value.
+- a first-stage record's content is the user's own staging row, so a staging field named `version` is their data;
+- `apply_version_merge` spreads a version-merge **tool**'s output flat over content rather than nesting it under the action name, so an output field named `version` is content's own top-level key;
+- the guard context never carries `seed` at all — it is injected on the prompt path only — so there is never a resolved `seed` to prefer.
+
+Removing such a key would leave the clause reading a missing field, which `reclassify_missing_field_error` turns into *not matched* — a silent filter rather than an error. Preferring a resolved answer can only change which of two values a clause reads; it never takes a readable key away.
+
+One consequence worth stating: **`context_scope.drop` does not hide a `source` field from a guard.** The resolved namespace is the source document, which `drop` never touched. FILE mode used to hide such a field, because the scope pass wrote its own stripped copy onto the record; RECORD mode never did. The two now agree on RECORD's answer, which matches a guard's job — it gates the action, and `drop` shapes what the action then receives. A **dependency** namespace still comes from the record, so a FILE-mode `drop` does still hide one of those; that asymmetry predates this rule and is not addressed by it.
 
 ---
 

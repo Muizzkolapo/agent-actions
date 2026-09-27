@@ -25,16 +25,23 @@ from agent_actions.utils.udf_management.tooling import execute_user_defined_func
 logger = logging.getLogger(__name__)
 
 
-def _record_namespaces(content: dict[str, Any]) -> dict[str, Any]:
-    """Record content minus the namespaces the framework resolves for itself.
+def _record_namespaces(content: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    """Record content minus the framework namespaces *resolved* already answered.
 
-    A record's content can hold its own ``source`` (and, for a record written
-    inside a fan-out, ``version``) — a copy taken when the record was written,
-    which the pool can since have moved past. The resolved namespace reaches the
-    guard in its context, and these names are reserved action names, so a key
-    under one of them is never an action's output to prefer.
+    A record can carry its own copy of one, taken when the record was written and
+    possibly older than the pool; where the framework resolved the namespace itself
+    that answer wins. Only there: a key the framework has no answer for stays, because
+    these names are not always the framework's. A first-stage record's content is the
+    user's own staging row, and a version-merge tool spreads its output flat rather
+    than under its action name, so ``version`` can be that tool's output field.
+    Dropping such a key would leave the clause reading a missing field, which is *not
+    matched* — a silent filter.
     """
-    return {key: value for key, value in content.items() if key not in RUNTIME_BUS_NAMESPACES}
+    return {
+        key: value
+        for key, value in content.items()
+        if not (key in RUNTIME_BUS_NAMESPACES and key in resolved)
+    }
 
 
 @dataclass
@@ -304,8 +311,8 @@ class GuardEvaluator:
         so guard conditions can use dotted paths (e.g., ``action.field``).
 
         An action's own namespace comes from the record, which holds the in-flight
-        value. The framework namespaces come from *context*, which holds the
-        resolved one — see ``_record_namespaces``.
+        value. A framework namespace comes from *context* where *context* resolved
+        one, and from the record otherwise — see ``_record_namespaces``.
         """
         eval_data = {}
 
@@ -318,9 +325,9 @@ class GuardEvaluator:
                 for k, v in item.items():
                     if k != "content":
                         eval_data[k] = v
-                eval_data.update(_record_namespaces(item["content"]))
+                eval_data.update(_record_namespaces(item["content"], context))
             else:
-                eval_data.update(_record_namespaces(item))
+                eval_data.update(_record_namespaces(item, context))
         elif item is not None:
             eval_data["_raw"] = item
 

@@ -9,22 +9,23 @@ body: >-
   writes the resolved namespace onto the record before the guard runs, and a FILE action
   declaring no `context_scope` read the stale copy exactly like a RECORD one. A guard's
   answer no longer depends on which granularity reads the record or on whether an unrelated
-  `context_scope` happened to materialise the namespace. `version`, `workflow` and `seed`
-  are covered by the same rule because they share that merge; only `source` has a producer
-  writing it into record content today, so for the other three this is future-proofing rather
-  than a fault anyone could reach. These four are reserved action names, so a key under one
-  of them in record content is never an action's output. An action's own namespace still
-  comes from the record, which is where the in-flight value lives. Nothing is lost for a
-  record the pool cannot place: the resolver already falls back to what such a record
-  carries, so the resolved answer and the carried one are the same value in exactly those
-  cases.
+  `context_scope` happened to materialise the namespace.
+
+  The rule is one-directional: a resolved framework namespace outranks the record's copy,
+  and a key the framework resolved no answer for is left alone. `source`, `version`,
+  `workflow` and `seed` are reserved *action* names, which does not make every key spelled
+  that way the framework's — a first-stage record's content is the user's own staging row, a
+  version-merge tool spreads its output flat rather than under its action name so an output
+  field named `version` is content's own key, and the guard context never carries `seed` at
+  all. Taking such a key away would leave the clause reading a missing field, which counts as
+  *not matched* and would silently filter the record. Nothing a guard could read before is
+  removed; only which of two values a clause reads can change.
 
   One behaviour change follows. `context_scope.drop` no longer hides a `source` field from a
   guard clause, because the resolved namespace is the source document and `drop` never
   touched it. This closes a second divergence rather than opening one: FILE mode used to
-  hide such a field, because the scope pass wrote its own stripped copy onto the record,
-  and RECORD mode never did. The two now agree on RECORD's answer, which matches a guard
-  gating the action before it receives anything. A dropped *dependency* field is still
-  hidden from a FILE-mode guard and not from a RECORD-mode one; that asymmetry predates
-  this change.
+  hide such a field, because the scope pass wrote its own stripped copy onto the record, and
+  RECORD mode never did. The two now agree on RECORD's answer, which matches a guard gating
+  the action before it receives anything. A dropped *dependency* field is still hidden from a
+  FILE-mode guard and not from a RECORD-mode one; that asymmetry predates this change.
 time: 2026-09-27T12:47:37Z
