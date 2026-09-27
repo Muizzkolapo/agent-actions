@@ -9,10 +9,14 @@ Two dependencies is the easy way there — some records then carry both namespac
 and some only one — but one dependency and one incomplete record is enough.
 """
 
+from copy import deepcopy
+from unittest.mock import patch
+
 import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from agent_actions.processing.unified import UnifiedProcessor
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -49,19 +53,22 @@ SECOND_ACTION = """  - name: enrich
     intent: "Tag"
     schema: tool_action_output
     impl: tag_every_record
-    context_scope: { observe: [flatten.summary] }
+    context_scope: {scope}
     expect: { repair: none }
-"""
+""".replace("{scope}", "%s")
+
+OBSERVE_ONLY = "{ observe: [flatten.summary] }"
+OBSERVE_AND_DROP = "{ observe: [flatten.summary], drop: [flatten.exam_density] }"
 
 
-def _declare_file_action(project):  # noqa: F811
+def _declare_file_action(project, scope=OBSERVE_ONLY):  # noqa: F811
     """Append the FILE-granularity action without running it yet.
 
     Not run here: the fixture's tool fills the observed field for every record, so
     a run before the upstream is edited would leave nothing for the scope to drop.
     """
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + (SECOND_ACTION % scope))
     # Not `tag.py` or `file_tag.py`: tool discovery imports by module name and two
     # other fixtures already claim those, so the second module to load is served
     # the first one out of sys.modules and its UDF is never found.
@@ -190,3 +197,51 @@ class TestASkippedRecordNamesItsInputPosition:
         _enriched, skipped = self._pass([{"source_guid": "keep", "content": {"d": {"x": 1}}}])
 
         assert skipped == []
+
+
+class TestTheListHandedToTheGuardIsThePreObserveOne:
+    """Equal length is not the contract — ``original_data`` exists to carry the
+    records as they were *before* the scope touched them, so the guard can restore
+    what it removed. Handing over the scoped list instead makes the two lists the
+    same length and the parameter pointless, and no length assertion can tell the
+    difference. A dropped field can: the scope removes it from the records it
+    returns and cannot remove it from the originals.
+    """
+
+    @staticmethod
+    def _captured(project):  # noqa: F811
+        _declare_file_action(project, scope=OBSERVE_AND_DROP)
+        _unobservable(project, _record_ids(project)[-1])
+        seen: dict[str, list[dict]] = {}
+        through = UnifiedProcessor.process
+
+        def _capture(self, records, context, strategy, **kwargs):
+            if kwargs.get("raw_records") is not None:
+                seen["records"] = deepcopy(records)
+                seen["raw"] = deepcopy(kwargs["raw_records"])
+            return through(self, records, context, strategy, **kwargs)
+
+        with patch.object(UnifiedProcessor, "process", _capture):
+            result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+        assert result.exit_code == 0, result.output
+        assert seen, "the FILE-mode branch was never reached — nothing was captured"
+        return seen
+
+    def test_the_scoped_records_have_the_drop_applied(self, project):  # noqa: F811
+        """The premise of the test below: the two lists really do differ here."""
+        seen = self._captured(project)
+
+        assert all("exam_density" not in r["content"][ACTION] for r in seen["records"])
+
+    def test_the_pre_observe_records_still_carry_the_dropped_field(self, project):  # noqa: F811
+        seen = self._captured(project)
+
+        assert all("exam_density" in r["content"][ACTION] for r in seen["raw"])
+
+    def test_both_lists_hold_the_same_records_in_the_same_order(self, project):  # noqa: F811
+        seen = self._captured(project)
+
+        assert [r["source_guid"] for r in seen["raw"]] == [
+            r["source_guid"] for r in seen["records"]
+        ]
+        assert len(seen["raw"]) == RECORDS - 1
