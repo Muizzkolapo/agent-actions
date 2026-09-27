@@ -80,12 +80,13 @@ class TestAKeyTheSchemaDoesNotDeclare:
         assert "model_vendor" in message and "record_limit" in message
 
     def test_a_key_far_from_every_field_is_not_given_a_suggestion(self):
-        """A superseded spelling is not a typo, and guessing at one misdirects.
+        """A key naming something the block does not do is not a typo, and guessing
+        at one misdirects.
 
-        `reprompt` sits at 0.600 against `prompt_debug`, under the cutoff by
-        0.05 — so declaring a field spelled near it would flip this.
+        `output_schema` sits at 0.640 against `output_field`, under the cutoff by
+        0.01 — so declaring a field spelled near it would flip this.
         """
-        assert "did you mean" not in refusal(reprompt={"max_iterations": 2})
+        assert "did you mean" not in refusal(output_schema="out.yml")
 
     def test_every_unknown_key_is_named_not_only_the_first(self):
         message = refusal(few_shot=0, totally_bogus=True)
@@ -102,20 +103,27 @@ class TestAKeyTheSchemaDoesNotDeclare:
 
 class TestASupersededSpellingKeepsBeingRefused:
     """Refused by the rule covering every undeclared key, not by a table of the
-    ones someone remembered to list."""
+    ones someone remembered to list.
 
-    @pytest.mark.parametrize("key", ["reprompt", "on_schema_mismatch"])
+    Neither of these can be answered by name. `use_self_reflection` was a key of a
+    block that no longer exists and has no successor; `max_attempts` is a live key of
+    `retry:` written one level too high, so naming a replacement would send the
+    reader to the wrong block. The general rule is what has to catch both.
+    """
+
+    SIBLINGS = ["use_self_reflection", "max_attempts"]
+
+    @pytest.mark.parametrize("key", SIBLINGS)
     def test_it_is_refused_by_that_rule(self, key):
-        message = refusal(**{key: {"max_iterations": 2}})
+        message = refusal(**{key: 3})
 
         assert f"unknown defaults key '{key}'" in message
         assert "valid defaults keys are" in message
 
-    @pytest.mark.parametrize("key", ["reprompt", "on_schema_mismatch"])
-    def test_the_refusal_does_not_narrate_the_replacement(self, key):
-        message = refusal(**{key: {"max_iterations": 2}})
+    @pytest.mark.parametrize("key", SIBLINGS)
+    def test_the_refusal_does_not_narrate_a_replacement_it_does_not_have(self, key):
+        message = refusal(**{key: 3})
 
-        assert "has been replaced" not in message
         assert "expect:" not in message
 
 

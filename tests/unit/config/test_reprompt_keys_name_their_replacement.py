@@ -1,15 +1,9 @@
 """`reprompt:` and `on_schema_mismatch:` are not config keys — `expect:` took over.
 
-Four blocks can carry either. Two of them are validated by models that allow extra
-keys, so leaving the field undeclared refuses nothing there: the value rode onto
-every agent, where no stage read it, and anything dumping an agent config showed the
-setting present and apparently applied.
-
-Every refusal is asserted to name `expect:`, not merely to fail. Unlike a key whose
-feature was deleted outright, the behaviour these two asked for is still available —
-so "unknown key" is not just unhelpful here, it costs the reader the migration and
-invites them to try the same block one level up, which is the surface that kept
-accepting it.
+Two of the four blocks that can carry either allow extra keys, so leaving the field
+undeclared refuses nothing there and the value rode onto every agent unread. Each
+refusal is asserted to name `expect:` rather than only to fail: the behaviour these
+asked for is still available, so "unknown key" costs the reader the migration.
 """
 
 import pytest
@@ -23,6 +17,7 @@ from agent_actions.config.schema import (
     WorkflowConfig,
 )
 from agent_actions.errors import ConfigurationError
+from agent_actions.output.response.expander import ActionExpander
 
 BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"}
 
@@ -33,14 +28,48 @@ WRITTEN = {
     "on_schema_mismatch": "reject",
 }
 
-# The `expect:` blocks each key's own refusal names. They are asserted to validate as
-# well as to be quoted: guidance that does not load sends the reader in a circle.
-PRESCRIBED = {
-    "reprompt": [{"repair": "auto"}, {"expectations": [{"type": "no_null_fields"}]}],
-    "on_schema_mismatch": [{"repair": "auto"}, {"max_iterations": 1, "on_exhausted": "raise"}],
+# What only the other key's migration says, so a single hint serving both is caught.
+# They share `repair: auto`, and asserting on that alone would accept one sentence
+# stitched from both — which tells a `reject` author to start a retry loop.
+ONLY_THE_OTHERS = {
+    "reprompt": "on_exhausted: raise",
+    "on_schema_mismatch": "expectations:",
 }
 
+RETIRED_MARKER = "is no longer read"
+
 KEYS = sorted(WRITTEN)
+
+
+def _refusal_for(key: str, level: str = "action") -> str:
+    written = {key: WRITTEN[key]}
+    config = _workflow(action=written) if level == "action" else _workflow(defaults=written)
+    with pytest.raises(ValidationError) as caught:
+        WorkflowConfig.model_validate(config)
+    return _msgs(caught)
+
+
+def _quoted_expect_blocks(message: str) -> list[dict]:
+    """Every `expect: {...}` the refusal quotes, parsed as the reader would paste it.
+
+    Read out of the message rather than listed here on purpose: a list of blocks kept
+    beside the test passes while the message drifts to prescribing something that does
+    not load, which is the one failure a migration hint has.
+    """
+    marker = "expect: "
+    blocks = []
+    for start in (i for i in range(len(message)) if message.startswith(marker + "{", i)):
+        depth, j = 0, start + len(marker)
+        while j < len(message):
+            if message[j] == "{":
+                depth += 1
+            elif message[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        blocks.append(yaml.safe_load(message[start + len(marker) : j + 1]))
+    return blocks
 
 
 def _msgs(caught: pytest.ExceptionInfo[ValidationError]) -> str:
@@ -60,6 +89,23 @@ def _workflow(defaults=None, action=None):
         "defaults": {**BASE_DEFAULTS, **(defaults or {})},
         "actions": [{"name": "a1", "intent": "i", "prompt": "p", **(action or {})}],
     }
+
+
+def _expand(action):
+    """Expand a raw action dict, skipping validation.
+
+    Deliberately not through `WorkflowConfig`, which now refuses this input: a test
+    that could only reach the expander through the schema would stop exercising it at
+    the point the expander's own half needs proving.
+    """
+    expanded = ActionExpander.expand_actions_to_agents(
+        {
+            "name": "wf",
+            "actions": [{"name": "a1", "intent": "i", "prompt": "p", **action}],
+            "defaults": dict(BASE_DEFAULTS),
+        }
+    )
+    return expanded["wf"][0]
 
 
 def _bare_manager() -> ConfigManager:
@@ -160,30 +206,76 @@ class TestTheMigrationTheRefusalPrescribes:
     """A refusal that names a replacement is only as good as the replacement loading."""
 
     @pytest.mark.parametrize("key", KEYS)
-    def test_every_expect_block_the_refusal_quotes_is_accepted(self, key):
-        for block in PRESCRIBED[key]:
+    def test_every_expect_block_the_refusal_quotes_actually_loads(self, key):
+        """Parsed out of the message, not listed beside the test: the block a reader
+        pastes is the one the message holds, so that is what has to validate."""
+        message = _refusal_for(key)
+        blocks = _quoted_expect_blocks(message)
+
+        assert blocks, f"the refusal names no expect: block to migrate to: {message!r}"
+        for block in blocks:
             WorkflowConfig.model_validate(_workflow(action={"expect": block}))
             DefaultsConfig.model_validate({**BASE_DEFAULTS, "expect": block})
 
     @pytest.mark.parametrize("key", KEYS)
     def test_the_refusal_quotes_the_block_that_replaces_this_key(self, key):
-        """Pins guidance to key: `reject` halts and `reprompt` regenerates, and a
-        refusal offering the other one silently changes what the action does."""
-        with pytest.raises(ValidationError) as caught:
-            WorkflowConfig.model_validate(_workflow(action={key: WRITTEN[key]}))
+        message = _refusal_for(key)
 
-        message = _msgs(caught)
         assert "repair: auto" in message
+        assert ONLY_THE_OTHERS[key] not in message, (
+            f"the '{key}' refusal also offers the other key's migration, and the two "
+            f"are not interchangeable — `reject` halts where `reprompt` regenerates, so "
+            f"following the wrong one turns a deliberate halt into a retry loop, or "
+            f"drops the rules a validation: function checked: {message!r}"
+        )
+
+    @pytest.mark.parametrize("key", KEYS)
+    def test_the_block_it_quotes_does_what_the_key_did(self, key):
+        """Loading is not enough: `reject` halted, so its replacement must halt too.
+
+        Asserted on the validated model rather than the message, since the message is
+        what is under test.
+        """
+        blocks = _quoted_expect_blocks(_refusal_for(key))
+        validated = [DefaultsConfig.model_validate({**BASE_DEFAULTS, "expect": b}) for b in blocks]
+
         if key == "on_schema_mismatch":
-            assert "on_exhausted: raise" in message, (
-                "`reject` halted instead of regenerating; a refusal that only offers "
-                f"repair: auto turns a halt into a retry loop: {message!r}"
+            halting = [v.expect for v in validated if v.expect.on_exhausted == "raise"]
+            assert halting, "no quoted block halts, so `reject` has no replacement offered"
+            assert halting[0].max_iterations == 1, (
+                "a halting block that still loops is not what `reject` did: "
+                f"max_iterations={halting[0].max_iterations}"
             )
         else:
-            assert "expectations:" in message, (
-                "a block naming a validation: function becomes a rule list, and a "
-                f"refusal that only offers repair: auto drops the checks: {message!r}"
+            assert any(v.expect.expectations for v in validated), (
+                "no quoted block carries rules, so a block naming a validation: "
+                "function has no replacement offered"
             )
+
+
+class TestTheExpanderHandsNeitherKeyToTheAgent:
+    """The two strict surfaces are refused, so nothing should reach expansion — but
+    the expander copies action keys onto the agent and is the carrier that made the
+    sibling retired key look applied. Asserted on the agent it actually builds."""
+
+    @pytest.mark.parametrize("key", KEYS)
+    def test_no_expanded_agent_carries_the_key(self, key):
+        agent = _expand({key: WRITTEN[key]})
+
+        assert key not in agent, (
+            f"the expander copied '{key}' onto the agent, where no stage reads it: "
+            f"{agent.get(key)!r}"
+        )
+
+    @pytest.mark.parametrize("key", KEYS)
+    def test_the_expander_still_carries_what_it_processes_beside_the_key(self, key):
+        """Guard on the guard: the assertion above also passes if the expander stopped
+        building agents or ignored the action. `expect:` is the replacement and sits in
+        the same step, so it must survive on an action carrying both."""
+        agent = _expand({key: WRITTEN[key], "expect": {"repair": "auto"}})
+
+        assert agent["expect"]["repair"] == "auto"
+        assert key not in agent
 
 
 class TestTheSharedTableCoversEverySurface:
@@ -198,23 +290,32 @@ class TestTheSharedTableCoversEverySurface:
     def test_every_key_in_the_table_is_refused_on_all_four_surfaces(self, key, tmp_path):
         written = WRITTEN.get(key, {"any": "value"})
 
+        # The marker, not a bare raises: both strict surfaces already refuse any
+        # undeclared key, so a key in the table that reached only the general rule
+        # would satisfy `raises(ValidationError)` while saying nothing about itself.
         for level in ("action", "defaults"):
             config = (
                 _workflow(action={key: written})
                 if level == "action"
                 else _workflow(defaults={key: written})
             )
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError) as caught:
                 WorkflowConfig.model_validate(config)
+            assert RETIRED_MARKER in _msgs(caught), (
+                f"'{key}' is in the table but the {level} surface fell through to the "
+                f"generic unknown-key refusal: {_msgs(caught)!r}"
+            )
 
-        with pytest.raises(ConfigurationError):
+        with pytest.raises(ConfigurationError) as raised:
             _bare_manager().merge_agent_configs(
                 [{"agent_type": "a1", **BASE_DEFAULTS, "chunk_config": {}, key: written}]
             )
+        assert RETIRED_MARKER in str(raised.value)
 
         manager = _project(tmp_path, {**BASE_DEFAULTS, key: written})
-        with pytest.raises(ConfigurationError):
+        with pytest.raises(ConfigurationError) as raised:
             manager.merge_agent_configs(manager.get_user_agents())
+        assert RETIRED_MARKER in str(raised.value)
 
 
 class TestWhatTheRefusalMustNotSwallow:
@@ -249,10 +350,18 @@ class TestWhatTheRefusalMustNotSwallow:
 
         assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4"
 
-    def test_an_expect_block_is_not_mistaken_for_the_keys_it_replaces(self):
-        """`on_schema_mismatch` is refused as a key, not as a substring: `expect:`
-        carries its own nested keys and a match on the wrong level would refuse the
-        migration this change tells people to make."""
-        config = _workflow(action={"expect": {"repair": "auto", "structural": "auto"}})
+    @pytest.mark.parametrize("key", KEYS)
+    def test_a_retired_name_inside_a_free_form_rule_is_not_refused(self, key):
+        """An `expectations:` entry is a free-form dict, so a rule may legitimately
+        carry a field named like a retired key. The check reads the block's own keys;
+        matching recursively would refuse the very migration it prescribes.
 
-        assert WorkflowConfig.model_validate(config).actions[0].expect.structural == "auto"
+        The fixture has to contain the name at depth — a block that merely omits it
+        cannot fail for this reason and would pass whatever the check did.
+        """
+        rule = {"type": "no_null_fields", key: WRITTEN[key]}
+        config = _workflow(action={"expect": {"expectations": [rule]}})
+
+        validated = WorkflowConfig.model_validate(config)
+
+        assert validated.actions[0].expect.expectations == [rule]

@@ -69,11 +69,26 @@ _VERSION_ORDER_HINT = (
     "many run at once use --concurrency-limit"
 )
 
+# Both shapes the retired block took have a spelling under `expect:`, so a reader told
+# only to remove the key loses the behaviour they were asking for.
+_EXPECT_REPLACES_REPROMPT = (
+    "the expect: block does this now, and both shapes have a spelling there: one that "
+    "only checked the schema becomes expect: {repair: auto}, and one naming a "
+    "validation: function becomes a rule list, e.g. "
+    "expect: {expectations: [{type: no_null_fields}]}"
+)
+_EXPECT_REPLACES_SCHEMA_MISMATCH = (
+    "the expect: block does this now: reprompt becomes expect: {repair: auto}, and "
+    "reject becomes expect: {max_iterations: 1, on_exhausted: raise}"
+)
+
 # Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
     "interceptors": "",
+    "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
+    "reprompt": _EXPECT_REPLACES_REPROMPT,
     "version_mode": _VERSION_ORDER_HINT,
 }
 

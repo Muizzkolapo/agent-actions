@@ -309,8 +309,10 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 
 ### Migrating from `reprompt:`
 
-`reprompt:` has been removed. A config carrying it is refused at load as a key the schema does not
-declare, and the migration is below.
+`reprompt:` has been removed. A config carrying it is refused at load with the `expect:` block that
+replaces it named in the error, and the full migration is below. All four blocks that can carry it
+refuse it: an action, `defaults:`, a top-level `agents:` entry, and the `default_agent_config:` block
+of `agent_actions.yml` — so moving it up a level does not get a workflow past the error.
 
 **A block that only checked the schema** — the common case — becomes a rule-free `expect:`. Set it
 once for the workflow:
