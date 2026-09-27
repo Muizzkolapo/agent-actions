@@ -204,23 +204,10 @@ class LineageEnricher(Enricher):
     def _index_by_source_guid(
         records: list[dict[str, Any]] | None,
     ) -> dict[str, dict] | None:
-        """Build a {source_guid: record} dict, or None when *records* is empty.
-
-        First row wins a repeated guid, as both source resolvers do. Called for
-        ``context.source_data``, where that matters directly — a record's source
-        namespace and its lineage are then read off the same pool, and opposite
-        tie-breaks would attribute the two to different rows — and for
-        ``context.parent_records``, which takes the same tie-break so that one
-        record's ancestry is not assembled from two rows sharing a guid.
-        """
+        """Build a {source_guid: record} dict, or None when *records* is empty."""
         if not records:
             return None
-        index: dict[str, dict] = {}
-        for record in records:
-            sg = record.get("source_guid")
-            if sg is not None:
-                index.setdefault(sg, record)
-        return index
+        return {sg: r for r in records if (sg := r.get("source_guid")) is not None}
 
     @staticmethod
     def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:

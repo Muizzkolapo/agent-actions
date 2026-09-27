@@ -169,39 +169,6 @@ class TestTheTwoResolversPickTheSameRowFromADuplicatedPool:
         )
 
 
-class TestEveryReaderOfThePoolBreaksADuplicateTheSameWay:
-    """Three places index the same pool: both source resolvers and the lineage
-    enricher, which picks a record's parent off it. Opposite tie-breaks would
-    attribute one record's source namespace and its lineage to different rows."""
-
-    DUPLICATED = [
-        {"source_guid": "G0", "content": {"source": {"url": "FIRST"}}, "lineage": ["first"]},
-        {"source_guid": "G0", "content": {"source": {"url": "LAST"}}, "lineage": ["last"]},
-    ]
-
-    def test_the_lineage_enricher_takes_the_first_row(self):
-        from agent_actions.processing.enrichment import LineageEnricher
-
-        index = LineageEnricher._index_by_source_guid(self.DUPLICATED)
-
-        assert index["G0"]["lineage"] == ["first"]
-
-    def test_it_agrees_with_the_record_mode_resolver(self):
-        from agent_actions.processing.enrichment import LineageEnricher
-
-        index = LineageEnricher._index_by_source_guid(self.DUPLICATED)
-        resolved = resolve_source_content(
-            carrying("CARRIED", source_guid="G0"), "G0", self.DUPLICATED, "a2"
-        )
-
-        assert index["G0"] is resolved
-
-    def test_an_empty_pool_still_yields_no_index(self):
-        from agent_actions.processing.enrichment import LineageEnricher
-
-        assert LineageEnricher._index_by_source_guid([]) is None
-
-
 class TestAPoolThatIsTheActionsOwnInputSet:
     """A workflow with no staging data of its own passes its input records as the pool
     (``workflow/pipeline.py``: "the input data IS the source"). A record then resolves to

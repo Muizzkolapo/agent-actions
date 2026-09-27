@@ -13,8 +13,9 @@ class TestResolveSourceContent:
         result = resolve_source_content(item, "sg", None)
         assert result is item
 
-    def test_guid_lookup_when_no_source_key(self):
-        """Tier 2: source_guid + source_data -> look up by guid."""
+    def test_guid_lookup_resolves_first(self):
+        """The guid lookup is the first step, not a fallback for a record with no
+        source key — this record happens to have none, which is incidental."""
         item = {"content": {"upstream": {"x": 1}}, "source_guid": "sg-123"}
         source_data = [{"source_guid": "sg-123", "content": {"source": {"a": 1}}}]
         result = resolve_source_content(item, "sg-123", source_data)
