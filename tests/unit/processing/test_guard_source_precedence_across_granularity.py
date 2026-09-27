@@ -61,19 +61,27 @@ def record_mode(record, clause, *, pool=POOL, version_context=None, workflow_met
 def file_mode(record, clause, *, pool=POOL, scope=SCOPE):
     """Does a FILE-granularity guard keep this record?
 
-    Mirrors the caller: the scope pass runs first when the action declares one, and
-    ``prefilter_by_guard`` sees whatever that left behind. With *scope* ``None`` no pass
-    runs, which is what an action declaring no ``context_scope`` hands the guard.
+    Mirrors the caller: the scope pass runs first when the action declares one, and the
+    pre-scope records go alongside as ``original_data`` — which is what the guard reads, so
+    omitting it measures a call the pipeline never makes. With *scope* ``None`` no pass runs,
+    which is what an action declaring no ``context_scope`` hands the guard.
     """
     config = {"granularity": "file", "guard": guard(clause)}
-    records = [dict(record)]
+    records = [deepcopy(record)]
+    originals = [deepcopy(record)]
     if scope is not None:
         config["context_scope"] = scope
         records, _skipped = apply_context_scope_for_records(
             records, scope, action_name="a2", source_data=pool
         )
     passing, _skipped, _originals, _filtered = prefilter_by_guard(
-        records, config, "a2", agent_indices=INDICES, source_data=pool, is_first_stage=False
+        records,
+        config,
+        "a2",
+        original_data=originals,
+        agent_indices=INDICES,
+        source_data=pool,
+        is_first_stage=False,
     )
     return len(passing) == 1
 
@@ -288,18 +296,14 @@ class TestBothItemShapesFollowTheSameRule:
 
 
 class TestWhatADropDoesNotHideFromAGuard:
-    """The resolved namespace is the pool's document, which ``context_scope.drop`` never
-    touched — so a dropped ``source`` field is still readable by a guard clause.
+    """A dropped field is still readable by a guard clause, in this namespace or any other.
 
-    This is a change on the FILE side and it closes a divergence rather than opening one:
-    FILE mode used to hide the field, because the writeback put the scoped copy on the
-    record, while RECORD mode never did. Measured on the parent commit, FILE answered
-    ``kept=0`` and RECORD ``kept=True`` for the same clause. They now agree on RECORD's
-    answer, which is also the one that matches a guard's job — it gates the action before
-    it runs, and ``drop`` shapes what the action then receives.
-
-    A dependency namespace still comes from the record, so a FILE-mode drop still hides
-    one. That asymmetry is characterized here, not endorsed.
+    The resolved ``source`` namespace is the pool's document, which ``drop`` never touched,
+    and a dependency namespace answers the same way because the guard reads the record the
+    pipeline stored. FILE mode used to hide both and RECORD mode neither; they now agree on
+    RECORD's answer, which matches a guard's job — it gates the action before it runs, and
+    ``drop`` shapes what the action then receives. See
+    ``test_guard_reads_the_stored_record_not_the_scoped_view``.
     """
 
     POOL = [{"source_guid": "G0", "content": {"source": {"tier": "secret", "url": "u"}}}]
@@ -308,12 +312,13 @@ class TestWhatADropDoesNotHideFromAGuard:
     def _file(self, scope, clause):
         record = {"source_guid": "G0", "content": deepcopy(self.CONTENT)}
         enriched, _ = apply_context_scope_for_records(
-            [record], scope, action_name="a2", source_data=self.POOL
+            [deepcopy(record)], scope, action_name="a2", source_data=self.POOL
         )
         passing, _skipped, _originals, _filtered = prefilter_by_guard(
             enriched,
             {"granularity": "file", "context_scope": scope, "guard": guard(clause)},
             "a2",
+            original_data=[record],
             agent_indices=INDICES,
             source_data=self.POOL,
             is_first_stage=False,
@@ -349,12 +354,13 @@ class TestWhatADropDoesNotHideFromAGuard:
         assert self._file(no_drop, clause) is True
         assert self._file(self.DROP_SOURCE, clause) is True
 
-    def test_a_dropped_dependency_field_is_still_hidden_from_a_file_mode_guard(self):
-        """Unchanged by the fix and inconsistent with the rows above — a dependency
-        namespace comes from the record, which the scope pass did strip."""
+    def test_a_dropped_dependency_field_is_readable_on_both_granularities_too(self):
+        """Consistent with the rows above rather than the exception to them: the guard
+        reads the stored record, so the scope pass hides nothing from it."""
         scope = {"observe": ["source.url"], "drop": ["a1.tier"]}
 
-        assert self._file(scope, "a1.tier == 'secret'") is False
+        assert self._file(scope, "a1.tier == 'secret'") is True
+        assert self._record(scope, "a1.tier == 'secret'") is True
 
 
 class TestOnlyANamespaceIsDisplacedByANamespace:
