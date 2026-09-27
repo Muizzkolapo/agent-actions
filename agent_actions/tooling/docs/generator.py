@@ -206,24 +206,29 @@ def _copy_readme_images(
 
 
 def _reported_drop_refs(context_scope: dict[str, Any]) -> list[str]:
-    """The `context_scope.drop` refs the runtime will act on, each kept whole.
+    """The `context_scope.drop` refs the runtime can perform, in its own spelling.
 
-    Two things this must not do. It must not discard the namespace: the runtime pops
-    `prompt_context[ns][field]`, and an action may declare a field of its own by the
-    same name, so `upstream.body` and `body` are different claims. And it must not
-    report a ref the runtime refuses — one that does not parse is logged "Field will
-    NOT be removed" and skipped, so naming it would describe a drop that never runs.
+    The namespace is kept because the runtime pops `prompt_context[ns][field]`, so
+    `upstream.body` and `body` are different claims when an action declares a field of
+    its own by that name. A ref that does not parse is excluded: the runtime logs
+    "Field will NOT be removed" and skips it. So is one whose field part is neither a
+    plain name nor `*` — the pop is flat, so `a.b.c` matches no key and drops nothing,
+    and reporting either would describe a drop that never runs.
     """
     refs = context_scope.get("drop")
     if not isinstance(refs, list):
         return []
-    reported = []
+    reported: list[str] = []
     for ref in refs:
         try:
-            parse_field_reference(ref)
-        except (ValueError, TypeError, AttributeError):
+            namespace, field = parse_field_reference(ref)
+        except ValueError:
             continue
-        reported.append(ref)
+        if field != "*" and ("." in field or "*" in field):
+            continue
+        actionable = f"{namespace}.{field}"
+        if actionable not in reported:
+            reported.append(actionable)
     return reported
 
 
