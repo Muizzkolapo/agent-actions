@@ -16,6 +16,9 @@ _pipeline_file_mode = sys.modules.get("agent_actions.workflow.pipeline_file_mode
 if _pipeline_file_mode is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
+import pytest
+
+from agent_actions.errors.processing import ProcessingError
 from agent_actions.processing.disposition_gate import DispositionGate
 from agent_actions.processing.types import (
     ProcessingContext,
@@ -408,6 +411,47 @@ class TestRepairNarrowsAboveTheGuard:
 
         assert [r["source_guid"] for r in seen["records"]] == ["r2"]
         assert [r["pre_observe"] for r in seen["raw"]] == ["original-of-r2"]
+
+    def test_a_mispaired_caller_is_refused_rather_than_paired_wrongly(self):
+        """The narrowing applies one position list to both, so a caller that arrives
+        already mispaired would come out of it the *same* length and be paired
+        record-to-wrong-original — past the length check further down. Refused here
+        instead: [B, C] against [A, B, C] repairing {B, C} would yield [A, B].
+        """
+        backend = _mock_backend(terminal_ids=set())
+        gate = DispositionGate(storage_backend=backend, repairing={"r1", "r2"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        scoped = [_make_record("r1"), _make_record("r2")]
+        raw = [_make_record(f"r{i}") for i in range(3)]
+
+        with pytest.raises(ProcessingError, match="position for position"):
+            processor.process(
+                scoped,
+                _make_context(storage_backend=backend),
+                _TrackingStrategy(),
+                raw_records=raw,
+                repair_inputs=raw,
+            )
+
+    def test_a_matched_pair_is_not_refused(self):
+        """The control: the refusal must not fire on the shape the pipeline sends."""
+        backend = _mock_backend(terminal_ids=set())
+        gate = DispositionGate(storage_backend=backend, repairing={"r1"})
+        processor = UnifiedProcessor(disposition_gate=gate)
+        records = [_make_record(f"r{i}") for i in range(3)]
+
+        with patch.object(
+            processor, "_guard_filter_file_mode", side_effect=lambda r, _c, o: (r, [], o)
+        ):
+            output, _stats = processor.process(
+                records,
+                _make_context(storage_backend=backend),
+                _TrackingStrategy(),
+                raw_records=[_make_record(f"r{i}") for i in range(3)],
+                repair_inputs=records,
+            )
+
+        assert [r["source_guid"] for r in output] == ["r1"]
 
     def test_the_two_lists_stay_the_same_length_through_the_narrowing(self):
         """What prefilter_by_guard refuses a mismatch on, one layer up."""

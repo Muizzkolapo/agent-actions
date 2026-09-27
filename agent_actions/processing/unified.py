@@ -110,6 +110,16 @@ class UnifiedProcessor:
         Returns:
             Tuple of (output_records, stats).
         """
+        # Refused here rather than at the guard: a repair narrows both lists by one
+        # position list, so an already-mispaired caller arrives at the guard the same
+        # length and is paired record-to-wrong-original instead of refused.
+        if raw_records is not None and len(raw_records) != len(records):
+            raise ProcessingError(
+                f"Action '{context.action_name}' was given {len(raw_records)} pre-observe "
+                f"records for {len(records)} records. The two are read position for "
+                f"position and there is no way to pair them once they differ."
+            )
+
         # Stamp first-stage records at the source BEFORE the guard split, so
         # guard-skipped records carry a (deterministic, content-hash) identity too
         # and are not downgraded to failures at enrichment.

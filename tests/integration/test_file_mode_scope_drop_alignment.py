@@ -97,6 +97,15 @@ def _unobservable(project, record_id):  # noqa: F811
         backend.close()
 
 
+def _skip_reason(project, record_id, action):  # noqa: F811
+    backend = _backend(project)
+    try:
+        rows = [r for r in backend.get_disposition(action) if r.get("record_id") == record_id]
+        return rows[0]["reason"] if rows else None
+    finally:
+        backend.close()
+
+
 @pytest.fixture
 def one_unobservable(project):  # noqa: F811
     """Six upstream records, one of which the scope can no longer resolve."""
@@ -127,9 +136,12 @@ class TestOneDroppedRecordDoesNotFailTheFile:
         assert _stored_records(project, SECOND) == RECORDS - 1
 
     def test_the_unresolvable_record_alone_is_left_out(self, one_unobservable):
+        """The reason, not just "not success": no disposition row at all would also
+        satisfy a negative assertion, and that is a different outcome."""
         project, dropped, _result = one_unobservable  # noqa: F811
 
-        assert _disposition(project, dropped, SECOND) != "success"
+        assert _disposition(project, dropped, SECOND) == "skipped"
+        assert _skip_reason(project, dropped, SECOND) == "observe_field_missing"
 
     def test_the_others_succeed(self, one_unobservable):
         """A count alone would pass if five records landed with a failed
@@ -180,7 +192,11 @@ class TestASkippedRecordNamesItsInputPosition:
         assert [s["position"] for s in skipped] == [0, 2]
 
     def test_the_positions_left_over_are_the_records_that_survived(self):
-        """The slice the pipeline takes, asserted as the identity it has to have."""
+        """The scope's own contract: the positions it did not report are exactly the
+        records it returned. This reproduces the slice rather than observing the
+        pipeline take it, so it pins the contract and not the caller — the pipeline's
+        use of it is covered by the boundary tests below.
+        """
         records = [
             {"source_guid": "drop-a", "content": {"d": {}}},
             {"source_guid": "keep", "content": {"d": {"x": 1}}},
@@ -192,6 +208,52 @@ class TestASkippedRecordNamesItsInputPosition:
         survivors = [r for at, r in enumerate(records) if at not in dropped]
 
         assert [r["source_guid"] for r in survivors] == [r["source_guid"] for r in enriched]
+
+    def test_a_record_carrying_no_source_guid_still_names_its_position(self):
+        """A record need not carry a guid, so a guid is not always an identity a
+        caller can pair on. A position always is."""
+        records = [{"content": {"d": {}}}, {"content": {"d": {"x": 1}}}]
+
+        enriched, skipped = self._pass(records)
+
+        assert [s["position"] for s in skipped] == [0]
+        assert [s["source_guid"] for s in skipped] == [None]
+        assert len(enriched) == 1
+
+    def test_pairing_by_surviving_guid_would_readmit_a_guidless_drop(self):
+        """The rationale for position stated as something that can fail rather than as
+        a comment: with two guid-less records a surviving-guid set holds ``None``, so
+        it re-admits the dropped one and hands the guard a longer list again — the
+        mismatch this fix removes."""
+        records = [{"content": {"d": {}}}, {"content": {"d": {"x": 1}}}]
+
+        enriched, skipped = self._pass(records)
+        surviving = {r.get("source_guid") for r in enriched}
+        by_guid = [r for r in records if r.get("source_guid") in surviving]
+        dropped = {s["position"] for s in skipped}
+        by_position = [r for at, r in enumerate(records) if at not in dropped]
+
+        assert len(by_guid) == 2, "the guid pairing was expected to re-admit the drop"
+        assert len(by_position) == len(enriched) == 1
+
+    def test_a_repeated_source_guid_is_still_separated_by_position(self):
+        """The other half of the rationale: a concatenated multi-dependency input can
+        carry one guid twice, and a guid cannot then say which copy was dropped."""
+        records = [
+            {"source_guid": "same", "content": {"d": {"x": 1}}},
+            {"source_guid": "same", "content": {"d": {}}},
+            {"source_guid": "same", "content": {"d": {"x": 3}}},
+        ]
+
+        enriched, skipped = self._pass(records)
+        dropped = {s["position"] for s in skipped}
+
+        assert dropped == {1}
+        assert [r["content"]["d"] for r in enriched] == [{"x": 1}, {"x": 3}]
+        surviving = {r.get("source_guid") for r in enriched}
+        assert len([r for r in records if r.get("source_guid") in surviving]) == 3, (
+            "the guid pairing was expected to keep every copy"
+        )
 
     def test_a_pass_that_drops_nothing_reports_no_positions(self):
         _enriched, skipped = self._pass([{"source_guid": "keep", "content": {"d": {"x": 1}}}])
@@ -209,9 +271,17 @@ class TestTheListHandedToTheGuardIsThePreObserveOne:
     """
 
     @staticmethod
-    def _captured(project):  # noqa: F811
+    def _captured(project, at=-1):  # noqa: F811
+        """*at* is which input record the scope can no longer resolve.
+
+        Parametrized rather than always the last one: at the end, dropping the
+        record and truncating the pre-observe list to the surviving length give the
+        same answer, so a terminal drop cannot tell a position slice from a
+        truncation. A drop in the middle pairs every record after it with the
+        previous record's original.
+        """
         _declare_file_action(project, scope=OBSERVE_AND_DROP)
-        _unobservable(project, _record_ids(project)[-1])
+        _unobservable(project, _record_ids(project)[at])
         seen: dict[str, list[dict]] = {}
         through = UnifiedProcessor.process
 
@@ -238,10 +308,24 @@ class TestTheListHandedToTheGuardIsThePreObserveOne:
 
         assert all("exam_density" in r["content"][ACTION] for r in seen["raw"])
 
-    def test_both_lists_hold_the_same_records_in_the_same_order(self, project):  # noqa: F811
-        seen = self._captured(project)
+    @pytest.mark.parametrize("at", [0, 2, -1])
+    def test_both_lists_hold_the_same_records_in_the_same_order(self, project, at):  # noqa: F811
+        """Asserted on the guids the pipeline actually paired, wherever the drop
+        falls — a middle drop is the whole difference between taking the surviving
+        positions and taking the first N."""
+        seen = self._captured(project, at)
 
         assert [r["source_guid"] for r in seen["raw"]] == [
             r["source_guid"] for r in seen["records"]
         ]
         assert len(seen["raw"]) == RECORDS - 1
+
+    @pytest.mark.parametrize("at", [0, 2, -1])
+    def test_the_dropped_record_is_in_neither_list(self, project, at):  # noqa: F811
+        """Equal, matching lists that both still hold the unresolvable record would
+        satisfy the assertion above."""
+        dropped_id = _record_ids(project)[at]
+        seen = self._captured(project, at)
+
+        assert dropped_id not in [r["source_guid"] for r in seen["raw"]]
+        assert dropped_id not in [r["source_guid"] for r in seen["records"]]
