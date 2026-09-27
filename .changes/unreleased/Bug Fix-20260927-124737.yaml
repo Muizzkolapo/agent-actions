@@ -1,0 +1,32 @@
+kind: Bug Fix
+body: >-
+  A guard condition now reads the `source` namespace the resolver picked, not the copy the
+  record carries. The guard's context already held the resolved answer, and the evaluator
+  merged the record's own content over it, so a record whose guid resolves to a pool row was
+  judged against a snapshot taken when the record was written. The visible symptom was a
+  granularity split — the same clause kept a record at FILE granularity and filtered it at
+  RECORD granularity — but the split was a side effect: a FILE-mode `context_scope` pass
+  writes the resolved namespace onto the record before the guard runs, and a FILE action
+  declaring no `context_scope` read the stale copy exactly like a RECORD one. A guard's
+  answer no longer depends on which granularity reads the record or on whether an unrelated
+  `context_scope` happened to materialise the namespace.
+
+  A namespace displaces a namespace and nothing else. `source`, `version`, `workflow` and
+  `seed` are reserved *action* names, which does not make a plain field spelled that way the
+  framework's: a first-stage record's content is the user's own staging row, a version-merge
+  tool spreads its output flat rather than under its action name so `version` or `source` can
+  be that tool's output field, and a dependency's `output_field` is promoted into the context
+  by name so presence there does not mean a resolver produced it. Both sides must be a
+  namespace before the resolved one wins, so a field spelled that way is left alone — taking
+  the key away would leave the clause reading a missing field, which counts as *not matched*
+  and would silently filter the record.
+
+  Two consequences. `context_scope.drop` no longer hides a `source` field from a guard
+  clause, because the resolved namespace is the source document and `drop` never touched it;
+  this closes a second divergence rather than opening one, since FILE mode used to hide such
+  a field and RECORD mode never did, and the two now agree on RECORD's answer. A dropped
+  *dependency* field is still hidden from a FILE-mode guard and not from a RECORD-mode one;
+  that asymmetry predates this change. And while no namespace key is removed, a *field* only
+  the carried copy had becomes unreadable once the resolved document replaces it — inherent
+  to resolving against the pool rather than against the snapshot.
+time: 2026-09-27T12:47:37Z

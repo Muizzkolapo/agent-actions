@@ -272,6 +272,21 @@ Guard condition uses dotted paths:
 
 If `_build_evaluation_context()` is used (Phase 2 evaluation with full context), the item's content is merged with context data (passthrough fields, source data). Content fields take precedence over top-level fields on collision.
 
+A framework namespace — `source`, `version`, `workflow`, `seed` — is the exception, and a narrow one: **where the context resolved a namespace and the record carries a namespace under the same name, the resolved one wins.** A record's copy was taken when the record was written and the pool can have moved past it, so the resolved answer is the run's current one. Without this a guard read the carried copy, and the same clause answered differently depending on whether a `context_scope` pass had already written the resolved namespace onto the record.
+
+Both sides must be a namespace. These are reserved **action** names, which does not make a plain field spelled that way the framework's, and three things put one there:
+
+- a first-stage record's content is the user's own staging row, so `source` can be a string they staged — and first-stage resolution builds the namespace *out of that same content*, so the key is present on both sides;
+- `apply_version_merge` spreads a version-merge **tool**'s output flat over content rather than nesting it under the action name, so `version` or `source` can be that tool's own output field;
+- a dependency's `output_field` is promoted into the context by name, so a key being present in the context does not mean a resolver produced it.
+
+Comparing shapes rather than names keeps all three: a scalar is somebody's field and is left alone. Removing such a key would leave the clause reading a missing field, which `reclassify_missing_field_error` turns into *not matched* — a silent filter rather than an error.
+
+Two consequences worth stating:
+
+- **`context_scope.drop` does not hide a `source` field from a guard.** The resolved namespace is the source document, which `drop` never touched. FILE mode used to hide such a field, because the scope pass wrote its own stripped copy onto the record; RECORD mode never did. The two now agree on RECORD's answer, which matches a guard's job — it gates the action, and `drop` shapes what the action then receives. A **dependency** namespace still comes from the record, so a FILE-mode `drop` does still hide one of those; that asymmetry predates this rule and is not addressed by it.
+- **No namespace key is removed, but a field can become unreadable.** The resolved document is a different document from the carried copy, so a field only the copy had reads as missing — which is *not matched*, and so a filter. That is inherent to resolving against the pool rather than against the snapshot.
+
 ---
 
 ## File Index

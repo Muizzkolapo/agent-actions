@@ -19,9 +19,43 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     GuardFilter,
     get_global_guard_filter,
 )
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
+
+
+def _record_namespaces(content: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    """Record content minus the framework namespaces *resolved* answered with its own.
+
+    A record can carry a copy of one, taken when the record was written and possibly
+    older than the pool; the resolved one is the run's current answer and wins. That is
+    a namespace shadowing a namespace, so both sides must be one — a *field* whose name
+    happens to match is somebody's data and is left alone:
+
+    - a first-stage record's content is the user's staging row, so ``source`` there can
+      be a string they staged;
+    - a version-merge tool spreads its output flat instead of under its action name, so
+      ``version`` or ``source`` can be that tool's own output field;
+    - a dependency's ``output_field`` is promoted into the context by name, which puts
+      keys there that no resolver produced.
+
+    Taking such a key away leaves the clause reading a missing field, which counts as
+    *not matched* — a silent filter rather than an error.
+
+    The *resolved* side of the shape test is defensive: every writer of one of these keys
+    into the context writes a namespace or nothing, so today it only restates presence. It
+    is what keeps a future writer of a scalar from displacing a record's key silently.
+    """
+    return {
+        key: value
+        for key, value in content.items()
+        if not (
+            key in RUNTIME_BUS_NAMESPACES
+            and isinstance(value, dict)
+            and isinstance(resolved.get(key), dict)
+        )
+    }
 
 
 @dataclass
@@ -289,6 +323,10 @@ class GuardEvaluator:
 
         Namespaced content in ``item["content"]`` is promoted to top-level keys
         so guard conditions can use dotted paths (e.g., ``action.field``).
+
+        An action's own namespace comes from the record, which holds the in-flight
+        value. A framework namespace comes from *context* where *context* resolved
+        one, and from the record otherwise — see ``_record_namespaces``.
         """
         eval_data = {}
 
@@ -301,9 +339,9 @@ class GuardEvaluator:
                 for k, v in item.items():
                     if k != "content":
                         eval_data[k] = v
-                eval_data.update(item["content"])
+                eval_data.update(_record_namespaces(item["content"], context))
             else:
-                eval_data.update(item)
+                eval_data.update(_record_namespaces(item, context))
         elif item is not None:
             eval_data["_raw"] = item
 
