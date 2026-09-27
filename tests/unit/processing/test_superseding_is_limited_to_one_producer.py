@@ -97,3 +97,88 @@ class TestTheSingleProducerRuleStillApplies:
         carry = stored_rows_not_reproduced(stored, produced, batch_inputs=batch_inputs)
 
         assert carry == expected
+
+
+class TestAGenerationIsOnlyReplacedWhenTheReplacementArrived:
+    """Superseding deletes, so it needs the replacement to be in this write."""
+
+    def test_a_run_that_settled_nothing_keeps_every_stored_row(self):
+        """Every record came back failed: the generation that would replace them never did."""
+        stored = [_stored("b1", producers=["a1"]), _stored("b2", producers=["a2"])]
+        failed = [
+            {"source_guid": "a3", "error": "provider overloaded", "_state": "failed"},
+            {"source_guid": "a4", "error": "provider overloaded", "_state": "failed"},
+        ]
+
+        carry = stored_rows_not_reproduced(stored, failed, batch_inputs={"a3", "a4"})
+
+        assert carry == {"b1", "b2"}, "a failed run deleted the answers it could not replace"
+
+    def test_a_run_that_produced_nothing_keeps_every_stored_row(self):
+        stored = [_stored("b1", producers=["a1"]), _stored("b2", producers=["a2"])]
+
+        carry = stored_rows_not_reproduced(stored, [], batch_inputs={"a3", "a4"})
+
+        assert carry == {"b1", "b2"}, "an empty write emptied the file"
+
+    def test_a_run_that_answered_only_part_of_its_input_keeps_every_stored_row(self):
+        """Half a replacement is not one: which stored row it replaces is unknowable."""
+        stored = [_stored("b1", producers=["a1"]), _stored("b2", producers=["a2"])]
+        produced = [_stored("n1", producers=["a3"])]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"})
+
+        assert carry == {"b1", "b2"}
+
+
+class TestOneMissingProducerIsNotAGeneration:
+    def test_a_row_whose_producer_alone_went_away_is_carried(self):
+        """An upstream guard newly filtering one record must not delete its rows.
+
+        The other producers are still inputs, so nothing was re-minted — one record
+        left the input, which is not the same thing as a generation being replaced.
+        """
+        stored = [
+            _stored("x1", producers=["r"]),
+            _stored("x2", producers=["s"]),
+            _stored("x3", producers=["t"]),
+        ]
+        produced = [_stored("y2", producers=["s"]), _stored("y3", producers=["t"])]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"s", "t"})
+
+        assert carry == {"x1"}, (
+            f"the filtered record's rows were deleted as a stale generation: {carry}"
+        )
+
+    def test_the_whole_generation_going_away_is_still_superseded(self):
+        """The contrast: no stored producer is an input, so all of them were re-minted."""
+        stored = [_stored("x1", producers=["r"]), _stored("x2", producers=["s"])]
+        produced = [_stored("y1", producers=["u"]), _stored("y2", producers=["v"])]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"u", "v"})
+
+        assert carry == set()
+
+
+@pytest.mark.xfail(
+    reason="An action that mints no identity of its own carries its input's, so below an "
+    "expansion its rows name a re-minted upstream child and still accumulate. Closing it "
+    "means reading a missing identity as a gone generation, which is exactly what "
+    "test_a_minted_row_whose_input_is_gone_is_still_carried forbids — an input that is "
+    "merely absent keeps its rows. Needs its own decision, not this rule widened.",
+    strict=True,
+)
+def test_an_action_that_mints_nothing_below_an_expansion_still_accumulates():
+    """The known remaining gap, recorded as a defect rather than as behaviour.
+
+    `is_expansion` is `len(structured_items) > 1`, so an action is 1:1 for any input
+    it answered with a single row and records no producer for it. Its stored rows then
+    carry the previous run's upstream child identity and match nothing.
+    """
+    stored = [_stored("a1"), _stored("a2")]
+    produced = [_stored("a3"), _stored("a4")]
+
+    carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"})
+
+    assert carry == set(), f"the previous generation was carried beside its replacement: {carry}"

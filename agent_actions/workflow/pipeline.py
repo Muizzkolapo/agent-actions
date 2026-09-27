@@ -251,6 +251,10 @@ class ProcessingPipeline:
             file_reader = FileReader(params.batch_file_path)
             data = file_reader.read()
         file_name = Path(params.batch_file_path).name
+        # A file read is the whole input by construction — no narrowing sits above it —
+        # so it is its own recording. Only a caller that narrowed before this has to say
+        # what it narrowed from, and "it did not say" must not be read as "nothing".
+        run_inputs = params.run_inputs if params.data is not None else data
 
         result = submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
@@ -259,7 +263,7 @@ class ProcessingPipeline:
             params.batch_output_directory,
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
-            run_inputs=params.run_inputs,
+            run_inputs=run_inputs,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -506,8 +510,10 @@ class ProcessingPipeline:
                     e,
                 )
 
-        # Above every narrowing, as staging captures it: a record the limit drops
-        # is still one of this action's inputs, and the gate reads these to tell a
+        # Above every narrowing this function makes, as staging captures it — the
+        # runner's drop of guard-filtered records is above even this, which is why the
+        # rules reading it decide generationally rather than per record. A record the
+        # limit drops is still one of this action's inputs, and the gate reads these to tell a
         # stored row of its own making from one minted upstream. Leave it out and
         # a row of that record reads as one of a repaired record's, to be deleted
         # by a rewrite that never makes it again. A limit never drops a repaired

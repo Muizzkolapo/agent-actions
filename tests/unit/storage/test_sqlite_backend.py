@@ -816,12 +816,13 @@ class TestMetadataDeletion:
         assert backend.load_metadata("batch%registry:gamma") == "trap"
 
     def test_clear_batch_state_removes_all_batch_keys(self, backend):
-        """clear_batch_state wipes registry, recovery, and context keys for an action."""
+        """clear_batch_state wipes registry, recovery, context and input keys."""
         action = "my_action"
         backend._save_metadata_raw(f"batch_registry:{action}", "reg")
         backend._save_metadata_raw(f"recovery_state:{action}:file1", "rec1")
         backend._save_metadata_raw(f"recovery_state:{action}:file2", "rec2")
         backend._save_metadata_raw(f"batch_context:{action}:ctx1", "ctx1")
+        backend._save_metadata_raw(f"batch_inputs:{action}:ctx1", "in1")
         backend._save_metadata_raw("unrelated_key", "stay")
 
         backend.clear_batch_state(action)
@@ -830,6 +831,7 @@ class TestMetadataDeletion:
         assert backend.load_metadata(f"recovery_state:{action}:file1") is None
         assert backend.load_metadata(f"recovery_state:{action}:file2") is None
         assert backend.load_metadata(f"batch_context:{action}:ctx1") is None
+        assert backend.load_metadata(f"batch_inputs:{action}:ctx1") is None
         assert backend.load_metadata("unrelated_key") == "stay"
 
     def test_clear_batch_state_is_idempotent(self, backend):

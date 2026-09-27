@@ -214,7 +214,11 @@ def stored_rows_not_reproduced(
     *batch_inputs* is the input before any narrowing, which settles what matching
     cannot: below an expansion the upstream children are minted again every run, so a
     producer named by no input is a generation that is gone rather than one this run did
-    not answer for. Left empty nothing is inferred, the inference being one that deletes.
+    not answer for. Inferred only on a run that settled every input it recorded, since
+    only then is the replacement in this write; left empty, or short of that, nothing is
+    inferred at all. A row naming no producer is never inferred away either — its
+    identity may be a gone generation's too, but an input that is merely absent is
+    indistinguishable from one the run never took, and that one keeps its rows.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -233,8 +237,27 @@ def stored_rows_not_reproduced(
             answered.add(guid)
 
     inputs = frozenset(batch_inputs)
+    stored_rows = list(stored)
+    # Decided across all the mints at once, not per row: what replaces a generation is an
+    # upstream action re-minting its whole output, so one producer missing while others are
+    # still inputs is an individual record that went away, and its rows are its own.
+    stored_mints = {
+        producer
+        for row in stored_rows
+        if len(producer_set := frozenset(row.get("producer_source_guids") or ())) == 1
+        for producer in producer_set
+    }
+    # ...and only on a run that settled every input it recorded: a run that failed, or
+    # returned nothing, would read its own stored answers as replaced and delete them.
+    generation_replaced = (
+        bool(inputs)
+        and bool(stored_mints)
+        and inputs <= answered
+        and stored_mints.isdisjoint(inputs)
+    )
+
     carry: set[str] = set()
-    for row in stored:
+    for row in stored_rows:
         guid = row.get("source_guid")
         if not guid:
             continue
@@ -249,9 +272,7 @@ def stored_rows_not_reproduced(
             # On this path one producer means a mint, because a batch row that names any
             # is re-keyed. It does not mean that in general — see the docstring.
             reproduced = producers <= answered
-            # Named by no input this run took: the producer is gone rather than
-            # unanswered for, so the row it minted has a replacement in this write.
-            superseded = bool(inputs) and producers.isdisjoint(inputs)
+            superseded = generation_replaced
         elif producers:
             # Several: the row holds what each input gave it, and its own identity is an
             # input's rather than a mint's. Never inferred away.

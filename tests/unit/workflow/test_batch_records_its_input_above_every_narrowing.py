@@ -191,3 +191,59 @@ class TestTheFirstStageBatchPathRecordsItTheSameWay:
             "the recording was taken below the limit, so the dropped rows read as gone: "
             f"{ctx.run_inputs}"
         )
+
+
+class TestAFileReadIsItsOwnRecording:
+    """No narrowing sits above a whole-file read, so the read is the recording.
+
+    "The caller did not say what it narrowed from" must not be read as "the input
+    was empty", and on this path there is nothing to say: the batch generator reads
+    the file itself.
+    """
+
+    @staticmethod
+    def _submit_from_file(tmp_path, rows, *, retried=frozenset()):
+        from agent_actions.workflow.pipeline import BatchPipelineParams, ProcessingPipeline
+
+        base = tmp_path / "base"
+        base.mkdir()
+        (tmp_path / "out").mkdir()
+        (base / "page.json").write_text(json.dumps(rows))
+
+        captured: dict[str, Any] = {}
+
+        def _capture(*args, **kwargs):
+            captured["run_inputs"] = kwargs.get("run_inputs")
+            return SubmissionResult(batch_id=None, passthrough={"carry_forward_only": True})
+
+        with patch(
+            "agent_actions.llm.batch.services.submission.BatchSubmissionService.submit_batch_job",
+            side_effect=_capture,
+        ):
+            ProcessingPipeline._handle_batch_generation(
+                BatchPipelineParams(
+                    pipeline_action_config={"kind": "llm", "action_name": ACTION},
+                    pipeline_action_name=ACTION,
+                    batch_file_path=str(base / "page.json"),
+                    batch_base_directory=str(base),
+                    batch_output_directory=str(tmp_path / "out"),
+                    retried_records=retried,
+                )
+            )
+        return captured["run_inputs"]
+
+    def test_the_file_it_read_is_what_it_records(self, tmp_path):
+        rows = [{"source_guid": "i1"}, {"source_guid": "i2"}]
+
+        recorded = self._submit_from_file(tmp_path, rows)
+
+        assert recorded is not None, "a whole-file read recorded nothing"
+        assert [r["source_guid"] for r in recorded] == ["i1", "i2"]
+
+    def test_a_repair_on_this_path_is_not_refused(self, tmp_path):
+        """The refusal is for a caller that narrowed and did not say so."""
+        rows = [{"source_guid": "i1"}, {"source_guid": "i2"}]
+
+        recorded = self._submit_from_file(tmp_path, rows, retried=frozenset({"i2"}))
+
+        assert [r["source_guid"] for r in recorded] == ["i1", "i2"]

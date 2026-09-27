@@ -396,19 +396,39 @@ expansion, its children are minted again every run, so a stored row names a prod
 run's rows never name and neither generation replaces the other. The two are told apart by
 what the action took as input — a producer named by none of it is a generation that is
 gone, one still standing in the input is an input this run did not answer for. That set is
-not the batch context map, which holds only what was submitted. Three narrowings sit above
-the submission — the action's `record_limit`, a repair's named records, then the disposition
-gate — and a record dropped by any of them still holds stored rows this action must carry.
-So the pipeline hands the batch path the same pre-narrowing input it already hands the
-online path (`offered_to_repair`), submission records it
+not the batch context map, which holds only what was submitted. Several narrowings sit
+between the two — the action's `record_limit`, a repair's named records, the disposition
+gate, and above the pipeline entirely the runner's drop of records an upstream guard
+filtered — and a record dropped by any of them still holds stored rows this action must
+carry. So the pipeline hands the batch path the same pre-narrowing input it already hands
+the online path (`offered_to_repair`), submission records it
 (`BatchContextManager.save_batch_inputs`), and the merge reads it back. Reading anything
 narrower deletes the rows of every record the run left out: on an ordinary incremental run
 that is everything already done, and on `agac retry` everything the repair did not name.
+The recording sits above the pipeline's own narrowings but not above the runner's, which is
+why the rule below is generational — what the recording cannot be trusted to include, the
+rule does not decide from.
 
-An unrecorded input infers nothing, so a batch submitted before this was recorded carries
-its rows exactly as it did. An input recorded as empty is reported apart from an unrecorded
-one but read the same way, since inferring from it would supersede every stored row at
-once — the inference deletes, so it fails towards keeping.
+Because the inference deletes, it is made only where the evidence is whole. Three
+conditions, all of them: the input was recorded at all; this run settled *every* input it
+recorded, so what replaces the stored generation is actually in this write; and *no* stored
+producer is still an input. The second stops a run that failed, or returned nothing, from
+reading its own stored answers as replaced and deleting them. The third makes the decision
+generational rather than per row — one producer missing while others are still inputs is an
+individual record that left the input, filtered upstream or dropped, and its rows are its
+own. An unrecorded input infers nothing, so a batch submitted before this was recorded
+carries its rows exactly as it did; an input recorded as empty is reported apart from an
+unrecorded one but read the same way.
+
+One case stays open. An action that mints no identity of its own carries its input's and
+records no producer, which happens for a 1:1 action and for an expansion on any input it
+answered with a single row (`is_expansion` is `len(structured_items) > 1`). Below an
+expansion its stored rows then carry the previous run's upstream child identity and match
+nothing, so they accumulate exactly as described above. The lever that would close it —
+reading an identity absent from the input as a gone generation — is the one
+`build_carry_forward` and the stored-row rule deliberately refuse, because an input that is
+merely absent still keeps its rows. It wants its own decision; the gap is recorded as a
+strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`.
 
 ---
 

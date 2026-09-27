@@ -1,40 +1,58 @@
 kind: Bug Fix
 body: >-
   Batch carry-forward no longer writes both generations of an expansion whose own
-  input is an expansion child — the nested-expansion gap the previous entry named
-  as remaining. `producer_source_guids` names the immediate inputs a row consumed,
-  and where the action above is itself an expansion those inputs are its minted
-  children, re-minted every run. The stored rows named producers that no longer
-  existed anywhere, this run's rows named the current ones, the two sets never
-  intersected, and nothing marked the stored generation as replaced. Measured
-  against a real store: two runs of `A(expand) → B(expand)` over one staged record
-  with nothing changed between them wrote eight rows where four were right, and
-  each further run added four more. What separates a producer that is gone from one
-  this run did not answer for is whether it still stands in the action's input, so
-  a batch now records the identities it took as input and the merge reads them
-  back: a stored row whose single producer is named by none of them is a
-  generation that has been replaced, and one whose producer is still an input is
-  carried as before. Only where one producer already reads as a mint — a row naming
-  several still holds content of its own and is never inferred away. The recorded
-  input is the action's input above *every* narrowing, which is the part that
-  decides whether this deletes data. Three narrowings sit above the submission: the
-  action's `record_limit`, the records a repair names, and the disposition gate. A
-  record dropped by any of them still holds stored rows the rewrite must carry, so
-  the batch path is now handed the same pre-narrowing list the online path already
-  receives, rather than the narrowed one reaching the submission. Recorded below
-  any of those, `agac retry` naming one record would have deleted every other
-  record's rows, and an ordinary incremental run would have deleted the rows of
-  everything already done. A repair that reaches the submission without that list
-  is refused rather than narrowed, matching the refusal the online path already
-  makes. An unrecorded input infers nothing, so a batch submitted by an earlier
-  version carries its rows exactly as it did, and a recording that cannot be read
-  or is not a list of identities degrades to the same, with a warning, rather than
-  abandoning results the provider has already returned. `clear_batch_state` clears
-  the recording alongside the context map it is scoped with, so `--fresh` and `agac
-  retry` no longer leave one behind to answer for a run that has none. Reachability
-  is narrower than the issue describes. It claimed every run, by way of an upstream
-  defect in how an expansion's dispositions are keyed; that issue was closed as
-  invalid, because the function it rests on (`write_record_dispositions`) has no
+  input is an expansion child — the nested-expansion gap the previous entry named as
+  remaining. `producer_source_guids` names the immediate inputs a row consumed, and
+  where the action above is itself an expansion those inputs are its minted children,
+  re-minted every run. The stored rows named producers that no longer existed
+  anywhere, this run's rows named the current ones, the two sets never intersected,
+  and nothing marked the stored generation as replaced. Measured against a real
+  store: two runs of `A(expand) → B(expand)` over one staged record with nothing
+  changed between them wrote eight rows where four were right, and each further run
+  added four more. What separates a producer that is gone from one this run did not
+  answer for is whether it still stands in the action's input, so a batch now records
+  the identities it took as input and the merge reads them back.
+
+  The recorded input is the action's input above *every* narrowing, which is the part
+  that decides whether this deletes data. Several narrowings sit between the two: the
+  action's `record_limit`, the records a repair names, the disposition gate, and above
+  the pipeline entirely the runner's drop of records an upstream guard filtered. A
+  record dropped by any of them still holds stored rows the rewrite must carry, so the
+  batch path is now handed the same pre-narrowing list the online path already
+  receives, rather than the narrowed one reaching the submission. Recorded below any of
+  those, `agac retry` naming one record would have deleted every other record's rows,
+  and an ordinary incremental run would have deleted the rows of everything already
+  done. A repair that reaches the submission without that list is refused rather than
+  narrowed, matching the refusal the online path already makes; a whole-file read,
+  which nothing narrows above, is its own recording.
+
+  Because the inference deletes, it is made only on whole evidence. The run must have
+  settled *every* input it recorded, and *no* stored producer may still be an input.
+  The first stops a run that failed or returned nothing from reading its own stored
+  answers as replaced and deleting them — measured before it was added, a failed
+  re-run deleted four stored answers and an empty one emptied the file. The second
+  makes the decision generational rather than per row, so a single record leaving the
+  input keeps its rows instead of reading as a stale generation. Only a row already
+  read as a mint is ever inferred away; one naming several producers holds content of
+  its own. An unrecorded input infers nothing, so a batch submitted by an earlier
+  version carries its rows exactly as it did, and a recording that cannot be read or
+  is not a list of identities degrades to the same, with a warning, rather than
+  abandoning results the provider has already returned. `clear_batch_state` clears the
+  recording alongside the context map it is scoped with, so `--fresh` and `agac retry`
+  no longer leave one behind to answer for a run that has none.
+
+  One case stays open, recorded as a strict xfail rather than left implicit. An action
+  that mints no identity of its own carries its input's and names no producer — a 1:1
+  action, and an expansion on any input it answered with a single row, since
+  `is_expansion` is `len(structured_items) > 1`. Below an expansion its stored rows
+  carry the previous run's upstream child identity, match nothing, and still
+  accumulate. Closing it means reading an identity absent from the input as a gone
+  generation, which is what carry-forward deliberately refuses: an input that is
+  merely absent keeps its rows. It wants its own change and its own review.
+
+  Reachability is narrower than the issue describes. It claimed every run, by way of an
+  upstream defect in how an expansion's dispositions are keyed; that issue was closed
+  as invalid, because the function it rests on (`write_record_dispositions`) has no
   production caller and a completed batch expansion is in fact narrowed away on the
   next run. What reaches this is the same window the previous fix addressed — a
   clearing that leaves stored rows behind: `agac retry`, or a reset of a failed,
