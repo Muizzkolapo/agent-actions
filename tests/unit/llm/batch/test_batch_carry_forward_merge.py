@@ -305,3 +305,62 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         )
 
         assert [r["source_guid"] for r in result] == ["n0", "m0"]
+
+    def test_an_expansion_that_returns_one_row_this_run_replaces_the_pair(self):
+        """Which field names the input turns on the row count: one row out keeps the
+        input's own guid and names no producer. An action that expanded last run and
+        did not this one is the same resurrection, reached from the other side."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i0"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action", [{"source_guid": "i0", "gen": "new"}], "data.json"
+        )
+
+        assert [r["source_guid"] for r in result] == ["i0"]
+
+    def test_a_row_the_batch_expanded_this_run_is_replaced_by_its_children(self):
+        """And the crossing in the other direction: the stored row carries the input's
+        own identity, which the output now names only as a producer."""
+        service = _make_service(
+            storage_backend=self._backend([{"source_guid": "i0", "gen": "old"}])
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [
+                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
+                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+            ],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "n1"]
+
+    def test_rows_sharing_an_identity_are_kept_unless_every_one_is_answered_for(self):
+        """Byte-identical records share a source_guid, so an action can hold several
+        rows under one, and they need not share producers. Answering for the identity
+        on one row's account deletes the others' content."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "t0", "gen": "kept"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "t0"]
+        assert result[1]["gen"] == "kept"

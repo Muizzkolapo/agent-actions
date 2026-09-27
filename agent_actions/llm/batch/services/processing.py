@@ -467,17 +467,12 @@ class BatchProcessingService:
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
-        *relative_path* is the file being written, and the only file read: the
-        rows are handed straight to the write, so gathering them across the
-        action's other files puts those files' records into this one.
-
-        A store this cannot read raises rather than returning the batch's answers
-        alone — those answers replace the file, so swallowing the error here
-        deletes every row the batch did not answer for.
-
-        The output is replaced whole, so what decides is whether the row exists,
-        not what disposition it holds: `failed` is not terminal, and a batch
-        narrowed to one record would drop the rest. Same rule as
+        *relative_path* is the file being written and the only file read: the rows
+        go straight to the write, so gathering them across the action's other files
+        puts those files' records into this one. A store this cannot read raises
+        rather than returning the batch's answers alone, which replace the file.
+        Dispositions never decide — `failed` is not terminal and a batch narrowed to
+        one record would drop the rest, same rule as
         ``DispositionGate.carried_past_repair`` online.
         """
         if not self._storage_backend or not action_name:
@@ -489,27 +484,35 @@ class BatchProcessingService:
             # Nothing stored for this file yet, so nothing to carry.
             return batch_output
 
-        stored_guids = {row["source_guid"] for row in stored if row.get("source_guid")}
-        if not stored_guids:
+        # Rows grouped by identity, because several can share one and they need
+        # not share producers: dropping the identity on one row's account deletes
+        # the others' content.
+        producers_by_guid: dict[str, list[frozenset[str]]] = {}
+        for row in stored:
+            if rid := row.get("source_guid"):
+                producers_by_guid.setdefault(rid, []).append(
+                    frozenset(row.get("producer_source_guids") or ())
+                )
+        if not producers_by_guid:
             return batch_output
 
-        batch_guids = {r.get("source_guid") for r in batch_output if r.get("source_guid")}
-        # An expansion mints uuid4 per child, so a re-run's rows carry none of the
-        # identities they replace: resolved through the producers the output names
-        # instead, and all of them, so a row only partly reprocessed stays (1083).
-        reprocessed = {
+        # What this run answered for: the identities the output carries, plus the
+        # inputs it names as producers. Which of the two names an input turns on the
+        # row count, so a re-run that crosses that line is named by one only (1083).
+        reprocessed = {r["source_guid"] for r in batch_output if r.get("source_guid")}
+        reprocessed |= {
             producer
             for record in batch_output
             for producer in (record.get("producer_source_guids") or ())
         }
+        # Every row under the identity, and a row naming no producer is answered
+        # for by nothing: one such row keeps the whole identity.
         answered_for = {
             rid
-            for row in stored
-            if (rid := row.get("source_guid"))
-            and (producers := frozenset(row.get("producer_source_guids") or ()))
-            and producers <= reprocessed
+            for rid, producers in producers_by_guid.items()
+            if all(p and p <= reprocessed for p in producers)
         }
-        carry_guids = stored_guids - batch_guids - answered_for
+        carry_guids = producers_by_guid.keys() - reprocessed - answered_for
 
         if not carry_guids:
             return batch_output
