@@ -11,8 +11,8 @@ from agent_actions.services.preflight_service import PreflightService
 
 # Real module-level UDF so `inspect.getsource` returns its true body: the
 # initial dict literal fixes only `options`; `source_quote` is written only
-# when a runtime guard passes — the exact shape that crashed qanalabs
-# `reconstruct_options` at 39/52 records post-568.
+# when a runtime guard passes — the exact shape that crashed a real user
+# project's `reconstruct_options` at 39/52 records post-568.
 def _conditional_source_quote_tool(data):
     flat = {}
     for key, value in data.items():

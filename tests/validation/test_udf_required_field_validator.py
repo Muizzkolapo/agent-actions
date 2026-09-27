@@ -9,7 +9,7 @@ from agent_actions.validation.udf_required_field_validator import (
     find_conditional_required_field_risks,
 )
 
-# The qanalabs reproducer, shrunk: `options`, `answer`, `answer_text` land in
+# The reproducer from a real user project, shrunk: `options`, `answer`, `answer_text` land in
 # the initial dict literal (unconditional), then `source_quote` and `question`
 # are guarded by `if field in flat`.
 _APPLY_EDITED_DISTRACTORS = (

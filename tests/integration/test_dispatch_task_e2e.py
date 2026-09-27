@@ -152,7 +152,7 @@ class TestDispatchTaskEndToEnd:
 
     def test_dispatch_resolves_function_in_subdirectory(self, tools_dir):
         """dispatch_task() finds a UDF located in a subdirectory of tools_path."""
-        subdir = tools_dir / "qanalabs-quiz-gen"
+        subdir = tools_dir / "nested-tools"
         subdir.mkdir()
         (subdir / "sub_opener.py").write_text(
             'def sub_opener(context_data, *args):\n    return "Found in subdirectory"\n'

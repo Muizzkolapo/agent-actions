@@ -136,7 +136,7 @@ def test_resolve_module_file_empty_name(tmp_path):
 
 def test_resolve_module_file_subdirectory(tmp_path):
     """Recursive fallback finds module in a subdirectory."""
-    subdir = tmp_path / "qanalabs-quiz-gen"
+    subdir = tmp_path / "nested-tools"
     subdir.mkdir()
     target = subdir / "my_function.py"
     target.write_text("X = 1")
