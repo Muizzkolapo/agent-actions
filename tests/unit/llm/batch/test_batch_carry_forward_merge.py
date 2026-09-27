@@ -209,3 +209,212 @@ class TestCarryForwardEdgeCases:
         batch_output = [{"source_guid": "r1"}]
         result = service._merge_carry_forward("test_action", batch_output, "data.json")
         assert result == batch_output
+
+
+class TestAStoredRowIsNotResurrectedBesideItsReplacement:
+    """An expansion mints ``uuid4`` per child, so a re-run's rows never carry the
+    identities the last run's did, and subtraction by identity hands the replaced
+    rows to a write already given their replacements.
+
+    Reachable without an interrupted write: a prompt, schema, guard, model or limit
+    change clears the action's dispositions (``executor.py``'s reset-to-pending), so
+    every input is submitted again with its previous rows still stored. Online drops
+    them — a producer being reprocessed carries nothing (1083).
+    """
+
+    @staticmethod
+    def _backend(stored: list[dict]) -> MagicMock:
+        return _mock_backend(target_files=["data.json"], prior_output={"data.json": stored})
+
+    def test_a_replaced_expansion_row_is_not_carried(self):
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i0"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [
+                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
+                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+            ],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "n1"], (
+            f"the previous generation was merged back beside its replacement: {result}"
+        )
+        assert {r["gen"] for r in result} == {"new"}
+
+    def test_a_row_whose_producer_this_run_did_not_touch_is_still_carried(self):
+        """The other half, and the reason this is a subtraction and not a purge: a
+        run narrowed to one input still holds rows for every other."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i1"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m1"]
+
+    def test_a_row_naming_no_producer_is_still_carried(self):
+        """A row that carries its input's own identity, or one a tool invented, names
+        no producer. Nothing about this run answers for it, so it stays."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "m0", "gen": "old"}, {"source_guid": "invented", "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m0", "invented"]
+
+    def test_a_row_only_partly_reprocessed_is_still_carried(self):
+        """A collapse names every input it consumed. With one of them reprocessed and
+        the other not, the row is neither answered for nor reproducible — dropping it
+        loses the untouched input's content, so it is carried and the duplicate is
+        accepted. Same refusal to guess as ``build_carry_forward``'s straddle rule."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "m0", "producer_source_guids": ["i0", "i1"], "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "m0"]
+
+    def test_an_expansion_that_returns_one_row_this_run_replaces_the_pair(self):
+        """Which field names the input turns on the row count: one row out keeps the
+        input's own guid and names no producer. An action that expanded last run and
+        did not this one is the same resurrection, reached from the other side."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [
+                    {"source_guid": "m0", "producer_source_guids": ["i0"], "gen": "old"},
+                    {"source_guid": "m1", "producer_source_guids": ["i0"], "gen": "old"},
+                ]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action", [{"source_guid": "i0", "gen": "new"}], "data.json"
+        )
+
+        assert [r["source_guid"] for r in result] == ["i0"]
+
+    def test_a_row_the_batch_expanded_this_run_is_replaced_by_its_children(self):
+        """And the crossing in the other direction: the stored row carries the input's
+        own identity, which the output now names only as a producer."""
+        service = _make_service(
+            storage_backend=self._backend([{"source_guid": "i0", "gen": "old"}])
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [
+                {"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"},
+                {"source_guid": "n1", "producer_source_guids": ["i0"], "gen": "new"},
+            ],
+            "data.json",
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "n1"]
+
+    def test_an_identity_with_a_row_this_run_cannot_account_for_is_kept(self):
+        """Byte-identical records share a source_guid, so an action can hold several
+        rows under one and they need not share producers. Answering for the identity
+        on one row's account deletes the others' content.
+
+        Only the identity's survival is pinned. Which of its rows comes back is
+        ``build_carry_forward``'s last-wins rule and 615's question, not this one —
+        see the test below, which pins that rather than leaving it to fixture order.
+        """
+        stale = {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "stale"}
+        kept = {"source_guid": "t0", "gen": "kept"}
+        batch = [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}]
+
+        for order in ([stale, kept], [kept, stale]):
+            service = _make_service(storage_backend=self._backend(list(order)))
+
+            result = service._merge_carry_forward("test_action", batch, "data.json")
+
+            assert [r["source_guid"] for r in result] == ["n0", "t0"], (
+                f"the identity was dropped on one row's account: {order}"
+            )
+
+    def test_which_row_of_a_shared_identity_survives_is_the_stored_order(self):
+        """Pinned so the rule above is read as scoped, not as luck. ``build_carry_forward``
+        keeps the last row per identity; this method does not change that."""
+        rows = [
+            {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "first"},
+            {"source_guid": "t0", "gen": "second"},
+        ]
+        batch = [{"source_guid": "n0", "producer_source_guids": ["i0"]}]
+
+        forward = _make_service(storage_backend=self._backend(list(rows)))
+        backward = _make_service(storage_backend=self._backend(list(reversed(rows))))
+
+        assert forward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "second"
+        assert backward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "first"
+
+    def test_an_input_the_batch_carried_but_did_not_answer_for_keeps_its_row(self):
+        """`producer_source_guids` is the consumed set MINUS the row's own guid, so a
+        row that kept an input's identity does not name it. Reading only the producers
+        calls such a row answered for when this run replaced its other inputs and not
+        it — and deletes the content its own identity accounts for."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "in0", "producer_source_guids": ["in1", "in2"], "gen": "TOTAL"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "in1", "gen": "new"}, {"source_guid": "in2", "gen": "new"}],
+            "data.json",
+            {"in0", "in1", "in2"},
+        )
+
+        assert [r["source_guid"] for r in result] == ["in1", "in2", "in0"]
+        assert result[2]["gen"] == "TOTAL", "the row's own content was deleted"
+
+    def test_a_row_naming_a_producer_this_run_left_alone_keeps_both(self):
+        """The identity being named is not enough on its own: the row also holds what
+        its other producers gave it, and this run answered for only one of them."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "p0", "producer_source_guids": ["i0", "i9"], "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["p0", "i0"], "gen": "new"}],
+            "data.json",
+            {"p0", "i0"},
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "p0"], "i9's content was deleted"
