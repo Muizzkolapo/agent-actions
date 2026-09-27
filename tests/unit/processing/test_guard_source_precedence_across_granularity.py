@@ -351,3 +351,54 @@ class TestWhatADropDoesNotHideFromAGuard:
         scope = {"observe": ["source.url"], "drop": ["a1.tier"]}
 
         assert self._file(scope, "a1.tier == 'secret'") is False
+
+
+class TestAMalformedCarriedNamespaceIsNotServedToAGuard:
+    """Why the rule is "the record never supplies these" and not the narrower "strip only
+    what the resolver replaced".
+
+    The two agree wherever the carried copy is well formed, because the resolver already
+    falls back to it. They part on a malformed one: a scalar or list under ``source`` is not
+    a namespace, and the resolver already refuses to serve such a record as its own source
+    document. Letting the record fill the key whenever the resolver produced nothing would
+    reinstate that refusal's opposite at the guard surface — measured, the narrower rule
+    puts ``'scalar'`` and ``[1, 2]`` into the context a clause reads.
+
+    Asserted as absence rather than ``is None``, because the narrower rule supplies the key
+    with a falsy value and only the missing key tells the two apart.
+    """
+
+    @pytest.mark.parametrize("carried", ["scalar", [1, 2], 0, None, ""])
+    def test_no_malformed_shape_reaches_the_guard_context(self, carried):
+        record = {"source_guid": "GHOST", "content": {"source": carried, "a1": {"n": 1}}}
+        context = build_guard_context(
+            dict(record),
+            agent_name="a2",
+            agent_config={"granularity": "record", "context_scope": SCOPE},
+            agent_indices=INDICES,
+            source_data=POOL,
+            is_first_stage=False,
+        )
+
+        merged = GuardEvaluator()._build_evaluation_context(record["content"], context)
+
+        assert "source" not in merged, (
+            f"a malformed carried source reached the guard: {merged.get('source')!r}"
+        )
+
+    def test_a_well_formed_carried_namespace_is_still_the_answer(self):
+        """The boundary: this is the case the two rules agree on, and it must keep working
+        — the resolver returns the record itself, so the namespace is in the context."""
+        record = {"source_guid": "GHOST", "content": {"source": {"url": "C"}, "a1": {"n": 1}}}
+        context = build_guard_context(
+            dict(record),
+            agent_name="a2",
+            agent_config={"granularity": "record", "context_scope": SCOPE},
+            agent_indices=INDICES,
+            source_data=POOL,
+            is_first_stage=False,
+        )
+
+        merged = GuardEvaluator()._build_evaluation_context(record["content"], context)
+
+        assert merged["source"] == {"url": "C"}
