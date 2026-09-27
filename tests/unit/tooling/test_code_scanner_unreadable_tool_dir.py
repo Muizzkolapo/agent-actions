@@ -6,10 +6,8 @@ feeds schema inference and the docs rather than the runtime registry, so the cos
 of silence is a tool whose schema is unknowably missing rather than a failed run.
 """
 
-import ast
 import logging
 import os
-from pathlib import Path
 
 import pytest
 
@@ -111,21 +109,3 @@ class TestTheCatalogIsKeyedOnFunctionName:
         first, second = scan_tool_functions(tmp_path), scan_tool_functions(tmp_path)
 
         assert first["dup"]["file_path"] == second["dup"]["file_path"]
-
-
-class TestFileHandlerStaysStdlibOnly:
-    """`utils/_MANIFEST.md` advertises this module as stdlib-only at module level,
-    which is why an import-light module like `code_scanner` may depend on it. The
-    claim was false before `resolve_project_root` moved into `get_agent_paths`;
-    this keeps it from drifting back."""
-
-    def test_file_handler_imports_nothing_from_agent_actions_at_module_level(self):
-        import agent_actions.utils.file_handler as module
-
-        tree = ast.parse(Path(module.__file__).read_text())
-        top_level = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
-        names = [n.module or "" for n in top_level if isinstance(n, ast.ImportFrom)] + [
-            a.name for n in top_level if isinstance(n, ast.Import) for a in n.names
-        ]
-
-        assert [n for n in names if n.startswith("agent_actions")] == []

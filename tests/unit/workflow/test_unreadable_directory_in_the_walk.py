@@ -388,13 +388,19 @@ class _RepairBackend(_Backend):
 class TestARepairIsReportedLikeAnyOtherWalk:
     """A repair narrows its walk to the files holding the records it named, and it
     is tempting to exempt it from the report: the directory it could not open is
-    probably unrelated. It is not exempt, for two reasons. The store resolves
-    record ids to staging paths with a set union, so an id that resolves to
-    nothing leaves no trace — "unrelated to what the store named" is not
-    "unrelated to what the repair needs". And the exemption would buy nothing:
-    `_lose_file` only forgets the slice observation, and `_stamped_slice_outcome`
-    short-circuits on `retried_records` and returns the stored count, so during a
-    repair that observation is never read.
+    probably unrelated. It is not exempt.
+
+    The store resolves record ids to staging paths with a set union, so an id that
+    resolves to nothing leaves no trace — "unrelated to what the store named" is
+    not "unrelated to what the repair needs", and the file behind the lock may be
+    exactly the one being repaired.
+
+    Reporting is not free: the loss counts toward `files_found`, so a repair whose
+    every other file is skipped raises rather than completing. That is the trade
+    this ticket takes deliberately — a named permission fault over a repair that
+    silently does nothing. (`_lose_file`'s own effect *is* inert here, since
+    `_stamped_slice_outcome` short-circuits on `retried_records`, but the report
+    and the count are not.)
     """
 
     def _walk(self, tmp_path, backend, *, readable=("a.json",)):
@@ -436,6 +442,25 @@ class TestARepairIsReportedLikeAnyOtherWalk:
 
         assert (found, processed) == (2, 1)
         assert [message.split(":")[0] for message in errors.messages] == ["locked"]
+
+
+class TestAPartialLossThroughTheOrchestrator:
+    """The walk functions are tested directly elsewhere; this drives `process_files`,
+    which is what decides the action's fate. A directory loss must NOT be action-fatal:
+    an implementation that tagged the OSError with `_ACTION_FATAL_KEY` would satisfy
+    every other test here while hard-failing any action that has one unreadable
+    subdirectory among readable files."""
+
+    def test_the_readable_files_still_process_and_the_action_survives(self, tmp_path, locked_dirs):
+        backend = _Backend()
+        root = _staging(tmp_path, locked_dirs)
+        (tmp_path / "output").mkdir()
+        runner = _runner(backend, _slices(backend))
+
+        process_files(runner, _params(tmp_path, [str(root)]))
+
+        assert _seen_names(runner) == ["a.json", "b.json"]
+        assert slice_observation(backend, ACTION) is None
 
 
 class TestTheCollector:
