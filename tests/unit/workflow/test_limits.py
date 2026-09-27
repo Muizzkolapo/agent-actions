@@ -490,7 +490,7 @@ class TestTheMergedWalkOrder:
             (first / name).write_text(json.dumps([{"id": name}]))
         (second / "a.json").write_text(json.dumps([{"id": "a"}]))
 
-        collected = collect_files_from_upstream([str(first), str(second)])
+        collected, _lost = collect_files_from_upstream([str(first), str(second)])
 
         assert [str(path) for path in collected] == ["a.json", "m.json", "z.json"]
 
