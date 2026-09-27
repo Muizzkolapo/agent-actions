@@ -780,3 +780,115 @@ class TestCatalogContractWithTheDashboard:
         ids = [row["id"] for row in self._catalog(tmp_path)["logs"]["events"]]
 
         assert len(ids) == len(set(ids))
+
+
+def _catalog_from_workflow(tmp_path, workflow: dict) -> dict:
+    """Drive generate() from a workflow YAML on disk, the way the CLI does."""
+    import yaml
+
+    wf_yml = tmp_path / f"{workflow['name']}.yml"
+    wf_yml.write_text(yaml.dump(workflow))
+    gen = _make_generator(
+        {workflow["name"]: {"rendered": None, "original": str(wf_yml)}}, str(tmp_path)
+    )
+    return gen.generate(**_empty_inputs())
+
+
+# `redact` drops one of its own schema fields (`verdict`), one field it observed
+# (`upstream.body`), and one name that belongs to nothing (`ghost_field`). `fanin`
+# observes a wildcard, the shape 148 of the sample project's 515 actions use.
+REDACT_FLOW = {
+    "name": "redact_flow",
+    "description": "d",
+    "actions": [
+        {
+            "name": "upstream",
+            "intent": "i",
+            "schema": {"headline": {"type": "string"}, "body": {"type": "string"}},
+        },
+        {
+            "name": "redact",
+            "intent": "i",
+            "dependencies": ["upstream"],
+            "schema": {"verdict": {"type": "string"}},
+            "context_scope": {
+                "observe": ["upstream.headline", "upstream.body"],
+                "drop": ["verdict", "ghost_field", "upstream.body"],
+            },
+        },
+        {
+            "name": "fanin",
+            "intent": "i",
+            "dependencies": ["redact"],
+            "schema": {"summary": {"type": "string"}},
+            "context_scope": {"observe": ["redact.*"]},
+        },
+    ],
+}
+
+RAW_DROP = REDACT_FLOW["actions"][1]["context_scope"]["drop"]
+
+
+class TestTheCatalogNamesWhatAnActionDropsAndObserves:
+    """`drops` and `observe` are read by the docs frontend and were emitted by nothing.
+
+    `transformers.ts:146-147` takes both off the catalog action, so an absent key
+    renders as an empty panel rather than as an error. The two are sourced
+    differently on purpose: `drops` from the resolved ActionSchema, because the raw
+    directive names fields that are not dropped; `observe` from the directive,
+    because the resolved side cannot enumerate a wildcard.
+    """
+
+    def _actions(self, tmp_path) -> dict:
+        return _catalog_from_workflow(tmp_path, REDACT_FLOW)["actions"]
+
+    def test_a_dropped_field_is_named_rather_than_vanishing(self, tmp_path):
+        redact = self._actions(tmp_path)["redact_flow.redact"]
+
+        assert redact.get("drops") == ["body", "verdict"], redact.get("drops")
+
+    def test_the_dropped_name_is_carried_by_no_other_key(self, tmp_path):
+        """Why the key has to exist: `outputs` and `output_fields` hold the survivors."""
+        redact = self._actions(tmp_path)["redact_flow.redact"]
+
+        assert "verdict" not in redact["outputs"], redact["outputs"]
+        assert "verdict" not in [f["name"] for f in redact["output_fields"]]
+        assert "verdict" in redact.get("drops", []), redact.get("drops")
+
+    def test_drops_names_only_fields_that_were_really_dropped(self, tmp_path):
+        """The raw directive names a ghost and a namespaced wildcard; neither is a field."""
+        redact = self._actions(tmp_path)["redact_flow.redact"]
+
+        assert "ghost_field" in RAW_DROP and "upstream.body" in RAW_DROP, RAW_DROP
+        assert redact.get("drops") == ["body", "verdict"], redact.get("drops")
+        assert "ghost_field" not in redact["drops"]
+        assert "upstream.body" not in redact["drops"]
+
+    def test_observe_is_the_directive_as_the_workflow_wrote_it(self, tmp_path):
+        redact = self._actions(tmp_path)["redact_flow.redact"]
+
+        assert redact.get("observe") == ["upstream.headline", "upstream.body"], redact.get(
+            "observe"
+        )
+
+    def test_observe_keeps_a_wildcard_the_resolved_side_cannot_expand(self, tmp_path):
+        """Sourcing `observe` from resolved output fields yields [] here — the common shape."""
+        fanin = self._actions(tmp_path)["redact_flow.fanin"]
+
+        assert fanin.get("observe") == ["redact.*"], fanin.get("observe")
+
+    def test_an_action_with_no_context_scope_gains_no_observe_key(self, tmp_path):
+        actions = self._actions(tmp_path)
+
+        assert "observe" not in actions["redact_flow.upstream"], sorted(
+            actions["redact_flow.upstream"]
+        )
+        assert "observe" in actions["redact_flow.redact"], "fixture proves the key is reachable"
+
+    def test_an_action_that_drops_nothing_gains_no_drops_key(self, tmp_path):
+        actions = self._actions(tmp_path)
+
+        assert "drops" not in actions["redact_flow.upstream"], sorted(
+            actions["redact_flow.upstream"]
+        )
+        assert "drops" in actions["redact_flow.redact"], "fixture proves the key is reachable"
