@@ -27,6 +27,7 @@ body: >-
   a root-level array, or a separate schema file, which rendering inlines first. A
   record-granularity action nests its output under its own name, so a field sharing a
   namespace's name collides with nothing there and is left alone. The flat merge was
-  written out separately at three places, two of them live; all three now share one
-  function, so the rule cannot drift between the FILE and batch paths.
+  written out separately at three places, only one of them reachable in a run — the FILE
+  path, since a tool action cannot run in batch mode at all; all three now share one
+  function, so the rule cannot drift between them.
 time: 2026-09-27T16:35:00Z
