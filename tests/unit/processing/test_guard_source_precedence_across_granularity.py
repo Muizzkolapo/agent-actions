@@ -581,3 +581,60 @@ class TestAVersionedActionDoesNotDisplaceAToolsOwnField:
         """A version context exists here, so a name-only rule would prefer the iteration
         and this clause would stop matching."""
         assert self._kept({"i": 1, "idx": 0}) is True
+
+
+class TestAPromotionCannotClaimAFrameworkNamespacesName:
+    """What makes the evaluator's rule sound rather than lucky. It reads a bus-namespace key
+    in the context as the framework's own answer, so nothing else may put one there.
+
+    ``output_field`` promotion writes a dependency's field into the context by name, and it
+    already declines a name another key holds. A framework name is declined too, because a
+    promoted field sitting under one would be preferred over the record's — and a dict-valued
+    one is indistinguishable from a resolved namespace by shape alone.
+    """
+
+    POOL = [{"source_guid": "G0", "content": {"source": {"u": 1}}}]
+
+    def _context(self, content, deps, scope=None):
+        return build_guard_context(
+            {"source_guid": "G0", "content": deepcopy(content)},
+            agent_name="a2",
+            agent_config={
+                "granularity": "record",
+                "context_scope": scope or {"observe": ["a1.n"]},
+            },
+            agent_indices=INDICES,
+            source_data=self.POOL,
+            dependency_configs=deps,
+        )
+
+    @pytest.mark.parametrize("name", sorted(RUNTIME_BUS_NAMESPACES))
+    def test_a_promotion_named_for_a_bus_namespace_is_refused(self, name):
+        content = {"a1": {"n": 1, name: {"tier": "FROM-UPSTREAM"}}}
+        scope = {"observe": ["a1.n", f"a1.{name}"]}
+
+        context = self._context(content, {"a1": {"output_field": name, "idx": 0}}, scope=scope)
+
+        assert context.get(name) != {"tier": "FROM-UPSTREAM"}
+
+    def test_the_record_keeps_its_own_key_when_a_promotion_is_refused(self):
+        """The consequence that matters: a dict-valued promotion would otherwise look like a
+        resolved namespace and displace the record's."""
+        content = {"a1": {"n": 1, "seed": {"tier": "FROM-UPSTREAM"}}, "seed": {"tier": "gold"}}
+        deps = {"a1": {"output_field": "seed", "idx": 0}}
+        context = self._context(content, deps, scope={"observe": ["a1.n", "a1.seed"]})
+
+        merged = GuardEvaluator()._build_evaluation_context(content, context)
+
+        assert merged["seed"] == {"tier": "gold"}
+
+    def test_an_ordinary_output_field_is_still_promoted(self):
+        """So the refusal is scoped to the reserved names and has not broken the feature."""
+        content = {"a1": {"n": 1, "severity": "high"}}
+        scope = {"observe": ["a1.n", "a1.severity"]}
+
+        context = self._context(
+            content, {"a1": {"output_field": "severity", "idx": 0}}, scope=scope
+        )
+
+        assert context["severity"] == "high"

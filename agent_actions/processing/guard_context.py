@@ -12,6 +12,8 @@ merge-blocking anti-pattern.
 import logging
 from typing import Any
 
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +94,19 @@ def build_guard_context(
             if isinstance(dep_data, list) and len(dep_data) == 1:
                 dep_data = dep_data[0]
             if isinstance(dep_data, dict) and of_name in dep_data:
-                if of_name not in field_context:
+                if of_name in RUNTIME_BUS_NAMESPACES:
+                    # A promotion may not take a framework namespace's name. The evaluator
+                    # reads these keys as the framework's own answer, so a promoted field
+                    # sitting under one would be preferred over the record's.
+                    logger.warning(
+                        "output_field '%s' from action '%s' is a framework namespace name "
+                        "and is not promoted — use '%s.%s' in guard conditions instead",
+                        of_name,
+                        dep_name,
+                        dep_name,
+                        of_name,
+                    )
+                elif of_name not in field_context:
                     field_context[of_name] = dep_data[of_name]
                 else:
                     logger.warning(
