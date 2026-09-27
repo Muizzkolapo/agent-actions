@@ -892,3 +892,56 @@ class TestTheCatalogNamesWhatAnActionDropsAndObserves:
             actions["redact_flow.upstream"]
         )
         assert "drops" in actions["redact_flow.redact"], "fixture proves the key is reachable"
+
+
+WILDCARD_DROP_FLOW = {
+    "name": "wildcard_drop_flow",
+    "description": "d",
+    "actions": [
+        {
+            "name": "upstream",
+            "intent": "i",
+            "schema": {"headline": {"type": "string"}, "secret": {"type": "string"}},
+        },
+        {
+            "name": "consume",
+            "intent": "i",
+            "dependencies": ["upstream"],
+            "schema": {"verdict": {"type": "string"}},
+            "context_scope": {"observe": ["upstream.*"], "drop": ["upstream.secret"]},
+        },
+    ],
+}
+
+
+class TestADropBehindAWildcardIsNotNamed:
+    """A field the analyzer never enumerated cannot be reported as dropped.
+
+    `observe: [upstream.*]` records the wildcard's source name, not its fields, so
+    the action's output schema has no entry for `drop` to mark. This is not specific
+    to the new key: the same blindness already shortens `outputs`, which is the
+    assertion below that would hold with or without it.
+    """
+
+    def _consume(self, tmp_path) -> dict:
+        return _catalog_from_workflow(tmp_path, WILDCARD_DROP_FLOW)["actions"][
+            "wildcard_drop_flow.consume"
+        ]
+
+    def test_the_observed_fields_reach_neither_outputs_nor_drops(self, tmp_path):
+        consume = self._consume(tmp_path)
+
+        assert consume["outputs"] == ["verdict"], consume["outputs"]
+        assert "drops" not in consume, consume.get("drops")
+
+    def test_the_same_drop_is_named_when_the_observe_is_explicit(self, tmp_path):
+        """The gap is the wildcard, not the drop — spelling the field out reports it."""
+        explicit = json.loads(json.dumps(WILDCARD_DROP_FLOW))
+        explicit["name"] = "explicit_drop_flow"
+        explicit["actions"][1]["context_scope"]["observe"] = ["upstream.secret"]
+
+        consume = _catalog_from_workflow(tmp_path, explicit)["actions"][
+            "explicit_drop_flow.consume"
+        ]
+
+        assert consume.get("drops") == ["secret"], consume.get("drops")
