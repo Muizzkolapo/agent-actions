@@ -32,12 +32,9 @@ class PreparedTask:
 
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
     original_content: Any = None
-    source_content: Any | None = None
     source_snapshot: Any | None = None
     guard_status: GuardStatus = GuardStatus.PASSED
     guard_behavior: str | None = None
-    prompt_context: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def should_execute(self) -> bool:

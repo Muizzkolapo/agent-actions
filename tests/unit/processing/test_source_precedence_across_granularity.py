@@ -23,6 +23,7 @@ from agent_actions.processing.prepared_task import PreparationContext
 from agent_actions.processing.source_resolution import resolve_source_content
 from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
+from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
 POOL = [
     {"source_guid": "G0", "content": {"source": {"url": "POOL"}}},
@@ -354,3 +355,169 @@ class TestAFirstStageItemThatIsNotARecord:
     @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7, 0.5, True])
     def test_a_non_record_item_resolves_to_no_source_namespace(self, item):
         assert prompt_source(item, WILDCARD) is None
+
+
+POOLED_BUT_CARRYING = {
+    "source_guid": "G0",
+    "content": {"a1": {"n": 1}, "source": {"url": "CARRIED"}},
+}
+"""Resolves two ways if a surface reads the wrong one: identity places it in the pool at
+``POOL``, while the namespace it carries says ``CARRIED``."""
+
+NOT_CARRYING = {"source_guid": "G0", "content": {"a1": {"n": 1}}}
+
+
+def prepare_pooled(record, guard=None):
+    """Run the real preparer over a later-stage record against ``POOL``."""
+    config = {
+        "agent_type": "llm_agent",
+        "prompt": "URL: {{ source.url }}",
+        "granularity": "record",
+        "context_scope": SCOPE,
+    }
+    if guard is not None:
+        config["guard"] = guard
+    context = PreparationContext(
+        agent_config=config,
+        agent_name="a2",
+        agent_indices={"a1": 0, "a2": 1},
+        source_data=POOL,
+        is_first_stage=False,
+    )
+    return TaskPreparer().prepare(dict(record), context)
+
+
+class TestThePromptAndThePrefilterGuardResolveOneNamespace:
+    """``PreparedTask.source_content`` was assigned on both exit paths and read nowhere, so
+    it could not become the single carrier of the resolved namespace: ``prefilter_by_guard``
+    runs over raw records before any ``PreparedTask`` exists, and within
+    ``TaskPreparer.prepare`` the guard and the prompt already share one ``field_context``
+    built from one resolution. What the field stood in for is the agreement between the two
+    surfaces that do resolve independently — the preparer resolves and threads the value
+    into ``build_guard_context``, the prefilter lets it resolve inside. These pin that
+    agreement directly, which is what makes the field safe to delete.
+    """
+
+    def test_the_prompt_reads_the_namespace_a_guard_context_resolves_unaided(self):
+        """``record_mode_source`` is ``build_guard_context`` called with no pre-resolved
+        value — the resolution path the prefilter takes, not the prefilter itself. The
+        function proper is driven in
+        ``TestTheGuardThePromptAndThePrefilterReadOneResolvedNamespace``.
+        """
+        task = prepare_pooled(POOLED_BUT_CARRYING)
+
+        assert task.llm_context["source"] == record_mode_source(POOLED_BUT_CARRYING)
+
+    def test_that_shared_namespace_is_the_pool_row_not_the_carried_copy(self):
+        """Agreement alone is also satisfied by both surfaces being wrong together."""
+        task = prepare_pooled(POOLED_BUT_CARRYING)
+
+        assert task.llm_context["source"] == {"url": "POOL"}
+        assert task.formatted_prompt == "URL: POOL"
+
+
+class TestTheGuardThePromptAndThePrefilterReadOneResolvedNamespace:
+    """The agreement a carrier field would have been for, asserted across all three
+    surfaces at once. A record that both resolves in the pool and carries its own
+    ``source`` namespace has two available answers, so a surface reading the wrong one is
+    visible rather than silent.
+
+    Until #1135 the in-prepare guard was the odd one out: the evaluator merged the guard's
+    item after the resolved context, so the record's carried copy overrode it and a guard
+    admitted on a value the prompt would never show. That is fixed on trunk.
+
+    Overlap with #1135, stated rather than implied: ``test_guard_source_precedence_across_
+    granularity.py`` drives the same two callers these do — ``TaskPreparer.prepare`` and
+    ``prefilter_by_guard`` — and its ``TestNoSurfaceAnswersTheSameClauseDifferently``
+    already pins guard-to-guard agreement on this record shape. The guard cases below are
+    a second angle on that, kept because this file is where the carrier question is
+    answered. What is *not* covered there is the **prompt**: that the value a guard
+    admitted on is the one the model is then shown (``formatted_prompt == "URL: POOL"``).
+    That assertion is the new coverage, and it is the half a carrier field would have been
+    for.
+    """
+
+    def test_the_guard_admits_on_the_resolved_value_not_the_carried_copy(self):
+        admitted = prepare_pooled(
+            POOLED_BUT_CARRYING, guard={"clause": "source.url == 'POOL'", "behavior": "filter"}
+        )
+
+        assert admitted.should_execute
+
+    def test_the_carried_copy_does_not_satisfy_the_guard(self):
+        """The other side: the value sitting in the record is not what the guard reads.
+
+        Filtering alone would also follow from ``source`` being absent from the context
+        entirely — a missing field reads as not matched — so this pins that the namespace
+        is present and holds the resolved value while the carried one fails to match.
+        """
+        filtered = prepare_pooled(
+            POOLED_BUT_CARRYING,
+            guard={"clause": "source.url == 'CARRIED'", "behavior": "filter"},
+        )
+
+        assert filtered.is_filtered
+        assert prepare_pooled(POOLED_BUT_CARRYING).llm_context["source"] == {"url": "POOL"}
+
+    def test_the_prompt_shows_the_value_the_guard_admitted_on(self):
+        """Both surfaces in one run, which is the invariant: a guard may not admit a
+        record on a value the model is then not shown."""
+        admitted = prepare_pooled(
+            POOLED_BUT_CARRYING, guard={"clause": "source.url == 'POOL'", "behavior": "filter"}
+        )
+
+        assert admitted.should_execute
+        assert admitted.formatted_prompt == "URL: POOL"
+
+    def test_carrying_a_copy_at_all_changes_no_answer(self):
+        """The record's own copy is not the discriminator it used to be: the same record
+        without one resolves and guards identically."""
+        carrying = prepare_pooled(
+            POOLED_BUT_CARRYING, guard={"clause": "source.url == 'POOL'", "behavior": "filter"}
+        )
+        bare = prepare_pooled(
+            NOT_CARRYING, guard={"clause": "source.url == 'POOL'", "behavior": "filter"}
+        )
+
+        assert carrying.should_execute == bare.should_execute
+        assert carrying.formatted_prompt == bare.formatted_prompt == "URL: POOL"
+
+    def test_the_prefilter_agrees_with_the_preparer_for_either_shape(self):
+        """``prefilter_by_guard`` itself, not a stand-in for it: the surface that resolves
+        internally rather than being handed a value, and the reason the resolved namespace
+        cannot be carried on a ``PreparedTask`` — it runs over raw records, before one
+        exists. Both shapes are admitted on the resolved value, and the preparer then
+        renders the prompt from the same one.
+        """
+        guard = {"clause": "source.url == 'POOL'", "behavior": "filter"}
+        config = {"granularity": "record", "context_scope": SCOPE, "guard": guard}
+
+        for record in (POOLED_BUT_CARRYING, NOT_CARRYING):
+            passing, skipped, _originals, filtered = prefilter_by_guard(
+                [dict(record)],
+                config,
+                "a2",
+                agent_indices={"a1": 0, "a2": 1},
+                source_data=POOL,
+            )
+
+            assert (len(passing), len(skipped), len(filtered)) == (1, 0, 0)
+            assert prepare_pooled(record, guard=guard).formatted_prompt == "URL: POOL"
+
+    def test_the_prefilter_filters_on_the_resolved_value_too(self):
+        """The falsifiable half: the carried copy does not admit a record here either."""
+        config = {
+            "granularity": "record",
+            "context_scope": SCOPE,
+            "guard": {"clause": "source.url == 'CARRIED'", "behavior": "filter"},
+        }
+
+        passing, _skipped, _originals, filtered = prefilter_by_guard(
+            [dict(POOLED_BUT_CARRYING)],
+            config,
+            "a2",
+            agent_indices={"a1": 0, "a2": 1},
+            source_data=POOL,
+        )
+
+        assert (len(passing), len(filtered)) == (0, 1)
