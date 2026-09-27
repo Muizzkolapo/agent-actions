@@ -385,17 +385,23 @@ class _RepairBackend(_Backend):
         return self._wanted
 
 
-class TestARepairThatNarrowedItsWalk:
-    """A repair reads only the files holding the records it named, and the store
-    said where those live — so a directory that will not open holds none of them.
-    Charging the loss would void the count, and where the narrowing left nothing
-    else, fail a repair outright over a directory it was never going to read."""
+class TestARepairIsReportedLikeAnyOtherWalk:
+    """A repair narrows its walk to the files holding the records it named, and it
+    is tempting to exempt it from the report: the directory it could not open is
+    probably unrelated. It is not exempt, for two reasons. The store resolves
+    record ids to staging paths with a set union, so an id that resolves to
+    nothing leaves no trace — "unrelated to what the store named" is not
+    "unrelated to what the repair needs". And the exemption would buy nothing:
+    `_lose_file` only forgets the slice observation, and `_stamped_slice_outcome`
+    short-circuits on `retried_records` and returns the stored count, so during a
+    repair that observation is never read.
+    """
 
-    def _walk(self, tmp_path, backend, *, retried=frozenset({"rec1"}), readable=("a.json",)):
+    def _walk(self, tmp_path, backend, *, readable=("a.json",)):
         root = _staging(tmp_path, self._lock, readable=readable, hidden=("x.json",))
         (tmp_path / "output").mkdir()
         runner = _runner(backend, lambda _p: None)
-        runner.retried_records = retried
+        runner.retried_records = frozenset({"rec1"})
         return process_directory_files(
             runner, root, tmp_path / "output", str(root), _params(tmp_path), set()
         )
@@ -404,40 +410,28 @@ class TestARepairThatNarrowedItsWalk:
     def _lock_fixture(self, locked_dirs):
         self._lock = locked_dirs
 
-    def test_it_is_not_charged_for_a_directory_it_would_not_have_read(self, tmp_path):
+    def test_a_narrowed_repair_still_reports_the_directory(self, tmp_path):
         found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}))
 
-        assert (found, processed, errors.messages) == (1, 1, [])
+        assert (found, processed) == (2, 1)
+        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
     def test_a_named_file_the_walk_never_saw_is_reported(self, tmp_path):
-        """Where the two safe directions collide, and why this one wins.
-
-        Not charging a repair for a directory it would never read argues for
-        staying quiet here. But the store names staging paths, and a file the walk
-        did not enumerate is indistinguishable from one sitting inside the
-        directory that would not open — so silence risks a repair that completes
-        green having repaired nothing. The directory is genuinely unreadable
-        either way, which is a fault worth naming.
-        """
+        """It may be sitting inside the directory that would not open."""
         found, processed, errors = self._walk(tmp_path, _RepairBackend({"nowhere"}))
 
         assert (found, processed) == (1, 0)
         assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
-    def test_a_named_file_under_the_unreadable_directory_is_still_reported(self, tmp_path):
-        """The exemption's one unsafe shape. The store names staging paths, so a
-        record's file can be *inside* the directory that will not open: the walk
-        never enumerated it, the narrowing drops it without comment, and clearing
-        the loss would leave the repair completing green having repaired nothing —
-        the very silence this change exists to end."""
-        found, processed, errors = self._walk(tmp_path, _RepairBackend({"locked/hidden"}))
+    def test_a_record_the_store_cannot_place_does_not_silence_the_report(self, tmp_path):
+        """The shape an exemption keyed on the store would miss: `source_files_for_records`
+        is a set union, so a retried id with no source row simply contributes nothing
+        to the wanted set — and its staging file may be the one behind the lock."""
+        found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}))
 
-        assert (found, processed) == (1, 0)
         assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
     def test_a_repair_that_fell_back_to_walking_everything_still_reports(self, tmp_path):
-        """Unnarrowed, the walk is the full walk again — and an unreadable
-        directory there may well hold a file carrying a named record."""
         found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}, shares_chain=True))
 
         assert (found, processed) == (2, 1)

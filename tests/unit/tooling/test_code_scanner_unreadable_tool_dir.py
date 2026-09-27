@@ -113,10 +113,11 @@ class TestTheCatalogIsKeyedOnFunctionName:
         assert first["dup"]["file_path"] == second["dup"]["file_path"]
 
 
-class TestTheScannerStaysImportLight:
-    """`code_scanner` sits at the top of `tooling` to break an import cycle (its own
-    docstring says so), so what it imports at module level has to stay cheap.
-    `file_handler` is now one of those imports."""
+class TestFileHandlerStaysStdlibOnly:
+    """`utils/_MANIFEST.md` advertises this module as stdlib-only at module level,
+    which is why an import-light module like `code_scanner` may depend on it. The
+    claim was false before `resolve_project_root` moved into `get_agent_paths`;
+    this keeps it from drifting back."""
 
     def test_file_handler_imports_nothing_from_agent_actions_at_module_level(self):
         import agent_actions.utils.file_handler as module
