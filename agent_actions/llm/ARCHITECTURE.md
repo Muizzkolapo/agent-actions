@@ -271,8 +271,13 @@ Reconciliation (reconciler.py):
 All state is persisted to StorageBackend metadata between runs:
   recovery_state:{action}:{name}
   batch_registry:{action}
-  batch_context:{action}:{name}
+  batch_context:{action}:{name}   what was submitted
+  batch_inputs:{action}:{name}    what the action took as input, above every
+                                  narrowing — read by carry-forward to tell a
+                                  record the run left out from one that is gone
 ```
+
+`clear_batch_state` removes all four.
 
 ---
 

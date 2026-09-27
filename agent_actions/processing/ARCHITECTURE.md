@@ -396,12 +396,19 @@ expansion, its children are minted again every run, so a stored row names a prod
 run's rows never name and neither generation replaces the other. The two are told apart by
 what the action took as input — a producer named by none of it is a generation that is
 gone, one still standing in the input is an input this run did not answer for. That set is
-not the batch context map, which holds only what was submitted: the disposition gate
-narrows the input before the map is built, so reading the map alone would delete the rows
-of every already-done input. Submission therefore records the input as it stood before the
-gate (`BatchContextManager.save_batch_inputs`) and the merge reads it back. Nothing
-recorded is distinct from an empty recording, and reads as "do not infer" — the inference
-deletes rows, so it fails towards keeping them.
+not the batch context map, which holds only what was submitted. Three narrowings sit above
+the submission — the action's `record_limit`, a repair's named records, then the disposition
+gate — and a record dropped by any of them still holds stored rows this action must carry.
+So the pipeline hands the batch path the same pre-narrowing input it already hands the
+online path (`offered_to_repair`), submission records it
+(`BatchContextManager.save_batch_inputs`), and the merge reads it back. Reading anything
+narrower deletes the rows of every record the run left out: on an ordinary incremental run
+that is everything already done, and on `agac retry` everything the repair did not name.
+
+An unrecorded input infers nothing, so a batch submitted before this was recorded carries
+its rows exactly as it did. An input recorded as empty is reported apart from an unrecorded
+one but read the same way, since inferring from it would supersede every stored row at
+once — the inference deletes, so it fails towards keeping.
 
 ---
 

@@ -884,12 +884,16 @@ class StorageBackend(ABC):
         return 0
 
     def clear_batch_state(self, action_name: str) -> None:
-        """Delete all batch state (registry, recovery, context) for an action."""
+        """Delete all batch state (registry, recovery, context, input) for an action."""
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
         self.delete_metadata(f"{BatchRegistryManager.METADATA_KEY_PREFIX}{action_name}")
         self.delete_metadata_prefix(f"recovery_state:{action_name}:")
         self.delete_metadata_prefix(f"batch_context:{action_name}:")
+        # Carry-forward reads this to decide which stored rows a run replaced, so a
+        # recording left behind by cleared state answers for a run that no longer has
+        # one. It shares the context map's scope and must share its lifetime.
+        self.delete_metadata_prefix(f"batch_inputs:{action_name}:")
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner.

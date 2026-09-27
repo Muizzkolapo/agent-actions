@@ -64,23 +64,38 @@ class BatchContextManager:
     ) -> set[str] | None:
         """The input recorded for this batch, or None where none was recorded.
 
-        None rather than an empty set: the reader infers rows away from this, so
-        "nothing recorded" and "recorded as empty" must not read alike. A batch
-        submitted before the input was recorded returns None and is left alone.
+        A run that recorded nothing is not one that took no input, so the two are
+        returned apart. Carry-forward then treats both as no evidence — inferring
+        from an empty set would supersede every stored row at once — but the
+        distinction is the store's to report, not this function's to flatten.
         """
         key = BatchContextManager._inputs_key(action_name, batch_name)
         raw = backend.load_metadata(key)
         if raw is None:
             logger.debug("No recorded input for %s/%s", action_name, batch_name)
             return None
+        # Unreadable reads as absent: raising would abandon a batch already answered,
+        # and a non-list blob is refused rather than iterated — set("a1") is {"a", "1"},
+        # and a wrong input set drives a rule that deletes.
         try:
-            return set(json.loads(raw))
-        except (json.JSONDecodeError, TypeError) as e:
-            raise ProcessingError(
-                f"Invalid JSON in batch inputs: {e}",
-                cause=e,
-                context={"action_name": action_name, "batch_name": batch_name},
-            ) from e
+            recorded = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                "Unreadable recorded input for %s/%s — carrying every stored row instead",
+                action_name,
+                batch_name,
+            )
+            return None
+        if not isinstance(recorded, list) or not all(isinstance(g, str) for g in recorded):
+            logger.warning(
+                "Recorded input for %s/%s is not a list of identities (%s) — "
+                "carrying every stored row instead",
+                action_name,
+                batch_name,
+                type(recorded).__name__,
+            )
+            return None
+        return set(recorded)
 
     @staticmethod
     def save_batch_context_map(

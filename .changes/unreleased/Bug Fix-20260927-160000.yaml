@@ -11,19 +11,28 @@ body: >-
   with nothing changed between them wrote eight rows where four were right, and
   each further run added four more. What separates a producer that is gone from one
   this run did not answer for is whether it still stands in the action's input, so
-  submission now records the identities it took as input and the merge reads them
-  back: a stored row whose single producer is named by none of them is a generation
-  that has been replaced, and one whose producer is still an input is carried as
-  before. Only where one producer already reads as a mint — a row naming several
-  still holds content of its own and is never inferred away. That input is
-  deliberately not the batch context map, which several readings of this bug
-  assume it is: the disposition gate narrows the input before the map is built, so
-  the map holds only what was submitted, and a rule reading it would have deleted
-  the stored rows of every already-done input on every ordinary incremental run.
-  The recording is therefore taken before the gate, and "nothing recorded" stays
-  distinct from "recorded as empty" and infers nothing — a batch submitted by an
-  earlier version carries its rows forward exactly as it did. Reachability is
-  narrower than the issue describes. It claimed every run, by way of an upstream
+  a batch now records the identities it took as input and the merge reads them
+  back: a stored row whose single producer is named by none of them is a
+  generation that has been replaced, and one whose producer is still an input is
+  carried as before. Only where one producer already reads as a mint — a row naming
+  several still holds content of its own and is never inferred away. The recorded
+  input is the action's input above *every* narrowing, which is the part that
+  decides whether this deletes data. Three narrowings sit above the submission: the
+  action's `record_limit`, the records a repair names, and the disposition gate. A
+  record dropped by any of them still holds stored rows the rewrite must carry, so
+  the batch path is now handed the same pre-narrowing list the online path already
+  receives, rather than the narrowed one reaching the submission. Recorded below
+  any of those, `agac retry` naming one record would have deleted every other
+  record's rows, and an ordinary incremental run would have deleted the rows of
+  everything already done. A repair that reaches the submission without that list
+  is refused rather than narrowed, matching the refusal the online path already
+  makes. An unrecorded input infers nothing, so a batch submitted by an earlier
+  version carries its rows exactly as it did, and a recording that cannot be read
+  or is not a list of identities degrades to the same, with a warning, rather than
+  abandoning results the provider has already returned. `clear_batch_state` clears
+  the recording alongside the context map it is scoped with, so `--fresh` and `agac
+  retry` no longer leave one behind to answer for a run that has none. Reachability
+  is narrower than the issue describes. It claimed every run, by way of an upstream
   defect in how an expansion's dispositions are keyed; that issue was closed as
   invalid, because the function it rests on (`write_record_dispositions`) has no
   production caller and a completed batch expansion is in fact narrowed away on the

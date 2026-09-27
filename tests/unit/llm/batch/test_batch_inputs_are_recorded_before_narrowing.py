@@ -14,12 +14,13 @@ outside in ``test_batch_rerun_below_an_expansion.py``.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
@@ -61,6 +62,36 @@ class TestTheRecordedInputRoundTrips:
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, "page.json") == {"i1"}
         assert BatchContextManager.load_batch_inputs(backend, ACTION, "other.json") == {"i9"}
+
+    def test_an_unreadable_recording_reads_as_unrecorded(self, backend, caplog):
+        """Raising would abandon a batch the provider has already answered for."""
+        backend.save_metadata(f"batch_inputs:{ACTION}:{BATCH}", "{not json")
+
+        with caplog.at_level(logging.WARNING):
+            assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
+        assert "carrying every stored row" in caplog.text
+
+    @pytest.mark.parametrize("blob", ['"a1"', '{"i1": 1}', "5", "null"])
+    def test_a_recording_that_is_not_a_list_of_identities_reads_as_unrecorded(
+        self, backend, blob, caplog
+    ):
+        """`set("a1")` is {"a", "1"} — a wrong input set drives a rule that deletes."""
+        backend.save_metadata(f"batch_inputs:{ACTION}:{BATCH}", blob)
+
+        with caplog.at_level(logging.WARNING):
+            assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
+
+    def test_clearing_batch_state_removes_the_recording(self, backend):
+        """`--fresh` and `agac retry` promise to wipe the action's batch state.
+
+        Left behind, the recording answers for a run that no longer has one.
+        """
+        BatchContextManager.save_batch_inputs(backend, ACTION, ["i1"], BATCH)
+        BatchContextManager.save_batch_context_map(backend, ACTION, {"t0": {}}, BATCH)
+
+        backend.clear_batch_state(ACTION)
+
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
 
     def test_a_path_traversing_batch_name_is_refused(self, backend):
         """Refused the same way the context map refuses it, and nothing is written."""
@@ -120,6 +151,7 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
             data=data,
             output_directory=str(tmp_path / "out"),
             force=True,
+            run_inputs=data,
         )
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1", "i2"}, (
@@ -137,9 +169,35 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
             data=data,
             output_directory=str(tmp_path / "out"),
             force=True,
+            run_inputs=data,
         )
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1", "i2"}
+
+    def test_a_repair_given_no_recording_is_refused_rather_than_narrowed(self, backend, tmp_path):
+        """The same refusal the online path makes when it is handed no wider input.
+
+        Proceeding would record the repair's own narrowing as the whole input, and
+        every record it did not name would read as a generation that is gone.
+        """
+        service = BatchSubmissionService(
+            task_preparator=MagicMock(),
+            client_resolver=MagicMock(),
+            context_manager=BatchContextManager(),
+            registry_manager_factory=MagicMock(),
+            storage_backend=backend,
+            disposition_gate=DispositionGate(storage_backend=backend, repairing={"i2"}),
+        )
+        data = [{"source_guid": "i1", "text": "a"}, {"source_guid": "i2", "text": "b"}]
+
+        with pytest.raises(ConfigurationError, match="pre-narrowing input"):
+            service.submit_batch_job(
+                agent_config={"action_name": ACTION, "kind": "llm"},
+                batch_name=BATCH,
+                data=data,
+                output_directory=str(tmp_path / "out"),
+                force=True,
+            )
 
     def test_a_row_carrying_no_identity_is_left_out_rather_than_recorded_as_none(
         self, backend, tmp_path
@@ -155,6 +213,7 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
             data=data,
             output_directory=str(tmp_path / "out"),
             force=True,
+            run_inputs=data,
         )
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1"}

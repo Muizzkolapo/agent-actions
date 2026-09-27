@@ -78,6 +78,10 @@ class BatchPipelineParams:
     disposition_gate: Optional["DispositionGate"] = field(default=None)
     # Only used when no gate is injected; a gate built without it never narrows.
     retried_records: frozenset[str] = frozenset()
+    # This action's input above every narrowing, which carry-forward records so a
+    # stored row of a record the run left out is not read as one that is gone.
+    # None means unrecorded, and nothing is inferred from it.
+    run_inputs: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -255,6 +259,7 @@ class ProcessingPipeline:
             params.batch_output_directory,
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
+            run_inputs=params.run_inputs,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -412,6 +417,7 @@ class ProcessingPipeline:
         agent_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, Any] | None = None,
         version_context: dict[str, Any] | None = None,
+        run_inputs: list[dict[str, Any]] | None = None,
     ):
         """Handle batch mode processing.
 
@@ -424,6 +430,7 @@ class ProcessingPipeline:
             agent_indices: Pre-built agent indices from _build_pipeline_context()
             dependency_configs: Pre-built dependency configs from _build_pipeline_context()
             version_context: Pre-built version context from _build_pipeline_context()
+            run_inputs: This action's input above every narrowing — see BatchPipelineParams
         """
         result_path = self._handle_batch_generation(
             BatchPipelineParams(
@@ -441,6 +448,7 @@ class ProcessingPipeline:
                 dependency_configs=dependency_configs,
                 version_context=version_context,
                 disposition_gate=self._disposition_gate,
+                run_inputs=run_inputs,
             )
         )
         return result_path
@@ -543,6 +551,7 @@ class ProcessingPipeline:
                 agent_indices,
                 dependency_configs,
                 version_context,
+                run_inputs=offered_to_repair,
             )
             return
 
