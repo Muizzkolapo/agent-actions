@@ -63,7 +63,13 @@ class TaskPreparer:
         target_id = existing_target_id or self._generate_target_id()
 
         if context.is_first_stage:
-            source_content = content
+            # _normalize_input returns the whole record here, whose framework keys the
+            # namespace builder's flat branch would publish as document fields.
+            source_content = (
+                {"content": get_existing_content(item, is_first_stage=True)}
+                if isinstance(item, dict)
+                else content
+            )
         else:
             from agent_actions.processing.source_resolution import resolve_source_content
 
