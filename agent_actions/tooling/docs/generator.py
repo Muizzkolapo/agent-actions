@@ -249,6 +249,11 @@ class CatalogGenerator:
             non_dropped = [f for f in action_schema.output_fields if not f.is_dropped]
             enriched["outputs"] = [f.name for f in non_dropped]
             enriched["output_fields"] = [f.to_dict() for f in non_dropped]
+            # The keys above carry only survivors, so this is a dropped name's one
+            # channel. Resolved, not `context_scope.drop`: the directive also names
+            # wildcards and fields belonging to nothing, once rendered as dropped.
+            if action_schema.dropped_outputs:
+                enriched["drops"] = action_schema.dropped_outputs
         elif "schema" in action and isinstance(action["schema"], dict):
             # Inline schema dict — not file-based, so WorkflowSchemaService
             # doesn't resolve these. Extract field names directly.
@@ -269,9 +274,16 @@ class CatalogGenerator:
 
         # Extract input fields from context_scope
         if "context_scope" in action:
-            inputs = self.parser.extract_input_fields(action["context_scope"])
+            context_scope = action["context_scope"]
+            inputs = self.parser.extract_input_fields(context_scope)
             if inputs:
                 enriched["inputs"] = inputs
+            # The directive as written, at the same resolution as `inputs` beside it:
+            # a wildcard here names no field this action owns, so the resolved side
+            # reports none of them.
+            observe = context_scope.get("observe")
+            if isinstance(observe, list) and observe:
+                enriched["observe"] = list(observe)
 
         # Clean up internal fields not needed in catalog
         enriched.pop("context_scope", None)
