@@ -45,6 +45,9 @@ class ContextScope(Check):
             refs.append((namespace, leaf))
         if not refs:
             return [CheckResult(False, label, "check declares no dropped_fields")]
+        # `ns.*` deletes the namespace outright at runtime. Without this the leaf "*" is
+        # looked up as a literal key, never found, and the check passes having proved
+        # nothing — the silent-pass shape this check was rewritten to remove.
 
         with sqlite3.connect(str(ctx.db_path)) as conn:
             conn.row_factory = sqlite3.Row
@@ -75,6 +78,7 @@ class ContextScope(Check):
 
         violations: list[str] = []
         inspected = 0
+        truncated = 0
         for row in rows:
             raw = row["llm_context"]
             if not raw:
@@ -86,9 +90,18 @@ class ContextScope(Check):
                 continue
             if not isinstance(context, dict):
                 continue
+            if context.get("__truncated__"):
+                # sqlite_backend swaps an over-1MB context for a stub. It parses and it
+                # is a dict, so counting it inspected would report green on no evidence.
+                truncated += 1
+                continue
             inspected += 1
             for namespace, leaf in refs:
                 namespace_data = context.get(namespace)
+                if leaf == "*":
+                    if namespace in context:
+                        violations.append(f"{row['record_id']}@{row['attempt']}: {namespace}.*")
+                    continue
                 if isinstance(namespace_data, dict) and leaf in namespace_data:
                     violations.append(f"{row['record_id']}@{row['attempt']}: {namespace}.{leaf}")
                 elif leaf in context:
@@ -102,12 +115,18 @@ class ContextScope(Check):
                 )
             ]
         if not inspected:
-            return [CheckResult(False, label, "no trace carried an llm_context — nothing verified")]
+            detail = (
+                f"all {truncated} llm_context(s) were truncated at write time"
+                if truncated
+                else "no trace carried an llm_context"
+            )
+            return [CheckResult(False, label, f"{detail} — nothing verified")]
         return [
             CheckResult(
                 True,
                 label,
-                f"checked {inspected} llm_context(s) — none carry "
-                f"{[f'{ns}.{leaf}' for ns, leaf in refs]}",
+                f"checked {inspected} llm_context(s)"
+                + (f" ({truncated} skipped as truncated)" if truncated else "")
+                + f" — none carry {[f'{ns}.{leaf}' for ns, leaf in refs]}",
             )
         ]

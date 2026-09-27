@@ -204,6 +204,46 @@ class TestDropStillRemovesWhatItForwards:
         schema = OutputSchema(schema_fields={"score"}, dropped_refs={("up", "score")})
         assert schema.available_fields == {"score"}
 
+    def test_a_name_the_action_still_supplies_is_never_reported_dropped(self):
+        """`drops_field` must agree with `available_fields`, both ways.
+
+        A name in both answers would put the field in `available_outputs` AND
+        `dropped_outputs`, and make `_build_field_mapping` skip a real producer.
+        Two shapes reach it, and only a test that reads `drops_field` directly can:
+        the drop collides with a name this action produces, or with one a sibling
+        namespace still supplies.
+        """
+        produced_and_forwarded = OutputSchema(
+            schema_fields={"score"},
+            passthrough_refs={("up", "score")},
+            dropped_refs={("up", "score")},
+        )
+        assert not produced_and_forwarded.drops_field("score")
+        assert produced_and_forwarded.dropped_fields == set()
+        assert "score" in produced_and_forwarded.available_fields
+
+        sibling_still_forwards = OutputSchema(
+            passthrough_refs={("a", "score"), ("b", "score")},
+            dropped_refs={("a", "score")},
+        )
+        assert not sibling_still_forwards.drops_field("score")
+        assert sibling_still_forwards.dropped_fields == set()
+        assert "score" in sibling_still_forwards.available_fields
+
+    def test_a_forwarding_ref_the_runtime_refuses_is_not_modelled(self):
+        """A dotless passthrough is skipped at runtime, so nothing is forwarded."""
+        from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
+
+        schema = SchemaExtractor().extract_schema(
+            {
+                "name": "carry",
+                "schema": {"type": "object", "properties": {"note": {"type": "string"}}},
+                "context_scope": {"passthrough": ["score"], "drop": ["score"]},
+            }
+        )
+        assert schema.passthrough_refs == set()
+        assert schema.available_fields == {"note"}
+
 
 class TestTheCatalogAndPreflightSeeTheWithheldField:
     """The consumers a `drops_field -> False` mutant would otherwise slip past."""

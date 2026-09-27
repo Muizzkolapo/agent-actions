@@ -210,7 +210,7 @@ class TestConflictDetector:
         """Test detection of drop-recreate patterns."""
         graph = DataFlowGraph()
 
-        # First action produces and drops a field
+        # First action forwards a field and drops it
         action1 = DataFlowNode(
             name="action1",
             agent_kind=ActionKind.LLM,

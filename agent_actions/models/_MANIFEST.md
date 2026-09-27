@@ -14,7 +14,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `from_dict` | Method | Reconstruct from a dict produced by `to_dict` (round-trip). | - |
 | `ActionSchema` | Class | Unified schema for any action type. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_outputs` | Method | Fields available to downstream agents (excludes dropped). | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `dropped_outputs` | Method | Fields explicitly dropped from output. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `dropped_outputs` | Method | Forwarded fields a `context_scope.drop` withholds — never a field the action produces, and never one a sibling namespace still forwards. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `required_inputs` | Method | Required input field names (for tools). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `optional_inputs` | Method | Optional input field names (for tools). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |

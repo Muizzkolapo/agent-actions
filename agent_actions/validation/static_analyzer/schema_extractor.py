@@ -412,26 +412,26 @@ class SchemaExtractor:
         """Apply context_scope directives to output schema."""
         context_scope = config.get("context_scope", {})
 
-        passthrough = context_scope.get("passthrough", [])
-        for ref in passthrough:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.passthrough_refs.add((self._extract_namespace(ref), field_name))
-            elif isinstance(ref, str) and ".*" in ref:
-                # Wildcard passthrough: "source.*" → record the source name
-                source_name = ref.split(".", 1)[0]
-                if source_name:
-                    output.passthrough_wildcard_sources.add(source_name)
+        # A ref the runtime's parser rejects is skipped at runtime, so modelling it as
+        # forwarded leaves a field the run never delivers, undroppable by the drop the
+        # parser rejects for the same reason.
+        for ref in context_scope.get("passthrough", []):
+            parsed = self._parse_scope_ref(ref)
+            if not parsed:
+                continue
+            namespace, field_name = parsed
+            if field_name == "*":
+                output.passthrough_wildcard_sources.add(namespace)
+            else:
+                output.passthrough_refs.add(parsed)
 
-        scope_observe = context_scope.get("observe", [])
-        for ref in scope_observe:
-            field_name = self._extract_field_name(ref)
-            if field_name:
-                output.observe_refs.add((self._extract_namespace(ref), field_name))
+        for ref in context_scope.get("observe", []):
+            parsed = self._parse_scope_ref(ref)
+            if parsed and parsed[1] != "*":
+                output.observe_refs.add(parsed)
 
-        scope_drops = context_scope.get("drop")
-        for ref in scope_drops or []:  # or [] guards against explicit null (drop: null in config)
-            parsed = self._parse_drop_ref(ref)
+        for ref in context_scope.get("drop") or []:  # `or []` guards `drop: null`
+            parsed = self._parse_scope_ref(ref)
             if parsed:
                 output.dropped_refs.add(parsed)
 
@@ -506,20 +506,12 @@ class SchemaExtractor:
         return fields
 
     @staticmethod
-    def _extract_namespace(reference: str) -> str | None:
-        """Namespace of a `ns.field` reference, or None when it names none."""
-        if not reference or "." not in reference:
-            return None
-        return reference.split(".", 1)[0] or None
+    def _parse_scope_ref(reference: Any) -> tuple[str, str] | None:
+        """A context_scope ref as ``(namespace, field)``, or None if the runtime skips it.
 
-    @staticmethod
-    def _parse_drop_ref(reference: Any) -> tuple[str, str] | None:
-        """A drop ref as ``(namespace, field)``, or None when the runtime won't act on it.
-
-        Mirrors `_apply_drops_to_content`: refs the runtime's own parser rejects are
-        logged as "Field will NOT be removed" and skipped, and a nested field path
-        matches no key because the pop is flat. Recording either would withhold a field
-        the run still forwards.
+        Uses the runtime's own parser, so a spelling it rejects — no namespace, or a
+        nested path the flat pop can never match — is absent from the model rather than
+        half-present. `field` may be ``"*"``; that is a whole-namespace directive.
         """
         if not isinstance(reference, str):
             return None
@@ -530,20 +522,6 @@ class SchemaExtractor:
         if field_name != "*" and ("." in field_name or "*" in field_name):
             return None
         return (namespace, field_name)
-
-    def _extract_field_name(self, reference: str) -> str | None:
-        """Extract field name from a reference string."""
-        if not reference:
-            return None
-        if "." not in reference:
-            return reference
-        parts = reference.split(".", 1)
-        field = parts[1] if parts[1] else None  # None for malformed like "ns."
-        # "*" is a wildcard directive (observe all), not a literal field name.
-        # Returning None prevents it from entering observe/passthrough field sets.
-        if field == "*":
-            return None
-        return field
 
     def extract_from_workflow(
         self,
