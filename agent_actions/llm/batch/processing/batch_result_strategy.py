@@ -40,7 +40,11 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PREP_FAILED,
 )
-from agent_actions.utils.content import get_existing_content, is_version_merge
+from agent_actions.utils.content import (
+    get_existing_content,
+    is_version_merge,
+    merge_version_content,
+)
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
@@ -429,7 +433,7 @@ class BatchResultStrategy:
                 if verdict is not None:
                     item_dict = attach_verdict(item_dict, verdict)
             if is_tool_version_merge:
-                content = {**(existing_content or {}), **item_dict}
+                content = merge_version_content(existing_content, item_dict, action_name)
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
                 carry_framework_fields(original_row, record, fields=_vm_fields)
             else:

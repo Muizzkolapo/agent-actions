@@ -12,7 +12,7 @@ from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
-from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.content import is_version_merge, merge_version_content
 
 
 def derive_relative_path(file_path: str | None, output_directory: str | None) -> str | None:
@@ -150,7 +150,7 @@ def apply_version_merge(
     Returns a content dict (not a full record envelope).
     """
     is_tool = agent_config.get("kind") == "tool"
-    if is_version_merge(agent_config) and is_tool:
-        return {**(existing_content or {}), **action_output}
     action_name = agent_config["action_name"]
+    if is_version_merge(agent_config) and is_tool:
+        return merge_version_content(existing_content, action_output, action_name)
     return RecordEnvelope.build_content(action_name, action_output, existing_content)
