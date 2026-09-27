@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -443,11 +443,19 @@ class BatchProcessingService:
         main_output: list[dict[str, Any]],
         output_directory: str,
         action_name: str | None = None,
+        submitted_guids: Collection[str] = (),
     ) -> None:
-        """Write batch output file, merging any carry-forward records first."""
+        """Write batch output file, merging any carry-forward records first.
+
+        *submitted_guids* names the inputs this batch carried, so a row held for
+        one it did not answer for is kept rather than inferred away.
+        """
         effective_action = self._resolve_action_name(action_name)
         main_output = self._merge_carry_forward(
-            effective_action, main_output, target_relative_path(output_file, output_directory)
+            effective_action,
+            main_output,
+            target_relative_path(output_file, output_directory),
+            submitted_guids,
         )
 
         if self._storage_backend is None:
@@ -464,6 +472,7 @@ class BatchProcessingService:
         action_name: str | None,
         batch_output: list[dict[str, Any]],
         relative_path: str,
+        submitted_guids: Collection[str] = (),
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
@@ -505,14 +514,29 @@ class BatchProcessingService:
             for record in batch_output
             for producer in (record.get("producer_source_guids") or ())
         }
-        # Every row under the identity, and a row naming no producer is answered
-        # for by nothing: one such row keeps the whole identity.
-        answered_for = {
-            rid
-            for rid, producers in producers_by_guid.items()
-            if all(p and p <= reprocessed for p in producers)
+        submitted = frozenset(submitted_guids)
+
+        def answered_for(rid: str, producers: list[frozenset[str]]) -> bool:
+            """Did this run replace everything the rows under *rid* hold?
+
+            Never on the strength of the identity alone: `producer_source_guids`
+            is the consumed set *minus* the row's own guid, so a row also holds
+            whatever its identity accounts for, and a row that named producers
+            the run left alone keeps them both (1083).
+            """
+            if all(p <= reprocessed for p in producers):
+                # Replaced under its own identity, holding nothing else.
+                if rid in reprocessed:
+                    return True
+                # Or minted by a producer this run redid. An input the batch
+                # carried is never that, so one it did not answer for stays.
+                if rid not in submitted and all(producers):
+                    return True
+            return False
+
+        carry_guids = {
+            rid for rid, producers in producers_by_guid.items() if not answered_for(rid, producers)
         }
-        carry_guids = producers_by_guid.keys() - reprocessed - answered_for
 
         if not carry_guids:
             return batch_output

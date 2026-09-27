@@ -343,24 +343,78 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
 
         assert [r["source_guid"] for r in result] == ["n0", "n1"]
 
-    def test_rows_sharing_an_identity_are_kept_unless_every_one_is_answered_for(self):
+    def test_an_identity_with_a_row_this_run_cannot_account_for_is_kept(self):
         """Byte-identical records share a source_guid, so an action can hold several
-        rows under one, and they need not share producers. Answering for the identity
-        on one row's account deletes the others' content."""
+        rows under one and they need not share producers. Answering for the identity
+        on one row's account deletes the others' content.
+
+        Only the identity's survival is pinned. Which of its rows comes back is
+        ``build_carry_forward``'s last-wins rule and 615's question, not this one —
+        see the test below, which pins that rather than leaving it to fixture order.
+        """
+        stale = {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "stale"}
+        kept = {"source_guid": "t0", "gen": "kept"}
+        batch = [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}]
+
+        for order in ([stale, kept], [kept, stale]):
+            service = _make_service(storage_backend=self._backend(list(order)))
+
+            result = service._merge_carry_forward("test_action", batch, "data.json")
+
+            assert [r["source_guid"] for r in result] == ["n0", "t0"], (
+                f"the identity was dropped on one row's account: {order}"
+            )
+
+    def test_which_row_of_a_shared_identity_survives_is_the_stored_order(self):
+        """Pinned so the rule above is read as scoped, not as luck. ``build_carry_forward``
+        keeps the last row per identity; this method does not change that."""
+        rows = [
+            {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "first"},
+            {"source_guid": "t0", "gen": "second"},
+        ]
+        batch = [{"source_guid": "n0", "producer_source_guids": ["i0"]}]
+
+        forward = _make_service(storage_backend=self._backend(list(rows)))
+        backward = _make_service(storage_backend=self._backend(list(reversed(rows))))
+
+        assert forward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "second"
+        assert backward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "first"
+
+    def test_an_input_the_batch_carried_but_did_not_answer_for_keeps_its_row(self):
+        """`producer_source_guids` is the consumed set MINUS the row's own guid, so a
+        row that kept an input's identity does not name it. Reading only the producers
+        calls such a row answered for when this run replaced its other inputs and not
+        it — and deletes the content its own identity accounts for."""
         service = _make_service(
             storage_backend=self._backend(
-                [
-                    {"source_guid": "t0", "producer_source_guids": ["i0"], "gen": "old"},
-                    {"source_guid": "t0", "gen": "kept"},
-                ]
+                [{"source_guid": "in0", "producer_source_guids": ["in1", "in2"], "gen": "TOTAL"}]
             )
         )
 
         result = service._merge_carry_forward(
             "test_action",
-            [{"source_guid": "n0", "producer_source_guids": ["i0"], "gen": "new"}],
+            [{"source_guid": "in1", "gen": "new"}, {"source_guid": "in2", "gen": "new"}],
             "data.json",
+            {"in0", "in1", "in2"},
         )
 
-        assert [r["source_guid"] for r in result] == ["n0", "t0"]
-        assert result[1]["gen"] == "kept"
+        assert [r["source_guid"] for r in result] == ["in1", "in2", "in0"]
+        assert result[2]["gen"] == "TOTAL", "the row's own content was deleted"
+
+    def test_a_row_naming_a_producer_this_run_left_alone_keeps_both(self):
+        """The identity being named is not enough on its own: the row also holds what
+        its other producers gave it, and this run answered for only one of them."""
+        service = _make_service(
+            storage_backend=self._backend(
+                [{"source_guid": "p0", "producer_source_guids": ["i0", "i9"], "gen": "old"}]
+            )
+        )
+
+        result = service._merge_carry_forward(
+            "test_action",
+            [{"source_guid": "n0", "producer_source_guids": ["p0", "i0"], "gen": "new"}],
+            "data.json",
+            {"p0", "i0"},
+        )
+
+        assert [r["source_guid"] for r in result] == ["n0", "p0"], "i9's content was deleted"
