@@ -35,7 +35,7 @@ def build_guard_context(
     identical context structures.
 
     Args:
-        record: The input record (must have "content" dict).
+        record: The input record; a first-stage record's flat fields are normalized.
         agent_name: Current action name.
         agent_config: Action configuration (contains context_scope, guard, etc.).
         agent_indices: Map of action names to workflow positions (enables dep loading).
@@ -53,12 +53,13 @@ def build_guard_context(
     from agent_actions.prompt.context.scope_builder import build_field_context_with_history
     from agent_actions.utils.content import get_existing_content
 
-    content = get_existing_content(record)
-
     if source_content is not None:
         resolved_source = source_content
     elif is_first_stage:
-        resolved_source = content
+        # The namespace builder reads a record envelope, not the inner content dict.
+        # Handed the inner dict it finds no "content" key, takes its flat branch and
+        # publishes {"source": payload} as the namespace, one level too deep.
+        resolved_source = {"content": get_existing_content(record, is_first_stage=True)}
     else:
         from agent_actions.processing.source_resolution import resolve_source_content
 
