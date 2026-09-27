@@ -794,12 +794,10 @@ def _catalog_from_workflow(tmp_path, workflow: dict) -> dict:
     return gen.generate(**_empty_inputs())
 
 
-# Shapes taken from `qana_quiz`, the only workflow in the sample project that drops
-# anything. `redact` declares a field of its own named `body` while dropping the
-# upstream's `body`: the runtime pops `upstream.body` and leaves the action's own
-# field alone, so a report that discards the namespace cannot tell the two apart.
-# `clear_ns` drops a whole namespace, which the runtime supports. `bare_ref` writes a
-# ref with no dot, which the runtime refuses to act on.
+# Shapes taken from `qana_quiz`, the only sample-project workflow that drops anything.
+# `redact` declares its own `body` while dropping the upstream's, so a namespace-blind
+# report cannot tell the two apart; `clear_ns` drops a namespace; `bare_ref` writes a
+# dotless ref, which the runtime refuses to act on.
 DROP_FLOW = {
     "name": "drop_flow",
     "description": "d",
