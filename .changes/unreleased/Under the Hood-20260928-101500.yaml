@@ -1,0 +1,16 @@
+kind: Under the Hood
+body: >-
+  Clearing the version correlation registry now rebinds a fresh `OrderedDict` instead of
+  emptying whatever object the attribute holds. Both correlation-id getters call
+  `move_to_end` when they hit an existing key, and the size cap calls
+  `popitem(last=False)`, so the ordering is a contract the read path depends on and not an
+  implementation detail. Emptying in place cannot restore it once something has rebound the
+  attribute to a plain dict, and the clear that exists to isolate one run from the next was
+  the call that could not repair it.
+
+  No shipped code path rebinds that attribute, so no run was affected; the crash was
+  reachable only from inside the test suite, where one unit test seeded a stale entry by
+  assignment. It now seeds through the getter. The reported symptom was two order-dependent
+  suite failures with unrelated tracebacks, an `AttributeError` on the cache hit and a
+  `TypeError` on eviction, both of which disappear with the rebind.
+time: 2026-09-28T10:15:00Z

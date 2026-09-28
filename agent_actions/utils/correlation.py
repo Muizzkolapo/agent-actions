@@ -72,9 +72,14 @@ class VersionIdGenerator:
 
     @classmethod
     def clear_version_correlation_registry(cls):
-        """Clear the version correlation ID registry."""
+        """Clear the version correlation ID registry.
+
+        Rebinds rather than mutating, so the ordering the read path needs is restored
+        and not merely emptied — ``move_to_end`` and ``popitem(last=False)`` both fail
+        on a plain dict, and clearing one in place leaves it in place.
+        """
         with cls._version_correlation_lock:
-            cls._version_correlation_registry.clear()
+            cls._version_correlation_registry = OrderedDict()
 
     @classmethod
     def clear(cls) -> None:
