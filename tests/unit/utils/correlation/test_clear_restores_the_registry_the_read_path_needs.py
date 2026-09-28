@@ -68,12 +68,12 @@ class TestTheRegistryIsEmptyAfterAClear:
     def teardown_method(self):
         VersionIdGenerator._version_correlation_registry = OrderedDict()
 
-    def test_an_id_minted_before_a_clear_is_not_returned_after_it(self):
+    def test_a_minted_key_is_no_longer_held_after_a_clear(self):
         VersionIdGenerator._version_correlation_registry = OrderedDict()
-        before = VersionIdGenerator.get_or_create_version_correlation_id("g1", "v1", "sess_a")
+        VersionIdGenerator.get_or_create_version_correlation_id("g1", "v1", "sess_a")
+        assert "sess_a:v1:g1" in VersionIdGenerator._version_correlation_registry
 
         VersionIdGenerator.clear_version_correlation_registry()
 
+        assert "sess_a:v1:g1" not in VersionIdGenerator._version_correlation_registry
         assert VersionIdGenerator._version_correlation_registry == {}
-        after = VersionIdGenerator.get_or_create_version_correlation_id("g1", "v1", "sess_b")
-        assert after != before

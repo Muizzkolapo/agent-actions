@@ -71,3 +71,15 @@ class TestPrepareActionConfigs:
         wf._prepare_action_configs()
 
         assert VersionIdGenerator._version_correlation_registry == {}
+
+    def test_the_registry_it_leaves_behind_still_serves_the_getters(self):
+        """Empty is not enough: the clear must leave one the cache-hit path can touch."""
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        wf = _build_workflow_for_prepare({"action_a": {"kind": "llm"}})
+        wf._prepare_action_configs()
+
+        first = VersionIdGenerator.get_or_create_version_correlation_id("g1", "v1", "sess")
+        second = VersionIdGenerator.get_or_create_version_correlation_id("g1", "v1", "sess")
+
+        assert second == first
