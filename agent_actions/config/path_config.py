@@ -63,19 +63,17 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
 # reader told only to delete the key loses whatever they meant to set.
 _UNREAD_PROJECT_KEYS: dict[str, str] = {
     "output_storage": (
-        "the store location is not configurable — every workflow writes "
-        "agent_io/store/<workflow>.db under the project root"
+        "the store location is not configurable; each workflow writes "
+        "agent_io/store/<workflow>.db inside its own workflow directory"
     ),
 }
 
 
-def warn_unread_project_keys(config: Any) -> None:
+def warn_unread_project_keys(config: dict[str, Any]) -> None:
     """Report each top-level project-config key that no reader takes."""
-    if not isinstance(config, dict):
-        return
     for key in sorted(str(key) for key in config if str(key) in _UNREAD_PROJECT_KEYS):
         logger.warning(
-            "agent_actions.yml: '%s' is not read and configures nothing; remove it — %s",
+            "project config: '%s' is not read and configures nothing; remove it — %s",
             key,
             _UNREAD_PROJECT_KEYS[key],
         )
