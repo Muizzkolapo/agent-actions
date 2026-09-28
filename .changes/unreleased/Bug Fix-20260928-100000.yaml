@@ -3,8 +3,8 @@ body: >-
   `output_storage` is gone from the configuration reference and from the six shipped
   examples that wrote it, and a project file still carrying it now says so at load.
   It was documented as a top-level key of `agent_actions.yml` — `backend` and a
-  `db_path` described as the database file location — and written in every example, but
-  no reader ever took it: the top-level keys read are `tool_path`, `schema_path`,
+  `db_path` described as the database file location — but no reader ever took it: the
+  top-level keys read are `default_agent_config`, `tool_path`, `schema_path`,
   `seed_data_path`, `required_by_default` and `project_name`. So a project setting
   `db_path` got no error and no effect, and the store went where it would have gone
   anyway. The documented value pointed somewhere the framework never writes:

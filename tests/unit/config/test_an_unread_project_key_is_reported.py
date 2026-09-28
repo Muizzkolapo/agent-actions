@@ -144,6 +144,8 @@ class TestTheAdvertisedPathTracksTheStorageLayer:
 
         template = str(database.relative_to(workflow_dir)).replace("wf.db", "<workflow>.db")
         assert template in caplog.text
+        # Positive, because a blocklist of the wrong phrasing passes any paraphrase of it.
+        assert "workflow directory" in caplog.text
         assert "project root" not in caplog.text
 
 
