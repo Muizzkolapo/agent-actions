@@ -61,8 +61,9 @@ class TestPrepareActionConfigs:
         """_prepare_action_configs must clear stale correlation IDs from prior runs."""
         from agent_actions.utils.correlation import VersionIdGenerator
 
-        # Seed the registry with a stale entry
-        VersionIdGenerator._version_correlation_registry = {"stale": "value"}
+        # Seed through the getter: replacing the attribute installs a type the read
+        # path cannot use, and the clear under test is what everything after it gets.
+        VersionIdGenerator.get_or_create_version_correlation_id("stale", "v1", "prior_session")
 
         configs = {"action_a": {"kind": "llm"}}
         wf = _build_workflow_for_prepare(configs)
