@@ -62,6 +62,7 @@ Key Functions
 | `path_config.py` | `resolve_project_root` | Function | Resolve project root, defaulting to `Path.cwd()`. |
 | `path_config.py` | `get_project_name` | Function | Return `project_name` from project config, or `None` with warning if absent. |
 | `path_config.py` | `get_tool_dirs` | Function | Resolve tool directory names from project config, defaulting to `["tools"]`. |
+| `path_config.py` | `warn_unread_project_keys` | Function | Report each top-level `agent_actions.yml` key that no reader takes. |
 
 ## Cross-Module Touchpoints
 
@@ -90,6 +91,7 @@ Key Functions
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
+| `warn_unread_project_keys` | `agent_actions.yml` | Validates | `output_storage` |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |
 | `ProjectPathsFactory.create_project_paths` | `prompt_store/{workflow}.md` | Reads | — |
 | `ConfigManager.load_configs` | `agent_config/{workflow}.yml` | Reads | `tool_path` |

@@ -58,6 +58,29 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     return {}
 
 
+# Reported rather than refused: this file has no model, so a raise would be its only
+# strict surface. Each value names where the behaviour comes from instead, since a
+# reader told only to delete the key loses whatever they meant to set.
+_UNREAD_PROJECT_KEYS: dict[str, str] = {
+    "output_storage": (
+        "the store location is not configurable — every workflow writes "
+        "agent_io/store/<workflow>.db under the project root"
+    ),
+}
+
+
+def warn_unread_project_keys(config: Any) -> None:
+    """Report each top-level project-config key that no reader takes."""
+    if not isinstance(config, dict):
+        return
+    for key in sorted(str(key) for key in config if str(key) in _UNREAD_PROJECT_KEYS):
+        logger.warning(
+            "agent_actions.yml: '%s' is not read and configures nothing; remove it — %s",
+            key,
+            _UNREAD_PROJECT_KEYS[key],
+        )
+
+
 _PROJECT_MARKERS = ("agent_actions.yml", "agent_actions.yaml", ".agent_actions.yml")
 _FALLBACK_DIRS = ("agent_actions", "agent_config")
 

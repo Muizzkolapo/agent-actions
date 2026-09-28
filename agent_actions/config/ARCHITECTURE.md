@@ -343,6 +343,12 @@ something different for a file with no model and several independent readers, an
 because the merge at `manager.py` mixes it with a block that is already strict. It is
 the last remaining instance of this class inside `config/`.
 
+A key already *known* to have no reader does not wait for that decision.
+`warn_unread_project_keys` names such a key at load, once per workflow, from the same
+place the project defaults are checked. It reports a fixed list of keys rather than
+anything undeclared, so a typo is still dropped in silence — which of the two a stray
+key is cannot be answered without the decision above.
+
 ### 5. AgentConfig uses `extra="allow"`
 
 The post-expansion `AgentConfig` (in `output/response/config_schema.py`, not in this module) uses `extra="allow"` because `ActionExpander` injects many runtime-only fields (`agent_type`, `code_path`, `schema_name`, `tools_path`, `is_versioned_agent`, etc.) that aren't in the original YAML. These pass through without Pydantic rejecting them.
