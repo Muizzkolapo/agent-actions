@@ -8,7 +8,7 @@ body: >-
   attribute to a plain dict, and the clear that exists to isolate one run from the next was
   the call that could not repair it.
 
-  No shipped code path rebinds that attribute, so no run was affected; the crash was
+  Nothing outside this clear rebinds that attribute, so no run was affected; the crash was
   reachable only from inside the test suite, where one unit test seeded a stale entry by
   assignment. It now seeds through the getter. The reported symptom was two order-dependent
   suite failures with unrelated tracebacks, an `AttributeError` on the cache hit and a
