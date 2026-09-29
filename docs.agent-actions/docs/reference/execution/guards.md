@@ -121,12 +121,17 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ## Context Access
 
-Guards can access:
+A guard gates the action before it receives anything, so it reads the record **as stored** —
+every namespace the record carries, addressed as `action_name.field`.
 
 | Source | Syntax |
 |--------|--------|
 | Upstream action field | `extract_facts.count` |
-| Context scope observed | `group_by_similarity.num_similar_facts` |
+| A dependency's field, whether or not the action observes it | `group_by_similarity.num_similar_facts` |
+
+`context_scope` describes what the action is handed once the guard has let the record through.
+It does not decide the verdict: a field the action `drop`s still answers a clause, and the
+guard field does not have to appear in `observe`.
 
 ```yaml
 - name: validate

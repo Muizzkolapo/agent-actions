@@ -154,4 +154,4 @@ Lineage follows `source_index`; the framework assigns `source_guid` itself, and 
 
 - [Tool Actions](../tools#granularity) - Tool granularity configuration
 - [Run Modes](./run-modes) - Batch vs online execution
-- [Guards](./guards) - Conditional execution (record only)
+- [Guards](./guards) - Conditional execution (both granularities)

@@ -280,11 +280,11 @@ This happens automatically. Each action lists `write_description` (or a derivati
   kind: tool
   impl: select_for_users
   guard:
-    condition: 'passes_filter'
+    condition: 'filter_quality.passes_filter == true'
     on_false: filter
 ```
 
-- `condition: 'passes_filter'` evaluates the field from `filter_quality`'s output.
+- `condition: 'filter_quality.passes_filter == true'` evaluates the field from `filter_quality`'s output.
 - `on_false: filter` silently skips the record (not an error).
 
 Only records that pass quality thresholds (score >= 3.0, >= 3 enriched fields, marked publication-ready) reach the final output. Half-enriched or low-quality records never appear in the consumer views.

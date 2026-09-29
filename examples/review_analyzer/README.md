@@ -116,7 +116,7 @@ Drafts a professional merchant response, but only for reviews that scored high e
 
 ```yaml
 guard:
-  condition: 'consensus_score >= 6'
+  condition: 'aggregate_scores.consensus_score >= 6'
   on_false: "filter"              # LLM never fires for junk reviews
 ```
 
@@ -146,7 +146,7 @@ Classifies actionable feedback into product improvement categories defined in th
 ```yaml
 dependencies: [aggregate_scores]  # Same as generate_response
 guard:
-  condition: 'consensus_score >= 6'
+  condition: 'aggregate_scores.consensus_score >= 6'
   on_false: "filter"
 context_scope:
   observe:
@@ -254,7 +254,7 @@ Guards prevent expensive actions from running on records that don't meet a thres
 ```yaml
 - name: generate_response
   guard:
-    condition: 'consensus_score >= 6'
+    condition: 'aggregate_scores.consensus_score >= 6'
     on_false: "filter"
 ```
 
