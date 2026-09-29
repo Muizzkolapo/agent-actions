@@ -253,14 +253,16 @@ class WorkflowParser:
         expanded_actions: dict[str, Any] = {}
         for name, action in workflow["actions"].items():
             versions = action.get("versions")
-            if versions and isinstance(versions.get("range"), list):
-                version_range = versions["range"]
-                expanded_names = [f"{name}_{v}" for v in version_range]
+            expanded_names = version_base_map.get(name) if versions else None
+            if expanded_names:
+                # Same rule the runtime expands by: a two-element range is a start and an
+                # end, inclusive. Reading `range` literally listed [2, 5] as two actions
+                # where the run has four.
                 version_map[name] = expanded_names
-                for v in version_range:
-                    versioned = {**action, "name": f"{name}_{v}"}
+                for variant in expanded_names:
+                    versioned = {**action, "name": variant}
                     versioned.pop("versions", None)
-                    expanded_actions[f"{name}_{v}"] = versioned
+                    expanded_actions[variant] = versioned
             else:
                 expanded_actions[name] = action
 
