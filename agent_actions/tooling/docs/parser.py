@@ -209,7 +209,15 @@ class WorkflowParser:
                 defaults.get("context_scope"), action_data.get("context_scope")
             )
             if merged_scope:
-                action["context_scope"] = normalize_context_scope(merged_scope, version_base_map)
+                try:
+                    action["context_scope"] = normalize_context_scope(
+                        merged_scope, version_base_map
+                    )
+                except ConfigurationError:
+                    # A directive the normaliser does not know -- a retired spelling, say --
+                    # is the loader's error to raise on a run. Documentation reports what it
+                    # can rather than refusing to build, so the raw block stands.
+                    action["context_scope"] = merged_scope
 
             # Extract additional action configuration fields
             action["granularity"] = action_data.get("granularity")  # RECORD or FILE

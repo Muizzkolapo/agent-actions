@@ -160,3 +160,48 @@ class TestAVersionBaseReferenceIsExpanded:
 
         drops = (_action(parsed, "upstream").get("context_scope") or {}).get("drop") or []
         assert drops == ["upstream.secret"], drops
+
+
+class TestADirectiveTheNormaliserRejectsDoesNotFailTheBuild:
+    """A retired directive is the loader's error to raise on a run, not the catalog's.
+
+    `artefact/rendered_workflows/` is read when a project has run before, and a rendered
+    file can carry a spelling the normaliser no longer accepts (`seed_path` in the sample
+    project). Routing the merged block through `normalize_context_scope` without this guard
+    turned a working `agac docs` into an uncaught ConfigurationError.
+    """
+
+    def test_a_workflow_with_a_retired_directive_still_parses(self, tmp_path):
+        workflow = {
+            "name": "retired_directive",
+            "description": "defaults carry a directive the normaliser refuses",
+            "defaults": {
+                "model_vendor": "anthropic",
+                "model_name": "claude-3",
+                "context_scope": {"seed_path": {"rubric": "$file:rubric.json"}},
+            },
+            "actions": [{"name": "solo", "intent": "x", "prompt": "p {{ source.t }}"}],
+        }
+        parsed = _parse(tmp_path, workflow)
+
+        scope = _action(parsed, "solo").get("context_scope") or {}
+        assert scope == {"seed_path": {"rubric": "$file:rubric.json"}}, scope
+
+    def test_a_valid_directive_beside_a_retired_one_survives(self, tmp_path):
+        workflow = {
+            "name": "mixed",
+            "description": "one directive the normaliser knows, one it does not",
+            "defaults": {
+                "model_vendor": "anthropic",
+                "model_name": "claude-3",
+                "context_scope": {
+                    "seed_path": {"rubric": "$file:rubric.json"},
+                    "drop": ["upstream.secret"],
+                },
+            },
+            "actions": [{"name": "solo", "intent": "x", "prompt": "p {{ source.t }}"}],
+        }
+        parsed = _parse(tmp_path, workflow)
+
+        scope = _action(parsed, "solo").get("context_scope") or {}
+        assert scope.get("drop") == ["upstream.secret"], scope
