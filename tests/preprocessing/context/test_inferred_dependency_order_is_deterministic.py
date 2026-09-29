@@ -49,6 +49,17 @@ _PROBE = textwrap.dedent("""
 _SEEDS = ("0", "1", "2", "3", "4")
 
 
+def _run_probe(source: str, seed: str) -> dict[str, list[str]]:
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        env={"PYTHONHASHSEED": seed, "PATH": "/usr/bin:/bin"},
+        check=True,
+    )
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
 def _infer_under_seed(seed: str) -> dict[str, list[str]]:
     result = subprocess.run(
         [sys.executable, "-c", _PROBE],
@@ -82,14 +93,84 @@ class TestInferredDependencyOrderIsStableAcrossProcesses:
             )
 
     def test_the_auto_inferred_tail_is_sorted(self):
-        """Declaration order is unrecoverable here, so sorted is the chosen order.
+        """Sorted is the chosen order for the auto-inferred tail.
 
-        `extract_action_names_from_context_scope` returns a `set`, so by the time
-        `infer_dependencies` sees these names the order they were written in is already
-        gone. Recovering it means changing that helper's return type, which has five
-        production callers and tests asserting `== set()`. Sorting the tail is what makes
-        the output reproducible without touching any of them.
+        Declaration order is recoverable for the refs that came from `context_scope` --
+        `all_field_refs` holds them -- but not for those inferred from the prompt template,
+        which arrive from a set. One rule for the whole tail beats a hybrid, and nothing is
+        lost: this order was hash-random before.
         """
         context = _infer_under_seed("0")["context"]
         assert context == sorted(context), context
         assert len(context) == 6, f"expected the six non-dependency sources, got {context}"
+
+
+class TestTheOrderBearingHalvesAreNotSorted:
+    """The tail is sorted; the two halves that carry meaning are not.
+
+    A single-dependency probe never reaches either of them, and an implementation that
+    sorted them too passed the tests above while changing 68 of 518 catalog actions.
+    """
+
+    def test_a_fan_in_tail_keeps_its_declared_order(self):
+        """Non-primary dependencies of a fan-in are context sources in YAML order."""
+        probe = textwrap.dedent("""
+            import json
+            from agent_actions.prompt.context.scope_inference import infer_dependencies
+            config = {
+                "dependencies": ["zebra", "alpha", "middle"],
+                "primary_dependency": "zebra",
+                "context_scope": {"observe": ["zebra.a", "alpha.b", "middle.c"]},
+            }
+            names = ["zebra", "alpha", "middle"]
+            i, c = infer_dependencies(config, names, "probe", validate=False)
+            print(json.dumps({"inputs": i, "context": c}))
+        """)
+        result = _run_probe(probe, "0")
+
+        assert result["inputs"] == ["zebra"], result
+        # Declared zebra, alpha, middle -- so the fan-in tail is alpha, middle, NOT sorted
+        # into alpha, middle by luck. Reversing the config would catch a sort; see below.
+        assert result["context"] == ["alpha", "middle"], result
+
+    def test_a_fan_in_tail_is_not_alphabetised(self):
+        """The discriminating case: declared out of alphabetical order."""
+        probe = textwrap.dedent("""
+            import json
+            from agent_actions.prompt.context.scope_inference import infer_dependencies
+            config = {
+                "dependencies": ["alpha", "zebra", "middle"],
+                "primary_dependency": "alpha",
+                "context_scope": {"observe": ["alpha.a", "zebra.b", "middle.c"]},
+            }
+            names = ["alpha", "zebra", "middle"]
+            i, c = infer_dependencies(config, names, "probe", validate=False)
+            print(json.dumps({"inputs": i, "context": c}))
+        """)
+        result = _run_probe(probe, "0")
+
+        assert result["inputs"] == ["alpha"], result
+        assert result["context"] == ["zebra", "middle"], (
+            "the fan-in tail was alphabetised; it must keep declaration order"
+        )
+
+    def test_version_variants_are_expanded_after_the_sort_not_before(self):
+        """Sorting after expansion gives x_1, x_10, x_2 -- lexical, not numeric."""
+        variants = [f"voter_{n}" for n in range(1, 13)]
+        probe = textwrap.dedent(f"""
+            import json
+            from agent_actions.prompt.context.scope_inference import infer_dependencies
+            config = {{
+                "dependencies": ["seed_action"],
+                "context_scope": {{"observe": ["voter.verdict", "seed_action.x"]}},
+            }}
+            names = ["seed_action"] + {variants!r}
+            i, c = infer_dependencies(config, names, "probe", validate=False)
+            print(json.dumps({{"inputs": i, "context": c}}))
+        """)
+        result = _run_probe(probe, "0")
+
+        assert result["context"] == variants, (
+            "variants must come out in numeric order, which only holds if the sort runs "
+            "on the base name before expansion"
+        )

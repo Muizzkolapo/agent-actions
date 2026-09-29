@@ -294,7 +294,9 @@ def infer_dependencies(
     )
     context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
     # sorted(): this is a set, so iterating it leaks hash randomisation into catalog.json.
-    # Declaration order is already gone -- the names arrive here from a set.
+    # Declaration order is available for the refs that came from context_scope, but not for
+    # the ones inferred from the prompt template, so one rule for the whole tail beats a
+    # hybrid. Nothing is lost either way: the order here was hash-random before.
     context_sources.extend(sorted(potential_context_sources))
 
     # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
