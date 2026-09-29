@@ -1,0 +1,19 @@
+kind: Under the Hood
+body: >-
+  `agent_actions/processing/_MANIFEST.md` now describes the package it navigates.
+  `CLAUDE.md` makes the manifests the navigation contract — "only read source files
+  after the manifest has pointed you to the right location" — so an omission sends a
+  reader somewhere else, and a wrong entry sends them to the wrong package entirely.
+  Three modules had no `## Modules` row: `unified.py`, which holds the
+  `UnifiedProcessor` skeleton every processing path passes through and is the only
+  caller of `prefilter_by_guard`; `disposition_gate.py`, which decides what a repair
+  re-runs and what is carried forward; and `cascade_filter.py`, which quarantines
+  cascade-blocked records before any strategy sees them. `UnifiedProcessor.process()`
+  was already named in the `## Project Surface` table while its module was absent from
+  the one above it. The `evaluation/` sub-package was missing from `## Sub-Modules`.
+  `## Dependencies` claimed an outbound edge to `output` for a `ResponseSchemaCompiler`
+  that appears nowhere in the package — there is no import of `agent_actions.output`
+  from `processing/` at all — and omitted six edges that do exist, including `record`,
+  which both newly-listed partitioning modules read `RecordState` from. Documentation
+  only; no code changed.
+time: 2026-09-29T09:00:00Z
