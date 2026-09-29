@@ -25,11 +25,8 @@ def _context(mode: RunMode, agent_config: dict | None = None) -> MagicMock:
     ctx.dependency_configs = None
     ctx.workflow_metadata = None
     ctx.version_context = None
-    ctx.file_path = None
-    ctx.output_directory = None
     ctx.storage_backend = MagicMock()
     ctx.current_item = None
-    ctx.record_index = 0
     return ctx
 
 

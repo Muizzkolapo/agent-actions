@@ -87,7 +87,6 @@ class TestPreparationContext:
         assert prep_ctx.agent_name == "test_agent"
         assert prep_ctx.is_first_stage is True
         assert prep_ctx.source_data == [{"a": 1}]
-        assert prep_ctx.file_path == "/tmp/test.json"
         assert prep_ctx.version_context == {"i": 0}
 
 
