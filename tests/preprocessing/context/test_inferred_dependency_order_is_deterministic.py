@@ -1,21 +1,10 @@
 """An action's inferred dependency list must not depend on the hash seed.
 
-`infer_dependencies` returns `(input_sources, context_sources)`. The first comes from the
-`dependencies:` key and is a list, so it keeps declaration order. The second is built by
-iterating `potential_context_sources`, which is a **set** -- `referenced_actions` comes from
-`extract_action_names_from_context_scope`, whose return type is `set`. Python randomises
-`str` hashing per process, so that iteration order varies from run to run.
-
-The order reaches `catalog.json`: `tooling/docs/parser.py` builds each action's
-`dependencies` as `input_sources + context_sources`. Generating the catalog twice from
-identical code produced a different order for 42 of 515 actions, and `dependencies` was the
-only key that differed. The edge *set* is stable, so the rendered DAG is not wrong -- but any
-diff of two catalogs is noisy, anything content-addressing one sees churn, and a test
-asserting on that order would be flaky at a rate set by the hash seed.
-
-These tests run the inference in subprocesses with fixed, differing `PYTHONHASHSEED`s. That
-is what makes the RED deterministic rather than flaky: within one process the order is
-whatever that process's seed produced, and only across seeds does the disagreement show.
+`context_sources` is built by iterating a set, so its order varies per process, and it
+reaches `catalog.json` through `parser.py`'s `input_sources + context_sources`. These tests
+run the inference in subprocesses under fixed, differing `PYTHONHASHSEED`s -- within one
+process the order is simply whatever that seed produced, so only across seeds does the
+disagreement show, and only that makes the failure deterministic rather than flaky.
 """
 
 from __future__ import annotations
