@@ -1,21 +1,17 @@
 """Every unreleased changelog entry must survive the release that reads it.
 
-Nothing else looks at `.changes/`. CI checks only that a `.yaml` file exists in
-`unreleased/` (`.github/workflows/ci.yml`), ruff and mypy do not read YAML, and no other
-test opens the directory. So a malformed entry passes every gate and surfaces at
-`changie batch` during a release -- by which time the PR that introduced it merged long
-ago, and whoever is cutting the release has to work out which entry is broken and what it
-was meant to say. That has now happened twice: an entry whose quoted scalar never closed,
-and one missing `time:`, which `changie batch` reads.
+Nothing else looks at `.changes/`: CI checks only that a `.yaml` file exists in
+`unreleased/`, ruff and mypy do not read YAML, and no other test opens the directory. So a
+malformed entry surfaces at `changie batch`, with the PR that introduced it long merged.
 
-The checks mirror what a release consumes: the file parses as a mapping, `kind` is one of
-the labels `.changie.yaml` declares, and `body` and `time` are present and non-empty.
-`_problems` is the single implementation -- the real entries and the negative controls
-below both go through it, so a check that stops working stops working for both.
+`_problems` reports two separate things, and says which is which: shapes `changie batch`
+genuinely rejects (exit 1), and two repo conventions it tolerates -- a non-empty `body`, and
+a `time` field, which `changie new` always writes and all entries in the tree carry.
 """
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -39,8 +35,10 @@ def _problems(raw: str, kinds: set[str]) -> list[str]:
     """Every reason a release would reject this entry, or an empty list."""
     try:
         entry = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        return [f"does not parse as YAML: {exc.__class__.__name__}"]
+    except (yaml.YAMLError, ValueError) as exc:
+        # ValueError, not YAMLError, is what PyYAML raises for a plain timestamp
+        # scalar changie rejects (`06:70:00` -> "minute must be in 0..59").
+        return [f"does not parse as YAML: {exc.__class__.__name__}: {exc}"]
 
     if not isinstance(entry, dict):
         return [f"is not a mapping, but {type(entry).__name__}"]
@@ -51,10 +49,30 @@ def _problems(raw: str, kinds: set[str]) -> list[str]:
         found.append(f"kind {kind!r} is not one of the labels .changie.yaml declares")
     body = entry.get("body")
     if not isinstance(body, str) or not body.strip():
-        found.append("body is missing or empty")
-    if not entry.get("time"):
-        found.append("time is missing or empty, and changie batch reads it")
+        found.append("body is missing or empty (changie renders it, but no entry should)")
+    found.extend(_time_problems(entry.get("time")))
     return found
+
+
+def _time_problems(value: object) -> list[str]:
+    """changie parses `time` as a timestamp and exits 1 when it cannot.
+
+    Presence is not enough. PyYAML's timestamp resolver fires only on a *plain* scalar, so
+    a quoted `'2026-04-21T06:70:00Z'` stays a `str` and reaches here unvalidated -- the exact
+    shape changie rejects with "minute out of range".
+    """
+    if value is None:
+        # changie accepts an entry with no `time`. Convention, not a release-breaker.
+        return ["time is absent; changie new always writes one"]
+    if isinstance(value, (datetime, date)):
+        return []
+    if not isinstance(value, str) or not value.strip():
+        return ["time is empty, which changie rejects"]
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return [f"time {value!r} is not a timestamp changie can parse"]
+    return []
 
 
 class TestTheGateIsLookingAtSomething:
@@ -63,8 +81,13 @@ class TestTheGateIsLookingAtSomething:
     def test_the_changie_config_declares_kinds(self):
         kinds = _declared_kinds()
         assert kinds, f"{_CHANGIE_CONFIG} declares no kinds"
+        # Non-empty is not enough: an over-broad reader would pass every entry.
+        assert "Bug Fix" in kinds, sorted(kinds)
 
     def test_the_unreleased_directory_holds_entries(self):
+        """Empty is a failure, not a pass: the test below is parametrized over this glob,
+        so an empty list would make every case vanish and the suite go green having read
+        nothing. `changie batch` empties the directory, so a local batch trips this."""
         assert _UNRELEASED.is_dir(), f"{_UNRELEASED} is not a directory"
         assert _entry_paths(), f"{_UNRELEASED} holds no .yaml entries -- nothing was checked"
 
@@ -84,9 +107,35 @@ class TestTheChecksCanActuallyFail:
         raw = 'kind: Bug Fix\nbody: "never closed\ntime: 2026-01-01T00:00:00Z\n'
         assert any("does not parse as YAML" in p for p in _problems(raw, self.KINDS))
 
-    def test_a_missing_time_is_reported(self):
+    def test_a_plain_timestamp_changie_rejects_is_reported(self):
+        """`changie batch` exits 1 on this. PyYAML raises a bare ValueError, not a
+        YAMLError, so a narrower except lets it through."""
+        raw = "kind: Bug Fix\nbody: a real body\ntime: 2026-04-21T06:70:00Z\n"
+        found = _problems(raw, self.KINDS)
+        assert any("does not parse as YAML" in p for p in found), found
+        assert any("minute" in p for p in found), found
+
+    def test_a_quoted_timestamp_changie_rejects_is_reported(self):
+        """The same bad value in quotes. PyYAML's resolver fires only on a plain
+        scalar, so this stays a `str` and a presence check passes it straight through
+        -- while changie still exits 1."""
+        raw = "kind: Bug Fix\nbody: a real body\ntime: '2026-04-21T06:70:00Z'\n"
+        found = _problems(raw, self.KINDS)
+        assert any("not a timestamp changie can parse" in p for p in found), found
+
+    def test_a_time_that_is_not_a_date_at_all_is_reported(self):
+        raw = "kind: Bug Fix\nbody: a real body\ntime: TBD\n"
+        assert any("not a timestamp" in p for p in _problems(raw, self.KINDS)), raw
+
+    def test_a_date_only_time_is_accepted(self):
+        """changie accepts it, so this check must not over-reject."""
+        raw = "kind: Bug Fix\nbody: a real body\ntime: 2026-01-01\n"
+        assert _problems(raw, self.KINDS) == []
+
+    def test_an_absent_time_is_reported_as_convention(self):
+        """changie accepts this one -- the check is repo convention, and says so."""
         raw = "kind: Bug Fix\nbody: a real body\n"
-        assert any("time is missing" in p for p in _problems(raw, self.KINDS))
+        assert any("time is absent" in p for p in _problems(raw, self.KINDS))
 
     def test_an_undeclared_kind_is_reported(self):
         raw = "kind: Documentation\nbody: a real body\ntime: 2026-01-01T00:00:00Z\n"
