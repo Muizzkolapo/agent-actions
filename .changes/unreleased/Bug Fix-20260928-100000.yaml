@@ -1,0 +1,25 @@
+kind: Bug Fix
+body: >-
+  `output_storage` is gone from the configuration reference and from the six shipped
+  examples that wrote it, and a project file still carrying it now says so at load.
+  It was documented as a top-level key of `agent_actions.yml` — `backend` and a
+  `db_path` described as the database file location — but no reader ever took it: the
+  top-level keys read are `default_agent_config`, `tool_path`, `schema_path`,
+  `seed_data_path`, `required_by_default` and `project_name`. So a project setting
+  `db_path` got no error and no effect, and the store went where it would have gone
+  anyway. The documented value pointed somewhere the framework never writes:
+  `./agent_io/outputs.db`, against the `agent_io/store/<workflow>.db` that a run
+  actually creates and that the data reference already documents — so the one key
+  claiming to control the location was also the one place contradicting the location.
+  Neither half of it was wired to anything a project could set: the store path is
+  derived inside the storage factory, which takes no path and is called from eight
+  places that each rebuild the same convention, and `sqlite` is the only backend
+  registered. Removing the key is therefore what closes it, rather than honouring a
+  location the readers cannot agree on. Because a project that copied the key from the
+  docs keeps it after an upgrade, the key is also reported by name at load — once per
+  workflow, naming the path a run writes instead — rather than going quiet for
+  everyone who already believed the reference. The report covers a fixed list of keys
+  known to have no reader, not undeclared keys in general: the project file still has
+  no model, and giving it one stays the separate decision it was, so a misspelled key
+  is still dropped in silence.
+time: 2026-09-28T10:00:00Z

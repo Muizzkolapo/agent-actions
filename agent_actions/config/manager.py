@@ -14,6 +14,7 @@ from agent_actions.config.path_config import (
     find_project_root_dir,
     load_project_config,
     resolve_project_root,
+    warn_unread_project_keys,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
@@ -267,6 +268,7 @@ class ConfigManager:
                 path_manager = PathManager(project_root=self.project_root)
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
+                warn_unread_project_keys(project_config)
                 project_defaults = project_config.get("default_agent_config", {})
                 _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
                 project_defaults = _flatten_project_chunk_block(project_defaults)
