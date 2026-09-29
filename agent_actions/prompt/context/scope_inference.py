@@ -293,8 +293,11 @@ def infer_dependencies(
         referenced_actions - set(input_sources) - set(fan_in_context_sources)
     )
     context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
-    for action in potential_context_sources:
-        context_sources.append(action)
+    # sorted(): potential_context_sources is a set, and iterating one leaks Python's
+    # per-process string hash randomisation into every consumer -- including the
+    # dependency lists in catalog.json. Declaration order cannot be restored here:
+    # extract_action_names_from_context_scope returns a set, so it is already gone.
+    context_sources.extend(sorted(potential_context_sources))
 
     # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
     # This handles version_consumption where context_scope references the base name
