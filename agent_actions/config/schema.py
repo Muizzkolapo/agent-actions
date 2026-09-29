@@ -240,6 +240,22 @@ class VersionConfig(BaseModel):
         return value
 
 
+def version_variant_names(action_name: str, version_config: Any) -> list[str]:
+    """The agent names a versions block expands to, in order.
+
+    Shared so the expander and any reader of raw YAML agree on the rule. A two-element range
+    is a start and an end, inclusive; any other length is a literal list.
+    """
+    validated = validate_version_block(version_config, action_name)
+    values: list[int | str]
+    if len(validated.range) == 2:
+        start, end = int(validated.range[0]), int(validated.range[1])
+        values = list(range(start, end + 1))
+    else:
+        values = list(validated.range)
+    return [f"{action_name}_{value}" for value in values]
+
+
 def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
     """Validate a `versions:` block and return it, for the expansion to read.
 

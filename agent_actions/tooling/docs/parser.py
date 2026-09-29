@@ -6,7 +6,11 @@ from typing import Any
 import click
 import yaml
 
+from agent_actions.config.schema import version_variant_names
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
+from agent_actions.errors import ConfigurationError
+from agent_actions.input.context.normalizer import normalize_context_scope
+from agent_actions.output.response.expander_merge import deep_merge_context_scope
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 logger = logging.getLogger(__name__)
@@ -143,6 +147,20 @@ class WorkflowParser:
         actions = data.get("actions", [])
         action_names = [a.get("name") for a in actions if a.get("name")]
 
+        # Built from the raw `versions:` blocks: the expanded configs this map is normally
+        # derived from do not exist yet at this point.
+        version_base_map: dict[str, list[str]] = {}
+        for action_data in actions:
+            versions = action_data.get("versions")
+            name = action_data.get("name")
+            if not versions or not name:
+                continue
+            try:
+                version_base_map[name] = version_variant_names(name, versions)
+            except ConfigurationError:
+                # A malformed block is the loader's error to report, not the catalog's.
+                continue
+
         for action_data in actions:
             action_name = action_data.get("name", "unnamed")
 
@@ -184,9 +202,14 @@ class WorkflowParser:
             if "schema" in action_data:
                 action["schema"] = action_data["schema"]
 
-            # Extract context_scope (for input fields)
-            if "context_scope" in action_data:
-                action["context_scope"] = action_data["context_scope"]
+            # The runtime is handed defaults merged in and version bases expanded, so a
+            # panel built from the raw block reports no drop for an action the runtime
+            # drops a field on, and names a namespace no action answers to.
+            merged_scope = deep_merge_context_scope(
+                defaults.get("context_scope"), action_data.get("context_scope")
+            )
+            if merged_scope:
+                action["context_scope"] = normalize_context_scope(merged_scope, version_base_map)
 
             # Extract additional action configuration fields
             action["granularity"] = action_data.get("granularity")  # RECORD or FILE
