@@ -27,3 +27,4 @@ body: >-
   To check a workflow before upgrading: for each File-granularity action carrying a `guard`,
   confirm every field its clause names is written `action.field`, and be aware that a clause
   reading a field the action drops will now admit records it previously discarded.
+time: 2026-09-27T16:30:00Z
