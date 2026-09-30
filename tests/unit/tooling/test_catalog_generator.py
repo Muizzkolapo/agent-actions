@@ -882,16 +882,15 @@ class TestTheCatalogNamesWhatAnActionDrops:
 
         assert bare.get("drops") == ["redact.body"], bare.get("drops")
 
-    def test_a_nested_ref_is_not_reported_because_the_pop_is_flat(self, tmp_path):
-        """`redact.body.text` parses, so parsing alone is not the test of a real drop.
+    def test_a_nested_ref_is_reported_because_the_runtime_traverses(self, tmp_path):
+        """Was excluded while the pop was flat; #1116 made the runtime traverse the path.
 
-        The runtime pops `prompt_context[ns][field]` by exact key, with no traversal,
-        so a dotted field part matches nothing and the field survives into the LLM
-        context. Reporting it would claim a drop that never happens.
+        The panel and the runtime have to agree: reporting it while it did nothing was the
+        old mismatch, and not reporting it now would be the mirror of the same bug.
         """
         nested = self._actions(tmp_path)["drop_flow.nested_ref"]
 
-        assert "drops" not in nested, nested.get("drops")
+        assert nested.get("drops") == ["redact.body.text"], nested.get("drops")
         assert self._actions(tmp_path)["drop_flow.redact"].get("drops"), "key is reachable"
 
     def test_a_whole_namespace_drop_is_reported(self, tmp_path):
