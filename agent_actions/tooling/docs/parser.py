@@ -9,7 +9,7 @@ import yaml
 from agent_actions.config.schema import version_variant_names
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigurationError
-from agent_actions.input.context.normalizer import normalize_context_scope
+from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
 from agent_actions.output.response.expander_merge import deep_merge_context_scope
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
@@ -89,6 +89,24 @@ def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
     return fields
 
 
+def _normalise_known_directives(
+    scope: dict[str, Any], version_base_map: dict[str, list[str]]
+) -> dict[str, Any]:
+    """Normalise the directives the runtime knows, and pass the rest through untouched.
+
+    A retired spelling is the loader's error to raise on a run, so the catalog reports what it
+    can rather than refusing to build. Per directive, not per block: normalising nothing when
+    one key is unknown suppressed version expansion for every reference in the same workflow.
+    """
+    known = {k: v for k, v in scope.items() if k in DIRECTIVE_REGISTRY}
+    unknown = {k: v for k, v in scope.items() if k not in DIRECTIVE_REGISTRY}
+    try:
+        normalised = normalize_context_scope(known, version_base_map)
+    except ConfigurationError:
+        normalised = known
+    return {**normalised, **unknown}
+
+
 class WorkflowParser:
     """Parse and extract information from agent workflow YAML files."""
 
@@ -147,31 +165,64 @@ class WorkflowParser:
         actions = data.get("actions", [])
         action_names = [a.get("name") for a in actions if a.get("name")]
 
-        # Built from the raw `versions:` blocks: the expanded configs this map is normally
-        # derived from do not exist yet at this point.
+        # Two shapes reach here. A source workflow still carries `versions:`. A rendered one
+        # does not -- render_workflow expands it and strips the key, leaving the base name in
+        # `_version_context` -- and a rendered file is what `scan_workflows` prefers whenever
+        # the project has run, so a map built only from `versions:` is empty for every real
+        # project. The runtime builds its own map from the same base name.
         version_base_map: dict[str, list[str]] = {}
         for action_data in actions:
-            versions = action_data.get("versions")
             name = action_data.get("name")
-            if not versions or not name:
+            if not name:
                 continue
-            try:
-                version_base_map[name] = version_variant_names(name, versions)
-            except ConfigurationError:
-                # A malformed block is the loader's error to report, not the catalog's.
+            versions = action_data.get("versions")
+            if versions:
+                try:
+                    version_base_map[name] = version_variant_names(name, versions)
+                except ConfigurationError:
+                    # A malformed block is the loader's error to report, not the catalog's.
+                    continue
                 continue
+            version_context = action_data.get("_version_context")
+            if isinstance(version_context, dict):
+                base = version_context.get("base_name")
+                if base:
+                    version_base_map.setdefault(base, []).append(name)
+
+        # The names inference is checked against must be the expanded ones, because the
+        # scope handed to it has already been normalised to `voter_1`, `voter_2`. Built from
+        # the raw list, a source workflow's `voter` is the only name present, inference
+        # raises on every variant, and the fallback below quietly drops real edges --
+        # measured, 2 fallbacks became 13 and four actions lost upstreams the catalog is
+        # supposed to show. The runtime has no such gap: it passes expanded names.
+        for variants in version_base_map.values():
+            action_names.extend(name for name in variants if name not in action_names)
 
         for action_data in actions:
             action_name = action_data.get("name", "unnamed")
+
+            # The runtime normalises before inferring, and says why at config/manager.py:399:
+            # "so that infer_dependencies sees concrete versioned refs, not base names".
+            # Inferring from the raw block reported a scope the dependency graph did not agree
+            # with -- an inherited observe named an upstream the graph then omitted.
+            merged_scope = _normalise_known_directives(
+                deep_merge_context_scope(
+                    defaults.get("context_scope"), action_data.get("context_scope")
+                ),
+                version_base_map,
+            )
+            inference_input = (
+                {**action_data, "context_scope": merged_scope} if merged_scope else action_data
+            )
 
             # Use auto-inferred dependencies for complete graph
             from agent_actions.prompt.context.scope_inference import infer_dependencies
 
             try:
                 input_sources, context_sources = infer_dependencies(
-                    action_data, action_names, action_name
+                    inference_input, action_names, action_name
                 )
-                all_dependencies = input_sources + context_sources
+                all_dependencies = list(dict.fromkeys(input_sources + context_sources))
             except Exception as e:
                 logger.debug(
                     "Dependency inference failed for action %s, using explicit deps: %s",
@@ -205,19 +256,8 @@ class WorkflowParser:
             # The runtime is handed defaults merged in and version bases expanded, so a
             # panel built from the raw block reports no drop for an action the runtime
             # drops a field on, and names a namespace no action answers to.
-            merged_scope = deep_merge_context_scope(
-                defaults.get("context_scope"), action_data.get("context_scope")
-            )
             if merged_scope:
-                try:
-                    action["context_scope"] = normalize_context_scope(
-                        merged_scope, version_base_map
-                    )
-                except ConfigurationError:
-                    # A directive the normaliser does not know -- a retired spelling, say --
-                    # is the loader's error to raise on a run. Documentation reports what it
-                    # can rather than refusing to build, so the raw block stands.
-                    action["context_scope"] = merged_scope
+                action["context_scope"] = merged_scope
 
             # Extract additional action configuration fields
             action["granularity"] = action_data.get("granularity")  # RECORD or FILE
@@ -282,7 +322,11 @@ class WorkflowParser:
                         resolved_deps.extend(version_map[dep])
                     else:
                         resolved_deps.append(dep)
-                action["dependencies"] = resolved_deps
+                # Deduped after expansion, which is where the collision is: inference names
+                # the base in input_sources and the variants in context_sources, so
+                # expanding the base produces names the list already carries. A catalog
+                # printing `draft_id_note_1` twice is wrong about the graph.
+                action["dependencies"] = list(dict.fromkeys(resolved_deps))
             workflow["actions"] = expanded_actions
 
         return workflow

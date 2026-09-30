@@ -154,6 +154,75 @@ class TestAVersionBaseReferenceIsExpanded:
         drops = (_action(parsed, "tally").get("context_scope") or {}).get("drop") or []
         assert sorted(drops) == ["voter_1.score", "voter_2.score", "voter_3.score"], drops
 
+    def test_the_graph_keeps_every_upstream_the_scope_names(self, tmp_path):
+        """Inference is checked against the EXPANDED names, or it raises and edges vanish.
+
+        The scope handed to infer_dependencies is already normalised to `voter_1`,
+        `voter_2`. Checking it against a name list built from the raw actions, where only
+        `voter` exists, makes inference raise on every variant; the parser then falls back
+        to explicit dependencies and the catalog silently loses the rest. Measured before
+        this was fixed: 13 fallbacks across the shipped workflows, four actions short of
+        upstreams their own context_scope names.
+        """
+        workflow = {
+            "name": "versioned",
+            "description": "a fan-in that also observes a plain upstream and the source",
+            "actions": [
+                {"name": "prep", "intent": "prep", "prompt": "prep {{ source.text }}"},
+                {
+                    "name": "voter",
+                    "intent": "vote",
+                    "prompt": "vote on {{ source.text }}",
+                    "versions": {"param": "voter_id", "range": [1, 2]},
+                },
+                {
+                    "name": "tally",
+                    "intent": "count",
+                    "dependencies": ["voter"],
+                    "prompt": "count {{ voter.verdict }}",
+                    "context_scope": {"observe": ["voter.verdict", "prep.note", "source.text"]},
+                },
+            ],
+        }
+        parsed = _parse(tmp_path, workflow)
+        deps = _action(parsed, "tally").get("dependencies") or []
+
+        assert "prep" in deps, f"a plain upstream the scope names went missing: {deps}"
+        assert "source" in deps, f"the source edge went missing: {deps}"
+        assert "voter_1" in deps and "voter_2" in deps, deps
+        assert "voter" not in deps, f"the base is never a runtime namespace: {deps}"
+        assert len(deps) == len(set(deps)), f"the catalog must not print an edge twice: {deps}"
+
+    def test_an_upstream_named_only_by_defaults_is_still_an_edge(self, tmp_path):
+        """Inference must see the MERGED scope, not the action's own block.
+
+        This is the half the post-expansion pass cannot reproduce: expanding version bases
+        afterwards recovers a variant edge, but an upstream the action never names itself --
+        it inherits the reference from `defaults.context_scope` -- is simply absent from the
+        graph if inference was handed the raw block.
+        """
+        workflow = {
+            "name": "inherited-edge",
+            "description": "the only reference to `prep` lives in defaults",
+            "defaults": {"context_scope": {"observe": ["prep.note"]}},
+            "actions": [
+                {"name": "prep", "intent": "prep", "prompt": "prep {{ source.text }}"},
+                {
+                    "name": "tally",
+                    "intent": "count",
+                    "prompt": "count it",
+                    "context_scope": {"observe": ["source.text"]},
+                },
+            ],
+        }
+        parsed = _parse(tmp_path, workflow)
+        deps = _action(parsed, "tally").get("dependencies") or []
+
+        assert "prep" in deps, (
+            f"`prep` is named only by defaults.context_scope; inferring from the raw "
+            f"action block loses the edge entirely: {deps}"
+        )
+
     def test_a_non_versioned_reference_is_left_alone(self, tmp_path):
         """The expansion must not rewrite a name that is already a real action."""
         parsed = _parse(tmp_path, _INHERITED)
@@ -205,3 +274,75 @@ class TestADirectiveTheNormaliserRejectsDoesNotFailTheBuild:
 
         scope = _action(parsed, "solo").get("context_scope") or {}
         assert scope.get("drop") == ["upstream.secret"], scope
+
+
+class TestTheRenderedShapeIsWhatRealProjectsHave:
+    """`scan_workflows` prefers `artefact/rendered_workflows/` once a project has run.
+
+    `render_workflow` expands versions at render time and strips the `versions:` key, leaving
+    the base name in `_version_context`. A map built only from `versions:` is therefore empty
+    for every project that has ever run -- which is the shape all 37 workflows in the sample
+    project have, and the one the first version of this fix silently did nothing for.
+    """
+
+    def _rendered(self) -> dict:
+        return {
+            "name": "rendered_shape",
+            "description": "expanded at render time, no versions: key",
+            "defaults": {
+                "model_vendor": "anthropic",
+                "model_name": "claude-3",
+                "context_scope": {"drop": ["upstream.secret"]},
+            },
+            "actions": [
+                {"name": "upstream", "intent": "p", "prompt": "m {{ source.text }}"},
+                *(
+                    {
+                        "name": f"voter_{i}",
+                        "intent": "v",
+                        "prompt": "v {{ upstream.headline }}",
+                        "dependencies": ["upstream"],
+                        "_version_context": {
+                            "i": i,
+                            "idx": i - 1,
+                            "length": 3,
+                            "base_name": "voter",
+                            "param_name": "voter_id",
+                        },
+                    }
+                    for i in (1, 2, 3)
+                ),
+                {
+                    "name": "tally",
+                    "intent": "c",
+                    "dependencies": ["voter_1", "voter_2", "voter_3"],
+                    "prompt": "q {{ voter.verdict }}",
+                    "context_scope": {"observe": ["voter.verdict"], "drop": ["voter.score"]},
+                },
+            ],
+        }
+
+    def test_a_version_base_ref_expands_without_a_versions_key(self, tmp_path):
+        parsed = _parse(tmp_path, self._rendered())
+
+        drops = (_action(parsed, "tally").get("context_scope") or {}).get("drop") or []
+        assert sorted(drops) == [
+            "upstream.secret",
+            "voter_1.score",
+            "voter_2.score",
+            "voter_3.score",
+        ], drops
+
+    def test_a_retired_directive_does_not_suppress_expansion(self, tmp_path):
+        """Per directive, not per block: qana_quiz carries `seed_path` and versioned actions,
+        and normalising nothing when one key is unknown lost expansion for the whole file."""
+        workflow = self._rendered()
+        workflow["defaults"]["context_scope"] = {
+            "drop": ["upstream.secret"],
+            "seed_path": {"rubric": "$file:rubric.json"},
+        }
+        parsed = _parse(tmp_path, workflow)
+
+        scope = _action(parsed, "tally").get("context_scope") or {}
+        assert "voter_1.score" in (scope.get("drop") or []), scope
+        assert scope.get("seed_path") == {"rubric": "$file:rubric.json"}, scope

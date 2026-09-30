@@ -82,3 +82,37 @@ def test_an_explicit_list_is_taken_literally():
         "voter_3",
         "voter_7",
     ]
+
+
+@pytest.mark.parametrize("version_config", _RANGES, ids=lambda c: str(c["range"]))
+def test_the_renderer_names_variants_the_same_way(version_config):
+    """The fourth site, and the one that matters most to the catalog.
+
+    `render_workflow._expand_versioned_action` writes `artefact/rendered_workflows/`, which is
+    what the docs scanner reads once a project has run. It keeps its own copy of the rule, so
+    the map the catalog builds from `_version_context.base_name` only lines up with the action
+    names in the same file while the two agree. Nothing else pins that.
+    """
+    from agent_actions.prompt.render_workflow import _expand_versioned_action
+
+    action = {"name": "voter", "intent": "x", "prompt": "p", "versions": version_config}
+    rendered = _expand_versioned_action(action)
+
+    assert [a["name"] for a in rendered] == version_variant_names("voter", version_config)
+
+
+def test_the_renderer_records_the_base_name_the_catalog_reads():
+    """`_version_context.base_name` is the datum the catalog's version map is built from."""
+    from agent_actions.prompt.render_workflow import _expand_versioned_action
+
+    rendered = _expand_versioned_action(
+        {
+            "name": "voter",
+            "intent": "x",
+            "prompt": "p",
+            "versions": {"param": "vid", "range": [1, 3]},
+        }
+    )
+
+    assert [a["_version_context"]["base_name"] for a in rendered] == ["voter"] * 3
+    assert all("versions" not in a for a in rendered), "the renderer strips the key"
