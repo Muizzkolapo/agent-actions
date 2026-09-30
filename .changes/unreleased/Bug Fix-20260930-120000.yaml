@@ -15,6 +15,12 @@ body: >-
   the run does not re-invoke the tool. A `behavior: filter` record writes no row and
   is deliberately not counted, so a merge row keyed on one is still carried untouched.
 
+  One consequence is worth stating: a guard-skipped record's prior answer is replaced by
+  a fresh tombstone rather than carried, and that now holds for a merge row as well as
+  the 1:1 row where it already held. The inputs that row also answered for are re-queued
+  and rebuilt, so nothing is lost, but the skipped record's own stored output does not
+  survive the run that skips it.
+
   Measured across four consecutive runs read back through `read_target_for_rewrite`:
   the duplicate was stable from the first skipping run rather than accumulating, so a
   single run's in-memory output could not distinguish the two states.

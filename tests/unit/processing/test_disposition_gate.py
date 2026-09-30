@@ -637,3 +637,100 @@ class TestBuildCarryForward:
 
         assert found == []
         assert missing == set()
+
+
+class TestARowIsNeverCarriedUnderAnIdentityTheRunWrites:
+    """The rule belongs to the row, not to the route that found it (#1082).
+
+    No caller reaches this on the identity route — the gate's carry ids come from
+    records that passed the guard, and a repair's come from rows a repaired guid does
+    not key — so the two sets are disjoint today. The pair below is the contract a
+    caller that stops keeping them apart would otherwise break silently.
+    """
+
+    def test_the_identity_route_refuses_it(self):
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "g1", "v": "stored"}]
+
+        found, _missing = build_carry_forward(
+            carry_ids={"g1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"g1"},
+            rewriting={"g1"},
+        )
+
+        assert found == [], f"carried a row beside the one the run writes for it: {found}"
+
+    def test_it_comes_back_as_missing_rather_than_vanishing(self):
+        """Refusing without re-queueing is the row loss this must not become."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "g1", "v": "stored"}]
+
+        _found, missing = build_carry_forward(
+            carry_ids={"g1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"g1"},
+            rewriting={"g1"},
+        )
+
+        assert missing == {"g1"}
+
+    def test_an_identity_the_run_does_not_write_is_still_carried(self):
+        """The refusal is keyed on the set, not on having been passed one."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "g1", "v": "stored"}]
+
+        found, missing = build_carry_forward(
+            carry_ids={"g1"},
+            action_name="action_b",
+            relative_path="data.json",
+            storage_backend=backend,
+            produced_by={"g1"},
+            rewriting={"g9"},
+        )
+
+        assert [r["source_guid"] for r in found] == ["g1"]
+        assert missing == set()
+
+
+class TestARepairedIdentityIsNotAlsoCarried:
+    """The invariant `missing_ids -= repair_carry_ids` depends on and nothing asserted.
+
+    A repair narrows its records before the guard runs, so the only record the guard can
+    skip on a repair run is one the repair named — and a repaired guid's rows are not
+    carried. If that stopped holding, a refused row's producer would be subtracted out of
+    `missing_ids` and never re-queued, which is silent loss.
+    """
+
+    def test_the_repaired_guid_is_not_in_the_carried_set(self):
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "r1", "v": "row of the repaired record"},
+            {"source_guid": "r9", "v": "row of an untouched record"},
+        ]
+        gate = DispositionGate(storage_backend=backend, repairing={"r1"})
+
+        carried = gate.carried_past_repair(
+            "action_b", "data.json", [_make_record("r1"), _make_record("r9")]
+        )
+
+        assert carried == {"r9"}, f"a repaired guid was carried as well as rebuilt: {carried}"
+
+    def test_a_row_keyed_on_a_repaired_guid_is_dropped_even_beside_others(self):
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "r1", "v": "first"},
+            {"source_guid": "r1", "v": "second under the same identity"},
+            {"source_guid": "r9", "v": "untouched"},
+        ]
+        gate = DispositionGate(storage_backend=backend, repairing={"r1"})
+
+        carried = gate.carried_past_repair(
+            "action_b", "data.json", [_make_record("r1"), _make_record("r9")]
+        )
+
+        assert "r1" not in carried

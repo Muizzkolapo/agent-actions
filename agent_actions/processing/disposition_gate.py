@@ -354,11 +354,13 @@ def build_carry_forward(
     produced_indices: set[int] = set()
     producers_found: set[str] = set()
     for index, rid, producers in rows:
-        if rid in carry_ids:
+        # Both routes refuse a row the run is writing under, or the carried copy lands
+        # beside the run's own and the identity is stored twice (#1082). The rule is the
+        # row's, not the route's: nothing reaches it here today, and something may.
+        if rid in carry_ids and rid not in rewritten:
             chosen[rid] = index
         # An action minting an identity per row holds none carrying its input's, so the
-        # rows it produced are the only place that input is named — unless the run is
-        # writing that row's own identity, when handing it back stores it twice (#1082).
+        # rows it produced are the only place that input is named.
         if producers and not straddles and producers <= inputs_carried and rid not in rewritten:
             produced_indices.add(index)
             producers_found |= producers

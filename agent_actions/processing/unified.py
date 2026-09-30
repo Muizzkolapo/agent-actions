@@ -189,8 +189,9 @@ class UnifiedProcessor:
                         | {rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
-                    # missing: re-queueing would process a record the repair did not
-                    # name, which is the widening this narrowing exists to stop.
+                    # missing: that would process a record the repair did not name. Never
+                    # a gate id — a repaired guid keys no carried row, and on a repair run
+                    # only a repaired record reaches the guard.
                     missing_ids -= repair_carry_ids
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
