@@ -1,17 +1,12 @@
 """A guard-skipped record's identity is written once, not twice (#1082).
 
-The guard runs *above* the per-record gate, so a guard-skipped record never reaches
-``DispositionGate.filter`` and is absent from every id the run hands carry-forward.
-A stored merge row keyed on that record while naming a *carried* input still passes
-the producer test in ``build_carry_forward``, so it is handed back — beside the
-tombstone the guard has just written for the same identity. Nothing detects it:
-``missing`` is empty, so nothing is re-queued either.
+The guard runs *above* the per-record gate, so a skipped record reaches no carry set,
+while a stored merge row keyed on it and naming a *carried* input still passes
+carry-forward's producer test — and comes back beside the tombstone the guard wrote.
 
-Measured across consecutive runs read back through ``read_target_for_rewrite``,
-because the duplicate is stable rather than accumulating and an in-memory
-assertion on one run cannot tell the two apart. The fix must also not simply drop
-the merge row: its content answers for the carried input too, and the run does not
-re-invoke the tool on its own.
+Measured across consecutive runs read back through ``read_target_for_rewrite``: the
+duplicate is stable rather than accumulating, so one run cannot tell the two states
+apart. Dropping the merge row instead loses the carried input's content.
 """
 
 from __future__ import annotations
@@ -30,13 +25,16 @@ from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.utils.udf_management.registry import FileUDFResult
 
 ACTION = "fold_rows"
-AGENT_CONFIG: dict[str, Any] = {
-    "kind": "tool",
-    "granularity": "file",
-    "guard": {"clause": "score > 50", "behavior": "skip"},
-}
 
 MERGED = ("r1", "r2")
+
+
+def _config(behavior: str) -> dict[str, Any]:
+    return {
+        "kind": "tool",
+        "granularity": "file",
+        "guard": {"clause": "score > 50", "behavior": behavior},
+    }
 
 
 def _records(*, skip_r1: bool) -> list[dict[str, Any]]:
@@ -83,13 +81,14 @@ class _Run:
     ``read_target_for_rewrite`` reconstructs them, not the in-memory output.
     """
 
-    def __init__(self, backend: SQLiteBackend, tmp_path) -> None:
+    def __init__(self, backend: SQLiteBackend, tmp_path, behavior: str = "skip") -> None:
         self.backend = backend
         self.tmp_path = tmp_path
+        self.behavior = behavior
         self.seen: list[list[str]] = []
 
     def __call__(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        context = ProcessingContext(agent_config=AGENT_CONFIG, agent_name=ACTION)
+        context = ProcessingContext(agent_config=_config(self.behavior), agent_name=ACTION)
         context.source_data = records
         context.storage_backend = self.backend
         context.file_path = str(self.tmp_path / "in" / "f.json")
@@ -122,6 +121,11 @@ class _Run:
 @pytest.fixture
 def run(backend, tmp_path):
     return _Run(backend, tmp_path)
+
+
+@pytest.fixture
+def filtering_run(backend, tmp_path):
+    return _Run(backend, tmp_path, behavior="filter")
 
 
 def _guids(rows: list[dict[str, Any]]) -> list[str]:
@@ -198,3 +202,28 @@ class TestTheRunSettles:
             )
 
         assert answers == [["r0-0"], ["r0-0"], ["r0-0"]]
+
+
+class TestAFilteredRecordIsTheOtherHalfOfTheRule:
+    """``behavior: filter`` excludes the record outright — it writes no row, so
+    nothing of this run stands under its identity and the stored merge row keyed on
+    it is still the only answer its producers have. Reading the guard's verdicts as
+    written rows regardless of behavior refuses that row and rebuilds it for nothing,
+    losing the filtered input's content in the process."""
+
+    def test_the_merge_row_is_carried_rather_than_rebuilt(self, filtering_run):
+        filtering_run(_records(skip_r1=False))
+        stored = filtering_run(_records(skip_r1=True))
+
+        assert filtering_run.seen == [["r0", "r1", "r2"]], (
+            f"the tool was invoked again: {filtering_run.seen[1:]}"
+        )
+        assert [row["content"][ACTION]["out"] for row in stored if row["source_guid"] == "r1"] == [
+            "fold:r1+r2"
+        ]
+
+    def test_the_filtered_record_still_has_no_second_row(self, filtering_run):
+        filtering_run(_records(skip_r1=False))
+        guids = _guids(filtering_run(_records(skip_r1=True)))
+
+        assert guids.count("r1") == 1

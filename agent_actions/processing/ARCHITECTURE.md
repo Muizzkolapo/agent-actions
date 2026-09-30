@@ -363,6 +363,14 @@ row holds none carrying its input's, so an input resolvable only the second way 
 be re-queued and reprocessed on every run. Every row a producer made comes back, since
 the input is the whole group's only identity.
 
+Neither reading may return a row under an identity this run is already writing, or the
+carried copy lands beside the run's own and the identity is stored twice. The caller
+therefore names every such identity, not only the records it reprocesses: the guard runs
+*above* the gate, so a guard-skipped record is in no carry set and still writes a
+tombstone of its own. A merge row keyed on it answers for its other producers too, so
+refusing it reports those as `missing` and the caller re-queues them — dropping the row
+on its own would take their content with it, since the run does not re-invoke the tool.
+
 The batch path rewrites its output file whole and asks the mirrored question — which
 *stored* rows the run did not write again — through `stored_rows_not_reproduced()`. Two
 runs of a minting action share no identity, so comparing identities carries every stale

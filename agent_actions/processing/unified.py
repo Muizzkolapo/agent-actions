@@ -153,6 +153,13 @@ class UnifiedProcessor:
             passing, guard_results = self._guard_filter(records, context)
             source_by_record = {}
 
+        # The guard runs above the gate, so a skipped record is in none of the carry
+        # sets while still writing a row under its own identity. A filtered one is
+        # excluded outright and writes nothing, which is what the data test reads.
+        written_by_guard = {
+            result.source_guid for result in guard_results if result.data and result.source_guid
+        }
+
         carry_results: list[ProcessingResult] = []
         to_process = passing
         carry_ids: set[str] = set(repair_carry_ids)
@@ -178,7 +185,8 @@ class UnifiedProcessor:
                         context.storage_backend,
                         # Only the gate's ids name inputs; a repair's name stored rows.
                         produced_by=gate_carry_ids,
-                        reprocessing={rid for r in to_process if (rid := r.get("source_guid"))},
+                        rewriting=written_by_guard
+                        | {rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
                     # missing: re-queueing would process a record the repair did not

@@ -419,7 +419,7 @@ class TestBuildCarryForward:
             relative_path="data.json",
             storage_backend=backend,
             produced_by={"in1"},
-            reprocessing={"in2"},
+            rewriting={"in2"},
         )
 
         assert found == [], f"carried a row a re-queued producer rebuilds: {found}"
@@ -443,7 +443,7 @@ class TestBuildCarryForward:
             relative_path="data.json",
             storage_backend=backend,
             produced_by={"in1"},
-            reprocessing={"in2"},
+            rewriting={"in2"},
         )
 
         assert missing == {"in1"}, "in1 was not re-queued, so the in1+in2 row is never rebuilt"

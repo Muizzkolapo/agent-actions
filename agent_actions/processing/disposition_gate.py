@@ -293,7 +293,7 @@ def build_carry_forward(
     storage_backend: StorageBackend,
     *,
     produced_by: Collection[str] = (),
-    reprocessing: Collection[str] = (),
+    rewriting: Collection[str] = (),
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read prior output for carry-forward records, returning (found, missing_ids).
 
@@ -302,7 +302,8 @@ def build_carry_forward(
 
     *produced_by* names this run's INPUTS — the only ids resolvable through a row's
     ``producer_source_guids``, since ``carry_ids`` also holds stored-row ids where a
-    repair named rows. *reprocessing* names what this run rebuilds.
+    repair named rows. *rewriting* names every identity this run writes a row under,
+    wider than what it reprocesses; a row under one is reported as *missing* instead.
     """
     try:
         prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
@@ -339,7 +340,7 @@ def build_carry_forward(
         for index, record in enumerate(prior_output)
         if (rid := record.get("source_guid"))
     ]
-    rebuilding = frozenset(reprocessing)
+    rewritten = frozenset(rewriting)
     # A row naming a carried input and anything else — reprocessed, gone, or re-identified
     # — can be neither carried nor rebuilt. Read off every stored row, guid-less included.
     straddles = any(
@@ -356,8 +357,9 @@ def build_carry_forward(
         if rid in carry_ids:
             chosen[rid] = index
         # An action minting an identity per row holds none carrying its input's, so the
-        # rows it produced are the only place that input is named.
-        if producers and not straddles and producers <= inputs_carried and rid not in rebuilding:
+        # rows it produced are the only place that input is named — unless the run is
+        # writing that row's own identity, when handing it back stores it twice (#1082).
+        if producers and not straddles and producers <= inputs_carried and rid not in rewritten:
             produced_indices.add(index)
             producers_found |= producers
     # Indices, so a row matched both ways is written once and keeps its place. Then one
