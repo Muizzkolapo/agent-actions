@@ -22,6 +22,11 @@ class OutputSchema:
     # passthrough_fields outright.
     dropped_refs: set[tuple[str, str]] = field(default_factory=set)
     passthrough_wildcard_sources: set[str] = field(default_factory=set)
+    # `observe: [up.*]` recorded nothing at all, so a field it forwards never appeared in
+    # the outputs and a `drop` aimed at one had no entry to mark. Kept as the source name
+    # rather than expanded here: this object does not know the upstream's fields, and an
+    # upstream that is schemaless or template-based has none to know.
+    observe_wildcard_sources: set[str] = field(default_factory=set)
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False

@@ -927,9 +927,13 @@ class TestTheCatalogNamesWhatAnActionDrops:
 
         `drops` answers "what did this action declare", with the namespace. The resolved
         set answers "which of this action's own output names is withheld", in bare names.
-        #1114 narrowed the second — `redact` declares two drops and withholds neither,
-        because `body` is its own field and `secret` it never forwarded. The two keys must
-        stay distinct: a namespaced ref must never appear in the resolved set.
+        The two keys must stay distinct: a namespaced ref must never appear in the
+        resolved set.
+
+        #1114 narrowed the second, and #1106 narrowed it again in the other direction.
+        `redact` observes `upstream.*`, which now enumerates the fields that brings in —
+        so `secret` IS forwarded and dropping it withholds something real. `body` stays
+        available because `upstream.body` and redact's own `body` are different claims.
         """
         from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -941,8 +945,9 @@ class TestTheCatalogNamesWhatAnActionDrops:
         reported = self._actions(tmp_path)["drop_flow.redact"]["drops"]
         assert reported == ["upstream.body", "upstream.secret"], reported
         assert all("." in ref for ref in reported), reported
-        # `redact` declares both drops and withholds neither of its own outputs.
-        assert redact_schema.dropped_outputs == [], redact_schema.dropped_outputs
+        # `secret` reaches redact only through the wildcard, so dropping it is a real
+        # withholding; before #1106 the wildcard enumerated nothing and this read [].
+        assert redact_schema.dropped_outputs == ["secret"], redact_schema.dropped_outputs
         assert "body" in redact_schema.available_outputs, redact_schema.available_outputs
 
         # A non-empty resolved set, so the "no namespace in there" claim can fail:
