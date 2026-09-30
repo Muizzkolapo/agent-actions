@@ -192,6 +192,13 @@ def reclassify_missing_field_error(filter_result: FilterResult, clause: str) -> 
     )
 
 
+def _readonly_bus(context: Any) -> Any:
+    """A read-only view of the guard context, still a Bus so the UDF keeps require()."""
+    from agent_actions.utils.udf_management.bus import ReadOnlyBus
+
+    return ReadOnlyBus(context) if isinstance(context, dict) else context
+
+
 class GuardEvaluator:
     """Unified guard evaluation for batch and online modes."""
 
@@ -233,7 +240,12 @@ class GuardEvaluator:
             return None
 
         try:
-            if not execute_user_defined_function(clause, context):
+            # Read-only: `context` holds the record's own namespaces by reference -- when
+            # no context was supplied it IS the record -- so a UDF that writes to it
+            # rewrites the record mid-run, and the action's input, the enricher and the
+            # skipped tombstones all see the rewritten value with nothing logged. A
+            # mutating UDF now fails loudly instead, naming itself.
+            if not execute_user_defined_function(clause, _readonly_bus(context)):
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
         except Exception as e:
