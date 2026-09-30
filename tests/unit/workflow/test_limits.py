@@ -174,7 +174,6 @@ class TestFileLimitDirectoryFiles:
         # read as a repair in progress and narrow the walk. State the empty set a
         # runner that is not repairing actually carries.
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {"file_limit": 2}
@@ -198,7 +197,6 @@ class TestFileLimitDirectoryFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {}
@@ -221,7 +219,6 @@ class TestFileLimitDirectoryFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {"file_limit": 100}
