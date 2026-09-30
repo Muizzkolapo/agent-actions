@@ -86,6 +86,7 @@ _EXPECT_REPLACES_SCHEMA_MISMATCH = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
@@ -501,7 +502,6 @@ class ActionConfig(_RetryValidators):
     retry: RetryConfig | None = Field(
         default=None, description="Retry configuration for transport-layer failures"
     )
-    idempotency_key: str | None = Field(default=None, description="Idempotency key template")
     prompt: str | None = Field(default=None, description="Prompt template or reference")
     dependencies: list[str] = Field(
         default_factory=list, description="List of upstream dependencies"

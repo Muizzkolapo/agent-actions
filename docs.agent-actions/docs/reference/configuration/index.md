@@ -162,7 +162,6 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 | `guard` | object | Conditional execution — see [Guards](../execution/guards.md) |
 | `is_operational` | boolean | Enable/disable action (default: true) |
 | `policy` | string | Execution policy |
-| `idempotency_key` | string | Template for idempotency key |
 | `retry` | object | Retry configuration for transport-layer failures |
 
 :::note Granularity Constraints

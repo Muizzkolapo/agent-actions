@@ -1,0 +1,12 @@
+kind: Breaking Change
+body: >-
+  `idempotency_key` is refused rather than accepted. It was declared on `ActionConfig`,
+  documented in the configuration reference, and echoed into generated docs by the docs
+  parser — with no runtime consumer anywhere, so a project writing it validated, saw the
+  key in its own documentation, and got nothing. Unlike the keys retired in #1066 nothing
+  had been removed: it never worked. It joins `_RETIRED_CONFIG_KEYS` with no replacement
+  hint, since there is no behaviour to redirect a reader to, which refuses it on all four
+  blocks that carry agent settings with a message naming the key rather than a generic
+  unknown-field error. The declaration, the reference row and the docs echo are all
+  removed. Measured before the change: no shipped project, example or fixture writes it.
+time: 2026-09-30T23:30:00Z
