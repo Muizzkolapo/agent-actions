@@ -9,6 +9,7 @@ The METADATA_KEYS set here is the single source of truth, mirrored in:
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from typing import Any
 
 # ── Metadata keys (single source of truth) ──────────────────────────────────
@@ -32,6 +33,11 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "_state",
         "_state_history",
         "_state_schema_version",
+        # Framework fields the card used to show a human as business data. Pinned against
+        # RECORD_FRAMEWORK_FIELDS by test_the_card_knows_every_framework_field, so a new
+        # identity field cannot be added to the envelope and quietly render as content.
+        "_delta_mode",
+        "version_correlation_id",
     }
 )
 
@@ -65,14 +71,26 @@ def classify_field(key: str) -> str:
 
 def classify_record(
     record: dict[str, Any],
+    *,
+    content_keys: Collection[str] | None = None,
 ) -> dict[str, list[tuple[str, Any]]]:
-    """Partition a record into identity / content / metadata field groups."""
+    """Partition a record into identity / content / metadata field groups.
+
+    *content_keys* names the action's own fields, when the caller knows them. Those are
+    the user's data whatever they are called, so a field named `metadata` or `lineage` is
+    content rather than framework noise. Classifying by name is a guess, and it is only
+    right for a caller holding a flat dict with no boundary left in it -- which is why
+    this is a parameter rather than a change to `classify_field`.
+    """
     groups: dict[str, list[tuple[str, Any]]] = {
         "identity": [],
         "content": [],
         "metadata": [],
     }
     for key, value in record.items():
+        if content_keys is not None and key in content_keys:
+            groups["content"].append((key, value))
+            continue
         groups[classify_field(key)].append((key, value))
     return groups
 
@@ -133,6 +151,7 @@ def render_card_markdown(
     action's fields.
     """
     display = record
+    action_field_names: set[str] | None = None
     if action_name:
         content = record.get("content")
         if (
@@ -145,7 +164,13 @@ def render_card_markdown(
             # "content" blob.
             display = {k: v for k, v in record.items() if k != "content"}
             display.update(content[action_name])
-    groups = classify_record(display)
+            # The boundary is known here and is thrown away by the flattening above, so
+            # it is handed on rather than re-guessed: the action's own keys are content
+            # even when one is called `metadata`. A collision resolves the same way the
+            # update did -- the user's value is what is displayed, so it is the user's
+            # field that is classified.
+            action_field_names = set(content[action_name])
+    groups = classify_record(display, content_keys=action_field_names)
     lines: list[str] = []
 
     # Identity header

@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A record's own field named `metadata`, `lineage`, `node_id`, `target_id` or `chunk_info`
+  is no longer shown as framework metadata. `render_card_markdown` unwraps the envelope on
+  purpose, so a human sees the action's fields — and then classified every key by name
+  against a hand-kept list, filing the user's own field under framework noise. Nothing was
+  lost, but on the HITL approval screen the field a reviewer most needs to read could be
+  hidden among identity keys. The boundary is known at that point and the flattening threw
+  it away: the action's fields are exactly `content[action_name]`, so that set is passed to
+  the classifier instead of being re-guessed. Classifying by name stays available for a
+  caller holding a flat dict with no boundary left, which is the only case where guessing
+  is the best available answer. Two framework fields the card did not know — `_delta_mode`
+  and `version_correlation_id` — were rendering to humans as business data and are now
+  classified, with a test pinning the card's list against `RECORD_FRAMEWORK_FIELDS` so a
+  new identity field cannot be added to the envelope and quietly render as content.
+time: 2026-10-01T00:30:00Z
