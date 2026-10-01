@@ -23,18 +23,18 @@ class TestGuardParser:
 
     def test_parse_udf_guard(self):
         """Test parsing UDF guard expressions."""
-        guard = "udf:topic_to_quiz_pipeline.get_answer_length_flag_value"
+        guard = "udf:get_answer_length_flag_value"
         result = GuardParser.parse(guard)
         assert result.type == GuardType.UDF
-        assert result.expression == "topic_to_quiz_pipeline.get_answer_length_flag_value"
+        assert result.expression == "get_answer_length_flag_value"
         assert result.original == guard
 
     def test_parse_udf_guard_with_whitespace(self):
         """Test parsing UDF guard with extra whitespace."""
-        guard = "  udf:  module.function  "
+        guard = "  udf:  check_eligibility  "
         result = GuardParser.parse(guard)
         assert result.type == GuardType.UDF
-        assert result.expression == "module.function"
+        assert result.expression == "check_eligibility"
         assert result.original == guard
 
     def test_parse_complex_sql_guard(self):
@@ -62,13 +62,16 @@ class TestGuardParser:
     def test_validate_udf_expression_invalid_patterns(self):
         """Test invalid UDF expression patterns."""
         invalid_expressions = [
-            "function",
+            # A module prefix is refused rather than resolved by its last segment:
+            # UDF_REGISTRY is keyed on the bare name, so two spellings answering to
+            # one function would make the module half decorative (#1188).
+            "module.function",
+            "myproject.tools.validators.check_answer_quality",
             ".function",
             "module.",
-            "module..function",
-            "module.123function",
-            "module.func-tion",
-            "module.func tion",
+            "123function",
+            "func-tion",
+            "func tion",
         ]
         for expr in invalid_expressions:
             with pytest.raises(ValidationError, match="Invalid UDF expression format"):
@@ -77,11 +80,11 @@ class TestGuardParser:
     def test_validate_udf_expression_dangerous_patterns(self):
         """Test that dangerous patterns in UDF expressions raise ValidationError."""
         dangerous_expressions = [
-            "module.__import__",
-            "package.exec",
-            "my_module.eval",
-            "test.compile",
-            "utils.open",
+            "__import__",
+            "exec",
+            "eval",
+            "compile",
+            "open",
         ]
         for expr in dangerous_expressions:
             with pytest.raises(ValidationError, match="potentially dangerous pattern"):
@@ -90,12 +93,12 @@ class TestGuardParser:
     def test_validate_udf_expression_allows_legitimate_names(self):
         """Legitimate identifiers containing dangerous substrings must NOT be blocked."""
         safe_expressions = [
-            "my_module.eval_something",
-            "test.compile_code",
-            "utils.open_file",
-            "pipeline.execution_status",
-            "tools.file_handler",
-            "data.directory_scanner",
+            "eval_something",
+            "compile_code",
+            "open_file",
+            "execution_status",
+            "file_handler",
+            "directory_scanner",
         ]
         for expr in safe_expressions:
             # Should NOT raise — these are legitimate function names
@@ -104,9 +107,9 @@ class TestGuardParser:
     def test_validate_udf_expression_blocks_dunder_access(self):
         """Any dunder access in UDF expressions should be blocked."""
         dunder_expressions = [
-            "module.__class__",
-            "module.__dict__",
-            "module.__getattribute__",
+            "__class__",
+            "__dict__",
+            "__getattribute__",
         ]
         for expr in dunder_expressions:
             with pytest.raises(ValidationError, match="potentially dangerous pattern"):
@@ -141,7 +144,7 @@ class TestGuardParser:
         """Test the convenience parse_guard function."""
         sql_result = parse_guard('field == "value"')
         assert sql_result.type == GuardType.SQL
-        udf_result = parse_guard("udf:module.function")
+        udf_result = parse_guard("udf:check_eligibility")
         assert udf_result.type == GuardType.UDF
 
 
@@ -150,10 +153,10 @@ class TestGuardParserIntegration:
 
     def test_quiz_workflow_guard(self):
         """Test parsing a real quiz workflow guard."""
-        guard = "udf:topic_to_quiz_pipeline.get_answer_length_flag_value"
+        guard = "udf:get_answer_length_flag_value"
         result = GuardParser.parse(guard)
         assert result.type == GuardType.UDF
-        assert result.expression == "topic_to_quiz_pipeline.get_answer_length_flag_value"
+        assert result.expression == "get_answer_length_flag_value"
 
     def test_complex_sql_guard(self):
         """Test parsing complex SQL-like guard expressions."""
@@ -168,12 +171,12 @@ class TestGuardParserIntegration:
             assert result.type == GuardType.SQL
             assert result.expression == guard
 
-    def test_nested_module_udf(self):
-        """Test UDF with deeply nested module paths."""
-        guard = "udf:myproject.tools.quiz_gen.validators.check_answer_quality"
-        result = GuardParser.parse(guard)
-        assert result.type == GuardType.UDF
-        assert result.expression == "myproject.tools.quiz_gen.validators.check_answer_quality"
+    def test_a_nested_module_path_is_refused(self):
+        """It parsed before and resolved never: UDF_REGISTRY is keyed on the bare
+        function name, and the static checker read the dots as an action reference, so a
+        dotted guard failed preflight rather than running (#1188)."""
+        with pytest.raises(ValidationError, match="Invalid UDF expression format"):
+            GuardParser.parse("udf:myproject.tools.quiz_gen.validators.check_answer_quality")
 
 
 if __name__ == "__main__":

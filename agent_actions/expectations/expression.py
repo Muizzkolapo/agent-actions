@@ -10,7 +10,7 @@ from functools import lru_cache
 from typing import Any
 
 from agent_actions.errors import ValidationError
-from agent_actions.guards.guard_parser import GuardParser, GuardType
+from agent_actions.guards.guard_parser import GuardParser
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
     ASTNode,
     ComparisonNode,
@@ -35,15 +35,18 @@ _parser = WhereClauseParser()
 @lru_cache(maxsize=256)
 def parse_condition(condition: str) -> WhereClauseAST:
     """Parse a condition through the guard blocklist and grammar; expressions never take udf:."""
-    try:
-        guard_expression = GuardParser.parse(condition)
-    except ValidationError as exc:
-        raise ExpressionParseError(str(exc)) from exc
-    if guard_expression.type is GuardType.UDF:
+    # Read before the format check, not after a successful parse: an expression takes no
+    # udf: condition whatever its shape, and deciding on the parse made the answer depend
+    # on whether the name happened to be well-formed.
+    if isinstance(condition, str) and condition.strip().startswith(GuardParser.UDF_PREFIX):
         raise ExpressionParseError(
             "udf: conditions are not supported in expression expectations; "
             "register an @expectation_check function instead"
         )
+    try:
+        GuardParser.parse(condition)
+    except ValidationError as exc:
+        raise ExpressionParseError(str(exc)) from exc
     result = _parser.parse(condition)
     if not result.success or result.ast is None:
         message = result.error.message if result.error else "unparseable condition"
