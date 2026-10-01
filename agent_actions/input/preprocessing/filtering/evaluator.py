@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.errors import ConfigurationError, FunctionNotFoundError
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.guards.consolidated_guard import (
     _UNSUPPORTED_GUARD_BEHAVIORS as _UNSUPPORTED_BEHAVIORS,
@@ -236,6 +237,19 @@ class GuardEvaluator:
             if not execute_user_defined_function(clause, context):
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
+        except FunctionNotFoundError as e:
+            # Not an execution error, so passthrough does not apply: the guard named a
+            # function that does not exist, and admitting every record on a name the
+            # config got wrong is the silent no-op #1188 would otherwise have opened.
+            raise ConfigurationError(
+                f"Guard UDF '{clause}' is not registered. Name the function as it is "
+                "registered, with no module prefix; `agac list-udfs` prints the names.",
+                context={
+                    "udf_name": clause,
+                    "operation": "evaluate_conditional_clause",
+                    "failed_field": "guard",
+                },
+            ) from e
         except Exception as e:
             logger.warning(
                 "Guard: conditional_clause '%s' raised %s: %s — passing record "

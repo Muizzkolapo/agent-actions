@@ -37,17 +37,21 @@ class TestTheParserAcceptsTheNameTheRegistryHolds:
         def check_eligibility(data):
             return True
 
-        from agent_actions.utils.udf_management.registry import udf_tool
+        from agent_actions.utils.udf_management import registry as registry_module
 
-        udf_tool(check_eligibility)
+        modules_before = set(registry_module._registered_modules)
+        registry_module.udf_tool(check_eligibility)
         try:
             assert "check_eligibility" in UDF_REGISTRY
             assert "tools.check_eligibility" not in UDF_REGISTRY
         finally:
+            # Both structures: `clear_registry` pops every recorded module out of
+            # sys.modules, so leaving this test's module behind would evict it later.
             UDF_REGISTRY.pop("check_eligibility", None)
+            registry_module._registered_modules.intersection_update(modules_before)
 
     def test_a_dict_guard_carrying_a_bare_udf_name_parses(self):
-        config = parse_guard_config({"condition": "udf:check_eligibility", "behavior": "skip"})
+        config = parse_guard_config({"condition": "udf:check_eligibility", "on_false": "skip"})
 
         assert config.is_udf_condition()
         assert config.get_condition_expression() == "check_eligibility"
@@ -76,10 +80,16 @@ class TestTheDangerousNameBlocklistStillApplies:
     def test_a_legitimate_name_containing_one_is_not(self, name):
         assert GuardParser.parse(f"udf:{name}").expression == name
 
-    @pytest.mark.parametrize("bad", ["123start", "has-dash", "has space", ""])
+    @pytest.mark.parametrize("bad", ["123start", "has-dash", "has space", "a.b"])
     def test_a_name_that_is_not_an_identifier_is_refused(self, bad):
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="Invalid UDF expression format"):
             GuardParser.parse(f"udf:{bad}")
+
+    def test_an_empty_name_is_refused_for_being_empty(self):
+        """Split out because it raises a different error, and a bare `raises` let this
+        pass on that one while the name claimed a format refusal."""
+        with pytest.raises(ValidationError, match="cannot be empty after"):
+            GuardParser.parse("udf:")
 
 
 class TestTheStaticCheckerReadsNoActionReferenceFromIt:
@@ -98,8 +108,11 @@ class TestTheStaticCheckerReadsNoActionReferenceFromIt:
 
     def test_a_dotted_clause_is_what_the_checker_misread(self):
         """Pins the mechanism rather than the fix: the extractor is unchanged, and this
-        is why nothing more than the parser had to move. A clause can no longer hold a
-        dot, so this input is now unreachable from any config."""
+        is why nothing more than the parser had to move. An `actions:` config can no
+        longer produce a dotted clause, since the expander validates the guard first.
+        The legacy `agents:` shape still can -- `get_user_agents` returns those dicts
+        verbatim and `AgentConfig` allows extras -- so this input stays reachable there,
+        and such a config fails exactly as it did before."""
         requirements = ReferenceExtractor().extract_from_agent(
             {"conditional_clause": "tools.check_eligibility"}
         )
@@ -127,3 +140,38 @@ class TestABehaviourIsStillForcedToSkip:
         config = parse_guard_config({"condition": "udf:check_eligibility"})
 
         assert config.on_false is GuardBehavior.SKIP
+
+
+class TestAnUnregisteredNameIsLoudRatherThanAdmittingEverything:
+    """Making the bare form loadable makes a misspelled one reachable, and
+    `_evaluate_conditional_clause` passes records through on any exception -- so a typo
+    would admit every record while reporting nothing but a warning. An unresolved name is
+    a config error, not the execution error that passthrough exists for."""
+
+    def test_an_unregistered_guard_udf_raises(self):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
+
+        with pytest.raises(ConfigurationError, match="is not registered"):
+            GuardEvaluator()._evaluate_conditional_clause({"a": 1}, "no_such_guard_udf")
+
+    def test_a_udf_that_raises_while_running_still_passes_the_record(self):
+        """The semantics that stay: a guard whose body fails is not a config error, and
+        the record goes through with a warning rather than failing the action."""
+        from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
+        from agent_actions.utils.udf_management import registry as registry_module
+
+        def guard_udf_that_explodes(data):
+            raise RuntimeError("boom")
+
+        modules_before = set(registry_module._registered_modules)
+        registry_module.udf_tool(guard_udf_that_explodes)
+        try:
+            result = GuardEvaluator()._evaluate_conditional_clause(
+                {"a": 1}, "guard_udf_that_explodes"
+            )
+        finally:
+            UDF_REGISTRY.pop("guard_udf_that_explodes", None)
+            registry_module._registered_modules.intersection_update(modules_before)
+
+        assert result is None, "a raising guard body must not be turned into a skip"

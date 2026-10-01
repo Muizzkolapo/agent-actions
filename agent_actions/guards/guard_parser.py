@@ -107,7 +107,7 @@ class GuardParser:
         Raises:
             ValidationError: If expression format is invalid or contains dangerous patterns
         """
-        pattern = "^[a-zA-Z_][a-zA-Z0-9_]*$"
+        pattern = r"\A[a-zA-Z_][a-zA-Z0-9_]*\Z"
         if not re.match(pattern, expression):
             raise ValidationError(
                 f"Invalid UDF expression format: '{expression}'. "

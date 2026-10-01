@@ -124,7 +124,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │                                                              │
 │    Converts GuardConfig into agent dict keys:                │
 │      SQL  → agent["guard"] = {clause, scope, behavior}       │
-│      UDF  → agent["conditional_clause"] = "module.func"      │
+│      UDF  → agent["conditional_clause"] = "func_name"        │
 │                                                              │
 │    Enforces: UDF cannot use FILTER behavior                  │
 └──────────────────────────┬───────────────────────────────────┘
