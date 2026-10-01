@@ -110,3 +110,27 @@ class TestTheCommandReportsWhatItChecked:
 
         assert ValidateUDFsCommand._count_impl_references(config) == {"ug_echo"}
         assert ValidateUDFsCommand._count_guard_udf_references(config) == {"ug_keep"}
+
+
+class TestAMalformedNameIsLeftToTheCheckThatOwnsTheMessage:
+    """This walk runs before the structural preflight, so reporting a malformed guard UDF
+    as a missing function would answer the wrong question: a dotted name would be met with
+    "did you forget the decorator?" rather than "drop the module prefix", which is the
+    message the guard parser exists to give.
+    """
+
+    def test_a_dotted_name_is_not_reported_as_a_missing_function(self, registered):
+        validate_udf_references(_config("udf:mymod.check_it"))
+
+    def test_a_blocklisted_name_is_not_reported_as_a_missing_function(self, registered):
+        validate_udf_references(_config("udf:exec"))
+
+    def test_an_empty_name_is_not_looked_up(self, registered):
+        """`get_udf("")` would be a lookup of nothing; the parser refuses it first."""
+        validate_udf_references(_config("udf:"))
+        validate_udf_references(_config({"condition": "udf:   "}))
+
+    def test_a_condition_that_is_not_a_string_is_not_looked_up(self, registered):
+        validate_udf_references(_config({"condition": {"nested": 1}}))
+        validate_udf_references(_config({"condition": ["udf:ug_kep"]}))
+        validate_udf_references(_config({"condition": 42}))

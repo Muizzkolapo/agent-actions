@@ -149,6 +149,7 @@ class TestValidate:
         assert result["valid"] is True
         assert result["registry"] == {"func_a": {}, "func_b": {}}
         assert result["impl_refs"] == {"func_a"}
+        assert result["guard_udf_refs"] == set()
         mock_clear.assert_called_once()
 
     @patch(_CLEAR_REGISTRY)

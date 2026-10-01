@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import DuplicateFunctionError, UDFLoadError
+from agent_actions.errors import DuplicateFunctionError, UDFLoadError, ValidationError
+from agent_actions.guards.guard_parser import GuardParser, GuardType
 from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
@@ -168,23 +169,22 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     return UDF_REGISTRY
 
 
-_UDF_GUARD_PREFIX = "udf:"
-
-
 def guard_udf_name(guard: Any) -> str | None:
-    """The UDF a guard names, or None when it is a SQL guard or names none.
+    """The UDF a guard names, or None for a SQL guard, no guard, or a malformed one.
 
-    Both spellings a raw config can hold — ``guard: "udf:name"`` and
-    ``guard: {condition: "udf:name"}``. Matched case-sensitively, as ``GuardParser``
-    does, so an uppercase prefix stays the SQL guard the runtime reads it as.
+    Classification is ``GuardParser``'s rather than a second copy of it, which also
+    settles what a malformed name means here: it is the structural check's to report,
+    and naming it as a missing function would answer the wrong question — a dotted name
+    would be met with "did you forget the decorator?" instead of "drop the module
+    prefix" (#1191). Both spellings a raw config can hold are covered, since the parser
+    reads the condition either way.
     """
     condition = guard.get("condition") if isinstance(guard, dict) else guard
-    if not isinstance(condition, str):
+    try:
+        parsed = GuardParser.parse(condition)
+    except ValidationError:
         return None
-    condition = condition.strip()
-    if not condition.startswith(_UDF_GUARD_PREFIX):
-        return None
-    return condition[len(_UDF_GUARD_PREFIX) :].strip() or None
+    return parsed.expression if parsed.type is GuardType.UDF else None
 
 
 def validate_udf_references(config: dict[str, Any]) -> None:

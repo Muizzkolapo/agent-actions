@@ -178,9 +178,9 @@ class ValidateUDFsCommand:
                 # annotations) that may contain Rich markup (e.g. "[/x]", "list[dict]"),
                 # which would otherwise crash the console or drop text.
                 self.console.print(f"[yellow]⚠ {escape(warning)}[/yellow]")
-            if impl_refs:
+            if impl_refs or guard_udf_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
-                for ref in sorted(impl_refs):
+                for ref in sorted(impl_refs | guard_udf_refs):
                     try:
                         udf_meta = get_udf_metadata(ref)
                         self.console.print(f"  • {ref} ([cyan]{udf_meta['file']}[/cyan])")
