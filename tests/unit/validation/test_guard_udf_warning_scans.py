@@ -11,9 +11,10 @@ into one scan would fix that by widening the tool set too, silencing real findin
 
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.validation.validate_udfs import ValidateUDFsCommand
 
@@ -42,14 +43,12 @@ class TestTheValidSetForAGuardIsWiderThanForATool:
         spread up — so a guard reading `data["content"]` genuinely is a mistake."""
         assert "content" not in ValidateUDFsCommand._guard_valid_namespaces({"tag"})
 
-    def test_the_wider_set_is_exactly_the_envelope_minus_content(self):
-        """Pins the derivation rather than re-listing it, so a field added to the envelope
-        is covered without this test being edited."""
-        guard_valid = ValidateUDFsCommand._guard_valid_namespaces({"tag"})
-
-        assert guard_valid == {"tag"} | RUNTIME_BUS_NAMESPACES | (
-            RECORD_FRAMEWORK_FIELDS - {"content"}
-        )
+    @pytest.mark.parametrize("key", ["base_name", "i", "idx", "param_name"])
+    def test_the_promoted_version_loop_keys_are_allowed(self, key):
+        """Measured from `build_guard_context`: a versioned action's guard context
+        promotes these alongside the action namespaces, so a guard reading `idx` is
+        correct and warning about it would be a false positive."""
+        assert key in ValidateUDFsCommand._guard_valid_namespaces({"tag"})
 
 
 class TestAGuardUdfIsScanned:
@@ -72,19 +71,38 @@ class TestAGuardUdfIsScanned:
 
 
 class TestTheToolSetIsNotWidened:
-    def test_a_tool_reading_an_envelope_field_is_still_warned_about(self):
+    """The central claim of the two-scan split. The previous version of this class built
+    the tool set as an inline literal and never called the production method, so replacing
+    the tool scan's set with the guard's — exactly the merge this design argues against —
+    left the whole suite green.
+    """
+
+    @staticmethod
+    def _tool_warnings(body: str) -> list[str]:
+        """Through the real method, so a change to the set it uses is visible here."""
+
+        def t(data):
+            return data
+
+        t.__wrapped_source__ = body
+        registry = {"t": {"function": t}}
+        cmd = ValidateUDFsCommand.__new__(ValidateUDFsCommand)
+        with mock.patch.object(ValidateUDFsCommand, "_udf_sources", return_value={"t": body}):
+            return cmd._find_bus_namespace_warnings(registry, {"t"}, {"tag"})
+
+    def test_a_tool_reading_an_envelope_field_is_warned_about(self):
         """If the two scans were merged into one widened set this finding would vanish —
         a tool UDF receives the action-keyed bus, which carries no `source_guid`."""
-        from agent_actions.validation.bus_namespace_validator import (
-            find_unknown_bus_namespaces,
-        )
-
-        body = 'def t(data):\n    return data["source_guid"]\n'
-
-        warnings = find_unknown_bus_namespaces({"t": body}, {"tag"} | RUNTIME_BUS_NAMESPACES)
+        warnings = self._tool_warnings('def t(data):\n    return data["source_guid"]\n')
 
         assert any("source_guid" in w for w in warnings), warnings
 
-    @pytest.mark.parametrize("name", ["source_guid", "_state"])
-    def test_the_tool_valid_set_excludes_the_envelope(self, name):
-        assert name not in ({"tag"} | RUNTIME_BUS_NAMESPACES)
+    def test_a_tool_reading_a_version_key_is_warned_about(self):
+        warnings = self._tool_warnings('def t(data):\n    return data["idx"]\n')
+
+        assert any("idx" in w for w in warnings), warnings
+
+    def test_a_tool_reading_an_action_name_is_not(self):
+        warnings = self._tool_warnings('def t(data):\n    return data["tag"]\n')
+
+        assert warnings == [], warnings

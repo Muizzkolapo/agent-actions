@@ -36,6 +36,10 @@ from agent_actions.utils.udf_management.registry import (
 from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
 from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
+# Measured from `build_guard_context`, not assumed: a versioned action's guard context
+# promotes these to the top level alongside the action namespaces.
+_PROMOTED_VERSION_KEYS = frozenset({"base_name", "i", "idx", "param_name"})
+
 
 class ValidateUDFsCommand:
     """Implementation of the validate-udfs command."""
@@ -286,24 +290,38 @@ class ValidateUDFsCommand:
 
     @staticmethod
     def _guard_valid_namespaces(action_names: set[str]) -> set[str]:
-        """What a guard UDF may read, which is wider than what a tool UDF may.
+        """What a guard UDF may read — the union over every shape its context can take.
 
-        A guard receives the evaluation context rather than the action bus, and
-        ``_build_evaluation_context`` copies the record's envelope fields onto it, so
-        ``data["source_guid"]`` is a correct read in a guard and a mistake in a tool.
-        ``content`` is excluded because that one is flattened rather than exposed (#1192).
+        A guard receives the evaluation context rather than the action bus, and what that
+        context holds depends on the action: a first-stage one carries the record's
+        envelope, a versioned one carries the promoted loop keys, and a plain one carries
+        neither. This scan is keyed by UDF name and does not know which action it belongs
+        to, so it allows all of them.
+
+        That is deliberately an over-approximation and costs real findings — a guard on a
+        non-first-stage action reading ``source_guid`` reads nothing and is not reported.
+        The alternative errs the other way: a correct guard on a versioned action reading
+        ``idx`` would be warned about, and a validator that cries wolf gets ignored.
+        Narrowing this needs the per-action derivation ``build_guard_context`` performs
+        (#1192).
         """
-        return action_names | RUNTIME_BUS_NAMESPACES | (RECORD_FRAMEWORK_FIELDS - {"content"})
+        return (
+            action_names
+            | RUNTIME_BUS_NAMESPACES
+            | (RECORD_FRAMEWORK_FIELDS - {"content"})
+            | _PROMOTED_VERSION_KEYS
+        )
 
+    @classmethod
     def _find_guard_bus_namespace_warnings(
-        self, sources: dict[str, str], action_names: set[str]
+        cls, sources: dict[str, str], action_names: set[str]
     ) -> list[str]:
         """The same scan as for tools, against the guard's wider valid set.
 
         A second call rather than one merged ref list: merging would widen the tool set
-        by the envelope too, and silence real findings for tools.
+        too, and silence real findings there.
         """
-        return find_unknown_bus_namespaces(sources, self._guard_valid_namespaces(action_names))
+        return find_unknown_bus_namespaces(sources, cls._guard_valid_namespaces(action_names))
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""
