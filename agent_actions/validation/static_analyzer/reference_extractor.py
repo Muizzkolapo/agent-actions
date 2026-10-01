@@ -65,7 +65,10 @@ class ReferenceExtractor:
         if guard:
             requirements.extend(self._extract_from_guard(guard, agent_name))
 
-        context_scope = agent_config.get("context_scope", {})
+        # `or {}` rather than a default: the key can be present and null, which means no
+        # directives just as absence does. Reading it as a dict crashed instead of letting
+        # the "action has no context_scope" check report it (#1193).
+        context_scope = agent_config.get("context_scope") or {}
         for directive, refs in context_scope.items():
             if isinstance(refs, list):
                 requirements.extend(

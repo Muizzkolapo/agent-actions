@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  A `context_scope` key that is present but null no longer crashes the static analyser with
+  `AttributeError: 'NoneType' object has no attribute 'items'`. `AgentConfig` permits the
+  value, and the reference extractor read it with a `{}` default, which does not help when
+  the key is there and the value is null — so the whole config went down, taking the
+  references the analyser had already found with it.
+
+  Null and absent both mean no directives, so they are now read alike, which lets the
+  existing "action has no context_scope" check report it with its own hint instead. That is
+  the idiom the rest of the codebase already uses for this key; the extractor was the one
+  remaining site reading it the other way.
+
+  Not reachable through the `actions:` config shape, where an empty `context_scope:` already
+  produced a clean error. It needed the legacy `agents:` shape, which `get_user_agents`
+  returns verbatim without `ActionConfig` or the expander, or a direct caller of the
+  extractor.
+time: 2026-10-01T12:00:00Z
