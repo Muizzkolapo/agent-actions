@@ -614,3 +614,33 @@ class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
         result = WorkflowStaticAnalyzer(self._config(None)).analyze()
 
         assert any("has no context_scope" in str(e.message) for e in result.errors)
+
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        [
+            (None, "context_scope is null"),
+            ("observe", "must be a mapping, got str"),
+            (["observe"], "must be a mapping, got list"),
+            (5, "must be a mapping, got int"),
+        ],
+    )
+    def test_the_hint_survives_a_graph_built_before_analyze(self, scope, expected):
+        """Step 0 picks its hint from the raw value. Writing the coercion back into the
+        caller's config would destroy it, and a caller that touches the graph first — the
+        schema service is exactly that shape — would then be told to add a context_scope
+        it did write, misindented. The message is the same either way; only the hint
+        differs, so asserting on the message alone cannot see this."""
+        analyzer = WorkflowStaticAnalyzer(self._config(scope))
+        analyzer.get_graph()
+
+        result = analyzer.analyze()
+
+        hints = [getattr(e, "hint", "") or "" for e in result.errors]
+        assert any(expected in h for h in hints), hints
+
+    def test_building_the_graph_does_not_rewrite_the_callers_config(self):
+        config = self._config("observe")
+
+        WorkflowStaticAnalyzer(config).get_graph()
+
+        assert config["actions"][1]["context_scope"] == "observe"
