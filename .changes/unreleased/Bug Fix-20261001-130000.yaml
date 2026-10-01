@@ -1,0 +1,17 @@
+kind: Bug Fix
+body: >-
+  `agac validate-udfs` now scans a guard's UDF for reads of an unknown bus namespace, the
+  warning it already emitted for `impl:` UDFs. The same typo in a guard UDF was silent,
+  which matters more now that a guard UDF can be referenced at all.
+
+  The valid set is wider for a guard than for a tool, and that is why this is two scans
+  rather than one merged list. A tool UDF receives the action-keyed bus; a guard receives
+  the evaluation context, onto which the record's envelope fields are also copied — so
+  `data["source_guid"]` is a correct read in a guard and would have been reported as an
+  unknown namespace. Merging the two reference lists into a single scan would have avoided
+  those false warnings by widening the tool set too, silencing real findings there.
+  `content` stays excluded from the guard set, because the context flattens it rather than
+  exposing it, so reading it is genuinely a mistake.
+
+  The FILE return-contract scan is unchanged and still covers `impl:` only: a guard UDF
+  returns a boolean and declares no granularity, so that contract does not apply to it.

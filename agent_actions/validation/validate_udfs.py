@@ -27,6 +27,7 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
+from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
@@ -153,9 +154,14 @@ class ValidateUDFsCommand:
             registry = result["registry"]
             impl_refs = result["impl_refs"]
             guard_udf_refs = result["guard_udf_refs"]
+            # Only impl_refs: a guard UDF returns a boolean and declares no granularity,
+            # so the FILE return contract does not apply to it at all (#1192).
             udf_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
             udf_warnings += self._find_bus_namespace_warnings(
                 registry, impl_refs, result["action_names"]
+            )
+            udf_warnings += self._find_guard_bus_namespace_warnings(
+                self._udf_sources(registry, guard_udf_refs), result["action_names"]
             )
             fire_event(
                 ValidationCompleteEvent(
@@ -261,8 +267,14 @@ class ValidateUDFsCommand:
         that receive a plain record, not the action-keyed bus. Scanning either would
         flag legitimate reads against the wrong namespace set.
         """
+        sources = self._udf_sources(registry, impl_refs)
+        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
+
+    @staticmethod
+    def _udf_sources(registry: dict, refs: set[str]) -> dict[str, str]:
+        """Each referenced UDF's own function body, keyed by the name that referenced it."""
         sources: dict[str, str] = {}
-        for ref in impl_refs:
+        for ref in refs:
             meta = registry.get(ref) or registry.get(ref.lower())
             if meta is None:
                 continue
@@ -270,7 +282,28 @@ class ValidateUDFsCommand:
                 sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
             except (OSError, TypeError, KeyError):
                 continue
-        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
+        return sources
+
+    @staticmethod
+    def _guard_valid_namespaces(action_names: set[str]) -> set[str]:
+        """What a guard UDF may read, which is wider than what a tool UDF may.
+
+        A guard receives the evaluation context rather than the action bus, and
+        ``_build_evaluation_context`` copies the record's envelope fields onto it, so
+        ``data["source_guid"]`` is a correct read in a guard and a mistake in a tool.
+        ``content`` is excluded because that one is flattened rather than exposed (#1192).
+        """
+        return action_names | RUNTIME_BUS_NAMESPACES | (RECORD_FRAMEWORK_FIELDS - {"content"})
+
+    def _find_guard_bus_namespace_warnings(
+        self, sources: dict[str, str], action_names: set[str]
+    ) -> list[str]:
+        """The same scan as for tools, against the guard's wider valid set.
+
+        A second call rather than one merged ref list: merging would widen the tool set
+        by the envelope too, and silence real findings for tools.
+        """
+        return find_unknown_bus_namespaces(sources, self._guard_valid_namespaces(action_names))
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""

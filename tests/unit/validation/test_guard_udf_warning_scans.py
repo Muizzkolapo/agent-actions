@@ -1,14 +1,12 @@
 """A guard UDF's body is scanned for bad bus namespaces, against its own valid set (#1192).
 
-`validate-udfs` warns when a UDF reads a bus namespace that is not an action name. It
-scanned only `impl:` UDFs, so the identical mistake in a guard UDF was silent.
+`validate-udfs` warns when a UDF reads a bus namespace that is not an action name, and
+scanned only `impl:` UDFs, so the same mistake in a guard UDF was silent.
 
-The valid set is not the same for the two. A tool UDF receives the action-keyed bus; a
-guard UDF receives the guard evaluation context, which `_build_evaluation_context` also
-populates with the record's envelope fields. So `data["source_guid"]` is a legitimate read
-in a guard and would be flagged against the tool set — four false warnings on a correct
-guard UDF. Merging the two ref lists into one scan would fix that by widening the tool
-set too, silencing real findings for tools; hence two scans with two sets.
+The valid set differs: a tool UDF receives the action-keyed bus, a guard receives the
+evaluation context, which also carries the record's envelope fields. So `data["source_guid"]`
+is correct in a guard and would be flagged against the tool set. Merging the two ref lists
+into one scan would fix that by widening the tool set too, silencing real findings there.
 """
 
 from __future__ import annotations
