@@ -504,3 +504,59 @@ class TestReferenceExtractorTemplateSyntaxError:
             assert len(warning_records) == 0
         finally:
             logging.getLogger("agent_actions").propagate = original
+
+
+class TestAPresentButNullContextScope:
+    """`AgentConfig` permits `context_scope: None`, and reading it with a `{}` default does
+    not help when the key is there and the value is null. The static analyser then crashed
+    on `.items()` instead of letting the "action has no context_scope" check report it.
+
+    Not reachable through the modern `actions:` route, where the expander drops the key —
+    it needs the legacy `agents:` shape that `ConfigManager.get_user_agents` returns
+    verbatim, or a direct caller (#1193).
+    """
+
+    def setup_method(self):
+        self.extractor = ReferenceExtractor()
+
+    def test_a_null_context_scope_does_not_crash_the_walk(self):
+        config = {"name": "a", "prompt": "p", "context_scope": None}
+
+        assert self.extractor.extract_from_agent(config) == []
+
+    def test_it_is_read_the_same_as_an_absent_one(self):
+        """Null and absent both mean no directives, so they must answer alike — that is
+        what lets the existing "has no context_scope" check report it properly."""
+        absent = self.extractor.extract_from_agent({"name": "a", "prompt": "p"})
+        null = self.extractor.extract_from_agent(
+            {"name": "a", "prompt": "p", "context_scope": None}
+        )
+
+        assert null == absent
+
+    def test_other_references_in_the_same_config_still_resolve(self):
+        """The crash took the whole config down, so a null context_scope must not cost the
+        prompt's references."""
+        config = {
+            "name": "a",
+            "prompt": "{{ action.extractor.summary }}",
+            "context_scope": None,
+        }
+
+        refs = self.extractor.extract_from_agent(config)
+
+        assert [(r.source_agent, r.field_path) for r in refs] == [("extractor", "summary")]
+
+    def test_a_populated_context_scope_is_unaffected(self):
+        config = {"name": "a", "prompt": "p", "context_scope": {"observe": ["up.field"]}}
+
+        refs = self.extractor.extract_from_agent(config)
+
+        assert [(r.source_agent, r.field_path) for r in refs] == [("up", "field")]
+
+    def test_a_null_directive_inside_context_scope_does_not_crash_either(self):
+        """The sibling shape: the block is a dict but one directive is null. `for refs in
+        ...` would hand None to the ref walk."""
+        config = {"name": "a", "prompt": "p", "context_scope": {"observe": None}}
+
+        assert self.extractor.extract_from_agent(config) == []
