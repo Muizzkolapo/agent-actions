@@ -21,6 +21,7 @@ from agent_actions.errors import (
 )
 from agent_actions.input.loaders.udf import (
     discover_udfs,
+    guard_udf_name,
     validate_udf_references,
 )
 from agent_actions.logging.core.manager import fire_event
@@ -107,6 +108,7 @@ class ValidateUDFsCommand:
             "valid": True,
             "registry": registry,
             "impl_refs": impl_refs,
+            "guard_udf_refs": self._count_guard_udf_references(config),
             "action_names": self._extract_action_names(config),
         }
 
@@ -150,6 +152,7 @@ class ValidateUDFsCommand:
                 raise click.exceptions.Exit(1)
             registry = result["registry"]
             impl_refs = result["impl_refs"]
+            guard_udf_refs = result["guard_udf_refs"]
             udf_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
             udf_warnings += self._find_bus_namespace_warnings(
                 registry, impl_refs, result["action_names"]
@@ -166,6 +169,8 @@ class ValidateUDFsCommand:
             self.console.print("[green]✅ No duplicate function names[/green]")
             self.console.print("\n[bold]Summary:[/bold]")
             self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
+            if guard_udf_refs:
+                self.console.print(f"  - {len(guard_udf_refs)} Guard UDFs referenced in config")
             self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
             for warning in udf_warnings:
@@ -194,7 +199,8 @@ class ValidateUDFsCommand:
             )
             raise click.ClickException(error_message) from e
 
-    def _count_impl_references(self, config: dict) -> set[str]:
+    @staticmethod
+    def _count_impl_references(config: dict) -> set[str]:
         """Return set of unique impl reference names from config."""
         impl_refs = set()
 
@@ -211,6 +217,29 @@ class ValidateUDFsCommand:
 
         extract_impl_refs(config)
         return impl_refs
+
+    @staticmethod
+    def _count_guard_udf_references(config: dict) -> set[str]:
+        """Return set of unique UDF names referenced by guards.
+
+        Reported apart from the tool count rather than folded into it: a guard UDF is not
+        a tool, and one number covering both would overstate what it says.
+        """
+        guard_refs = set()
+
+        def extract_guard_refs(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key == "guard" and (name := guard_udf_name(value)):
+                        guard_refs.add(name)
+                    else:
+                        extract_guard_refs(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    extract_guard_refs(item)
+
+        extract_guard_refs(config)
+        return guard_refs
 
     def _extract_action_names(self, config: dict) -> set[str]:
         """Return workflow action names from the raw config (list-of-dicts form)."""

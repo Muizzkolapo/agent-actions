@@ -168,28 +168,53 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     return UDF_REGISTRY
 
 
+_UDF_GUARD_PREFIX = "udf:"
+
+
+def guard_udf_name(guard: Any) -> str | None:
+    """The UDF a guard names, or None when it is a SQL guard or names none.
+
+    Both spellings a raw config can hold — ``guard: "udf:name"`` and
+    ``guard: {condition: "udf:name"}``. Matched case-sensitively, as ``GuardParser``
+    does, so an uppercase prefix stays the SQL guard the runtime reads it as.
+    """
+    condition = guard.get("condition") if isinstance(guard, dict) else guard
+    if not isinstance(condition, str):
+        return None
+    condition = condition.strip()
+    if not condition.startswith(_UDF_GUARD_PREFIX):
+        return None
+    return condition[len(_UDF_GUARD_PREFIX) :].strip() or None
+
+
 def validate_udf_references(config: dict[str, Any]) -> None:
-    """Validate that all 'impl' references in config exist in the UDF registry.
+    """Validate that every UDF a config references exists in the registry.
+
+    Covers ``impl:`` and a guard's ``udf:`` condition. A guard UDF is caught at run time
+    too, but only when the action runs — which is what this command exists to avoid
+    (#1191).
 
     Raises:
         FunctionNotFoundError: If a referenced function is not in the registry.
     """
-    impl_references: list[str] = []
+    references: list[str] = []
 
-    def extract_impl_refs(obj: Any, path: str = "") -> None:
-        """Recursively extract all 'impl' field values."""
+    def extract_refs(obj: Any, path: str = "") -> None:
+        """Recursively extract every 'impl' value and every guard's UDF name."""
         if isinstance(obj, dict):
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key
                 if key == "impl" and isinstance(value, str):
-                    impl_references.append(value)
+                    references.append(value)
+                elif key == "guard" and (name := guard_udf_name(value)):
+                    references.append(name)
                 else:
-                    extract_impl_refs(value, current_path)
+                    extract_refs(value, current_path)
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
                 current_path = f"{path}[{idx}]"
-                extract_impl_refs(item, current_path)
+                extract_refs(item, current_path)
 
-    extract_impl_refs(config)
-    for impl_ref in impl_references:
-        get_udf(impl_ref)
+    extract_refs(config)
+    for reference in references:
+        get_udf(reference)
