@@ -1,23 +1,17 @@
 kind: Bug Fix
 body: >-
-  A `context_scope` key that is present but null no longer crashes the static analyser with
-  `AttributeError: 'NoneType' object has no attribute 'items'`. `AgentConfig` permits the
-  value, and the reference extractor read it with a `{}` default, which does not help when
-  the key is there and the value is null — so the whole config went down, taking the
-  references the analyser had already found with it.
+  A `context_scope` that is not a mapping — `context_scope:` written with nothing under it,
+  or as a scalar or list — no longer crashes the static analyser with an unhandled
+  `AttributeError`. `agac docs` and anything else reading a workflow's catalog or schemas
+  went down on a traceback instead of reporting the problem.
 
-  Null and absent both mean no directives, so they are now read alike, which lets the
-  existing "action has no context_scope" check report it with its own hint instead. That is
-  the idiom five other call sites already use for this key.
+  The cause was that `analyze()` normalizes `context_scope` before the graph is built, and
+  the five lazy entry points that reach graph building directly — which the docs catalog
+  and the schema service use — did not. Every reader below them received the raw YAML, so
+  the first one to index it raised: the schema extractor, then dependency inference, then
+  the docs parser. Coercing the shape once where the graph is built fixes all of them,
+  rather than each in turn. The diagnostics are unaffected: `analyze()` still inspects the
+  raw value first and still reports "action has no context_scope" with its null-specific
+  hint, so a bad value is reported rather than silently read as empty.
 
-  Two sibling sites in the schema extractor raised the same error on the same input and are
-  fixed with it: the methods that infer an input schema from `context_scope` and that apply
-  its directives to an output schema both called `.get` on the value directly. A sweep of
-  every read of the key found fifteen further sites, all already safe — by an `isinstance`
-  check, an `if not context_scope` guard, or a receiver typed to accept `None`.
-
-  Not reachable through the `actions:` config shape, where an empty `context_scope:` already
-  produced a clean error. It needed the legacy `agents:` shape, which `get_user_agents`
-  returns verbatim without `ActionConfig` or the expander, or a direct caller of the
-  extractor.
-time: 2026-10-01T12:00:00Z
+  `agac inspect` and `agac run` were never affected, because both go through `analyze()`.

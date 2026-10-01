@@ -5,6 +5,9 @@ import logging
 import pytest
 
 from agent_actions.validation.static_analyzer import ReferenceExtractor
+from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+    WorkflowStaticAnalyzer,
+)
 
 _LOGGER_NAME = "agent_actions.validation.static_analyzer.reference_extractor"
 
@@ -560,3 +563,54 @@ class TestAPresentButNullContextScope:
         config = {"name": "a", "prompt": "p", "context_scope": {"observe": None}}
 
         assert self.extractor.extract_from_agent(config) == []
+
+
+class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
+    """`analyze()` normalizes at its Step 0b, but `get_graph` and the four other lazy
+    entry points reach `_build_graph` without it — and those are what the docs catalog
+    and the schema service use. A `context_scope:` that is null or a scalar is raw YAML
+    until something coerces it, so every reader below the graph saw it as written (#1193).
+
+    These are the cases that distinguish fixing the producer from fixing one reader: the
+    first crash was in the schema extractor, the next in dependency inference, and a
+    reader-by-reader fix moves it rather than ending it.
+    """
+
+    @staticmethod
+    def _config(scope):
+        # Fresh per call: analyze() normalizes the dict in place, so a shared config
+        # would hide the very thing under test.
+        return {
+            "name": "wf",
+            "actions": [
+                {
+                    "name": "first",
+                    "prompt": "p",
+                    "schema": {"field": "string"},
+                    "context_scope": {"observe": ["source.x"]},
+                },
+                {"name": "second", "prompt": "{{ action.first.field }}", "context_scope": scope},
+            ],
+        }
+
+    @pytest.mark.parametrize("scope", [None, [], "", 0, False, "observe", ["observe"], 5])
+    def test_get_graph_does_not_raise_on_a_non_mapping(self, scope):
+        graph = WorkflowStaticAnalyzer(self._config(scope)).get_graph()
+
+        assert graph is not None
+
+    def test_a_populated_scope_still_reaches_the_graph(self):
+        """The coercion must not quietly discard a real block."""
+        analyzer = WorkflowStaticAnalyzer(self._config({"observe": ["first.field"]}))
+        analyzer.get_graph()
+
+        assert analyzer.workflow_config["actions"][1]["context_scope"] == {
+            "observe": ["first.field"]
+        }
+
+    def test_analyze_still_reports_the_null_rather_than_silently_accepting_it(self):
+        """The coercion happens below analyze()'s Step 0 diagnostics, so the actionable
+        error must survive — otherwise the fix trades a crash for silence."""
+        result = WorkflowStaticAnalyzer(self._config(None)).analyze()
+
+        assert any("has no context_scope" in str(e.message) for e in result.errors)
