@@ -8,8 +8,13 @@ body: >-
 
   Null and absent both mean no directives, so they are now read alike, which lets the
   existing "action has no context_scope" check report it with its own hint instead. That is
-  the idiom the rest of the codebase already uses for this key; the extractor was the one
-  remaining site reading it the other way.
+  the idiom five other call sites already use for this key.
+
+  Two sibling sites in the schema extractor raised the same error on the same input and are
+  fixed with it: the methods that infer an input schema from `context_scope` and that apply
+  its directives to an output schema both called `.get` on the value directly. A sweep of
+  every read of the key found fifteen further sites, all already safe — by an `isinstance`
+  check, an `if not context_scope` guard, or a receiver typed to accept `None`.
 
   Not reachable through the `actions:` config shape, where an empty `context_scope:` already
   produced a clean error. It needed the legacy `agents:` shape, which `get_user_agents`

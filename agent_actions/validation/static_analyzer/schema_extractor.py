@@ -258,7 +258,7 @@ class SchemaExtractor:
         input_schema: InputSchema,
     ) -> None:
         """Infer input schema from context_scope declarations."""
-        context_scope = config.get("context_scope", {})
+        context_scope = config.get("context_scope") or {}
         observe = context_scope.get("observe", [])
         passthrough = context_scope.get("passthrough", [])
 
@@ -410,7 +410,7 @@ class SchemaExtractor:
 
     def _apply_context_scope(self, config: dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema."""
-        context_scope = config.get("context_scope", {})
+        context_scope = config.get("context_scope") or {}
 
         # A ref the runtime's parser rejects is skipped at runtime, so modelling it as
         # forwarded leaves a field the run never delivers, undroppable by the drop the
