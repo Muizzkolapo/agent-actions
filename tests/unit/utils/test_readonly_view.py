@@ -439,18 +439,10 @@ class TestACyclicRecordIsWrappedWithoutRecursing:
 
 
 class TestAliasingInsideTheRecord:
-    """The memo that terminates a cycle also means a shared dict, list or set is wrapped once,
-    so aliasing inside the record survives into the view -- and into `copy()`, as `deepcopy`
-    does. Wrapping a shared container twice would hand a UDF two views of one object that
-    compare equal and are not the same.
+    """A shared dict, list or set is wrapped once, in the view and in `copy()`; a tuple is not.
 
-    A tuple is the exception, pinned below so the limit is recorded rather than rediscovered:
-    `__getitem__` re-runs the wrapping and a tuple is rebuilt rather than returned as stored,
-    so two keys holding one tuple give two tuple objects -- as does the same key read twice.
-
-    Every view-side test here also asserts the result refuses a write, and every copy-side
-    test that the record is unchanged. Identity alone is satisfied by a view that wraps nothing
-    at all, which is the vulnerability the module exists to close.
+    Identity alone is satisfied by a view that wraps nothing, so every view-side test also
+    asserts a write is refused, and every copy-side test that the record is unchanged.
     """
 
     def test_two_keys_holding_the_same_dict_wrap_to_the_same_read_only_view(self):
