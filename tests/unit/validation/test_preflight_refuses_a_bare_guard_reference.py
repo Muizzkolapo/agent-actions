@@ -201,3 +201,68 @@ class TestTheShippedConfigsAreAccepted:
         # Counted first: with the check disabled this test is green either way.
         assert guards >= 8, f"only {guards} guards seen across {len(files)} files"
         assert offenders == [], "\n".join(offenders)
+
+
+class TestAVersionParamAfterExpansion:
+    """Preflight runs after expansion, which replaces `versions` with `_version_context`.
+
+    Shapes below are the expander's real output for
+    `versions: {param: classifier_id, range: [1, 2]}`, not a hand-built guess:
+
+        versions=None
+        _version_context={'i': 1, 'idx': 0, 'length': 2, 'first': True,
+                          'last': False, 'classifier_id': 1}
+        guard={'clause': 'classifier_id == 1', ...}
+
+    Reading `versions` here therefore found nothing and the param was refused as a bare
+    reference, failing the run on a guard the runtime resolves.
+    """
+
+    _VERSION_CONTEXT = {
+        "i": 1,
+        "idx": 0,
+        "length": 2,
+        "first": True,
+        "last": False,
+        "classifier_id": 1,
+    }
+
+    def _versioned(self, clause: str) -> list[str]:
+        return _errors(
+            {
+                "ingest": {},
+                "classify_1": {
+                    "dependencies": ["ingest"],
+                    "_version_context": dict(self._VERSION_CONTEXT),
+                    "guard": {"clause": clause},
+                },
+            }
+        )
+
+    def test_a_custom_param_is_left_alone(self):
+        assert self._versioned("classifier_id == 1") == []
+
+    def test_the_reserved_promotions_are_left_alone(self):
+        for name in ("i", "idx"):
+            assert self._versioned(f"{name} == 1") == [], name
+
+    def test_a_name_the_version_context_does_not_promote_is_still_refused(self):
+        """The fix must not blanket-allow: `length` is in the context but reserved, so it
+        is reachable only as `version.length` and stays provably unresolvable bare."""
+        assert len(self._versioned("nosuch == 1")) == 1
+
+    def test_an_unversioned_action_is_unaffected(self):
+        assert (
+            len(
+                _errors(
+                    {
+                        "ingest": {},
+                        "classify": {
+                            "dependencies": ["ingest"],
+                            "guard": {"clause": "classifier_id == 1"},
+                        },
+                    }
+                )
+            )
+            == 1
+        )
