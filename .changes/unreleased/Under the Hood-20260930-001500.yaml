@@ -1,0 +1,10 @@
+kind: Under the Hood
+body: >-
+  `PreparationContext` carries only fields something reads. `file_path`, `output_directory`
+  and `record_index` were assigned by both of its builders and read by neither — the
+  same-named reads elsewhere are on `ProcessingContext` and `DataPreparationContext`, and the
+  only reference to any of them was a test asserting the copy itself rather than a consumer.
+  The batch builder derived `file_path` from an `output_directory` and a `batch_name` it took
+  for no other purpose, so both parameters went with the fields, along with the arguments at
+  its two call sites.
+time: 2026-09-30T00:15:00Z

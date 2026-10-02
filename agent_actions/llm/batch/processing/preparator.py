@@ -107,8 +107,6 @@ class BatchTaskPreparator:
         self._run_preflight_validation(
             agent_config,
             data,
-            output_directory,
-            batch_name,
             source_data,
             workflow_metadata,
         )
@@ -123,8 +121,6 @@ class BatchTaskPreparator:
         # Build PreparationContext for TaskPreparer
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
-            output_directory=output_directory,
-            batch_name=batch_name,
             source_data=source_data,
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
@@ -317,7 +313,6 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""
-        from pathlib import Path
 
         from agent_actions.output.response.schema import ResponseSchemaCompiler
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
@@ -337,8 +332,6 @@ class BatchTaskPreparator:
     def _build_preparation_context(
         self,
         agent_config: dict[str, Any],
-        output_directory: str | None,
-        batch_name: str | None,
         source_data: list[Any] | None,
         workflow_metadata: dict[str, Any] | None,
         tools_path: str | None,
@@ -346,9 +339,6 @@ class BatchTaskPreparator:
     ) -> PreparationContext:
         """Build PreparationContext with common settings."""
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
-        file_path = (
-            str(Path(output_directory) / batch_name) if output_directory and batch_name else None
-        )
 
         return PreparationContext(
             agent_config=agent_config,
@@ -360,8 +350,6 @@ class BatchTaskPreparator:
             dependency_configs=self.dependency_configs,
             workflow_metadata=workflow_metadata,
             version_context=self.version_context,
-            file_path=file_path,
-            output_directory=output_directory,
             tools_path=tools_path,
             storage_backend=self.storage_backend,
             current_item=current_item,
@@ -371,8 +359,6 @@ class BatchTaskPreparator:
         self,
         agent_config: dict[str, Any],
         data: list[dict[str, Any]],
-        output_directory: str | None = None,
-        batch_name: str | None = None,
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -389,8 +375,6 @@ class BatchTaskPreparator:
         tools_path = resolve_tools_path(agent_config)
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
-            output_directory=output_directory,
-            batch_name=batch_name,
             source_data=source_data,
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
