@@ -310,12 +310,14 @@ class WorkflowSchemaService:
         # HERE rather than in the graph: the static checker validates observe_refs, and
         # synthesising refs there makes it report references the author never wrote.
         wildcard_refs = self._wildcard_observe_refs(out)
-        for namespace, field_name in sorted(out.observe_refs | wildcard_refs):
+        for _, field_name in sorted(out.observe_refs | wildcard_refs):
             if field_name not in seen:
                 seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.OBSERVE,
-                    is_dropped=out._ref_dropped(namespace, field_name),
+                    # Per name, not per ref: one entry is kept for a name two namespaces
+                    # supply, so asking about this ref alone answered by sort order.
+                    is_dropped=out.drops_field(field_name, extra_refs=wildcard_refs),
                 )
 
         for field_name in out.passthrough_fields:
