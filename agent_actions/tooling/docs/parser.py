@@ -193,7 +193,6 @@ class WorkflowParser:
             action["guard"] = action_data.get("guard")  # Conditional execution
             action["policy"] = action_data.get("policy")  # Execution policy
             action["prompt"] = action_data.get("prompt")  # Prompt reference
-            action["idempotency_key"] = action_data.get("idempotency_key")
 
             # Loop configuration (legacy)
             if "loop" in action_data:
