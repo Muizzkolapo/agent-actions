@@ -161,3 +161,57 @@ class TestTakingACopyCannotReachTheRecord:
         except TypeError:
             pass
         assert record["xs"][0]["n"] == 1
+
+
+class TestContainersThatAreNotDictsOrLists:
+    """`_readonly` knew dict and list, so a mutable container reached by any other route
+    was handed over raw. A tuple is immutable but what it holds need not be, and a set is
+    mutable itself. Both appear in records built by Python UDF tools, which are not
+    restricted to JSON shapes.
+    """
+
+    def test_a_dict_inside_a_tuple_is_wrapped(self):
+        record = {"t": ({"a": 1},)}
+        view = readonly_view(record)
+        with pytest.raises(TypeError, match="read-only"):
+            view["t"][0]["a"] = 99
+        assert record["t"][0]["a"] == 1
+
+    def test_a_set_refuses_mutation(self):
+        record = {"s": {1, 2}}
+        view = readonly_view(record)
+        with pytest.raises(TypeError, match="read-only"):
+            view["s"].add(99)
+        assert record["s"] == {1, 2}
+
+    def test_a_list_inside_a_tuple_is_wrapped(self):
+        record = {"t": ([1, 2],)}
+        view = readonly_view(record)
+        with pytest.raises(TypeError, match="read-only"):
+            view["t"][0].append(3)
+        assert record["t"][0] == [1, 2]
+
+    def test_a_copy_does_not_share_a_tuple_wrapped_dict(self):
+        """`copy()` promises it shares nothing mutable with the record."""
+        record = {"t": ({"a": 1},)}
+        writable = readonly_view(record).copy()
+        writable["t"][0]["a"] = 99
+
+        assert record["t"][0]["a"] == 1
+
+    def test_a_copy_does_not_share_a_set(self):
+        record = {"s": {1, 2}}
+        writable = readonly_view(record).copy()
+        writable["s"].add(99)
+
+        assert record["s"] == {1, 2}
+
+    def test_a_tuple_is_still_a_tuple_and_a_set_still_a_set(self):
+        """Wrapping must not change the type a reading UDF sees."""
+        view = readonly_view({"t": (1, 2), "s": {1}, "fs": frozenset({1})})
+
+        assert isinstance(view["t"], tuple)
+        assert isinstance(view["s"], set)
+        assert isinstance(view["fs"], frozenset)
+        assert view["t"] == (1, 2)
+        assert view["s"] == {1}
