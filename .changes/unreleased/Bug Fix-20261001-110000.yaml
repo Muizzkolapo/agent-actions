@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  `agac validate-udfs` now checks a guard's UDF, not only `impl:`. The command is
+  documented as validating all UDF references in a config without running the workflow,
+  and its walk collected one key, so a config naming a guard UDF that does not exist
+  passed validation cleanly and failed later when the action ran — which is the outcome
+  the command exists to avoid.
+
+  Both guard spellings are covered: `guard: "udf:name"` and
+  `guard: {condition: "udf:name"}`. The prefix is matched case-sensitively, as
+  `GuardParser` matches it, so an uppercase `UDF:` stays the SQL guard the runtime reads
+  it as rather than being refused as a missing function. A SQL guard, a guard naming no
+  condition, and a non-string guard are all left alone.
+
+  The summary reports guard UDFs on their own line rather than folding them into the
+  tool count, since a guard UDF is not a tool and one number covering both would
+  overstate what it says.
+time: 2026-10-01T11:00:00Z

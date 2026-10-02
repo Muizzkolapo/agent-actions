@@ -24,7 +24,7 @@ and chunking/lineage support).
 | `SourceDataLoader.load_source_data()` | `agent_io/target/{action}/` | Reads | — |
 | `resolve_start_node_data_source()` | `agent_io/staging/` | Reads | `data_source` |
 | `discover_udfs()` | `tools/{workflow}/*.py` | Reads | — |
-| `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl` |
+| `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl`, `guard` (`udf:` conditions) |
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
