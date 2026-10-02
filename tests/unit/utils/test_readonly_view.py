@@ -439,7 +439,8 @@ class TestACyclicRecordIsWrappedWithoutRecursing:
 
 
 class TestAliasingInsideTheRecord:
-    """A shared dict, list or set is wrapped once, in the view and in `copy()`; a tuple is not.
+    """A shared dict, list or set is wrapped once, in the view and in `copy()`. A shared tuple
+    is one object in the view's storage and in `copy()`, but rebuilt on each read.
 
     Identity alone is satisfied by a view that wraps nothing, so every view-side test also
     asserts a write is refused, and every copy-side test that the record is unchanged.
@@ -640,3 +641,45 @@ class TestACopyIsWalkedFromStorageAndKeepsItsTypes:
         assert writable["pair"] == (1, 2)
         assert type(writable["t"]) is tuple
         assert hash(writable["pair"]) == hash((1, 2))
+
+
+class TestAMemoHitIsAlwaysTheObjectItWasKeyedBy:
+    """The memo keys `id()`, which is unique only while its object lives. A source that
+    builds its values on access hands the walk temporaries, and once one is freed a later
+    value can reuse its address, so every keyed original must outlive the walk."""
+
+    def test_a_dict_whose_values_are_built_on_access_wraps_each_its_own(self):
+        class Computed(dict):
+            def __iter__(self):
+                return iter(dict.keys(self))
+
+            def __getitem__(self, key):
+                return {"computed_from": dict.__getitem__(self, key)}
+
+        record = {f"k{index}": Computed(a=index) for index in range(30)}
+
+        view = readonly_view(record)
+
+        assert [view[f"k{index}"]["a"]["computed_from"] for index in range(30)] == list(range(30))
+
+    def test_a_list_whose_items_are_built_on_access_wraps_each_its_own(self):
+        class Fresh(list):
+            def __iter__(self):
+                return iter([{"n": item} for item in list.__iter__(self)])
+
+        record = {f"k{index}": Fresh([index]) for index in range(30)}
+
+        view = readonly_view(record)
+
+        assert [view[f"k{index}"][0]["n"] for index in range(30)] == list(range(30))
+
+    def test_a_tuple_whose_items_are_built_on_access_wraps_each_its_own(self):
+        class FreshTuple(tuple):
+            def __iter__(self):
+                return iter([{"n": item} for item in tuple.__iter__(self)])
+
+        record = {f"k{index}": FreshTuple((index,)) for index in range(30)}
+
+        view = readonly_view(record)
+
+        assert [view[f"k{index}"][0]["n"] for index in range(30)] == list(range(30))
