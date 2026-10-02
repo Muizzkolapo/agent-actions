@@ -238,8 +238,12 @@ def infer_dependencies(
         # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
         input_sources = all_deps
 
-    # 2. Parse context_scope to find all referenced actions
-    context_scope = action_config.get("context_scope", {})
+    # 2. Parse context_scope to find all referenced actions. Coerced here rather than at
+    # each caller: seven of them pass an action config, and the docs parser and inspect
+    # read it straight from YAML, where `context_scope:` null or a scalar survives (#1193).
+    context_scope = action_config.get("context_scope")
+    if not isinstance(context_scope, dict):
+        context_scope = {}
     referenced_actions = extract_action_names_from_context_scope(context_scope)
 
     # 2a. Auto-infer from prompt template (if no context_scope configured)

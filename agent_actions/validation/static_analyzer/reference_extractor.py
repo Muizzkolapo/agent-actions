@@ -65,7 +65,12 @@ class ReferenceExtractor:
         if guard:
             requirements.extend(self._extract_from_guard(guard, agent_name))
 
-        context_scope = agent_config.get("context_scope", {})
+        # By shape, not falsiness: `context_scope:` null and a scalar are the same user
+        # error, and `or {}` left the second one raising. The graph builder coerces this
+        # too; here it is the contract of a public entry point (#1193).
+        context_scope = agent_config.get("context_scope")
+        if not isinstance(context_scope, dict):
+            context_scope = {}
         for directive, refs in context_scope.items():
             if isinstance(refs, list):
                 requirements.extend(

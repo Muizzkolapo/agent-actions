@@ -5,6 +5,9 @@ import logging
 import pytest
 
 from agent_actions.validation.static_analyzer import ReferenceExtractor
+from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
+    WorkflowStaticAnalyzer,
+)
 
 _LOGGER_NAME = "agent_actions.validation.static_analyzer.reference_extractor"
 
@@ -504,3 +507,166 @@ class TestReferenceExtractorTemplateSyntaxError:
             assert len(warning_records) == 0
         finally:
             logging.getLogger("agent_actions").propagate = original
+
+
+class TestAPresentButNullContextScope:
+    """`AgentConfig` permits `context_scope: None`, and reading it with a `{}` default does
+    not help when the key is there and the value is null. The static analyser then crashed
+    on `.items()` instead of letting the "action has no context_scope" check report it.
+
+    Not reachable through the modern `actions:` route, where the expander drops the key —
+    it needs the legacy `agents:` shape that `ConfigManager.get_user_agents` returns
+    verbatim, or a direct caller (#1193).
+    """
+
+    def setup_method(self):
+        self.extractor = ReferenceExtractor()
+
+    def test_a_null_context_scope_does_not_crash_the_walk(self):
+        config = {"name": "a", "prompt": "p", "context_scope": None}
+
+        assert self.extractor.extract_from_agent(config) == []
+
+    def test_it_is_read_the_same_as_an_absent_one(self):
+        """Null and absent both mean no directives, so they must answer alike — that is
+        what lets the existing "has no context_scope" check report it properly."""
+        absent = self.extractor.extract_from_agent({"name": "a", "prompt": "p"})
+        null = self.extractor.extract_from_agent(
+            {"name": "a", "prompt": "p", "context_scope": None}
+        )
+
+        assert null == absent
+
+    def test_other_references_in_the_same_config_still_resolve(self):
+        """The crash took the whole config down, so a null context_scope must not cost the
+        prompt's references."""
+        config = {
+            "name": "a",
+            "prompt": "{{ action.extractor.summary }}",
+            "context_scope": None,
+        }
+
+        refs = self.extractor.extract_from_agent(config)
+
+        assert [(r.source_agent, r.field_path) for r in refs] == [("extractor", "summary")]
+
+    def test_a_populated_context_scope_is_unaffected(self):
+        config = {"name": "a", "prompt": "p", "context_scope": {"observe": ["up.field"]}}
+
+        refs = self.extractor.extract_from_agent(config)
+
+        assert [(r.source_agent, r.field_path) for r in refs] == [("up", "field")]
+
+    def test_a_null_directive_inside_context_scope_does_not_crash_either(self):
+        """The sibling shape: the block is a dict but one directive is null. `for refs in
+        ...` would hand None to the ref walk."""
+        config = {"name": "a", "prompt": "p", "context_scope": {"observe": None}}
+
+        assert self.extractor.extract_from_agent(config) == []
+
+
+class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
+    """`analyze()` normalizes at its Step 0b, but `get_graph` and the four other lazy
+    entry points reach `_build_graph` without it — and those are what the docs catalog
+    and the schema service use. A `context_scope:` that is null or a scalar is raw YAML
+    until something coerces it, so every reader below the graph saw it as written (#1193).
+
+    These are the cases that distinguish fixing the producer from fixing one reader: the
+    first crash was in the schema extractor, the next in dependency inference, and a
+    reader-by-reader fix moves it rather than ending it.
+    """
+
+    @staticmethod
+    def _config(scope):
+        # Fresh per call: analyze() normalizes the dict in place, so a shared config
+        # would hide the very thing under test.
+        return {
+            "name": "wf",
+            "actions": [
+                {
+                    "name": "first",
+                    "prompt": "p",
+                    "schema": {"field": "string"},
+                    "context_scope": {"observe": ["source.x"]},
+                },
+                {"name": "second", "prompt": "{{ action.first.field }}", "context_scope": scope},
+            ],
+        }
+
+    @pytest.mark.parametrize("scope", [None, [], "", 0, False, "observe", ["observe"], 5])
+    def test_get_graph_does_not_raise_on_a_non_mapping(self, scope):
+        graph = WorkflowStaticAnalyzer(self._config(scope)).get_graph()
+
+        assert graph is not None
+
+    def test_a_populated_scope_still_reaches_the_graph(self):
+        """Two things this must avoid, both of which make the assertion vacuous.
+
+        Asserting on `workflow_config` cannot see the coercion at all, because it copies
+        rather than writing back. And asserting a requirement that the *prompt* also
+        supplies cannot see it either — `{{ action.first.field }}` yields the same
+        requirement whether or not the block survived. So the action here references
+        nothing in its prompt, and `first.field` can only arrive via `observe`.
+        """
+        config = {
+            "name": "wf",
+            "actions": [
+                {
+                    "name": "first",
+                    "prompt": "p",
+                    "schema": {"field": "string"},
+                    "context_scope": {"observe": ["source.x"]},
+                },
+                {
+                    "name": "second",
+                    "prompt": "no action references here",
+                    "context_scope": {"observe": ["first.field"]},
+                },
+            ],
+        }
+        analyzer = WorkflowStaticAnalyzer(config)
+
+        graph = analyzer.get_graph()
+
+        node = graph.get_node("second")
+        assert node is not None
+        assert ("first", "field") in {
+            (r.source_agent, r.field_path) for r in node.input_requirements
+        }
+
+    def test_analyze_still_reports_the_null_rather_than_silently_accepting_it(self):
+        """The coercion happens below analyze()'s Step 0 diagnostics, so the actionable
+        error must survive — otherwise the fix trades a crash for silence."""
+        result = WorkflowStaticAnalyzer(self._config(None)).analyze()
+
+        assert any("has no context_scope" in str(e.message) for e in result.errors)
+
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        [
+            (None, "context_scope is null"),
+            ("observe", "must be a mapping, got str"),
+            (["observe"], "must be a mapping, got list"),
+            (5, "must be a mapping, got int"),
+        ],
+    )
+    def test_the_hint_survives_a_graph_built_before_analyze(self, scope, expected):
+        """Step 0 picks its hint from the raw value. Writing the coercion back into the
+        caller's config would destroy it, and a caller that touches the graph first — the
+        schema service is exactly that shape — would then be told to add a context_scope
+        it did write, misindented. The message is the same either way; only the hint
+        differs, so asserting on the message alone cannot see this."""
+        analyzer = WorkflowStaticAnalyzer(self._config(scope))
+        analyzer.get_graph()
+
+        result = analyzer.analyze()
+
+        hints = [getattr(e, "hint", "") or "" for e in result.errors]
+        assert any(expected in h for h in hints), hints
+
+    def test_building_the_graph_does_not_rewrite_the_callers_config(self):
+        config = self._config("observe")
+
+        WorkflowStaticAnalyzer(config).get_graph()
+
+        assert config["actions"][1]["context_scope"] == "observe"

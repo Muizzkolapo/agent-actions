@@ -298,7 +298,12 @@ class CatalogGenerator:
 
         # Extract input fields from context_scope
         if "context_scope" in action:
+            # Key presence is not a mapping: the docs parser reads raw YAML
+            # (`parser.py:188`) with no validation layer, so `context_scope:` null or a
+            # scalar arrives as written (#1193).
             context_scope = action["context_scope"]
+            if not isinstance(context_scope, dict):
+                context_scope = {}
             inputs = self.parser.extract_input_fields(context_scope)
             if inputs:
                 enriched["inputs"] = inputs

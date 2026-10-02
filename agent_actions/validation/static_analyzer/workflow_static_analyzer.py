@@ -267,6 +267,16 @@ class WorkflowStaticAnalyzer:
 
         actions = self.workflow_config.get("actions", [])
 
+        # Every reader below expects a mapping, which the lazy entry points reaching here
+        # do not guarantee the way `analyze()` does (#1193). Copied, not written back:
+        # Step 0 picks its hint from the raw value, which overwriting would destroy.
+        actions = [
+            {**action, "context_scope": {}}
+            if isinstance(action, dict) and not isinstance(action.get("context_scope"), dict)
+            else action
+            for action in actions
+        ]
+
         # Add special source node (always available)
         self._add_source_node()
 

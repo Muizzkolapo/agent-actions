@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  A `context_scope` that is not a mapping — `context_scope:` written with nothing under it,
+  or as a scalar or list — no longer crashes the static analyser with an unhandled
+  `AttributeError`. `agac docs` and anything else reading a workflow's catalog or schemas
+  went down on a traceback instead of reporting the problem.
+
+  The cause was that `analyze()` normalizes `context_scope` before the graph is built, and
+  the five lazy entry points that reach graph building directly — which the docs catalog
+  and the schema service use — did not. Every reader below them received the raw YAML, so
+  the first one to index it raised: the schema extractor, then dependency inference, then
+  the docs parser. Coercing the shape once where the graph is built fixes all of them,
+  rather than each in turn. The diagnostics are unaffected: `analyze()` still inspects the
+  raw value first and still reports "action has no context_scope" with its null-specific
+  hint, so a bad value is reported rather than silently read as empty.
+
+  `agac inspect` and `agac run` were never affected, because both go through `analyze()`.
+time: 2026-10-01T12:00:00Z
