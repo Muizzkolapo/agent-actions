@@ -51,12 +51,20 @@ guard:
 
 | Operator | Example |
 |----------|---------|
-| `IN` | `status IN ["active", "pending"]` |
-| `NOT IN` | `category NOT IN ["spam"]` |
-| `CONTAINS` | `tags CONTAINS "important"` |
-| `LIKE` | `name LIKE "prod_*"` |
-| `BETWEEN` | `score BETWEEN 50 AND 100` |
-| `IS NULL` | `description IS NULL` |
+| `IN` | `triage.status IN ["active", "pending"]` |
+| `NOT IN` | `classify.category NOT IN ["spam"]` |
+| `CONTAINS` | `extract.tags CONTAINS "important"` |
+| `LIKE` | `lookup.name LIKE "prod_*"` |
+| `BETWEEN` | `score_review.score BETWEEN 50 AND 100` |
+| `IS NULL` | `summarize.description IS NULL` |
+
+Each field carries its action prefix, as every guard field must — see
+[Context Access](#context-access).
+
+`IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
+prefix — is treated as null, so the clause is true and the record passes. Every other operator
+reports a missing field and filters; `IS NULL` alone lets it through, and logs nothing while
+doing it. A guard written `summarize.descriptio IS NULL` filters nothing and says nothing.
 
 ### Boolean Values
 
