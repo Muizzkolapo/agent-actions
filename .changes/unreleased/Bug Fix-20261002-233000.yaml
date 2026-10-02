@@ -6,8 +6,10 @@ body: >-
   admitted with its guard never applied. Both walks the view makes, building it and taking a
   writable `copy()`, now remember each container they have handled, as `copy.deepcopy` does,
   so a cycle terminates and two places holding one dict, list or set share one result. A tuple
-  is the exception: it cannot be remembered before its contents exist, so a cycle passing
-  through many nested tuples can still exhaust the stack (about 29 on one cycle); records read
-  from JSON hold no tuples. Building a view costs up to about 17% more on records with few
-  scalars per container, and less on scalar-dense ones.
+  cannot be remembered before its contents exist, so a reference back into a tuple re-walks it,
+  and 29 nested tuples that each hold one back to the outermost exhaust the stack; records read
+  from JSON hold no tuples. The memo costs time on records with few scalars per container:
+  building a view of a ~4 KB record with one scalar per container takes about 25% longer
+  (56 to 70 microseconds), and a record of hundreds of empty or two-element containers about
+  35-40% longer; `copy()` of either about 35-55% longer. A scalar-dense record costs the same.
 time: 2026-10-02T23:30:00Z

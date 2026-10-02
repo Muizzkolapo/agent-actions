@@ -1,49 +1,12 @@
-"""Read-only views over a record, for handing to user code.
+"""Read-only views over a record, for handing to user code such as a guard UDF.
 
-Guard evaluation assembles its context by assigning the record's namespaces by reference,
-so without a view the dict a `conditional_clause` UDF receives IS the record's own content.
-A UDF that writes to it rewrites the record mid-run, and everything downstream -- the
-action's input, the enricher, the skipped tombstones -- sees the rewritten value with
-nothing logged.
-
-Two separate things are going on, and it is worth being exact about which does what:
-
-* **Wrapping on the way IN is what protects the record.** The storage holds wrappers, not
-  the record's own containers, so a write lands on a wrapper and never reaches the record
-  at any depth. It has to be on the way in: `dict(view)`, `{**view}` and `list(view)` copy
-  the values as stored through a C fast path that no Python override intercepts, so
-  wrapping only on access handed the record's nested containers straight back out.
-  Accessors still wrap, so a container reaching the storage unwrapped is also covered,
-  which is why `items`, `values` and list iteration are overridden too.
-* **Refusing mutation is what makes it honest.** Without it a UDF's write would silently
-  succeed against a copy and the author would believe it had taken effect. Raising names
-  the offending UDF instead.
-* **Taking a copy has to work.** `copy()`, `copy.copy` and `copy.deepcopy` all return a
-  plain, deep, writable structure. A shallow copy would share the record's nested
-  containers, so the hatch offered to avoid rewriting the record would have rewritten it;
-  `copy.copy` raised outright, because rebuilding a dict subclass assigns into a fresh
-  instance and `__setitem__` refuses.
-
-These are dict/list/set subclasses rather than MappingProxyType or a bare Mapping so that
-`isinstance(x, dict)`, `json.dumps(x)` and `**x` keep working for the overwhelming
-majority of UDFs, which only read. That choice is what forces the wrapping to be eager:
-a non-dict Mapping would route `dict(view)` through `keys()` and `__getitem__` and so
-could wrap lazily, at the cost of those three.
-
-Two consequences of wrapping on the way in, both accepted deliberately:
-
-* **The view is a snapshot of the container structure, not a live alias.** A namespace the
-  record gains after the view is built is not visible through it. Guard evaluation builds
-  the view per record and does not mutate the record while evaluating, so nothing in this
-  codebase observes the difference.
-* **A cyclic record raises RecursionError at construction**, where wrapping on access
-  tolerated it until something walked the cycle. Records here come from JSON -- the store,
-  staging, LLM output -- so they are acyclic; a Python UDF could in principle build a cycle,
-  and it would fail here rather than later at serialization.
-
-`copy()` deliberately does not preserve aliasing between two places in the record that
-hold the same object: it hands back independent writable structures, so mutating one does
-not surprise the author by changing the other.
+Wrapped on the way in: `dict(view)`, `{**view}`, `xs + []` and `reversed(xs)` read stored
+values below any Python override, so the storage must already hold wrappers. A write is
+refused loudly so a UDF never believes it took effect; `copy()` is the hatch, plain, deep
+and writable. Subclassing dict/list/set keeps `isinstance`, `json.dumps` and `**` working.
+The view is a snapshot of the record's structure when built. Both walks memoise each
+container by `id()`, as `copy.deepcopy` does, so a cycle terminates and a shared dict, list
+or set stays one object; a tuple read from a view is rebuilt each time.
 """
 
 from __future__ import annotations
@@ -58,40 +21,73 @@ _MESSAGE = (
 )
 
 
-def _readonly(value: Any) -> Any:
-    """Wrap *value* if it is a container, so a write through it cannot reach the record."""
-    if isinstance(value, ReadOnlyDict | ReadOnlyList):
-        return value
-    if isinstance(value, dict):
-        return ReadOnlyDict(value)
-    if isinstance(value, list):
-        return ReadOnlyList(value)
-    if isinstance(value, ReadOnlySet):
-        return value
-    if isinstance(value, tuple):
-        # Immutable itself, but what it holds need not be: a dict inside a tuple was handed
-        # over raw and a write to it reached the record.
-        return tuple(_readonly(item) for item in value)
-    if isinstance(value, set):
-        # A set cannot hold a dict or a list -- its members must be hashable -- so only the
-        # set itself needs guarding. frozenset needs nothing.
-        return ReadOnlySet(value)
-    return value
+def _hold(memo: dict[int, Any], built: Any) -> None:
+    # The memo keys `id()`, unique only while its object lives. What an exact dict, list or
+    # tuple yields is the record's own and outlives the walk; what a subclass yields may be
+    # built on access and freed, so it is kept alive until the walk ends.
+    memo.setdefault(id(memo), []).append(built)
 
 
-def _unwrap(value: Any) -> Any:
-    """A plain, writable copy of *value*, sharing nothing with the record."""
+def _readonly(value: Any, memo: dict[int, Any] | None = None) -> Any:
+    """Wrap *value* if it is a container, so a write through it cannot reach the record.
+
+    *memo* maps `id(container)` to its wrapper for one walk.
+    """
+    if isinstance(value, _WRAPPERS):
+        return value
+    if not isinstance(value, _WRAPPABLE):
+        return value
+    if memo is None:
+        memo = {}
+    elif (wrapped := memo.get(id(value))) is not None:
+        return wrapped
     if isinstance(value, dict):
-        return {key: _unwrap(dict.__getitem__(value, key)) for key in value}
+        return ReadOnlyDict(value, memo)
     if isinstance(value, list):
-        return [_unwrap(item) for item in list.__iter__(value)]
+        return ReadOnlyList(value, memo)
     if isinstance(value, tuple):
-        return tuple(_unwrap(item) for item in value)
+        # Not memoisable before its items exist, so a reference back into a tuple re-walks
+        # it: 29 nested tuples that each hold one back to the outermost exhaust the stack.
+        # A record read from JSON holds no tuples.
+        items = tuple(value)
+        if type(value) is not tuple:
+            _hold(memo, items)
+        return memo.setdefault(id(value), tuple(_readonly(item, memo) for item in items))
+    # Set members are hashable, so a set holds no plain dict or list and its members are not
+    # walked; only the set itself is guarded. frozenset needs nothing.
+    return memo.setdefault(id(value), ReadOnlySet(value))
+
+
+def _unwrap(value: Any, memo: dict[int, Any] | None = None) -> Any:
+    """A plain, writable copy of *value*; set members, being hashable, are kept by reference.
+
+    Memoised for the same reason as `_readonly`: once construction stops raising on a cycle,
+    this is the next walk that would recurse forever on one.
+    """
+    if not isinstance(value, _COPYABLE):
+        return value
+    if memo is None:
+        memo = {}
+    elif (done := memo.get(id(value))) is not None:
+        return done
+    if isinstance(value, dict):
+        plain: dict[Any, Any] = {}
+        memo[id(value)] = plain
+        for key in value:
+            plain[key] = _unwrap(dict.__getitem__(value, key), memo)
+        return plain
+    if isinstance(value, list):
+        items: list[Any] = []
+        memo[id(value)] = items
+        items.extend(_unwrap(item, memo) for item in list.__iter__(value))
+        return items
+    if isinstance(value, tuple):
+        return memo.setdefault(id(value), tuple(_unwrap(item, memo) for item in value))
     if isinstance(value, frozenset):
-        return frozenset(value)
-    if isinstance(value, set):
-        return set(set.__iter__(value))
-    return value
+        # `frozenset(x)` is x itself for an exact frozenset; for a subclass it is a new
+        # object, and the memo is what keeps one shared instance one object in the copy.
+        return memo.setdefault(id(value), frozenset(value))
+    return memo.setdefault(id(value), set(set.__iter__(value)))
 
 
 def _refuse(*_args: Any, **_kwargs: Any) -> NoReturn:
@@ -101,13 +97,20 @@ def _refuse(*_args: Any, **_kwargs: Any) -> NoReturn:
 class ReadOnlyDict(dict):
     """A dict that refuses mutation and holds its nested containers already wrapped."""
 
-    def __init__(self, source: Any = (), /) -> None:
+    def __init__(self, source: Any = (), memo: dict[int, Any] | None = None, /) -> None:
         # Wrapped on the way IN, not on the way out. `dict(view)` and `{**view}` copy the
         # values as stored through a C fast path that no Python override sees, so storing
         # the record's own containers handed them straight back (measured). Storing
         # wrappers means such a copy carries wrappers, and a nested write through it is
         # refused instead of silently rewriting the record.
-        super().__init__({key: _readonly(value) for key, value in dict(source).items()})
+        memo = {} if memo is None else memo
+        # Registered before the values are walked, so a cycle leading back to *source*
+        # resolves to this instance -- empty at that moment, populated before any read.
+        memo[id(source)] = self
+        items = dict(source)
+        if type(source) is not dict:
+            _hold(memo, items)
+        super().__init__({key: _readonly(value, memo) for key, value in items.items()})
 
     def __setitem__(self, *args: Any, **kwargs: Any) -> NoReturn:
         _refuse()
@@ -157,7 +160,8 @@ class ReadOnlyDict(dict):
         shares the record's nested containers, so a write one level down reached the
         record through the very hatch offered to avoid that.
         """
-        return {key: _unwrap(dict.__getitem__(self, key)) for key in self}
+        plain: dict[Any, Any] = _unwrap(self)
+        return plain
 
     def __copy__(self) -> dict:
         # `copy.copy` rebuilds a dict subclass by assigning into a fresh instance, which
@@ -171,10 +175,15 @@ class ReadOnlyDict(dict):
 class ReadOnlyList(list):
     """A list that refuses mutation and holds its nested containers already wrapped."""
 
-    def __init__(self, source: Any = (), /) -> None:
-        # Wrapped on the way in, for the reason given on ReadOnlyDict: `list(view)` and
-        # `[*view]` copy the items as stored, below any Python override.
-        super().__init__(_readonly(item) for item in list(source))
+    def __init__(self, source: Any = (), memo: dict[int, Any] | None = None, /) -> None:
+        # Wrapped on the way in, for the reason given on ReadOnlyDict: `xs + []` and
+        # `reversed(xs)` read the items as stored, below any Python override.
+        memo = {} if memo is None else memo
+        memo[id(source)] = self
+        items = list(source)
+        if type(source) is not list:
+            _hold(memo, items)
+        super().__init__(_readonly(item, memo) for item in items)
 
     def __setitem__(self, *args: Any, **kwargs: Any) -> NoReturn:
         _refuse()
@@ -223,7 +232,8 @@ class ReadOnlyList(list):
 
     def copy(self) -> list:
         """A real, writable list, deep -- as on ReadOnlyDict."""
-        return [_unwrap(item) for item in list.__iter__(self)]
+        items: list[Any] = _unwrap(self)
+        return items
 
     def __copy__(self) -> list:
         return self.copy()
@@ -289,6 +299,12 @@ class ReadOnlySet(set):
 
     def __deepcopy__(self, _memo: dict) -> set:
         return self.copy()
+
+
+# Tuples, not `A | B`: that builds a types.UnionType per call, once per value in the record.
+_WRAPPERS = (ReadOnlyDict, ReadOnlyList, ReadOnlySet)
+_WRAPPABLE = (dict, list, tuple, set)  # frozenset is absent: immutable, and cannot nest one
+_COPYABLE = (*_WRAPPABLE, frozenset)
 
 
 def readonly_view(data: Any) -> Any:
