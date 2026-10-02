@@ -1,0 +1,22 @@
+kind: Bug Fix
+body: >-
+  The editor's guard diagnostic now runs on real configs, and reports only what a workflow file
+  can prove. It had never run on an idiomatic one: the indexer captured a condition with the
+  quotes YAML uses to hold the scalar still attached and then blanked quoted literals before
+  extracting variables, and it only recognised the block form of `guard:` — so of the 90 guards
+  in the sample project it saw 3, and extracted variables from none. Values now come from the
+  parsed document rather than from the lines, which also fixes a trailing `# comment` being read
+  as field names, a quoted `output_field`, quoted `context_scope` list items, and `>-` block
+  scalars. A clause is reported in two cases: a bare name that no promotion can resolve — a
+  dependency's `output_field`, a version key, a record field such as `source_guid`, or a
+  first-stage action's staging columns, which are unknowable and therefore left alone — and a
+  dotted reference whose namespace no action in the workflow writes, which is how a misspelt
+  action name is caught. Which FIELDS a namespace holds is never judged: the record carries
+  every namespace the run accumulated rather than only this action's declared dependencies, and
+  the framework attaches `expect` while refusing any schema that declares it, so reporting
+  fields produced 19 warnings against the sample project, every one on a clause the runtime
+  answers and one of them impossible to silence. A versioned action is stored per variant
+  (`score_1`, `score_fast`) and never under its own name, so a clause naming the base is
+  reported with the variants it should have used. The guard language's own words — `CONTAINS`,
+  `LIKE`, `BETWEEN`, `LENGTH` — and `udf:` conditions are no longer read as field references.
+time: 2026-09-30T04:00:00Z
