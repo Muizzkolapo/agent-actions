@@ -82,3 +82,49 @@ class TestAnUnresolvedSourceSaysWhatWasSearched:
         )
 
         assert empty[0].get("detail") != populated[0].get("detail")
+
+
+class TestTheDetailReachesTheStoredRow:
+    """The skip dict carrying a detail is half of it; the column has to be written.
+
+    `pipeline.py` built the seven-tuple inline and passed `None` for `detail`, which is how
+    it stayed empty unnoticed. `scope_skip_disposition_rows` is that construction, named so
+    the column can be asserted without driving a whole pipeline (#1140).
+    """
+
+    def test_the_detail_lands_in_the_seventh_column(self):
+        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+
+        rows = scope_skip_disposition_rows(
+            "consume",
+            [
+                {
+                    "source_guid": "g1",
+                    "reason": "observe_field_missing",
+                    "position": 0,
+                    "detail": "context_scope.observe field 'a1.n' not found in this record",
+                }
+            ],
+        )
+
+        assert len(rows) == 1
+        assert len(rows[0]) == 7, rows[0]
+        assert rows[0][3] == "observe_field_missing"
+        assert rows[0][6] == "context_scope.observe field 'a1.n' not found in this record"
+
+    def test_a_skip_with_no_detail_still_writes_a_row(self):
+        """Nothing requires the detail: a reason-only skip must still be accounted for."""
+        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+
+        rows = scope_skip_disposition_rows(
+            "consume", [{"source_guid": "g1", "reason": "source_unresolved", "position": 0}]
+        )
+
+        assert len(rows) == 1
+        assert rows[0][6] is None
+
+    def test_a_skip_without_a_source_guid_is_left_out(self):
+        """There is nothing to key a disposition on."""
+        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+
+        assert scope_skip_disposition_rows("consume", [{"reason": "source_unresolved"}]) == []
