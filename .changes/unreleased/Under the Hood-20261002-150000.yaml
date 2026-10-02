@@ -1,0 +1,11 @@
+kind: Under the Hood
+body: >-
+  `render_card_markdown`'s `action_name` parameter is gone, with the branch that unwrapped
+  `content[action_name]`. It was never reachable: the parameter is keyword-only, defaults to
+  `None`, and no caller has ever supplied it — the sole production call is the LSP seed-file
+  hover, in every commit since the parameter was added. Three documentation claims about the
+  function went with it: the module manifest named `agent_io/store/{workflow}.db` as a
+  project surface the function never touches, the architecture diagram described the unwrap
+  step, and the same file put `METADATA_KEYS` at 13 keys when it holds 19. The count is
+  replaced by the set relationship and the test that pins it, rather than by a new number.
+time: 2026-10-02T15:00:00Z

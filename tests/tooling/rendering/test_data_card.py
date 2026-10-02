@@ -181,39 +181,35 @@ class TestRenderCardMarkdown:
         parts = md.split("---")
         assert len(parts) <= 2  # at most one separator
 
-    def test_namespace_unwrap_with_action_name(self):
-        """When action_name is given, namespaced content is unwrapped."""
+    def test_a_namespaced_content_renders_as_one_field(self):
+        """The envelope is not unwrapped: `content` is a top-level key like any other, so
+        the namespace dict renders as that one field's value rather than as fields of its
+        own. The unwrapping parameter this once exercised was never reachable (#1198).
+
+        The negative assertions are the load-bearing ones and come from the deleted
+        test: `"classify" in md` alone is an input substring that any echo of the record
+        satisfies, including a JSON dump.
+        """
         record = {
-            "source_guid": "g1",
             "content": {
                 "classify": {"genre": "fiction", "confidence": 0.9},
                 "summarize": {"summary": "A book about..."},
             },
         }
-        md = render_card_markdown(record, action_name="classify")
-        # Should show the action's fields, not the namespace keys
-        assert "Genre" in md  # humanized "genre"
-        assert "fiction" in md
-        assert "Confidence" in md
-        # Should NOT show other action names as fields
-        assert "Summarize" not in md
-        assert "Classify" not in md
-
-    def test_namespace_unwrap_without_action_name(self):
-        """Without action_name, namespaced content renders as-is."""
-        record = {
-            "content": {
-                "classify": {"genre": "fiction"},
-            },
-        }
         md = render_card_markdown(record)
-        # "content" is a top-level key classified as "content"
-        # Its value (the namespace dict) renders as JSON
-        assert "classify" in md
 
-    def test_namespace_unwrap_flat_content_unaffected(self):
-        """action_name with flat content (no namespace) passes through."""
+        assert "**Content**" in md, md
+        assert "classify" in md
+        # Not promoted to fields of their own, which is what unwrapping would have done.
+        assert "**Classify**" not in md, md
+        assert "**Summarize**" not in md, md
+        assert "**Genre**" not in md, md
+
+    def test_a_flat_record_renders_its_own_fields(self):
+        """The shape the one caller actually passes: `_build_seed_file_hover` reads
+        `seed_data/*.json` and hands over `data[0]`, a flat record."""
         record = {"genre": "fiction", "confidence": 0.9}
-        md = render_card_markdown(record, action_name="classify")
+        md = render_card_markdown(record)
+
         assert "Genre" in md
         assert "fiction" in md
