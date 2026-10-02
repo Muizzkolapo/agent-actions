@@ -1,9 +1,10 @@
 """Read-only views over a record, for handing to user code.
 
 Guard evaluation assembles its context by assigning the record's namespaces by reference,
-so the dict a `conditional_clause` UDF receives IS the record's own content. A UDF that
-writes to it rewrites the record mid-run, and everything downstream -- the action's input,
-the enricher, the skipped tombstones -- sees the rewritten value with nothing logged.
+so without a view the dict a `conditional_clause` UDF receives IS the record's own content.
+A UDF that writes to it rewrites the record mid-run, and everything downstream -- the
+action's input, the enricher, the skipped tombstones -- sees the rewritten value with
+nothing logged.
 
 Two separate things are going on, and it is worth being exact about which does what:
 
@@ -23,9 +24,26 @@ Two separate things are going on, and it is worth being exact about which does w
   `copy.copy` raised outright, because rebuilding a dict subclass assigns into a fresh
   instance and `__setitem__` refuses.
 
-These are dict/list subclasses rather than MappingProxyType or a bare Mapping so that
+These are dict/list/set subclasses rather than MappingProxyType or a bare Mapping so that
 `isinstance(x, dict)`, `json.dumps(x)` and `**x` keep working for the overwhelming
-majority of UDFs, which only read.
+majority of UDFs, which only read. That choice is what forces the wrapping to be eager:
+a non-dict Mapping would route `dict(view)` through `keys()` and `__getitem__` and so
+could wrap lazily, at the cost of those three.
+
+Two consequences of wrapping on the way in, both accepted deliberately:
+
+* **The view is a snapshot of the container structure, not a live alias.** A namespace the
+  record gains after the view is built is not visible through it. Guard evaluation builds
+  the view per record and does not mutate the record while evaluating, so nothing in this
+  codebase observes the difference.
+* **A cyclic record raises RecursionError at construction**, where wrapping on access
+  tolerated it until something walked the cycle. Records here come from JSON -- the store,
+  staging, LLM output -- so they are acyclic; a Python UDF could in principle build a cycle,
+  and it would fail here rather than later at serialization.
+
+`copy()` deliberately does not preserve aliasing between two places in the record that
+hold the same object: it hands back independent writable structures, so mutating one does
+not surprise the author by changing the other.
 """
 
 from __future__ import annotations
@@ -33,8 +51,8 @@ from __future__ import annotations
 from typing import Any, NoReturn
 
 _MESSAGE = (
-    "A guard's evaluation context is read-only: it holds the record's own namespaces by "
-    "reference, so writing to it would rewrite the record mid-run. Copy what you need "
+    "A guard's evaluation context is read-only: it is built from the record, so writing to "
+    "it would be an attempt to rewrite the record mid-run. Copy what you need "
     "(data['ns'].copy(), which is deep and writable) and return a value instead of "
     "mutating the input."
 )
@@ -48,6 +66,16 @@ def _readonly(value: Any) -> Any:
         return ReadOnlyDict(value)
     if isinstance(value, list):
         return ReadOnlyList(value)
+    if isinstance(value, ReadOnlySet):
+        return value
+    if isinstance(value, tuple):
+        # Immutable itself, but what it holds need not be: a dict inside a tuple was handed
+        # over raw and a write to it reached the record.
+        return tuple(_readonly(item) for item in value)
+    if isinstance(value, set):
+        # A set cannot hold a dict or a list -- its members must be hashable -- so only the
+        # set itself needs guarding. frozenset needs nothing.
+        return ReadOnlySet(value)
     return value
 
 
@@ -57,6 +85,12 @@ def _unwrap(value: Any) -> Any:
         return {key: _unwrap(dict.__getitem__(value, key)) for key in value}
     if isinstance(value, list):
         return [_unwrap(item) for item in list.__iter__(value)]
+    if isinstance(value, tuple):
+        return tuple(_unwrap(item) for item in value)
+    if isinstance(value, frozenset):
+        return frozenset(value)
+    if isinstance(value, set):
+        return set(set.__iter__(value))
     return value
 
 
@@ -195,6 +229,65 @@ class ReadOnlyList(list):
         return self.copy()
 
     def __deepcopy__(self, _memo: dict) -> list:
+        return self.copy()
+
+
+class ReadOnlySet(set):
+    """A set that refuses mutation.
+
+    Members only -- a set's members must be hashable, so it cannot hold a dict or a list,
+    and there is nothing below it to wrap. `frozenset` needs no wrapper at all.
+    """
+
+    def __iand__(self, other: Any) -> NoReturn:  # type: ignore[misc]
+        # In-place operators again: refused explicitly because the C-level slot does not
+        # route through the named-method overrides below.
+        _refuse()
+
+    def __ior__(self, other: Any) -> NoReturn:  # type: ignore[misc]
+        _refuse()
+
+    def __isub__(self, other: Any) -> NoReturn:  # type: ignore[misc]
+        _refuse()
+
+    def __ixor__(self, other: Any) -> NoReturn:  # type: ignore[misc]
+        _refuse()
+
+    def add(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def clear(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def difference_update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def discard(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def intersection_update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def pop(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def remove(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def symmetric_difference_update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        _refuse()
+
+    def copy(self) -> set:  # type: ignore[override]
+        """A real, writable set."""
+        return set(set.__iter__(self))
+
+    def __copy__(self) -> set:
+        return self.copy()
+
+    def __deepcopy__(self, _memo: dict) -> set:
         return self.copy()
 
 
