@@ -709,6 +709,15 @@ def apply_context_scope_for_records(
         or any(ref.startswith("source.") for ref in passthrough_refs)
         or any(ref.startswith("source.") for ref in drop_refs)
     )
+    # Resolving and REQUIRING are different questions. `drop` names a field to withhold,
+    # so an unresolvable source means there is nothing to withhold and the record is
+    # complete without it; only observe and passthrough need the content to exist. Gating
+    # the skip on has_source_refs discarded a record whose action merely declared
+    # `drop: [source.secret]` -- a record that carries no source cannot leak one, and
+    # RECORD mode proceeds with it.
+    needs_source_content = any(
+        ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
+    )
 
     source_index = _build_source_index(source_data) if has_source_refs else {}
     resolved_observe, qualify_wildcards = (
@@ -742,7 +751,14 @@ def apply_context_scope_for_records(
                 # identity, and this answer is the record's own content.
                 carried = content.get("source")
                 source_content = carried if isinstance(carried, dict) else None
-            if source_content is None:
+            if source_content is None and not needs_source_content:
+                logger.debug(
+                    "[%s] Record %s has no resolvable source, but the action only names "
+                    "it in `drop` — nothing to withhold, so the record is kept",
+                    action_name,
+                    sguid,
+                )
+            elif source_content is None:
                 logger.debug(
                     "[%s] Skipping record %s — source_guid matches no record in the "
                     "%d-record source pool and the record carries no source namespace",

@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A FILE-granularity action that only names `source` in `drop` no longer discards records
+  whose source cannot be resolved. The skip was gated on `has_source_refs`, the same flag
+  that decides whether to build the source index — but resolving and requiring are
+  different questions. `drop` names a field to withhold, so an unresolvable source means
+  there is nothing to withhold and the record is complete without it; a record carrying no
+  source cannot leak one. Only `observe` and `passthrough` need the content to exist, and
+  those still skip with `source_unresolved`, unchanged. RECORD mode already kept such a
+  record, so the two granularities disagreed about whether it survives; they now agree for
+  every combination.
+time: 2026-09-30T20:30:00Z
