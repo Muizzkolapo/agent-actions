@@ -257,6 +257,7 @@ def stored_rows_not_reproduced(
     )
 
     carry: set[str] = set()
+    unattributable: set[str] = set()
     for row in stored_rows:
         guid = row.get("source_guid")
         if not guid:
@@ -283,6 +284,24 @@ def stored_rows_not_reproduced(
             reproduced = guid in answered
         if not reproduced and not superseded:
             carry.add(guid)
+            if not producers and batch_inputs and guid not in batch_inputs:
+                # No producer to attribute it by, and no input of this run carries its
+                # identity. Below an expansion that is the previous run's upstream child,
+                # re-minted this run, so the row is carried beside its replacement and the
+                # file grows every run. It is NOT safe to infer that here: an input that
+                # is merely absent -- unstaged, filtered upstream, dropped by a limit --
+                # looks identical, and its rows must be kept (#1151).
+                unattributable.add(guid)
+
+    if unattributable:
+        logger.warning(
+            "%d stored row(s) carry an identity no input of this run names and no "
+            "producer to attribute them by, so they are kept beside the rows that "
+            "replace them and this output grows every run. An action that answered an "
+            "input with a single row records no producer, so below an expansion its "
+            "rows name the previous run's upstream child; see issue #1155",
+            len(unattributable),
+        )
     return carry
 
 
