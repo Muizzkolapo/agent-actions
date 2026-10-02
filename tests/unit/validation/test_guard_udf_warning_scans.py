@@ -44,11 +44,12 @@ class TestTheValidSetForAGuardIsWiderThanForATool:
         assert "content" not in ValidateUDFsCommand._guard_valid_namespaces({"tag"})
 
     @pytest.mark.parametrize("key", ["base_name", "i", "idx", "param_name"])
-    def test_the_promoted_version_loop_keys_are_allowed(self, key):
-        """Measured from `build_guard_context`: a versioned action's guard context
-        promotes these alongside the action namespaces, so a guard reading `idx` is
-        correct and warning about it would be a false positive."""
-        assert key in ValidateUDFsCommand._guard_valid_namespaces({"tag"})
+    def test_version_keys_are_not_allowed_without_a_versioned_action(self, key):
+        """These were a hardcoded addition to every guard's set. They are derived from the
+        config now, so on a workflow with no versioned action they are correctly absent —
+        nothing promotes them there, and a guard reading `idx` is making a real mistake.
+        `TestADeclaredLoopParamIsAllowed` covers the versioned case."""
+        assert key not in ValidateUDFsCommand._guard_valid_namespaces({"tag"})
 
 
 class TestAGuardUdfIsScanned:
@@ -110,55 +111,80 @@ class TestTheToolSetIsNotWidened:
 
 class TestADeclaredLoopParamIsAllowed:
     """`VersionNamespaceBuilder.build` promotes every non-reserved key of the version
-    context to the top level (`scope_builder.py:255-258`), so a workflow declaring
-    `versions: {param: classifier_id}` gives its guard a top-level `classifier_id`.
+    context to the top level, so `versions: {param: classifier_id}` gives its guard a
+    top-level `classifier_id`. No fixed list can know that name — it is a config decision,
+    and the sample project declares three of them already (`iteration`, `voter_id`,
+    `verifier_id`).
 
-    A hardcoded set of framework keys cannot know that name — it comes from the config.
-    Reading it is correct, so warning about it is the false positive the over-approximation
-    exists to prevent, and the sample project declares three such params already
-    (`iteration`, `voter_id`, `verifier_id`).
+    The config here carries `_version_context`, not `versions:`, because that is the shape
+    this command receives: expansion replaces `versions:` with one `_version_context` per
+    variant before `validate-udfs` ever loads it. A fixture using `versions:` would test a
+    shape production never sees — which is how the first attempt at this passed its unit
+    tests while the real command still warned.
     """
 
     @staticmethod
     def _config(param: str) -> dict:
         return {
-            "wf": {
-                "actions": [
-                    {"name": "tag", "prompt": "p", "schema": {"name": "string"}},
-                    {
-                        "name": "decide",
-                        "impl": "ug_echo",
-                        "guard": "udf:ug_keep",
-                        "versions": {"param": param, "range": [1, 2]},
+            "name": "wf",
+            "actions": [
+                {"name": "tag", "prompt": "p", "schema": {"name": "string"}},
+                {
+                    "name": "decide_1",
+                    "impl": "ug_echo",
+                    "guard": "udf:ug_keep",
+                    "_version_context": {
+                        "i": 1,
+                        "idx": 0,
+                        "length": 2,
+                        "first": True,
+                        "last": False,
+                        "base_name": "decide",
+                        "param_name": param,
+                        param: 1,
                     },
-                ]
-            }
+                },
+            ],
         }
 
     def test_the_declared_param_is_in_the_valid_set(self):
-        valid = ValidateUDFsCommand._guard_valid_namespaces(
-            {"tag", "decide"}, self._config("classifier_id")
-        )
+        params = ValidateUDFsCommand._promoted_version_names(self._config("classifier_id"))
+        valid = ValidateUDFsCommand._guard_valid_namespaces({"tag", "decide_1"}, params)
 
         assert "classifier_id" in valid
 
-    def test_a_guard_reading_it_is_not_warned_about(self):
+    def test_the_framework_keys_come_from_the_same_derivation(self):
+        """They used to be a hardcoded list beside this; deriving covers both."""
+        params = ValidateUDFsCommand._promoted_version_names(self._config("classifier_id"))
+
+        assert {"i", "idx", "base_name", "param_name"} <= params
+
+    def test_the_reserved_keys_that_are_not_promoted_stay_out(self):
+        """`length`, `first` and `last` are in the version context and are NOT promoted,
+        so a guard reading them is making a real mistake."""
+        params = ValidateUDFsCommand._promoted_version_names(self._config("classifier_id"))
+
+        assert params.isdisjoint({"length", "first", "last"})
+
+    def test_a_guard_reading_the_param_is_not_warned_about(self):
         cmd = ValidateUDFsCommand.__new__(ValidateUDFsCommand)
         body = 'def ug_keep(data):\n    return data["classifier_id"] > 0\n'
+        params = ValidateUDFsCommand._promoted_version_names(self._config("classifier_id"))
 
         warnings = cmd._find_guard_bus_namespace_warnings(
-            {"ug_keep": body}, {"tag", "decide"}, self._config("classifier_id")
+            {"ug_keep": body}, {"tag", "decide_1"}, loop_params=params
         )
 
         assert warnings == [], warnings
 
-    def test_an_undeclared_name_is_still_warned_about(self):
-        """The set widens by what the config declares, not by anything version-shaped."""
+    def test_an_undeclared_param_is_still_warned_about(self):
+        """The set widens by what this config declares, not by anything version-shaped."""
         cmd = ValidateUDFsCommand.__new__(ValidateUDFsCommand)
         body = 'def ug_keep(data):\n    return data["voter_id"] > 0\n'
+        params = ValidateUDFsCommand._promoted_version_names(self._config("classifier_id"))
 
         warnings = cmd._find_guard_bus_namespace_warnings(
-            {"ug_keep": body}, {"tag", "decide"}, self._config("classifier_id")
+            {"ug_keep": body}, {"tag", "decide_1"}, loop_params=params
         )
 
         assert any("voter_id" in w for w in warnings), warnings

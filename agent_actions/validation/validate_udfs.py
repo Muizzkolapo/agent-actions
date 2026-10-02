@@ -36,10 +36,6 @@ from agent_actions.utils.udf_management.registry import (
 from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
 from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
-# Measured from `build_guard_context`, not assumed: a versioned action's guard context
-# promotes these to the top level alongside the action namespaces.
-_PROMOTED_VERSION_KEYS = frozenset({"base_name", "i", "idx", "param_name"})
-
 
 class ValidateUDFsCommand:
     """Implementation of the validate-udfs command."""
@@ -114,6 +110,7 @@ class ValidateUDFsCommand:
             "registry": registry,
             "impl_refs": impl_refs,
             "guard_udf_refs": self._count_guard_udf_references(config),
+            "loop_params": self._promoted_version_names(config),
             "action_names": self._extract_action_names(config),
         }
 
@@ -165,7 +162,9 @@ class ValidateUDFsCommand:
                 registry, impl_refs, result["action_names"]
             )
             udf_warnings += self._find_guard_bus_namespace_warnings(
-                self._udf_sources(registry, guard_udf_refs), result["action_names"]
+                self._udf_sources(registry, guard_udf_refs),
+                result["action_names"],
+                loop_params=result["loop_params"],
             )
             fire_event(
                 ValidationCompleteEvent(
@@ -289,7 +288,39 @@ class ValidateUDFsCommand:
         return sources
 
     @staticmethod
-    def _guard_valid_namespaces(action_names: set[str]) -> set[str]:
+    def _promoted_version_names(config: dict) -> set[str]:
+        """Every name a versioned action's guard context promotes to the top level.
+
+        Derived, not listed. The loop param's own name is a config decision
+        (`versions: {param: voter_id}` promotes `voter_id`), and `versions:` is gone by the
+        time this command sees the config — expansion replaces it with a `_version_context`
+        per variant. Reading that is also what `VersionNamespaceBuilder.build` does, and its
+        `_RESERVED_KEYS` is reused rather than copied so the exclusion cannot drift; `i` and
+        `idx` are reserved there yet promoted explicitly (#1192).
+        """
+        from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+
+        names: set[str] = set()
+
+        def walk(obj):
+            if isinstance(obj, dict):
+                vc = obj.get("_version_context")
+                if isinstance(vc, dict):
+                    names.update({"i", "idx"})
+                    names.update(set(vc) - VersionNamespaceBuilder._RESERVED_KEYS)
+                for value in obj.values():
+                    walk(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    walk(item)
+
+        walk(config)
+        return names
+
+    @staticmethod
+    def _guard_valid_namespaces(
+        action_names: set[str], loop_params: set[str] | None = None
+    ) -> set[str]:
         """What a guard UDF may read — the union over every shape its context can take.
 
         A guard receives the evaluation context rather than the action bus, and what that
@@ -309,19 +340,21 @@ class ValidateUDFsCommand:
             action_names
             | RUNTIME_BUS_NAMESPACES
             | (RECORD_FRAMEWORK_FIELDS - {"content"})
-            | _PROMOTED_VERSION_KEYS
+            | (loop_params or set())
         )
 
     @classmethod
     def _find_guard_bus_namespace_warnings(
-        cls, sources: dict[str, str], action_names: set[str]
+        cls, sources: dict[str, str], action_names: set[str], loop_params: set[str] | None = None
     ) -> list[str]:
         """The same scan as for tools, against the guard's wider valid set.
 
         A second call rather than one merged ref list: merging would widen the tool set
         too, and silence real findings there.
         """
-        return find_unknown_bus_namespaces(sources, cls._guard_valid_namespaces(action_names))
+        return find_unknown_bus_namespaces(
+            sources, cls._guard_valid_namespaces(action_names, loop_params)
+        )
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""
