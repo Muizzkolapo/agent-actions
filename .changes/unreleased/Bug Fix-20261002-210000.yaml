@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  Batch carry-forward now logs when it drops stored rows. When none of the producers named
+  by an action's stored rows is among a run's recorded inputs, and the run answered every
+  input, the stored rows are read as a generation the upstream action replaced and are not
+  carried forward. That drop logged nothing at any level. It is now reported once per write,
+  at INFO, with how many rows were dropped and the counts that decided it. INFO, not
+  WARNING, because a re-run of an action below an expansion that mints its children again
+  takes this path every time, and that is the case the rule exists for. Nothing about which
+  rows are carried or dropped changes; whether dropping is right when the records instead
+  left the input is still open in #1206 and #1155.
+time: 2026-10-02T21:00:00Z
