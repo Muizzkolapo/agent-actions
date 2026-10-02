@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A guard UDF can no longer rewrite the record through a copy of its input. The read-only bus a
+  `conditional_clause` UDF receives held the record's own nested containers, so `dict(data)`,
+  `{**data}`, `data | {}`, `Bus(data)`, `{}.update(data)` and the unbound `dict` methods handed
+  them out writable, and a write through any of them changed the record mid-run with the guard
+  returning normally and nothing logged. The bus now stores read-only wrappers, the rule the
+  read-only view already applies one level down. `data.copy()`, `copy.copy(data)` and
+  `copy.deepcopy(data)` return a plain, deep, writable dict (the last two used to raise), and
+  `data |= {...}` is refused. A UDF that only reads is unaffected, except that a copy taken with
+  `dict(data)` or `{**data}` now holds read-only containers rather than plain ones; use
+  `data.copy()` where a plain structure is needed.
+time: 2026-10-02T23:00:00Z
