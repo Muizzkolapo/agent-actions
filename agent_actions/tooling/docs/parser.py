@@ -102,7 +102,12 @@ def _normalise_known_directives(
     unknown = {k: v for k, v in scope.items() if k not in DIRECTIVE_REGISTRY}
     try:
         normalised = normalize_context_scope(known, version_base_map)
-    except ConfigurationError:
+    except ConfigurationError as e:
+        logger.debug(
+            "Context scope normalisation failed, using the raw directives: %s. "
+            "Version references in this scope will not be expanded in the catalog.",
+            e,
+        )
         normalised = known
     return {**normalised, **unknown}
 
@@ -179,8 +184,16 @@ class WorkflowParser:
             if versions:
                 try:
                     version_base_map[name] = version_variant_names(name, versions)
-                except ConfigurationError:
-                    # A malformed block is the loader's error to report, not the catalog's.
+                except ConfigurationError as e:
+                    # The malformed block is the loader's to reject on a run, but `agac docs`
+                    # never calls it, so without this line the catalog silently omits every
+                    # version reference for the action and nothing says why.
+                    logger.warning(
+                        "Action '%s' has a malformed versions block, so the catalog cannot "
+                        "expand its version references: %s",
+                        name,
+                        e,
+                    )
                     continue
                 continue
             version_context = action_data.get("_version_context")
