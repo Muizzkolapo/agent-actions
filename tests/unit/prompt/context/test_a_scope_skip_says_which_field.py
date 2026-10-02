@@ -56,32 +56,46 @@ class TestAnObserveFieldMissingSaysWhichOne:
         assert "a1.other_name" in second, second
 
 
-class TestAnUnresolvedSourceSaysWhatWasSearched:
-    def test_the_detail_names_the_pool_it_searched(self):
-        """The reason says the guid matched nothing; the detail says how large the pool
-        was, which is what distinguishes an empty pool from a genuine miss."""
-        records = [{"source_guid": "ghost", "content": {"a1": {"x": 1}}}]
-        source_data = [{"source_guid": "real-1", "content": {"url": "u"}}]
+def _pool(n: int) -> list[dict]:
+    return [{"source_guid": f"r{i}", "content": {"url": "u"}} for i in range(n)]
 
-        skipped = _skip(records, scope={"observe": ["source.url"]}, source_data=source_data)
+
+class TestAnUnresolvedSourceSaysWhatWasSearched:
+    def test_the_detail_names_how_many_records_were_searched(self):
+        """The reason says the guid matched nothing. The count says whether it searched one
+        record or a thousand, which is the difference between a misconfigured pool and a
+        genuine miss -- and the reason alone cannot carry it."""
+        records = [{"source_guid": "ghost", "content": {"a1": {"x": 1}}}]
+
+        skipped = _skip(records, scope={"observe": ["source.url"]}, source_data=_pool(3))
 
         assert len(skipped) == 1, skipped
         assert skipped[0]["reason"] == "source_unresolved"
-        detail = skipped[0].get("detail")
-        assert detail, "the skip carried no detail at all"
-        assert "1" in detail, detail
+        assert "3 pooled records" in (skipped[0].get("detail") or ""), skipped
 
-    def test_an_empty_pool_is_distinguishable_from_a_miss(self):
+    def test_the_count_is_the_real_pool_size(self):
+        """Non-tautological, and the reason an earlier version of this test was wrong: a
+        pool of one and a pool of three both reach this branch with the same reason, so only
+        the count distinguishes them. (An *empty* pool does not reach it at all -- it comes
+        out as observe_field_missing -- so the count can never read 0 here.)"""
         records = [{"source_guid": "ghost", "content": {"a1": {"x": 1}}}]
 
-        empty = _skip(records, scope={"observe": ["source.url"]}, source_data=[])
-        populated = _skip(
-            records,
-            scope={"observe": ["source.url"]},
-            source_data=[{"source_guid": "real-1", "content": {"url": "u"}}],
-        )
+        one = _skip(records, scope={"observe": ["source.url"]}, source_data=_pool(1))
+        three = _skip(records, scope={"observe": ["source.url"]}, source_data=_pool(3))
 
-        assert empty[0].get("detail") != populated[0].get("detail")
+        assert one[0]["reason"] == three[0]["reason"] == "source_unresolved"
+        assert "1 pooled records" in one[0]["detail"], one
+        assert "3 pooled records" in three[0]["detail"], three
+
+    def test_an_empty_pool_is_a_different_reason_entirely(self):
+        """Pinned because it is counter-intuitive: with no pool there is nothing to resolve
+        against, so `source.url` is simply an absent observe field."""
+        records = [{"source_guid": "ghost", "content": {"a1": {"x": 1}}}]
+
+        skipped = _skip(records, scope={"observe": ["source.url"]}, source_data=[])
+
+        assert skipped[0]["reason"] == "observe_field_missing", skipped
+        assert "source.url" in skipped[0]["detail"], skipped
 
 
 class TestTheDetailReachesTheStoredRow:

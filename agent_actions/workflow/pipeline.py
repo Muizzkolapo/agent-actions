@@ -55,6 +55,30 @@ class PipelineConfig:
     retried_records: frozenset[str] = frozenset()
 
 
+def scope_skip_disposition_rows(
+    action_name: str, scope_skipped: list[dict[str, Any]]
+) -> list[DispositionRow]:
+    """The disposition rows for records the scope pass refused.
+
+    `detail` is the seventh column and carries which field was missing, or how large the
+    source pool was -- the reason alone says only that something was. A record with no
+    source_guid has nothing to key a disposition on and is left out.
+    """
+    return [
+        (
+            action_name,
+            str(skip["source_guid"]),
+            DISPOSITION_SKIPPED,
+            skip["reason"],
+            None,
+            None,
+            skip.get("detail"),
+        )
+        for skip in scope_skipped
+        if skip.get("source_guid")
+    ]
+
+
 @dataclass
 class BatchPipelineParams:
     """Parameters for batch pipeline processing."""
@@ -592,19 +616,7 @@ class ProcessingPipeline:
                 source_data=source_data,
             )
             if scope_skipped and self.config.storage_backend:
-                batch: list[DispositionRow] = [
-                    (
-                        self.config.action_name,
-                        str(skip["source_guid"]),
-                        DISPOSITION_SKIPPED,
-                        skip["reason"],
-                        None,
-                        None,
-                        None,
-                    )
-                    for skip in scope_skipped
-                    if skip.get("source_guid")
-                ]
+                batch = scope_skip_disposition_rows(self.config.action_name, scope_skipped)
                 if batch:
                     try:
                         self.config.storage_backend.set_dispositions_batch(batch)
