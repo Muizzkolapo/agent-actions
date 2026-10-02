@@ -1,10 +1,16 @@
-"""A first-stage guard can read the staging row it is judging.
+"""A first-stage guard reads the staging row it is judging, on both paths.
 
-`get_existing_content` synthesizes a `source` namespace from a first-stage row, and its
-docstring calls itself "the SINGLE function for content extraction -- batch and online paths
-both use this". The online prefilter called it without `is_first_stage`, so it got `{}`: every
-clause failed as a missing field with "Available top-level fields:" empty, and the guard
-discarded every record whatever its value.
+`get_existing_content` synthesizes a `source` namespace from a first-stage row, and only
+when told the row is first-stage: without that flag it returns `{}`, every clause fails as
+a missing field with an empty "Available top-level fields:", and the guard discards every
+record whatever its value.
+
+Both production callers forward the flag (`unified.py:268` and `:321` pass
+`is_first_stage=context.is_first_stage`), so this pins a hazard rather than recording a
+defect — a caller that forgets it silently inverts every first-stage guard, and nothing
+else in the suite would notice. An earlier draft of this docstring described the online
+prefilter as having had that bug; it did not, and the measurement behind that claim came
+from a probe that omitted the flag.
 """
 
 from __future__ import annotations
