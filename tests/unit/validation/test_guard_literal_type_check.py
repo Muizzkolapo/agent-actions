@@ -97,7 +97,7 @@ class TestCompatibleGuardLiteralsStaySilent:
         assert _type_warnings(WorkflowStaticAnalyzer(wf).analyze()) == []
 
     def test_udf_guard_no_warning(self):
-        wf = _workflow({"approved": "string"}, "udf:tools.check_approved")
+        wf = _workflow({"approved": "string"}, "udf:check_approved")
         assert _type_warnings(WorkflowStaticAnalyzer(wf).analyze()) == []
 
     def test_null_literal_no_warning(self):

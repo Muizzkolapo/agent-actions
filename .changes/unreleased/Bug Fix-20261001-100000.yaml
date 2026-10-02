@@ -1,0 +1,24 @@
+kind: Bug Fix
+body: >-
+  A `udf:` guard can now be written. No spelling of it loaded before. The parser required
+  at least one dot, so a bare name was refused outright; a dotted name passed the parser
+  and became a `conditional_clause`, which the preflight static checker reads for
+  `action.field` references and rejected as naming a missing action. Had it got that far,
+  `UDF_REGISTRY` is keyed on the bare lowercased function name, so the lookup would have
+  raised `FunctionNotFoundError` — and silently, since `conditional_clause` passes records
+  through on error. The form was documented in `agent_actions/guards/ARCHITECTURE.md`.
+
+  The name is now the registered function's own, with no module prefix — the same form
+  `impl:` uses, and the only form `UDF_REGISTRY` holds. A dotted path is refused rather
+  than resolved by its last segment: two spellings answering to one function would make
+  the module half decorative. Nothing that worked changes, because nothing worked; a
+  config carrying the documented dotted form now gets an error naming the form to use
+  instead of one about a missing action.
+
+  The identifier blocklist is unaffected — it already matched on word boundaries, so
+  `udf:exec` and `udf:__import__` are still refused while `udf:eval_something` is not.
+  Separately, an `expression` expectation now reports a `udf:` condition with its pointer
+  to `@expectation_check` before validating the name's shape; it previously decided that
+  on a successful parse, so the answer depended on whether the name happened to be
+  well-formed.
+time: 2026-10-01T10:00:00Z

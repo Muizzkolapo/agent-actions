@@ -30,7 +30,7 @@ Guard configuration in `agent_config/{workflow}.yml` supports two formats:
 ```yaml
 # Legacy string format
 guard: "status == 'active'"            # SQL — defaults to on_false: filter
-guard: "udf:tools.check_eligibility"   # UDF — defaults to on_false: skip
+guard: "udf:check_eligibility"         # UDF — defaults to on_false: skip
 
 # Current dict format
 guard:
@@ -57,22 +57,24 @@ Validated at parse time against `DANGEROUS_PATTERNS` (blocks `exec`, `eval`, `__
 
 ### UDF Guards
 
-User-defined Python functions referenced by module path. The function receives the record data and returns a boolean.
+User-defined Python functions referenced by name. The function receives the guard context and returns a boolean.
 
 ```yaml
 guard:
-  condition: "udf:tools.guards.check_eligibility"
+  condition: "udf:check_eligibility"
   on_false: skip
 ```
 
-Validated at parse time: must match `module.function` dotted path format, checked against `DANGEROUS_PATTERNS_UDF`. UDF guards **cannot use FILTER behavior** — this is enforced during config expansion in `expander_action_types.py`, which raises `ConfigurationError` if a UDF guard specifies `on_false: filter`.
+The name is the registered function's own, with no module prefix — the same form `impl:` uses, because both resolve through `UDF_REGISTRY`, which is keyed on `f.__name__.lower()`. A dotted path is refused: it matches no registry key, and the preflight static checker reads the dot as an action reference (#1188). `agac list-udfs` prints the registered names.
+
+Validated at parse time: must be a Python identifier, checked against `DANGEROUS_PATTERNS_UDF`. UDF guards **cannot use FILTER behavior** — this is enforced during config expansion in `expander_action_types.py`, which raises `ConfigurationError` if a UDF guard specifies `on_false: filter`.
 
 ### Safety Validation
 
 Both types run through safety checks at parse time:
 
 - SQL expressions: blocked patterns include `exec(`, `eval(`, `__import__`, `system(`, `subprocess`
-- UDF expressions: same checks plus format validation (must be `module.function` or `module.submodule.function`)
+- UDF expressions: same checks plus format validation (must be a Python identifier — the registered function's own name, no module prefix)
 - Built-in Python names (`file`, `input`, `vars`, `dir`) are treated as column references in SQL guards, not as Python builtins
 
 ---
@@ -111,7 +113,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │         ▼                                                    │
 │    parse_guard_config()  →  GuardConfig                      │
 │      validates expression safety (dangerous patterns)        │
-│      validates UDF format (module.function)                  │
+│      validates UDF format (bare function name)               │
 │      validates behavior (skip/filter/warn)                   │
 └──────────────────────────┬───────────────────────────────────┘
                            │
@@ -122,7 +124,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │                                                              │
 │    Converts GuardConfig into agent dict keys:                │
 │      SQL  → agent["guard"] = {clause, scope, behavior}       │
-│      UDF  → agent["conditional_clause"] = "module.func"      │
+│      UDF  → agent["conditional_clause"] = "func_name"        │
 │                                                              │
 │    Enforces: UDF cannot use FILTER behavior                  │
 └──────────────────────────┬───────────────────────────────────┘
