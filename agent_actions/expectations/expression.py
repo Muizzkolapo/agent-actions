@@ -1,7 +1,8 @@
 """Parsing and evaluating an ``expression`` expectation's condition.
 
-Reuses the guard machinery's own grammar and AST so a condition string is
-portable between a ``guard:`` block and an ``expect:`` entry unchanged.
+Reuses the guard machinery's own grammar and AST. The grammar is shared; field
+resolution is not -- an ``expect:`` entry reads its action's own output by bare
+name, where a guard reads the namespaced stored record.
 """
 
 from __future__ import annotations

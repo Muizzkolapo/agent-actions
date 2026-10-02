@@ -134,7 +134,7 @@ The `optimize_seo` action uses a guard to skip itself when compliance validation
 - name: optimize_seo
   dependencies: [validate_compliance]
   guard:
-    condition: 'compliance_passed == true'
+    condition: 'validate_compliance.compliance_passed == true'
     on_false: "skip"
   context_scope:
     observe:

@@ -159,7 +159,7 @@ Nested paths inside a wildcard element (`options[*].text`) aren't supported — 
 
 ## Expressions
 
-`type: expression` evaluates a condition against the **whole record**, using the same syntax as [guard](../execution/guards.md) conditions — a condition string is portable between a `guard:` block and an `expect:` entry unchanged. It takes no `field:` (the fields it reads are named inside the condition):
+`type: expression` evaluates a condition against the **whole record**, using the same syntax as [guard](../execution/guards.md) conditions. The grammar is shared; field resolution is not, so a condition string is **not** portable between the two unchanged. An `expect:` entry reads the action's own output by bare name, as below. A guard reads the namespaced stored record, so the same bare name usually resolves to something else there, or to nothing — which is why the two are not interchangeable. Some bare names do resolve in a guard; #1164 measures which. It takes no `field:` (the fields it reads are named inside the condition):
 
 ```yaml
 - id: score_consistent_with_verdict
