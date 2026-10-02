@@ -1,6 +1,7 @@
 """Data flow graph for workflow static analysis."""
 
 import collections
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +23,11 @@ class OutputSchema:
     # passthrough_fields outright.
     dropped_refs: set[tuple[str, str]] = field(default_factory=set)
     passthrough_wildcard_sources: set[str] = field(default_factory=set)
+    # `observe: [up.*]` recorded nothing at all, so a field it forwards never appeared in
+    # the outputs and a `drop` aimed at one had no entry to mark. Kept as the source name
+    # rather than expanded here: this object does not know the upstream's fields, and an
+    # upstream that is schemaless or template-based has none to know.
+    observe_wildcard_sources: set[str] = field(default_factory=set)
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False
@@ -66,7 +72,9 @@ class OutputSchema:
         }
         return self.schema_fields | forwarded
 
-    def drops_field(self, field_name: str) -> bool:
+    def drops_field(
+        self, field_name: str, extra_refs: Iterable[tuple[str | None, str]] = ()
+    ) -> bool:
         """Whether ``drop`` keeps *field_name* out of what this action forwards.
 
         A drop filters upstream namespaces on their way into the action's context, so it
@@ -74,10 +82,16 @@ class OutputSchema:
         names. So a produced field is never dropped — the action's own namespace does not
         exist yet when drop runs — and a forwarded one is dropped only when *every*
         namespace supplying that name drops it.
+
+        `extra_refs` adds refs resolved outside the graph: a wildcard observe records only
+        its source name, and the schema service expands it. They must be counted here or
+        the rule above is applied to a pool missing some of the namespaces supplying the
+        name.
         """
         if field_name in self.schema_fields:
             return False
-        supplying = [(ns, name) for ns, name in self._forwarded_refs if name == field_name]
+        pool = self._forwarded_refs | set(extra_refs)
+        supplying = [(ns, name) for ns, name in pool if name == field_name]
         return bool(supplying) and all(self._ref_dropped(ns, name) for ns, name in supplying)
 
     def has_field(self, field_name: str) -> bool:
