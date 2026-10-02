@@ -74,7 +74,7 @@ Validated at parse time: must be a Python identifier, checked against `DANGEROUS
 Both types run through safety checks at parse time:
 
 - SQL expressions: blocked patterns include `exec(`, `eval(`, `__import__`, `system(`, `subprocess`
-- UDF expressions: same checks plus format validation (must be `module.function` or `module.submodule.function`)
+- UDF expressions: same checks plus format validation (must be a Python identifier — the registered function's own name, no module prefix)
 - Built-in Python names (`file`, `input`, `vars`, `dir`) are treated as column references in SQL guards, not as Python builtins
 
 ---
@@ -113,7 +113,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │         ▼                                                    │
 │    parse_guard_config()  →  GuardConfig                      │
 │      validates expression safety (dangerous patterns)        │
-│      validates UDF format (module.function)                  │
+│      validates UDF format (bare function name)               │
 │      validates behavior (skip/filter/warn)                   │
 └──────────────────────────┬───────────────────────────────────┘
                            │
