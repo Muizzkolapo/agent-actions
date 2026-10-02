@@ -111,13 +111,16 @@ class TestItStaysSilentWhereTheNameResolves:
             ), name
 
     def test_a_declared_version_param_is_left_alone(self):
+        """Written in the expanded shape, because that is the only one that reaches here:
+        expansion replaces `versions` with `_version_context` per variant. Spelled with
+        `versions` this passed while the real config was refused."""
         assert (
             _errors(
                 {
                     "a1": {},
-                    "b": {
+                    "b_1": {
                         "dependencies": ["a1"],
-                        "versions": {"param": "voter_id", "range": [1, 2]},
+                        "_version_context": {"i": 1, "idx": 0, "length": 2, "voter_id": 1},
                         "guard": {"clause": "voter_id == 1"},
                     },
                 }
