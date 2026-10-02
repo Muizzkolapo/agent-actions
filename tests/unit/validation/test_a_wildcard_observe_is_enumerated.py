@@ -107,3 +107,69 @@ class TestAnUpstreamWithNoFieldListExpandsToNothing:
     def test_an_unknown_upstream_adds_no_fields(self):
         """Naming a namespace no action declares must not invent fields for it."""
         assert _schema(["nosuch.*"]).available_outputs == ["verdict"]
+
+
+def _two_suppliers(drop: list[str]):
+    """Two upstreams both supplying `score`, so a drop on one leaves the other forwarding it."""
+    configs = {
+        "a": {
+            "name": "a",
+            "kind": "llm",
+            "intent": "x",
+            "schema": {"score": {"type": "string"}},
+        },
+        "b": {
+            "name": "b",
+            "kind": "llm",
+            "intent": "x",
+            "schema": {"score": {"type": "string"}},
+        },
+        "consume": {
+            "name": "consume",
+            "kind": "llm",
+            "intent": "y",
+            "dependencies": ["a", "b"],
+            "schema": {"verdict": {"type": "string"}},
+            "context_scope": {"observe": ["a.score", "b.score"], "drop": drop},
+        },
+    }
+    return WorkflowSchemaService.from_action_configs("p", configs).get_action_schema("consume")
+
+
+class TestAFieldTwoNamespacesSupply:
+    """`drops_field` documents the rule: a forwarded field is dropped "only when *every*
+    namespace supplying that name drops it". The observe loop keeps one entry per bare name
+    and took `is_dropped` from whichever `(namespace, field)` pair sorted first, so the
+    answer depended on sort order — and the passthrough loop three lines below still called
+    `drops_field`, so the two disagreed inside one function.
+
+    Measured before the fix: `drop: [a.score]` reported `score` dropped and withheld it,
+    `drop: [b.score]` reported it available. Same shape, opposite verdict.
+    """
+
+    def test_dropping_one_supplier_does_not_report_the_name_dropped(self):
+        """`b.score` still forwards `score`. `a` sorts first, which is why this is the
+        direction that failed."""
+        schema = _two_suppliers(drop=["a.score"])
+
+        assert schema.dropped_outputs == [], schema.dropped_outputs
+
+    def test_dropping_one_supplier_keeps_it_available(self):
+        schema = _two_suppliers(drop=["a.score"])
+
+        assert "score" in schema.available_outputs, sorted(schema.available_outputs)
+
+    def test_the_verdict_does_not_depend_on_which_supplier_is_dropped(self):
+        """The asymmetry itself, asserted directly rather than inferred from one side."""
+        dropping_a = _two_suppliers(drop=["a.score"])
+        dropping_b = _two_suppliers(drop=["b.score"])
+
+        assert dropping_a.dropped_outputs == dropping_b.dropped_outputs
+        assert sorted(dropping_a.available_outputs) == sorted(dropping_b.available_outputs)
+
+    def test_dropping_every_supplier_does_report_it_dropped(self):
+        """The edge the rule exists for: with nothing forwarding it, it is gone."""
+        schema = _two_suppliers(drop=["a.score", "b.score"])
+
+        assert schema.dropped_outputs == ["score"], schema.dropped_outputs
+        assert "score" not in schema.available_outputs
