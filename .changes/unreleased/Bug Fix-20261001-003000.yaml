@@ -1,16 +1,11 @@
 kind: Bug Fix
 body: >-
-  A record's own field named `metadata`, `lineage`, `node_id`, `target_id` or `chunk_info`
-  is no longer shown as framework metadata. `render_card_markdown` unwraps the envelope on
-  purpose, so a human sees the action's fields — and then classified every key by name
-  against a hand-kept list, filing the user's own field under framework noise. Nothing was
-  lost, but on the HITL approval screen the field a reviewer most needs to read could be
-  hidden among identity keys. The boundary is known at that point and the flattening threw
-  it away: the action's fields are exactly `content[action_name]`, so that set is passed to
-  the classifier instead of being re-guessed. Classifying by name stays available for a
-  caller holding a flat dict with no boundary left, which is the only case where guessing
-  is the best available answer. Two framework fields the card did not know — `_delta_mode`
-  and `version_correlation_id` — were rendering to humans as business data and are now
-  classified, with a test pinning the card's list against `RECORD_FRAMEWORK_FIELDS` so a
-  new identity field cannot be added to the envelope and quietly render as content.
+  Two framework fields — `_delta_mode` and `version_correlation_id` — no longer render to a
+  human as business data. `RECORD_FRAMEWORK_FIELDS` counts both as envelope metadata and the
+  data card's own `METADATA_KEYS` did not list them, so anything reading that list treated
+  them as the record's content. The HITL approval screen reads it: `hitl/server.py`
+  serialises `METADATA_KEYS` into `approval.html`, which filters those keys out of what a
+  reviewer is shown. A test now pins the card's list against `RECORD_FRAMEWORK_FIELDS`, so a
+  field added to the envelope cannot quietly start rendering as content — three hand-kept
+  lists answer this one question and nothing compared them before.
 time: 2026-10-01T00:30:00Z
