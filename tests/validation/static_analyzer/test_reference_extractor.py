@@ -600,12 +600,38 @@ class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
         assert graph is not None
 
     def test_a_populated_scope_still_reaches_the_graph(self):
-        """The coercion must not quietly discard a real block."""
-        analyzer = WorkflowStaticAnalyzer(self._config({"observe": ["first.field"]}))
-        analyzer.get_graph()
+        """Two things this must avoid, both of which make the assertion vacuous.
 
-        assert analyzer.workflow_config["actions"][1]["context_scope"] == {
-            "observe": ["first.field"]
+        Asserting on `workflow_config` cannot see the coercion at all, because it copies
+        rather than writing back. And asserting a requirement that the *prompt* also
+        supplies cannot see it either — `{{ action.first.field }}` yields the same
+        requirement whether or not the block survived. So the action here references
+        nothing in its prompt, and `first.field` can only arrive via `observe`.
+        """
+        config = {
+            "name": "wf",
+            "actions": [
+                {
+                    "name": "first",
+                    "prompt": "p",
+                    "schema": {"field": "string"},
+                    "context_scope": {"observe": ["source.x"]},
+                },
+                {
+                    "name": "second",
+                    "prompt": "no action references here",
+                    "context_scope": {"observe": ["first.field"]},
+                },
+            ],
+        }
+        analyzer = WorkflowStaticAnalyzer(config)
+
+        graph = analyzer.get_graph()
+
+        node = graph.get_node("second")
+        assert node is not None
+        assert ("first", "field") in {
+            (r.source_agent, r.field_path) for r in node.input_requirements
         }
 
     def test_analyze_still_reports_the_null_rather_than_silently_accepting_it(self):
