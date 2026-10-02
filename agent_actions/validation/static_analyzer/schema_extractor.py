@@ -427,7 +427,14 @@ class SchemaExtractor:
 
         for ref in context_scope.get("observe", []):
             parsed = self._parse_scope_ref(ref)
-            if parsed and parsed[1] != "*":
+            if not parsed:
+                continue
+            namespace, field_name = parsed
+            if field_name == "*":
+                # Expanded once the graph is built and the upstream's fields are known.
+                if namespace:
+                    output.observe_wildcard_sources.add(namespace)
+            else:
                 output.observe_refs.add(parsed)
 
         for ref in context_scope.get("drop") or []:  # `or []` guards `drop: null`

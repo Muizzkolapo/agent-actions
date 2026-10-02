@@ -115,6 +115,24 @@ class WorkflowSchemaService:
         """Return the data flow graph."""
         return self._analyzer.get_graph()
 
+    def _wildcard_observe_refs(self, output: Any) -> set[tuple[str, str]]:
+        """The (namespace, field) pairs an `observe: [ns.*]` actually forwards.
+
+        An upstream whose fields are unknowable -- schemaless, dynamic, or absent from the
+        graph -- contributes nothing, so a reader still sees the wildcard's source without
+        being told fields that may not exist.
+        """
+        refs: set[tuple[str, str]] = set()
+        for source in getattr(output, "observe_wildcard_sources", ()):
+            upstream = self.graph.nodes.get(source)
+            if upstream is None:
+                continue
+            upstream_output = upstream.output_schema
+            if upstream_output.is_schemaless or upstream_output.is_dynamic:
+                continue
+            refs |= {(source, name) for name in upstream_output.schema_fields}
+        return refs
+
     def get_action_schema(self, action_name: str) -> ActionSchema | None:
         """Return the ActionSchema for action_name, or None if it does not exist."""
         with self._schema_lock:
@@ -287,12 +305,19 @@ class WorkflowSchemaService:
                     description=desc,
                 )
 
-        for field_name in out.observe_fields:
+        # A wildcard observe records only the source name, so the fields it forwards were
+        # absent from the outputs and a drop aimed at one had no entry to mark. Resolved
+        # HERE rather than in the graph: the static checker validates observe_refs, and
+        # synthesising refs there makes it report references the author never wrote.
+        wildcard_refs = self._wildcard_observe_refs(out)
+        for _, field_name in sorted(out.observe_refs | wildcard_refs):
             if field_name not in seen:
                 seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.OBSERVE,
-                    is_dropped=out.drops_field(field_name),
+                    # Per name, not per ref: one entry is kept for a name two namespaces
+                    # supply, so asking about this ref alone answered by sort order.
+                    is_dropped=out.drops_field(field_name, extra_refs=wildcard_refs),
                 )
 
         for field_name in out.passthrough_fields:

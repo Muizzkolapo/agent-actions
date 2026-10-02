@@ -208,12 +208,13 @@ def _copy_readme_images(
 def _reported_drop_refs(context_scope: dict[str, Any]) -> list[str]:
     """The `context_scope.drop` refs the runtime can perform, in its own spelling.
 
-    The namespace is kept because the runtime pops `prompt_context[ns][field]`, so
+    The namespace is kept because the runtime removes `prompt_context[ns][field]`, so
     `upstream.body` and `body` are different claims when an action declares a field of
     its own by that name. A ref that does not parse is excluded: the runtime logs
-    "Field will NOT be removed" and skips it. So is one whose field part is neither a
-    plain name nor `*` — the pop is flat, so `a.b.c` matches no key and drops nothing,
-    and reporting either would describe a drop that never runs.
+    "Field will NOT be removed" and skips it. So is one carrying a wildcard inside the
+    path (`a.*.c`) — there is no path to walk, and the runtime warns that it removed
+    nothing. A dotted path IS reported: the runtime traverses it (#1116), so reporting it
+    describes a drop that really runs.
     """
     refs = context_scope.get("drop")
     if not isinstance(refs, list):
@@ -224,7 +225,7 @@ def _reported_drop_refs(context_scope: dict[str, Any]) -> list[str]:
             namespace, field = parse_field_reference(ref)
         except ValueError:
             continue
-        if field != "*" and ("." in field or "*" in field):
+        if field != "*" and "*" in field:
             continue
         actionable = f"{namespace}.{field}"
         if actionable not in reported:

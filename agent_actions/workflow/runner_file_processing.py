@@ -747,6 +747,12 @@ def process_from_storage_backend(
     errors = CollectedErrors()
 
     data_by_path: dict[str, list[tuple[str, Any]]] = {}
+    # Entries that never reached data_by_path. files_found is computed from what was READ,
+    # so without this a walk that loses everything returns (0, 0) and process_files'
+    # `files_found > 0` gate never fires: the action completes as though its input had
+    # never existed. #1026 fixed the same shape for the two filesystem walks by widening
+    # files_seen; this walker counts differently, hence a separate tally.
+    lost = 0
 
     for input_directory in params.upstream_data_dirs:
         input_path = Path(input_directory)
@@ -758,9 +764,12 @@ def process_from_storage_backend(
         try:
             target_files = runner.storage_backend.list_target_files(action_name)
         except (OSError, sqlite3.Error) as e:
-            # Every file of this upstream is gone, and none of them is in
-            # data_by_path to be counted or reported. Keyed on the action being
-            # run, not the upstream being read.
+            # Every file of this upstream is gone. Counted as one loss because the
+            # listing is what failed, so how many files it held is unknowable -- a floor,
+            # but enough to make the walk fail loudly and name the upstream.
+            # Keyed on the action being run, not the upstream being read.
+            lost += 1
+            errors.record(f"{action_name}/*", e)
             _lose_file(runner, params.action_name)
             logger.warning(
                 "Could not list target files from backend for %s: %s",
@@ -777,9 +786,11 @@ def process_from_storage_backend(
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
             except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
-                # Dropped before the processing loop, so it never reaches the
-                # handler there, is absent from data_by_path and so from
-                # files_found, and lands in no CollectedErrors either.
+                # Dropped before the processing loop, so it never reaches the handler
+                # there. Counted and recorded here instead, or it is absent from
+                # files_found and from CollectedErrors both.
+                lost += 1
+                errors.record(f"{action_name}/{relative_path}", e)
                 _lose_file(runner, params.action_name)
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
@@ -793,7 +804,9 @@ def process_from_storage_backend(
     # union of several upstreams is otherwise ordered by which one was read first.
     data_by_path = {path: data_by_path[path] for path in sorted(data_by_path)}
 
-    files_found = len(data_by_path)
+    # What was there, not what survived: a lost entry is still an input this action was
+    # meant to process, and counting only survivors is what let an all-lost walk pass.
+    files_found = len(data_by_path) + lost
     files_processed = 0
 
     # A guard `filter` anywhere upstream makes those records dead — they must not

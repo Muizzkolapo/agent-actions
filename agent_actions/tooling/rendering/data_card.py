@@ -32,6 +32,11 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "_state",
         "_state_history",
         "_state_schema_version",
+        # Envelope fields RECORD_FRAMEWORK_FIELDS counts as metadata and this list did not,
+        # so both rendered to a human as business data. Pinned against it by
+        # test_no_framework_field_would_render_as_business_data.
+        "_delta_mode",
+        "version_correlation_id",
     }
 )
 

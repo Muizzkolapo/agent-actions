@@ -1,0 +1,19 @@
+kind: Bug Fix
+body: >-
+  A nested `context_scope.drop` reference now removes the field instead of silently keeping
+  it. `parse_field_reference` splits on the first dot, so `upstream.body.text` arrived as the
+  field part `body.text`, which is not a key of the namespace — the flat `pop` matched
+  nothing, `pop(..., None)` swallowed the miss, and the field the author asked to withhold
+  was sent to the provider. `observe` already traversed the same path, so nested references
+  worked for one directive and were inert for the other, and the syntax is documented for
+  all three. The traversal is now shared (`pop_nested_value`) across the RECORD-mode path,
+  the FILE-mode path and the `seed` drop, which each carried their own flat pop, so the two
+  run modes cannot disagree about what a drop removes. `passthrough` is cleared for the same
+  reference in both of the shapes it stores — an explicit nested reference is held under its
+  literal dotted key, a wildcard copies the nested dict — or a field would be withheld from
+  the prompt and still written to the output. A drop that removes nothing now warns instead
+  of logging at debug, and names the consequence, because an inert drop is a field the author
+  believes is withheld and is not; an inner wildcard such as `a.*.c` is not a path the runtime
+  can walk and now says so rather than passing silently. The docs Drops panel, which excluded
+  nested references precisely because the runtime would not perform them, reports them again.
+time: 2026-09-30T14:00:00Z
