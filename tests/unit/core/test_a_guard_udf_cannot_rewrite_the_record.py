@@ -244,6 +244,26 @@ def guard_probe_appends_to_a_top_level_list(data):
     return True
 
 
+def guard_probe_reads_an_absent_key_with_a_default(data):
+    by_keyword = data.get("flags", default={"allow": False})["allow"]
+    by_position = data.get("flags", {"allow": False})["allow"]
+    _ran.append("answered")
+    return by_keyword or by_position
+
+
+def guard_probe_writes_through_a_lists_own_storage(data):
+    items = _a1(data)["items"]
+    try:
+        (items + [])[0]["n"] = "MUTATED"
+    except TypeError as error:
+        _ran.append(_refused(error))
+    else:
+        _ran.append("written")
+    dict.__setitem__(list.__getitem__(items, 0), "n", "MUTATED")
+    dict.__setitem__(next(reversed(items)), "n", "MUTATED")
+    return True
+
+
 def guard_probe_indexes_items_and_values(data):
     items, values = data.items(), data.values()
     _ran.extend([type(items).__name__, type(values).__name__])
@@ -284,6 +304,8 @@ _PROBES = (
     guard_probe_writes_deep_via_unpack,
     guard_probe_writes_deep_via_unbound_getitem,
     guard_probe_reads_with_a_keyword_default,
+    guard_probe_reads_an_absent_key_with_a_default,
+    guard_probe_writes_through_a_lists_own_storage,
 )
 
 
@@ -446,6 +468,17 @@ class TestEveryRouteOutOfTheViewHandsOverReadOnlyNamespaces:
         assert item == _deep_item(), item
 
     @_CONTEXTS
+    def test_a_lists_own_storage_holds_wrappers_too(self, context):
+        """Every other deep probe reads a list through `__getitem__`, which wraps on access;
+        `items + []`, unbound `list.__getitem__` and `reversed` read its storage instead."""
+        item = _deep_item()
+
+        _evaluate(guard_probe_writes_through_a_lists_own_storage, item, context)
+
+        assert _ran == ["refused"], "the write must be refused, not silently taken"
+        assert item == _deep_item(), item
+
+    @_CONTEXTS
     def test_the_record_is_out_of_reach_even_when_the_refusal_is_sidestepped(self, context):
         """Unbound `dict.__setitem__` and `list.append` skip the refusal, so each write
         lands; it must land on the view's own storage at every level, never on the record."""
@@ -543,6 +576,15 @@ class TestAReadingUdfStillDecidesTheGuard:
 
         assert _ran == ["answered"], "a raising UDF is passed through, which looks like keep"
         assert (result.should_execute, result.behavior) == (should_execute, behavior)
+
+    @_CONTEXTS
+    def test_get_returns_the_default_for_an_absent_key(self, context):
+        """By keyword and by position. A dropped default makes `None["allow"]` raise, and a
+        raising UDF is passed through, which admits the record the UDF rejects."""
+        result = _evaluate(guard_probe_reads_an_absent_key_with_a_default, _item(), context)
+
+        assert _ran == ["answered"], "a raising UDF is passed through, which looks like keep"
+        assert (result.should_execute, result.behavior) == (False, GuardBehavior.SKIP)
 
     @pytest.mark.parametrize(
         ("tier", "should_execute", "behavior"),
