@@ -106,3 +106,59 @@ class TestTheToolSetIsNotWidened:
         warnings = self._tool_warnings('def t(data):\n    return data["tag"]\n')
 
         assert warnings == [], warnings
+
+
+class TestADeclaredLoopParamIsAllowed:
+    """`VersionNamespaceBuilder.build` promotes every non-reserved key of the version
+    context to the top level (`scope_builder.py:255-258`), so a workflow declaring
+    `versions: {param: classifier_id}` gives its guard a top-level `classifier_id`.
+
+    A hardcoded set of framework keys cannot know that name — it comes from the config.
+    Reading it is correct, so warning about it is the false positive the over-approximation
+    exists to prevent, and the sample project declares three such params already
+    (`iteration`, `voter_id`, `verifier_id`).
+    """
+
+    @staticmethod
+    def _config(param: str) -> dict:
+        return {
+            "wf": {
+                "actions": [
+                    {"name": "tag", "prompt": "p", "schema": {"name": "string"}},
+                    {
+                        "name": "decide",
+                        "impl": "ug_echo",
+                        "guard": "udf:ug_keep",
+                        "versions": {"param": param, "range": [1, 2]},
+                    },
+                ]
+            }
+        }
+
+    def test_the_declared_param_is_in_the_valid_set(self):
+        valid = ValidateUDFsCommand._guard_valid_namespaces(
+            {"tag", "decide"}, self._config("classifier_id")
+        )
+
+        assert "classifier_id" in valid
+
+    def test_a_guard_reading_it_is_not_warned_about(self):
+        cmd = ValidateUDFsCommand.__new__(ValidateUDFsCommand)
+        body = 'def ug_keep(data):\n    return data["classifier_id"] > 0\n'
+
+        warnings = cmd._find_guard_bus_namespace_warnings(
+            {"ug_keep": body}, {"tag", "decide"}, self._config("classifier_id")
+        )
+
+        assert warnings == [], warnings
+
+    def test_an_undeclared_name_is_still_warned_about(self):
+        """The set widens by what the config declares, not by anything version-shaped."""
+        cmd = ValidateUDFsCommand.__new__(ValidateUDFsCommand)
+        body = 'def ug_keep(data):\n    return data["voter_id"] > 0\n'
+
+        warnings = cmd._find_guard_bus_namespace_warnings(
+            {"ug_keep": body}, {"tag", "decide"}, self._config("classifier_id")
+        )
+
+        assert any("voter_id" in w for w in warnings), warnings
