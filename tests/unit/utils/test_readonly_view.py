@@ -93,3 +93,71 @@ class TestTheViewStaysUsable:
         assert isinstance(view, ReadOnlyDict)
         assert isinstance(view["xs"], ReadOnlyList)
         assert isinstance(view["xs"][0], ReadOnlyDict)
+
+
+class TestTakingACopyCannotReachTheRecord:
+    """The module promises a write cannot reach the record "at any depth". Three documented
+    ways of taking a copy broke that promise, and the escape hatch the error message
+    recommends was one of them.
+
+    `dict(view)` and `{**view}` read the underlying storage through a C fast path that no
+    Python override intercepts, so the fix is what the storage holds: wrapped values, not
+    the record's own containers.
+    """
+
+    @staticmethod
+    def _record():
+        return {"ns": {"inner": {"x": 1}}, "xs": [{"n": 1}]}
+
+    def test_copy_copy_does_not_raise(self):
+        """It raised: `copy` rebuilds a dict subclass by assigning into a new instance, and
+        `__setitem__` refuses. The author is told to copy and then cannot."""
+        import copy
+
+        record = self._record()
+        copy.copy(readonly_view(record))
+
+    def test_copy_deepcopy_does_not_raise(self):
+        import copy
+
+        record = self._record()
+        copy.deepcopy(readonly_view(record))
+
+    def test_copy_copy_yields_a_copy_a_nested_write_cannot_escape(self):
+        import copy
+
+        record = self._record()
+        taken = copy.copy(readonly_view(record))
+        try:
+            taken["ns"]["inner"]["x"] = 999
+        except TypeError:
+            pass
+        assert record["ns"]["inner"]["x"] == 1
+
+    def test_the_documented_copy_is_deep(self):
+        """`copy()` is what the error message tells a UDF author to use, so a nested write
+        through it must land on the copy -- writable, and not the record."""
+        record = self._record()
+        writable = readonly_view(record).copy()
+        writable["ns"]["inner"]["x"] = 999
+
+        assert record["ns"]["inner"]["x"] == 1
+        assert writable["ns"]["inner"]["x"] == 999
+
+    def test_a_nested_write_through_dict_of_the_view_cannot_reach_the_record(self):
+        record = self._record()
+        shallow = dict(readonly_view(record))
+        try:
+            shallow["ns"]["inner"]["x"] = 999
+        except TypeError:
+            pass
+        assert record["ns"]["inner"]["x"] == 1
+
+    def test_a_nested_write_through_splatting_the_view_cannot_reach_the_record(self):
+        record = self._record()
+        shallow = {**readonly_view(record)}
+        try:
+            shallow["xs"][0]["n"] = 999
+        except TypeError:
+            pass
+        assert record["xs"][0]["n"] == 1
