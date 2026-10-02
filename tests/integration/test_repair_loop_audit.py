@@ -35,7 +35,6 @@ default_agent_config:
   api_key: OPENAI_API_KEY
   model_name: gpt-4o-mini
   model_vendor: openai
-  ephemeral: false
 schema_path: schema
 tool_path: ["tools"]
 required_by_default: true

@@ -86,6 +86,7 @@ _EXPECT_REPLACES_SCHEMA_MISMATCH = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "ephemeral": "",
     "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
