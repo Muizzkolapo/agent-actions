@@ -7,14 +7,21 @@ the enricher, the skipped tombstones -- sees the rewritten value with nothing lo
 
 Two separate things are going on, and it is worth being exact about which does what:
 
-* **Wrapping on access is what protects the record.** Each access returns a fresh wrapper
-  constructed from the underlying container, so a write lands on that copy and never
-  reaches the record -- at any depth, because every level is re-wrapped. Returning the raw
-  value anywhere reopens the hole, which is why `items`, `values` and list iteration are
-  overridden too.
+* **Wrapping on the way IN is what protects the record.** The storage holds wrappers, not
+  the record's own containers, so a write lands on a wrapper and never reaches the record
+  at any depth. It has to be on the way in: `dict(view)`, `{**view}` and `list(view)` copy
+  the values as stored through a C fast path that no Python override intercepts, so
+  wrapping only on access handed the record's nested containers straight back out.
+  Accessors still wrap, so a container reaching the storage unwrapped is also covered,
+  which is why `items`, `values` and list iteration are overridden too.
 * **Refusing mutation is what makes it honest.** Without it a UDF's write would silently
   succeed against a copy and the author would believe it had taken effect. Raising names
   the offending UDF instead.
+* **Taking a copy has to work.** `copy()`, `copy.copy` and `copy.deepcopy` all return a
+  plain, deep, writable structure. A shallow copy would share the record's nested
+  containers, so the hatch offered to avoid rewriting the record would have rewritten it;
+  `copy.copy` raised outright, because rebuilding a dict subclass assigns into a fresh
+  instance and `__setitem__` refuses.
 
 These are dict/list subclasses rather than MappingProxyType or a bare Mapping so that
 `isinstance(x, dict)`, `json.dumps(x)` and `**x` keep working for the overwhelming
@@ -28,7 +35,8 @@ from typing import Any, NoReturn
 _MESSAGE = (
     "A guard's evaluation context is read-only: it holds the record's own namespaces by "
     "reference, so writing to it would rewrite the record mid-run. Copy what you need "
-    "(e.g. dict(data['ns'])) and return a value instead of mutating the input."
+    "(data['ns'].copy(), which is deep and writable) and return a value instead of "
+    "mutating the input."
 )
 
 
@@ -43,12 +51,29 @@ def _readonly(value: Any) -> Any:
     return value
 
 
+def _unwrap(value: Any) -> Any:
+    """A plain, writable copy of *value*, sharing nothing with the record."""
+    if isinstance(value, dict):
+        return {key: _unwrap(dict.__getitem__(value, key)) for key in value}
+    if isinstance(value, list):
+        return [_unwrap(item) for item in list.__iter__(value)]
+    return value
+
+
 def _refuse(*_args: Any, **_kwargs: Any) -> NoReturn:
     raise TypeError(_MESSAGE)
 
 
 class ReadOnlyDict(dict):
-    """A dict that refuses mutation and wraps nested containers on the way out."""
+    """A dict that refuses mutation and holds its nested containers already wrapped."""
+
+    def __init__(self, source: Any = (), /) -> None:
+        # Wrapped on the way IN, not on the way out. `dict(view)` and `{**view}` copy the
+        # values as stored through a C fast path that no Python override sees, so storing
+        # the record's own containers handed them straight back (measured). Storing
+        # wrappers means such a copy carries wrappers, and a nested write through it is
+        # refused instead of silently rewriting the record.
+        super().__init__({key: _readonly(value) for key, value in dict(source).items()})
 
     def __setitem__(self, *args: Any, **kwargs: Any) -> NoReturn:
         _refuse()
@@ -92,12 +117,30 @@ class ReadOnlyDict(dict):
         return [(key, self[key]) for key in self]
 
     def copy(self) -> dict:
-        """A real, writable dict -- the documented way to take what you need."""
-        return {key: dict.__getitem__(self, key) for key in self}
+        """A real, writable dict, deep -- the documented way to take what you need.
+
+        Deep because this is what `_MESSAGE` tells a UDF author to call: a shallow copy
+        shares the record's nested containers, so a write one level down reached the
+        record through the very hatch offered to avoid that.
+        """
+        return {key: _unwrap(dict.__getitem__(self, key)) for key in self}
+
+    def __copy__(self) -> dict:
+        # `copy.copy` rebuilds a dict subclass by assigning into a fresh instance, which
+        # `__setitem__` refuses -- so without this the author is told to copy and cannot.
+        return self.copy()
+
+    def __deepcopy__(self, _memo: dict) -> dict:
+        return self.copy()
 
 
 class ReadOnlyList(list):
-    """A list that refuses mutation and wraps nested containers on the way out."""
+    """A list that refuses mutation and holds its nested containers already wrapped."""
+
+    def __init__(self, source: Any = (), /) -> None:
+        # Wrapped on the way in, for the reason given on ReadOnlyDict: `list(view)` and
+        # `[*view]` copy the items as stored, below any Python override.
+        super().__init__(_readonly(item) for item in list(source))
 
     def __setitem__(self, *args: Any, **kwargs: Any) -> NoReturn:
         _refuse()
@@ -145,7 +188,14 @@ class ReadOnlyList(list):
         return (_readonly(item) for item in list.__iter__(self))
 
     def copy(self) -> list:
-        return [list.__getitem__(self, i) for i in range(len(self))]
+        """A real, writable list, deep -- as on ReadOnlyDict."""
+        return [_unwrap(item) for item in list.__iter__(self)]
+
+    def __copy__(self) -> list:
+        return self.copy()
+
+    def __deepcopy__(self, _memo: dict) -> list:
+        return self.copy()
 
 
 def readonly_view(data: Any) -> Any:
