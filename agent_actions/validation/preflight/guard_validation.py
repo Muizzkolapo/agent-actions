@@ -12,6 +12,7 @@ from agent_actions.guards.bare_reference import (
     spreads_output_flat,
 )
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 
 if TYPE_CHECKING:
     from agent_actions.input.preprocessing.parsing.ast_nodes import (
@@ -70,12 +71,16 @@ def _collect_field_nodes(node: ASTNode) -> list[str]:
 
 
 def _version_params(config: dict) -> list[str]:
-    versions = config.get("versions")
-    if isinstance(versions, dict):
-        versions = [versions]
-    if not isinstance(versions, list):
+    """The version names a guard clause may use bare, read from the expanded config.
+
+    This runs after expansion, which replaces `versions` with a per-variant
+    `_version_context` -- so reading `versions` found nothing and every guard naming a
+    version param was refused as unresolvable.
+    """
+    version_context = config.get("_version_context")
+    if not isinstance(version_context, dict):
         return []
-    return [v["param"] for v in versions if isinstance(v, dict) and v.get("param")]
+    return sorted(VersionNamespaceBuilder.promoted_names(version_context))
 
 
 def _suggest_dotted(variable: str, upstreams: list[str]) -> str:
