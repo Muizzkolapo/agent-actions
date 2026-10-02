@@ -214,8 +214,17 @@ def _as_staging_document(payload: Any) -> list[Any]:
     return payload if isinstance(payload, list) else [payload]
 
 
-def _staged_by_the_walk(item: Path) -> bool:
-    """Mirror the runner's own skip rules for an item under an input directory."""
+def _would_be_staged(item: Path) -> bool:
+    """Whether a cache entry is one the walk would stage, so rewriting it is worth it.
+
+    Deliberately NOT the runner's `should_skip_item`, which this once claimed to mirror and
+    has diverged from since #1026. That one answers every exclusion before touching the
+    filesystem and lets `is_file()` raise, because a stat failure there is a lost record the
+    run must report. Here it is a cache file: one that cannot be stat-ed is simply not worth
+    rewriting, and raising would fail a run over an entry that was never going to be staged.
+    `processed_paths` and `file_type_filter` are the runner's too, and do not apply to a
+    cache directory.
+    """
     return item.is_file() and not item.name.startswith(".") and "batch" not in item.parts
 
 
@@ -228,7 +237,7 @@ def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
     going to be staged.
     """
     for cache_file in sorted(cache_dir.rglob("*.json")):
-        if not _staged_by_the_walk(cache_file):
+        if not _would_be_staged(cache_file):
             continue
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))

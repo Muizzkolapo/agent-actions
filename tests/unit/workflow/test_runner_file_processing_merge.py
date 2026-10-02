@@ -50,9 +50,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         # read as a repair in progress and narrow the walk. State the empty set a
         # runner that is not repairing actually carries.
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
-        }
         runner._process_single_file = MagicMock()
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
@@ -78,9 +75,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
-        }
         runner._process_single_file.side_effect = RuntimeError("processing failed")
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
@@ -107,9 +101,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
-        }
         runner._process_single_file = MagicMock()
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
@@ -133,9 +124,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
-        }
         runner._process_single_file.side_effect = RuntimeError("boom")
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
@@ -159,9 +147,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("data.json"): [upstream_a / "data.json", upstream_b / "data.json"],
-        }
         runner._process_single_file = MagicMock()
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
@@ -260,10 +245,6 @@ class TestProcessMergedFilesIsolation:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            Path("good.json"): [upstream / "good.json"],
-            Path("bad.json"): [upstream / "bad.json"],
-        }
         runner._process_single_file.side_effect = _process
 
         params = _make_params([str(upstream)], output)
@@ -293,12 +274,6 @@ class TestProcessMergedFilesIsolation:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._collect_files_from_upstream.return_value = {
-            # good.json: single-file path (len==1)
-            Path("good.json"): [upstream_a / "good.json"],
-            # bad.json: merge path (len==2)
-            Path("bad.json"): [upstream_a / "bad.json", upstream_b / "bad.json"],
-        }
         runner._process_single_file.side_effect = _process
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
