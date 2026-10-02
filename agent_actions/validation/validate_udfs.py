@@ -27,6 +27,7 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
+from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
@@ -109,6 +110,7 @@ class ValidateUDFsCommand:
             "registry": registry,
             "impl_refs": impl_refs,
             "guard_udf_refs": self._count_guard_udf_references(config),
+            "loop_params": self._promoted_version_names(config),
             "action_names": self._extract_action_names(config),
         }
 
@@ -153,9 +155,16 @@ class ValidateUDFsCommand:
             registry = result["registry"]
             impl_refs = result["impl_refs"]
             guard_udf_refs = result["guard_udf_refs"]
+            # Only impl_refs: a guard UDF returns a boolean and declares no granularity,
+            # so the FILE return contract does not apply to it at all (#1192).
             udf_warnings = find_file_udf_contract_warnings(registry, referenced=impl_refs)
             udf_warnings += self._find_bus_namespace_warnings(
                 registry, impl_refs, result["action_names"]
+            )
+            udf_warnings += self._find_guard_bus_namespace_warnings(
+                self._udf_sources(registry, guard_udf_refs),
+                result["action_names"],
+                loop_params=result["loop_params"],
             )
             fire_event(
                 ValidationCompleteEvent(
@@ -261,8 +270,14 @@ class ValidateUDFsCommand:
         that receive a plain record, not the action-keyed bus. Scanning either would
         flag legitimate reads against the wrong namespace set.
         """
+        sources = self._udf_sources(registry, impl_refs)
+        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
+
+    @staticmethod
+    def _udf_sources(registry: dict, refs: set[str]) -> dict[str, str]:
+        """Each referenced UDF's own function body, keyed by the name that referenced it."""
         sources: dict[str, str] = {}
-        for ref in impl_refs:
+        for ref in refs:
             meta = registry.get(ref) or registry.get(ref.lower())
             if meta is None:
                 continue
@@ -270,7 +285,76 @@ class ValidateUDFsCommand:
                 sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
             except (OSError, TypeError, KeyError):
                 continue
-        return find_unknown_bus_namespaces(sources, action_names | RUNTIME_BUS_NAMESPACES)
+        return sources
+
+    @staticmethod
+    def _promoted_version_names(config: dict) -> set[str]:
+        """Every name a versioned action's guard context promotes to the top level.
+
+        Derived, not listed. The loop param's own name is a config decision
+        (`versions: {param: voter_id}` promotes `voter_id`), and `versions:` is gone by the
+        time this command sees the config — expansion replaces it with a `_version_context`
+        per variant. Reading that is also what `VersionNamespaceBuilder.build` does, and its
+        `_RESERVED_KEYS` is reused rather than copied so the exclusion cannot drift; `i` and
+        `idx` are reserved there yet promoted explicitly (#1192).
+        """
+        from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+
+        names: set[str] = set()
+
+        def walk(obj):
+            if isinstance(obj, dict):
+                vc = obj.get("_version_context")
+                if isinstance(vc, dict):
+                    names.update({"i", "idx"})
+                    names.update(set(vc) - VersionNamespaceBuilder._RESERVED_KEYS)
+                for value in obj.values():
+                    walk(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    walk(item)
+
+        walk(config)
+        return names
+
+    @staticmethod
+    def _guard_valid_namespaces(
+        action_names: set[str], loop_params: set[str] | None = None
+    ) -> set[str]:
+        """What a guard UDF may read — the union over every shape its context can take.
+
+        A guard receives the evaluation context rather than the action bus, and what that
+        context holds depends on the action: a first-stage one carries the record's
+        envelope, a versioned one carries the promoted loop keys, and a plain one carries
+        neither. This scan is keyed by UDF name and does not know which action it belongs
+        to, so it allows all of them.
+
+        That is deliberately an over-approximation and costs real findings — a guard on a
+        non-first-stage action reading ``source_guid`` reads nothing and is not reported.
+        The alternative errs the other way: a correct guard on a versioned action reading
+        ``idx`` would be warned about, and a validator that cries wolf gets ignored.
+        Narrowing this needs the per-action derivation ``build_guard_context`` performs
+        (#1192).
+        """
+        return (
+            action_names
+            | RUNTIME_BUS_NAMESPACES
+            | (RECORD_FRAMEWORK_FIELDS - {"content"})
+            | (loop_params or set())
+        )
+
+    @classmethod
+    def _find_guard_bus_namespace_warnings(
+        cls, sources: dict[str, str], action_names: set[str], loop_params: set[str] | None = None
+    ) -> list[str]:
+        """The same scan as for tools, against the guard's wider valid set.
+
+        A second call rather than one merged ref list: merging would widen the tool set
+        too, and silence real findings there.
+        """
+        return find_unknown_bus_namespaces(
+            sources, cls._guard_valid_namespaces(action_names, loop_params)
+        )
 
     def _handle_duplicate_error(self, error: DuplicateFunctionError) -> None:
         """Handle duplicate function error with formatted output."""

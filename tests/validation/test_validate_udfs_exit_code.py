@@ -75,6 +75,7 @@ def test_valid_result_exits_zero(monkeypatch, tmp_path):
             "registry": {"fn": {}},
             "impl_refs": {"fn"},
             "guard_udf_refs": set(),
+            "loop_params": set(),
             "action_names": set(),
         },
     )
