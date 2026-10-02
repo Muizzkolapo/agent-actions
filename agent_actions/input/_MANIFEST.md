@@ -28,7 +28,7 @@ and chunking/lineage support).
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
-| `GuardFilter.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
+| `GuardFilter.filter_item()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 
 **Internal only**: `ReferenceParser`, `FieldReferenceResolver`, `ReferenceValidator`, `SchemaFieldValidator`, `EvaluationContextProvider`, `Tokenizer` -- no direct project surface.

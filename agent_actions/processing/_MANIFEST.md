@@ -42,11 +42,9 @@ lineage helpers, recovery flows, and transformation pipelines.
 |--------|------|-------------|------------|
 | `UnifiedProcessor.process()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].granularity`, `actions[].kind` |
 | `TaskPreparer.prepare()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].conditional_clause` |
-| `ResultCollector.collect()` | `agent_io/target/{action}/` | Writes | — |
+| `ResultCollector.collect_results()` | `agent_io/target/{action}/` | Writes | — |
 | `EnrichmentPipeline.enrich()` | `agent_io/target/{action}/` | Transforms | — |
-| `BatchContextAdapter.to_processing_context()` | `agent_io/staging/` | Reads | — |
 | `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
-| `ProcessorErrorHandlerMixin.load_file()` | `agent_io/staging/` | Reads | — |
 
 **Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `EvaluationMetadata`, `ExpectationsMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.
 
