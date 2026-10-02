@@ -15,3 +15,4 @@ body: >-
   hint, so a bad value is reported rather than silently read as empty.
 
   `agac inspect` and `agac run` were never affected, because both go through `analyze()`.
+time: 2026-10-01T12:00:00Z
