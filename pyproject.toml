@@ -127,6 +127,14 @@ dev-dependencies = [
 [tool.mypy]
 python_version = "3.11"
 exclude = ["^examples/"]
+# `mypy tests/` aborted on "Duplicate module named conftest" before checking a single file,
+# so the whole test tree was unreachable to the type checker -- not out of scope, but
+# unrunnable. 34 of 203 test directories carry an __init__.py and the rest do not, so mypy
+# resolved several conftest.py files to the same module name. Chosen over adding the missing
+# __init__.py files because it changes no layout: pytest's rootdir and import mode are
+# untouched, and collection is identical before and after.
+explicit_package_bases = true
+mypy_path = "."
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
