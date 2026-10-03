@@ -275,14 +275,13 @@ CONTENT:   everything not in METADATA_KEYS or IDENTITY_KEYS
 METADATA:  lineage, node_id, _state, _state_history, _recovery, etc.
 ```
 
-`METADATA_KEYS` is defined as a `frozenset` of 13 keys. `LONG_FORM_HINTS` identifies fields like `reasoning`, `description`, `summary` that get block-quote rendering instead of inline display.
+`METADATA_KEYS` is a `frozenset` of the keys the card files as framework metadata. It is not `RECORD_FRAMEWORK_FIELDS` — it adds `_file` and omits `content`, which is the payload rather than metadata about it — but it must cover every framework field, and `test_no_framework_field_would_render_as_business_data` asserts that direction. Deliberately not a count here: the last one said 13 and was wrong when written. `LONG_FORM_HINTS` identifies fields like `reasoning`, `description`, `summary` that get block-quote rendering instead of inline display.
 
 ### render_card_markdown()
 
 ```
-Input: record dict + optional action_name
+Input: record dict
        |
-       +-- Unwrap namespaced content if action_name provided
        +-- classify_record() -> {identity: [...], content: [...], metadata: [...]}
        |
        v
