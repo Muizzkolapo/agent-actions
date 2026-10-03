@@ -18,6 +18,7 @@ narrowing, recorded at submission and read back here.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -142,6 +143,25 @@ class TestAnExpansionBelowAnExpansion:
         assert _guids(result) == ["b5", "b6", "b7", "b8"], (
             f"the previous generation was carried beside its replacement: {_guids(result)}"
         )
+
+    def test_the_drop_is_reported_once_per_write(self, tmp_path, caplog):
+        """One decision, one record: the merge decides once, and nothing else reports it."""
+        stored = [
+            _row("b1", producers=["a1"]),
+            _row("b2", producers=["a1"]),
+            _row("b3", producers=["a2"]),
+            _row("b4", producers=["a2"]),
+        ]
+        produced = [_row("b5", producers=["a3"]), _row("b6", producers=["a4"])]
+
+        with caplog.at_level(logging.DEBUG):
+            _finalize(tmp_path, stored, produced, submitted=["a3", "a4"], run_inputs=["a3", "a4"])
+
+        drops = [r for r in caplog.records if "dropped" in r.getMessage().lower()]
+        assert len(drops) == 1, [(r.name, r.levelname, r.getMessage()) for r in drops]
+        assert drops[0].name == "agent_actions.processing.disposition_gate"
+        assert drops[0].levelno == logging.INFO
+        assert drops[0].getMessage().startswith("4 stored row(s) dropped"), drops[0].getMessage()
 
     def test_an_input_this_run_did_not_answer_for_keeps_its_rows(self, tmp_path):
         """A producer still standing in the input is not a generation that is gone."""

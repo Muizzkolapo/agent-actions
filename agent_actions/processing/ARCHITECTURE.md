@@ -426,7 +426,9 @@ generational rather than per row — one producer missing while others are still
 individual record that left the input, filtered upstream or dropped, and its rows are its
 own. An unrecorded input infers nothing, so a batch submitted before this was recorded
 carries its rows exactly as it did; an input recorded as empty is reported apart from an
-unrecorded one but read the same way.
+unrecorded one but read the same way. A drop is logged once per write at INFO, not WARNING,
+with how many rows went and the counts that decided it, since the healthy re-run this case
+exists for makes one every time.
 
 One case stays open. An action that mints no identity of its own carries its input's and
 records no producer, which happens for a 1:1 action and for an expansion on any input it

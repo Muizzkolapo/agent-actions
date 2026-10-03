@@ -257,6 +257,7 @@ def stored_rows_not_reproduced(
     )
 
     carry: set[str] = set()
+    dropped: set[str] = set()
     unattributable: set[str] = set()
     for row in stored_rows:
         guid = row.get("source_guid")
@@ -292,6 +293,26 @@ def stored_rows_not_reproduced(
                 # is merely absent -- unstaged, filtered upstream, dropped by a limit --
                 # looks identical, and its rows must be kept (#1151).
                 unattributable.add(guid)
+        elif not reproduced:
+            dropped.add(guid)
+    # An identity still carried through another of its rows has lost nothing.
+    dropped -= carry
+
+    if dropped:
+        # INFO, not WARNING: a minting action below an expansion takes this path on
+        # every healthy re-run, which is the case the inference exists for.
+        logger.info(
+            "%d stored row(s) dropped, not carried forward: the stored rows made from a "
+            "single record name %d record(s) between them, none of which is among the %d "
+            "input(s) this run recorded, and this run answered all of those inputs, so "
+            "those rows are read as a generation the upstream action replaced. Expected "
+            "on a re-run below an expansion, which mints its children again; if those "
+            "records instead left this action's input, their rows are gone with them. "
+            "See issue #1155",
+            len(dropped),
+            len(stored_mints),
+            len(inputs),
+        )
 
     if unattributable:
         logger.warning(
