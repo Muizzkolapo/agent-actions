@@ -65,7 +65,7 @@ def _finalize(
     stored: list[dict],
     produced: list[dict],
     submitted: list[str],
-    run_inputs: list[str] | None,
+    run_inputs: list[str] | dict[str, str] | None,
 ) -> list[dict]:
     """Finalize a run over *stored*, having submitted *submitted* out of *run_inputs*.
 
@@ -78,7 +78,8 @@ def _finalize(
     backend._write_target_raw(ACTION, RELATIVE, stored)
     backend._reconstruction_cache.clear()
     if run_inputs is not None:
-        backend.save_metadata(INPUTS_KEY, json.dumps(sorted(run_inputs)))
+        recorded = run_inputs if isinstance(run_inputs, dict) else sorted(run_inputs)
+        backend.save_metadata(INPUTS_KEY, json.dumps(recorded))
 
     service = BatchProcessingService(
         client_resolver=MagicMock(),
@@ -251,3 +252,43 @@ class TestTheRowShapesTheseTestsRelyOn:
         minted = [r["source_guid"] for r in rows]
         assert upstream_child not in minted
         assert len(set(minted)) == 2
+
+
+class TestAOneToOneActionBelowAnExpansion:
+    """Through finalize and the store, with each input recorded beside its staged record."""
+
+    @staticmethod
+    def _answer(guid: str) -> dict[str, Any]:
+        return {
+            "source_guid": guid,
+            "parent_source_guid": STAGED,
+            "answer": f"answer-for-{guid}",
+            "_delta_mode": "full",
+            "_state": "processed",
+        }
+
+    def test_three_reruns_stay_at_two_rows(self, tmp_path):
+        """#1155: the upstream action mints its two children again every run."""
+        stored = [self._answer("a1"), self._answer("a2")]
+        counts = []
+        for run in range(2, 5):
+            children = [f"a{2 * run - 1}", f"a{2 * run}"]
+            stored = _finalize(
+                tmp_path / str(run),
+                stored,
+                [self._answer(child) for child in children],
+                submitted=children,
+                run_inputs=dict.fromkeys(children, STAGED),
+            )
+            counts.append(len(stored))
+
+        assert counts == [2, 2, 2], f"the output grew across re-runs: {counts}"
+
+    def test_a_new_batch_of_staged_records_keeps_the_earlier_answers(self, tmp_path):
+        """#1206: nothing this run took came from the records already answered."""
+        old = [dict(self._answer("r1"), parent_source_guid="r1")]
+        new = dict(self._answer("r2"), parent_source_guid="r2")
+
+        result = _finalize(tmp_path, old, [new], submitted=["r2"], run_inputs={"r2": "r2"})
+
+        assert sorted(_guids(result)) == ["r1", "r2"]

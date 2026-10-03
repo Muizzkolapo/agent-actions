@@ -430,15 +430,18 @@ unrecorded one but read the same way. A drop is logged once per write at INFO, n
 with how many rows went and the counts that decided it, since the healthy re-run this case
 exists for makes one every time.
 
-One case stays open. An action that mints no identity of its own carries its input's and
-records no producer, which happens for a 1:1 action and for an expansion on any input it
-answered with a single row (`is_expansion` is `len(structured_items) > 1`). Below an
-expansion its stored rows then carry the previous run's upstream child identity and match
-nothing, so they accumulate exactly as described above. The lever that would close it —
-reading an identity absent from the input as a gone generation — is the one
-`build_carry_forward` and the stored-row rule deliberately refuse, because an input that is
-merely absent still keeps its rows. It wants its own decision; the gap is recorded as a
-strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`.
+That rule reads identities alone, and an identity cannot tell an upstream action minting
+its children again from a record that left the input, so it accumulates below an expansion
+for an action that mints nothing (#1155) and drops the rows of records that merely left
+(#1206). A run now records, beside each input, the staged record it descends from --
+`parent_source_guid`, which every row carries, or the row's own identity at the first stage
+-- and where that is recorded `_carried_by_ancestor` decides instead, per staged record. A
+record's stored rows are replaced only where the run answered every input descended from
+it and none of the inputs those rows answered for is still an input: its children were
+minted again. A record absent from the input, or one whose inputs kept their identities,
+keeps its rows. Rows merging several inputs are never replaced. A run recorded before
+ancestors were is read by the identity rule above, unchanged; the strict xfail in
+`tests/unit/processing/test_superseding_is_limited_to_one_producer.py` pins that path.
 
 ---
 

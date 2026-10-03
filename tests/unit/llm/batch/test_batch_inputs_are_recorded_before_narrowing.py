@@ -49,6 +49,24 @@ class TestTheRecordedInputRoundTrips:
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1", "i2"}
 
+    def test_a_recording_with_ancestors_reads_back_both_ways(self, backend):
+        BatchContextManager.save_batch_inputs(backend, ACTION, {"a2": "S", "a1": "S"}, BATCH)
+
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"a1", "a2"}
+        assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) == {
+            "a1": "S",
+            "a2": "S",
+        }
+
+    def test_a_recording_of_identities_alone_has_no_ancestors(self, backend):
+        """What every run recorded before ancestors were: read as none, never guessed."""
+        BatchContextManager.save_batch_inputs(backend, ACTION, ["i1"], BATCH)
+
+        assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) is None
+
+    def test_no_recording_has_no_ancestors(self, backend):
+        assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) is None
+
     def test_an_empty_recording_is_not_a_missing_one(self, backend):
         """A run that took no input recorded that, and it must not read as unknown."""
         BatchContextManager.save_batch_inputs(backend, ACTION, [], BATCH)
@@ -157,6 +175,29 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1", "i2"}, (
             "the gate-carried input was left out of the recording"
         )
+
+    def test_each_input_is_recorded_with_the_staged_record_it_came_from(self, backend, tmp_path):
+        """A child of an expansion carries its staged record; a staged row is its own."""
+        service = _service(backend)
+        data = [
+            {"source_guid": "a1", "parent_source_guid": "S", "text": "a"},
+            {"source_guid": "r2", "text": "b"},
+        ]
+        _prepared(service, data)
+
+        service.submit_batch_job(
+            agent_config={"action_name": ACTION, "kind": "llm"},
+            batch_name=BATCH,
+            data=data,
+            output_directory=str(tmp_path / "out"),
+            force=True,
+            run_inputs=data,
+        )
+
+        assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) == {
+            "a1": "S",
+            "r2": "r2",
+        }
 
     def test_a_run_the_gate_did_not_narrow_records_everything(self, backend, tmp_path):
         service = _service(backend)

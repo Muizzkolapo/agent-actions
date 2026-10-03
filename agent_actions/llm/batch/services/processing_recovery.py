@@ -335,8 +335,12 @@ def finalize_batch_output(
     # Not the context map: the gate narrows before the map is built, so the map holds
     # only what was submitted and reading it deletes the rows of everything it carried.
     batch_inputs: set[str] | None = None
+    input_ancestors: dict[str, str] | None = None
     if service._storage_backend and effective_action_name and identity.file_name:
         batch_inputs = BatchContextManager.load_batch_inputs(
+            service._storage_backend, effective_action_name, identity.file_name
+        )
+        input_ancestors = BatchContextManager.load_batch_input_ancestors(
             service._storage_backend, effective_action_name, identity.file_name
         )
     service._write_batch_output(
@@ -345,6 +349,7 @@ def finalize_batch_output(
         context.output_directory,
         context.action_name,
         batch_inputs=batch_inputs or (),
+        input_ancestors=input_ancestors,
     )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.

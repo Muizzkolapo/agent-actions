@@ -251,7 +251,11 @@ class BatchSubmissionService:
                 context={"action_name": action_name, "batch_name": batch_name},
             )
         run_input_guids = (
-            [guid for row in run_inputs if (guid := row.get("source_guid"))]
+            {
+                guid: row.get("parent_source_guid") or guid
+                for row in run_inputs
+                if (guid := row.get("source_guid"))
+            }
             if run_inputs is not None
             else None
         )

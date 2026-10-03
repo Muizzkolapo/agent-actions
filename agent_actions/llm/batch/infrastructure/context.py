@@ -2,7 +2,7 @@
 
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
@@ -38,10 +38,13 @@ class BatchContextManager:
     def save_batch_inputs(
         backend: "StorageBackend",
         action_name: str,
-        source_guids: Collection[str],
+        source_guids: Collection[str] | Mapping[str, str],
         batch_name: str,
     ) -> None:
         """Record the identities this action took as input, before any narrowing.
+
+        A mapping records each input's staged record beside it, which is what lets
+        carry-forward tell a re-minted input from one that left.
 
         Separate from the context map, which holds only what was submitted: the
         disposition gate narrows the input before the map is built. Carry-forward
@@ -50,7 +53,12 @@ class BatchContextManager:
         """
         try:
             key = BatchContextManager._inputs_key(action_name, batch_name)
-            backend.save_metadata(key, json.dumps(sorted(source_guids)))
+            recorded: Any = (
+                dict(sorted(source_guids.items()))
+                if isinstance(source_guids, Mapping)
+                else sorted(source_guids)
+            )
+            backend.save_metadata(key, json.dumps(recorded))
         except Exception as e:
             raise ProcessingError(
                 f"Failed to save batch inputs: {e}",
@@ -86,6 +94,8 @@ class BatchContextManager:
                 batch_name,
             )
             return None
+        if isinstance(recorded, dict) and all(isinstance(a, str) for a in recorded.values()):
+            return set(recorded)
         if not isinstance(recorded, list) or not all(isinstance(g, str) for g in recorded):
             logger.warning(
                 "Recorded input for %s/%s is not a list of identities (%s) — "
@@ -96,6 +106,28 @@ class BatchContextManager:
             )
             return None
         return set(recorded)
+
+    @staticmethod
+    def load_batch_input_ancestors(
+        backend: "StorageBackend", action_name: str, batch_name: str
+    ) -> dict[str, str] | None:
+        """Each recorded input's staged record, or None where the run recorded none.
+
+        None for a run recorded before ancestors were, or an unreadable one: carry-forward
+        then falls back to the identity-only rule `load_batch_inputs` feeds.
+        """
+        raw = backend.load_metadata(BatchContextManager._inputs_key(action_name, batch_name))
+        if raw is None:
+            return None
+        try:
+            recorded = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(recorded, dict):
+            return None
+        if not all(isinstance(a, str) for a in recorded.values()):
+            return None
+        return recorded
 
     @staticmethod
     def save_batch_context_map(

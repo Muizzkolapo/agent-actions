@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  Batch carry-forward now decides by the staged record a row came from. Matching stored rows
+  to a run by identity alone could not tell an upstream action minting its children again
+  from a record that left the input. Below an expansion, an action that answers one row per
+  input kept every previous run's rows beside the new ones, growing by its input size each
+  run; and where a file received a new batch of records, the earlier batch's rows from an
+  expanding action were dropped without being asked. A run now records, beside each input,
+  the staged record it descends from. A record's stored rows are replaced only where the run
+  answered every input descended from that record under new identities; a record that is
+  absent from the input, was filtered, or was only partly answered keeps its rows. Batches
+  submitted before this change carry no such record and finalize exactly as before.
+time: 2026-10-03T01:00:00Z

@@ -14,7 +14,7 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.record.state import RecordState
@@ -192,33 +192,17 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    input_ancestors: Mapping[str, str] | None = None,
 ) -> set[str]:
     """Identities in *stored* that *produced* did not write again.
 
-    Matching is by input: two runs of a minting action share no identity, and how many
-    rows an input yields is decided per run, so the same input mints several rows one
-    run and keeps its own identity the next — each direction a replacement.
-
-    Only a row settled as processed answers for an input, and what it answers for is
-    the producers it names, else the identity it carries. Both halves need that test: a
-    failed row is keyed on its input too, and a row can be stamped unsettled after
-    enrichment named its producers.
-
-    A stored row naming one input is inferred away; naming several, never. That reads
-    one producer as a mint, which holds where this is called from — a batch row naming
-    producers has been re-keyed — and not in general: the FILE writer records the inputs
-    a row consumed *minus* its own, so a two-input merge keeps one identity and names
-    one producer. Inferred away there, its own input's content goes with it, and a
-    caller reading those rows wants the stricter reading ``build_carry_forward`` has.
-
-    *batch_inputs* is the input before any narrowing, which settles what matching
-    cannot: below an expansion the upstream children are minted again every run, so a
-    producer named by no input is a generation that is gone rather than one this run did
-    not answer for. Inferred only on a run that settled every input it recorded, since
-    only then is the replacement in this write; left empty, or short of that, nothing is
-    inferred at all. A row naming no producer is never inferred away either — its
-    identity may be a gone generation's too, but an input that is merely absent is
-    indistinguishable from one the run never took, and that one keeps its rows.
+    Matched by input, since a minting action's runs share no identity: a processed row
+    answers for the producers it names, else for the identity it carries. With
+    *input_ancestors* recorded, replacement is decided per staged record by
+    ``_carried_by_ancestor``. Without, for a run recorded before those were, single-producer
+    rows are inferred away only when the run answered every *batch_inputs* entry and none of
+    their producers is still one; rows naming no producer or several never are.
+    ARCHITECTURE.md has the reasoning.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -236,8 +220,11 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
-    inputs = frozenset(batch_inputs)
     stored_rows = list(stored)
+    if input_ancestors is not None:
+        return _carried_by_ancestor(stored_rows, answered, rewritten, input_ancestors)
+
+    inputs = frozenset(batch_inputs)
     # Decided across all the mints at once, not per row: what replaces a generation is an
     # upstream action re-minting its whole output, so one producer missing while others are
     # still inputs is an individual record that went away, and its rows are its own.
@@ -322,6 +309,71 @@ def stored_rows_not_reproduced(
             "input with a single row records no producer, so below an expansion its "
             "rows name the previous run's upstream child; see issue #1155",
             len(unattributable),
+        )
+    return carry
+
+
+def _carried_by_ancestor(
+    stored_rows: list[dict[str, Any]],
+    answered: set[str],
+    rewritten: set[str],
+    input_ancestors: Mapping[str, str],
+) -> set[str]:
+    """Carry every stored row whose staged record this run did not answer again in full.
+
+    A staged record's stored rows are replaced only where the run answered every input
+    descended from it and none of the inputs those rows answered for is still an input:
+    the upstream action minted its children again. A record absent from the input, or
+    one whose inputs kept their identities, left or was narrowed past, and keeps its rows.
+    """
+    inputs_of: dict[str, set[str]] = {}
+    for input_guid, staged in input_ancestors.items():
+        inputs_of.setdefault(staged, set()).add(input_guid)
+
+    answered_for: dict[str, set[str]] = {}
+    judged: list[tuple[str, str, str]] = []
+    carry: set[str] = set()
+    for row in stored_rows:
+        guid = row.get("source_guid")
+        if not guid:
+            continue
+        producers = frozenset(row.get("producer_source_guids") or ())
+        if len(producers) > 1:
+            # Holds what each of several inputs gave it; never inferred away.
+            if guid not in rewritten:
+                carry.add(guid)
+            continue
+        key = next(iter(producers), guid)
+        ancestor = row.get("parent_source_guid") or guid
+        # Counted even for a row the run rewrote: its input still standing is what shows
+        # the record's siblings kept their identities rather than being minted again.
+        answered_for.setdefault(ancestor, set()).add(key)
+        if guid not in rewritten:
+            judged.append((guid, key, ancestor))
+
+    replaced = {
+        ancestor
+        for ancestor, inputs in inputs_of.items()
+        if inputs <= answered and answered_for.get(ancestor, set()).isdisjoint(input_ancestors)
+    }
+    dropped: set[str] = set()
+    for guid, key, ancestor in judged:
+        if key in answered:
+            continue
+        if ancestor in replaced:
+            dropped.add(guid)
+        else:
+            carry.add(guid)
+    dropped -= carry
+
+    if dropped:
+        # INFO: an action below an expansion takes this path on every healthy re-run.
+        logger.info(
+            "%d stored row(s) dropped, not carried forward: this run answered again every "
+            "input made from the %d staged record(s) they came from, under new identities, "
+            "so they are the previous run's answers for the same records.",
+            len(dropped),
+            len({ancestor for guid, _, ancestor in judged if guid in dropped}),
         )
     return carry
 

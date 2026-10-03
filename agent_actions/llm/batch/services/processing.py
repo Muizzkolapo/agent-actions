@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -445,6 +445,7 @@ class BatchProcessingService:
         action_name: str | None = None,
         *,
         batch_inputs: Collection[str] = (),
+        input_ancestors: Mapping[str, str] | None = None,
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = self._resolve_action_name(action_name)
@@ -453,6 +454,7 @@ class BatchProcessingService:
             main_output,
             target_relative_path(output_file, output_directory),
             batch_inputs=batch_inputs,
+            input_ancestors=input_ancestors,
         )
 
         if self._storage_backend is None:
@@ -471,6 +473,7 @@ class BatchProcessingService:
         relative_path: str,
         *,
         batch_inputs: Collection[str] = (),
+        input_ancestors: Mapping[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
@@ -498,7 +501,9 @@ class BatchProcessingService:
 
         from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
 
-        carry_guids = stored_rows_not_reproduced(stored, batch_output, batch_inputs=batch_inputs)
+        carry_guids = stored_rows_not_reproduced(
+            stored, batch_output, batch_inputs=batch_inputs, input_ancestors=input_ancestors
+        )
         if not carry_guids:
             return batch_output
 
