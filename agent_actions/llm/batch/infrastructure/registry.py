@@ -81,6 +81,26 @@ class BatchRegistryManager:
         reads as no ids rather than an error — a registry nothing can read names
         no batch anything could reclaim.
         """
+        return [entry["batch_id"] for entry in cls._stored_entries(storage_backend, action_name)]
+
+    @classmethod
+    def uncollected_batch_ids(
+        cls, storage_backend: "StorageBackend", action_name: str
+    ) -> list[str]:
+        """The ids among ``batch_ids`` whose results nothing has written yet.
+
+        Still out, or finished and waiting. One the provider failed or cancelled has
+        no results to wait for.
+        """
+        ended = {BatchStatus.FAILED.value, BatchStatus.CANCELLED.value}
+        return [
+            entry["batch_id"]
+            for entry in cls._stored_entries(storage_backend, action_name)
+            if entry.get("collected_at") is None and entry.get("status") not in ended
+        ]
+
+    @classmethod
+    def _stored_entries(cls, storage_backend: "StorageBackend", action_name: str) -> list[dict]:
         raw = storage_backend.load_metadata(cls.METADATA_KEY_PREFIX + action_name)
         if not isinstance(raw, str):
             return []
@@ -92,7 +112,7 @@ class BatchRegistryManager:
         if not isinstance(stored, dict):
             return []
         return [
-            entry["batch_id"]
+            entry
             for entry in stored.values()
             if isinstance(entry, dict) and isinstance(entry.get("batch_id"), str)
         ]

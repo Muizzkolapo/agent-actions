@@ -236,33 +236,51 @@ _execute_action_run()
     → _resolve_completion_status()
 ```
 
-**A reset reaches everything that reads it.** A completed action put back to pending is
-about to write new output, so whatever an action that reads that output holds was computed
+**A reset reaches everything that reads it.** A completed action put back to pending
+because its config, model or limit changed, or because its output is gone, is about to
+answer everything again. Whatever an action that reads that output holds was computed
 from what is being replaced: the answers of a completed one, the batch of one still out,
 the records an interrupted or halted one had finished. Left as it is, it ends holding
 answers for records that are gone and none for the new ones, while the workflow reports
-success. `_reset_what_reads_it` resets each of them, whatever state it was left in, with
-the same clearing a reset does (dispositions and batch state). A batch still out is given
-up, since it was sent the old output. What counts as reading is what the run order counts:
-an action's dependencies, the versions it merges, and any action it names only in its
-context scope or prompt.
+success. Each reader is reset with it, whatever state it was left in: dispositions,
+checkpoint records and batch state are cleared, and a batch still out is given up and
+named in a warning, since it was sent the old output. A reader is an action that depends
+on it, merges its versions, or only names it in its context scope or prompt, and the
+reader of a reader.
 
-It is done when the upstream action is reset and not as each reader is reached: a batch
-action pauses the run, and the next process no longer knows which action was reset. The
-readers go first and the action itself last, its status after its clearing, so a process
-killed part-way leaves the action as it was found and the next run does all of it again.
-Every route that runs a completed action again goes through it: a changed config, model
-or limit, output that is gone or cannot be read, and a node-level failure it recorded.
+The stores are cleared first, readers and then the action, and the statuses are written
+last, all in one write (`ActionStateManager.reopen`). A process that dies before that
+write leaves every status as it was and the reason for the reset still readable, so the
+next run does all of it again; one that dies after it leaves all of them pending. It is
+done when the action is reset and not as each reader is reached, because a batch action
+pauses the run and the next process no longer knows which action was reset.
 
-A repair (`agac retry`) resets nothing. It answers only the records it named, so a reset
-under it clears every other record's disposition, at the edited action and at everything
-that reads it, with nothing run to replace them. The stamp is left alone and the next
-plain run finds the change.
+Two routes run a completed action again and leave its readers alone: a node-level
+failure it recorded, and output that could not be read. There the action still holds its
+rows and its records' dispositions, so it answers only what failed and carries the rest,
+and what its readers computed from those rows stands. A row it adds on that run does not
+reach a reader that has completed (#1229).
 
-What it does not do: stored rows are not deleted, only replaced as the re-run writes each
-file. A re-run that is interrupted and resumed can therefore serve the old row for a
-record it had already answered again (#1226). And the cost is real: a prompt change at
-the top of a long workflow re-answers everything below it.
+A run that is repairing records (`agac retry` with records to re-run) compares nothing
+and resets no reader. It answers only the records it named, so a reset under it clears
+every other record's disposition with nothing run to replace them. It warns when it
+meets an edited action, and it keeps the completion stamp it found on each action it
+completes, so the next plain run still finds the edit and applies it. A retry with no
+record to re-run (only a node-level failure) is a plain run for this purpose.
+
+Costs and limits:
+
+- A prompt change at the top of a long workflow re-answers everything below it.
+- A limit counts as a change. `--record-limit` on a run resets the actions it applies to
+  and their readers, giving up a batch still out below and clearing a halt.
+- Stored rows are not deleted, only replaced as the re-run writes each file. A re-run that
+  is interrupted and resumed can serve the old row for a record it had already answered
+  again (#1226).
+- A retry over an action that a reset left unfinished completes it on the records it
+  named and keeps old rows for the rest (#1227). Run the workflow before retrying.
+- The level loop orders by `dependencies` alone. A reader that names an action only in
+  its context scope and sits in an earlier level is reset after its level has passed, and
+  runs on the next run (#1228).
 
 
 ---
@@ -547,8 +565,9 @@ _compute_action_config_hash() covers:
 If you change one of these fields and re-run WITHOUT --fresh:
     The executor detects the hash mismatch, resets the action to PENDING,
     and clears its dispositions, and does the same to every action that
-    reads it. They re-run with new config. Not under `agac retry`, which
-    compares nothing; the next plain run does.
+    reads it. They re-run with new config. Not while `agac retry` is
+    re-running records: it compares nothing and keeps the stamps it
+    found, so the next plain run still sees the mismatch.
 
 If you add a new config field that affects output but don't add it
 to the hash computation:
@@ -591,11 +610,13 @@ If you add async I/O inside run_action (e.g., aiohttp calls):
 ### Every path that resets actions must clear checkpoint records
 
 ```
-Three places reset action state. ALL THREE clear checkpoint_output:
+Four places reset action state. ALL FOUR clear checkpoint_output:
 
-1. pipeline.py:618      — after save_main_output (normal completion)
-2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
-3. cli/retry.py:201     — RetryCommand.execute (retry command)
+1. pipeline.py          — after save_main_output (normal completion)
+2. coordinator.py       — _clear_for_fresh_run (--fresh flag)
+3. cli/retry.py         — RetryCommand.execute (retry command)
+4. executor.py          — _forget_what_it_did (an action reset because it or
+                          what it reads is running again)
 
 If you add a new CLI command or reset path:
     You MUST call storage_backend.clear_checkpoint_records(action_name).

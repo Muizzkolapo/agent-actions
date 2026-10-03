@@ -3,7 +3,7 @@
 import json
 import logging
 import threading
-from collections.abc import Container
+from collections.abc import Container, Iterable
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -141,27 +141,20 @@ class ActionStateManager:
     def adopt_truncation_marker(self, action_name: str) -> bool:
         """Whether this completion stamp was left by a run capped below its config.
 
-        A run capped from outside its own config used to stamp the limit the
-        config asked for, which reads as a full run for ever after. The cap it
-        ran under was written beside it under a key nothing reads; this is the
-        one read of it, and the key does not survive being read.
-
-        When it reports a truncation the removal is left unsaved: the write that
-        reopens the action carries it. Persisting here would put the stamp
-        through a moment where it is completed, carries the config's limit, and
-        no longer records the cap — the unrepairable shape this exists to
-        remove — which a crash or a failed write would make permanent.
-
-        That holds because the only caller reads this while deciding whether to
-        reopen, and reopens in the same breath. A caller that read it while some
-        other action could write the file would lose the marker for good.
+        Such a run stamped the limit its config asked for, which reads as a full run
+        for ever after; the cap it ran under sits beside it under a key nothing else
+        reads. A marker that reports a truncation is left where it is, and ``reopen``
+        removes it in the write that puts the action back to pending: removed here,
+        a crash or any other write to the file in between leaves the stamp completed,
+        carrying the config's limit and no record of the cap. A marker that reports
+        nothing is retired here, since nothing reopens.
         """
         with self._lock:
             details = self.action_status.get(action_name)
             if not isinstance(details, dict) or "max_records" not in details:
                 return False
 
-            cap = details.pop("max_records")
+            cap = details["max_records"]
             # A cap is a count, on the terms the limit resolver already sets: a
             # bool or a number below one never capped anything, and reopening an
             # action on one would re-run finished work for no reason. The same
@@ -175,8 +168,24 @@ class ActionStateManager:
                 and (configured is None or cap < configured)
             )
             if not truncated:
+                del details["max_records"]
                 self._save_status()
             return truncated
+
+    def reopen(self, action_names: Iterable[str]) -> None:
+        """Put these actions back to pending, in one write.
+
+        One write, so a process that dies around it leaves all of them as they were
+        or all of them pending: an action reset while what reads it is left as it
+        was completes again with nothing to say the readers are stale.
+        """
+        with self._lock:
+            for name in action_names:
+                details = self.action_status.setdefault(name, {})
+                details["status"] = ActionStatus.PENDING
+                details.pop("max_records", None)
+                details.pop(_STOPPED_COLLECTING, None)
+            self._save_status()
 
     def is_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
