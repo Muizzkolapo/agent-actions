@@ -438,6 +438,10 @@ class ActionExecutor:
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
                 storage_backend.clear_disposition(action_name)
+                # A completed batch job is what stops a file being submitted twice, so
+                # left behind it stops the reset action being submitted at all. Only a
+                # completed action reaches here, so no batch of its is in flight.
+                storage_backend.clear_batch_state(action_name)
             return ActionStatus.PENDING
         return current_status
 

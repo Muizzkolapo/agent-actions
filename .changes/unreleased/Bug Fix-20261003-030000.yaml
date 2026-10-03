@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A batch action that is reset now submits again. When a completed action's record limit,
+  prompt, schema, guard or model changes, the next run resets it and runs it again; for a
+  batch action the reset left the finished batch job on record, and since a finished job for
+  a file is what stops that file being submitted twice, the action was skipped with "Found
+  completed batch job ... skipping resubmission". The run reported it complete with 0 records
+  and its output stayed whatever the earlier configuration had produced. Trying a workflow
+  under `--record-limit 1` and then running it in full, without `--fresh`, was enough: the
+  full run answered nothing. The reset now clears the action's batch state as `--fresh` does,
+  so the action submits for the inputs it has now, as the same action does online.
+time: 2026-10-03T03:00:00Z
