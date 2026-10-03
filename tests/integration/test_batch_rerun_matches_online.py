@@ -864,6 +864,21 @@ def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer
     assert batch.sent[1] == []
 
 
+def test_a_record_that_cannot_be_prepared_is_stored_as_a_failure(tmp_path):
+    """Online marks it failed. Stored as a guard skip, the output says the guard turned
+    away a record the guard passed, and nothing that reads row state sees a failure."""
+    from agent_actions.storage.backend import DISPOSITION_FAILED
+
+    batch = _Batch(tmp_path)
+    turned_away = [rec(name, keep=False, topic="dbt") for name in ("s1", "s2", "s3", "s4", "s5")]
+
+    held = batch.run(1, [*turned_away, rec("p6", keep=True)], extra={**SKIP, **PREPARED})
+
+    assert held == ["failed:p6", *(f"guard_skipped:s{n}" for n in range(1, 6))]
+    failed = batch.backend.get_disposition(ACTION, disposition=DISPOSITION_FAILED)
+    assert [row["record_id"] for row in failed] == ["p6"]
+
+
 def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
     """Its disposition says done and it holds no row, by design: nothing is missing."""
     batch = _Batch(tmp_path)
