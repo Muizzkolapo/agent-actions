@@ -5,6 +5,7 @@ Tests cover: parent spec items 5, 17.
 
 from __future__ import annotations
 
+import logging
 import sys
 import tempfile
 from typing import Any
@@ -74,6 +75,33 @@ def _mock_backend(terminal_ids: set[str]) -> MagicMock:
         {"source_guid": guid, "content": {}} for guid in sorted(terminal_ids)
     ]
     return backend
+
+
+def _dispositions(*, filtered: set[str]):
+    def _get(action_name: str, record_id: str | None = None, disposition: str | None = None):
+        if disposition != "filtered":
+            return []
+        return [{"record_id": guid} for guid in sorted(filtered)]
+
+    return _get
+
+
+def _sent(backend: MagicMock, inputs: list[str]) -> list[str]:
+    """The inputs a submission over *inputs* hands on to preparation, in order."""
+    service = _make_service(
+        disposition_gate=DispositionGate(storage_backend=backend),
+        storage_backend=backend,
+        tasks=[{"custom_id": "t", "body": {}}],
+        context_map={"t": {"source_guid": "t"}},
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service.submit_batch_job(
+            agent_config={"agent_type": "test_action", "action_name": "test_action"},
+            batch_name="data.json",
+            data=[_make_record(guid) for guid in inputs],
+            output_directory=tmpdir,
+        )
+    return [record["source_guid"] for record in service.prepare_batch_tasks.call_args[0][1]]
 
 
 class TestBatchDispositionGate:
@@ -170,6 +198,45 @@ class TestBatchDispositionGate:
 
         sent = service.prepare_batch_tasks.call_args[0][1]
         assert [record["source_guid"] for record in sent] == ["r1"]
+
+    def test_a_done_input_whose_answers_carry_minted_identities_is_not_sent_again(self):
+        """No stored row carries the input's own identity; each names it as its producer."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "m1", "producer_source_guids": ["r0"], "content": {}},
+            {"source_guid": "m2", "producer_source_guids": ["r0"], "content": {}},
+        ]
+
+        assert _sent(backend, ["r0", "r1"]) == ["r1"]
+
+    def test_a_done_input_whose_row_this_run_writes_over_is_sent_again(self):
+        """Its only row sits under an identity the run is processing, so that row is
+        replaced and the input would be left with no answer."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "r1", "producer_source_guids": ["r0"], "content": {}},
+        ]
+
+        assert _sent(backend, ["r0", "r1"]) == ["r0", "r1"]
+
+    def test_an_input_the_guard_filtered_goes_to_the_guard_again(self):
+        """Online judges it afresh every run; called done here, it would never be."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        backend.get_disposition.side_effect = _dispositions(filtered={"r1"})
+
+        assert _sent(backend, ["r0", "r1", "r2"]) == ["r1", "r2"]
+
+    def test_a_filtered_input_is_not_reported_as_a_row_gone_missing(self, caplog):
+        """It holds no row by design, so a healthy run has nothing to warn about."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        backend.get_disposition.side_effect = _dispositions(filtered={"r1"})
+
+        with caplog.at_level(logging.WARNING):
+            _sent(backend, ["r0", "r1"])
+
+        assert "not found in prior output" not in caplog.text
 
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""

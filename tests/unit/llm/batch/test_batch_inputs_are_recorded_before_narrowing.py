@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import ConfigurationError, ProcessingError
+from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
@@ -174,30 +174,24 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"i1", "i2"}
 
-    def test_a_repair_given_no_recording_is_refused_rather_than_narrowed(self, backend, tmp_path):
-        """The same refusal the online path makes when it is handed no wider input.
-
-        Proceeding would record the repair's own narrowing as the whole input, and
-        every record it did not name would read as a generation that is gone.
-        """
-        service = BatchSubmissionService(
-            task_preparator=MagicMock(),
-            client_resolver=MagicMock(),
-            context_manager=BatchContextManager(),
-            registry_manager_factory=MagicMock(),
-            storage_backend=backend,
-            disposition_gate=DispositionGate(storage_backend=backend, repairing={"i2"}),
-        )
+    def test_a_repair_records_no_inputs(self, backend, tmp_path):
+        """A repair answers what it named, and every other stored row stays as online
+        keeps it. Recorded, its inputs would decide which rows are part of the run."""
+        service = _service(backend)
+        service._disposition_gate = DispositionGate(storage_backend=backend, repairing={"i2"})
         data = [{"source_guid": "i1", "text": "a"}, {"source_guid": "i2", "text": "b"}]
+        _prepared(service, [data[1]])
 
-        with pytest.raises(ConfigurationError, match="pre-narrowing input"):
-            service.submit_batch_job(
-                agent_config={"action_name": ACTION, "kind": "llm"},
-                batch_name=BATCH,
-                data=data,
-                output_directory=str(tmp_path / "out"),
-                force=True,
-            )
+        service.submit_batch_job(
+            agent_config={"action_name": ACTION, "kind": "llm"},
+            batch_name=BATCH,
+            data=[data[1]],
+            output_directory=str(tmp_path / "out"),
+            force=True,
+            run_inputs=data,
+        )
+
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
 
     def test_a_row_carrying_no_identity_is_left_out_rather_than_recorded_as_none(
         self, backend, tmp_path

@@ -1,193 +1,456 @@
-"""A batch re-run leaves in an action's output file what an online re-run does.
+"""A batch re-run holds what an online re-run holds, and answers what it answers.
 
-Both paths share everything above the fork and then diverge. Online writes rows for this
-run's inputs only -- the ones it processed and the ones the gate carried -- and re-answers
-an input the gate calls done whose stored row is missing. Each scenario here is run
-through both real paths against a real store, and the files must end up the same.
+Both run modes are driven from ``ProcessingPipeline.process``, above the fork, against a
+real store. Below it everything is the production object except the model: online swaps
+the strategy, batch swaps the provider. So the guard, record limit, gate, preparator,
+submission, enrichment, collector and finalize all run as they do for a user.
+
+The two files are not always equal. Batch writes a failed row where online refuses to
+write at all, and keeps the rows of inputs a record limit holds back. What must never
+happen is the reverse, and ``shortfalls`` names each way it could.
 """
 
 from __future__ import annotations
 
-import sys
+import json
+import logging
+import random
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# unified imports pipeline_file_mode, which imports workflow; stub it as the online
-# processor's own tests do.
-if "agent_actions.workflow.pipeline_file_mode" not in sys.modules:
-    sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
-
-from agent_actions.llm.batch.core.batch_models import (  # noqa: E402
-    BatchIdentity,
-    RecoveryContext,
-    SubmissionResult,
+from agent_actions.config.types import RunMode
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
+from agent_actions.llm.batch.services.processing import BatchProcessingService
+from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+from agent_actions.processing.record_helpers import build_exhausted_tombstone
+from agent_actions.processing.types import (
+    ProcessingContext,
+    ProcessingResult,
+    RecoveryMetadata,
+    RetryMetadata,
 )
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager  # noqa: E402
-from agent_actions.llm.batch.services.processing import BatchProcessingService  # noqa: E402
-from agent_actions.llm.batch.services.processing_recovery import (  # noqa: E402
-    finalize_batch_output,
-)
-from agent_actions.llm.batch.services.submission import BatchSubmissionService  # noqa: E402
-from agent_actions.output.writer import FileWriter  # noqa: E402
-from agent_actions.processing.disposition_gate import DispositionGate  # noqa: E402
-from agent_actions.processing.types import ProcessingContext, ProcessingResult  # noqa: E402
-from agent_actions.processing.unified import UnifiedProcessor  # noqa: E402
-from agent_actions.storage.backend import DISPOSITION_SUCCESS  # noqa: E402
-from agent_actions.storage.backends.sqlite_backend import SQLiteBackend  # noqa: E402
+from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.storage.backend import FAILURE_DISPOSITIONS
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
 
 ACTION = "write_question"
+UPSTREAM = "flatten"
 FILE = "page.json"
 
+FILTER = {"guard": {"clause": f"{UPSTREAM}.keep == true", "behavior": "filter"}}
+SKIP = {"guard": {"clause": f"{UPSTREAM}.keep == true", "behavior": "skip"}}
 
-def _input(guid: str) -> dict[str, Any]:
-    return {"source_guid": guid, "parent_source_guid": "S", "content": {"flatten": {"item": guid}}}
+
+@pytest.fixture(autouse=True)
+def _only_warnings_are_captured(caplog):
+    """A failure here spans many whole runs; at DEBUG its report is megabytes of log."""
+    caplog.set_level(logging.WARNING, logger="agent_actions")
 
 
-def _answer(guid: str, run: int) -> dict[str, Any]:
+def rec(guid: str, **fields: Any) -> dict[str, Any]:
+    """An input as an upstream expansion hands it on: a minted child naming its record."""
     return {
         "source_guid": guid,
         "parent_source_guid": "S",
-        "answer": f"run-{run}-answer-for-{guid}",
-        "_state": "processed",
-        "_delta_mode": "full",
+        "producer_source_guids": ["S"],
+        "target_id": f"t-{guid}",
+        "parent_target_id": "t-S",
+        "node_id": f"{UPSTREAM}_{guid}",
+        "lineage": [f"{UPSTREAM}_{guid}"],
+        "content": {UPSTREAM: {"item": guid, **fields}},
     }
 
 
-def _stored(backend: SQLiteBackend) -> dict[str, str]:
-    """Identity -> answer for every row the file now holds; a duplicate identity raises."""
-    backend._reconstruction_cache.clear()
-    rows = backend.read_target_for_rewrite(ACTION, FILE)
-    held = {row["source_guid"]: row["answer"] for row in rows}
-    assert len(held) == len(rows), [row["source_guid"] for row in rows]
-    return held
+class Answerer:
+    """What the model says for one input on one run: a number of rows, or a failure."""
+
+    def __init__(self, shape: dict[Any, Any] | None = None) -> None:
+        self.shape = shape or {}
+
+    def __call__(self, guid: str, run: int) -> Any:
+        want = self.shape.get((guid, run), self.shape.get(guid, 1))
+        if want in ("fail", "exhaust"):
+            return want
+        return [{"answer": f"{guid}:{position}@run{run}"} for position in range(want)]
 
 
-class _Online:
-    """The online path: UnifiedProcessor, the real gate and the real store."""
+def _exhausted() -> RecoveryMetadata:
+    return RecoveryMetadata(
+        retry=RetryMetadata(attempts=3, failures=3, succeeded=False, reason="missing")
+    )
 
-    def __init__(self, tmp_path: Path) -> None:
-        self.backend = SQLiteBackend(str(tmp_path / "online.db"), workflow_name="w")
+
+def _config(run_mode: RunMode, extra: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "agent_type": ACTION,
+        "name": ACTION,
+        "action_name": ACTION,
+        "kind": "llm",
+        "model_vendor": "openai",
+        "model_name": "fake-model",
+        "run_mode": run_mode,
+        "json_mode": False,
+        "prompt": "Write a question.",
+        "dependencies": [UPSTREAM],
+        "context_scope": {"observe": [f"{UPSTREAM}.*"]},
+        "idx": 1,
+        "workflow_session_id": "session-1",
+        **extra,
+    }
+
+
+def answers(rows: list[dict[str, Any]]) -> list[str]:
+    """What each stored row says, in a form both modes produce identically.
+
+    Minted identities differ between the two stores, so an answered row is named by its
+    answer (input, position, run) and any other row by its state and identity.
+    """
+    out = []
+    for row in rows:
+        mine = (row.get("content") or {}).get(ACTION)
+        text = mine.get("answer") if isinstance(mine, dict) else None
+        out.append(f"{row.get('_state')}:{text or row.get('source_guid')}")
+    return sorted(out)
+
+
+def _written_twice(rows: list[dict[str, Any]]) -> list[str]:
+    guids = [row["source_guid"] for row in rows]
+    return sorted({guid for guid in guids if guids.count(guid) > 1})
+
+
+class _Mode:
+    """One run mode with a store of its own."""
+
+    run_mode: RunMode
+
+    def __init__(self, tmp_path: Path, file: str = FILE) -> None:
+        name = self.run_mode.value
+        self.backend = SQLiteBackend(str(tmp_path / f"{name}.db"), workflow_name="w")
         self.backend.initialize()
-        self.out = tmp_path / "online" / ACTION
+        self.base = tmp_path / name / "in"
+        self.out = tmp_path / name / "out"
+        self.base.mkdir(parents=True)
         self.out.mkdir(parents=True)
-        self.processed: list[list[str]] = []
+        self.file = file
+        self.stored_as = file
+        self.sent: list[list[str]] = []
+        self.raised: list[str | None] = []
 
-    def run(self, run: int, inputs: list[str]) -> dict[str, str]:
-        records = [_input(guid) for guid in inputs]
+    def held(self) -> list[dict[str, Any]]:
+        self.backend._reconstruction_cache.clear()
+        try:
+            return self.backend.read_target_for_rewrite(ACTION, self.stored_as)
+        except FileNotFoundError:
+            return []
+
+    def _upstream_wrote(self, inputs: list[dict[str, Any]]) -> None:
+        """Store the upstream action's output for this run, as its own run would have."""
+        self.backend.save_metadata("execution_order", json.dumps([UPSTREAM, ACTION]))
+        self.backend.save_metadata(
+            "dependency_graph", json.dumps({UPSTREAM: [], ACTION: [UPSTREAM]})
+        )
+        rows = [
+            {**json.loads(json.dumps(row)), "_delta_mode": "full", "_state": "processed"}
+            for row in inputs
+        ]
+        self.backend._write_target_raw(UPSTREAM, self.stored_as, rows)
+        self.backend._reconstruction_cache.clear()
+
+    def failures(self) -> list[str]:
+        """The records ``agac retry`` would name."""
+        return [
+            row["record_id"]
+            for disposition in sorted(FAILURE_DISPOSITIONS)
+            for row in self.backend.get_disposition(ACTION, disposition=disposition)
+        ]
+
+    def _repairing(self, named: Any) -> frozenset[str]:
+        """What ``agac retry`` does first: forget the records, then narrow the run to them."""
+        for guid in named:
+            self.backend.clear_disposition(ACTION, record_id=guid)
+        return frozenset(named)
+
+    def _pipeline(self, extra: dict[str, Any], retry: Any):
+        config = _config(self.run_mode, extra)
+        return config, create_processing_pipeline_from_params(
+            action_config=config,
+            action_name=ACTION,
+            idx=1,
+            action_configs={ACTION: config},
+            storage_backend=self.backend,
+            retried_records=self._repairing(retry),
+        )
+
+    def _process(self, pipeline: Any, inputs: list[dict[str, Any]]) -> None:
+        try:
+            pipeline.process(
+                str(self.base / self.file),
+                str(self.base),
+                str(self.out),
+                data=json.loads(json.dumps(inputs)),
+            )
+        except Exception as error:  # recorded, and compared between the modes
+            self.raised.append(f"{type(error).__name__}: {error}")
+        else:
+            self.raised.append(None)
+
+
+class _Online(_Mode):
+    run_mode = RunMode.ONLINE
+
+    def run(
+        self,
+        run: int,
+        inputs: list[dict[str, Any]],
+        answer: Answerer | None = None,
+        extra: dict[str, Any] | None = None,
+        retry: Any = (),
+    ) -> list[str]:
+        answer = answer or Answerer()
         taken: list[str] = []
+        self._upstream_wrote(inputs)
 
         class Strategy:
             def invoke(self, batch: list[dict[str, Any]], context: ProcessingContext):
-                taken.extend(record["source_guid"] for record in batch)
-                return [
-                    ProcessingResult.success(
-                        data=[_answer(record["source_guid"], run)],
-                        source_guid=record["source_guid"],
-                    )
-                    for record in batch
-                ]
+                results = []
+                for record in batch:
+                    guid = record["source_guid"]
+                    taken.append(guid)
+                    said = answer(guid, run)
+                    if said == "fail":
+                        result = ProcessingResult.failed(
+                            error="provider error", source_guid=guid, input_record=record
+                        )
+                    elif said == "exhaust":
+                        result = ProcessingResult.exhausted(
+                            error="Retry exhausted after 3 attempts",
+                            data=[
+                                build_exhausted_tombstone(
+                                    ACTION,
+                                    record,
+                                    ExhaustedRecordBuilder.build_empty_content(
+                                        context.agent_config
+                                    ),
+                                    source_guid=guid,
+                                )
+                            ],
+                            source_guid=guid,
+                            recovery_metadata=_exhausted(),
+                            source_snapshot=json.loads(json.dumps(record)),
+                        )
+                    else:
+                        data = []
+                        for item in said:
+                            row = RecordEnvelope.build(ACTION, item, record)
+                            row["source_guid"] = guid
+                            data.append(row)
+                        result = ProcessingResult.success(data=data, source_guid=guid)
+                        result.is_expansion = len(data) > 1
+                    results.append(result)
+                return results
 
-        context = ProcessingContext(
-            agent_config={"agent_type": ACTION, "name": ACTION},
-            agent_name=ACTION,
-            file_path=str(self.out / FILE),
-            output_directory=str(self.out),
-            storage_backend=self.backend,
-        )
-        processor = UnifiedProcessor(disposition_gate=DispositionGate(storage_backend=self.backend))
-        with patch.object(processor, "_guard_filter", return_value=(records, [])):
-            output, _ = processor.process(records, context, Strategy())
-        FileWriter(
-            str(self.out / FILE),
-            storage_backend=self.backend,
-            action_name=ACTION,
-            output_directory=str(self.out),
-        ).write_target(output)
-        for guid in taken:
-            self.backend.set_disposition(ACTION, guid, DISPOSITION_SUCCESS)
-        self.processed.append(sorted(taken))
-        return _stored(self.backend)
+        _config_, pipeline = self._pipeline(extra or {}, retry)
+        with patch.object(pipeline, "_select_strategy", return_value=Strategy()):
+            self._process(pipeline, inputs)
+        self.sent.append(sorted(taken))
+        return answers(self.held())
 
 
-class _Batch:
-    """The batch path: real submission, gate, finalize and store; the provider is not."""
+class _Provider:
+    """The provider's two calls the submission path makes."""
 
-    def __init__(self, tmp_path: Path) -> None:
-        self.backend = SQLiteBackend(str(tmp_path / "batch.db"), workflow_name="w")
-        self.backend.initialize()
-        self.out = tmp_path / "batch" / ACTION
-        self.out.mkdir(parents=True)
-        self.processed: list[list[str]] = []
+    vendor_type = "openai"
 
-    def run(self, run: int, inputs: list[str]) -> dict[str, str]:
-        records = [_input(guid) for guid in inputs]
-        submitted: list[dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.submitted: list[list[dict[str, Any]]] = []
 
-        submission = BatchSubmissionService(
-            task_preparator=MagicMock(),
+    def prepare_tasks(self, tasks: list[dict[str, Any]], config: dict[str, Any]):
+        return [{"custom_id": task["target_id"], "body": task} for task in tasks]
+
+    def submit_batch(self, tasks, batch_name, output_directory):
+        self.submitted.append(tasks)
+        return f"batch-{len(self.submitted)}", BatchStatus.SUBMITTED
+
+
+class _Batch(_Mode):
+    run_mode = RunMode.BATCH
+
+    def __init__(self, tmp_path: Path, file: str = FILE) -> None:
+        super().__init__(tmp_path, file)
+        self.stored_as = f"{Path(file).stem}.json"
+        self.provider = _Provider()
+        self.sent_in_order: list[list[str]] = []
+
+    def run(
+        self,
+        run: int,
+        inputs: list[dict[str, Any]],
+        answer: Answerer | None = None,
+        extra: dict[str, Any] | None = None,
+        retry: Any = (),
+    ) -> list[str]:
+        answer = answer or Answerer()
+        # What a reset, `agac retry` and `--fresh` each do before a batch action runs
+        # again: a spent registry entry otherwise hands back the prior batch.
+        self.backend.clear_batch_state(ACTION)
+        self._upstream_wrote(inputs)
+
+        config, pipeline = self._pipeline(extra or {}, retry)
+        before = len(self.provider.submitted)
+        with patch(
+            "agent_actions.llm.batch.infrastructure.batch_client_resolver."
+            "BatchClientResolver.get_for_config",
+            return_value=self.provider,
+        ):
+            self._process(pipeline, inputs)
+        if self.raised[-1] is not None or len(self.provider.submitted) == before:
+            self.sent.append([])
+            self.sent_in_order.append([])
+            return answers(self.held())
+
+        name = Path(self.file).name
+        context_map = BatchContextManager.load_batch_context_map(self.backend, ACTION, name)
+        included = {
+            custom_id: row
+            for custom_id, row in context_map.items()
+            if BatchContextMetadata.get_filter_status(row) == FilterStatus.INCLUDED
+        }
+        submitted = [task["custom_id"] for task in self.provider.submitted[-1]]
+        assert sorted(submitted) == sorted(included)
+        self.sent_in_order.append([included[custom_id]["source_guid"] for custom_id in submitted])
+        self.sent.append(sorted(self.sent_in_order[-1]))
+
+        results = []
+        exhausted: dict[str, Any] = {}
+        for custom_id, row in included.items():
+            said = answer(row["source_guid"], run)
+            if said == "exhaust":
+                exhausted[custom_id] = _exhausted()
+            elif said == "fail":
+                results.append(
+                    BatchResult(custom_id=custom_id, content=None, success=False, error="boom")
+                )
+            else:
+                content = said if len(said) != 1 else said[0]
+                results.append(BatchResult(custom_id=custom_id, content=content, success=True))
+
+        manager = BatchRegistryManager(self.backend, ACTION)
+        entry = manager.get_batch_job(name)
+        assert entry is not None, "submission registered nothing"
+        service = BatchProcessingService(
             client_resolver=MagicMock(),
             context_manager=BatchContextManager(),
-            registry_manager_factory=MagicMock(),
-            storage_backend=self.backend,
-            disposition_gate=DispositionGate(storage_backend=self.backend),
-        )
-        submission._submit_to_provider = MagicMock(  # type: ignore[method-assign]
-            return_value=SubmissionResult(batch_id=f"batch-{run}")
-        )
-        submission._stamp_deferred = MagicMock()  # type: ignore[method-assign]
-
-        def prepare(agent_config, data, *args, **kwargs):
-            submitted.extend(data)
-            context_map = {row["source_guid"]: dict(row) for row in data}
-            return [{"target_id": key} for key in context_map], context_map
-
-        submission.prepare_batch_tasks = MagicMock(side_effect=prepare)  # type: ignore[method-assign]
-        submission.submit_batch_job(
-            agent_config={"action_name": ACTION, "kind": "llm"},
-            batch_name=FILE,
-            data=records,
-            output_directory=str(self.out),
-            force=True,
-            run_inputs=records,
-        )
-        taken = sorted(row["source_guid"] for row in submitted)
-        self.processed.append(taken)
-        if not taken:
-            # Nothing was sent, so nothing finalizes and the file is left as it stands.
-            return _stored(self.backend)
-
-        processing = BatchProcessingService(
-            client_resolver=MagicMock(),
-            context_manager=MagicMock(),
-            result_processor=MagicMock(),
-            registry_manager_factory=MagicMock(),
+            result_processor=BatchResultStrategy(),
+            registry_manager_factory=lambda name: manager,
             workflow_name=ACTION,
             storage_backend=self.backend,
         )
-        processing._convert_batch_results_to_workflow_format = MagicMock(  # type: ignore[method-assign]
-            return_value=([_answer(guid, run) for guid in taken], MagicMock(), None)
+        service._finalize_batch_output(
+            context=RecoveryContext(
+                service=service,
+                manager=manager,
+                provider=self.provider,
+                agent_config=dict(config),
+                output_directory=str(self.out),
+                action_name=ACTION,
+                start_time=0.0,
+            ),
+            identity=BatchIdentity(batch_id=entry.batch_id, file_name=name, entry=entry),
+            batch_results=results,
+            context_map=context_map,
+            exhausted_recovery=exhausted or None,
         )
-        context = RecoveryContext(
-            service=processing,
-            manager=MagicMock(),
-            provider=MagicMock(),
-            agent_config={"kind": "llm"},
-            output_directory=str(self.out),
-            action_name=ACTION,
-            start_time=0.0,
-        )
-        identity = BatchIdentity(batch_id=f"batch-{run}", file_name=FILE, entry=MagicMock())
-        context_map = {row["source_guid"]: dict(row) for row in submitted}
-        finalize_batch_output(context, identity, batch_results=[], context_map=context_map)
-        for guid in taken:
-            self.backend.set_disposition(ACTION, guid, DISPOSITION_SUCCESS)
-        return _stored(self.backend)
+        return answers(self.held())
 
 
-SCENARIOS = {
+def compare(
+    tmp_path: Path,
+    runs: list[Any],
+    config: dict[str, Any] | None = None,
+    shape: dict[Any, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Run every step through both modes and report what each held and sent.
+
+    A step is a list of inputs (guids or records), or a dict of ``inputs`` with an
+    optional ``config`` override for that run and an optional ``retry``: the records a
+    repair names, or ``"failures"`` for whichever online's store says failed. Both modes
+    are given the same names, so both run the same repair.
+    """
+    online, batch = _Online(tmp_path), _Batch(tmp_path)
+    answer = Answerer(shape)
+    findings = []
+    for number, step in enumerate(runs, start=1):
+        step = step if isinstance(step, dict) else {"inputs": step}
+        inputs = [rec(item) if isinstance(item, str) else item for item in step["inputs"]]
+        extra = {**(config or {}), **step.get("config", {})}
+        retry = step.get("retry", ())
+        if retry == "failures":
+            retry = online.failures()
+        findings.append(
+            {
+                "run": number,
+                "online": online.run(number, inputs, answer, extra, retry),
+                "batch": batch.run(number, inputs, answer, extra, retry),
+                "online_sent": online.sent[-1],
+                "batch_sent": batch.sent[-1],
+                "online_raised": online.raised[-1],
+                "batch_raised": batch.raised[-1],
+                "online_twice": _written_twice(online.held()),
+                "batch_twice": _written_twice(batch.held()),
+            }
+        )
+    return findings
+
+
+def _answered(keys: list[str]) -> set[str]:
+    """The answers held, as input and position: which run wrote one is not the point."""
+    return {key.split("@")[0] for key in keys if key.startswith("processed:")}
+
+
+def _input_of(key: str) -> str:
+    return key.split(":")[1].split("@")[0]
+
+
+def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
+    """Each way batch fell short of online over a sequence. Empty when it never did."""
+    found = []
+    held_before: set[str] = set()
+    paid_for_alone: set[str] = set()
+    for run in findings:
+        number = run["run"]
+        online_sent, batch_sent = set(run["online_sent"]), set(run["batch_sent"])
+        held = _answered(run["batch"])
+        for answer in sorted(_answered(run["online"]) - held):
+            # An answer batch had, or one both modes were just given. One batch never
+            # had is the next check's to find.
+            if answer in held_before or _input_of(answer) in online_sent & batch_sent:
+                found.append(f"run {number}: online holds {answer}, batch lost it")
+        with_a_row = {_input_of(key) for key in run["batch"]}
+        for guid in sorted(online_sent - batch_sent - with_a_row):
+            found.append(f"run {number}: online answered {guid}, batch neither did nor holds it")
+        alone = batch_sent - online_sent
+        for guid in sorted(alone & paid_for_alone):
+            found.append(f"run {number}: batch paid for {guid} again where online did not")
+        paid_for_alone = {guid for guid in alone if f"failed:{guid}" not in run["batch"]}
+        if run["batch_raised"] and not run["online_raised"]:
+            found.append(f"run {number}: batch raised {run['batch_raised']}")
+        for guid in sorted(set(run["batch_twice"]) - set(run["online_twice"])):
+            found.append(f"run {number}: batch wrote {guid} twice")
+        held_before = held
+    return found
+
+
+MINTED_AGAIN = {
     "upstream_mints_its_children_again_each_run": [["a1", "a2"], ["a3", "a4"], ["a5", "a6"]],
     "a_new_input_joins_ones_already_done": [["a1", "a2"], ["a1", "a2", "a3"]],
     "an_input_leaves_while_another_is_new": [["a1", "a2"], ["a1", "a3"]],
@@ -201,27 +464,163 @@ SCENARIOS = {
 }
 
 
-@pytest.mark.parametrize("runs", SCENARIOS.values(), ids=SCENARIOS.keys())
+@pytest.mark.parametrize("runs", MINTED_AGAIN.values(), ids=MINTED_AGAIN.keys())
 def test_batch_leaves_what_online_leaves(tmp_path, runs):
-    online, batch = _Online(tmp_path), _Batch(tmp_path)
+    """With nothing failing and no limit, the two files are the same after every run."""
+    for run in compare(tmp_path, runs):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
-    for number, inputs in enumerate(runs, start=1):
-        expected = online.run(number, inputs)
-        actual = batch.run(number, inputs)
-        assert sorted(actual) == sorted(expected), (
-            f"run {number} over {inputs}: online holds {sorted(expected)}, "
-            f"batch holds {sorted(actual)}"
-        )
-        assert actual == expected, f"run {number}: the answers differ"
 
-    assert batch.processed == online.processed, "the two paths answered different inputs"
+_PASSES = [rec("a1", keep=True), rec("a2", keep=True)]
+_UNCHANGED_WITH_ONE_REFUSED = [*_PASSES, rec("f1", keep=False)]
+
+NEVER_SHORT = {
+    "an_input_the_guard_filters_through_an_unchanged_re_run": (
+        [_UNCHANGED_WITH_ONE_REFUSED] * 7,
+        FILTER,
+        None,
+    ),
+    "an_input_the_guard_skips_through_an_unchanged_re_run": (
+        [_UNCHANGED_WITH_ONE_REFUSED] * 5,
+        SKIP,
+        None,
+    ),
+    "a_filtered_input_that_later_passes": (
+        [_UNCHANGED_WITH_ONE_REFUSED, [*_PASSES, rec("f1", keep=True)]],
+        FILTER,
+        None,
+    ),
+    "an_answered_input_that_later_fails_the_guard": (
+        [_PASSES, [rec("a1", keep=True), rec("a2", keep=False)], _PASSES],
+        FILTER,
+        None,
+    ),
+    "every_input_sent_fails": (
+        [["a1", "a2"], ["a3", "a4"], ["a1", "a2"]],
+        None,
+        {("a3", 2): "fail", ("a4", 2): "fail"},
+    ),
+    "the_one_input_sent_fails_beside_a_carried_one": (
+        [["a1", "a2", "a3"], ["a1", "a4"], ["a1", "a2", "a3"]],
+        None,
+        {("a4", 2): "fail", ("a2", 3): "fail"},
+    ),
+    "a_repair_run_while_an_input_is_absent": (
+        [
+            ["a1", "a2", "a3"],
+            {"inputs": ["a2", "a3"], "retry": ["a2"]},
+            {"inputs": ["a1", "a2", "a3"], "retry": ["a3"]},
+        ],
+        None,
+        {("a2", 1): "fail"},
+    ),
+    "a_repair_whose_named_record_the_guard_now_filters": (
+        [_PASSES, {"inputs": [rec("a1", keep=True), rec("a2", keep=False)], "retry": "failures"}],
+        FILTER,
+        {("a2", 1): "exhaust"},
+    ),
+    "an_exhausted_input_leaves_and_returns": (
+        [["a1", "a2"], ["a1"], ["a1", "a2"], ["a1", "a2"]],
+        None,
+        {("a2", 1): "exhaust"},
+    ),
+    "a_limit_of_one_then_none_then_one_then_none": (
+        [
+            {"inputs": ["a1", "a2", "a3", "a4"], "config": {"record_limit": 1}},
+            ["a1", "a2", "a3", "a4"],
+            {"inputs": ["a1", "a2", "a3", "a4"], "config": {"record_limit": 1}},
+            ["a1", "a2", "a3", "a4"],
+        ],
+        None,
+        {"a2": 3},
+    ),
+    "an_expanding_input_changes_how_many_rows_it_gives": (
+        [["a1", "a2"], ["a2"], ["a1", "a2"]],
+        None,
+        {"a1": 3, ("a1", 3): 2},
+    ),
+}
+
+
+@pytest.mark.parametrize("case", NEVER_SHORT.values(), ids=NEVER_SHORT.keys())
+def test_batch_never_falls_short_of_online(tmp_path, case):
+    runs, config, shape = case
+
+    assert shortfalls(compare(tmp_path, runs, config, shape)) == []
+
+
+def _random_sequence(rng: random.Random, *, guard: bool, limits: bool, retries: bool):
+    """Three to six runs over inputs that come, go, expand, fail and flip at the guard."""
+    known = [f"a{i}" for i in range(1, 6)]
+    shape: dict[Any, Any] = {}
+    for guid in known:
+        roll = rng.random()
+        if roll < 0.25:
+            shape[guid] = rng.choice([2, 3])
+        elif roll < 0.30:
+            shape[guid] = 0
+    passes = dict.fromkeys(known, True)
+    runs = []
+    for number in range(1, rng.randint(3, 6) + 1):
+        if rng.random() < 0.2:
+            guids = [f"g{number}_{i}" for i in range(rng.randint(1, 3))]
+        else:
+            guids = [guid for guid in known if rng.random() < 0.65]
+            if rng.random() < 0.25:
+                guids.append(f"n{number}")
+        rng.shuffle(guids)
+        for guid in guids:
+            if guard and rng.random() < 0.2:
+                passes[guid] = not passes.get(guid, True)
+            roll = rng.random()
+            if roll < 0.08:
+                shape[(guid, number)] = "fail"
+            elif roll < 0.11:
+                shape[(guid, number)] = "exhaust"
+        step: dict[str, Any] = {
+            "inputs": [rec(guid, keep=passes.get(guid, True)) for guid in guids]
+        }
+        if limits and rng.random() < 0.4:
+            step["config"] = {"record_limit": rng.choice([1, 2, 3])}
+        if retries and number > 1 and rng.random() < 0.4:
+            step["retry"] = "failures"
+        runs.append(step)
+    return runs, shape
+
+
+FAMILIES = {
+    "inputs_come_and_go": ({}, {}),
+    "under_a_record_limit": ({}, {"limits": True}),
+    "behind_a_filtering_guard": (FILTER, {"guard": True}),
+    "behind_a_skipping_guard": (SKIP, {"guard": True}),
+    "a_filtering_guard_under_a_limit": (FILTER, {"guard": True, "limits": True}),
+    "with_repairs_of_what_failed": ({}, {"retries": True}),
+    "repairs_behind_a_filtering_guard": (FILTER, {"guard": True, "retries": True}),
+}
+
+
+@pytest.mark.parametrize("family", FAMILIES.keys())
+def test_no_random_sequence_leaves_batch_short_of_online(tmp_path, family):
+    config, features = FAMILIES[family]
+    features = {"guard": False, "limits": False, "retries": False, **features}
+
+    short = {}
+    for seed in range(40):
+        runs, shape = _random_sequence(random.Random(seed), **features)
+        where = tmp_path / str(seed)
+        where.mkdir()
+        if found := shortfalls(compare(where, runs, config, shape)):
+            short[seed] = found
+
+    assert short == {}
 
 
 def test_a_one_to_one_action_below_an_expansion_stays_at_its_input_size(tmp_path):
     """#1155, stated on its own: 2, 2, 2 where it was 2, 4, 6."""
     batch = _Batch(tmp_path)
 
-    sizes = [len(batch.run(n, [f"a{2 * n - 1}", f"a{2 * n}"])) for n in range(1, 4)]
+    sizes = [len(batch.run(n, [rec(f"a{2 * n - 1}"), rec(f"a{2 * n}")])) for n in range(1, 4)]
 
     assert sizes == [2, 2, 2]
 
@@ -229,11 +628,113 @@ def test_a_one_to_one_action_below_an_expansion_stays_at_its_input_size(tmp_path
 def test_an_input_called_done_whose_row_is_gone_is_answered_again(tmp_path):
     """Online re-queues it; left out, batch would never answer it again."""
     batch = _Batch(tmp_path)
-    batch.run(1, ["a1", "a2"])
-    batch.run(2, ["a1", "a3"])
+    batch.run(1, [rec("a1"), rec("a2")])
+    batch.run(2, [rec("a1"), rec("a3")])
 
-    held = batch.run(3, ["a1", "a2", "a4"])
+    held = batch.run(3, [rec("a1"), rec("a2"), rec("a4")])
 
-    assert batch.processed[2] == ["a2", "a4"]
-    assert held["a2"] == "run-3-answer-for-a2"
-    assert held["a1"] == "run-1-answer-for-a1", "an input still done and stored is not re-answered"
+    assert batch.sent[2] == ["a2", "a4"]
+    assert held == ["processed:a1:0@run1", "processed:a2:0@run3", "processed:a4:0@run3"]
+
+
+def test_inputs_answered_again_are_sent_in_the_order_the_input_holds_them(tmp_path):
+    batch = _Batch(tmp_path)
+    batch.run(1, [rec("a1"), rec("a2"), rec("a3")])
+    batch.run(2, [rec("a2"), rec("x1")])
+
+    batch.run(3, [rec("a3"), rec("n1"), rec("a1"), rec("a2"), rec("n2")])
+
+    assert batch.sent_in_order[2] == ["a3", "n1", "a1", "n2"]
+
+
+def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
+    """Its disposition says done and it holds no row, by design: nothing is missing."""
+    batch = _Batch(tmp_path)
+    first = batch.run(1, _UNCHANGED_WITH_ONE_REFUSED, extra=FILTER)
+
+    again = [batch.run(n, _UNCHANGED_WITH_ONE_REFUSED, extra=FILTER) for n in (2, 3, 4)]
+
+    assert first == ["processed:a1:0@run1", "processed:a2:0@run1"]
+    assert again == [first] * 3
+    assert len(batch.provider.submitted) == 1
+
+
+def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
+    """Nothing is left to send, and what is written in its place must not be nothing."""
+    batch = _Batch(tmp_path)
+    batch.run(1, _PASSES, Answerer({"a2": "exhaust"}), FILTER)
+
+    held = batch.run(2, [rec("a1", keep=True), rec("a2", keep=False)], extra=FILTER, retry=["a2"])
+
+    assert "processed:a1:0@run1" in held
+    assert batch.sent[1] == []
+
+
+def test_inputs_minted_again_and_skipped_every_run_do_not_pile_up(tmp_path):
+    """The write made when nothing is sent follows the inputs too: 2, 2, 2, not 2, 4, 6."""
+    batch = _Batch(tmp_path)
+
+    sizes = [
+        len(
+            batch.run(
+                n, [rec(f"s{2 * n - 1}", keep=False), rec(f"s{2 * n}", keep=False)], extra=SKIP
+            )
+        )
+        for n in range(1, 4)
+    ]
+
+    assert sizes == [2, 2, 2]
+
+
+def test_a_run_whose_every_answer_fails_keeps_the_stored_answers(tmp_path):
+    """Online raises before it writes; here the failures are written beside them."""
+    batch = _Batch(tmp_path)
+    batch.run(1, [rec("a1"), rec("a2")])
+
+    held = batch.run(2, [rec("a3"), rec("a4")], Answerer({"a3": "fail", "a4": "fail"}))
+
+    assert held == ["failed:a3", "failed:a4", "processed:a1:0@run1", "processed:a2:0@run1"]
+
+
+def test_a_run_that_answers_something_leaves_out_what_is_not_its_input(tmp_path):
+    """The other edge of the one above: one answer is enough to make it this run's file."""
+    batch = _Batch(tmp_path)
+    batch.run(1, [rec("a1"), rec("a2")])
+
+    held = batch.run(2, [rec("a3"), rec("a4")], Answerer({"a4": "fail"}))
+
+    assert held == ["failed:a4", "processed:a3:0@run2"]
+
+
+def test_a_repair_keeps_the_rows_of_an_input_absent_from_it(tmp_path):
+    """A repair answers what it named and nothing else, so no other row is its to drop."""
+    batch = _Batch(tmp_path)
+    batch.run(1, [rec("a1"), rec("a2"), rec("a3")], Answerer({("a2", 1): "fail"}))
+
+    held = batch.run(2, [rec("a2"), rec("a3")], retry=["a2"])
+
+    assert held == ["processed:a1:0@run1", "processed:a2:0@run2", "processed:a3:0@run1"]
+
+
+def test_an_ordinary_run_after_a_repair_goes_back_to_its_own_inputs(tmp_path):
+    """The repair recorded no inputs; that must not outlive it."""
+    batch = _Batch(tmp_path)
+    batch.run(1, [rec("a1"), rec("a2"), rec("a3")], Answerer({("a2", 1): "fail"}))
+    batch.run(2, [rec("a2"), rec("a3")], retry=["a2"])
+
+    held = batch.run(3, [rec("a2"), rec("a4")])
+
+    assert held == ["processed:a2:0@run2", "processed:a4:0@run3"]
+
+
+@pytest.mark.parametrize("file", ["page.json", "page.txt", "page.jsonl", "page.v2.json", "page"])
+def test_a_done_input_is_found_whatever_the_input_file_is_called(tmp_path, file):
+    """The output is stored under one name and looked up under the same one."""
+    batch = _Batch(tmp_path, file)
+    first = batch.run(1, [rec("a1"), rec("a2")])
+
+    again = batch.run(2, [rec("a1"), rec("a2"), rec("a3")])
+
+    assert first == ["processed:a1:0@run1", "processed:a2:0@run1"]
+    assert batch.sent[1] == ["a3"]
+    assert again == [*first, "processed:a3:0@run2"]

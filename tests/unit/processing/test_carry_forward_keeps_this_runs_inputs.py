@@ -2,8 +2,9 @@
 
 The rule is the online path's: an action's output holds rows for this run's inputs. A
 stored row is carried where the input it answered for is one of the run's and the run did
-not answer it again; a row whose input is not among them is left out. Only where no input
-was recorded is every unanswered row carried, since nothing is known about the run.
+not answer it again; a row whose input is not among them is left out. Where no input was
+recorded every unanswered row is carried, since nothing is known about the run, and a run
+that answered nothing replaces no stored answer, as online writes nothing at all.
 """
 
 from __future__ import annotations
@@ -59,6 +60,18 @@ class TestARowWhoseInputIsInTheRunIsCarried:
 
         assert stored_rows_not_reproduced(stored, [], batch_inputs={"a1", "a2"}) == {"a1", "m2"}
 
+    def test_stored_may_be_a_one_shot_iterable(self):
+        stored = iter([_row("a1"), _row("a2")])
+
+        carry = stored_rows_not_reproduced(stored, [_row("a3")], batch_inputs={"a1", "a3"})
+
+        assert carry == {"a1"}
+
+    def test_a_stored_row_carrying_no_identity_is_never_carried(self):
+        stored = [{"_state": "processed"}, _row("a1")]
+
+        assert stored_rows_not_reproduced(stored, [], batch_inputs=()) == {"a1"}
+
 
 class TestARowWhoseInputIsNotInTheRunIsLeftOut:
     def test_an_action_below_an_expansion_does_not_keep_the_previous_generation(self):
@@ -82,12 +95,42 @@ class TestARowWhoseInputIsNotInTheRunIsLeftOut:
 
         assert carry == {"a2"}
 
-    def test_it_is_left_out_whether_or_not_the_run_settled(self):
-        """As online: a run that fails over new inputs still writes only those inputs."""
+    def test_one_answer_is_enough_to_leave_it_out(self):
+        """The run produced an output, so the file is this run's."""
         stored = [_row("a1")]
+        produced = [_row("a3"), _row("a4", state="failed")]
+
+        assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"}) == set()
+
+
+class TestARunThatAnsweredNothingReplacesNoAnswer:
+    """Online raises before it writes when everything it sent failed, so its answers stand."""
+
+    @pytest.mark.parametrize(
+        "produced",
+        [[], [_row("a3", state="failed")], [_row("n1", ["a3"], state="exhausted")]],
+        ids=["nothing_produced", "a_failure", "an_exhausted_row_naming_its_input"],
+    )
+    def test_a_stored_answer_stands_whichever_input_it_was_for(self, produced):
+        stored = [_row("a1"), _row("m1", ["gone"])]
+
+        assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1", "m1"}
+
+    @pytest.mark.parametrize("state", ["failed", "exhausted", "guard_skipped", "cascade_skipped"])
+    def test_a_stored_row_that_is_no_answer_still_goes_with_its_input(self, state):
+        """Kept, each such run over inputs minted again would add its rows beside the last."""
+        stored = [_row("a1", state=state), _row("a3", state=state)]
+        produced = [_row("a4", state="failed")]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"})
+
+        assert carry == {"a3"}
+
+    def test_a_row_the_run_wrote_again_is_still_replaced(self):
+        stored = [_row("a3", state="failed"), _row("a1")]
         produced = [_row("a3", state="failed")]
 
-        assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == set()
+        assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1"}
 
 
 class TestARowAnsweredAgainIsReplaced:
@@ -137,11 +180,6 @@ class TestWithNoInputRecordedEveryUnansweredRowIsCarried:
 
         assert carry == {"a1", "m1"}
 
-    def test_stored_may_be_a_one_shot_iterable(self):
-        stored = iter([_row("a1"), _row("a2")])
-
-        assert stored_rows_not_reproduced(stored, [], batch_inputs={"a1"}) == {"a1"}
-
 
 class TestWhatIsLeftOutIsReported:
     def test_one_info_record_names_the_rows_and_the_inputs(self, caplog):
@@ -168,11 +206,14 @@ class TestWhatIsLeftOutIsReported:
         (record,) = _gate_records(caplog)
         assert record.getMessage().startswith("1 stored row(s)"), record.getMessage()
 
-    def test_an_identity_still_carried_through_another_row_is_not_counted(self, caplog):
-        stored = [_row("g", ["gone"]), _row("g", ["here"])]
+    @pytest.mark.parametrize("order", [("gone", "here"), ("here", "gone")])
+    def test_an_identity_still_carried_through_another_row_is_not_counted(self, caplog, order):
+        stored = [_row("g", [producer]) for producer in order]
 
         with caplog.at_level(logging.DEBUG, logger=GATE_LOGGER):
-            carry = stored_rows_not_reproduced(stored, [], batch_inputs={"here"})
+            carry = stored_rows_not_reproduced(
+                stored, [_row("n", ["new"])], batch_inputs={"here", "new"}
+            )
 
         assert carry == {"g"}
         assert _gate_records(caplog) == []
