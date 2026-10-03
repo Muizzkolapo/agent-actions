@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.workflow.executor import (
     ActionExecutor,
     ExecutorDependencies,
@@ -187,6 +189,87 @@ class TestConfigChangeInvalidation:
         executor.deps.action_runner.storage_backend.clear_disposition.assert_called_once_with(
             "action_a"
         )
+
+
+class TestAResetActionCanSubmitItsBatchAgain:
+    """A completed batch job is what stops a file being submitted twice. Left in place when
+    the action is reset, it stops the reset action being submitted at all: the run reports
+    the action complete with no records, over output the old configuration produced."""
+
+    @staticmethod
+    def _executor(state_mgr, backend):
+        action_runner = MagicMock()
+        action_runner.retried_records = frozenset()
+        action_runner.storage_backend = backend
+        deps = ExecutorDependencies(
+            action_runner=action_runner,
+            state_manager=state_mgr,
+            skip_evaluator=MagicMock(),
+            batch_manager=MagicMock(),
+            output_manager=MagicMock(),
+        )
+        return ActionExecutor(deps)
+
+    @staticmethod
+    def _backend_with_a_finished_batch(tmp_path):
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+        backend.initialize()
+        keys = [
+            f"{BatchRegistryManager.METADATA_KEY_PREFIX}action_a",
+            "batch_context:action_a:page.json",
+            "batch_inputs:action_a:page.json",
+        ]
+        for key in keys:
+            backend.save_metadata(key, "{}")
+        backend.save_metadata(f"{BatchRegistryManager.METADATA_KEY_PREFIX}other", "{}")
+        return backend, keys
+
+    @pytest.mark.parametrize(
+        ("stored", "now"),
+        [
+            ({"prompt": "X", "model": "m", "record_limit": 1}, {"prompt": "X", "model": "m"}),
+            ({"prompt": "X", "model": "m"}, {"prompt": "Y", "model": "m"}),
+        ],
+        ids=["the_record_limit_changed", "the_prompt_changed"],
+    )
+    def test_the_reset_clears_the_actions_batch_state(self, tmp_path, stored, now):
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        backend, keys = self._backend_with_a_finished_batch(tmp_path)
+        state_mgr = ActionStateManager(tmp_path / "status.json", ["action_a"])
+        state_mgr.update_status(
+            "action_a",
+            ActionStatus.COMPLETED,
+            record_limit=stored.get("record_limit"),
+            config_hash=_compute_action_config_hash(stored),
+        )
+
+        status = self._executor(state_mgr, backend)._maybe_invalidate_completed_status(
+            "action_a", now, ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.PENDING
+        assert [backend.load_metadata(key) for key in keys] == [None, None, None]
+        other = f"{BatchRegistryManager.METADATA_KEY_PREFIX}other"
+        assert backend.load_metadata(other) == "{}", "another action's batch state was cleared"
+
+    def test_an_action_that_is_not_reset_keeps_its_batch_state(self, tmp_path):
+        backend, keys = self._backend_with_a_finished_batch(tmp_path)
+        config = {"prompt": "X", "model": "m"}
+        state_mgr = ActionStateManager(tmp_path / "status.json", ["action_a"])
+        state_mgr.update_status(
+            "action_a", ActionStatus.COMPLETED, config_hash=_compute_action_config_hash(config)
+        )
+
+        status = self._executor(state_mgr, backend)._maybe_invalidate_completed_status(
+            "action_a", config, ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.COMPLETED
+        assert [backend.load_metadata(key) for key in keys] == ["{}", "{}", "{}"]
 
 
 def _executor_for_stamp():
