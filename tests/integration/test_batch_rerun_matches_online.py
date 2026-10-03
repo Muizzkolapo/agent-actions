@@ -285,11 +285,14 @@ class _Provider:
 class _Batch(_Mode):
     run_mode = RunMode.BATCH
 
-    def __init__(self, tmp_path: Path, file: str = FILE) -> None:
+    def __init__(
+        self, tmp_path: Path, file: str = FILE, *, clears_batch_state: bool = True
+    ) -> None:
         super().__init__(tmp_path, file)
         self.stored_as = f"{Path(file).stem}.json"
         self.provider = _Provider()
         self.sent_in_order: list[list[str]] = []
+        self.clears_batch_state = clears_batch_state
 
     def run(
         self,
@@ -300,9 +303,10 @@ class _Batch(_Mode):
         retry: Any = (),
     ) -> list[str]:
         answer = answer or Answerer()
-        # What a reset, `agac retry` and `--fresh` each do before a batch action runs
-        # again: a spent registry entry otherwise hands back the prior batch.
-        self.backend.clear_batch_state(ACTION)
+        # A reset, `agac retry` and `--fresh` each clear this before the action runs
+        # again. A plain run over a failed action clears nothing.
+        if self.clears_batch_state:
+            self.backend.clear_batch_state(ACTION)
         self._upstream_wrote(inputs)
 
         config, pipeline = self._pipeline(extra or {}, retry)
@@ -378,6 +382,8 @@ def compare(
     runs: list[Any],
     config: dict[str, Any] | None = None,
     shape: dict[Any, Any] | None = None,
+    *,
+    clears_batch_state: bool = True,
 ) -> list[dict[str, Any]]:
     """Run every step through both modes and report what each held and sent.
 
@@ -386,7 +392,8 @@ def compare(
     repair names, or ``"failures"`` for whichever online's store says failed. Both modes
     are given the same names, so both run the same repair.
     """
-    online, batch = _Online(tmp_path), _Batch(tmp_path)
+    online = _Online(tmp_path)
+    batch = _Batch(tmp_path, clears_batch_state=clears_batch_state)
     answer = Answerer(shape)
     findings = []
     for number, step in enumerate(runs, start=1):
@@ -600,20 +607,39 @@ FAMILIES = {
 }
 
 
-@pytest.mark.parametrize("family", FAMILIES.keys())
-def test_no_random_sequence_leaves_batch_short_of_online(tmp_path, family):
+def _short_sequences(tmp_path: Path, family: str, **how: Any) -> dict[int, list[str]]:
     config, features = FAMILIES[family]
     features = {"guard": False, "limits": False, "retries": False, **features}
-
     short = {}
     for seed in range(40):
         runs, shape = _random_sequence(random.Random(seed), **features)
         where = tmp_path / str(seed)
         where.mkdir()
-        if found := shortfalls(compare(where, runs, config, shape)):
+        if found := shortfalls(compare(where, runs, config, shape, **how)):
             short[seed] = found
+    return short
 
-    assert short == {}
+
+@pytest.mark.parametrize("family", FAMILIES.keys())
+def test_no_random_sequence_leaves_batch_short_of_online(tmp_path, family):
+    assert _short_sequences(tmp_path, family) == {}
+
+
+@pytest.mark.parametrize("family", ["inputs_come_and_go", "behind_a_filtering_guard"])
+def test_nor_does_one_run_plainly_with_the_last_batch_job_left_on_record(tmp_path, family):
+    """Only a reset, a repair and `--fresh` clear batch state; a plain run does not."""
+    assert _short_sequences(tmp_path, family, clears_batch_state=False) == {}
+
+
+def test_a_failed_batch_action_run_again_is_submitted_again(tmp_path):
+    """Its job finished and was collected, so it is no reason to skip the file."""
+    batch = _Batch(tmp_path, clears_batch_state=False)
+    batch.run(1, [rec("a1"), rec("a2")], Answerer({("a1", 1): "fail", ("a2", 1): "fail"}))
+
+    held = batch.run(2, [rec("a1"), rec("a2")])
+
+    assert batch.sent[1] == ["a1", "a2"]
+    assert held == ["processed:a1:0@run2", "processed:a2:0@run2"]
 
 
 def test_a_one_to_one_action_below_an_expansion_stays_at_its_input_size(tmp_path):
