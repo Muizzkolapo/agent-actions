@@ -8,5 +8,9 @@ body: >-
   and its output stayed whatever the earlier configuration had produced. Trying a workflow
   under `--record-limit 1` and then running it in full, without `--fresh`, was enough: the
   full run answered nothing. The reset now clears the action's batch state as `--fresh` does,
-  so the action submits for the inputs it has now, as the same action does online.
+  so the action submits for the inputs it has now, as the same action does online. A failed
+  batch action run again with a plain `agac run` was skipped the same way, and the run
+  reported it complete with nothing sent, where online sends the failed records again. A
+  finished batch job now stops its file being submitted again only until its results have
+  been collected.
 time: 2026-10-03T03:00:00Z
