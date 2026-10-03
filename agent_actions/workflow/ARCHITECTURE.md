@@ -484,19 +484,23 @@ If you change this to bulk-clear for any of them:
     submitting, and paying for, every collected file again.
 
 The same trap applies to routing an interrupt through FAILED: every
-other FAILED action is bulk-wiped by design, so collapsing INTERRUPTED
-into it silently destroys the checkpoint it exists to protect.
+other FAILED action the reset takes is bulk-wiped by design, so
+collapsing INTERRUPTED into it silently destroys the checkpoint it
+exists to protect. (A FAILED action halted by `on_exhausted: raise` is
+not reset at all.)
 ```
 
 ### The snapshot ordering in _reset_retryable_actions matters
 
 ```
-running_actions = {... get_status == RUNNING ...}   ← snapshot BEFORE
-reset_actions = state_mgr.reset_retryable()          ← mutates to PENDING
+running_actions = {... status in MID_PROCESSING_STATUSES
+                       or stopped_collecting(name) ...}   ← snapshot BEFORE
+reset_actions = state_mgr.reset_retryable(exclude=halted)  ← mutates to PENDING
 
 The snapshot MUST be captured before reset_retryable() because
-reset_retryable() transitions all matching statuses to PENDING.
-After the call, you can't tell which actions were RUNNING.
+reset_retryable() transitions all matching statuses to PENDING and
+drops the stopped_collecting mark with them. After the call, you
+can't tell which actions were mid-processing.
 
 If you swap the order:
     running_actions is always empty → all actions get bulk-cleared
