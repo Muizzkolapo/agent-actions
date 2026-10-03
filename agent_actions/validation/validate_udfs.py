@@ -291,12 +291,15 @@ class ValidateUDFsCommand:
     def _promoted_version_names(config: dict) -> set[str]:
         """Every name a versioned action's guard context promotes to the top level.
 
-        Derived, not listed. The loop param's own name is a config decision
-        (`versions: {param: voter_id}` promotes `voter_id`), and `versions:` is gone by the
-        time this command sees the config — expansion replaces it with a `_version_context`
-        per variant. Reading that is also what `VersionNamespaceBuilder.build` does, and its
-        `_RESERVED_KEYS` is reused rather than copied so the exclusion cannot drift; `i` and
-        `idx` are reserved there yet promoted explicitly (#1192).
+        Finds the contexts; `VersionNamespaceBuilder.promoted_names` decides what each one
+        promotes, so a context cannot be read differently here than where it is built. It
+        was: claiming `i` and `idx` wherever a `_version_context` existed reported a guard
+        UDF reading a name the runtime never promotes as fine, which is the silence this
+        command exists to remove (#1199).
+
+        Still a union across the whole config, so a name promoted by one action's context is
+        allowed for every action -- the same deliberate over-approximation
+        `_guard_valid_namespaces` carries, and per-action resolution is #1192's.
         """
         from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 
@@ -306,8 +309,7 @@ class ValidateUDFsCommand:
             if isinstance(obj, dict):
                 vc = obj.get("_version_context")
                 if isinstance(vc, dict):
-                    names.update({"i", "idx"})
-                    names.update(set(vc) - VersionNamespaceBuilder._RESERVED_KEYS)
+                    names.update(VersionNamespaceBuilder.promoted_names(vc))
                 for value in obj.values():
                     walk(value)
             elif isinstance(obj, list):
