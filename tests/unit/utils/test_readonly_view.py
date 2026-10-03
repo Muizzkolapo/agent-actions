@@ -683,3 +683,20 @@ class TestAMemoHitIsAlwaysTheObjectItWasKeyedBy:
         view = readonly_view(record)
 
         assert [view[f"k{index}"][0]["n"] for index in range(30)] == list(range(30))
+
+    def test_a_container_freed_by_user_code_mid_walk_does_not_lend_its_wrapper(self):
+        """An accessor that drops one of the record's own dicts while the view is being built
+        frees an id the memo already keys; the value built next must not get its wrapper."""
+        record: dict[str, Any] = {}
+
+        class Lazy(list):
+            def __iter__(self):
+                record["a"].pop("x", None)
+                return iter([{"mine": item} for item in list.__iter__(self)])
+
+        record["a"] = {"x": {"secret": "A-DATA"}}
+        record["b"] = Lazy([1])
+
+        view = readonly_view(record)
+
+        assert view["b"][0] == {"mine": 1}
