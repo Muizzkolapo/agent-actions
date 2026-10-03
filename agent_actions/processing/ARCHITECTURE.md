@@ -417,7 +417,8 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   what a batch submitted before inputs were recorded gets. The repair's submission removes
   any recording an earlier run left, so that does not rest on who cleared batch state first.
 - **A run in which something failed and nothing was answered replaces no answer.** Online
-  raises before it writes (`raise_if_terminal_failure`), so its stored answers stand. Here
+  raises before it writes when nothing succeeded (`raise_if_terminal_failure`), so its
+  stored answers stand. Here
   the failures are written, beside every stored answer whichever input it was for; a
   failure row under a stored answer's own identity gives way to it, so the identity is
   still stored once. Stored rows that are not answers follow the inputs as usual. Without
@@ -468,11 +469,16 @@ one exception noted last:
   it minted before beside its failure row. Online holds the failure row alone.
 - An input sent again that answers with no rows keeps the rows it had, since nothing was
   produced to replace them.
+- A failure beside an input that answers with no rows. Online counts the empty answer as a
+  success, so it does not raise, and writes the failure row. Batch sees no answer row,
+  reads the run as one online would refuse, and keeps every stored answer with no failure
+  row.
 - A row naming several inputs is always carried.
 - The exception: an online run that raised wrote nothing, so its file still holds answers
-  for records that are no input of that run. A batch run over the same inputs that answers
-  something writes this run's file, without them. Batch holds less there only because
-  online's run aborted, and never for a record that is an input of the run.
+  for records that are no input of that run. A batch run over the same inputs that writes
+  a file, whether it answered something or wrote only what the guard left, writes this
+  run's file, without them. Batch holds less there only because online's run aborted, and
+  never for a record that is an input of the run.
 
 `tests/integration/test_batch_rerun_matches_online.py` drives both paths from
 `ProcessingPipeline.process` against a real store. For every input of a run it requires

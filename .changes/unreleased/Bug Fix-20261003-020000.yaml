@@ -23,7 +23,10 @@ body: >-
   nothing is sent because the one record that passed the guard failed prompt preparation
   counts as a run in which everything failed.
 
-  Batch and online still differ in places, and where they do batch keeps more. A run with
+  Batch and online still differ in places. Where they do batch keeps more, with one
+  exception: an online run that stopped on an error wrote nothing, so it can still hold
+  answers for records that were not part of that run, which the batch run does not keep.
+  A run with
   nothing to send leaves the file as it stands, so it can still hold rows for records that
   have left. Rows of records a record limit holds back are kept, where online drops them and
   answers them again. A run in which everything fails writes the failed rows; online writes
