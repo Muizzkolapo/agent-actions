@@ -62,6 +62,10 @@ MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
 )
 
 
+# Recorded beside the status of an action whose run was stopped while it was collecting.
+_STOPPED_COLLECTING = "stopped_collecting"
+
+
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -246,7 +250,17 @@ class ActionStateManager:
         BATCH_SUBMITTED is deliberately excluded: that work continues in the
         provider's queue after this process exits, so it is not in flight here.
         """
+        # An action stopped while collecting has written the files it reached, and the
+        # status it is about to be given no longer says that is what it was doing.
+        with self._lock:
+            for details in self.action_status.values():
+                if details.get("status") == ActionStatus.CHECKING_BATCH:
+                    details[_STOPPED_COLLECTING] = True
         return self._bulk_transition({ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status)
+
+    def stopped_collecting(self, action_name: str) -> bool:
+        """Whether *action_name* was collecting a batch when its run was stopped."""
+        return bool(self.action_status.get(action_name, {}).get(_STOPPED_COLLECTING))
 
     def mark_running_as_failed(self) -> list[str]:
         """Mark all actions in 'running' or 'checking_batch' status as failed."""
@@ -270,7 +284,14 @@ class ActionStateManager:
         the returned action names, and name in *exclude* any action whose
         state must be preserved rather than retried.
         """
-        return self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING, exclude=exclude)
+        reset = self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING, exclude=exclude)
+        with self._lock:
+            forgot = [
+                name for name in reset if self.action_status[name].pop(_STOPPED_COLLECTING, None)
+            ]
+            if forgot:
+                self._save_status()
+        return reset
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses (current actions only)."""
