@@ -80,10 +80,29 @@ class TestTheRecordedInputRoundTrips:
     def test_no_recorded_pool_reads_as_none(self, backend):
         assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
 
-    def test_an_unreadable_pool_reads_as_none(self, backend):
-        backend.save_metadata(f"batch_inputs:{ACTION}:pool:{BATCH}", "{not json")
+    @pytest.mark.parametrize("blob", ["{not json", '["a1"]', '{"a1": 1}', '{"a1": null}', "null"])
+    def test_a_pool_or_ancestors_that_are_not_identity_to_identity_read_as_none(
+        self, backend, blob
+    ):
+        """Raising would abandon a batch already answered, and a wrong mapping drives a
+        rule that deletes."""
+        backend.save_metadata(f"batch_pool:{ACTION}:{BATCH}", blob)
+        backend.save_metadata(f"batch_inputs:{ACTION}:{BATCH}", blob)
 
         assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
+        assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) is None
+
+    def test_an_unknown_pool_replaces_an_earlier_one(self, backend):
+        BatchContextManager.save_upstream_pool(backend, ACTION, {"a1": "S"}, BATCH)
+        BatchContextManager.save_upstream_pool(backend, ACTION, None, BATCH)
+
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
+
+    def test_a_file_named_like_the_pool_does_not_overwrite_it(self, backend):
+        BatchContextManager.save_upstream_pool(backend, ACTION, {"a1": "S"}, BATCH)
+        BatchContextManager.save_batch_inputs(backend, ACTION, {"zz": "zz"}, f"pool:{BATCH}")
+
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) == {"a1": "S"}
 
     def test_an_empty_recording_is_not_a_missing_one(self, backend):
         """A run that took no input recorded that, and it must not read as unknown."""

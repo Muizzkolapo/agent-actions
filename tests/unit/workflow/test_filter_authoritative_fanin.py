@@ -278,13 +278,13 @@ def _recorded_pool(storage, action_name="dedup_by_concept"):
     saves = [
         json.loads(call.args[1])
         for call in storage.save_metadata.call_args_list
-        if call.args[0] == f"batch_inputs:{action_name}:pool:data.json"
+        if call.args[0] == f"batch_pool:{action_name}:data.json"
     ]
     assert len(saves) == 1, storage.save_metadata.call_args_list
     return saves[0]
 
 
-def test_the_upstream_pool_is_recorded_above_the_drop_with_what_was_held_back(tmp_path):
+def test_the_recorded_pool_holds_what_upstream_offered_and_what_was_held_back(tmp_path):
     """Batch carry-forward reads it later: a filtered record is absent from its action's
     output, so without this it is indistinguishable from one that no longer exists."""
     tag_dir = tmp_path / "tag_code_concept"
@@ -357,3 +357,81 @@ def test_a_pool_that_cannot_be_saved_does_not_cost_the_file(tmp_path, caplog):
 
     assert _captured_guids(runner) == ["c1"]
     assert any("could not record the upstream pool" in r.getMessage() for r in caplog.records)
+
+
+def test_a_deferred_upstream_record_is_in_the_pool(tmp_path):
+    """Awaiting its batch, it has no row in its action's output yet."""
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+    storage.get_disposition.side_effect = lambda action, record_id=None, disposition=None: (
+        [{"record_id": "d7", "disposition": disposition}] if disposition == "deferred" else []
+    )
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    assert _recorded_pool(storage) == {"c1": "c1", "d7": "d7"}
+
+
+def test_a_failed_disposition_read_records_the_pool_as_unknown(tmp_path):
+    """Recorded short, the pool would read a held-back record as one that is gone."""
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+
+    def _get_disposition(action, record_id=None, disposition=None):
+        if disposition == "deferred":
+            raise OSError("database is locked")
+        return []
+
+    storage.get_disposition.side_effect = _get_disposition
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    assert _recorded_pool(storage) is None
+    assert _captured_guids(runner) == ["c1"]
+
+
+def test_any_failure_to_record_the_pool_leaves_the_file_processed(tmp_path, caplog):
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+    storage.save_metadata.side_effect = RuntimeError("backend has no metadata")
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    with caplog.at_level("WARNING"):
+        process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    assert _captured_guids(runner) == ["c1"]
+    assert any("could not record the upstream pool" in r.getMessage() for r in caplog.records)
+
+
+def test_the_held_back_records_are_read_once_for_the_action_not_per_file(tmp_path):
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+    storage.list_target_files.return_value = ["a.json", "b.json", "c.json"]
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    deferred_reads = [
+        call
+        for call in storage.get_disposition.call_args_list
+        if call.kwargs.get("disposition") == "deferred"
+    ]
+    assert len(deferred_reads) == 1

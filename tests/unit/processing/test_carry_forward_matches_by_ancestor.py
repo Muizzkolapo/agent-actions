@@ -151,11 +151,62 @@ class TestMixedAndLeftoverShapes:
 
         assert _carry(stored, produced, {"s1": "P", "c3": "P"}) == set()
 
-    def test_rows_left_by_an_earlier_partial_run_go_once_the_record_settles(self):
+    def test_rows_left_by_an_earlier_partial_run_stay_until_the_next_mint(self):
+        """Nothing was minted this run, so a row missing from the pool is not shown to be
+        a replaced generation's. It goes when the record is next minted again."""
         stored = [_row(g, parent="S") for g in ("a3", "a4", "a1", "a2")]
-        produced = [_row("a3", parent="S"), _row("a4", parent="S")]
 
-        assert _carry(stored, produced, {"a3": "S", "a4": "S"}) == set()
+        same = [_row("a3", parent="S"), _row("a4", parent="S")]
+        assert _carry(stored, same, {"a3": "S", "a4": "S"}) == {"a1", "a2"}
+
+        minted = [_row("a5", parent="S"), _row("a6", parent="S")]
+        assert _carry(stored, minted, {"a5": "S", "a6": "S"}) == set()
+
+    def test_a_sibling_missing_from_the_pool_is_kept_where_nothing_was_minted(self):
+        """A pool recorded short, or a record that left without a mark: absence alone
+        deletes nothing."""
+        stored = [_row("c1", parent="S"), _row("c2", parent="S"), _row("c3", parent="S")]
+        produced = [_row("c1", parent="S"), _row("c2", parent="S")]
+
+        assert _carry(stored, produced, {"c1": "S", "c2": "S"}) == {"c3"}
+
+    def test_an_expanding_action_is_judged_by_the_input_a_row_answered_for(self):
+        """Rows naming a producer are matched by it, not by their own minted identity."""
+        stored = [
+            _row("b1", parent="S", producers=["a1"]),
+            _row("b2", parent="S", producers=["a1"]),
+            _row("b3", parent="S", producers=["a2"]),
+        ]
+        produced = [
+            _row("b5", parent="S", producers=["a1"]),
+            _row("b6", parent="S", producers=["a1"]),
+        ]
+
+        carry = _carry(stored, produced, {"a1": "S"}, filtered={"a2": "S"})
+
+        assert carry == {"b3"}
+
+    def test_a_minted_row_whose_input_was_held_back_survives_a_newly_admitted_sibling(self):
+        """The pool is asked about the input the row answered for (c1, still upstream),
+        not about the row's own minted identity, which no pool ever holds."""
+        stored = [_row("x1", parent="P", producers=["c1"])]
+        produced = [_row("y1", parent="P", producers=["c2"])]
+
+        assert _carry(stored, produced, {"c2": "P"}, filtered={"c1": "P"}) == {"x1"}
+
+    def test_a_row_the_run_rewrote_is_not_carried_beside_itself(self):
+        stored = [
+            _row("a1", parent="S"),
+            _row("a2", parent="S"),
+            _row("m", parent="S", producers=["c1", "c2"]),
+        ]
+        produced = [
+            _row("a1", parent="S", state="failed"),
+            _row("a2", parent="S"),
+            _row("m", parent="S", producers=["c1", "c2"]),
+        ]
+
+        assert _carry(stored, produced, {"a1": "S", "a2": "S"}) == set()
 
     def test_a_guard_skipped_input_settles_its_record(self):
         """A skip is a healthy outcome: the record is settled though one input is unanswered."""
@@ -166,17 +217,34 @@ class TestMixedAndLeftoverShapes:
 
 
 class TestNothingIsInferredShortOfTheWholeRecord:
-    def test_no_recorded_upstream_pool_infers_nothing(self):
-        """Without the pool nothing is known to be gone upstream."""
-        stored = [_row("a1", parent="S"), _row("a2", parent="S")]
-        produced = [_row("a3", parent="S"), _row("a4", parent="S")]
-        ancestors = {"a3": "S", "a4": "S"}
+    def test_without_a_pool_the_identity_rule_decides_as_it_did(self):
+        """A minting action's replaced generation still goes, as on a run recorded before
+        the pool was; a row naming no producer is still kept."""
+        ancestors = {"c2": "S"}
+        minted = [_row("m1", parent="S", producers=["c1"])]
+        carried = [_row("a1", parent="S")]
+
+        def decide(stored, produced):
+            return stored_rows_not_reproduced(
+                stored, produced, batch_inputs=set(ancestors), input_ancestors=ancestors
+            )
+
+        assert decide(minted, [_row("m2", parent="S", producers=["c2"])]) == set()
+        assert decide(carried, [_row("c2", parent="S")]) == {"a1"}
+
+    def test_a_pool_that_does_not_hold_the_runs_inputs_is_another_runs(self):
+        stored = [_row("a1", parent="S")]
+        produced = [_row("a3", parent="S")]
 
         carry = stored_rows_not_reproduced(
-            stored, produced, batch_inputs=set(ancestors), input_ancestors=ancestors
+            stored,
+            produced,
+            batch_inputs={"a3"},
+            input_ancestors={"a3": "S"},
+            upstream_pool={"zz": "S"},
         )
 
-        assert carry == {"a1", "a2"}
+        assert carry == {"a1"}
 
     def test_a_record_only_partly_answered_keeps_its_stored_rows(self):
         stored = [_row("a1", parent="S"), _row("a2", parent="S")]

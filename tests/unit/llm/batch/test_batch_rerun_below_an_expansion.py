@@ -41,7 +41,7 @@ STAGED = "S"
 # outside: production owning both ends of a key it alone reads would let the two
 # drift together and still pass.
 INPUTS_KEY = f"batch_inputs:{ACTION}:{RELATIVE}"
-POOL_KEY = f"batch_inputs:{ACTION}:pool:{RELATIVE}"
+POOL_KEY = f"batch_pool:{ACTION}:{RELATIVE}"
 
 
 def _row(guid: str, *, producers: list[str], ancestor: str = STAGED) -> dict[str, Any]:
@@ -285,6 +285,7 @@ class TestAOneToOneActionBelowAnExpansion:
                 run_inputs=dict.fromkeys(children, STAGED),
             )
             counts.append(len(stored))
+            assert sorted(_guids(stored)) == children
 
         assert counts == [2, 2, 2], f"the output grew across re-runs: {counts}"
 
