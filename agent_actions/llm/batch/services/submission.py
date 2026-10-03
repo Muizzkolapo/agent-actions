@@ -268,7 +268,8 @@ class BatchSubmissionService:
             if run_inputs is not None
             else None
         )
-        if self._disposition_gate is not None and self._disposition_gate.repairing:
+        repairing = self._disposition_gate is not None and bool(self._disposition_gate.repairing)
+        if repairing:
             # A repair answers what it named, and online carries every stored row it
             # did not name. Read against its inputs, a row under an identity this run
             # does not derive would be left out.
@@ -310,7 +311,13 @@ class BatchSubmissionService:
             self._context_manager.save_batch_context_map(
                 self._storage_backend, action_name, context_map, batch_name
             )
-            if run_input_guids is not None:
+            if repairing:
+                # Not left to whoever started the repair: finalize would read an earlier
+                # run's inputs as this one's.
+                self._context_manager.clear_batch_inputs(
+                    self._storage_backend, action_name, batch_name
+                )
+            elif run_input_guids is not None:
                 self._context_manager.save_batch_inputs(
                     self._storage_backend, action_name, run_input_guids, batch_name
                 )

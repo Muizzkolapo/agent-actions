@@ -70,6 +70,11 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
+    def clear_batch_inputs(backend: "StorageBackend", action_name: str, batch_name: str) -> None:
+        """Remove the recording, so the next reader finds none recorded."""
+        backend.delete_metadata(BatchContextManager._inputs_key(action_name, batch_name))
+
+    @staticmethod
     def load_batch_inputs(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> set[str] | None:

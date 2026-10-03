@@ -412,8 +412,8 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   stored row can sit under an identity the repair's input does not derive -- its record
   absent that run, or stored under another file's identity -- and read against the inputs it
   would be left out. With nothing recorded every unanswered row is carried, which is also
-  what a batch submitted before inputs were recorded gets. `agac retry` clears the last
-  run's recording with the rest of the batch state before it submits.
+  what a batch submitted before inputs were recorded gets. The repair's submission removes
+  any recording an earlier run left, so that does not rest on who cleared batch state first.
 - **A run that answered nothing replaces no answer.** Online raises before it writes when
   everything it sent failed (`raise_if_terminal_failure`), so its stored answers stand. Here
   the failures are written, beside every stored answer whichever input it was for. Stored
