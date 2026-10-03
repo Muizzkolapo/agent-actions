@@ -24,6 +24,7 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
 )
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
+    batch_output_name,
 )
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -434,7 +435,7 @@ class BatchProcessingService:
             Path object for the output file
         """
         if file_name:
-            return Path(output_directory) / f"{Path(file_name).stem}.json"
+            return Path(output_directory) / batch_output_name(file_name)
         return Path(output_directory) / f"{batch_id}_processed_output.json"
 
     def _write_batch_output(

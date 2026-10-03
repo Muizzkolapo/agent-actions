@@ -16,6 +16,7 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
 )
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
+    batch_output_name,
 )
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
@@ -172,6 +173,34 @@ class BatchSubmissionService:
                 f"Failed to check batch status: {e}", context={"vendor": vendor}, cause=e
             ) from e
 
+    def _carried_with_no_stored_row(
+        self,
+        data: list[dict[str, Any]],
+        to_process: list[dict[str, Any]],
+        carry_ids: set[str],
+        action_name: str,
+        batch_name: str,
+    ) -> list[dict[str, Any]]:
+        """The inputs the gate carried that no stored row answers for, to answer again.
+
+        Finalize carries a stored row only for an input of the run, so an input that left
+        and returned has a disposition and no row. Online re-queues those; left out here
+        it would be neither carried nor answered.
+        """
+        if not carry_ids or self._storage_backend is None:
+            return []
+        from agent_actions.processing.disposition_gate import build_carry_forward
+
+        _found, missing = build_carry_forward(
+            set(carry_ids),
+            action_name,
+            batch_output_name(batch_name),
+            self._storage_backend,
+            produced_by=carry_ids,
+            rewriting={guid for record in to_process if (guid := record.get("source_guid"))},
+        )
+        return [record for record in data if record.get("source_guid") in missing]
+
     def submit_batch_job(
         self,
         agent_config: dict[str, Any],
@@ -258,7 +287,11 @@ class BatchSubmissionService:
         carry_forward_guids: list[str] = []
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
-            data = to_process
+            requeued = self._carried_with_no_stored_row(
+                data, to_process, carry_ids, action_name, batch_name
+            )
+            carry_ids = carry_ids - {record["source_guid"] for record in requeued}
+            data = to_process + requeued
             if carry_ids:
                 carry_forward_guids = sorted(carry_ids)
 

@@ -390,55 +390,40 @@ credited as an answer deletes what the last run produced. Such a row does still 
 a stored row of its own identity, which is decided first — carried rows are appended to
 the run's own output, so an identity in both lists would be written twice.
 
-A stored row naming exactly one input is inferred away; naming several, never. That
-reads one producer as a mint, which holds on this path — a batch row that names producers
-has been re-keyed — but not in general. The FILE writer records the inputs a row consumed
-*minus* its own, so a two-input merge keeps one identity and names one producer; inferred
-away, its own input's content goes with it. `build_carry_forward` carries the stricter
-reading for rows of that shape, and a future caller reading them wants it rather than
-this. Where several inputs are named the row is handed back regardless, a duplicate being
-visible where a dropped row is not.
+Which unanswered rows come back is the online path's rule. Online writes rows for this
+run's inputs and nothing else: what it processed, and what the gate carried. So a stored
+row is carried where the input it answered for is one of the run's and the run did not
+answer it again, and a row whose input is not among them is left out. Below an expansion
+that is what stops the output growing: the upstream children are minted again every run, so
+the previous generation's rows answer for inputs this run never took.
 
-Matching by input still leaves one case open: where the action above is *itself* an
-expansion, its children are minted again every run, so a stored row names a producer this
-run's rows never name and neither generation replaces the other. The two are told apart by
-what the action took as input — a producer named by none of it is a generation that is
-gone, one still standing in the input is an input this run did not answer for. That set is
-not the batch context map, which holds only what was submitted. Several narrowings sit
-between the two — the action's `record_limit`, a repair's named records, the disposition
-gate, and above the pipeline entirely the runner's drop of records an upstream guard
-filtered — and a record dropped by any of them still holds stored rows this action must
-carry. So the pipeline hands the batch path the same pre-narrowing input it already hands
-the online path (`offered_to_repair`), submission records it
+"This run's inputs" is not the batch context map, which holds only what was submitted.
+Several narrowings sit between the two -- the action's `record_limit`, a repair's named
+records, the disposition gate -- and a record dropped by any of them is still an input whose
+stored rows must be carried. So the pipeline hands the batch path the same pre-narrowing
+input it already hands the online path (`offered_to_repair`), submission records it
 (`BatchContextManager.save_batch_inputs`), and the merge reads it back. Reading anything
 narrower deletes the rows of every record the run left out: on an ordinary incremental run
 that is everything already done, and on `agac retry` everything the repair did not name.
-The recording sits above the pipeline's own narrowings but not above the runner's, which is
-why the rule below is generational — what the recording cannot be trusted to include, the
-rule does not decide from.
+Where no input was recorded -- a batch submitted before it was, or a store with no backend
+-- every unanswered row is carried, since nothing is known about the run.
 
-Because the inference deletes, it is made only where the evidence is whole. Three
-conditions, all of them: the input was recorded at all; this run settled *every* input it
-recorded, so what replaces the stored generation is actually in this write; and *no* stored
-producer is still an input. The second stops a run that failed, or returned nothing, from
-reading its own stored answers as replaced and deleting them. The third makes the decision
-generational rather than per row — one producer missing while others are still inputs is an
-individual record that left the input, filtered upstream or dropped, and its rows are its
-own. An unrecorded input infers nothing, so a batch submitted before this was recorded
-carries its rows exactly as it did; an input recorded as empty is reported apart from an
-unrecorded one but read the same way. A drop is logged once per write at INFO, not WARNING,
-with how many rows went and the counts that decided it, since the healthy re-run this case
-exists for makes one every time.
+A row naming several inputs is always carried: it holds what each gave it, so no one input
+accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
+logged once per write at INFO with the counts, since a healthy re-run below an expansion
+leaves rows out every time.
 
-One case stays open. An action that mints no identity of its own carries its input's and
-records no producer, which happens for a 1:1 action and for an expansion on any input it
-answered with a single row (`is_expansion` is `len(structured_items) > 1`). Below an
-expansion its stored rows then carry the previous run's upstream child identity and match
-nothing, so they accumulate exactly as described above. The lever that would close it —
-reading an identity absent from the input as a gone generation — is the one
-`build_carry_forward` and the stored-row rule deliberately refuse, because an input that is
-merely absent still keeps its rows. It wants its own decision; the gap is recorded as a
-strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`.
+Leaving a row out is safe only because an input that returns is answered again. The gate
+carries any input with a terminal disposition, and one whose row was left out has the
+disposition and no row. Online re-queues those (`build_carry_forward` reports them
+`missing`); submission does the same, looking the stored file up under the name finalize
+writes it (`batch_output_name`), so the two cannot disagree about whether a row exists.
+
+One difference from online remains, on the keeping side. A run whose every input the gate
+carries submits nothing and finalizes nothing, so the file is left as it stands and can
+still hold a row for an input that has left; online would rewrite the file without it.
+`tests/integration/test_batch_rerun_matches_online.py` runs each case through both paths
+against a real store and requires the same file.
 
 ---
 

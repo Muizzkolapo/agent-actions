@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A batch re-run now leaves in an action's output what an online re-run leaves. Online writes
+  rows for the run's inputs only; batch carried every stored row it had not answered again,
+  whether or not its input was still part of the run. Below a step that splits one record
+  into several, whose rows are given new identities on each run, that kept the previous run's
+  answers beside the new ones, so the output doubled, then tripled. Batch now carries a
+  stored row only where the input it answered for is one of the run's, counting inputs the
+  run left unanswered because they were already done, held by a record limit, or failed. And
+  as online does, an input marked done whose stored row is missing is sent again rather than
+  skipped, so a record that leaves the input and later returns is answered again. One
+  consequence to know: an answer for a record that is no longer in the input, because it was
+  filtered upstream or the file now holds different records, is no longer kept in the batch
+  output. That is what the online path already did.
+time: 2026-10-03T02:00:00Z

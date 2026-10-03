@@ -63,8 +63,16 @@ def _make_record(guid: str) -> dict:
 
 
 def _mock_backend(terminal_ids: set[str]) -> MagicMock:
+    """A store where every record called done also has its stored row, as a real one does.
+
+    One with a disposition and no row is re-queued, which is pinned against a real store in
+    ``tests/integration/test_batch_rerun_matches_online.py``.
+    """
     backend = MagicMock()
     backend.get_terminal_record_ids.return_value = terminal_ids
+    backend.read_target_for_rewrite.return_value = [
+        {"source_guid": guid, "content": {}} for guid in sorted(terminal_ids)
+    ]
     return backend
 
 
@@ -110,6 +118,58 @@ class TestBatchDispositionGate:
         assert result.batch_id is None
         service.prepare_batch_tasks.assert_not_called()
         service._submit_to_provider.assert_not_called()
+
+    def test_a_done_input_is_looked_up_under_the_name_its_output_is_stored_under(self):
+        """Finalize stores `data.json` whatever the input file is called. Looked up under
+        the input's own name, every done record reads as having no row and is re-sent."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        rows = backend.read_target_for_rewrite.return_value
+
+        def _read(action_name: str, relative_path: str) -> list[dict]:
+            if relative_path != "data.json":
+                raise FileNotFoundError(relative_path)
+            return rows
+
+        backend.read_target_for_rewrite.side_effect = _read
+        backend.read_checkpoint_records.return_value = []
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[{"custom_id": "r2", "body": {}}],
+            context_map={"r2": {"source_guid": "r2"}},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="data.jsonl",
+                data=[_make_record(f"r{i}") for i in range(3)],
+                output_directory=tmpdir,
+            )
+
+        sent = service.prepare_batch_tasks.call_args[0][1]
+        assert [record["source_guid"] for record in sent] == ["r2"]
+
+    def test_a_done_input_with_no_stored_row_is_sent_again(self):
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[{"custom_id": "r1", "body": {}}],
+            context_map={"r1": {"source_guid": "r1"}},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="data.json",
+                data=[_make_record("r0"), _make_record("r1")],
+                output_directory=tmpdir,
+            )
+
+        sent = service.prepare_batch_tasks.call_args[0][1]
+        assert [record["source_guid"] for record in sent] == ["r1"]
 
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""

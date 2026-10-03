@@ -13,6 +13,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def batch_output_name(file_name: str) -> str:
+    """The name a batch's output file is stored under, given the input file it answers.
+
+    Finalize writes under it and submission looks stored rows up under it; two copies of
+    this rule would let one drift and every carried input read as having no stored row.
+    """
+    from pathlib import Path
+
+    return f"{Path(file_name).stem}.json"
+
+
 class BatchContextManager:
     """Saves and loads batch context maps via StorageBackend."""
 
