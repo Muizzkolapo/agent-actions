@@ -26,11 +26,12 @@ class PassthroughItemBuilder:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
         The item carries ``metadata.agent_type = "tombstone"`` so downstream processing
-        skips it. *mode* picks the metadata format: batch uses legacy flags, online adds a
-        ``reason`` string. *state* is the state it is left in: a record that failed, or one
-        an action above already failed, is not one the guard skipped, and what reads row
-        state has to be able to tell. *cause* is what its history records, where the
-        caller holds more than the reason, such as the error itself.
+        skips it. *state* is the state it is left in: a record that failed, or one an
+        action above already failed, is not one the guard skipped, and what reads row
+        state has to be able to tell. A guard skip carries a legacy ``skipped_by_*`` flag;
+        any other state, and every online item, carries ``metadata.reason``. *cause* is
+        what its history records, where the caller holds more than the reason, such as
+        the error itself.
         """
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
         resolved_source_guid = LineageBuilder.resolve_source_guid(

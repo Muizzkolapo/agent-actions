@@ -158,8 +158,8 @@ class TestPassthroughBuilderIncludesFailed:
 
 class TestEachEntryIsBuiltAsWhatPreparationFoundIt:
     """Built alike, a failed or upstream-blocked record is stored as a guard skip: the
-    output says the guard turned away a record it never judged, and the action below
-    takes it as input."""
+    output says the guard turned away a record it passed, or one it never judged, and the
+    action below takes it as input."""
 
     @staticmethod
     def _rows(context_map):
@@ -191,6 +191,15 @@ class TestEachEntryIsBuiltAsWhatPreparationFoundIt:
         row = self._rows({"t1": entry})["sg_failed"]
 
         assert row["_state"] == "failed"
+        assert row["_state_history"][-1]["reason"] == "prep_failed"
+
+    def test_an_earlier_actions_last_word_is_not_taken_for_this_failure(self):
+        """Preparation records nothing where the entry cannot move to failed."""
+        entry = {"source_guid": "sg_failed", "content": {}, "_batch_filter_status": "failed"}
+        RecordEnvelope.transition(entry, RecordState.PROCESSED, "the_action_above", "success")
+
+        row = self._rows({"t1": entry})["sg_failed"]
+
         assert row["_state_history"][-1]["reason"] == "prep_failed"
 
     def test_a_record_blocked_upstream_is_a_cascade_skip(self):

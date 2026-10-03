@@ -86,4 +86,8 @@ def _recorded_error(entry: dict[str, Any]) -> str | None:
     if not isinstance(history, list) or not history:
         return None
     last = history[-1]
-    return last.get("reason") if isinstance(last, dict) else None
+    # Preparation records nothing where the entry's state cannot move to failed, and
+    # the last entry is then an earlier action's, not this failure's.
+    if not isinstance(last, dict) or last.get("to") != RecordState.FAILED.value:
+        return None
+    return last.get("reason")

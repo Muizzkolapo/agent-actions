@@ -5,9 +5,9 @@ body: >-
   with every one of them marked `guard_skipped`. A record that had passed the guard and then
   failed prompt preparation, for example because the prompt names a field it does not have,
   was stored that way, and so was a record an action above had already failed. The output
-  said the guard had turned away records it never judged, and because a guard skip is passed
-  on, the action below took them as input: a failed record could be processed again two
-  actions later. A preparation failure is now stored as `failed`, with the error in its
+  said the guard had turned away a record it had passed, or one it had never judged, and
+  because a guard skip is passed on, the action below took them as input: a failed record
+  could be processed again two actions later. A preparation failure is now stored as `failed`, with the error in its
   history, and a record blocked upstream as `cascade_skipped`, as online and a batch run
   that does send something already store them. The failed disposition and the action's
   status were already right and do not change.
