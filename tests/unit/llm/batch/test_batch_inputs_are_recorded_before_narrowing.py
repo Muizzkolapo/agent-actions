@@ -67,6 +67,24 @@ class TestTheRecordedInputRoundTrips:
     def test_no_recording_has_no_ancestors(self, backend):
         assert BatchContextManager.load_batch_input_ancestors(backend, ACTION, BATCH) is None
 
+    def test_the_upstream_pool_round_trips_beside_the_inputs(self, backend):
+        BatchContextManager.save_batch_inputs(backend, ACTION, {"a1": "S"}, BATCH)
+        BatchContextManager.save_upstream_pool(backend, ACTION, {"a2": "S", "a1": "S"}, BATCH)
+
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) == {
+            "a1": "S",
+            "a2": "S",
+        }
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) == {"a1"}
+
+    def test_no_recorded_pool_reads_as_none(self, backend):
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
+
+    def test_an_unreadable_pool_reads_as_none(self, backend):
+        backend.save_metadata(f"batch_inputs:{ACTION}:pool:{BATCH}", "{not json")
+
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
+
     def test_an_empty_recording_is_not_a_missing_one(self, backend):
         """A run that took no input recorded that, and it must not read as unknown."""
         BatchContextManager.save_batch_inputs(backend, ACTION, [], BATCH)
@@ -105,11 +123,13 @@ class TestTheRecordedInputRoundTrips:
         Left behind, the recording answers for a run that no longer has one.
         """
         BatchContextManager.save_batch_inputs(backend, ACTION, ["i1"], BATCH)
+        BatchContextManager.save_upstream_pool(backend, ACTION, {"i1": "i1"}, BATCH)
         BatchContextManager.save_batch_context_map(backend, ACTION, {"t0": {}}, BATCH)
 
         backend.clear_batch_state(ACTION)
 
         assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
+        assert BatchContextManager.load_upstream_pool(backend, ACTION, BATCH) is None
 
     def test_a_path_traversing_batch_name_is_refused(self, backend):
         """Refused the same way the context map refuses it, and nothing is written."""

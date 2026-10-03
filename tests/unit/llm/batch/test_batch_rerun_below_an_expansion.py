@@ -41,6 +41,7 @@ STAGED = "S"
 # outside: production owning both ends of a key it alone reads would let the two
 # drift together and still pass.
 INPUTS_KEY = f"batch_inputs:{ACTION}:{RELATIVE}"
+POOL_KEY = f"batch_inputs:{ACTION}:pool:{RELATIVE}"
 
 
 def _row(guid: str, *, producers: list[str], ancestor: str = STAGED) -> dict[str, Any]:
@@ -80,6 +81,9 @@ def _finalize(
     if run_inputs is not None:
         recorded = run_inputs if isinstance(run_inputs, dict) else sorted(run_inputs)
         backend.save_metadata(INPUTS_KEY, json.dumps(recorded))
+        if isinstance(run_inputs, dict):
+            # What the runner records above the guard drop: here nothing was dropped.
+            backend.save_metadata(POOL_KEY, json.dumps(run_inputs))
 
     service = BatchProcessingService(
         client_resolver=MagicMock(),

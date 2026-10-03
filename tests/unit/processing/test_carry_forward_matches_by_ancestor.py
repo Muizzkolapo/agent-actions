@@ -1,9 +1,10 @@
-"""Carry-forward decides by the staged record a row came from, where the run recorded it.
+"""Carry-forward reads what upstream still holds, where the run recorded it.
 
 A stored row's own identity cannot tell an upstream action minting its children again from
-a record that left the input: both are "an identity no input names". The staged record a
-row descends from can. It is carried on every row as `parent_source_guid` (a first-stage
-row is its own), and a run records it for each of its inputs.
+a record that left the input, or from one a guard filtered: all are "an identity no input
+names". Two recordings can: the upstream pool as it stood before any guard drop, and for
+each identity the staged record it descends from (`parent_source_guid` where a row has
+one, else its own identity).
 """
 
 from __future__ import annotations
@@ -31,9 +32,16 @@ def _row(
     return row
 
 
-def _carry(stored, produced, ancestors: dict[str, str]) -> set[str]:
+def _carry(
+    stored, produced, ancestors: dict[str, str], *, filtered: dict[str, str] | None = None
+) -> set[str]:
+    """*filtered* names the upstream records a guard dropped before the run took its input."""
     return stored_rows_not_reproduced(
-        stored, produced, batch_inputs=set(ancestors), input_ancestors=ancestors
+        stored,
+        produced,
+        batch_inputs=set(ancestors),
+        input_ancestors=ancestors,
+        upstream_pool={**ancestors, **(filtered or {})},
     )
 
 
@@ -88,7 +96,9 @@ class TestARecordThatLeftTheInputKeepsItsRows:
             _row("n2a", parent="P2", producers=["P2"]),
         ]
 
-        assert _carry(stored, produced, {"P1": "P1", "P2": "P2"}) == {"P3"}
+        carry = _carry(stored, produced, {"P1": "P1", "P2": "P2"}, filtered={"P3": "P3"})
+
+        assert carry == {"P3"}
 
     def test_a_new_batch_of_records_keeps_the_previous_batchs_mints(self):
         """#1206: nothing this run took came from r1 or r2."""
@@ -116,10 +126,58 @@ class TestARecordThatLeftTheInputKeepsItsRows:
         stored = [_row("a1", parent="S"), _row("a2", parent="S")]
         produced = [_row("a1", parent="S")]
 
-        assert _carry(stored, produced, {"a1": "S"}) == {"a2"}
+        assert _carry(stored, produced, {"a1": "S"}, filtered={"a2": "S"}) == {"a2"}
+
+    def test_a_sibling_newly_admitted_does_not_condemn_the_one_newly_filtered(self):
+        """c2 is not a re-mint of c1: c1 still exists upstream, a guard dropped it."""
+        stored = [_row("c1", parent="S")]
+        produced = [_row("c2", parent="S")]
+
+        assert _carry(stored, produced, {"c2": "S"}, filtered={"c1": "S"}) == {"c1"}
+
+
+class TestMixedAndLeftoverShapes:
+    def test_a_stable_sibling_of_the_same_record_does_not_pin_a_replaced_generation(self):
+        stored = [
+            _row("x1", parent="P", producers=["c1"]),
+            _row("x2", parent="P", producers=["c1"]),
+            _row("s1", parent="P"),
+        ]
+        produced = [
+            _row("y1", parent="P", producers=["c3"]),
+            _row("y2", parent="P", producers=["c3"]),
+            _row("s1", parent="P"),
+        ]
+
+        assert _carry(stored, produced, {"s1": "P", "c3": "P"}) == set()
+
+    def test_rows_left_by_an_earlier_partial_run_go_once_the_record_settles(self):
+        stored = [_row(g, parent="S") for g in ("a3", "a4", "a1", "a2")]
+        produced = [_row("a3", parent="S"), _row("a4", parent="S")]
+
+        assert _carry(stored, produced, {"a3": "S", "a4": "S"}) == set()
+
+    def test_a_guard_skipped_input_settles_its_record(self):
+        """A skip is a healthy outcome: the record is settled though one input is unanswered."""
+        stored = [_row("a1", parent="S"), _row("a2", parent="S", state="guard_skipped")]
+        produced = [_row("a3", parent="S"), _row("a4", parent="S", state="guard_skipped")]
+
+        assert _carry(stored, produced, {"a3": "S", "a4": "S"}) == set()
 
 
 class TestNothingIsInferredShortOfTheWholeRecord:
+    def test_no_recorded_upstream_pool_infers_nothing(self):
+        """Without the pool nothing is known to be gone upstream."""
+        stored = [_row("a1", parent="S"), _row("a2", parent="S")]
+        produced = [_row("a3", parent="S"), _row("a4", parent="S")]
+        ancestors = {"a3": "S", "a4": "S"}
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs=set(ancestors), input_ancestors=ancestors
+        )
+
+        assert carry == {"a1", "a2"}
+
     def test_a_record_only_partly_answered_keeps_its_stored_rows(self):
         stored = [_row("a1", parent="S"), _row("a2", parent="S")]
         produced = [_row("a3", parent="S"), _row("a4", parent="S", state="failed")]

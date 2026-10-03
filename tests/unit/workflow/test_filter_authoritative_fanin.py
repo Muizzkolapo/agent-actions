@@ -12,6 +12,7 @@ records reach the downstream action.
 import json
 from unittest.mock import MagicMock
 
+from agent_actions.config.types import RunMode
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.runner_file_processing import process_from_storage_backend
 
@@ -265,3 +266,94 @@ def test_node_level_filtered_disposition_is_ignored(tmp_path):
 
     guids = _captured_guids(runner)
     assert guids == ["sg-1"], f"node-level marker wrongly dropped a record: {guids}"
+
+
+def _batch_params(upstream_dirs, output_dir):
+    params = _params(upstream_dirs, output_dir)
+    params.action_config = {"run_mode": RunMode.BATCH}
+    return params
+
+
+def _recorded_pool(storage, action_name="dedup_by_concept"):
+    saves = [
+        json.loads(call.args[1])
+        for call in storage.save_metadata.call_args_list
+        if call.args[0] == f"batch_inputs:{action_name}:pool:data.json"
+    ]
+    assert len(saves) == 1, storage.save_metadata.call_args_list
+    return saves[0]
+
+
+def test_the_upstream_pool_is_recorded_above_the_drop_with_what_was_held_back(tmp_path):
+    """Batch carry-forward reads it later: a filtered record is absent from its action's
+    output, so without this it is indistinguishable from one that no longer exists."""
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    records = [
+        {"source_guid": "c1", "parent_source_guid": "S"},
+        {"source_guid": "r2"},
+    ]
+    storage = _storage({"tag_code_concept": records}, {"tag_code_concept": ["c9"]})
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    assert _recorded_pool(storage) == {"c1": "S", "c9": "c9", "r2": "r2"}
+
+
+def test_a_record_dropped_at_fan_in_is_still_in_the_recorded_pool(tmp_path):
+    tag_dir = tmp_path / "tag_code_concept"
+    dedup_dir = tmp_path / "dedup_code_blocks"
+    output = tmp_path / "out"
+    for d in (tag_dir, dedup_dir, output):
+        d.mkdir()
+    storage = _storage(
+        {
+            "tag_code_concept": [{"source_guid": "sg-1"}],
+            "dedup_code_blocks": [{"source_guid": "sg-1"}, {"source_guid": "sg-2"}],
+        },
+        {"tag_code_concept": ["sg-2"]},
+    )
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _batch_params([str(tag_dir), str(dedup_dir)], output))
+
+    assert _captured_guids(runner) == ["sg-1"]
+    assert _recorded_pool(storage) == {"sg-1": "sg-1", "sg-2": "sg-2"}
+
+
+def test_an_online_action_records_no_pool(tmp_path):
+    """Only batch finalizes later and reads it; an online run would write it for nothing."""
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    process_from_storage_backend(runner, _params([str(tag_dir)], output))
+
+    assert storage.save_metadata.call_args_list == []
+    assert _captured_guids(runner) == ["c1"]
+
+
+def test_a_pool_that_cannot_be_saved_does_not_cost_the_file(tmp_path, caplog):
+    tag_dir = tmp_path / "tag_code_concept"
+    output = tmp_path / "out"
+    for d in (tag_dir, output):
+        d.mkdir()
+    storage = _storage({"tag_code_concept": [{"source_guid": "c1"}]}, {})
+    storage.save_metadata.side_effect = OSError("disk full")
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    with caplog.at_level("WARNING"):
+        process_from_storage_backend(runner, _batch_params([str(tag_dir)], output))
+
+    assert _captured_guids(runner) == ["c1"]
+    assert any("could not record the upstream pool" in r.getMessage() for r in caplog.records)
