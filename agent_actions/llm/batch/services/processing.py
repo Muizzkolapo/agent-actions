@@ -446,6 +446,7 @@ class BatchProcessingService:
         *,
         batch_inputs: Collection[str] = (),
         input_ancestors: Mapping[str, str] | None = None,
+        upstream_pool: Mapping[str, str] | None = None,
     ) -> None:
         """Write batch output file, merging any carry-forward records first."""
         effective_action = self._resolve_action_name(action_name)
@@ -455,6 +456,7 @@ class BatchProcessingService:
             target_relative_path(output_file, output_directory),
             batch_inputs=batch_inputs,
             input_ancestors=input_ancestors,
+            upstream_pool=upstream_pool,
         )
 
         if self._storage_backend is None:
@@ -474,6 +476,7 @@ class BatchProcessingService:
         *,
         batch_inputs: Collection[str] = (),
         input_ancestors: Mapping[str, str] | None = None,
+        upstream_pool: Mapping[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
@@ -502,7 +505,11 @@ class BatchProcessingService:
         from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
 
         carry_guids = stored_rows_not_reproduced(
-            stored, batch_output, batch_inputs=batch_inputs, input_ancestors=input_ancestors
+            stored,
+            batch_output,
+            batch_inputs=batch_inputs,
+            input_ancestors=input_ancestors,
+            upstream_pool=upstream_pool,
         )
         if not carry_guids:
             return batch_output

@@ -431,17 +431,25 @@ with how many rows went and the counts that decided it, since the healthy re-run
 exists for makes one every time.
 
 That rule reads identities alone, and an identity cannot tell an upstream action minting
-its children again from a record that left the input, so it accumulates below an expansion
-for an action that mints nothing (#1155) and drops the rows of records that merely left
-(#1206). A run now records, beside each input, the staged record it descends from --
-`parent_source_guid`, which every row carries, or the row's own identity at the first stage
--- and where that is recorded `_carried_by_ancestor` decides instead, per staged record. A
-record's stored rows are replaced only where the run answered every input descended from
-it and none of the inputs those rows answered for is still an input: its children were
-minted again. A record absent from the input, or one whose inputs kept their identities,
-keeps its rows. Rows merging several inputs are never replaced. A run recorded before
-ancestors were is read by the identity rule above, unchanged; the strict xfail in
-`tests/unit/processing/test_superseding_is_limited_to_one_producer.py` pins that path.
+its children again from a record that left the input or one a guard held back. So it
+accumulates below an expansion for an action that mints nothing (#1155), and drops the rows
+of records that merely left (#1206). A batch run now records two more things, and where
+both are present `_carried_by_ancestor` decides instead:
+
+- beside each input, the staged record it descends from: its `parent_source_guid` where it
+  has one, else its own identity;
+- the upstream pool for the file as the runner read it, above its drop of guard-filtered
+  records, with each identity's staged record. A filtered or deferred record is absent from
+  its action's output, so those identities are added from the dispositions.
+
+A stored row is dropped only where the input it answered for is gone from that pool while
+the run has inputs descended from the same staged record -- the children were minted again
+-- and settled (answered or guard-skipped) every one of them, so the replacement is in this
+write. A row whose input is still in the pool was held back or narrowed past and is kept; so
+is one whose staged record no input descends from, and one merging several inputs. With no pool recorded nothing is known to be gone and every row not answered again
+is kept. A run recorded before any of this is read by the identity rule above, unchanged;
+the strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`
+pins that path.
 
 ---
 

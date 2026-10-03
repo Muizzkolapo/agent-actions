@@ -35,6 +35,42 @@ class BatchContextManager:
         return f"batch_inputs:{action_name}:{safe_name}"
 
     @staticmethod
+    def _pool_key(action_name: str, batch_name: str) -> str:
+        # Under the inputs prefix, so clearing an action's batch state clears this too.
+        inputs_key = BatchContextManager._inputs_key(action_name, batch_name)
+        return inputs_key.replace(f":{action_name}:", f":{action_name}:pool:", 1)
+
+    @staticmethod
+    def save_upstream_pool(
+        backend: "StorageBackend", action_name: str, pool: Mapping[str, str], batch_name: str
+    ) -> None:
+        """Record every upstream record offered for this file, before any guard drop.
+
+        Each identity beside its staged record. Carry-forward reads it to tell a stored
+        row whose input still exists upstream from one whose input was minted again.
+        """
+        key = BatchContextManager._pool_key(action_name, batch_name)
+        backend.save_metadata(key, json.dumps(dict(sorted(pool.items()))))
+
+    @staticmethod
+    def load_upstream_pool(
+        backend: "StorageBackend", action_name: str, batch_name: str
+    ) -> dict[str, str] | None:
+        """The recorded upstream pool, or None where none was recorded or it is unreadable."""
+        raw = backend.load_metadata(BatchContextManager._pool_key(action_name, batch_name))
+        if raw is None:
+            return None
+        try:
+            recorded = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(recorded, dict):
+            return None
+        if not all(isinstance(a, str) for a in recorded.values()):
+            return None
+        return recorded
+
+    @staticmethod
     def save_batch_inputs(
         backend: "StorageBackend",
         action_name: str,
@@ -98,7 +134,7 @@ class BatchContextManager:
             return set(recorded)
         if not isinstance(recorded, list) or not all(isinstance(g, str) for g in recorded):
             logger.warning(
-                "Recorded input for %s/%s is not a list of identities (%s) — "
+                "Recorded input for %s/%s is not a recording of identities (%s) — "
                 "carrying every stored row instead",
                 action_name,
                 batch_name,

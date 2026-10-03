@@ -18,9 +18,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
-from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FILTERED,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
@@ -704,14 +709,24 @@ def _collect_upstream_filtered_guids(
     guids are subtracted at fan-in.  ``__node__`` markers are rerun signals, not
     record ids.  Fails open on storage errors (a safety net must not abort).
     """
-    filtered_guids: set[str] = set()
+    return _collect_upstream_guids(
+        storage_backend, action_name, upstream_data_dirs, DISPOSITION_FILTERED
+    )
+
+
+def _collect_upstream_guids(
+    storage_backend: Any, action_name: str, upstream_data_dirs: list[str], disposition: str
+) -> set[str]:
+    """Record ids holding *disposition* in any action upstream of ``action_name``."""
+    guids: set[str] = set()
     for dep in _ancestor_action_names(storage_backend, action_name, upstream_data_dirs):
         try:
-            dispositions = storage_backend.get_disposition(dep, disposition=DISPOSITION_FILTERED)
+            dispositions = storage_backend.get_disposition(dep, disposition=disposition)
         except (OSError, sqlite3.Error, ValueError) as e:
             logger.warning(
-                "Could not read FILTERED dispositions for upstream '%s' — "
+                "Could not read %s dispositions for upstream '%s' — "
                 "filter authority not enforced for it this run: %s",
+                disposition.upper(),
                 dep,
                 e,
             )
@@ -719,8 +734,51 @@ def _collect_upstream_filtered_guids(
         for disp in dispositions:
             record_id = disp.get("record_id")
             if record_id and record_id != NODE_LEVEL_RECORD_ID:
-                filtered_guids.add(record_id)
-    return filtered_guids
+                guids.add(record_id)
+    return guids
+
+
+def _record_upstream_pool(
+    runner: ActionRunner,
+    params: FileProcessParams,
+    relative_path: str,
+    data: Any,
+    filtered_guids: set[str],
+) -> None:
+    """Record every upstream record that still exists for this file, above the guard drop.
+
+    Batch carry-forward finalizes later and reads it to tell a stored row whose input was
+    held back this run from one whose input no longer exists. A filtered or deferred
+    record is absent from its action's output, so those are added from the dispositions.
+    """
+    if runner.storage_backend is None or not isinstance(data, list):
+        return
+    if params.action_config.get("run_mode") != RunMode.BATCH:
+        return
+    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+    held_back = filtered_guids | _collect_upstream_guids(
+        runner.storage_backend, params.action_name, params.upstream_data_dirs, DISPOSITION_DEFERRED
+    )
+    pool = {guid: guid for guid in sorted(held_back)}
+    pool.update(
+        (guid, record.get("parent_source_guid") or guid)
+        for record in data
+        if isinstance(record, dict) and (guid := record.get("source_guid"))
+    )
+    try:
+        BatchContextManager.save_upstream_pool(
+            runner.storage_backend, params.action_name, pool, Path(relative_path).name
+        )
+    except (OSError, sqlite3.Error, ValueError) as e:
+        # Unrecorded is safe: carry-forward then infers nothing and keeps every row.
+        logger.warning(
+            "%s: could not record the upstream pool for %s, so this batch's carry-forward "
+            "will keep every stored row it does not answer again: %s",
+            params.action_name,
+            relative_path,
+            e,
+        )
 
 
 def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, int]:
@@ -835,6 +893,7 @@ def process_from_storage_backend(
                         all_data.append(source_data)
                 data = merge_records_by_key(all_data, reduce_key)
 
+            _record_upstream_pool(runner, params, relative_path, data, filtered_guids)
             data, dropped = _drop_filtered_records(data, filtered_guids)
             if dropped:
                 logger.info(

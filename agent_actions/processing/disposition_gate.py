@@ -193,6 +193,7 @@ def stored_rows_not_reproduced(
     *,
     batch_inputs: Collection[str] = (),
     input_ancestors: Mapping[str, str] | None = None,
+    upstream_pool: Mapping[str, str] | None = None,
 ) -> set[str]:
     """Identities in *stored* that *produced* did not write again.
 
@@ -205,24 +206,29 @@ def stored_rows_not_reproduced(
     ARCHITECTURE.md has the reasoning.
     """
     answered: set[str] = set()
+    settled: set[str] = set()
     rewritten: set[str] = set()
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
-        if row.get("_state") != RecordState.PROCESSED.value:
+        state = row.get("_state")
+        if state not in (RecordState.PROCESSED.value, RecordState.GUARD_SKIPPED.value):
             continue
         # Producers are named during enrichment, before collection settles the state,
         # so an unsettled row can name an input it holds nothing for. Its own identity
         # is an input's only where it minted none of its own.
-        if producers := (row.get("producer_source_guids") or ()):
-            answered.update(producers)
-        elif guid:
-            answered.add(guid)
+        named = set(row.get("producer_source_guids") or ()) or ({guid} if guid else set())
+        # A guard skip settles its input without answering it.
+        settled.update(named)
+        if state == RecordState.PROCESSED.value:
+            answered.update(named)
 
     stored_rows = list(stored)
     if input_ancestors is not None:
-        return _carried_by_ancestor(stored_rows, answered, rewritten, input_ancestors)
+        return _carried_by_ancestor(
+            stored_rows, answered, settled, rewritten, input_ancestors, upstream_pool
+        )
 
     inputs = frozenset(batch_inputs)
     # Decided across all the mints at once, not per row: what replaces a generation is an
@@ -316,64 +322,61 @@ def stored_rows_not_reproduced(
 def _carried_by_ancestor(
     stored_rows: list[dict[str, Any]],
     answered: set[str],
+    settled: set[str],
     rewritten: set[str],
     input_ancestors: Mapping[str, str],
+    upstream_pool: Mapping[str, str] | None,
 ) -> set[str]:
-    """Carry every stored row whose staged record this run did not answer again in full.
+    """Carry every stored row whose input still exists upstream, or whose record left.
 
-    A staged record's stored rows are replaced only where the run answered every input
-    descended from it and none of the inputs those rows answered for is still an input:
-    the upstream action minted its children again. A record absent from the input, or
-    one whose inputs kept their identities, left or was narrowed past, and keeps its rows.
+    A row is dropped only where the input it answered for is gone from *upstream_pool*
+    while the run has inputs descended from the same staged record -- the upstream action
+    minted its children again -- and settled every one of them, so the replacement is in
+    this write. With no pool recorded nothing is known to be gone, and every row not
+    answered again is carried.
     """
     inputs_of: dict[str, set[str]] = {}
     for input_guid, staged in input_ancestors.items():
         inputs_of.setdefault(staged, set()).add(input_guid)
 
-    answered_for: dict[str, set[str]] = {}
-    judged: list[tuple[str, str, str]] = []
     carry: set[str] = set()
+    dropped: dict[str, str] = {}
     for row in stored_rows:
         guid = row.get("source_guid")
-        if not guid:
+        if not guid or guid in rewritten:
             continue
         producers = frozenset(row.get("producer_source_guids") or ())
         if len(producers) > 1:
             # Holds what each of several inputs gave it; never inferred away.
-            if guid not in rewritten:
-                carry.add(guid)
+            carry.add(guid)
             continue
         key = next(iter(producers), guid)
-        ancestor = row.get("parent_source_guid") or guid
-        # Counted even for a row the run rewrote: its input still standing is what shows
-        # the record's siblings kept their identities rather than being minted again.
-        answered_for.setdefault(ancestor, set()).add(key)
-        if guid not in rewritten:
-            judged.append((guid, key, ancestor))
-
-    replaced = {
-        ancestor
-        for ancestor, inputs in inputs_of.items()
-        if inputs <= answered and answered_for.get(ancestor, set()).isdisjoint(input_ancestors)
-    }
-    dropped: set[str] = set()
-    for guid, key, ancestor in judged:
         if key in answered:
             continue
-        if ancestor in replaced:
-            dropped.add(guid)
+        ancestor = row.get("parent_source_guid") or guid
+        current = inputs_of.get(ancestor)
+        reminted = (
+            upstream_pool is not None
+            and key not in upstream_pool
+            and current is not None
+            and current <= settled
+        )
+        if reminted:
+            dropped[guid] = ancestor
         else:
             carry.add(guid)
-    dropped -= carry
+    for guid in carry:
+        dropped.pop(guid, None)
 
     if dropped:
         # INFO: an action below an expansion takes this path on every healthy re-run.
         logger.info(
-            "%d stored row(s) dropped, not carried forward: this run answered again every "
-            "input made from the %d staged record(s) they came from, under new identities, "
-            "so they are the previous run's answers for the same records.",
+            "%d stored row(s) dropped, not carried forward: the inputs they answered for "
+            "no longer exist upstream, while the %d staged record(s) they came from do and "
+            "this run settled every input now made from them, so they are the previous "
+            "run's answers for the same records.",
             len(dropped),
-            len({ancestor for guid, _, ancestor in judged if guid in dropped}),
+            len(set(dropped.values())),
         )
     return carry
 
