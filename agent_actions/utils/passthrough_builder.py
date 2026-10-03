@@ -20,24 +20,14 @@ class PassthroughItemBuilder:
         source_guid: str | None = None,
         custom_id: str | None = None,
         mode: str = "batch",
+        state: RecordState = RecordState.GUARD_SKIPPED,
     ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
-        The returned item has
-        ``metadata.agent_type = "tombstone"`` so downstream processing
-        skips it. Metadata format varies by *mode* (batch uses legacy flags,
-        online adds a ``reason`` string).
-
-        Args:
-            row: Original data item.
-            reason: Passthrough reason (e.g., 'where_clause_not_matched').
-            action_name: Action name for node ID generation.
-            source_guid: Optional source GUID override.
-            custom_id: Optional custom target_id (batch fallback).
-            mode: 'batch' or 'online' (affects metadata format).
-
-        Returns:
-            Passthrough item dict.
+        The item carries ``metadata.agent_type = "tombstone"`` so downstream processing
+        skips it. *mode* picks the metadata format: batch uses legacy flags, online adds a
+        ``reason`` string. *state* is the state it is left in: a record that failed is not
+        one the guard skipped, and what reads row state has to be able to tell.
         """
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
         resolved_source_guid = LineageBuilder.resolve_source_guid(
@@ -74,7 +64,7 @@ class PassthroughItemBuilder:
         processed_item["_tombstone"] = True
         processed_item["_tombstone_reason"] = reason
 
-        RecordEnvelope.transition(processed_item, RecordState.GUARD_SKIPPED, action_name, reason)
+        RecordEnvelope.transition(processed_item, state, action_name, reason)
 
         return processed_item
 

@@ -34,7 +34,12 @@ from agent_actions.logging.events.batch_events import (
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
 from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+from agent_actions.record.reasons import PREP_FAILED
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+)
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -308,7 +313,6 @@ class BatchSubmissionService:
                 action_name,
                 tombstone_path,
                 run_input_guids,
-                preparation_failed=self._preparation_failed(context_map),
             )
 
         if output_directory and self._storage_backend:
@@ -341,8 +345,6 @@ class BatchSubmissionService:
         action_name: str,
         tombstone_path: str | None,
         run_input_guids: list[str] | None,
-        *,
-        preparation_failed: bool,
     ) -> SubmissionResult:
         """Add the stored rows a tombstone does not replace, as finalize would.
 
@@ -368,17 +370,8 @@ class BatchSubmissionService:
             tombstone_path,
             self._storage_backend,
             batch_inputs=run_input_guids or (),
-            # Written as a guard tombstone, so the rows alone do not say a record failed.
-            also_failed=preparation_failed,
         )
         return result
-
-    @staticmethod
-    def _preparation_failed(context_map: dict[str, Any]) -> bool:
-        return any(
-            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
-            for row in context_map.values()
-        )
 
     def _handle_empty_tasks(
         self,
@@ -400,10 +393,26 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
-        if self._preparation_failed(context_map):
+        failed = [
+            row
+            for row in context_map.values()
+            if BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
+        ]
+        if failed:
             passthrough = BatchPassthroughBuilder(
                 output_directory, action_name=action_name
             ).from_context(context_map, reason="guard_skip")
+            # A failure of this action, as online records it: nothing is submitted, so no
+            # finalize will come to say so.
+            if self._storage_backend is not None:
+                for row in failed:
+                    if guid := row.get("source_guid"):
+                        self._storage_backend.set_disposition(
+                            action_name,
+                            guid,
+                            DISPOSITION_FAILED,
+                            reason=BatchContextMetadata.get_skip_reason(row) or PREP_FAILED,
+                        )
             return SubmissionResult(passthrough=passthrough)
 
         has_guard_skipped = any(

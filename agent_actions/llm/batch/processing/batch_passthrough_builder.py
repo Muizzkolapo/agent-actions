@@ -5,6 +5,7 @@ from typing import Any
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.record.reasons import PREP_FAILED
+from agent_actions.record.state import RecordState
 from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 
 
@@ -31,11 +32,14 @@ class BatchPassthroughBuilder:
         processed_data = []
         for custom_id, original_row in context_map.items():
             status = BatchContextMetadata.get_filter_status(original_row)
-            if status in (FilterStatus.SKIPPED, FilterStatus.FAILED):
-                entry_reason = PREP_FAILED if status == FilterStatus.FAILED else reason
-                item = self._build_item(original_row, entry_reason, custom_id)
-                item.pop(ContextMetaKeys.FILTER_STATUS, None)
-                processed_data.append(item)
+            if status == FilterStatus.FAILED:
+                item = self._build_item(original_row, PREP_FAILED, custom_id, RecordState.FAILED)
+            elif status == FilterStatus.SKIPPED:
+                item = self._build_item(original_row, reason, custom_id)
+            else:
+                continue
+            item.pop(ContextMetaKeys.FILTER_STATUS, None)
+            processed_data.append(item)
 
         return {
             "type": "tombstone",
@@ -44,7 +48,11 @@ class BatchPassthroughBuilder:
         }
 
     def _build_item(
-        self, row: dict[str, Any], reason: str, custom_id: str | None = None
+        self,
+        row: dict[str, Any],
+        reason: str,
+        custom_id: str | None = None,
+        state: RecordState = RecordState.GUARD_SKIPPED,
     ) -> dict[str, Any]:
         return PassthroughItemBuilder.build_item(
             row=row,
@@ -53,4 +61,5 @@ class BatchPassthroughBuilder:
             source_guid=row.get("source_guid"),
             custom_id=custom_id,
             mode="batch",
+            state=state,
         )

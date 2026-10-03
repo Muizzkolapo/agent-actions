@@ -424,8 +424,8 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   still stored once. Stored rows that are not answers follow the inputs as usual. Without
   a failure the run did produce this run's file, however little is in it, and the inputs
   rule applies in full, as online writes it. A record that fails prompt preparation when
-  nothing else is sent is such a failure, though it reaches the write as a guard tombstone
-  and not a failure row; submission says so to the merge (`also_failed`).
+  nothing else is sent is such a failure: it reaches the write as a failed row, with a
+  failed disposition, as online records it.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
