@@ -8,8 +8,9 @@ body: >-
   so a cycle terminates and two places holding one dict, list or set share one result. A tuple
   cannot be remembered before its contents exist, so a reference back into a tuple re-walks it,
   and 29 nested tuples that each hold one back to the outermost exhaust the stack; records read
-  from JSON hold no tuples. The memo costs time on records with few scalars per container:
-  building a view of a ~4 KB record with one scalar per container takes about 25% longer
-  (56 to 70 microseconds), and a record of hundreds of empty or two-element containers about
-  35-40% longer; `copy()` of either about 35-55% longer. A scalar-dense record costs the same.
+  from JSON hold no tuples. The memo costs time where a record is mostly containers rather
+  than scalars: building a view of a ~4 KB record with one scalar per container measured about
+  a third longer (40 to 54 microseconds), a record of hundreds of empty or two-element
+  containers a third to a half longer, and `copy()` of such records from about half longer to
+  roughly double. A scalar-dense record measured no slower.
 time: 2026-10-02T23:30:00Z
