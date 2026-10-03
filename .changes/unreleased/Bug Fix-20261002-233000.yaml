@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A record containing a reference cycle no longer turns its guard off. The read-only view a
+  guard UDF receives wraps the record eagerly, and on a cyclic record that raised
+  RecursionError; the guard path treats a raising UDF as pass-through, so the record was
+  admitted with its guard never applied. Both walks the view makes, building it and taking a
+  writable `copy()`, now remember each container they have handled, as `copy.deepcopy` does,
+  so a cycle terminates and two places holding one dict, list or set share one result. A tuple
+  cannot be remembered before its contents exist, so a reference back into a tuple re-walks it,
+  and 29 nested tuples that each hold one back to the outermost exhaust the stack; records read
+  from JSON hold no tuples. The memo costs time where a record is mostly containers rather
+  than scalars: building a view of a ~4 KB record with one scalar per container measured about
+  a third longer (40 to 54 microseconds), a record of hundreds of empty or two-element
+  containers a third to a half longer, and `copy()` of such records from about half longer to
+  roughly double. A scalar-dense record measured no slower.
+time: 2026-10-02T23:30:00Z
