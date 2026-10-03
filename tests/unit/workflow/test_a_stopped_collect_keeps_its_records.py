@@ -92,11 +92,16 @@ def test_a_later_failure_while_running_is_wiped_though_an_earlier_one_was_collec
 def test_agac_retry_drops_the_mark_though_it_runs_no_reset(tmp_path, backend):
     """Retry sets the status itself. Left on, the mark would make a later failure of the
     same action, while running, look like a collect pass and keep what it should wipe."""
+    status_file = tmp_path / ".agent_status.json"
     _stopped(tmp_path, ActionStatus.CHECKING_BATCH)
-    retrying = ActionStateManager(tmp_path / ".agent_status.json", EXECUTION_ORDER)
-    retrying.update_status("agent_a", ActionStatus.PENDING)
-    _stopped(tmp_path, ActionStatus.RUNNING)
+    ActionStateManager(status_file, EXECUTION_ORDER).update_status("agent_a", ActionStatus.PENDING)
 
+    retried = ActionStateManager(status_file, EXECUTION_ORDER)
+    assert retried.stopped_collecting("agent_a") is False
+
+    # The executor's own route to failed, which sweeps nothing.
+    retried.update_status("agent_a", ActionStatus.RUNNING)
+    retried.update_status("agent_a", ActionStatus.FAILED)
     _next_run_resets(tmp_path, backend)
 
     assert _dispositions(backend) == {}
