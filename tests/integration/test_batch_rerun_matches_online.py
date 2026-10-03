@@ -742,6 +742,17 @@ def test_a_repair_keeps_the_rows_of_an_input_absent_from_it(tmp_path):
     assert held == ["processed:a1:0@run1", "processed:a2:0@run2", "processed:a3:0@run1"]
 
 
+def test_a_repair_does_not_read_an_earlier_runs_inputs_as_its_own(tmp_path):
+    """Run 2 answered nothing, so the file holds more than the inputs it recorded."""
+    batch = _Batch(tmp_path, clears_batch_state=False)
+    batch.run(1, [rec("a1"), rec("a2")])
+    batch.run(2, [rec("a3")], Answerer({("a3", 2): "fail"}))
+
+    held = batch.run(3, [rec("a3")], retry=["a3"])
+
+    assert held == ["processed:a1:0@run1", "processed:a2:0@run1", "processed:a3:0@run3"]
+
+
 def test_an_ordinary_run_after_a_repair_goes_back_to_its_own_inputs(tmp_path):
     """The repair recorded no inputs; that must not outlive it."""
     batch = _Batch(tmp_path)

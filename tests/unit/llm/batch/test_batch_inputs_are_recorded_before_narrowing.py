@@ -177,6 +177,20 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
     def test_a_repair_records_no_inputs(self, backend, tmp_path):
         """A repair answers what it named, and every other stored row stays as online
         keeps it. Recorded, its inputs would decide which rows are part of the run."""
+        self._repair(backend, tmp_path)
+
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
+
+    def test_a_repair_leaves_no_earlier_runs_inputs_to_be_read_as_its_own(self, backend, tmp_path):
+        """Whether or not whoever started the repair cleared the batch state first."""
+        BatchContextManager.save_batch_inputs(backend, ACTION, ["i2"], BATCH)
+
+        self._repair(backend, tmp_path)
+
+        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
+
+    @staticmethod
+    def _repair(backend, tmp_path) -> None:
         service = _service(backend)
         service._disposition_gate = DispositionGate(storage_backend=backend, repairing={"i2"})
         data = [{"source_guid": "i1", "text": "a"}, {"source_guid": "i2", "text": "b"}]
@@ -190,8 +204,6 @@ class TestSubmissionRecordsTheInputBeforeTheGateNarrowsIt:
             force=True,
             run_inputs=data,
         )
-
-        assert BatchContextManager.load_batch_inputs(backend, ACTION, BATCH) is None
 
     def test_a_row_carrying_no_identity_is_left_out_rather_than_recorded_as_none(
         self, backend, tmp_path
