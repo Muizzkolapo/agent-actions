@@ -1,15 +1,37 @@
 kind: Bug Fix
 body: >-
-  A batch re-run now leaves in an action's output what an online re-run leaves. Online writes
-  rows for the run's inputs only; batch carried every stored row it had not answered again,
-  whether or not its input was still part of the run. Below a step that splits one record
-  into several, whose rows are given new identities on each run, that kept the previous run's
-  answers beside the new ones, so the output doubled, then tripled. Batch now carries a
-  stored row only where the input it answered for is one of the run's, counting inputs the
-  run left unanswered because they were already done, held by a record limit, or failed. And
-  as online does, an input marked done whose stored row is missing is sent again rather than
-  skipped, so a record that leaves the input and later returns is answered again. One
-  consequence to know: an answer for a record that is no longer in the input, because it was
-  filtered upstream or the file now holds different records, is no longer kept in the batch
-  output. That is what the online path already did.
+  A batch re-run no longer keeps answers for records that have left the input, and no longer
+  loses answers for records that are still in it. Online writes an action's output for the
+  run's inputs only; batch carried every stored row it had not answered again. Below a step
+  that splits one record into several, whose rows are given new identities on each run, that
+  kept the previous run's answers beside the new ones, so the output doubled, then tripled
+  (#1155). Batch now carries a stored row only where the input it answered for is one of the
+  run's, counting inputs the run left unanswered because they were already done, held by a
+  record limit, or failed. As online does, an input marked done whose stored row is missing
+  is sent again rather than skipped, so a record that leaves the input and later returns is
+  answered again (#1206).
+
+  Three ways a re-run could empty or shrink a batch output are closed with it. When every
+  record left to send was turned away by the guard, the output file was replaced by the
+  guard's result alone, deleting every earlier answer while their records still read as
+  done, so they were never answered again; that write now carries the stored rows as an
+  ordinary one does. `agac retry` keeps every row it did not name, including the rows of a
+  record absent from that run, as online does. And a run in which everything sent fails keeps
+  the stored answers, where online refuses to write at all. A record the guard filtered is
+  now judged by the guard again on each run, as online judges it, instead of being called
+  done for good.
+
+  Batch and online still differ in four places, and in each batch keeps more, never less. A
+  run with nothing to send leaves the file as it stands, so it can still hold rows for
+  records that have left or that a record limit holds back. A run in which everything fails
+  writes the failed rows; online writes nothing. An answered record that now fails the guard
+  keeps its answer in batch. A row merged from several inputs is always kept. One consequence
+  to know: an answer for a record that is no longer in the input, because it was filtered
+  upstream or the file now holds different records, is dropped by the next batch run that
+  produces an output. That is what the online path already did.
+
+  This replaces the rule two earlier unreleased entries describe. Rows are no longer
+  inferred away by generation, the reports of that inference are gone (one INFO line now
+  says how many rows a write left out), and a repair reaching a batch submission without its
+  pre-narrowing input is no longer refused, because a repair no longer records its inputs.
 time: 2026-10-03T02:00:00Z

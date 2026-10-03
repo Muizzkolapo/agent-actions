@@ -534,14 +534,9 @@ class ProcessingPipeline:
                     e,
                 )
 
-        # Above every narrowing this function makes, as staging captures it — the
-        # runner's drop of guard-filtered records is above even this, which is why the
-        # rules reading it decide generationally rather than per record. A record the
-        # limit drops is still one of this action's inputs, and the gate reads these to tell a
-        # stored row of its own making from one minted upstream. Leave it out and
-        # a row of that record reads as one of a repaired record's, to be deleted
-        # by a rewrite that never makes it again. A limit never drops a repaired
-        # record, so the extra entries can only widen what is carried.
+        # Above every narrowing this function makes. A record the limit drops is still
+        # one of this action's inputs: left out, its stored rows read as a repaired
+        # record's and are deleted by a rewrite that never makes them again.
         offered_to_repair = data
 
         # ── per-action record_limit ──────────────────────────────────────

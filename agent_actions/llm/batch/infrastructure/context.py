@@ -76,8 +76,8 @@ class BatchContextManager:
         """The input recorded for this batch, or None where none was recorded.
 
         A run that recorded nothing is not one that took no input, so the two are
-        returned apart. Carry-forward then treats both as no evidence — inferring
-        from an empty set would supersede every stored row at once — but the
+        returned apart. Carry-forward then treats both as no evidence — read as the
+        run's inputs, an empty set would leave every stored row out — but the
         distinction is the store's to report, not this function's to flatten.
         """
         key = BatchContextManager._inputs_key(action_name, batch_name)

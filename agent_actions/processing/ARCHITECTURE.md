@@ -398,15 +398,27 @@ that is what stops the output growing: the upstream children are minted again ev
 the previous generation's rows answer for inputs this run never took.
 
 "This run's inputs" is not the batch context map, which holds only what was submitted.
-Several narrowings sit between the two -- the action's `record_limit`, a repair's named
-records, the disposition gate -- and a record dropped by any of them is still an input whose
-stored rows must be carried. So the pipeline hands the batch path the same pre-narrowing
-input it already hands the online path (`offered_to_repair`), submission records it
-(`BatchContextManager.save_batch_inputs`), and the merge reads it back. Reading anything
-narrower deletes the rows of every record the run left out: on an ordinary incremental run
-that is everything already done, and on `agac retry` everything the repair did not name.
-Where no input was recorded -- a batch submitted before it was, or a store with no backend
--- every unanswered row is carried, since nothing is known about the run.
+The action's `record_limit` and the disposition gate both sit between the two, and a record
+either drops is still an input whose stored rows must be carried. So the pipeline hands the
+batch path the same pre-narrowing input it already hands the online path
+(`offered_to_repair`), submission records it (`BatchContextManager.save_batch_inputs`), and
+the merge reads it back. Reading anything narrower deletes the rows of every record the run
+left out, which on an ordinary incremental run is everything already done.
+
+Two kinds of run carry more than their inputs' rows, each because online does:
+
+- **A repair records no inputs.** `agac retry` answers the records it named and nothing
+  else, and online hands back every stored row it did not name (`carried_past_repair`). A
+  stored row can sit under an identity the repair's input does not derive -- its record
+  absent that run, or stored under another file's identity -- and read against the inputs it
+  would be left out. With nothing recorded every unanswered row is carried, which is also
+  what a batch submitted before inputs were recorded gets. `agac retry` clears the last
+  run's recording with the rest of the batch state before it submits.
+- **A run that answered nothing replaces no answer.** Online raises before it writes when
+  everything it sent failed (`raise_if_terminal_failure`), so its stored answers stand. Here
+  the failures are written, beside every stored answer whichever input it was for. Stored
+  rows that are not answers still follow the inputs, or each such run over inputs minted
+  again would add its rows beside the last run's.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
@@ -417,13 +429,31 @@ Leaving a row out is safe only because an input that returns is answered again. 
 carries any input with a terminal disposition, and one whose row was left out has the
 disposition and no row. Online re-queues those (`build_carry_forward` reports them
 `missing`); submission does the same, looking the stored file up under the name finalize
-writes it (`batch_output_name`), so the two cannot disagree about whether a row exists.
+writes it (`batch_output_name`), so the two cannot disagree about whether a row exists. An
+input the guard filtered is not looked up, since it holds no row by design. It is sent on
+to the guard again instead: online's guard runs above its gate and judges every input
+afresh, where the gate here would call a filtered one done for good.
 
-One difference from online remains, on the keeping side. A run whose every input the gate
-carries submits nothing and finalizes nothing, so the file is left as it stands and can
-still hold a row for an input that has left; online would rewrite the file without it.
-`tests/integration/test_batch_rerun_matches_online.py` runs each case through both paths
-against a real store and requires the same file.
+When the guard leaves nothing to send, submission returns a tombstone that the pipeline
+writes as the whole file. It goes through the same merge
+(`with_stored_rows_not_reproduced`), so that write carries what a finalize would. Alone it
+replaced every stored answer with nothing while their dispositions still said done.
+
+The two paths do not always leave the same file. Every difference is batch keeping more:
+
+- A run whose every input the gate carries submits nothing and finalizes nothing, so the
+  file is left as it stands. It can still hold rows of inputs that have left, or that a
+  record limit holds back; online writes the file again without them and answers them again
+  when they return.
+- A run in which something fails and nothing succeeds writes its failed rows. Online writes
+  nothing.
+- The gate runs above the guard here, so an answered input that now fails the guard keeps
+  its answer. Online replaces it with a tombstone, or with nothing.
+- A row naming several inputs is always carried.
+
+`tests/integration/test_batch_rerun_matches_online.py` drives both paths from
+`ProcessingPipeline.process` against a real store and requires that batch is never the one
+holding less.
 
 ---
 

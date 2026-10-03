@@ -475,11 +475,6 @@ class BatchProcessingService:
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
 
-        *relative_path* is the file being written and the only file read: the rows
-        go straight to the write, so gathering them across the action's other files
-        puts those files' records into this one. A store this cannot read raises
-        rather than returning the batch's answers alone, which replace the file.
-
         A *stored* row's disposition does not decide whether it comes back: `failed`
         is not terminal, and a batch narrowed to one record would drop the rest. What
         the run *produced* is read the other way round — only a settled row answers for
@@ -491,40 +486,15 @@ class BatchProcessingService:
         if not self._storage_backend or not action_name:
             return batch_output
 
-        try:
-            stored = self._storage_backend.read_target_for_rewrite(action_name, relative_path)
-        except FileNotFoundError:
-            # Nothing stored for this file yet, so nothing to carry.
-            return batch_output
+        from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
-        from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
-
-        carry_guids = stored_rows_not_reproduced(stored, batch_output, batch_inputs=batch_inputs)
-        if not carry_guids:
-            return batch_output
-
-        from agent_actions.processing.disposition_gate import build_carry_forward
-
-        # Re-reads the same file, which the reconstruction cache answers, and in
-        # exchange keeps the one-row-per-identity rule in the place that owns it.
-        # Not its checkpoint fallback: a file with no stored rows has returned
-        # above, so that branch is unreachable from here.
-        carry_records, _missing = build_carry_forward(
-            carry_guids, action_name, relative_path, self._storage_backend
+        return with_stored_rows_not_reproduced(
+            batch_output,
+            action_name,
+            relative_path,
+            self._storage_backend,
+            batch_inputs=batch_inputs,
         )
-
-        if carry_records:
-            logger.info(
-                "Merging %d carry-forward records into batch output for %s",
-                len(carry_records),
-                action_name,
-            )
-
-        # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored
-        # whole and leaves the rest for `write_target` to re-derive, so a row
-        # round-trips into the mode it had. Stamping "full" re-stores every
-        # carried row whole — rewriting rows this run never reprocessed.
-        return batch_output + carry_records
 
     def _process_single_batch_file(
         self,

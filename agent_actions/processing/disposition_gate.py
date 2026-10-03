@@ -196,11 +196,12 @@ def stored_rows_not_reproduced(
     """Identities in *stored* to write again beside what *produced* holds.
 
     A stored row is carried where the input it answered for is one of *batch_inputs* and
-    this run did not answer it: the gate carried it, a limit left it out, or it failed.
-    A row whose input is not among them is not part of this run's output, which is what
-    an online run leaves too. Matching is by input, since a minting action's runs share
-    no identity: a processed row answers for the producer it names, else for the identity
-    it carries. With no inputs recorded every row not answered again is carried.
+    this run did not answer it; one whose input is not among them is not part of this
+    run's output, as online leaves it. Matching is by input, since a minting action's
+    runs share no identity: a processed row answers for the producer it names, else for
+    the identity it carries. With no inputs recorded every unanswered row is carried.
+    A run that answered nothing replaces no answer, as online raises before it writes;
+    stored rows that are not answers still follow the inputs.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -236,7 +237,8 @@ def stored_rows_not_reproduced(
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
             continue
-        if inputs and answers_for not in inputs:
+        stands = not answered and row.get("_state") == RecordState.PROCESSED.value
+        if inputs and answers_for not in inputs and not stands:
             left.add(guid)
         else:
             carry.add(guid)
@@ -252,6 +254,50 @@ def stored_rows_not_reproduced(
             len(inputs),
         )
     return carry
+
+
+def with_stored_rows_not_reproduced(
+    produced: list[dict[str, Any]],
+    action_name: str,
+    relative_path: str,
+    storage_backend: StorageBackend,
+    *,
+    batch_inputs: Collection[str] = (),
+) -> list[dict[str, Any]]:
+    """*produced* followed by every stored row it does not replace: the file to write.
+
+    *relative_path* is the file being written and the only file read: the rows go
+    straight to the write, so gathering them across the action's other files puts those
+    files' records into this one. A store this cannot read raises rather than returning
+    *produced* alone, which would replace the file.
+    """
+    try:
+        stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        # Nothing stored for this file yet, so nothing to carry.
+        return produced
+
+    carry_guids = stored_rows_not_reproduced(stored, produced, batch_inputs=batch_inputs)
+    if not carry_guids:
+        return produced
+
+    # Re-reads the same file, which the reconstruction cache answers, to keep the
+    # one-row-per-identity rule in the place that owns it. Its checkpoint fallback is
+    # unreachable: a file with no stored rows has returned above.
+    carry_records, _missing = build_carry_forward(
+        carry_guids, action_name, relative_path, storage_backend
+    )
+    if carry_records:
+        logger.info(
+            "Merging %d carry-forward records into batch output for %s",
+            len(carry_records),
+            action_name,
+        )
+
+    # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored whole, so
+    # a row round-trips into the mode it had. Stamping "full" would re-store every
+    # carried row whole, rewriting rows this run never reprocessed.
+    return produced + carry_records
 
 
 def build_carry_forward(

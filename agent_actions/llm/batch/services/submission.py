@@ -34,7 +34,7 @@ from agent_actions.logging.events.batch_events import (
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
 from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.storage.backend import DISPOSITION_DEFERRED
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -173,33 +173,44 @@ class BatchSubmissionService:
                 f"Failed to check batch status: {e}", context={"vendor": vendor}, cause=e
             ) from e
 
-    def _carried_with_no_stored_row(
+    def _carried_to_look_at_again(
         self,
-        data: list[dict[str, Any]],
         to_process: list[dict[str, Any]],
         carry_ids: set[str],
         action_name: str,
         batch_name: str,
-    ) -> list[dict[str, Any]]:
-        """The inputs the gate carried that no stored row answers for, to answer again.
+    ) -> set[str]:
+        """The inputs the gate carried that online would not simply carry.
 
-        Finalize carries a stored row only for an input of the run, so an input that left
-        and returned has a disposition and no row. Online re-queues those; left out here
-        it would be neither carried nor answered.
+        Two kinds. An input the guard filtered, which has no row by design: online's
+        guard runs above its gate and judges it afresh every run, where the gate here
+        would call it done for good. Sent on, the guard filters it again at no cost, or
+        it now passes and is answered. And an input holding no stored row though its
+        disposition says it should: finalize carries a row only for an input of the run,
+        so one that left and returned has lost its row, and online re-queues it.
         """
         if not carry_ids or self._storage_backend is None:
-            return []
+            return set()
+        filtered = carry_ids & {
+            row["record_id"]
+            for row in self._storage_backend.get_disposition(
+                action_name, disposition=DISPOSITION_FILTERED
+            )
+        }
+        holding = carry_ids - filtered
+        if not holding:
+            return filtered
         from agent_actions.processing.disposition_gate import build_carry_forward
 
         _found, missing = build_carry_forward(
-            set(carry_ids),
+            holding,
             action_name,
             batch_output_name(batch_name),
             self._storage_backend,
-            produced_by=carry_ids,
+            produced_by=holding,
             rewriting={guid for record in to_process if (guid := record.get("source_guid"))},
         )
-        return [record for record in data if record.get("source_guid") in missing]
+        return filtered | missing
 
     def submit_batch_job(
         self,
@@ -212,25 +223,11 @@ class BatchSubmissionService:
         workflow_metadata: dict[str, Any] | None = None,
         run_inputs: list[dict[str, Any]] | None = None,
     ) -> SubmissionResult:
-        """Submit a batch job for processing.
+        """Submit a batch job, or return a passthrough when nothing is left to send.
 
-        Args:
-            agent_config: Agent configuration
-            batch_name: Name for the batch
-            data: Input data to process
-            output_directory: Output directory path
-            force: Force new submission even if in-flight batch exists
-            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
-            run_inputs: This action's input above every narrowing. Recorded for
-                carry-forward, which cannot otherwise tell a record the run left
-                out from one that no longer exists. None records nothing.
-
-        Returns:
-            SubmissionResult with batch_id if submitted, or passthrough dict if no tasks
-
-        Raises:
-            ConfigValidationError: If model_vendor missing
-            ExternalServiceError: If submission fails
+        *run_inputs* is this action's input above every narrowing, recorded for
+        carry-forward, which cannot otherwise tell a record the run left out from one
+        that no longer exists. None records nothing, and neither does a repair.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -263,45 +260,34 @@ class BatchSubmissionService:
                     entry.batch_id,
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
-        # Never off `data`: the record limit, a repair and the gate below all narrow it,
-        # and a record any of them drops still holds rows this action must carry.
-        if (
-            run_inputs is None
-            and self._disposition_gate is not None
-            and self._disposition_gate.repairing
-        ):
-            # As `UnifiedProcessor.process` refuses: recording a repair's own narrowing
-            # as the whole input reads every other record's rows as a generation gone.
-            raise ConfigurationError(
-                f"Action '{action_name}' is repairing records but was given no "
-                "pre-narrowing input. Without it carry-forward cannot tell a record "
-                "this run left out from one that no longer exists, and would delete "
-                "the stored rows of every record the repair did not name.",
-                context={"action_name": action_name, "batch_name": batch_name},
-            )
+        # Never off `data`: the record limit and the gate below both narrow it, and a
+        # record either drops still holds rows this action must carry.
         run_input_guids = (
             [guid for row in run_inputs if (guid := row.get("source_guid"))]
             if run_inputs is not None
             else None
         )
-        carry_forward_guids: list[str] = []
+        if self._disposition_gate is not None and self._disposition_gate.repairing:
+            # A repair answers what it named, and online carries every stored row it
+            # did not name. Read against its inputs, a row under an identity this run
+            # does not derive would be left out.
+            run_input_guids = None
+        carry_ids: set[str] = set()
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
-            requeued = self._carried_with_no_stored_row(
-                data, to_process, carry_ids, action_name, batch_name
+            again = self._carried_to_look_at_again(to_process, carry_ids, action_name, batch_name)
+            carry_ids = carry_ids - again
+            # Read off the input, so one looked at again keeps its place in it.
+            data = (
+                [record for record in data if record.get("source_guid") not in carry_ids]
+                if again
+                else to_process
             )
-            carry_ids = carry_ids - {record["source_guid"] for record in requeued}
-            data = to_process + requeued
-            if carry_ids:
-                carry_forward_guids = sorted(carry_ids)
-
-        # Carry-forward GUIDs are tracked via dispositions in the storage
-        # backend — no filesystem artifact needed.
 
         if not data:
             logger.info(
                 "All %d records have terminal dispositions — skipping batch submission",
-                len(carry_forward_guids),
+                len(carry_ids),
             )
             return SubmissionResult(batch_id=None, passthrough={"carry_forward_only": True})
 
@@ -310,8 +296,13 @@ class BatchSubmissionService:
         )
 
         if not tasks:
-            return self._handle_empty_tasks(
-                agent_config, context_map, data, output_directory, action_name=action_name
+            return self._with_stored_rows(
+                self._handle_empty_tasks(
+                    agent_config, context_map, data, output_directory, action_name=action_name
+                ),
+                action_name,
+                batch_name,
+                run_input_guids,
             )
 
         if output_directory and self._storage_backend:
@@ -330,6 +321,37 @@ class BatchSubmissionService:
         if self._storage_backend and result.is_submitted:
             self._stamp_deferred(context_map, action_name, result.batch_id)
 
+        return result
+
+    def _with_stored_rows(
+        self,
+        result: SubmissionResult,
+        action_name: str,
+        batch_name: str,
+        run_input_guids: list[str] | None,
+    ) -> SubmissionResult:
+        """Add the stored rows a tombstone does not replace, as finalize would.
+
+        Nothing was left to send, so the passthrough is written as the whole output.
+        Alone it replaces every stored answer with nothing, and their dispositions
+        still say done, so they are never answered again.
+        """
+        passthrough = result.passthrough
+        if (
+            self._storage_backend is None
+            or not passthrough
+            or passthrough.get("type") != "tombstone"
+        ):
+            return result
+        from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
+
+        passthrough["data"] = with_stored_rows_not_reproduced(
+            passthrough["data"],
+            action_name,
+            batch_output_name(batch_name),
+            self._storage_backend,
+            batch_inputs=run_input_guids or (),
+        )
         return result
 
     def _handle_empty_tasks(
