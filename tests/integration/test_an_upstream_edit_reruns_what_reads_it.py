@@ -67,7 +67,7 @@ def test_a_run_with_nothing_edited_runs_neither(chained):  # noqa: F811
     assert {action: _raw_rows(chained, action) for action in (ACTION, SECOND)} == before
 
 
-def test_a_repair_after_the_edit_keeps_the_failure_it_did_not_name(chained):  # noqa: F811
+def test_a_repair_after_the_edit_touches_only_the_record_it_named(chained):  # noqa: F811
     """A repair answers the record it named. Resetting the edited action under it, and
     what reads it, clears every other record's disposition with nothing run to replace
     them, so the other failure can no longer be found."""
@@ -87,6 +87,22 @@ def test_a_repair_after_the_edit_keeps_the_failure_it_did_not_name(chained):  # 
 def test_the_plain_run_after_that_repair_still_finds_the_edit(chained):  # noqa: F811
     named = _record_ids(chained, SECOND)[-1]
     _fail(chained, named, SECOND)
+    _filter_the_first_page(chained)
+    assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named]).exit_code == 0
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+
+    assert result.exit_code == 0, result.output
+    assert len(_stored_guids(chained, ACTION)) == RECORDS - 1
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def test_a_repair_of_the_edited_action_leaves_the_edit_for_the_plain_run(chained):  # noqa: F811
+    """The repair completes the edited action on the one record it named. Stamped as
+    answered under the new config, the other five keep rows the old config wrote, and
+    the plain run calls both actions already complete."""
+    named = _record_ids(chained, ACTION)[-1]
+    _fail(chained, named)
     _filter_the_first_page(chained)
     assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named]).exit_code == 0
 

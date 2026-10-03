@@ -1,5 +1,6 @@
 """Tests for config change detection via action hash."""
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -443,25 +444,141 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert state_mgr.get_status("define") == ActionStatus.COMPLETED
         assert len(backend.get_disposition("define")) == 1
 
-    def test_the_readers_are_reset_before_the_action_itself(self, tmp_path):
-        """A process killed part-way must leave the action as it was found, so the
-        next run finds the same reason to reset it and reaches the readers again."""
+    @pytest.mark.parametrize("stopped_at", ["clear_disposition", "clear_batch_state"])
+    def test_a_reset_stopped_part_way_is_done_again_by_the_next_run(self, tmp_path, stopped_at):
+        """Nothing is put back to pending until every store is cleared, so the process
+        that comes next finds the action as it was, and the same reason to reset it."""
+        executor, _, backend = self._workflow(tmp_path)
+        names = ("split", "define", "grade")
+        working = getattr(backend, stopped_at)
+
+        def killed_at_grade(action_name, *args, **kwargs):
+            if action_name == "grade":
+                raise RuntimeError("killed")
+            return working(action_name, *args, **kwargs)
+
+        setattr(backend, stopped_at, killed_at_grade)
+        with pytest.raises(RuntimeError, match="killed"):
+            self._reset(executor, "split", self.CONFIGS)
+        next_process = ActionStateManager(tmp_path / "status.json", list(self.CONFIGS))
+        assert {name: next_process.get_status(name) for name in names} == dict.fromkeys(
+            names, ActionStatus.COMPLETED
+        )
+
+        setattr(backend, stopped_at, working)
+        executor.deps.state_manager = next_process
+        self._reset(executor, "split", self.CONFIGS)
+
+        assert {name: next_process.get_status(name) for name in names} == dict.fromkeys(
+            names, ActionStatus.PENDING
+        )
+        assert [backend.get_disposition(name) for name in names] == [[], [], []]
+
+    def test_a_cap_an_earlier_run_recorded_outlives_a_reset_stopped_part_way(self, tmp_path):
+        """It is the only record of that cap. Gone from the file before the action is
+        reopened, a process that dies in between leaves a truncated action served as
+        finished."""
         executor, state_mgr, backend = self._workflow(tmp_path)
+        state_mgr.update_status("split", ActionStatus.COMPLETED, record_limit=8, max_records=2)
         clear = backend.clear_disposition
 
-        def killed_at_split(action_name, *args, **kwargs):
-            if action_name == "split":
+        def killed_at_grade(action_name, *args, **kwargs):
+            if action_name == "grade":
                 raise RuntimeError("killed")
             return clear(action_name, *args, **kwargs)
 
-        backend.clear_disposition = killed_at_split
+        backend.clear_disposition = killed_at_grade
 
         with pytest.raises(RuntimeError, match="killed"):
+            executor._maybe_invalidate_completed_status(
+                "split", {**self.CONFIGS["split"], "record_limit": 8}, ActionStatus.COMPLETED
+            )
+
+        next_process = ActionStateManager(tmp_path / "status.json", list(self.CONFIGS))
+        assert next_process.adopt_truncation_marker("split") is True
+
+    @pytest.mark.parametrize("left_as", [ActionStatus.BATCH_SUBMITTED, ActionStatus.PENDING])
+    def test_a_batch_a_reader_still_has_out_is_given_up_and_named(self, tmp_path, caplog, left_as):
+        """Pending too: a run stopped while collecting is put back to pending by the
+        next run before anything looks at it, with its batches still in the registry."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        executor, _, backend = self._workflow(tmp_path, statuses={"define": left_as})
+        registry = BatchRegistryManager(backend, "define")
+        registry.save_batch_job(
+            "page.json",
+            BatchJobEntry(batch_id="b_out", status="in_progress", timestamp="t", provider="p"),
+        )
+        registry.save_batch_job(
+            "done.json",
+            BatchJobEntry(
+                batch_id="b_done",
+                status="completed",
+                timestamp="t",
+                provider="p",
+                collected_at="t2",
+            ),
+        )
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions"):
             self._reset(executor, "split", self.CONFIGS)
 
-        assert state_mgr.get_status("split") == ActionStatus.COMPLETED
-        assert state_mgr.get_status("define") == ActionStatus.PENDING
-        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+        assert BatchRegistryManager.batch_ids(backend, "define") == []
+        (given_up,) = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.WARNING and "giving up" in record.getMessage()
+        ]
+        assert "b_out" in given_up
+        assert "b_done" not in given_up
+
+    def test_what_an_interrupted_reader_had_checkpointed_goes_too(self, tmp_path):
+        """Those rows were answered from the output being replaced. Left in the store,
+        a later resume can serve them as this run's."""
+        executor, _, backend = self._workflow(tmp_path, statuses={"define": ActionStatus.PENDING})
+        backend.save_checkpoint_records(
+            "define", "page.json", [{"source_guid": "r1", "content": {"define": {"a": 1}}}]
+        )
+        assert backend.read_checkpoint_records("define", "page.json")
+
+        self._reset(executor, "split", self.CONFIGS)
+
+        assert not backend.read_checkpoint_records("define", "page.json")
+
+    def test_a_repair_leaves_the_stamp_it_found(self, tmp_path):
+        """It answered what it named under the config as it is now. Stamped with that
+        config, the action reads as answered under it throughout, and no later run
+        applies the edit to the records the repair never touched."""
+        executor, state_mgr, _ = self._workflow(tmp_path)
+        state_mgr.update_status("split", ActionStatus.COMPLETED, model_name="first")
+        executor.deps.action_runner.retried_records = frozenset({"r9"})
+        edited = {**self.CONFIGS["split"], "prompt": "Y", "model_name": "second"}
+
+        stamp = executor._completion_metadata("split", edited)
+
+        assert stamp["config_hash"] == _compute_action_config_hash(self.CONFIGS["split"])
+        assert stamp["model_name"] == "first"
+
+    def test_a_repair_completing_an_action_for_the_first_time_stamps_it(self, tmp_path):
+        executor, state_mgr, _ = self._workflow(tmp_path)
+        state_mgr.action_status["split"] = {"status": ActionStatus.PENDING}
+        executor.deps.action_runner.retried_records = frozenset({"r9"})
+        edited = {**self.CONFIGS["split"], "prompt": "Y"}
+
+        stamp = executor._completion_metadata("split", edited)
+
+        assert stamp["config_hash"] == _compute_action_config_hash(edited)
+
+    def test_a_repair_says_which_edit_it_left_for_a_plain_run(self, tmp_path, caplog):
+        executor, _, _ = self._workflow(tmp_path)
+        executor.deps.action_runner.retried_records = frozenset({"r9"})
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions"):
+            self._reset(executor, "split", self.CONFIGS)
+
+        assert "split" in caplog.text
+        assert "agac run" in caplog.text
 
     def test_the_order_the_configs_are_held_in_does_not_matter(self, tmp_path):
         configs = dict(reversed(list(self.CONFIGS.items())))
@@ -489,7 +606,11 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
             "aside": ActionStatus.COMPLETED,
         }
 
-    def test_an_action_run_again_over_a_failure_it_recorded_takes_them_with_it(self, tmp_path):
+    def test_an_action_run_again_over_a_failure_it_recorded_keeps_what_its_readers_hold(
+        self, tmp_path
+    ):
+        """It still holds its rows and its records' dispositions, so it answers only what
+        failed and carries the rest. What its readers computed from those rows stands."""
         from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
 
         executor, state_mgr, backend = self._workflow(tmp_path)
@@ -499,20 +620,21 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert executor.verify_completion_status("split") is False
 
         assert state_mgr.get_status("split") == ActionStatus.PENDING
-        assert state_mgr.get_status("define") == ActionStatus.PENDING
-        assert state_mgr.get_status("grade") == ActionStatus.PENDING
-        assert state_mgr.get_status("aside") == ActionStatus.COMPLETED
+        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
+        assert len(backend.get_disposition("define")) == 1
 
-    def test_an_action_run_again_because_its_output_could_not_be_read_takes_them_with_it(
+    def test_an_action_run_again_because_its_output_could_not_be_read_keeps_what_its_readers_hold(
         self, tmp_path
     ):
+        """One read that fails is no evidence the output changed."""
         executor, state_mgr, backend = self._workflow(tmp_path)
         backend.list_target_files = MagicMock(side_effect=RuntimeError("unreadable"))
 
         assert executor.verify_completion_status("split") is False
 
         assert state_mgr.get_status("split") == ActionStatus.PENDING
-        assert state_mgr.get_status("define") == ActionStatus.PENDING
+        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
+        assert len(backend.get_disposition("define")) == 1
 
     def test_a_reset_that_fails_part_way_is_not_read_as_a_failure_to_verify(self, tmp_path):
         """Swallowed, the run goes on with some readers reset and the rest left stale."""
