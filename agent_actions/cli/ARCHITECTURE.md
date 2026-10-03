@@ -210,7 +210,7 @@ after constructing the workflow, so with the reset in place it reported
 "No failed records ... Nothing to retry" about rows its own constructor had
 just deleted.
 
-The inspect commands do NOT use this helper -- `BaseInspectCommand._load_workflow()` has its own copy of this logic because it omits `output_dir` from the rendering step and always sets `use_tools=False`.
+The inspect commands do NOT use this helper -- `BaseInspectCommand._load_inspector()` builds a `WorkflowInspector`, which calls the shared `load_workflow_configs` with `use_tools=False` and `fire_events=False` and no `output_dir`.
 
 ---
 
@@ -485,7 +485,7 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 
 8. **`_LazyCLI` proxy.** `main.py` exports a module-level `cli` object that defers `CLI()` instantiation until first access. This exists so that tools importing the module (e.g., for testing or documentation) don't trigger the full bootstrap (signal handlers, event firing) on import.
 
-9. **`BaseInspectCommand._load_workflow()` duplicates `load_workflow()`.** The inspect base class has its own workflow loading logic instead of calling the shared `workflow_loader.load_workflow()`. This is because inspect commands omit `output_dir` from `ConfigRenderingService().render_and_load_config()` and always set `use_tools=False`. The duplication is intentional but means changes to config loading must be applied in both places.
+9. **Inspection loads config through `WorkflowInspector`, not `load_workflow()`.** `BaseInspectCommand._load_inspector()` constructs a `WorkflowInspector`, which calls the shared `load_workflow_configs` with `use_tools=False` and `fire_events=False`, and passes no `output_dir` -- a read-only pass with no storage or runtime init and no `verify_keys`. There is no duplicated loader: an earlier `_load_workflow()` on the base class did keep its own copy, and this entry described that copy for some time after it was removed (#1201).
 
 10. **`init` uses `_InitGroup` for implicit routing.** `agac init my_project` works because `_InitGroup.resolve_command()` detects that `my_project` is not a known subcommand and routes it to the `new` subcommand. This means you cannot name a project `list`, `new`, or `example` without using the explicit `agac init new list` form.
 

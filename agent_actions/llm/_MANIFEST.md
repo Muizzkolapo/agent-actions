@@ -28,8 +28,8 @@ Cohere, etc.).
 | `BaseVendorConfig` | `.env` | Reads | `api_key_env_name` |
 | `create_dynamic_agent()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 | `OutputHandler.save_main_output()` | `agent_io/target/{action}/` | Writes | — |
-| `BatchSubmissionService.submit()` | `agent_io/staging/` | Reads | — |
-| `BatchRetrievalService.retrieve()` | `agent_io/target/{action}/` | Writes | — |
+| `BatchSubmissionService.submit_batch_job()` | `agent_io/staging/` | Reads | — |
+| `BatchRetrievalService.retrieve_results()` | `agent_io/target/{action}/` | Writes | — |
 | `batch_cli` | `agent_actions.yml` | Reads | — |
 
 **Internal only**: `VendorType`, `ResponseFormat`, `VendorConfig`, `BatchJobEntry`, `SubmissionResult`, `BatchContextManager`, `BatchRegistryManager`, `BatchContextMetadata`, `BatchTaskPreparator`, `BatchClientResolver`, `ContextService`, `PromptService`, `CLIENT_REGISTRY` -- no direct project surface.

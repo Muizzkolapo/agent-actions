@@ -21,7 +21,6 @@
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `compile.py` | Module | Render command for the Agent Actions CLI. | `cli`, `errors`, `prompt_generation`, `validation` |
-| `RenderCommand` | Class | Implementation of the render command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `compile` | Function | Alias for render — compile workflow configuration. | - |
@@ -118,15 +117,13 @@
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
 | `RunCommand.execute()` | `.agac/batch_state/` | Deletes | `--fresh` |
 | `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
-| `RenderCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
-| `RenderCommand.execute()` | `prompt_store/{workflow}.md` | Reads | — |
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `SchemaCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema_name` |
 | `StatusCommand.execute()` | `agent_io/staging/` | Reads | — |
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
-| `BaseInspectCommand._load_workflow()` | `agent_config/{workflow}.yml` | Reads | — |
+| `BaseInspectCommand._load_inspector()` | `agent_config/{workflow}.yml` | Reads | — |
 | `clean_cli()` | `agent_io/source/` | Writes | — |
 | `clean_cli()` | `agent_io/staging/` | Writes | — |
 | `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
