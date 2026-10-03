@@ -15,7 +15,5 @@ body: >-
   been collected. So that this does not cost a second submission, a run killed while
   collecting a batch now keeps the done records of the files it had already collected, as an
   interrupted run keeps its checkpoints; before, they were wiped and only the finished job
-  kept those files from being sent again. A collect pass that ends in an error, not a kill,
-  still wipes them, as a failed action does in online mode, and sends those files again
-  (#1211).
+  kept those files from being sent again. A collect pass that ends in an error keeps them too.
 time: 2026-10-03T03:00:00Z

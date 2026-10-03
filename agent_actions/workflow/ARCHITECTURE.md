@@ -466,29 +466,41 @@ Why: such actions may have checkpointed SUCCESS dispositions.
 Bulk-wiping them destroys resume progress.
 
 Which statuses count is MID_PROCESSING_STATUSES:
-    RUNNING     — the process died without unwinding (SIGKILL, OOM,
-                  power loss), so nothing rewrote the status.
-    INTERRUPTED — the coordinator caught Ctrl-C/SIGTERM/cancellation
-                  and recorded a terminal status on the way out.
+    RUNNING        — the process died without unwinding (SIGKILL, OOM,
+                     power loss), so nothing rewrote the status.
+    INTERRUPTED    — the coordinator caught Ctrl-C/SIGTERM/cancellation
+                     and recorded a terminal status on the way out.
+    CHECKING_BATCH — the process died while collecting a batch. The
+                     files it reached are written and their records done.
 
-If you change this to bulk-clear for either:
+One FAILED action counts too: one the error handler swept from
+CHECKING_BATCH. The state manager marks it (`stopped_collecting`) in
+the write that gives it the new status, because FAILED alone no longer
+says it was collecting. Any later status change drops the mark.
+
+If you change this to bulk-clear for any of them:
     Checkpoint resume breaks — the DispositionGate finds no terminal
-    IDs and reprocesses everything from scratch.
+    IDs and reprocesses everything from scratch. For a batch that means
+    submitting, and paying for, every collected file again.
 
-The same trap applies to routing an interrupt through FAILED: that
-status is bulk-wiped by design, so collapsing INTERRUPTED into it
-silently destroys the checkpoint it exists to protect.
+The same trap applies to routing an interrupt through FAILED: every
+other FAILED action the reset takes is bulk-wiped by design, so
+collapsing INTERRUPTED into it silently destroys the checkpoint it
+exists to protect. (A FAILED action halted by `on_exhausted: raise` is
+not reset at all.)
 ```
 
 ### The snapshot ordering in _reset_retryable_actions matters
 
 ```
-running_actions = {... get_status == RUNNING ...}   ← snapshot BEFORE
-reset_actions = state_mgr.reset_retryable()          ← mutates to PENDING
+running_actions = {... status in MID_PROCESSING_STATUSES
+                       or stopped_collecting(name) ...}   ← snapshot BEFORE
+reset_actions = state_mgr.reset_retryable(exclude=halted)  ← mutates to PENDING
 
 The snapshot MUST be captured before reset_retryable() because
-reset_retryable() transitions all matching statuses to PENDING.
-After the call, you can't tell which actions were RUNNING.
+reset_retryable() transitions all matching statuses to PENDING and
+drops the stopped_collecting mark with them. After the call, you
+can't tell which actions were mid-processing.
 
 If you swap the order:
     running_actions is always empty → all actions get bulk-cleared
