@@ -87,3 +87,27 @@ def test_a_later_failure_while_running_is_wiped_though_an_earlier_one_was_collec
     _next_run_resets(tmp_path, backend)
 
     assert _dispositions(backend) == {}
+
+
+def test_agac_retry_drops_the_mark_though_it_runs_no_reset(tmp_path, backend):
+    """Retry sets the status itself. Left on, the mark would make a later failure of the
+    same action, while running, look like a collect pass and keep what it should wipe."""
+    _stopped(tmp_path, ActionStatus.CHECKING_BATCH)
+    retrying = ActionStateManager(tmp_path / ".agent_status.json", EXECUTION_ORDER)
+    retrying.update_status("agent_a", ActionStatus.PENDING)
+    _stopped(tmp_path, ActionStatus.RUNNING)
+
+    _next_run_resets(tmp_path, backend)
+
+    assert _dispositions(backend) == {}
+
+
+def test_an_action_left_out_of_the_reset_keeps_its_mark_for_when_it_is_reset(tmp_path):
+    _stopped(tmp_path, ActionStatus.CHECKING_BATCH)
+    manager = ActionStateManager(tmp_path / ".agent_status.json", EXECUTION_ORDER)
+
+    manager.reset_retryable(exclude={"agent_a"})
+
+    later = ActionStateManager(tmp_path / ".agent_status.json", EXECUTION_ORDER)
+    assert later.stopped_collecting("agent_a") is True
+    assert later.get_status("agent_a") == ActionStatus.FAILED

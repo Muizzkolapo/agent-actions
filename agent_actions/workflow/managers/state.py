@@ -121,6 +121,8 @@ class ActionStateManager:
                 self.action_status[action_name] = {}
 
             self.action_status[action_name]["status"] = status
+            # What the action was doing when it was stopped is true of that status only.
+            self.action_status[action_name].pop(_STOPPED_COLLECTING, None)
 
             for key, value in metadata.items():
                 self.action_status[action_name][key] = value
@@ -226,11 +228,16 @@ class ActionStateManager:
         from_statuses: frozenset[ActionStatus] | set[ActionStatus],
         to_status: ActionStatus,
         exclude: Container[str] = (),
+        mark_collecting: bool = False,
     ) -> list[str]:
         """Transition all actions matching *from_statuses* to *to_status*.
 
         Holds the lock for the entire scan-mutate-save cycle and persists
         at most once.  Returns the names of affected actions.
+
+        *mark_collecting* records, in the same write, which of them were collecting a
+        batch: the status they are given no longer says so. Any other transition
+        drops that mark, so it never describes a status it was not set with.
         """
         with self._lock:
             affected = [
@@ -239,7 +246,13 @@ class ActionStateManager:
                 if details.get("status") in from_statuses and name not in exclude
             ]
             for name in affected:
-                self.action_status[name]["status"] = to_status
+                details = self.action_status[name]
+                was_collecting = details.get("status") == ActionStatus.CHECKING_BATCH
+                details["status"] = to_status
+                if mark_collecting and was_collecting:
+                    details[_STOPPED_COLLECTING] = True
+                else:
+                    details.pop(_STOPPED_COLLECTING, None)
             if affected:
                 self._save_status()
         return affected
@@ -252,11 +265,9 @@ class ActionStateManager:
         """
         # An action stopped while collecting has written the files it reached, and the
         # status it is about to be given no longer says that is what it was doing.
-        with self._lock:
-            for details in self.action_status.values():
-                if details.get("status") == ActionStatus.CHECKING_BATCH:
-                    details[_STOPPED_COLLECTING] = True
-        return self._bulk_transition({ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status)
+        return self._bulk_transition(
+            {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status, mark_collecting=True
+        )
 
     def stopped_collecting(self, action_name: str) -> bool:
         """Whether *action_name* was collecting a batch when its run was stopped."""
@@ -284,14 +295,7 @@ class ActionStateManager:
         the returned action names, and name in *exclude* any action whose
         state must be preserved rather than retried.
         """
-        reset = self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING, exclude=exclude)
-        with self._lock:
-            forgot = [
-                name for name in reset if self.action_status[name].pop(_STOPPED_COLLECTING, None)
-            ]
-            if forgot:
-                self._save_status()
-        return reset
+        return self._bulk_transition(RETRYABLE_STATUSES, ActionStatus.PENDING, exclude=exclude)
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses (current actions only)."""

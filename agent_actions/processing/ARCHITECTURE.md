@@ -660,7 +660,9 @@ Why the asymmetry:
   A collect pass that ends in an error, not a kill, is marked FAILED by the
   error handler. It holds what it collected all the same, so the state
   manager records that it was stopped while collecting (`stopped_collecting`)
-  and the reset clears it selectively too. The mark is dropped at that reset.
+  and the reset clears it selectively too. The mark goes with the next status
+  change, so the protection covers one reset: if the resumed run then fails
+  while running, before it is back to collecting, the reset after that wipes.
 
   FAILED = zero successes whenever _resolve_completion_status classified it
   (it returns FAILED only when has_successful_items() is False). An action
