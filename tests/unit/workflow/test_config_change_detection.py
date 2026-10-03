@@ -360,16 +360,107 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert status == ActionStatus.COMPLETED
         assert state_mgr.get_status("define") == ActionStatus.COMPLETED
 
-    def test_a_dependent_with_a_batch_in_flight_is_left_to_finish(self, tmp_path):
-        """Its batch is at the provider; clearing its state would strand the results."""
-        executor, state_mgr, backend = self._workflow(
-            tmp_path, statuses={"define": ActionStatus.BATCH_SUBMITTED}
-        )
+    @pytest.mark.parametrize(
+        "left_as",
+        [
+            ActionStatus.COMPLETED_WITH_FAILURES,
+            ActionStatus.BATCH_SUBMITTED,
+            ActionStatus.CHECKING_BATCH,
+            ActionStatus.PENDING,
+            ActionStatus.FAILED,
+        ],
+    )
+    def test_a_dependent_is_reset_whatever_state_it_was_left_in(self, tmp_path, left_as):
+        """A batch still out was sent the old output, and the records an interrupted
+        run had finished were answered from it. Left alone they complete as they are."""
+        executor, state_mgr, backend = self._workflow(tmp_path, statuses={"define": left_as})
 
         self._reset(executor, "split", self.CONFIGS)
 
-        assert state_mgr.get_status("define") == ActionStatus.BATCH_SUBMITTED
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
+        assert backend.get_disposition("define") == []
+        assert backend.load_metadata("batch_inputs:define:page.json") is None
+        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+
+    def test_a_dependent_halted_on_exhaustion_is_no_longer_halted(self, tmp_path):
+        """What it exhausted on is gone with the output it was read from."""
+        from agent_actions.record.reasons import HALTED_ON_EXHAUSTED
+        from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+        from agent_actions.workflow.executor import action_is_halted
+
+        executor, state_mgr, backend = self._workflow(
+            tmp_path, statuses={"define": ActionStatus.FAILED}
+        )
+        backend.set_disposition(
+            "define", NODE_LEVEL_RECORD_ID, DISPOSITION_FAILED, detail=HALTED_ON_EXHAUSTED
+        )
+        assert action_is_halted(backend, "define")
+
+        self._reset(executor, "split", self.CONFIGS)
+
+        assert not action_is_halted(backend, "define")
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
+
+    def test_an_action_that_names_it_only_in_its_context_scope_is_reset(self, tmp_path):
+        """It is handed that output through the record, and the run order counts it."""
+        configs = {
+            **self.CONFIGS,
+            "reader": {
+                **self.PROMPT,
+                "dependencies": ["aside"],
+                "context_scope": {"observe": ["aside.*", "split.topic"]},
+            },
+        }
+        executor, state_mgr, _ = self._workflow(tmp_path, configs)
+
+        self._reset(executor, "split", configs)
+
+        assert state_mgr.get_status("reader") == ActionStatus.PENDING
+        assert state_mgr.get_status("aside") == ActionStatus.COMPLETED
+
+    def test_a_repair_resets_nothing(self, tmp_path):
+        """It answers only the records it named. A reset would clear every other
+        record's disposition, a failure among them, with nothing run to replace it."""
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        executor.deps.action_runner.retried_records = frozenset({"r9"})
+
+        status = self._reset(executor, "split", self.CONFIGS)
+
+        assert status == ActionStatus.COMPLETED
+        assert {name: state_mgr.get_status(name) for name in self.CONFIGS} == dict.fromkeys(
+            self.CONFIGS, ActionStatus.COMPLETED
+        )
+        assert {name: len(backend.get_disposition(name)) for name in self.CONFIGS} == dict.fromkeys(
+            self.CONFIGS, 1
+        )
+
+    def test_a_repair_that_finds_output_gone_leaves_the_readers_as_they_are(self, tmp_path):
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        executor.deps.action_runner.retried_records = frozenset({"r9"})
+
+        assert executor.verify_completion_status("split") is False
+
+        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
         assert len(backend.get_disposition("define")) == 1
+
+    def test_the_readers_are_reset_before_the_action_itself(self, tmp_path):
+        """A process killed part-way must leave the action as it was found, so the
+        next run finds the same reason to reset it and reaches the readers again."""
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        clear = backend.clear_disposition
+
+        def killed_at_split(action_name, *args, **kwargs):
+            if action_name == "split":
+                raise RuntimeError("killed")
+            return clear(action_name, *args, **kwargs)
+
+        backend.clear_disposition = killed_at_split
+
+        with pytest.raises(RuntimeError, match="killed"):
+            self._reset(executor, "split", self.CONFIGS)
+
+        assert state_mgr.get_status("split") == ActionStatus.COMPLETED
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
         assert state_mgr.get_status("grade") == ActionStatus.PENDING
 
     def test_the_order_the_configs_are_held_in_does_not_matter(self, tmp_path):
@@ -397,6 +488,48 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
             "grade": ActionStatus.PENDING,
             "aside": ActionStatus.COMPLETED,
         }
+
+    def test_an_action_run_again_over_a_failure_it_recorded_takes_them_with_it(self, tmp_path):
+        from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        backend.write_target("split", "page.json", [{"source_guid": "r1", "content": {}}])
+        backend.set_disposition("split", NODE_LEVEL_RECORD_ID, DISPOSITION_FAILED)
+
+        assert executor.verify_completion_status("split") is False
+
+        assert state_mgr.get_status("split") == ActionStatus.PENDING
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
+        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+        assert state_mgr.get_status("aside") == ActionStatus.COMPLETED
+
+    def test_an_action_run_again_because_its_output_could_not_be_read_takes_them_with_it(
+        self, tmp_path
+    ):
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        backend.list_target_files = MagicMock(side_effect=RuntimeError("unreadable"))
+
+        assert executor.verify_completion_status("split") is False
+
+        assert state_mgr.get_status("split") == ActionStatus.PENDING
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
+
+    def test_a_reset_that_fails_part_way_is_not_read_as_a_failure_to_verify(self, tmp_path):
+        """Swallowed, the run goes on with some readers reset and the rest left stale."""
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        clear = backend.clear_disposition
+
+        def fails_at_grade(action_name, *args, **kwargs):
+            if action_name == "grade":
+                raise RuntimeError("store went away")
+            return clear(action_name, *args, **kwargs)
+
+        backend.clear_disposition = fails_at_grade
+
+        with pytest.raises(RuntimeError, match="store went away"):
+            executor.verify_completion_status("split")
+
+        assert state_mgr.get_status("split") == ActionStatus.COMPLETED
 
     def test_an_action_that_merges_versions_follows_any_one_of_them(self, tmp_path):
         configs = {

@@ -68,8 +68,9 @@ class TestCheckPriorOutputIntentionalNoOutput:
         backend = MagicMock()
         backend.list_target_files.return_value = []
         backend.has_disposition.return_value = False
+        executor.deps.action_runner.storage_backend = backend
 
-        has_output, result = executor._check_prior_output(backend, "my_action")
+        has_output, result = executor._verify_completion_status("my_action")
 
         assert has_output is False
         assert result is None
@@ -97,8 +98,9 @@ class TestCheckPriorOutputIntentionalNoOutput:
             return disp == DISPOSITION_FAILED and record_id == NODE_LEVEL_RECORD_ID
 
         backend.has_disposition.side_effect = has_disp
+        executor.deps.action_runner.storage_backend = backend
 
-        has_output, result = executor._check_prior_output(backend, "my_action")
+        has_output, result = executor._verify_completion_status("my_action")
 
         assert has_output is False
         assert result is None
