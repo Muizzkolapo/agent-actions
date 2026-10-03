@@ -624,17 +624,22 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED)
+  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED, CHECKING_BATCH)
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
                     Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
 
-  All other retryable statuses (FAILED, SKIPPED, CHECKING_BATCH)
+  All other retryable statuses (FAILED, SKIPPED)
                  → bulk clear ALL dispositions
 
 Why the asymmetry:
   RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
   dispositions that should survive for carry-forward on resume.
+
+  CHECKING_BATCH = died while collecting a batch. The files it reached are
+  written and their records done. A finished batch job stops its file being
+  submitted again only until it is collected, so with those dispositions
+  wiped each collected file is submitted, and paid for, a second time.
 
   FAILED = zero successes whenever _resolve_completion_status classified it
   (it returns FAILED only when has_successful_items() is False). An action

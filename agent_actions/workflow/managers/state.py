@@ -56,9 +56,11 @@ RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
 )
 # Statuses whose action died mid-processing and may hold checkpointed SUCCESS
 # dispositions. _reset_retryable_actions must clear these selectively, never in
-# bulk, or resume reprocesses work that already succeeded.
+# bulk, or resume reprocesses work that already succeeded. CHECKING_BATCH is one:
+# a run that dies collecting has written the files it reached, and wiped, each is
+# submitted and paid for again.
 MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
-    {ActionStatus.RUNNING, ActionStatus.INTERRUPTED}
+    {ActionStatus.RUNNING, ActionStatus.INTERRUPTED, ActionStatus.CHECKING_BATCH}
 )
 
 
