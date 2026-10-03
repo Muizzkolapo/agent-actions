@@ -414,11 +414,13 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   would be left out. With nothing recorded every unanswered row is carried, which is also
   what a batch submitted before inputs were recorded gets. The repair's submission removes
   any recording an earlier run left, so that does not rest on who cleared batch state first.
-- **A run that answered nothing replaces no answer.** Online raises before it writes when
-  everything it sent failed (`raise_if_terminal_failure`), so its stored answers stand. Here
-  the failures are written, beside every stored answer whichever input it was for. Stored
-  rows that are not answers still follow the inputs, or each such run over inputs minted
-  again would add its rows beside the last run's.
+- **A run in which something failed and nothing was answered replaces no answer.** Online
+  raises before it writes (`raise_if_terminal_failure`), so its stored answers stand. Here
+  the failures are written, beside every stored answer whichever input it was for; a
+  failure row under a stored answer's own identity gives way to it, so the identity is
+  still stored once. Stored rows that are not answers follow the inputs as usual. Without
+  a failure the run did produce this run's file, however little is in it, and the inputs
+  rule applies in full, as online writes it.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
@@ -434,26 +436,37 @@ input the guard filtered is not looked up, since it holds no row by design. It i
 to the guard again instead: online's guard runs above its gate and judges every input
 afresh, where the gate here would call a filtered one done for good.
 
-When the guard leaves nothing to send, submission returns a tombstone that the pipeline
-writes as the whole file. It goes through the same merge
-(`with_stored_rows_not_reproduced`), so that write carries what a finalize would. Alone it
-replaced every stored answer with nothing while their dispositions still said done.
+When the guard leaves nothing to send, submission returns a tombstone that the caller
+writes as a whole file. It goes through the same merge (`with_stored_rows_not_reproduced`),
+so that write carries what a finalize would. Alone it replaced every stored answer with
+nothing while their dispositions still said done. The rows are read from the file the
+tombstone is written to, which the caller names (`tombstone_path`), and from no other. For
+a file in a subdirectory that is not the batch's output file: the runner hands the file's
+own folder as the output directory, so the tombstone lands under `sub/page.json` while the
+batch output is stored as `page.json`. Reading the one and writing the other stores each
+row twice.
 
-The two paths do not always leave the same file. Every difference is batch keeping more:
+The two paths do not always leave the same file. Where they differ, batch holds more:
 
 - A run whose every input the gate carries submits nothing and finalizes nothing, so the
-  file is left as it stands. It can still hold rows of inputs that have left, or that a
-  record limit holds back; online writes the file again without them and answers them again
-  when they return.
+  file is left as it stands. It can still hold rows of inputs that have left; online writes
+  the file again without them and answers them again when they return. A record that moves
+  from one input file to another is answered in its new file while the old one, if nothing
+  is submitted for it, still holds its row.
+- Rows of inputs a record limit holds back are carried, since they are still inputs. Online
+  drops them and answers them again when the limit admits them.
 - A run in which something fails and nothing succeeds writes its failed rows. Online writes
   nothing.
 - The gate runs above the guard here, so an answered input that now fails the guard keeps
   its answer. Online replaces it with a tombstone, or with nothing.
+- An expanding input sent again that fails, while something else succeeds, keeps the rows
+  it minted before beside its failure row. Online holds the failure row alone.
 - A row naming several inputs is always carried.
 
 `tests/integration/test_batch_rerun_matches_online.py` drives both paths from
-`ProcessingPipeline.process` against a real store and requires that batch is never the one
-holding less.
+`ProcessingPipeline.process` against a real store and requires that batch never loses an
+answer online still holds, never leaves unanswered what online answers, and never pays for
+an input twice running where online did not.
 
 ---
 

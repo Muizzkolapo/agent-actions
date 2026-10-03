@@ -222,12 +222,15 @@ class BatchSubmissionService:
         source_data: Any | None = None,
         workflow_metadata: dict[str, Any] | None = None,
         run_inputs: list[dict[str, Any]] | None = None,
+        tombstone_path: str | None = None,
     ) -> SubmissionResult:
         """Submit a batch job, or return a passthrough when nothing is left to send.
 
         *run_inputs* is this action's input above every narrowing, recorded for
         carry-forward, which cannot otherwise tell a record the run left out from one
         that no longer exists. None records nothing, and neither does a repair.
+        *tombstone_path* is the stored path the caller writes a tombstone passthrough
+        to; the rows that file holds are merged in, or the write replaces them.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -303,7 +306,7 @@ class BatchSubmissionService:
                     agent_config, context_map, data, output_directory, action_name=action_name
                 ),
                 action_name,
-                batch_name,
+                tombstone_path,
                 run_input_guids,
             )
 
@@ -335,18 +338,21 @@ class BatchSubmissionService:
         self,
         result: SubmissionResult,
         action_name: str,
-        batch_name: str,
+        tombstone_path: str | None,
         run_input_guids: list[str] | None,
     ) -> SubmissionResult:
         """Add the stored rows a tombstone does not replace, as finalize would.
 
-        Nothing was left to send, so the passthrough is written as the whole output.
-        Alone it replaces every stored answer with nothing, and their dispositions
-        still say done, so they are never answered again.
+        Nothing was left to send, so the passthrough is written as the whole of
+        *tombstone_path*. Alone it replaces every answer stored there with nothing, and
+        their dispositions still say done, so they are never answered again. The rows
+        are read from that file and no other: a file in a subdirectory keeps its batch
+        output under another name, and rows read from there would be stored twice.
         """
         passthrough = result.passthrough
         if (
             self._storage_backend is None
+            or tombstone_path is None
             or not passthrough
             or passthrough.get("type") != "tombstone"
         ):
@@ -356,7 +362,7 @@ class BatchSubmissionService:
         passthrough["data"] = with_stored_rows_not_reproduced(
             passthrough["data"],
             action_name,
-            batch_output_name(batch_name),
+            tombstone_path,
             self._storage_backend,
             batch_inputs=run_input_guids or (),
         )

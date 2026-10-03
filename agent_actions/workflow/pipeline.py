@@ -14,7 +14,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.output.writer import FileWriter
+from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
@@ -279,6 +279,8 @@ class ProcessingPipeline:
         # so it is its own recording. Only a caller that narrowed before this has to say
         # what it narrowed from, and "it did not say" must not be read as "nothing".
         run_inputs = params.run_inputs if params.data is not None else data
+        relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
+        output_file_path = Path(params.batch_output_directory) / relative_path
 
         result = submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
@@ -288,10 +290,9 @@ class ProcessingPipeline:
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
             run_inputs=run_inputs,
+            tombstone_path=target_relative_path(output_file_path, params.batch_output_directory),
         )
 
-        relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
-        output_file_path = Path(params.batch_output_directory) / relative_path
         if (
             result.is_passthrough
             and result.passthrough is not None

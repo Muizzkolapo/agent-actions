@@ -4,7 +4,8 @@ The rule is the online path's: an action's output holds rows for this run's inpu
 stored row is carried where the input it answered for is one of the run's and the run did
 not answer it again; a row whose input is not among them is left out. Where no input was
 recorded every unanswered row is carried, since nothing is known about the run, and a run
-that answered nothing replaces no stored answer, as online writes nothing at all.
+in which something failed and nothing was answered replaces no stored answer, as online
+raises before it writes.
 """
 
 from __future__ import annotations
@@ -103,18 +104,46 @@ class TestARowWhoseInputIsNotInTheRunIsLeftOut:
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"}) == set()
 
 
-class TestARunThatAnsweredNothingReplacesNoAnswer:
+class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
     """Online raises before it writes when everything it sent failed, so its answers stand."""
 
     @pytest.mark.parametrize(
         "produced",
-        [[], [_row("a3", state="failed")], [_row("n1", ["a3"], state="exhausted")]],
-        ids=["nothing_produced", "a_failure", "an_exhausted_row_naming_its_input"],
+        [[_row("a3", state="failed")], [_row("n1", ["a3"], state="exhausted")]],
+        ids=["a_failure", "an_exhausted_row_naming_its_input"],
     )
     def test_a_stored_answer_stands_whichever_input_it_was_for(self, produced):
         stored = [_row("a1"), _row("m1", ["gone"])]
 
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1", "m1"}
+
+    def test_it_stands_over_the_failure_row_written_under_its_own_identity(self):
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="failed"), _row("a2", state="exhausted")]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a1", "a2"})
+
+        assert carry == {"a1", "a2"}
+
+    @pytest.mark.parametrize(
+        "produced",
+        [[], [_row("a3", state="guard_skipped")], [_row("a3", state="cascade_skipped")]],
+        ids=["nothing_produced", "a_guard_tombstone", "a_cascade_skip"],
+    )
+    def test_without_a_failure_the_file_is_this_runs_and_follows_its_inputs(self, produced):
+        """Online writes then, with nothing for a record that has left."""
+        stored = [_row("a1"), _row("m1", ["gone"])]
+
+        assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == set()
+
+    def test_a_tombstone_still_replaces_the_answer_under_its_identity(self):
+        """No failure, so no refusal: the guard's row is this run's row for that input."""
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="guard_skipped")]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a1", "a2"})
+
+        assert carry == {"a2"}
 
     @pytest.mark.parametrize("state", ["failed", "exhausted", "guard_skipped", "cascade_skipped"])
     def test_a_stored_row_that_is_no_answer_still_goes_with_its_input(self, state):

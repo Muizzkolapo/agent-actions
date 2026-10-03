@@ -238,6 +238,39 @@ class TestBatchDispositionGate:
 
         assert "not found in prior output" not in caplog.text
 
+    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_caller_names(self):
+        """And no other: a file in a subdirectory keeps its batch output under another name."""
+        result = self._nothing_left_to_send(tombstone_path="sub/data.json")
+
+        assert [row["source_guid"] for row in result.passthrough["data"]] == ["x1"]
+
+    def test_a_caller_naming_no_file_is_handed_the_tombstone_alone(self):
+        result = self._nothing_left_to_send(tombstone_path=None)
+
+        assert result.passthrough["data"] == []
+
+    @staticmethod
+    def _nothing_left_to_send(*, tombstone_path: str | None):
+        backend = _mock_backend(terminal_ids={"r0"})
+        files = {
+            "data.json": [{"source_guid": "r0", "content": {}}],
+            "sub/data.json": [{"source_guid": "x1", "content": {}}],
+        }
+        backend.read_target_for_rewrite.side_effect = lambda action, path: files[path]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            return service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="data.json",
+                data=[_make_record("r0"), _make_record("r1")],
+                output_directory=tmpdir,
+                tombstone_path=tombstone_path,
+            )
+
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""
         terminal = {f"r{i}" for i in range(9)}

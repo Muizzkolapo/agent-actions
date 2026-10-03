@@ -17,18 +17,20 @@ body: >-
   done, so they were never answered again; that write now carries the stored rows as an
   ordinary one does. `agac retry` keeps every row it did not name, including the rows of a
   record absent from that run, as online does. And a run in which everything sent fails keeps
-  the stored answers, where online refuses to write at all. A record the guard filtered is
-  now judged by the guard again on each run, as online judges it, instead of being called
-  done for good.
+  the stored answers, including one stored under the same identity as a failure, where online
+  refuses to write at all. A record the guard filtered is now judged by the guard again on
+  each run, as online judges it, instead of being called done for good.
 
-  Batch and online still differ in four places, and in each batch keeps more, never less. A
-  run with nothing to send leaves the file as it stands, so it can still hold rows for
-  records that have left or that a record limit holds back. A run in which everything fails
-  writes the failed rows; online writes nothing. An answered record that now fails the guard
-  keeps its answer in batch. A row merged from several inputs is always kept. One consequence
-  to know: an answer for a record that is no longer in the input, because it was filtered
-  upstream or the file now holds different records, is dropped by the next batch run that
-  produces an output. That is what the online path already did.
+  Batch and online still differ in places, and where they do batch keeps more. A run with
+  nothing to send leaves the file as it stands, so it can still hold rows for records that
+  have left. Rows of records a record limit holds back are kept, where online drops them and
+  answers them again. A run in which everything fails writes the failed rows; online writes
+  nothing. An answered record that now fails the guard keeps its answer in batch. A record
+  split into several rows that is sent again and fails keeps its earlier rows beside the
+  failure. A row merged from several inputs is always kept. One consequence to know: an
+  answer for a record that is no longer in the input, because it was filtered upstream or
+  the file now holds different records, is dropped by the next batch run that produces an
+  output. That is what the online path already did.
 
   This replaces the rule two earlier unreleased entries describe. Rows are no longer
   inferred away by generation, the reports of that inference are gone (one INFO line now

@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
+_FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
+
 
 class DispositionGate:
     """Per-record idempotency gate. Instantiate once per workflow run.
@@ -193,22 +195,24 @@ def stored_rows_not_reproduced(
     *,
     batch_inputs: Collection[str] = (),
 ) -> set[str]:
-    """Identities in *stored* to write again beside what *produced* holds.
+    """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A stored row is carried where the input it answered for is one of *batch_inputs* and
     this run did not answer it; one whose input is not among them is not part of this
     run's output, as online leaves it. Matching is by input, since a minting action's
     runs share no identity: a processed row answers for the producer it names, else for
     the identity it carries. With no inputs recorded every unanswered row is carried.
-    A run that answered nothing replaces no answer, as online raises before it writes;
-    stored rows that are not answers still follow the inputs.
+    Where something failed and nothing was answered online raises before it writes, so
+    every stored answer stands, over a failure row produced under its identity too.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
+    failed = False
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
+        failed = failed or row.get("_state") in _FAILURE_STATES
         if row.get("_state") != RecordState.PROCESSED.value:
             continue
         # Producers are named during enrichment, before collection settles the state,
@@ -219,15 +223,19 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
+    refused = failed and not answered
     inputs = frozenset(batch_inputs)
     carry: set[str] = set()
     left: set[str] = set()
     for row in stored:
         guid = row.get("source_guid")
+        if not guid:
+            continue
+        stands = refused and row.get("_state") == RecordState.PROCESSED.value
         # A row the run rewrote under this identity replaces it whatever else it says,
         # or the carried copy is appended beside that one and the identity is written
         # twice.
-        if not guid or guid in rewritten:
+        if guid in rewritten and not stands:
             continue
         producers = frozenset(row.get("producer_source_guids") or ())
         if len(producers) > 1:
@@ -237,7 +245,6 @@ def stored_rows_not_reproduced(
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
             continue
-        stands = not answered and row.get("_state") == RecordState.PROCESSED.value
         if inputs and answers_for not in inputs and not stands:
             left.add(guid)
         else:
@@ -294,10 +301,15 @@ def with_stored_rows_not_reproduced(
             action_name,
         )
 
+    # A carried row replaces what the run produced under its identity: a stored answer
+    # standing over the failure row of a run that answered nothing.
+    carried = {row["source_guid"] for row in carry_records}
+    kept = [row for row in produced if row.get("source_guid") not in carried]
+
     # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored whole, so
     # a row round-trips into the mode it had. Stamping "full" would re-store every
     # carried row whole, rewriting rows this run never reprocessed.
-    return produced + carry_records
+    return kept + carry_records
 
 
 def build_carry_forward(
