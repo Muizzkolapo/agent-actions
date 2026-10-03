@@ -36,28 +36,39 @@ class BatchContextManager:
 
     @staticmethod
     def _pool_key(action_name: str, batch_name: str) -> str:
-        # Under the inputs prefix, so clearing an action's batch state clears this too.
-        inputs_key = BatchContextManager._inputs_key(action_name, batch_name)
-        return inputs_key.replace(f":{action_name}:", f":{action_name}:pool:", 1)
+        if ".." in batch_name:
+            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
+        from pathlib import Path
+
+        return f"batch_pool:{action_name}:{Path(batch_name).name}"
 
     @staticmethod
     def save_upstream_pool(
-        backend: "StorageBackend", action_name: str, pool: Mapping[str, str], batch_name: str
+        backend: "StorageBackend",
+        action_name: str,
+        pool: Mapping[str, str] | None,
+        batch_name: str,
     ) -> None:
-        """Record every upstream record offered for this file, before any guard drop.
+        """Record every upstream record that exists for this file, before any guard drop.
 
-        Each identity beside its staged record. Carry-forward reads it to tell a stored
-        row whose input still exists upstream from one whose input was minted again.
+        Each identity beside its staged record. None records that the pool is not known,
+        replacing an earlier run's, so carry-forward does not decide from a stale one.
         """
         key = BatchContextManager._pool_key(action_name, batch_name)
-        backend.save_metadata(key, json.dumps(dict(sorted(pool.items()))))
+        recorded = None if pool is None else dict(sorted(pool.items()))
+        backend.save_metadata(key, json.dumps(recorded))
 
     @staticmethod
     def load_upstream_pool(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> dict[str, str] | None:
-        """The recorded upstream pool, or None where none was recorded or it is unreadable."""
+        """The recorded upstream pool, or None where it is unrecorded, unknown or unreadable."""
         raw = backend.load_metadata(BatchContextManager._pool_key(action_name, batch_name))
+        return BatchContextManager._identity_mapping(raw)
+
+    @staticmethod
+    def _identity_mapping(raw: Any) -> dict[str, str] | None:
+        """A recorded identity-to-staged-record object, or None for anything else."""
         if raw is None:
             return None
         try:
@@ -66,7 +77,7 @@ class BatchContextManager:
             return None
         if not isinstance(recorded, dict):
             return None
-        if not all(isinstance(a, str) for a in recorded.values()):
+        if not all(isinstance(staged, str) for staged in recorded.values()):
             return None
         return recorded
 
@@ -153,17 +164,7 @@ class BatchContextManager:
         then falls back to the identity-only rule `load_batch_inputs` feeds.
         """
         raw = backend.load_metadata(BatchContextManager._inputs_key(action_name, batch_name))
-        if raw is None:
-            return None
-        try:
-            recorded = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return None
-        if not isinstance(recorded, dict):
-            return None
-        if not all(isinstance(a, str) for a in recorded.values()):
-            return None
-        return recorded
+        return BatchContextManager._identity_mapping(raw)
 
     @staticmethod
     def save_batch_context_map(

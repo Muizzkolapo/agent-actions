@@ -433,23 +433,31 @@ exists for makes one every time.
 That rule reads identities alone, and an identity cannot tell an upstream action minting
 its children again from a record that left the input or one a guard held back. So it
 accumulates below an expansion for an action that mints nothing (#1155), and drops the rows
-of records that merely left (#1206). A batch run now records two more things, and where
-both are present `_carried_by_ancestor` decides instead:
+of records that merely left (#1206). It is still the rule for any run that did not record
+what follows. A batch run now records two more things:
 
 - beside each input, the staged record it descends from: its `parent_source_guid` where it
   has one, else its own identity;
 - the upstream pool for the file as the runner read it, above its drop of guard-filtered
-  records, with each identity's staged record. A filtered or deferred record is absent from
-  its action's output, so those identities are added from the dispositions.
+  records, each identity beside its staged record. A filtered or deferred record has no row
+  in its action's output, so those identities are added from the dispositions; where a
+  disposition read fails the pool is recorded as unknown.
 
-A stored row is dropped only where the input it answered for is gone from that pool while
-the run has inputs descended from the same staged record -- the children were minted again
--- and settled (answered or guard-skipped) every one of them, so the replacement is in this
-write. A row whose input is still in the pool was held back or narrowed past and is kept; so
-is one whose staged record no input descends from, and one merging several inputs. With no pool recorded nothing is known to be gone and every row not answered again
-is kept. A run recorded before any of this is read by the identity rule above, unchanged;
-the strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`
-pins that path.
+Where both are present and the pool holds the run's own inputs, `_carried_by_ancestor`
+decides instead. A stored row is dropped only on all of: the input it answered for is gone
+from the pool; the run has inputs descended from the same staged record that no stored row
+answered for, so something was minted; and the run settled (answered or guard-skipped)
+every input descended from that record, so the replacement is in this write. Everything
+else is kept: a row whose input is still in the pool, one whose staged record no input
+descends from, one merging several inputs, and one whose input is merely missing from the
+pool with nothing newly minted beside it.
+
+Three limits are accepted, all on the keeping side. A record with an input the run did not
+settle -- failed, exhausted, cascade-skipped, held by a record limit -- keeps its stale rows
+until a run that settles it. Rows left that way go at the next mint, not before. And a
+FILTERED disposition left in the store for a child that was since minted again keeps that
+child's one row. `tests/integration/test_batch_carry_forward_end_to_end.py` runs the runner,
+submission and finalize against a real store.
 
 ---
 

@@ -278,8 +278,13 @@ All state is persisted to StorageBackend metadata between runs:
   batch_registry:{action}
   batch_context:{action}:{name}   what was submitted
   batch_inputs:{action}:{name}    what the action took as input, above every
-                                  narrowing — read by carry-forward to tell a
-                                  record the run left out from one that is gone
+                                  narrowing, each identity beside the staged
+                                  record it descends from — read by carry-forward
+                                  to tell a record the run left out from one
+                                  that is gone
+  batch_pool:{action}:{name}      every upstream record that exists for the file,
+                                  above the runner's guard drop, written by the
+                                  runner for batch actions; null where unknown
 ```
 
 `clear_batch_state` removes all four.

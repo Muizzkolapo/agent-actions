@@ -8,8 +8,9 @@ body: >-
   from an expanding action were dropped without being asked. A batch run now records the
   upstream records that exist for each file, including those a guard filtered, and the staged
   record each one descends from. A stored row is dropped only when its input no longer exists
-  upstream while its staged record does, and the run settled every input now made from that
-  record. A row whose input was filtered, skipped, failed or left out by a limit is kept, and
-  so is every row of a record that is no longer staged. Batches submitted before this change
-  carry no such record and finalize exactly as before.
+  upstream, new inputs were made from the same staged record, and the run settled every input
+  made from it. A row whose input was filtered, skipped, failed or left out by a limit is
+  kept, and so is every row of a record that is no longer staged. Where a record has an input
+  the run did not settle, its previous rows stay until a run that does. Batches submitted
+  before this change carry no such record and finalize exactly as before.
 time: 2026-10-03T01:00:00Z

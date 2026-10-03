@@ -894,6 +894,7 @@ class StorageBackend(ABC):
         # recording left behind by cleared state answers for a run that no longer has
         # one. It shares the context map's scope and must share its lifetime.
         self.delete_metadata_prefix(f"batch_inputs:{action_name}:")
+        self.delete_metadata_prefix(f"batch_pool:{action_name}:")
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner.

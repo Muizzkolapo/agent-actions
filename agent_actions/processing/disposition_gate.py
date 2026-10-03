@@ -225,7 +225,13 @@ def stored_rows_not_reproduced(
             answered.update(named)
 
     stored_rows = list(stored)
-    if input_ancestors is not None:
+    # Both recordings, and a pool holding the run's own inputs: one that does not was
+    # recorded by another run. Short of that the identity rule below decides, as it did.
+    if (
+        input_ancestors is not None
+        and upstream_pool is not None
+        and upstream_pool.keys() >= input_ancestors.keys()
+    ):
         return _carried_by_ancestor(
             stored_rows, answered, settled, rewritten, input_ancestors, upstream_pool
         )
@@ -325,43 +331,51 @@ def _carried_by_ancestor(
     settled: set[str],
     rewritten: set[str],
     input_ancestors: Mapping[str, str],
-    upstream_pool: Mapping[str, str] | None,
+    upstream_pool: Mapping[str, str],
 ) -> set[str]:
-    """Carry every stored row whose input still exists upstream, or whose record left.
+    """Carry every stored row not shown to be a minted-again generation's.
 
-    A row is dropped only where the input it answered for is gone from *upstream_pool*
-    while the run has inputs descended from the same staged record -- the upstream action
-    minted its children again -- and settled every one of them, so the replacement is in
-    this write. With no pool recorded nothing is known to be gone, and every row not
-    answered again is carried.
+    A row is dropped only on all of: the input it answered for is gone from
+    *upstream_pool*; the run has inputs descended from the same staged record that no
+    stored row answered for, so something was minted; and the run settled every input
+    descended from that record, so the replacement is in this write. An input merely
+    missing from the pool is not enough, and one still in it was held back.
     """
     inputs_of: dict[str, set[str]] = {}
     for input_guid, staged in input_ancestors.items():
         inputs_of.setdefault(staged, set()).add(input_guid)
 
+    known: dict[str, set[str]] = {}
+    judged: list[tuple[str, str, str]] = []
     carry: set[str] = set()
-    dropped: dict[str, str] = {}
     for row in stored_rows:
         guid = row.get("source_guid")
-        if not guid or guid in rewritten:
+        if not guid:
             continue
         producers = frozenset(row.get("producer_source_guids") or ())
         if len(producers) > 1:
             # Holds what each of several inputs gave it; never inferred away.
-            carry.add(guid)
+            if guid not in rewritten:
+                carry.add(guid)
             continue
         key = next(iter(producers), guid)
-        if key in answered:
-            continue
         ancestor = row.get("parent_source_guid") or guid
+        # Counted for a row the run rewrote or answered again too: an input one of those
+        # answered for is not a newly minted one.
+        known.setdefault(ancestor, set()).add(key)
+        if guid not in rewritten and key not in answered:
+            judged.append((guid, key, ancestor))
+
+    dropped: dict[str, str] = {}
+    for guid, key, ancestor in judged:
         current = inputs_of.get(ancestor)
-        reminted = (
-            upstream_pool is not None
-            and key not in upstream_pool
+        minted_again = (
+            key not in upstream_pool
             and current is not None
             and current <= settled
+            and not current <= known[ancestor]
         )
-        if reminted:
+        if minted_again:
             dropped[guid] = ancestor
         else:
             carry.add(guid)
@@ -372,9 +386,9 @@ def _carried_by_ancestor(
         # INFO: an action below an expansion takes this path on every healthy re-run.
         logger.info(
             "%d stored row(s) dropped, not carried forward: the inputs they answered for "
-            "no longer exist upstream, while the %d staged record(s) they came from do and "
-            "this run settled every input now made from them, so they are the previous "
-            "run's answers for the same records.",
+            "no longer exist upstream, and this run settled the inputs newly made from "
+            "the %d staged record(s) they came from, so they are the previous run's "
+            "answers for the same records.",
             len(dropped),
             len(set(dropped.values())),
         )

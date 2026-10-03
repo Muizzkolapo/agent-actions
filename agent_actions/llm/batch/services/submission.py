@@ -252,9 +252,11 @@ class BatchSubmissionService:
             )
         run_input_guids = (
             {
-                guid: row.get("parent_source_guid") or guid
+                guid: staged
+                if isinstance(staged := row.get("parent_source_guid"), str) and staged
+                else guid
                 for row in run_inputs
-                if (guid := row.get("source_guid"))
+                if isinstance(guid := row.get("source_guid"), str) and guid
             }
             if run_inputs is not None
             else None
