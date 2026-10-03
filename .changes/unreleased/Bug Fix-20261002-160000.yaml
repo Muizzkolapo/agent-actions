@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A record the scope pass refuses now records which field was missing, or how many pooled
+  records its source_guid was searched against. The stored disposition carried only
+  `observe_field_missing` or `source_unresolved` — that something was missing, never what.
+  The diagnosis does reach `logs/events.json` at debug level, but a log is not joined to the
+  record; the disposition row is where "why did this row vanish" can be queried alongside it.
+  It now travels to the `detail` column of the disposition row, which already existed for
+  "extended error message or context" and was being passed `None`. The text is built from the
+  error's structured context rather than its message, so only config-derived names reach a
+  durable column. Nothing about which disposition is written changes: FILE mode still skips
+  before the guard, RECORD mode still reaches the guard and then fails at prompt preparation.
+  No command displays a record-level detail yet — `agac status --quarantined` shows failed and
+  exhausted rows only — so for now it is readable by querying the store.
+time: 2026-10-02T16:00:00Z

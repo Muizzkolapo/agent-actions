@@ -12,6 +12,16 @@ The fallback is last, not first: a row whose guid resolves still takes the pool'
 from agent_actions.processing.source_resolution import resolve_source_content
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 
+
+def _without_detail(skipped: list[dict]) -> list[dict]:
+    """The skip minus its `detail`, so an exact-shape assertion stays readable.
+
+    `detail` names the field or the pool size and is pinned by
+    test_a_scope_skip_says_which_field.py; here the point is the shape (#1140).
+    """
+    return [{k: v for k, v in s.items() if k != "detail"} for s in skipped]
+
+
 POOL = [
     {"source_guid": "ANCESTOR", "content": {"source": {"url": "http://pool.com"}}},
     {"source_guid": "OTHER", "content": {"source": {"url": "http://other.com"}}},
@@ -94,7 +104,10 @@ class TestRowsWithNothingToFallBackOnStillSkip:
         enriched, skipped = scope_pass([{"source_guid": "GHOST", "content": {"a1": {"i": 1}}}])
 
         assert enriched == []
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_a_carried_source_that_is_not_a_namespace_is_not_used(self):
         """``source`` holding a scalar is malformed, not a namespace to read fields off."""
@@ -103,7 +116,10 @@ class TestRowsWithNothingToFallBackOnStillSkip:
         enriched, skipped = scope_pass([row])
 
         assert enriched == []
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "GHOST", "reason": "source_unresolved", "position": 0}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
 
 class TestOneRowsCarriedSourceIsNeverServedToAnother:
@@ -141,4 +157,7 @@ class TestTheRecordSurvivesTheWholeScopePass:
         enriched, skipped = scope_pass([carrying("http://carried.com"), bare])
 
         assert observed_urls(enriched) == ["http://carried.com"]
-        assert skipped == [{"source_guid": "GHOST", "reason": "source_unresolved", "position": 1}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "GHOST", "reason": "source_unresolved", "position": 1}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped

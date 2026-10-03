@@ -690,7 +690,7 @@ def apply_context_scope_for_records(
     enriched record: downstream guards need full namespace visibility.
 
     Returns (enriched_records, skipped_records); skipped entries carry
-    ``{"source_guid": ..., "reason": ..., "position": ...}``. *position* indexes
+    ``{"source_guid": ..., "reason": ..., "position": ..., "detail": ...}``. *position* indexes
     *records* — how a caller pairs a second list matched to the input, which
     ``source_guid`` cannot do when it is absent or repeated.
     """
@@ -767,7 +767,15 @@ def apply_context_scope_for_records(
                     len(source_data or []),
                 )
                 skipped.append(
-                    {"source_guid": sguid, "reason": SOURCE_UNRESOLVED, "position": position}
+                    {
+                        "source_guid": sguid,
+                        "reason": SOURCE_UNRESOLVED,
+                        "position": position,
+                        "detail": (
+                            f"source_guid matched none of the {len(source_data or [])} pooled "
+                            "records, and the record has no usable source namespace of its own"
+                        ),
+                    }
                 )
                 continue
             if source_content:
@@ -790,8 +798,28 @@ def apply_context_scope_for_records(
                 sguid,
                 e,
             )
+            # The reason says a field was missing, never which. The debug line above does
+            # reach logs/events.json on a normal run, but a log is not joined to the record:
+            # the disposition row is where "why did this row vanish" is queryable (#1140).
+            # Built from the error's structured context rather than from str(e), which
+            # bounds what can reach a durable column to config-derived names: a sibling
+            # RecordContextError in this package appends "Available: {list(data.keys())}",
+            # the record's own keys, and a disposition row outlives the run.
+            context = getattr(e, "context", None) or {}
+            field_ref = context.get("field_ref")
+            directive = context.get("directive")
+            detail = (
+                f"context_scope.{directive} field '{field_ref}' not found in this record"
+                if field_ref and directive
+                else "a context_scope field named by this action was not found in this record"
+            )
             skipped.append(
-                {"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING, "position": position}
+                {
+                    "source_guid": sguid,
+                    "reason": OBSERVE_FIELD_MISSING,
+                    "position": position,
+                    "detail": detail,
+                }
             )
             continue
 
