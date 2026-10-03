@@ -438,6 +438,10 @@ class ActionExecutor:
             storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
             if storage_backend is not None:
                 storage_backend.clear_disposition(action_name)
+                # The batch this reset replaces left a registry entry, recovery state and
+                # a context map the next submission must not read as its own. Only a
+                # completed action reaches here, so no batch of its is in flight.
+                storage_backend.clear_batch_state(action_name)
             return ActionStatus.PENDING
         return current_status
 

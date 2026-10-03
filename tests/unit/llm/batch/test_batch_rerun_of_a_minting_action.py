@@ -181,16 +181,30 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
 
         assert [r["source_guid"] for r in result] == ["n1", "n2", "i2", "m3"]
 
-    def test_an_identity_carrying_action_still_replaces_the_row_that_failed(self, tmp_path):
-        """The failed row does carry this input's identity, so it does replace it."""
+    def test_a_failed_row_replaces_the_answer_under_its_identity_when_another_was_answered(
+        self, tmp_path
+    ):
+        """The failed row carries this input's identity, and the run did produce an output."""
         stored = [_row("r1"), _row("r2")]
-        produced = [_failed("r1")]
+        produced = [_failed("r1"), _row("r2")]
 
         result = _rerun(tmp_path, stored, produced)
 
         assert [r["source_guid"] for r in result] == ["r1", "r2"]
         assert result[0].get("error"), "r1 is the stored answer, not the row that failed"
         assert "answer" not in result[0], "the stored answer was carried as well as replaced"
+
+    def test_a_run_in_which_everything_failed_leaves_the_answer_under_that_identity(self, tmp_path):
+        """Online raises before it writes, so there the answer is still what is stored.
+        Written once: the failure row gives way rather than standing beside it."""
+        stored = [_row("r1"), _row("r2")]
+        produced = [_failed("r1")]
+
+        result = _rerun(tmp_path, stored, produced)
+
+        assert [r["source_guid"] for r in result] == ["r1", "r2"]
+        assert result[0]["answer"] == "answer-for-r1"
+        assert "error" not in result[0]
 
     @pytest.mark.parametrize("state", ["failed", "exhausted", "cascade_skipped"])
     def test_a_row_that_named_its_input_but_did_not_settle_answers_for_nothing(

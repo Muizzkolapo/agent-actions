@@ -144,7 +144,7 @@ class TestAnExpansionBelowAnExpansion:
             f"the previous generation was carried beside its replacement: {_guids(result)}"
         )
 
-    def test_the_drop_is_reported_once_per_write(self, tmp_path, caplog):
+    def test_rows_left_out_are_reported_once_per_write(self, tmp_path, caplog):
         """One decision, one record: the merge decides once, and nothing else reports it."""
         stored = [
             _row("b1", producers=["a1"]),
@@ -157,11 +157,11 @@ class TestAnExpansionBelowAnExpansion:
         with caplog.at_level(logging.DEBUG):
             _finalize(tmp_path, stored, produced, submitted=["a3", "a4"], run_inputs=["a3", "a4"])
 
-        drops = [r for r in caplog.records if "dropped" in r.getMessage().lower()]
-        assert len(drops) == 1, [(r.name, r.levelname, r.getMessage()) for r in drops]
-        assert drops[0].name == "agent_actions.processing.disposition_gate"
-        assert drops[0].levelno == logging.INFO
-        assert drops[0].getMessage().startswith("4 stored row(s) dropped"), drops[0].getMessage()
+        left = [r for r in caplog.records if "not carried forward" in r.getMessage().lower()]
+        assert len(left) == 1, [(r.name, r.levelname, r.getMessage()) for r in left]
+        assert left[0].name == "agent_actions.processing.disposition_gate"
+        assert left[0].levelno == logging.INFO
+        assert left[0].getMessage().startswith("4 stored row(s) not carried"), left[0].getMessage()
 
     def test_an_input_this_run_did_not_answer_for_keeps_its_rows(self, tmp_path):
         """A producer still standing in the input is not a generation that is gone."""

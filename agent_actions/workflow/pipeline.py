@@ -14,7 +14,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.output.writer import FileWriter
+from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
@@ -279,6 +279,8 @@ class ProcessingPipeline:
         # so it is its own recording. Only a caller that narrowed before this has to say
         # what it narrowed from, and "it did not say" must not be read as "nothing".
         run_inputs = params.run_inputs if params.data is not None else data
+        relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
+        output_file_path = Path(params.batch_output_directory) / relative_path
 
         result = submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
@@ -288,10 +290,9 @@ class ProcessingPipeline:
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
             run_inputs=run_inputs,
+            tombstone_path=target_relative_path(output_file_path, params.batch_output_directory),
         )
 
-        relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
-        output_file_path = Path(params.batch_output_directory) / relative_path
         if (
             result.is_passthrough
             and result.passthrough is not None
@@ -534,14 +535,9 @@ class ProcessingPipeline:
                     e,
                 )
 
-        # Above every narrowing this function makes, as staging captures it — the
-        # runner's drop of guard-filtered records is above even this, which is why the
-        # rules reading it decide generationally rather than per record. A record the
-        # limit drops is still one of this action's inputs, and the gate reads these to tell a
-        # stored row of its own making from one minted upstream. Leave it out and
-        # a row of that record reads as one of a repaired record's, to be deleted
-        # by a rewrite that never makes it again. A limit never drops a repaired
-        # record, so the extra entries can only widen what is carried.
+        # Above every narrowing this function makes. A record the limit drops is still
+        # one of this action's inputs: left out, its stored rows read as a repaired
+        # record's and are deleted by a rewrite that never makes them again.
         offered_to_repair = data
 
         # ── per-action record_limit ──────────────────────────────────────

@@ -1,0 +1,21 @@
+kind: Bug Fix
+body: >-
+  A batch action that is reset now submits again. When a completed action's record limit,
+  prompt, schema, guard or model changes, the next run resets it and runs it again; for a
+  batch action the reset left the finished batch job on record, and since a finished job for
+  a file is what stops that file being submitted twice, the action was skipped with "Found
+  completed batch job ... skipping resubmission". The run reported it complete with 0 records
+  and its output stayed whatever the earlier configuration had produced. Trying a workflow
+  under `--record-limit 1` and then running it in full, without `--fresh`, was enough: the
+  full run answered nothing. The reset now clears the action's batch state as `--fresh` does,
+  so the action submits for the inputs it has now, as the same action does online. A failed
+  batch action run again with a plain `agac run` was skipped the same way, and the run
+  reported it complete with nothing sent, where online sends the failed records again. A
+  finished batch job now stops its file being submitted again only until its results have
+  been collected. So that this does not cost a second submission, a run killed while
+  collecting a batch now keeps the done records of the files it had already collected, as an
+  interrupted run keeps its checkpoints; before, they were wiped and only the finished job
+  kept those files from being sent again. A collect pass that ends in an error, not a kill,
+  still wipes them, as a failed action does in online mode, and sends those files again
+  (#1211).
+time: 2026-10-03T03:00:00Z

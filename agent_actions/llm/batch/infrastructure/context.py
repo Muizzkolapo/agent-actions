@@ -13,6 +13,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def batch_output_name(file_name: str) -> str:
+    """The name a batch's output file is stored under, given the input file it answers.
+
+    Finalize writes under it and submission looks stored rows up under it; two copies of
+    this rule would let one drift and every carried input read as having no stored row.
+    """
+    from pathlib import Path
+
+    return f"{Path(file_name).stem}.json"
+
+
 class BatchContextManager:
     """Saves and loads batch context maps via StorageBackend."""
 
@@ -59,14 +70,19 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
+    def clear_batch_inputs(backend: "StorageBackend", action_name: str, batch_name: str) -> None:
+        """Remove the recording, so the next reader finds none recorded."""
+        backend.delete_metadata(BatchContextManager._inputs_key(action_name, batch_name))
+
+    @staticmethod
     def load_batch_inputs(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> set[str] | None:
         """The input recorded for this batch, or None where none was recorded.
 
         A run that recorded nothing is not one that took no input, so the two are
-        returned apart. Carry-forward then treats both as no evidence — inferring
-        from an empty set would supersede every stored row at once — but the
+        returned apart. Carry-forward then treats both as no evidence — read as the
+        run's inputs, an empty set would leave every stored row out — but the
         distinction is the store's to report, not this function's to flatten.
         """
         key = BatchContextManager._inputs_key(action_name, batch_name)

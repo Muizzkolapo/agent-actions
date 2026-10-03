@@ -123,7 +123,7 @@ RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH, INTERRUPTED}
   → "Reset to PENDING on next run"
   → COMPLETED_WITH_FAILURES is NOT retryable (spec 534, 2026-05-31)
 
-MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED}
+MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED, CHECKING_BATCH}
   → "Died mid-processing; may hold checkpointed SUCCESS dispositions"
   → Used by: _reset_retryable_actions selective-vs-bulk disposition clearing
 ```

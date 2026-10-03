@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
+_FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
+
 
 class DispositionGate:
     """Per-record idempotency gate. Instantiate once per workflow run.
@@ -192,40 +194,27 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    also_failed: bool = False,
 ) -> set[str]:
-    """Identities in *stored* that *produced* did not write again.
+    """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
-    Matching is by input: two runs of a minting action share no identity, and how many
-    rows an input yields is decided per run, so the same input mints several rows one
-    run and keeps its own identity the next — each direction a replacement.
-
-    Only a row settled as processed answers for an input, and what it answers for is
-    the producers it names, else the identity it carries. Both halves need that test: a
-    failed row is keyed on its input too, and a row can be stamped unsettled after
-    enrichment named its producers.
-
-    A stored row naming one input is inferred away; naming several, never. That reads
-    one producer as a mint, which holds where this is called from — a batch row naming
-    producers has been re-keyed — and not in general: the FILE writer records the inputs
-    a row consumed *minus* its own, so a two-input merge keeps one identity and names
-    one producer. Inferred away there, its own input's content goes with it, and a
-    caller reading those rows wants the stricter reading ``build_carry_forward`` has.
-
-    *batch_inputs* is the input before any narrowing, which settles what matching
-    cannot: below an expansion the upstream children are minted again every run, so a
-    producer named by no input is a generation that is gone rather than one this run did
-    not answer for. Inferred only on a run that settled every input it recorded, since
-    only then is the replacement in this write; left empty, or short of that, nothing is
-    inferred at all. A row naming no producer is never inferred away either — its
-    identity may be a gone generation's too, but an input that is merely absent is
-    indistinguishable from one the run never took, and that one keeps its rows.
+    A stored row is carried where the input it answered for is one of *batch_inputs* and
+    this run did not answer it; otherwise it is no part of this run's output, as online
+    leaves it. Matching is by input, since a minting action's runs share no identity: a
+    processed row answers for the producer it names, else for the identity it carries.
+    With no inputs recorded every unanswered row is carried. Where something failed and
+    nothing was answered online raises before it writes, so every stored answer stands,
+    over a row produced under its identity too. *also_failed* says a record failed that
+    *produced* does not show as a failure row.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
+    failed = also_failed
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
+        failed = failed or row.get("_state") in _FAILURE_STATES
         if row.get("_state") != RecordState.PROCESSED.value:
             continue
         # Producers are named during enrichment, before collection settles the state,
@@ -236,94 +225,96 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
+    refused = failed and not answered
     inputs = frozenset(batch_inputs)
-    stored_rows = list(stored)
-    # Decided across all the mints at once, not per row: what replaces a generation is an
-    # upstream action re-minting its whole output, so one producer missing while others are
-    # still inputs is an individual record that went away, and its rows are its own.
-    stored_mints = {
-        producer
-        for row in stored_rows
-        if len(producer_set := frozenset(row.get("producer_source_guids") or ())) == 1
-        for producer in producer_set
-    }
-    # ...and only on a run that settled every input it recorded: a run that failed, or
-    # returned nothing, would read its own stored answers as replaced and delete them.
-    generation_replaced = (
-        bool(inputs)
-        and bool(stored_mints)
-        and inputs <= answered
-        and stored_mints.isdisjoint(inputs)
-    )
-
     carry: set[str] = set()
-    dropped: set[str] = set()
-    unattributable: set[str] = set()
-    for row in stored_rows:
+    left: set[str] = set()
+    for row in stored:
         guid = row.get("source_guid")
         if not guid:
             continue
-        producers = frozenset(row.get("producer_source_guids") or ())
+        stands = refused and row.get("_state") == RecordState.PROCESSED.value
         # A row the run rewrote under this identity replaces it whatever else it says,
         # or the carried copy is appended beside that one and the identity is written
-        # twice. A minted identity is never rewritten, so this decides nothing there.
-        if guid in rewritten:
+        # twice.
+        if guid in rewritten and not stands:
             continue
-        superseded = False
-        if len(producers) == 1:
-            # On this path one producer means a mint, because a batch row that names any
-            # is re-keyed. It does not mean that in general — see the docstring.
-            reproduced = producers <= answered
-            superseded = generation_replaced
-        elif producers:
-            # Several: the row holds what each input gave it, and its own identity is an
-            # input's rather than a mint's. Never inferred away.
-            reproduced = False
-        else:
-            # The identity is the input's own, so a run that did not take it simply
-            # narrowed past it. Absence from the input is no evidence here.
-            reproduced = guid in answered
-        if not reproduced and not superseded:
+        producers = frozenset(row.get("producer_source_guids") or ())
+        if len(producers) > 1:
+            # Holds what each of several inputs gave it, so no one input accounts for it.
             carry.add(guid)
-            if not producers and batch_inputs and guid not in batch_inputs:
-                # No producer to attribute it by, and no input of this run carries its
-                # identity. Below an expansion that is the previous run's upstream child,
-                # re-minted this run, so the row is carried beside its replacement and the
-                # file grows every run. It is NOT safe to infer that here: an input that
-                # is merely absent -- unstaged, filtered upstream, dropped by a limit --
-                # looks identical, and its rows must be kept (#1151).
-                unattributable.add(guid)
-        elif not reproduced:
-            dropped.add(guid)
+            continue
+        answers_for = next(iter(producers), guid)
+        if answers_for in answered:
+            continue
+        if inputs and answers_for not in inputs and not stands:
+            left.add(guid)
+        else:
+            carry.add(guid)
     # An identity still carried through another of its rows has lost nothing.
-    dropped -= carry
+    left -= carry
 
-    if dropped:
-        # INFO, not WARNING: a minting action below an expansion takes this path on
-        # every healthy re-run, which is the case the inference exists for.
+    if left:
         logger.info(
-            "%d stored row(s) dropped, not carried forward: the stored rows made from a "
-            "single record name %d record(s) between them, none of which is among the %d "
-            "input(s) this run recorded, and this run answered all of those inputs, so "
-            "those rows are read as a generation the upstream action replaced. Expected "
-            "on a re-run below an expansion, which mints its children again; if those "
-            "records instead left this action's input, their rows are gone with them. "
-            "See issue #1155",
-            len(dropped),
-            len(stored_mints),
+            "%d stored row(s) not carried forward: the inputs they answered for are not "
+            "among the %d this run took, so they are not part of this run's output. An "
+            "input that returns is answered again.",
+            len(left),
             len(inputs),
         )
-
-    if unattributable:
-        logger.warning(
-            "%d stored row(s) carry an identity no input of this run names and no "
-            "producer to attribute them by, so they are kept beside the rows that "
-            "replace them and this output grows every run. An action that answered an "
-            "input with a single row records no producer, so below an expansion its "
-            "rows name the previous run's upstream child; see issue #1155",
-            len(unattributable),
-        )
     return carry
+
+
+def with_stored_rows_not_reproduced(
+    produced: list[dict[str, Any]],
+    action_name: str,
+    relative_path: str,
+    storage_backend: StorageBackend,
+    *,
+    batch_inputs: Collection[str] = (),
+    also_failed: bool = False,
+) -> list[dict[str, Any]]:
+    """*produced* followed by every stored row it does not replace: the file to write.
+
+    *relative_path* is the file being written and the only file read: the rows go
+    straight to the write, so gathering them across the action's other files puts those
+    files' records into this one. A store this cannot read raises rather than returning
+    *produced* alone, which would replace the file.
+    """
+    try:
+        stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        # Nothing stored for this file yet, so nothing to carry.
+        return produced
+
+    carry_guids = stored_rows_not_reproduced(
+        stored, produced, batch_inputs=batch_inputs, also_failed=also_failed
+    )
+    if not carry_guids:
+        return produced
+
+    # Re-reads the same file, which the reconstruction cache answers, to keep the
+    # one-row-per-identity rule in the place that owns it. Its checkpoint fallback is
+    # unreachable: a file with no stored rows has returned above.
+    carry_records, _missing = build_carry_forward(
+        carry_guids, action_name, relative_path, storage_backend
+    )
+    if carry_records:
+        logger.info(
+            "Merging %d carry-forward records into batch output for %s",
+            len(carry_records),
+            action_name,
+        )
+
+    # A carried row replaces what the run produced under its identity: a stored answer
+    # standing over the row of a run that failed and answered nothing.
+    carried = {row["source_guid"] for row in carry_records}
+    kept = [row for row in produced if row.get("source_guid") not in carried]
+
+    # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored whole, so
+    # a row round-trips into the mode it had. Stamping "full" would re-store every
+    # carried row whole, rewriting rows this run never reprocessed.
+    return kept + carry_records
 
 
 def build_carry_forward(

@@ -11,7 +11,7 @@ from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
-from agent_actions.output.writer import FileWriter
+from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -719,6 +719,8 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         disposition_gate=disposition_gate,
     )
     file_name = Path(ctx.file_path).name
+    relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
+    output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
     result = submission_service.submit_batch_job(
         ctx.agent_config,
         file_name,
@@ -727,10 +729,9 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         source_data=ctx.data_chunk,
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
         run_inputs=ctx.run_inputs,
+        tombstone_path=target_relative_path(output_file_path, ctx.output_directory),
     )
 
-    relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
-    output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     passthrough = result.passthrough
