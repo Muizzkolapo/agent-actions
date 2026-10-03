@@ -272,6 +272,146 @@ class TestAResetActionCanSubmitItsBatchAgain:
         assert [backend.load_metadata(key) for key in keys] == ["{}", "{}", "{}"]
 
 
+class TestAResetReachesEveryActionThatReadsWhatItWrites:
+    """A reset action writes new output. What was computed from the old output is stale:
+    left complete, it holds answers for records that are gone and none for the new ones."""
+
+    PROMPT = {"prompt": "X", "model": "m"}
+    CONFIGS = {
+        "split": {**PROMPT},
+        "define": {**PROMPT, "dependencies": ["split"]},
+        "grade": {**PROMPT, "dependencies": ["define"]},
+        "aside": {**PROMPT},
+    }
+
+    def _workflow(self, tmp_path, configs=None, statuses=None):
+        from agent_actions.storage.backend import DISPOSITION_SUCCESS
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        configs = configs or self.CONFIGS
+        backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+        backend.initialize()
+        state_mgr = ActionStateManager(tmp_path / "status.json", list(configs))
+        for name, config in configs.items():
+            status = (statuses or {}).get(name, ActionStatus.COMPLETED)
+            state_mgr.update_status(name, status, config_hash=_compute_action_config_hash(config))
+            backend.set_disposition(name, "r1", DISPOSITION_SUCCESS)
+            backend.save_metadata(f"batch_inputs:{name}:page.json", "[]")
+        action_runner = MagicMock()
+        action_runner.retried_records = frozenset()
+        action_runner.storage_backend = backend
+        action_runner.action_configs = configs
+        executor = ActionExecutor(
+            ExecutorDependencies(
+                action_runner=action_runner,
+                state_manager=state_mgr,
+                skip_evaluator=MagicMock(),
+                batch_manager=MagicMock(),
+                output_manager=MagicMock(),
+            )
+        )
+        return executor, state_mgr, backend
+
+    @staticmethod
+    def _reset(executor, name, configs):
+        changed = {**configs[name], "prompt": "Y"}
+        return executor._maybe_invalidate_completed_status(name, changed, ActionStatus.COMPLETED)
+
+    def test_everything_below_it_is_reset_and_nothing_beside_it(self, tmp_path):
+        executor, state_mgr, _ = self._workflow(tmp_path)
+
+        self._reset(executor, "split", self.CONFIGS)
+
+        assert {name: state_mgr.get_status(name) for name in self.CONFIGS} == {
+            "split": ActionStatus.PENDING,
+            "define": ActionStatus.PENDING,
+            "grade": ActionStatus.PENDING,
+            "aside": ActionStatus.COMPLETED,
+        }
+
+    def test_what_they_called_done_is_forgotten_with_them(self, tmp_path):
+        """Reset alone, a dependent would carry its old answers past the gate (#1213)."""
+        executor, _, backend = self._workflow(tmp_path)
+
+        self._reset(executor, "split", self.CONFIGS)
+
+        held = {name: len(backend.get_disposition(name)) for name in self.CONFIGS}
+        assert held == {"split": 0, "define": 0, "grade": 0, "aside": 1}
+        recorded = {
+            name: backend.load_metadata(f"batch_inputs:{name}:page.json") for name in self.CONFIGS
+        }
+        assert recorded == {"split": None, "define": None, "grade": None, "aside": "[]"}
+
+    def test_a_reset_in_the_middle_leaves_what_is_above_it(self, tmp_path):
+        executor, state_mgr, _ = self._workflow(tmp_path)
+
+        self._reset(executor, "define", self.CONFIGS)
+
+        assert state_mgr.get_status("split") == ActionStatus.COMPLETED
+        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+
+    def test_an_action_that_is_not_reset_resets_nothing_below_it(self, tmp_path):
+        executor, state_mgr, _ = self._workflow(tmp_path)
+
+        status = executor._maybe_invalidate_completed_status(
+            "split", self.CONFIGS["split"], ActionStatus.COMPLETED
+        )
+
+        assert status == ActionStatus.COMPLETED
+        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
+
+    def test_a_dependent_with_a_batch_in_flight_is_left_to_finish(self, tmp_path):
+        """Its batch is at the provider; clearing its state would strand the results."""
+        executor, state_mgr, backend = self._workflow(
+            tmp_path, statuses={"define": ActionStatus.BATCH_SUBMITTED}
+        )
+
+        self._reset(executor, "split", self.CONFIGS)
+
+        assert state_mgr.get_status("define") == ActionStatus.BATCH_SUBMITTED
+        assert len(backend.get_disposition("define")) == 1
+        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+
+    def test_the_order_the_configs_are_held_in_does_not_matter(self, tmp_path):
+        configs = dict(reversed(list(self.CONFIGS.items())))
+        executor, state_mgr, _ = self._workflow(tmp_path, configs)
+
+        self._reset(executor, "split", configs)
+
+        assert state_mgr.get_status("define") == ActionStatus.PENDING
+        assert state_mgr.get_status("grade") == ActionStatus.PENDING
+        assert state_mgr.get_status("aside") == ActionStatus.COMPLETED
+
+    def test_an_action_run_again_because_its_output_is_gone_takes_them_with_it(self, tmp_path):
+        """It will write new output all the same, and theirs was computed from the old."""
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        for name in ("define", "grade", "aside"):
+            backend.write_target(name, "page.json", [{"source_guid": "r1", "content": {}}])
+
+        should_skip = executor.verify_completion_status("split")
+
+        assert should_skip is False
+        assert {name: state_mgr.get_status(name) for name in self.CONFIGS} == {
+            "split": ActionStatus.PENDING,
+            "define": ActionStatus.PENDING,
+            "grade": ActionStatus.PENDING,
+            "aside": ActionStatus.COMPLETED,
+        }
+
+    def test_an_action_that_merges_versions_follows_any_one_of_them(self, tmp_path):
+        configs = {
+            "vote_1": {**self.PROMPT},
+            "vote_2": {**self.PROMPT},
+            "tally": {**self.PROMPT, "version_consumption_config": {"source": "vote"}},
+        }
+        executor, state_mgr, _ = self._workflow(tmp_path, configs)
+
+        self._reset(executor, "vote_2", configs)
+
+        assert state_mgr.get_status("tally") == ActionStatus.PENDING
+        assert state_mgr.get_status("vote_1") == ActionStatus.COMPLETED
+
+
 def _executor_for_stamp():
     action_runner = MagicMock()
     action_runner.retried_records = frozenset()
