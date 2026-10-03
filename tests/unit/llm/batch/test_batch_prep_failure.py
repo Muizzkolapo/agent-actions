@@ -15,6 +15,7 @@ from agent_actions.llm.batch.processing.batch_passthrough_builder import (
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
+from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.state import RecordState
 
 
@@ -153,6 +154,83 @@ class TestPassthroughBuilderIncludesFailed:
         assert len(result["data"]) == 1
         assert result["data"][0]["source_guid"] == "sg_001"
         assert "my_action" in result["data"][0]["content"]
+
+
+class TestEachEntryIsBuiltAsWhatPreparationFoundIt:
+    """Built alike, a failed or upstream-blocked record is stored as a guard skip: the
+    output says the guard turned away a record it never judged, and the action below
+    takes it as input."""
+
+    @staticmethod
+    def _rows(context_map):
+        builder = BatchPassthroughBuilder(output_directory="/tmp/out", action_name="my_action")
+        rows = builder.from_context(context_map, reason="guard_skip")["data"]
+        return {row["source_guid"]: row for row in rows}
+
+    def test_a_preparation_failure_is_a_failed_row_holding_its_error(self):
+        entry = {
+            "source_guid": "sg_failed",
+            "content": {},
+            "_batch_filter_status": "failed",
+        }
+        RecordEnvelope.transition(
+            entry, RecordState.FAILED, "my_action", "references undefined variables: topic"
+        )
+
+        row = self._rows({"t1": entry})["sg_failed"]
+
+        assert row["_state"] == "failed"
+        assert row["_tombstone_reason"] == "prep_failed"
+        assert row["metadata"]["reason"] == "prep_failed"
+        assert row["_state_history"][-1]["reason"] == "references undefined variables: topic"
+        assert [key for key in row["metadata"] if key.startswith("skipped_by")] == []
+
+    def test_a_failure_with_no_error_recorded_falls_back_to_the_reason(self):
+        entry = {"source_guid": "sg_failed", "content": {}, "_batch_filter_status": "failed"}
+
+        row = self._rows({"t1": entry})["sg_failed"]
+
+        assert row["_state"] == "failed"
+        assert row["_state_history"][-1]["reason"] == "prep_failed"
+
+    def test_a_record_blocked_upstream_is_a_cascade_skip(self):
+        entry = {
+            "source_guid": "sg_blocked",
+            "content": {},
+            "_batch_filter_status": "skipped",
+            "_batch_skip_reason": "upstream_unprocessed",
+        }
+
+        row = self._rows({"t1": entry})["sg_blocked"]
+
+        assert row["_state"] == "cascade_skipped"
+        assert row["_tombstone_reason"] == "upstream_unprocessed"
+        assert [key for key in row["metadata"] if key.startswith("skipped_by")] == []
+
+    def test_a_guard_skip_is_built_as_it_was(self):
+        entry = {
+            "source_guid": "sg_skipped",
+            "content": {},
+            "_batch_filter_status": "skipped",
+            "_batch_skip_reason": "guard_skip",
+        }
+
+        row = self._rows({"t1": entry})["sg_skipped"]
+
+        assert row["_state"] == "guard_skipped"
+        assert row["_tombstone_reason"] == "guard_skip"
+        assert row["metadata"]["skipped_by_where_clause"] is True
+        assert "reason" not in row["metadata"]
+
+    def test_entries_that_were_sent_or_filtered_get_no_row(self):
+        rows = self._rows(
+            {
+                "t1": {"source_guid": "sent", "content": {}, "_batch_filter_status": "included"},
+                "t2": {"source_guid": "gone", "content": {}, "_batch_filter_status": "filtered"},
+            }
+        )
+
+        assert rows == {}
 
 
 class TestHandleEmptyTasksPrepFailed:

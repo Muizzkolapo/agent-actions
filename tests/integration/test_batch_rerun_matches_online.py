@@ -848,8 +848,8 @@ PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
 
 @pytest.mark.parametrize("guard", [SKIP, FILTER], ids=["skipping", "filtering"])
 def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer(tmp_path, guard):
-    """Nothing is sent and a record failed, so online raises before it writes. The
-    failure reaches the write as a guard tombstone, which is no failure row."""
+    """Nothing is sent and a record failed, so online raises before it writes, and the
+    answers stored under the tombstones and the failure row stand."""
     names = ["s1", "s2", "s3", "s4", "s5", "p6"]
     batch = _Batch(tmp_path)
     first = batch.run(
@@ -875,8 +875,32 @@ def test_a_record_that_cannot_be_prepared_is_stored_as_a_failure(tmp_path):
     held = batch.run(1, [*turned_away, rec("p6", keep=True)], extra={**SKIP, **PREPARED})
 
     assert held == ["failed:p6", *(f"guard_skipped:s{n}" for n in range(1, 6))]
-    failed = batch.backend.get_disposition(ACTION, disposition=DISPOSITION_FAILED)
-    assert [row["record_id"] for row in failed] == ["p6"]
+    (failed,) = batch.backend.get_disposition(ACTION, disposition=DISPOSITION_FAILED)
+    assert failed["record_id"] == "p6"
+    assert "topic" in failed["reason"], "the reason is the error itself, as online records it"
+
+
+def test_a_record_that_cannot_be_prepared_is_not_flagged_as_a_skip(tmp_path):
+    batch = _Batch(tmp_path)
+    turned_away = [rec(f"s{n}", keep=False, topic="dbt") for n in range(1, 6)]
+    batch.run(1, [*turned_away, rec("p6", keep=True)], extra={**SKIP, **PREPARED})
+
+    (failed,) = [row for row in batch.held() if row["source_guid"] == "p6"]
+
+    assert [key for key in failed["metadata"] if key.startswith("skipped_by")] == []
+
+
+def test_a_record_blocked_upstream_is_stored_as_blocked_when_nothing_is_sent(tmp_path):
+    """The action above failed it, so this one never looked at it. Stored as a guard skip
+    it reads as a record this action passed over, and the action below processes it."""
+    batch = _Batch(tmp_path)
+    blocked = {**rec("u1", keep=True), "_state": "failed"}
+
+    held = batch.run(1, [rec("s1", keep=False), blocked], extra=SKIP)
+
+    assert held == ["cascade_skipped:u1", "guard_skipped:s1"]
+    (row,) = [row for row in batch.held() if row["source_guid"] == "u1"]
+    assert row["_tombstone_reason"] == "upstream_unprocessed"
 
 
 def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
