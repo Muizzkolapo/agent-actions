@@ -153,6 +153,19 @@ class _Mode:
         except FileNotFoundError:
             return []
 
+    def everything_held(self) -> list[str]:
+        """What the action holds across every file it has stored, not this one alone."""
+        self.backend._reconstruction_cache.clear()
+        return sorted(
+            answer
+            for path in self.backend.list_target_files(ACTION)
+            for answer in answers(self.backend.read_target_for_rewrite(ACTION, path))
+        )
+
+    def _reset(self) -> None:
+        """What the executor does to a completed action whose limit or config changed."""
+        self.backend.clear_disposition(ACTION)
+
     def _upstream_wrote(self, inputs: list[dict[str, Any]]) -> None:
         """Store the upstream action's output for this run, as its own run would have."""
         self.backend.save_metadata("execution_order", json.dumps([UPSTREAM, ACTION]))
@@ -196,7 +209,8 @@ class _Mode:
             pipeline.process(
                 str(self.base / self.file),
                 str(self.base),
-                str(self.out),
+                # As the runner hands it: the folder this file's output goes in.
+                str((self.out / self.file).parent),
                 data=json.loads(json.dumps(inputs)),
             )
         except Exception as error:  # recorded, and compared between the modes
@@ -215,9 +229,12 @@ class _Online(_Mode):
         answer: Answerer | None = None,
         extra: dict[str, Any] | None = None,
         retry: Any = (),
+        reset: bool = False,
     ) -> list[str]:
         answer = answer or Answerer()
         taken: list[str] = []
+        if reset:
+            self._reset()
         self._upstream_wrote(inputs)
 
         class Strategy:
@@ -301,11 +318,14 @@ class _Batch(_Mode):
         answer: Answerer | None = None,
         extra: dict[str, Any] | None = None,
         retry: Any = (),
+        reset: bool = False,
     ) -> list[str]:
         answer = answer or Answerer()
+        if reset:
+            self._reset()
         # A reset, `agac retry` and `--fresh` each clear this before the action runs
         # again. A plain run over a failed action clears nothing.
-        if self.clears_batch_state:
+        if self.clears_batch_state or reset:
             self.backend.clear_batch_state(ACTION)
         self._upstream_wrote(inputs)
 
@@ -388,9 +408,9 @@ def compare(
     """Run every step through both modes and report what each held and sent.
 
     A step is a list of inputs (guids or records), or a dict of ``inputs`` with an
-    optional ``config`` override for that run and an optional ``retry``: the records a
-    repair names, or ``"failures"`` for whichever online's store says failed. Both modes
-    are given the same names, so both run the same repair.
+    optional ``config`` override for that run, an optional ``reset``, and an optional
+    ``retry``: the records a repair names, or ``"failures"`` for whichever online's store
+    says failed. Both modes are given the same names, so both run the same repair.
     """
     online = _Online(tmp_path)
     batch = _Batch(tmp_path, clears_batch_state=clears_batch_state)
@@ -403,11 +423,13 @@ def compare(
         retry = step.get("retry", ())
         if retry == "failures":
             retry = online.failures()
+        reset = step.get("reset", False)
         findings.append(
             {
                 "run": number,
-                "online": online.run(number, inputs, answer, extra, retry),
-                "batch": batch.run(number, inputs, answer, extra, retry),
+                "inputs": {record["source_guid"] for record in inputs},
+                "online": online.run(number, inputs, answer, extra, retry, reset),
+                "batch": batch.run(number, inputs, answer, extra, retry, reset),
                 "online_sent": online.sent[-1],
                 "batch_sent": batch.sent[-1],
                 "online_raised": online.raised[-1],
@@ -438,6 +460,11 @@ def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
         online_sent, batch_sent = set(run["online_sent"]), set(run["batch_sent"])
         held = _answered(run["batch"])
         for answer in sorted(_answered(run["online"]) - held):
+            # An online run that raised wrote nothing, so it still holds answers for
+            # records that are no input of this run. A batch run that answered
+            # something has written this run's file, without them.
+            if run["online_raised"] and _input_of(answer) not in run["inputs"]:
+                continue
             # An answer batch had, or one both modes were just given. One batch never
             # had is the next check's to find.
             if answer in held_before or _input_of(answer) in online_sent & batch_sent:
@@ -513,6 +540,35 @@ NEVER_SHORT = {
         None,
         {("a4", 2): "fail", ("a2", 3): "fail"},
     ),
+    "a_reset_in_which_everything_fails": (
+        [["a1", "a2"], {"inputs": ["a1", "a2"], "reset": True}],
+        None,
+        {("a1", 2): "fail", ("a2", 2): "fail"},
+    ),
+    "a_reset_in_which_everything_exhausts": (
+        [["a1", "a2"], {"inputs": ["a1", "a2"], "reset": True}],
+        None,
+        {("a1", 2): "exhaust", ("a2", 2): "exhaust"},
+    ),
+    "a_reset_in_which_one_fails_and_the_guard_now_skips_the_other": (
+        [_PASSES, {"inputs": [rec("a1", keep=True), rec("a2", keep=False)], "reset": True}],
+        SKIP,
+        {("a1", 2): "fail"},
+    ),
+    "a_repair_of_an_answered_record_that_then_fails": (
+        [["a1", "a2"], {"inputs": ["a1", "a2"], "retry": ["a1"]}],
+        None,
+        {("a1", 2): "fail"},
+    ),
+    "a_skipped_input_passes_while_the_only_other_one_sent_fails": (
+        [
+            ["a3", "a2", "a4", "a5", "n1"],
+            [rec("a5", keep=False), rec("a1", keep=False), "a3"],
+            [rec("a5", keep=False), "a1", "a2"],
+        ],
+        SKIP,
+        {"a2": 2, ("a2", 3): "fail"},
+    ),
     "a_repair_run_while_an_input_is_absent": (
         [
             ["a1", "a2", "a3"],
@@ -557,7 +613,9 @@ def test_batch_never_falls_short_of_online(tmp_path, case):
     assert shortfalls(compare(tmp_path, runs, config, shape)) == []
 
 
-def _random_sequence(rng: random.Random, *, guard: bool, limits: bool, retries: bool):
+def _random_sequence(
+    rng: random.Random, *, guard: bool, limits: bool, retries: bool, resets: bool = False
+):
     """Three to six runs over inputs that come, go, expand, fail and flip at the guard."""
     known = [f"a{i}" for i in range(1, 6)]
     shape: dict[Any, Any] = {}
@@ -592,6 +650,8 @@ def _random_sequence(rng: random.Random, *, guard: bool, limits: bool, retries: 
             step["config"] = {"record_limit": rng.choice([1, 2, 3])}
         if retries and number > 1 and rng.random() < 0.4:
             step["retry"] = "failures"
+        elif resets and number > 1 and rng.random() < 0.5:
+            step["reset"] = True
         runs.append(step)
     return runs, shape
 
@@ -602,6 +662,8 @@ FAMILIES = {
     "behind_a_filtering_guard": (FILTER, {"guard": True}),
     "behind_a_skipping_guard": (SKIP, {"guard": True}),
     "a_filtering_guard_under_a_limit": (FILTER, {"guard": True, "limits": True}),
+    "reset_before_some_runs": ({}, {"resets": True}),
+    "reset_behind_a_skipping_guard": (SKIP, {"guard": True, "resets": True}),
     "with_repairs_of_what_failed": ({}, {"retries": True}),
     "repairs_behind_a_filtering_guard": (FILTER, {"guard": True, "retries": True}),
 }
@@ -671,6 +733,18 @@ def test_inputs_answered_again_are_sent_in_the_order_the_input_holds_them(tmp_pa
     batch.run(3, [rec("a3"), rec("n1"), rec("a1"), rec("a2"), rec("n2")])
 
     assert batch.sent_in_order[2] == ["a3", "n1", "a1", "n2"]
+
+
+@pytest.mark.parametrize("config", [FILTER, SKIP], ids=["filtered", "skipped"])
+def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
+    """Its output and the write made when nothing is sent are stored under two names."""
+    batch = _Batch(tmp_path, "sub/page.json")
+    batch.run(1, _UNCHANGED_WITH_ONE_REFUSED, extra=config)
+
+    batch.run(2, _UNCHANGED_WITH_ONE_REFUSED, extra=config)
+
+    answered = [row for row in batch.everything_held() if row.startswith("processed:")]
+    assert answered == ["processed:a1:0@run1", "processed:a2:0@run1"]
 
 
 def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
