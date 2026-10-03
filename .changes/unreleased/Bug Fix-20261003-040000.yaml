@@ -5,9 +5,14 @@ body: >-
   ran it again, but the actions depending on it were left as they were. They kept output
   computed from the upstream output that had just been replaced, holding answers for
   records that no longer existed and none for the new ones, and the workflow was reported
-  complete. Every completed action that reads the reset action's output, directly or through
-  other actions, is now reset with it and runs again. The same holds when an action is run
-  again because its stored output has gone missing. Be aware of the cost: a prompt change at
-  the top of a long workflow now re-answers everything below it, which is the correct result
-  and not a cheap one. An action with a batch still in flight is left to finish.
+  complete. Every action that reads the reset action's output, directly or through other
+  actions, is now reset with it and runs again, whatever state it was left in. One that
+  names the action only in its context scope counts as reading it, and one with a batch
+  still out gives that batch up, since it was sent the old output. The same holds when an
+  action is run again because its stored output has gone missing. Be aware of the cost: a
+  prompt change at the top of a long workflow now re-answers everything below it, which is
+  the correct result and not a cheap one. `agac retry` no longer resets an action whose
+  config changed. A retry answers only the records it names, and that reset cleared the
+  failure records of every other record and left later runs unaware of the edit; the next
+  plain run now applies it.
 time: 2026-10-03T04:00:00Z

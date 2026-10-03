@@ -236,15 +236,33 @@ _execute_action_run()
     → _resolve_completion_status()
 ```
 
-**A reset reaches everything downstream.** An action put back to pending is about to write
-new output, so every completed action that reads that output was computed from what is
-being replaced. Left complete it holds answers for records that are gone and none for the
-new ones, while the workflow reports success. `_reset_what_reads_it` resets each of them
-with the same clearing a reset does (dispositions and batch state), at the moment the
-upstream action is reset and not when each is reached: a batch action pauses the run, and
-the next process no longer knows which action was reset. An action with a batch still in
-flight is left to finish, since clearing its state would strand the results. The cost is
-real: a prompt change at the top of a long workflow re-answers everything below it.
+**A reset reaches everything that reads it.** A completed action put back to pending is
+about to write new output, so whatever an action that reads that output holds was computed
+from what is being replaced: the answers of a completed one, the batch of one still out,
+the records an interrupted or halted one had finished. Left as it is, it ends holding
+answers for records that are gone and none for the new ones, while the workflow reports
+success. `_reset_what_reads_it` resets each of them, whatever state it was left in, with
+the same clearing a reset does (dispositions and batch state). A batch still out is given
+up, since it was sent the old output. What counts as reading is what the run order counts:
+an action's dependencies, the versions it merges, and any action it names only in its
+context scope or prompt.
+
+It is done when the upstream action is reset and not as each reader is reached: a batch
+action pauses the run, and the next process no longer knows which action was reset. The
+readers go first and the action itself last, its status after its clearing, so a process
+killed part-way leaves the action as it was found and the next run does all of it again.
+Every route that runs a completed action again goes through it: a changed config, model
+or limit, output that is gone or cannot be read, and a node-level failure it recorded.
+
+A repair (`agac retry`) resets nothing. It answers only the records it named, so a reset
+under it clears every other record's disposition, at the edited action and at everything
+that reads it, with nothing run to replace them. The stamp is left alone and the next
+plain run finds the change.
+
+What it does not do: stored rows are not deleted, only replaced as the re-run writes each
+file. A re-run that is interrupted and resumed can therefore serve the old row for a
+record it had already answered again (#1226). And the cost is real: a prompt change at
+the top of a long workflow re-answers everything below it.
 
 
 ---
@@ -528,7 +546,9 @@ _compute_action_config_hash() covers:
 
 If you change one of these fields and re-run WITHOUT --fresh:
     The executor detects the hash mismatch, resets the action to PENDING,
-    and clears its dispositions. The action re-runs with new config.
+    and clears its dispositions, and does the same to every action that
+    reads it. They re-run with new config. Not under `agac retry`, which
+    compares nothing; the next plain run does.
 
 If you add a new config field that affects output but don't add it
 to the hash computation:

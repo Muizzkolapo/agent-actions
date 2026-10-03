@@ -14,6 +14,7 @@ from rich.console import Console
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import (
     AgentActionsError,
+    ConfigurationError,
     get_error_detail,
     raised_by_exhaustion_policy,
 )
@@ -366,6 +367,11 @@ class ActionExecutor:
         """Reset to pending if limit or semantic config changed since last completion."""
         if current_status not in COMPLETED_STATUSES:
             return current_status
+        # A retry asks for named records, not for other work at actions it never started
+        # from. A reset here clears every other record's disposition, here and at whatever
+        # reads this action, with nothing run to replace it. The next plain run compares.
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
         # The limit in force, not the one the config asked for: stamping the
@@ -378,21 +384,11 @@ class ActionExecutor:
         record_limit_changed = stored_limit != record_limit and not _limit_cannot_reach_the_records(
             details, record_limit
         )
-        # A retry asks for named records, not for a different amount of work, so
-        # neither limit standing during one is something it asked for. Resetting
-        # a completed action on one clears that action's dispositions and re-runs
-        # it truncated — destroying records the retry never named, at actions it
-        # never started from.
-        repairing_records = bool(getattr(self.deps.action_runner, "retried_records", ()))
-        limits_changed = not repairing_records and (
-            record_limit_changed or details.get("file_limit") != file_limit
-        )
+        limits_changed = record_limit_changed or details.get("file_limit") != file_limit
         # Read only outside a repair, and the read consumes it: a repair that
         # declined to act on the marker would otherwise erase the one record of
         # a truncation, leaving the action skipped for good.
-        was_truncated = not repairing_records and self.deps.state_manager.adopt_truncation_marker(
-            action_name
-        )
+        was_truncated = self.deps.state_manager.adopt_truncation_marker(action_name)
 
         # The hash cannot cover the model: it reads a "model" key, and configs
         # write model_name/model_vendor. Adding them to the hash input would
@@ -434,52 +430,95 @@ class ActionExecutor:
                     file_limit,
                     reason,
                 )
-            self._reset_to_pending(action_name)
             self._reset_what_reads_it(action_name)
+            self._reset_to_pending(action_name)
             return ActionStatus.PENDING
         return current_status
 
     def _reset_to_pending(self, action_name: str) -> None:
-        """Put a completed action back to pending, forgetting what it called done."""
-        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+        """Put an action back to pending, forgetting what it called done.
+
+        The status goes last. A process killed part-way then leaves the action as it
+        was found, and the next run finds the same reason to reset it.
+        """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
             storage_backend.clear_disposition(action_name)
             # The batch this reset replaces left a registry entry, recovery state and
-            # a context map the next submission must not read as its own. Only a
-            # completed action reaches here, so no batch of its is in flight.
+            # a context map the next submission must not read as its own.
             storage_backend.clear_batch_state(action_name)
+        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
 
     def _reset_what_reads_it(self, action_name: str) -> None:
-        """Reset every completed action that reads, directly or not, what this one writes.
+        """Reset every action that reads, directly or not, what this one is about to replace.
 
-        Their output was computed from the output this action is about to replace. Done
-        now rather than when each is reached: a batch action pauses the run, and the
-        next process no longer knows which action was reset.
+        Whatever state they were left in, what they hold was computed from that output:
+        the answers of a completed one, the batch of one still out, the records an
+        interrupted or halted one had finished. Done now rather than as each is
+        reached, since a batch action pauses the run and the next process no longer
+        knows which action was reset, and before the action itself is reset, so a
+        process killed part-way finds the same reason to do it all again.
         """
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            # A repair answers only the records it named. Clearing the others' records
+            # here would lose their failures with nothing run to replace them.
+            return
+        for name in self._readers_of(action_name):
+            status = self.deps.state_manager.get_status(name)
+            if status in (ActionStatus.BATCH_SUBMITTED, ActionStatus.CHECKING_BATCH):
+                logger.warning(
+                    "%s has a batch out that was sent what %s wrote before: giving it up, "
+                    "since %s is running again and %s will be sent what it writes now",
+                    name,
+                    action_name,
+                    action_name,
+                    name,
+                )
+            elif status != ActionStatus.PENDING:
+                logger.info(
+                    "%s reads what %s writes, which is running again: resetting to pending",
+                    name,
+                    action_name,
+                )
+            self._reset_to_pending(name)
+
+    def _readers_of(self, action_name: str) -> list[str]:
+        """Every action that reads, directly or through others, what *action_name* writes."""
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        reads = {name: self._reads(name, config, list(configs)) for name, config in configs.items()}
         stale = {action_name}
         # To a fixed point rather than in one pass, so nothing rests on the order the
         # configs happen to be held in.
         grew = True
         while grew:
             grew = False
-            for name, config in configs.items():
-                if name not in stale and not stale.isdisjoint(
-                    self._collect_upstream_deps(name, config)
-                ):
+            for name, sources in reads.items():
+                if name not in stale and not stale.isdisjoint(sources):
                     stale.add(name)
                     grew = True
-        for name in configs:
-            if name == action_name or name not in stale:
-                continue
-            if self.deps.state_manager.get_status(name) in COMPLETED_STATUSES:
-                logger.info(
-                    "%s reads what %s writes, which is running again: resetting to pending",
-                    name,
-                    action_name,
-                )
-                self._reset_to_pending(name)
+        return [name for name in configs if name in stale and name != action_name]
+
+    def _reads(
+        self, action_name: str, action_config: ActionConfigDict, workflow_actions: list[str]
+    ) -> set[str]:
+        """The actions whose output *action_name* is handed.
+
+        Its inputs, and the ones it only names in its context scope or prompt: those
+        reach it through the record all the same, and the run order counts them.
+        """
+        from agent_actions.prompt.context.scope_inference import infer_dependencies
+
+        sources = set(self._collect_upstream_deps(action_name, action_config))
+        try:
+            inputs, context = infer_dependencies(
+                dict(action_config), workflow_actions, action_name, validate=False
+            )
+        except ConfigurationError as e:
+            logger.warning(
+                "Could not infer what %s reads beyond its dependencies: %s", action_name, e
+            )
+            return sources
+        return sources | set(inputs) | set(context)
 
     def verify_completion_status(self, action_name: str) -> bool:
         """Return True if the action has valid output and should be skipped.
@@ -533,7 +572,7 @@ class ActionExecutor:
             )
 
         try:
-            return self._check_prior_output(storage_backend, action_name)
+            should_skip, result = self._check_prior_output(storage_backend, action_name)
         except Exception as e:
             logger.warning(
                 "Failed to verify output for %s, resetting to pending: %s",
@@ -541,8 +580,13 @@ class ActionExecutor:
                 e,
                 exc_info=True,
             )
+            should_skip, result = False, None
+        if not should_skip:
+            # It will write new output whichever way it got here. Outside the try: a
+            # failure part-way through a reset is not a failure to verify.
+            self._reset_what_reads_it(action_name)
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-            return (False, None)
+        return (should_skip, result)
 
     def _check_prior_output(
         self, storage_backend: Any, action_name: str
@@ -554,7 +598,6 @@ class ActionExecutor:
             if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
                 logger.info("Action %s has %s from prior run — re-running", action_name, disp)
                 storage_backend.clear_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID)
-                self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
                 return (False, None)
 
         # The cached-completion path discovered an action that already
@@ -596,8 +639,6 @@ class ActionExecutor:
                 return _completed_result()
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)
-        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-        self._reset_what_reads_it(action_name)
         return (False, None)
 
     def _handle_action_skip(
