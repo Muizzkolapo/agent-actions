@@ -19,7 +19,9 @@ body: >-
   record absent from that run, as online does. And a run in which everything sent fails keeps
   the stored answers, including one stored under the same identity as a failure, where online
   refuses to write at all. A record the guard filtered is now judged by the guard again on
-  each run, as online judges it, instead of being called done for good.
+  each run, as online judges it, instead of being called done for good. A run in which
+  nothing is sent because the one record that passed the guard failed prompt preparation
+  counts as a run in which everything failed.
 
   Batch and online still differ in places, and where they do batch keeps more. A run with
   nothing to send leaves the file as it stands, so it can still hold rows for records that

@@ -12,8 +12,10 @@ body: >-
   batch action run again with a plain `agac run` was skipped the same way, and the run
   reported it complete with nothing sent, where online sends the failed records again. A
   finished batch job now stops its file being submitted again only until its results have
-  been collected. So that this does not cost a second submission, a run that dies while
+  been collected. So that this does not cost a second submission, a run killed while
   collecting a batch now keeps the done records of the files it had already collected, as an
   interrupted run keeps its checkpoints; before, they were wiped and only the finished job
-  kept those files from being sent again.
+  kept those files from being sent again. A collect pass that ends in an error, not a kill,
+  still wipes them, as a failed action does in online mode, and sends those files again
+  (#1211).
 time: 2026-10-03T03:00:00Z

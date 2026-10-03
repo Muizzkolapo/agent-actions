@@ -308,6 +308,7 @@ class BatchSubmissionService:
                 action_name,
                 tombstone_path,
                 run_input_guids,
+                preparation_failed=self._preparation_failed(context_map),
             )
 
         if output_directory and self._storage_backend:
@@ -340,6 +341,8 @@ class BatchSubmissionService:
         action_name: str,
         tombstone_path: str | None,
         run_input_guids: list[str] | None,
+        *,
+        preparation_failed: bool,
     ) -> SubmissionResult:
         """Add the stored rows a tombstone does not replace, as finalize would.
 
@@ -365,8 +368,17 @@ class BatchSubmissionService:
             tombstone_path,
             self._storage_backend,
             batch_inputs=run_input_guids or (),
+            # Written as a guard tombstone, so the rows alone do not say a record failed.
+            also_failed=preparation_failed,
         )
         return result
+
+    @staticmethod
+    def _preparation_failed(context_map: dict[str, Any]) -> bool:
+        return any(
+            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
+            for row in context_map.values()
+        )
 
     def _handle_empty_tasks(
         self,
@@ -388,11 +400,7 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
-        has_failed_prep = any(
-            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
-            for row in context_map.values()
-        )
-        if has_failed_prep:
+        if self._preparation_failed(context_map):
             passthrough = BatchPassthroughBuilder(
                 output_directory, action_name=action_name
             ).from_context(context_map, reason="guard_skip")

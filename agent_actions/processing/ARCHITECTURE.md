@@ -388,7 +388,9 @@ and holds no answer; and because producers are named during enrichment, before
 collection settles the state, a row can name an input it holds nothing for. Either
 credited as an answer deletes what the last run produced. Such a row does still replace
 a stored row of its own identity, which is decided first — carried rows are appended to
-the run's own output, so an identity in both lists would be written twice.
+the run's own output, so an identity in both lists would be written twice. The one
+exception is a run online would refuse to write, below: there the stored answer is the one
+row kept under that identity.
 
 Which unanswered rows come back is the online path's rule. Online writes rows for this
 run's inputs and nothing else: what it processed, and what the gate carried. So a stored
@@ -420,7 +422,9 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   failure row under a stored answer's own identity gives way to it, so the identity is
   still stored once. Stored rows that are not answers follow the inputs as usual. Without
   a failure the run did produce this run's file, however little is in it, and the inputs
-  rule applies in full, as online writes it.
+  rule applies in full, as online writes it. A record that fails prompt preparation when
+  nothing else is sent is such a failure, though it reaches the write as a guard tombstone
+  and not a failure row; submission says so to the merge (`also_failed`).
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
@@ -446,7 +450,8 @@ own folder as the output directory, so the tombstone lands under `sub/page.json`
 batch output is stored as `page.json`. Reading the one and writing the other stores each
 row twice.
 
-The two paths do not always leave the same file. Where they differ, batch holds more:
+The two paths do not always leave the same file. Where batch differs it holds more, with
+one exception noted last:
 
 - A run whose every input the gate carries submits nothing and finalizes nothing, so the
   file is left as it stands. It can still hold rows of inputs that have left; online writes
@@ -461,12 +466,18 @@ The two paths do not always leave the same file. Where they differ, batch holds 
   its answer. Online replaces it with a tombstone, or with nothing.
 - An expanding input sent again that fails, while something else succeeds, keeps the rows
   it minted before beside its failure row. Online holds the failure row alone.
+- An input sent again that answers with no rows keeps the rows it had, since nothing was
+  produced to replace them.
 - A row naming several inputs is always carried.
+- The exception: an online run that raised wrote nothing, so its file still holds answers
+  for records that are no input of that run. A batch run over the same inputs that answers
+  something writes this run's file, without them. Batch holds less there only because
+  online's run aborted, and never for a record that is an input of the run.
 
 `tests/integration/test_batch_rerun_matches_online.py` drives both paths from
-`ProcessingPipeline.process` against a real store and requires that batch never loses an
-answer online still holds, never leaves unanswered what online answers, and never pays for
-an input twice running where online did not.
+`ProcessingPipeline.process` against a real store. For every input of a run it requires
+that batch never loses an answer online still holds, never leaves unanswered what online
+answers, and never pays for an input twice running where online did not.
 
 ---
 

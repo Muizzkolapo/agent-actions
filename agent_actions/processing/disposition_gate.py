@@ -194,20 +194,22 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    also_failed: bool = False,
 ) -> set[str]:
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A stored row is carried where the input it answered for is one of *batch_inputs* and
-    this run did not answer it; one whose input is not among them is not part of this
-    run's output, as online leaves it. Matching is by input, since a minting action's
-    runs share no identity: a processed row answers for the producer it names, else for
-    the identity it carries. With no inputs recorded every unanswered row is carried.
-    Where something failed and nothing was answered online raises before it writes, so
-    every stored answer stands, over a failure row produced under its identity too.
+    this run did not answer it; otherwise it is no part of this run's output, as online
+    leaves it. Matching is by input, since a minting action's runs share no identity: a
+    processed row answers for the producer it names, else for the identity it carries.
+    With no inputs recorded every unanswered row is carried. Where something failed and
+    nothing was answered online raises before it writes, so every stored answer stands,
+    over a row produced under its identity too. *also_failed* says a record failed that
+    *produced* does not show as a failure row.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
-    failed = False
+    failed = also_failed
     for row in produced:
         guid = row.get("source_guid")
         if guid:
@@ -270,6 +272,7 @@ def with_stored_rows_not_reproduced(
     storage_backend: StorageBackend,
     *,
     batch_inputs: Collection[str] = (),
+    also_failed: bool = False,
 ) -> list[dict[str, Any]]:
     """*produced* followed by every stored row it does not replace: the file to write.
 
@@ -284,7 +287,9 @@ def with_stored_rows_not_reproduced(
         # Nothing stored for this file yet, so nothing to carry.
         return produced
 
-    carry_guids = stored_rows_not_reproduced(stored, produced, batch_inputs=batch_inputs)
+    carry_guids = stored_rows_not_reproduced(
+        stored, produced, batch_inputs=batch_inputs, also_failed=also_failed
+    )
     if not carry_guids:
         return produced
 
@@ -302,7 +307,7 @@ def with_stored_rows_not_reproduced(
         )
 
     # A carried row replaces what the run produced under its identity: a stored answer
-    # standing over the failure row of a run that answered nothing.
+    # standing over the row of a run that failed and answered nothing.
     carried = {row["source_guid"] for row in carry_records}
     kept = [row for row in produced if row.get("source_guid") not in carried]
 
