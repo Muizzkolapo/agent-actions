@@ -22,29 +22,46 @@ class Bus(dict[str, Any]):
 class ReadOnlyBus(Bus):
     """A Bus that refuses mutation, for the guard-clause path.
 
-    A Bus subclass, not a separate wrapper, because `execute_user_defined_function`
-    re-wraps any plain dict in a Bus -- `Bus(view)` reads the underlying storage and
-    hands the UDF the record's own nested dicts again, silently undoing the guard.
-    Being a Bus already, this passes through untouched and keeps `require()`.
+    A Bus, so `execute_user_defined_function` passes it through rather than re-wrapping
+    it in a plain Bus with a writable top level. Its storage holds read-only wrappers:
+    `dict(bus)`, `{**bus}`, `bus | {}` and the unbound `dict` methods read storage
+    without calling `__getitem__`, so wrapping only on access handed the record out.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         from agent_actions.utils.readonly import ReadOnlyDict
 
-        super().__init__(*args, **kwargs)
-        self._readonly = ReadOnlyDict(self)
-
-    def __getitem__(self, key: str) -> Any:
-        return self._readonly[key]
+        super().__init__(ReadOnlyDict(dict(*args, **kwargs)))
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._readonly.get(key, default)
+        # `dict.get` takes `default` positionally only; `ReadOnlyDict.get` takes it by
+        # keyword, and a guard UDF that passes it that way must not raise.
+        return super().get(key, default)
 
     def values(self):  # type: ignore[override]
-        return self._readonly.values()
+        # Lists, as on ReadOnlyDict; the storage already holds the wrappers.
+        return list(super().values())
 
     def items(self):  # type: ignore[override]
-        return self._readonly.items()
+        return list(super().items())
+
+    def copy(self) -> dict[str, Any]:
+        """A plain, deep, writable dict: the hatch a namespace's own `copy()` offers."""
+        from agent_actions.utils.readonly import ReadOnlyDict
+
+        return ReadOnlyDict(self).copy()
+
+    def __copy__(self) -> dict[str, Any]:
+        # `copy.copy` rebuilds a dict subclass by assigning into a fresh instance, which
+        # `__setitem__` refuses.
+        return self.copy()
+
+    def __deepcopy__(self, _memo: dict) -> dict[str, Any]:
+        return self.copy()
+
+    def __ior__(self, other: Any) -> NoReturn:  # type: ignore[misc]
+        # `bus |= {...}` merges at C level and never reaches the `update` override.
+        self._refuse()
 
     def _refuse(self, *args: Any, **kwargs: Any) -> NoReturn:
         from agent_actions.utils.readonly import _MESSAGE
