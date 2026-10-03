@@ -34,12 +34,7 @@ from agent_actions.logging.events.batch_events import (
 )
 from agent_actions.output.response.config_schema import WhereClauseBehavior
 from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.record.reasons import PREP_FAILED
-from agent_actions.storage.backend import (
-    DISPOSITION_DEFERRED,
-    DISPOSITION_FAILED,
-    DISPOSITION_FILTERED,
-)
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -393,26 +388,14 @@ class BatchSubmissionService:
         Returns:
             SubmissionResult with passthrough dict
         """
-        failed = [
-            row
+        has_failed_prep = any(
+            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
             for row in context_map.values()
-            if BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
-        ]
-        if failed:
+        )
+        if has_failed_prep:
             passthrough = BatchPassthroughBuilder(
                 output_directory, action_name=action_name
             ).from_context(context_map, reason="guard_skip")
-            # A failure of this action, as online records it: nothing is submitted, so no
-            # finalize will come to say so.
-            if self._storage_backend is not None:
-                for row in failed:
-                    if guid := row.get("source_guid"):
-                        self._storage_backend.set_disposition(
-                            action_name,
-                            guid,
-                            DISPOSITION_FAILED,
-                            reason=BatchContextMetadata.get_skip_reason(row) or PREP_FAILED,
-                        )
             return SubmissionResult(passthrough=passthrough)
 
         has_guard_skipped = any(

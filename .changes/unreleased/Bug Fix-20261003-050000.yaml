@@ -1,11 +1,14 @@
 kind: Bug Fix
 body: >-
-  A record that fails prompt preparation in a batch run with nothing else to send is now
-  stored as a failure. When the guard turned every other record away and the one it passed
-  could not be prepared, for example because the prompt names a field the record does not
-  have, nothing was submitted and the record was written to the output as `guard_skipped`,
-  with no failed disposition. The output said the guard had turned away a record it had
-  passed, `agac retry` had nothing to name, and the action was reported complete. Online
-  marks the same record failed. Batch now writes it in the failed state and records the
-  failed disposition, so the action ends failed, as it does online.
+  A batch run with nothing to send now stores each record as what it is. When the guard
+  turned away the records of a run and the rest could not be sent, the output was written
+  with every one of them marked `guard_skipped`. A record that had passed the guard and then
+  failed prompt preparation, for example because the prompt names a field it does not have,
+  was stored that way, and so was a record an action above had already failed. The output
+  said the guard had turned away records it never judged, and because a guard skip is passed
+  on, the action below took them as input: a failed record could be processed again two
+  actions later. A preparation failure is now stored as `failed`, with the error in its
+  history, and a record blocked upstream as `cascade_skipped`, as online and a batch run
+  that does send something already store them. The failed disposition and the action's
+  status were already right and do not change.
 time: 2026-10-03T05:00:00Z

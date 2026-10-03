@@ -21,13 +21,16 @@ class PassthroughItemBuilder:
         custom_id: str | None = None,
         mode: str = "batch",
         state: RecordState = RecordState.GUARD_SKIPPED,
+        cause: str | None = None,
     ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
         The item carries ``metadata.agent_type = "tombstone"`` so downstream processing
         skips it. *mode* picks the metadata format: batch uses legacy flags, online adds a
-        ``reason`` string. *state* is the state it is left in: a record that failed is not
-        one the guard skipped, and what reads row state has to be able to tell.
+        ``reason`` string. *state* is the state it is left in: a record that failed, or one
+        an action above already failed, is not one the guard skipped, and what reads row
+        state has to be able to tell. *cause* is what its history records, where the
+        caller holds more than the reason, such as the error itself.
         """
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
         resolved_source_guid = LineageBuilder.resolve_source_guid(
@@ -55,16 +58,18 @@ class PassthroughItemBuilder:
         if mode not in ("online", "batch"):
             raise ValueError(f"Invalid passthrough mode '{mode}' — must be 'online' or 'batch'")
 
-        if mode == "online":
+        if mode == "online" or state is not RecordState.GUARD_SKIPPED:
             processed_item["metadata"]["reason"] = reason
-        flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-        processed_item["metadata"][flag_name] = True
+        # The legacy flags all say "skipped by", which is true of a guard skip only.
+        if state is RecordState.GUARD_SKIPPED:
+            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
+            processed_item["metadata"][flag_name] = True
 
         processed_item["metadata"]["agent_type"] = "tombstone"
         processed_item["_tombstone"] = True
         processed_item["_tombstone_reason"] = reason
 
-        RecordEnvelope.transition(processed_item, state, action_name, reason)
+        RecordEnvelope.transition(processed_item, state, action_name, cause or reason)
 
         return processed_item
 
