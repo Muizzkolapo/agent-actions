@@ -22,6 +22,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.config.types import RunMode
+from agent_actions.input.preprocessing.staging.initial_pipeline import (
+    InitialStageContext,
+    process_initial_stage,
+)
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
@@ -342,59 +346,133 @@ class _Batch(_Mode):
             self.sent_in_order.append([])
             return answers(self.held())
 
-        name = Path(self.file).name
-        context_map = BatchContextManager.load_batch_context_map(self.backend, ACTION, name)
-        included = {
-            custom_id: row
-            for custom_id, row in context_map.items()
-            if BatchContextMetadata.get_filter_status(row) == FilterStatus.INCLUDED
-        }
-        submitted = [task["custom_id"] for task in self.provider.submitted[-1]]
-        assert sorted(submitted) == sorted(included)
-        self.sent_in_order.append([included[custom_id]["source_guid"] for custom_id in submitted])
+        self.sent_in_order.append(
+            _collect(
+                self.backend, self.provider, config, self.out, Path(self.file).name, run, answer
+            )
+        )
         self.sent.append(sorted(self.sent_in_order[-1]))
-
-        results = []
-        exhausted: dict[str, Any] = {}
-        for custom_id, row in included.items():
-            said = answer(row["source_guid"], run)
-            if said == "exhaust":
-                exhausted[custom_id] = _exhausted()
-            elif said == "fail":
-                results.append(
-                    BatchResult(custom_id=custom_id, content=None, success=False, error="boom")
-                )
-            else:
-                content = said if len(said) != 1 else said[0]
-                results.append(BatchResult(custom_id=custom_id, content=content, success=True))
-
-        manager = BatchRegistryManager(self.backend, ACTION)
-        entry = manager.get_batch_job(name)
-        assert entry is not None, "submission registered nothing"
-        service = BatchProcessingService(
-            client_resolver=MagicMock(),
-            context_manager=BatchContextManager(),
-            result_processor=BatchResultStrategy(),
-            registry_manager_factory=lambda name: manager,
-            workflow_name=ACTION,
-            storage_backend=self.backend,
-        )
-        service._finalize_batch_output(
-            context=RecoveryContext(
-                service=service,
-                manager=manager,
-                provider=self.provider,
-                agent_config=dict(config),
-                output_directory=str(self.out),
-                action_name=ACTION,
-                start_time=0.0,
-            ),
-            identity=BatchIdentity(batch_id=entry.batch_id, file_name=name, entry=entry),
-            batch_results=results,
-            context_map=context_map,
-            exhausted_recovery=exhausted or None,
-        )
         return answers(self.held())
+
+
+def _collect(
+    backend: SQLiteBackend,
+    provider: _Provider,
+    config: dict[str, Any],
+    out: Path,
+    name: str,
+    run: int,
+    answer: Answerer,
+    label: Any = lambda row: row["source_guid"],
+) -> list[str]:
+    """Answer the batch just submitted and finalize it. Returns what was sent, in order."""
+    context_map = BatchContextManager.load_batch_context_map(backend, ACTION, name)
+    included = {
+        custom_id: row
+        for custom_id, row in context_map.items()
+        if BatchContextMetadata.get_filter_status(row) == FilterStatus.INCLUDED
+    }
+    submitted = [task["custom_id"] for task in provider.submitted[-1]]
+    assert sorted(submitted) == sorted(included)
+
+    results = []
+    exhausted: dict[str, Any] = {}
+    for custom_id, row in included.items():
+        said = answer(label(row), run)
+        if said == "exhaust":
+            exhausted[custom_id] = _exhausted()
+        elif said == "fail":
+            results.append(
+                BatchResult(custom_id=custom_id, content=None, success=False, error="boom")
+            )
+        else:
+            content = said if len(said) != 1 else said[0]
+            results.append(BatchResult(custom_id=custom_id, content=content, success=True))
+
+    manager = BatchRegistryManager(backend, ACTION)
+    entry = manager.get_batch_job(name)
+    assert entry is not None, "submission registered nothing"
+    service = BatchProcessingService(
+        client_resolver=MagicMock(),
+        context_manager=BatchContextManager(),
+        result_processor=BatchResultStrategy(),
+        registry_manager_factory=lambda name: manager,
+        workflow_name=ACTION,
+        storage_backend=backend,
+    )
+    service._finalize_batch_output(
+        context=RecoveryContext(
+            service=service,
+            manager=manager,
+            provider=provider,
+            agent_config=dict(config),
+            output_directory=str(out),
+            action_name=ACTION,
+            start_time=0.0,
+        ),
+        identity=BatchIdentity(batch_id=entry.batch_id, file_name=name, entry=entry),
+        batch_results=results,
+        context_map=context_map,
+        exhausted_recovery=exhausted or None,
+    )
+    return [label(included[custom_id]) for custom_id in submitted]
+
+
+class _FirstStageBatch:
+    """A batch action with no action above it, driven through ``process_initial_stage``."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.backend = SQLiteBackend(str(tmp_path / "first.db"), workflow_name="w")
+        self.backend.initialize()
+        self.staging = tmp_path / "staging"
+        self.target = tmp_path / "target" / ACTION
+        self.staging.mkdir(parents=True)
+        self.target.mkdir(parents=True)
+        self.provider = _Provider()
+        self.sent: list[list[str]] = []
+
+    def run(self, run: int, staged: list[dict[str, Any]], extra: dict[str, Any]) -> list[str]:
+        self.backend.clear_batch_state(ACTION)
+        (self.staging / FILE).write_text(json.dumps(staged))
+        config = _config(
+            RunMode.BATCH,
+            {"dependencies": [], "context_scope": {"observe": ["source.*"]}, "idx": 0, **extra},
+        )
+        before = len(self.provider.submitted)
+        with patch(
+            "agent_actions.llm.batch.infrastructure.batch_client_resolver."
+            "BatchClientResolver.get_for_config",
+            return_value=self.provider,
+        ):
+            process_initial_stage(
+                InitialStageContext(
+                    agent_config=config,
+                    agent_name=ACTION,
+                    file_path=str(self.staging / FILE),
+                    base_directory=str(self.staging),
+                    output_directory=str(self.target),
+                    idx=0,
+                    storage_backend=self.backend,
+                    action_configs={ACTION: config},
+                    workflow_metadata={},
+                )
+            )
+        self.sent.append(
+            _collect(
+                self.backend,
+                self.provider,
+                config,
+                self.target,
+                FILE,
+                run,
+                Answerer(),
+                label=lambda row: row["content"]["source"]["item"],
+            )
+            if len(self.provider.submitted) > before
+            else []
+        )
+        self.backend._reconstruction_cache.clear()
+        return answers(self.backend.read_target_for_rewrite(ACTION, FILE))
 
 
 def compare(
@@ -745,6 +823,45 @@ def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
 
     answered = [row for row in batch.everything_held() if row.startswith("processed:")]
     assert answered == ["processed:a1:0@run1", "processed:a2:0@run1"]
+
+
+def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp_path):
+    """The same write, reached from staging: no action above this one hands it rows."""
+    staged = [
+        {"item": "a1", "keep": True},
+        {"item": "a2", "keep": True},
+        {"item": "f1", "keep": False},
+    ]
+    guard = {"guard": {"clause": "source.keep == true", "behavior": "filter"}}
+    batch = _FirstStageBatch(tmp_path)
+    first = batch.run(1, staged, guard)
+
+    again = batch.run(2, staged, guard)
+
+    assert first == ["processed:a1:0@run1", "processed:a2:0@run1"]
+    assert again == first
+    assert batch.sent == [["a1", "a2"], []]
+
+
+PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
+
+
+@pytest.mark.parametrize("guard", [SKIP, FILTER], ids=["skipping", "filtering"])
+def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer(tmp_path, guard):
+    """Nothing is sent and a record failed, so online raises before it writes. The
+    failure reaches the write as a guard tombstone, which is no failure row."""
+    names = ["s1", "s2", "s3", "s4", "s5", "p6"]
+    batch = _Batch(tmp_path)
+    first = batch.run(
+        1, [rec(name, keep=True, topic="dbt") for name in names], extra={**guard, **PREPARED}
+    )
+
+    refused = [rec(name, keep=False, topic="dbt") for name in names[:5]] + [rec("p6", keep=True)]
+    held = batch.run(2, refused, extra={**guard, **PREPARED}, reset=True)
+
+    assert first == [f"processed:{name}:0@run1" for name in sorted(names)]
+    assert [row for row in held if row.startswith("processed:")] == first
+    assert batch.sent[1] == []
 
 
 def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
