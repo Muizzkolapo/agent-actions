@@ -205,11 +205,13 @@ execute_action_sync(action_name)
 Config changed since last run?
 (prompt, model, schema, guard changed)
     YES → invalidate COMPLETED, reset to PENDING
+          and reset every COMPLETED action that reads its output,
+          directly or through other actions (see below)
     │
     ▼
 Already COMPLETED?
     YES → verify output exists
-          output missing → reset to PENDING
+          output missing → reset to PENDING, and what reads it likewise
           output present → skip, return success
     │
     ▼
@@ -233,6 +235,17 @@ _execute_action_run()
     → ActionRunner.run_action()
     → _resolve_completion_status()
 ```
+
+**A reset reaches everything downstream.** An action put back to pending is about to write
+new output, so every completed action that reads that output was computed from what is
+being replaced. Left complete it holds answers for records that are gone and none for the
+new ones, while the workflow reports success. `_reset_what_reads_it` resets each of them
+with the same clearing a reset does (dispositions and batch state), at the moment the
+upstream action is reset and not when each is reached: a batch action pauses the run, and
+the next process no longer knows which action was reset. An action with a batch still in
+flight is left to finish, since clearing its state would strand the results. The cost is
+real: a prompt change at the top of a long workflow re-answers everything below it.
+
 
 ---
 

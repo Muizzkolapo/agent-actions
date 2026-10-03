@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  Changing an upstream step now re-runs the steps below it. When a completed action's
+  prompt, schema, guard, model or record limit changed, the next run reset that action and
+  ran it again, but the actions depending on it were left as they were. They kept output
+  computed from the upstream output that had just been replaced, holding answers for
+  records that no longer existed and none for the new ones, and the workflow was reported
+  complete. Every completed action that reads the reset action's output, directly or through
+  other actions, is now reset with it and runs again. The same holds when an action is run
+  again because its stored output has gone missing. Be aware of the cost: a prompt change at
+  the top of a long workflow now re-answers everything below it, which is the correct result
+  and not a cheap one. An action with a batch still in flight is left to finish.
+time: 2026-10-03T04:00:00Z

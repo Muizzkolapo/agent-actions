@@ -434,16 +434,52 @@ class ActionExecutor:
                     file_limit,
                     reason,
                 )
-            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-            storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-            if storage_backend is not None:
-                storage_backend.clear_disposition(action_name)
-                # The batch this reset replaces left a registry entry, recovery state and
-                # a context map the next submission must not read as its own. Only a
-                # completed action reaches here, so no batch of its is in flight.
-                storage_backend.clear_batch_state(action_name)
+            self._reset_to_pending(action_name)
+            self._reset_what_reads_it(action_name)
             return ActionStatus.PENDING
         return current_status
+
+    def _reset_to_pending(self, action_name: str) -> None:
+        """Put a completed action back to pending, forgetting what it called done."""
+        self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is not None:
+            storage_backend.clear_disposition(action_name)
+            # The batch this reset replaces left a registry entry, recovery state and
+            # a context map the next submission must not read as its own. Only a
+            # completed action reaches here, so no batch of its is in flight.
+            storage_backend.clear_batch_state(action_name)
+
+    def _reset_what_reads_it(self, action_name: str) -> None:
+        """Reset every completed action that reads, directly or not, what this one writes.
+
+        Their output was computed from the output this action is about to replace. Done
+        now rather than when each is reached: a batch action pauses the run, and the
+        next process no longer knows which action was reset.
+        """
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        stale = {action_name}
+        # To a fixed point rather than in one pass, so nothing rests on the order the
+        # configs happen to be held in.
+        grew = True
+        while grew:
+            grew = False
+            for name, config in configs.items():
+                if name not in stale and not stale.isdisjoint(
+                    self._collect_upstream_deps(name, config)
+                ):
+                    stale.add(name)
+                    grew = True
+        for name in configs:
+            if name == action_name or name not in stale:
+                continue
+            if self.deps.state_manager.get_status(name) in COMPLETED_STATUSES:
+                logger.info(
+                    "%s reads what %s writes, which is running again: resetting to pending",
+                    name,
+                    action_name,
+                )
+                self._reset_to_pending(name)
 
     def verify_completion_status(self, action_name: str) -> bool:
         """Return True if the action has valid output and should be skipped.
@@ -561,6 +597,7 @@ class ActionExecutor:
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)
         self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+        self._reset_what_reads_it(action_name)
         return (False, None)
 
     def _handle_action_skip(
