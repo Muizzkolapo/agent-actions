@@ -624,6 +624,9 @@ MINTED_AGAIN = {
     ],
     "a_completely_new_batch_of_records": [["r1", "r2"], ["r3"]],
     "half_the_children_are_minted_again": [["a1", "a2", "b1"], ["a3", "a4", "b1"]],
+    "an_input_leaves_and_nothing_is_left_to_send": [["a1", "a2"], ["a1"]],
+    "an_input_leaves_with_nothing_to_send_then_returns": [["a1", "a2"], ["a1"], ["a1", "a2"]],
+    "every_input_leaves": [["a1", "a2"], []],
 }
 
 
