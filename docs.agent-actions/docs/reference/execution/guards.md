@@ -163,6 +163,8 @@ How guard results affect downstream actions in a multi-action workflow:
 | `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
 | `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
 
+An action whose guard filters every record it receives holds nothing and is skipped, and so is every action that depends on it. With several input files that takes every file: an action that filters all of one file's records and keeps records from another completes, and the actions that depend on it run on what it kept.
+
 ### Skipped records flow downstream
 
 When Action A skips a record (`on_false: skip`), Action B still receives it and can process it with its own LLM call. Each action's guard is independent:

@@ -142,7 +142,9 @@ class CollectionStats:
            SKIPPED disposition so the executor can cascade-skip downstream.
            Guard-skipped records with passthrough data ARE in ``output``,
            so ``not output`` prevents cascade-blocking when passthrough
-           data exists.
+           data exists. This runs per input file, so the executor takes
+           the row as the action's skip only while the action holds no
+           record.
         2. **zero successes** among active (non-unprocessed) input records
            with at least one failure — raise ``RuntimeError`` for the
            circuit breaker.  Unprocessed (cascade-quarantined) records are
@@ -942,7 +944,7 @@ def collect_results_from_processing_results(
     total_input = len(results)
     if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
         logger.warning(
-            "[%s] All %d records filtered by guard (%s). Downstream actions will receive no input.",
+            "[%s] All %d records filtered by guard (%s). None of them reaches downstream actions.",
             action_name,
             total_input,
             guard_condition or "unknown condition",
