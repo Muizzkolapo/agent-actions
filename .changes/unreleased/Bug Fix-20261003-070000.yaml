@@ -9,6 +9,7 @@ body: >-
   flight, and says to run the workflow again to collect it first. `--abandon-in-flight`
   still lets the retry through, and now marks every record the abandoned batch held as
   failed, including records whose waiting mark an earlier run had cleared, so a later
-  retry can reach them. A workflow whose batches were collected before this release is
-  not affected: a completed action is never treated as owing a batch.
+  retry can reach them. Whether a finished batch is
+  still owed is decided from its records, so a batch collected before this release, or one
+  whose records all failed, does not hold a retry up.
 time: 2026-10-03T07:00:00Z
