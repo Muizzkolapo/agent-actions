@@ -16,10 +16,8 @@ import pytest
 from agent_actions.errors import DependencyError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
-from agent_actions.llm.batch.services.processing import (
-    BatchProcessingService,
-    _empty_output_halt,
-)
+from agent_actions.llm.batch.services.collect import _empty_output_halt
+from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.workflow.executor import ActionExecutor
 
@@ -126,7 +124,7 @@ def test_a_polling_failure_is_still_re_raised():
 
 def test_a_second_halt_for_the_same_file_is_said_and_not_dropped_silently(caplog):
     from agent_actions.errors import exhaustion_halt
-    from agent_actions.llm.batch.services.processing import _halt_for
+    from agent_actions.llm.batch.services.collect import _halt_for
 
     first = exhaustion_halt("Retry exhausted for a3")
     empty = MagicMock(skip_reason=EMPTY_OUTPUT, source_guid="a1")

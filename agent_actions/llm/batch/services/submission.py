@@ -21,10 +21,8 @@ from agent_actions.llm.batch.infrastructure.context import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.processing.batch_passthrough_builder import (
-    BatchPassthroughBuilder,
-)
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.services.collect import collect_batch_rows, write_batch_file
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
@@ -32,9 +30,15 @@ from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,
     BatchSubmissionFailedEvent,
 )
-from agent_actions.output.response.config_schema import WhereClauseBehavior
-from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+from agent_actions.processing.result_collector import (
+    _safe_set_disposition,
+    write_node_level_disposition,
+)
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
+)
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -230,8 +234,8 @@ class BatchSubmissionService:
         *run_inputs* is this action's input above every narrowing, recorded for
         carry-forward, which cannot otherwise tell a record the run left out from one
         that no longer exists. None records nothing, and neither does a repair.
-        A tombstone passthrough is for the caller to write under
-        ``batch_output_name(batch_name)``, and carries the rows stored there.
+        When preparation leaves nothing to send, the file is collected and written
+        here, as finalize would; the caller has nothing left to write.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -302,12 +306,12 @@ class BatchSubmissionService:
         )
 
         if not tasks:
-            return self._with_stored_rows(
-                self._handle_empty_tasks(
-                    agent_config, context_map, data, output_directory, action_name=action_name
-                ),
+            return self._collect_without_sending(
+                agent_config,
                 action_name,
                 batch_name,
+                context_map,
+                output_directory,
                 run_input_guids,
             )
 
@@ -335,90 +339,54 @@ class BatchSubmissionService:
 
         return result
 
-    def _with_stored_rows(
-        self,
-        result: SubmissionResult,
-        action_name: str,
-        batch_name: str,
-        run_input_guids: list[str] | None,
-    ) -> SubmissionResult:
-        """Add the stored rows a tombstone does not replace, as finalize would.
-
-        Nothing was left to send, so the passthrough is written as the whole of the
-        batch's output file. Alone it replaces every answer stored there with nothing,
-        and their dispositions still say done, so they are never answered again.
-        """
-        passthrough = result.passthrough
-        if (
-            self._storage_backend is None
-            or not passthrough
-            or passthrough.get("type") != "tombstone"
-        ):
-            return result
-        from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
-
-        passthrough["data"] = with_stored_rows_not_reproduced(
-            passthrough["data"],
-            action_name,
-            batch_output_name(batch_name),
-            self._storage_backend,
-            batch_inputs=run_input_guids or (),
-        )
-        return result
-
-    def _handle_empty_tasks(
+    def _collect_without_sending(
         self,
         agent_config: dict[str, Any],
-        context_map: dict[str, Any],
-        data: list[dict[str, Any]],
-        output_directory: str | None,
         action_name: str,
+        batch_name: str,
+        context_map: dict[str, Any],
+        output_directory: str | None,
+        run_input_guids: list[str] | None,
     ) -> SubmissionResult:
-        """Handle case where no tasks remain after filtering.
+        """Collect and write the file as finalize does, from no results.
 
-        Args:
-            agent_config: Agent configuration
-            context_map: Context map from preparation
-            data: Original input data
-            output_directory: Output directory path
-            action_name: Action name for passthrough records
-
-        Returns:
-            SubmissionResult with passthrough dict
+        Every entry is one preparation held back: skipped or filtered by the guard,
+        blocked by the action above, or failed. No batch exists, so the registry, the
+        recovery state and the batch events are left alone.
         """
-        has_failed_prep = any(
-            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
-            for row in context_map.values()
+        if not output_directory:
+            raise ConfigurationError(
+                "output_directory is required to write a batch run with nothing to send",
+                context={"action_name": action_name, "batch_name": batch_name},
+            )
+        logger.info(
+            "Nothing left to send for %s: writing its %d record(s) without a batch",
+            batch_name,
+            len(context_map),
         )
-        if has_failed_prep:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="guard_skip")
-            return SubmissionResult(passthrough=passthrough)
-
-        has_guard_skipped = any(
-            BatchContextMetadata.is_skipped(row) for row in context_map.values()
+        rows, _stats, halt = collect_batch_rows(
+            self._storage_backend,
+            action_name,
+            agent_config,
+            context_map,
+            [],
+            output_directory=output_directory,
         )
-        if has_guard_skipped:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="guard_skip")
-            return SubmissionResult(passthrough=passthrough)
-
-        where_config = agent_config.get("where_clause") or {}
-        behavior = WhereClauseBehavior(where_config.get("behavior", "filter"))
-
-        if behavior == WhereClauseBehavior.FILTER:
-            passthrough = {
-                "type": "tombstone",
-                "data": [],
-                "output_directory": output_directory,
-            }
-        else:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="where_clause_not_matched")
-        return SubmissionResult(passthrough=passthrough)
+        write_batch_file(
+            self._storage_backend,
+            action_name,
+            rows,
+            output_root=output_directory,
+            stored_name=batch_output_name(batch_name),
+            batch_inputs=run_input_guids or (),
+        )
+        write_node_level_disposition(
+            self._storage_backend, action_name, DISPOSITION_PASSTHROUGH, "All records tombstoned"
+        )
+        # After the write, as finalize raises it: raised first, it takes the file too.
+        if halt is not None:
+            raise halt
+        return SubmissionResult(passthrough={"type": "written"})
 
     def _stamp_deferred(
         self,

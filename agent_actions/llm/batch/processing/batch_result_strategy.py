@@ -760,6 +760,8 @@ class BatchResultStrategy:
 
         Records with FilterStatus.FAILED were never submitted to the provider.
         They must still appear in output so downstream consumers see all records.
+        The result's error, which its disposition records, is the one preparation
+        recorded, as online's is; the row says only that preparation failed.
         """
         skip_reason = BatchContextMetadata.get_skip_reason(original_row)
         reason = skip_reason or PREP_FAILED
@@ -772,7 +774,7 @@ class BatchResultStrategy:
         )
 
         processing_result = ProcessingResult.failed(
-            error=reason,
+            error=BatchContextMetadata.get_prep_error(original_row) or reason,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )

@@ -12,23 +12,19 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchCl
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
     batch_file_identity,
-    batch_output_name,
     held_by_a_dependency,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.output.writer import FileWriter
 from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     DispositionRow,
 )
@@ -297,7 +293,9 @@ class ProcessingPipeline:
             registry=registry_manager_factory,
         )
 
-        result = submission_service.submit_batch_job(
+        # A run with nothing to send writes its file there; one that sends is marked in
+        # flight by the batch_jobs table, so no placeholder is needed on disk.
+        submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
             batch_name,
             data,
@@ -306,29 +304,6 @@ class ProcessingPipeline:
             workflow_metadata=params.workflow_metadata,
             run_inputs=run_inputs,
         )
-
-        if (
-            result.is_passthrough
-            and result.passthrough is not None
-            and result.passthrough.get("type") == "tombstone"
-        ):
-            file_writer = FileWriter(
-                str(Path(params.batch_output_directory) / batch_output_name(batch_name)),
-                storage_backend=params.storage_backend,
-                action_name=params.pipeline_action_name,
-                output_directory=params.batch_output_directory,
-            )
-            file_writer.write_target(result.passthrough["data"])
-            write_node_level_disposition(
-                params.storage_backend,
-                params.pipeline_action_name,
-                DISPOSITION_PASSTHROUGH,
-                "All records tombstoned",
-            )
-            return str(output_file_path)
-
-        # The batch_jobs table in the storage backend signals "in-flight" —
-        # no placeholder file is needed on disk.
         return str(output_file_path)
 
     @staticmethod

@@ -98,7 +98,6 @@ def _mock_service():
     service._determine_output_path = MagicMock(return_value=Path("/tmp/output.json"))
     service._write_batch_output = MagicMock()
     service._cleanup_recovery_entries = MagicMock()
-    service._update_prompt_trace_responses = MagicMock()
     return service
 
 
@@ -351,17 +350,13 @@ class TestFinalizeBatchOutput:
         service, _, _, _ = self._run_finalize()
         service._cleanup_recovery_entries.assert_not_called()
 
-    def test_finalize_writes_filtered_dispositions(self):
+    def test_finalize_hands_the_context_map_to_the_collect_step(self):
         """Phase 7b parity: FILTERED records in context_map must reach DISPOSITION_FILTERED.
 
-        finalize_batch_output is the production retrieve entry point (called via
-        process_all_batch_results → _process_single_batch_file → _process_original_batch
-        → _finalize_batch_output). The reconciler strips FILTERED rows from
-        processed_data before this function runs, so the collector path never sees
-        them. Without an explicit _write_filtered_dispositions call here, FILTERED
-        records stay stuck at DISPOSITION_DEFERRED (stamped at submit by Phase 7a)
-        and never transition to DISPOSITION_FILTERED — silently breaking the
-        Phase 7b parity contract for every real batch run.
+        The reconciler strips FILTERED rows before the collector sees them, so the
+        collect step writes them from the context map. Not handed it, FILTERED records
+        stay stuck at DISPOSITION_DEFERRED (stamped at submit by Phase 7a) and never
+        transition to DISPOSITION_FILTERED.
         """
         service = _mock_service()
         manager = MagicMock()
@@ -379,15 +374,12 @@ class TestFinalizeBatchOutput:
                 context_map=context_map,
             )
 
-        service._write_filtered_dispositions.assert_called_once_with(context_map, "test_action")
+        collected = service._convert_batch_results_to_workflow_format.call_args.kwargs
+        assert (collected["context_map"], collected["action_name"]) == (context_map, "test_action")
 
-    def test_finalize_uses_service_action_name_when_action_name_none(self):
-        """When action_name=None, _write_filtered_dispositions still uses service._workflow_name.
-
-        Mirrors how _clear_deferred_dispositions and _update_prompt_trace_responses
-        fall back to effective_action_name. A None action_name must not silently
-        skip filtered-disposition writes — the service knows its own name.
-        """
+    def test_finalize_collects_under_the_service_name_when_action_name_none(self):
+        """A None action_name must not leave the collect step without a name: the
+        service knows its own."""
         service = _mock_service()
         service._workflow_name = "fallback_action"
         manager = MagicMock()
@@ -405,7 +397,8 @@ class TestFinalizeBatchOutput:
                 context_map=context_map,
             )
 
-        service._write_filtered_dispositions.assert_called_once_with(context_map, "fallback_action")
+        collected = service._convert_batch_results_to_workflow_format.call_args.kwargs
+        assert collected["action_name"] == "fallback_action"
 
 
 # ---------------------------------------------------------------------------

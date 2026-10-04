@@ -32,14 +32,13 @@ def backend(tmp_path):
 
 def _batch_update(backend, items: list[dict]) -> None:
     """Drive the real batch trace-update over already-processed items."""
-    from agent_actions.llm.batch.services.processing import BatchProcessingService
+    from agent_actions.llm.batch.services.collect import update_prompt_trace_responses
     from agent_actions.record.state import RecordState
 
-    service = SimpleNamespace(_storage_backend=backend)
-    BatchProcessingService._update_prompt_trace_responses(
-        service,
-        [{"_state": RecordState.PROCESSED.value, **item} for item in items],
+    update_prompt_trace_responses(
+        backend,
         ACTION,
+        [{"_state": RecordState.PROCESSED.value, **item} for item in items],
     )
 
 

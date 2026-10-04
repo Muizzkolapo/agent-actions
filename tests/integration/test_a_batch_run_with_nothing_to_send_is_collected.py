@@ -20,8 +20,19 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.errors import exhaustion_halt
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.input.preprocessing.staging import initial_pipeline
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.infrastructure.recovery_state import (
+    RecoveryState,
+    RecoveryStateManager,
+)
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.batch.services import submission
+from agent_actions.logging.core.manager import EventManager
+from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.record.envelope import RecordEnvelope
@@ -266,6 +277,61 @@ def test_a_failure_with_no_identity_of_its_own_fails_the_action(tmp_path):
 
     assert _dispositions(batch.backend)["t-n1"][0] == "failed"
     assert _status(batch.backend) == ActionStatus.FAILED
+
+
+def test_a_run_with_nothing_to_send_leaves_the_batch_before_it_alone(tmp_path):
+    """No batch was sent, so none is completed, collected or reported; what a
+    finalize does to the registry and recovery state belongs to a batch."""
+    (tmp_path / "quiet").mkdir()
+    batch = _Batch(tmp_path / "quiet", clears_batch_state=False)
+    earlier = BatchJobEntry(
+        batch_id="batch-0",
+        status=BatchStatus.FAILED,
+        timestamp="t0",
+        provider="openai",
+        file_name="page.json",
+    )
+    BatchRegistryManager(batch.backend, ACTION).save_batch_job("page.json", earlier)
+    RecoveryStateManager.save(batch.backend, ACTION, "page.json", RecoveryState(retry_attempt=1))
+    fired: list[Any] = []
+
+    with patch.object(EventManager, "fire", lambda _manager, event: fired.append(event)):
+        held = batch.run(1, [handed("k1", keep=False)], extra=SKIP)
+
+    assert held == ["guard_skipped:k1"]
+    assert [event for event in fired if isinstance(event, BatchCompleteEvent)] == []
+    assert BatchRegistryManager(batch.backend, ACTION).get_all_jobs() == {"page.json": earlier}
+    assert RecoveryStateManager.load(batch.backend, ACTION, "page.json") == RecoveryState(
+        retry_attempt=1
+    )
+
+
+def test_a_halt_decided_while_collecting_is_raised_once_the_file_is_written(tmp_path):
+    """As finalize raises it. None can be decided with no results today, and raised
+    first, one would take the file with it."""
+    batch = _batch(tmp_path, "quiet")
+    halt = exhaustion_halt("Retry exhausted for k1")
+    collect, write = submission.collect_batch_rows, submission.write_batch_file
+    order: list[str] = []
+
+    def collecting(*args: Any, **kwargs: Any) -> Any:
+        rows, stats, _none = collect(*args, **kwargs)
+        order.append("collected")
+        return rows, stats, halt
+
+    def writing(*args: Any, **kwargs: Any) -> Any:
+        order.append("written")
+        return write(*args, **kwargs)
+
+    with (
+        patch.object(submission, "collect_batch_rows", collecting),
+        patch.object(submission, "write_batch_file", writing),
+    ):
+        held = batch.run(1, [handed("k1", keep=False)], extra=SKIP)
+
+    assert order == ["collected", "written"]
+    assert batch.raised == [f"{type(halt).__name__}: {halt}"]
+    assert held == ["guard_skipped:k1"]
 
 
 def test_a_file_in_a_subdirectory_is_written_under_its_one_name_when_nothing_is_sent(

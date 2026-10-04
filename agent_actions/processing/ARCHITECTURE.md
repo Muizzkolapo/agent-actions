@@ -440,13 +440,24 @@ input the guard filtered is not looked up, since it holds no row by design. It i
 to the guard again instead: online's guard runs above its gate and judges every input
 afresh, where the gate here would call a filtered one done for good.
 
-When the guard leaves nothing to send, submission returns a tombstone that the caller
-writes as a whole file. It goes through the same merge (`with_stored_rows_not_reproduced`),
-so that write carries what a finalize would. Alone it replaced every stored answer with
-nothing while their dispositions still said done. The rows are read from, and the tombstone
-written to, the one file finalize writes: `batch_output_name` of the batch's name, which
-submission derives itself rather than taking a path from its caller, so the two cannot
-drift.
+When preparation leaves nothing to send -- the guard skipped or filtered every input, the
+action above blocked it, or its prompt could not be prepared -- submission collects and
+writes the file itself, by the two functions finalize uses (`llm/batch/services/collect.py`).
+`collect_batch_rows` runs the context map through `BatchResultStrategy` and the shared
+collector with no results, so each row keeps the parent, version correlation and history
+the action above gave it, and each record gets the disposition a run that sends gives it:
+`unprocessed` for a guard skip or an upstream block, `filtered`, or `failed` with the
+error. `write_batch_file` merges the stored rows the run does not replace
+(`with_stored_rows_not_reproduced`) -- alone, the write replaced every stored answer with
+nothing while their dispositions still said done -- and stores the file under
+`batch_output_name` of the batch's name, the one file finalize writes, building the path
+from that name so the two cannot drift. Submission then records the node-level
+`passthrough` (with no rows stored, the action reads skipped) and raises any halt the
+collect step returned, after the write as finalize does. Nothing touches the registry,
+recovery state or batch events: no batch was sent. A record whose prompt cannot be
+prepared is recorded failed with the error preparation raised, on both paths: it is kept on
+the record's context-map entry (`_batch_prep_error`), since a collect pass may run in a
+later process. A map saved before the key existed records `prep_failed`.
 
 A batch input file has one name, its identity: its path under the action's input root
 (`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
@@ -519,6 +530,16 @@ one exception noted last:
   a file, whether it answered something or wrote only what the guard left, writes this
   run's file, without them. Batch holds less there only because online's run aborted, and
   never for a record that is an input of the run.
+
+Dispositions differ where the rows do not:
+
+- A guard skip is `unprocessed` here and `passthrough` online. The gate runs above the
+  guard here, so a terminal disposition would carry the skip for good; `unprocessed` sends
+  the record to the guard again on the next run.
+- A record with no `source_guid` that fails preparation is recorded failed under its
+  target id, so the action reads failed. Online refuses such a record at enrichment and
+  records nothing. `agac retry` selects records by `source_guid`, so it cannot repair it
+  on either path.
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. Under `error` online raises at the record and

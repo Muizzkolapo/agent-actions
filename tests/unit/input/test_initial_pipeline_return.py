@@ -57,7 +57,8 @@ class TestBatchModeReturnsPath:
         assert isinstance(result, str)
         assert result.endswith(".json")
 
-    def test_returns_string_path_on_tombstone_result(self, tmp_dirs):
+    def test_returns_string_path_when_nothing_was_sent(self, tmp_dirs):
+        """Submission wrote the file itself; no placeholder stands in for a batch."""
         base, output, input_file = tmp_dirs
         storage = MagicMock()
         ctx = BatchProcessingContext(
@@ -70,20 +71,18 @@ class TestBatchModeReturnsPath:
             storage_backend=storage,
         )
 
-        tombstone = {"type": "tombstone", "data": [{"status": "skipped"}]}
-        with (
-            patch(
-                "agent_actions.llm.batch.services.submission.BatchSubmissionService"
-            ) as MockSubmission,
-            patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
-        ):
+        with patch(
+            "agent_actions.llm.batch.services.submission.BatchSubmissionService"
+        ) as MockSubmission:
             MockSubmission.return_value.submit_batch_job.return_value = SubmissionResult(
-                passthrough=tombstone
+                passthrough={"type": "written"}
             )
             result = _process_batch_mode(ctx)
 
         assert isinstance(result, str)
         assert result.endswith(".json")
+        assert not (output / "sample.json").exists()
+        storage.write_target.assert_not_called()
 
 
 class TestOnlineModeReturnsPath:

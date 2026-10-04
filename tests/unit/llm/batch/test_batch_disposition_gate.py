@@ -240,17 +240,18 @@ class TestBatchDispositionGate:
 
     def test_the_write_made_when_nothing_is_sent_carries_the_file_its_batch_is_named_for(self):
         """And no other: the top-level file of the same name holds another file's rows."""
-        result = self._nothing_left_to_send(batch_name="sub/data.json")
+        written = self._nothing_left_to_send(batch_name="sub/data.json")
 
-        assert [row["source_guid"] for row in result.passthrough["data"]] == ["x1"]
+        assert written == ("sub/data.json", ["x1"])
 
     def test_a_top_level_file_carries_its_own_rows_when_nothing_is_sent(self):
-        result = self._nothing_left_to_send(batch_name="data.json")
+        written = self._nothing_left_to_send(batch_name="data.json")
 
-        assert [row["source_guid"] for row in result.passthrough["data"]] == ["r0"]
+        assert written == ("data.json", ["r0"])
 
     @staticmethod
-    def _nothing_left_to_send(*, batch_name: str):
+    def _nothing_left_to_send(*, batch_name: str) -> tuple[str, list[str]]:
+        """Where the run with nothing to send stored its file, and whose rows it holds."""
         backend = _mock_backend(terminal_ids={"r0"})
         files = {
             "data.json": [{"source_guid": "r0", "content": {}}],
@@ -263,12 +264,14 @@ class TestBatchDispositionGate:
             tasks=[],
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            return service.submit_batch_job(
+            service.submit_batch_job(
                 agent_config={"agent_type": "test_action", "action_name": "test_action"},
                 batch_name=batch_name,
                 data=[_make_record("r0"), _make_record("r1")],
                 output_directory=tmpdir,
             )
+        _action, stored_name, rows = backend.write_target.call_args.args
+        return stored_name, [row["source_guid"] for row in rows]
 
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""
