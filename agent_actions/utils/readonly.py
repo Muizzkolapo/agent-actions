@@ -240,6 +240,16 @@ class ReadOnlyList(list):
     def sort(self, *args: Any, **kwargs: Any) -> NoReturn:
         _refuse()
 
+    def __getitem__(self, index: Any) -> Any:
+        item = list.__getitem__(self, index)
+        if type(index) is not slice:
+            return item
+        # A slice is read from the view like anything else: read-only, and `copy()` on
+        # it is the deep one. Its items are already wrappers, so nothing is walked.
+        part: ReadOnlyList = list.__new__(ReadOnlyList)
+        list.extend(part, item)
+        return part
+
     def copy(self) -> list:
         """A real, writable list, deep -- as on ReadOnlyDict."""
         plain: list[Any] = _rebuild(self, False)

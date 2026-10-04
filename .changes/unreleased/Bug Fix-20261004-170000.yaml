@@ -7,10 +7,12 @@ body: >-
   whose function raises passes its record, so such a record went to the action with the
   guard never run. The view is now built without recursion: depth, cycles and a value held
   in two places no longer matter, and an ordinary record's view costs about half what it
-  did. If a view cannot be built at all, the run stops with an error naming the guard and
-  the record, where before the record was passed unjudged. Three things a guard function
-  can observe have changed. A copy taken with `.copy()` has the record's shape, so a value
-  the record holds in two places is one value in the copy, as `copy.deepcopy` gives. A
-  slice of a list is a plain list of read-only items. And a dict or list subclass inside a
-  record is read from what it stores, not through methods it overrides.
+  did. If a view cannot be built at all, the record is never passed unjudged, as it was
+  before: a tool or file-mode action fails with an error naming the guard and the record,
+  and elsewhere that one record is marked failed. Three things a guard function can
+  observe have changed. A copy taken with `.copy()` has the record's shape, so a value the
+  record holds in two places is one value in the copy, as `copy.deepcopy` gives. A dict or
+  list subclass inside a record is read from what it stores and in the order it stores it,
+  not through methods it overrides. And a named tuple that holds no dict or list keeps its
+  type, where it used to become a plain tuple.
 time: 2026-10-04T17:00:00Z

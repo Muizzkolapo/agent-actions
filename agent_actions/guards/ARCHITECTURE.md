@@ -85,9 +85,8 @@ What the view guarantees:
 - **A write is refused**, with a message saying what to do instead, so an author never believes
   a write took effect.
 - **Taking a copy works.** `copy()`, `copy.copy` and `copy.deepcopy` return a plain, writable
-  structure that shares nothing with the record or the view. It has the record's shape: a
-  container the record holds in two places is one container in the copy, as `copy.deepcopy`
-  of the record gives.
+  structure that shares no dict, list or set with the record or the view. It has the record's shape: a container the record holds in two places is one
+  container in the copy, and a cycle is the same cycle.
 - **It stays a dict.** These are dict/list/set subclasses, so `isinstance(x, dict)`,
   `json.dumps(x)` and `**x` work for a UDF that only reads.
 
@@ -95,21 +94,29 @@ How it is built: one loop over a worklist, with a memo of what replaced each con
 recurses, so nesting depth costs no interpreter frames. A container is replaced once however
 many places hold it, so a cycle in the record is the same cycle in the view and a shared
 container is walked once. The walk reads each container's own storage, never a subclass's
-accessors, so the only user code it can run is a dict key's `__hash__` and `__eq__`.
+accessors. The user code it can still run is a dict key's `__hash__` and `__eq__`, and the
+`__class__` lookup `isinstance` makes on a value.
 
 What to know:
 
 - The view is a snapshot of the record's structure when it was built. A namespace the record
   gains afterwards is not in it. Nothing changes a record while its guard is evaluated.
-- A slice of a list view is a new plain list of the view's items, as `list(view)` is.
+- A slice of a list view is a read-only list of the same items, and its `copy()` is the deep
+  one. `list(view)`, `xs + []` and `reversed(xs)` give plain lists of read-only items.
 - Only dict, list, tuple and set are replaced. A dict or list subclass becomes a plain
-  read-only dict or list, read from what it stores. A tuple that holds a container becomes a
-  plain tuple; one that holds none is handed over as it is. Any other value (an object with
-  attributes, a `MappingProxyType`, a `deque`) is handed over as it is.
+  read-only dict or list, read from what it stores and in the order it stores it (an
+  `OrderedDict` reordered with `move_to_end` is seen in insertion order). A tuple that holds
+  a container becomes a plain tuple; one that holds none is handed over as it is. Any other
+  value (an object with attributes, a `MappingProxyType`, a `deque`, a `bytearray`) is handed
+  over as it is, in the view and in a copy of it.
+- A value that only claims to be a dict or a list (a `weakref.proxy` to one, a mock with
+  `spec=dict`) has no storage to read, so the view cannot be built.
 - The cost is one pass over the record per view, on this path only. Expression guards never
   build one.
-- A view that cannot be built raises `GuardNotAppliedError`, naming the guard and, from the
-  pre-filter, the record. The record is not passed: it has not been judged.
+- A view that cannot be built raises `GuardNotAppliedError`, naming the guard. The record is
+  not passed: it has not been judged. The pre-filter adds the record and marks the error
+  fatal to the action, since that pass cannot fail one record; record-mode preparation fails
+  that record alone.
 
 ### Safety Validation
 
