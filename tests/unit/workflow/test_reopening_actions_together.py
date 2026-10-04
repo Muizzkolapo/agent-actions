@@ -111,3 +111,84 @@ def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, c
 
     assert status == ActionStatus.PENDING
     assert [r.getMessage() for r in caplog.records if "agac run" in r.getMessage()] != []
+
+
+CHAIN = {
+    "split": {"prompt": "X", "model": "m"},
+    "define": {"prompt": "X", "model": "m", "dependencies": ["split"]},
+}
+
+
+def _executor(tmp_path, configs, retried=frozenset(), **stamp):
+    backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+    backend.initialize()
+    state = ActionStateManager(tmp_path / "status.json", list(configs))
+    for name, config in configs.items():
+        state.update_status(
+            name,
+            ActionStatus.COMPLETED,
+            config_hash=_compute_action_config_hash(config),
+            **stamp,
+        )
+    runner = MagicMock()
+    runner.retried_records = retried
+    runner.storage_backend = backend
+    runner.action_configs = configs
+    executor = ActionExecutor(
+        ExecutorDependencies(
+            action_runner=runner,
+            state_manager=state,
+            skip_evaluator=MagicMock(),
+            batch_manager=MagicMock(),
+            output_manager=MagicMock(),
+        )
+    )
+    return executor, state
+
+
+def test_a_repair_keeps_the_vendor_it_found_too(tmp_path):
+    executor, _ = _executor(tmp_path, CHAIN, frozenset({"r1"}), model_vendor="first")
+
+    stamp = executor._completion_metadata("split", {**CHAIN["split"], "model_vendor": "second"})
+
+    assert stamp["model_vendor"] == "first"
+
+
+def test_a_repair_warns_for_a_changed_model_as_for_a_changed_prompt(tmp_path, caplog):
+    executor, _ = _executor(tmp_path, CHAIN, frozenset({"r1"}), model_name="first")
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        executor._maybe_invalidate_completed_status(
+            "split", {**CHAIN["split"], "model_name": "second"}, ActionStatus.COMPLETED
+        )
+
+    assert [r.getMessage() for r in caplog.records if "agac run" in r.getMessage()] != []
+
+
+def test_an_action_that_is_switched_off_is_not_reset_as_a_reader(tmp_path):
+    """It never runs, so put back to pending it would sit there for good."""
+    configs = {**CHAIN, "define": {**CHAIN["define"], "is_operational": False}}
+    executor, state = _executor(tmp_path, configs)
+
+    executor._maybe_invalidate_completed_status(
+        "split", {**configs["split"], "prompt": "Y"}, ActionStatus.COMPLETED
+    )
+
+    assert state.get_status("split") == ActionStatus.PENDING
+    assert state.get_status("define") == ActionStatus.COMPLETED
+
+
+def test_a_declared_reader_is_still_reset_when_the_rest_cannot_be_inferred(tmp_path, monkeypatch):
+    def cannot_infer(*args, **kwargs):
+        raise TypeError("context scope in a shape nothing expected")
+
+    monkeypatch.setattr(
+        "agent_actions.prompt.context.scope_inference.infer_dependencies", cannot_infer
+    )
+    executor, state = _executor(tmp_path, CHAIN)
+
+    executor._maybe_invalidate_completed_status(
+        "split", {**CHAIN["split"], "prompt": "Y"}, ActionStatus.COMPLETED
+    )
+
+    assert state.get_status("define") == ActionStatus.PENDING
