@@ -343,6 +343,86 @@ class TestASliceIsReadOnlyToo:
         assert view["xs"][-1] == 4
 
 
+def _iadd(target, other):
+    target += other
+
+
+def _imul(target, other):
+    target *= other
+
+
+def _ior(target, other):
+    target |= other
+
+
+def _iand(target, other):
+    target &= other
+
+
+def _isub(target, other):
+    target -= other
+
+
+def _ixor(target, other):
+    target ^= other
+
+
+_WRITES = {
+    "dict": {
+        "setitem": lambda d: d.__setitem__("k", 1),
+        "delitem": lambda d: d.__delitem__("a"),
+        "ior": lambda d: _ior(d, {"k": 1}),
+        "clear": lambda d: d.clear(),
+        "pop": lambda d: d.pop("a"),
+        "popitem": lambda d: d.popitem(),
+        "setdefault": lambda d: d.setdefault("k", 1),
+        "update": lambda d: d.update(k=1),
+    },
+    "list": {
+        "setitem": lambda xs: xs.__setitem__(0, 9),
+        "delitem": lambda xs: xs.__delitem__(0),
+        "iadd": lambda xs: _iadd(xs, [9]),
+        "imul": lambda xs: _imul(xs, 2),
+        "append": lambda xs: xs.append(9),
+        "clear": lambda xs: xs.clear(),
+        "extend": lambda xs: xs.extend([9]),
+        "insert": lambda xs: xs.insert(0, 9),
+        "pop": lambda xs: xs.pop(),
+        "remove": lambda xs: xs.remove(1),
+        "reverse": lambda xs: xs.reverse(),
+        "sort": lambda xs: xs.sort(),
+    },
+    "set": {
+        "iand": lambda m: _iand(m, {1}),
+        "ior": lambda m: _ior(m, {9}),
+        "isub": lambda m: _isub(m, {1}),
+        "ixor": lambda m: _ixor(m, {1}),
+        "add": lambda m: m.add(9),
+        "clear": lambda m: m.clear(),
+        "difference_update": lambda m: m.difference_update({1}),
+        "discard": lambda m: m.discard(1),
+        "intersection_update": lambda m: m.intersection_update({1}),
+        "pop": lambda m: m.pop(),
+        "remove": lambda m: m.remove(1),
+        "symmetric_difference_update": lambda m: m.symmetric_difference_update({1}),
+        "update": lambda m: m.update({9}),
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "kind, write",
+    [(kind, name) for kind, writes in _WRITES.items() for name in writes],
+)
+def test_every_way_of_writing_to_a_view_is_refused(kind, write):
+    record = {"dict": {"a": 1}, "list": [1, 2], "set": {1, 2}}
+
+    with pytest.raises(TypeError, match="read-only"):
+        _WRITES[kind][write](readonly_view(record)[kind])
+
+    assert record == {"dict": {"a": 1}, "list": [1, 2], "set": {1, 2}}
+
+
 class TestASetIsReadOnlyWhereverItSits:
     @pytest.mark.parametrize(
         "holder",
@@ -450,23 +530,28 @@ class TestAReplacedContainerIsKeptAliveForTheWalk:
         [
             (lambda: ("old", {"n": 1}), lambda i: ("new", {"n": i})),
             (lambda: {"old", "x"}, lambda i: {"new", i}),
+            (lambda: {"old": 1}, lambda i: {"new": i}),
         ],
-        ids=["a tuple", "a set"],
+        ids=["a tuple", "a set", "a dict"],
     )
     def test_one_freed_mid_walk_does_not_lend_its_replacement(self, old, new):
-        # `between` is walked after `first`, so nothing the walk still holds from reading
-        # `first` keeps its old item alive: only the memo's own hold can.
-        record: dict = {"first": [old()], "between": [0], "second": None, "later": []}
+        # Laid out so the walk has replaced `first`'s item, and has read every container
+        # before the key, by the time the key is hashed: nothing the walk still holds from
+        # reading them keeps the item alive, only the memo's own hold can. `target` is
+        # nested deep enough to be read last.
+        target: list = []
+        record: dict = {"first": [old()], "second": [None], "later": [[[target]]]}
 
         def swap():
-            # Nothing else holds what `first` held; these are built where it was.
+            # Nothing else holds what `first` held; these are built where it was. A list,
+            # not a generator: its frame would take the freed address first.
             record["first"].clear()
-            # A list, not a generator: its frame would take the freed address first.
-            record["later"].extend([new(i) for i in range(50)])
+            target.extend([new(i) for i in range(50)])
 
-        record["second"] = {_Swaps(swap): 1}
+        record["second"][0] = {_Swaps(swap): 1}
 
         view = readonly_view(record)
+        seen = view["later"][0][0][0]
 
-        assert len(view["later"]) == 50
-        assert all("new" in item for item in view["later"]), "a freed container's wrapper"
+        assert len(seen) == 50
+        assert all("new" in item for item in seen), "a freed container's replacement"

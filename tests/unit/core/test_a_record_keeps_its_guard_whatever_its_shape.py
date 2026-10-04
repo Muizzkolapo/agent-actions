@@ -235,6 +235,23 @@ class TestARecordTheGuardCouldNotBeShown:
 
         assert seen_by_the_file_walk.action_fatal is raised.value
 
+    def test_the_error_is_fatal_from_wherever_it_is_raised(self):
+        """A batch rehearses its first rows before submitting, outside the handler that
+        fails one row. Raised from there unmarked, the error is one file's failure: the
+        file is dropped and the action completes without it."""
+        from agent_actions.errors import is_action_fatal
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        with pytest.raises(ProcessingError) as from_the_evaluator:
+            _verdict(shape_probe_admits_everything, _unviewable())
+        with pytest.raises(ProcessingError) as from_preparation:
+            TaskPreparer._evaluate_guard(
+                _unviewable()["content"], None, "shape_probe_admits_everything", {"other": 1}
+            )
+
+        assert is_action_fatal(from_the_evaluator.value)
+        assert is_action_fatal(from_preparation.value)
+
     def test_record_mode_preparation_does_not_admit_it_either(self):
         from agent_actions.processing.task_preparer import TaskPreparer
 
