@@ -17,6 +17,7 @@ from agent_actions.errors import (
     get_error_detail,
     raised_by_exhaustion_policy,
 )
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.llm.providers.usage_tracker import get_last_usage
@@ -259,6 +260,13 @@ def action_is_halted(storage_backend: Any, action_name: str) -> bool:
         logger.warning("Could not read halt marker for %s: %s", action_name, read_err)
         return False
     return any(row.get("detail") == HALTED_ON_EXHAUSTED for row in rows)
+
+
+def _raised_by_on_empty_error(error: Exception) -> bool:
+    """True if *error*, or anything it chains to, is the halt `on_empty: error` asks for."""
+    from agent_actions.utils.safe_format import get_error_chain
+
+    return any(isinstance(link, EmptyOutputError) for link in get_error_chain(error))
 
 
 class ActionExecutor:
@@ -1472,11 +1480,12 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Record a policy halt raised while checking a batch; re-raise anything else.
 
-        Only a halt is converted. An ordinary polling failure must keep
+        Only a halt is converted: `on_exhausted: raise`, or `on_empty: error`, both
+        raised once the file is written. An ordinary polling failure must keep
         CHECKING_BATCH so the next run re-polls the existing job — turning it
         into FAILED would reset it to PENDING and submit a duplicate batch.
         """
-        if not raised_by_exhaustion_policy(error):
+        if not (raised_by_exhaustion_policy(error) or _raised_by_on_empty_error(error)):
             raise error
         return self._handle_run_failure(
             ActionRunParams(

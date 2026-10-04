@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import ProcessingError
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
@@ -67,8 +68,9 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
-from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
+from agent_actions.processing.types import ProcessingContext, ProcessingResult, RecoveryMetadata
 from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
 from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -131,6 +133,32 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
     )
     return superseded
+
+
+def _empty_output_halt(
+    results: list[ProcessingResult], ctx: ProcessingContext
+) -> EmptyOutputError | None:
+    """The halt ``on_empty: error`` asks for, raised by the caller after the file is written."""
+    if ctx.agent_config.get("on_empty", "warn") != "error":
+        return None
+    empty = [result.source_guid for result in results if result.skip_reason == EMPTY_OUTPUT]
+    if not empty:
+        return None
+    return EmptyOutputError(
+        f"Action '{ctx.agent_name}' produced empty output for {len(empty)} record(s) "
+        f"(on_empty=error): {', '.join(str(guid) for guid in empty[:5])}",
+        context={"agent_name": ctx.agent_name, "source_guids": empty},
+    )
+
+
+def _halt_for(results: list[ProcessingResult], ctx: ProcessingContext) -> Exception | None:
+    """The one halt to raise for this file: the first parked, else the empty-output one."""
+    empty = _empty_output_halt(results, ctx)
+    if ctx.pending_exhaustion is not None and empty is not None:
+        logger.warning(
+            "on_empty: error also stopped this file; raising the halt already parked. %s", empty
+        )
+    return ctx.pending_exhaustion or empty
 
 
 class BatchProcessingService:
@@ -349,13 +377,15 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except (RuntimeError, ExpectationConfigurationError):
+            except (RuntimeError, ExpectationConfigurationError, EmptyOutputError):
                 # An unresolvable `expect:` block is not this file's problem:
                 # every remaining file carries the same action config and fails
                 # the same way, so continuing would finish the run reporting
                 # success with each of them missing from the output. A plain
                 # ConfigurationError is per record — a malformed lifecycle state
-                # — and stays below, costing only its own file.
+                # — and stays below, costing only its own file. The halt `on_empty:
+                # error` asks for is raised once its file is written: taken as that
+                # file's failure, its records are marked failed over what they hold.
                 raise
             except Exception as e:
                 logger.exception(
@@ -995,7 +1025,7 @@ class BatchProcessingService:
         # to survive the failure here as it does on the recovery contexts.
         with _halt_survives_failure_impl(ctx):
             output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
-        return output_records, stats, ctx.pending_exhaustion
+        return output_records, stats, _halt_for(results, ctx)
 
     @staticmethod
     def _apply_workflow_session_id(

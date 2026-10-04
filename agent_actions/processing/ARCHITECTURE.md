@@ -466,18 +466,24 @@ one exception noted last:
   its answer. Online replaces it with a tombstone, or with nothing.
 - An expanding input sent again that fails, while something else succeeds, keeps the rows
   it minted before beside its failure row. Online holds the failure row alone.
-- An input sent again that answers with no rows keeps the rows it had, since nothing was
-  produced to replace them.
-- A failure beside an input that answers with no rows. Online counts the empty answer as a
-  success, so it does not raise, and writes the failure row. Batch sees no answer row,
-  reads the run as one online would refuse, and keeps every stored answer with no failure
-  row.
 - A row naming several inputs is always carried.
 - The exception: an online run that raised wrote nothing, so its file still holds answers
   for records that are no input of that run. A batch run over the same inputs that writes
   a file, whether it answered something or wrote only what the guard left, writes this
   run's file, without them. Batch holds less there only because online's run aborted, and
   never for a record that is an input of the run.
+
+An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
+and `skip` a tombstone, the same in each. Under `error` online raises at the record and
+stores nothing; a batch stores the record as failed with the other answers, since a batch
+has one write and they are in it, and then halts: the halt leaves the loop over the
+action's files and the executor records the action as failed. An empty answer is never a
+success with nothing stored, which left the record done with no row and nothing saying
+the model had returned nothing. Two things are not empty answers here: a result whose
+content is null is a provider failure (a refusal, a safety block), retried where `retry` is
+on and stored failed otherwise,
+and when an expanding input sent again answers empty under `skip`, the rows it minted
+before stay beside its tombstone, as they do beside a failure row.
 
 `tests/integration/test_batch_rerun_matches_online.py` drives both paths from
 `ProcessingPipeline.process` against a real store. For every input of a run it requires

@@ -17,7 +17,7 @@ Services that coordinate batch submission, retrieval, and processing updates.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `processing.py` | Module | Service that orchestrates batch processing pipelines (load, transform, execute). Delegates retry to `retry.py` and recovery/finalization to `processing_recovery.py`. | `processing`, `logging` |
+| `processing.py` | Module | Service that orchestrates batch processing pipelines (load, transform, execute). Delegates retry to `retry.py` and recovery/finalization to `processing_recovery.py`. Returns the `EmptyOutputError` that `on_empty: error` asks for as a halt the finaliser raises once the file is written; the loop over the action's files lets it through, as it does an exhaustion halt, and the executor records the action as failed. | `processing`, `logging` |
 | `processing_recovery.py` | Module | Recovery and finalization functions extracted from `BatchProcessingService`: recovery batch handling, retry and repair recovery, repair submission, output finalization. `finalize_batch_output` reads the run's recorded input (`batch_inputs:{action}:{file}`) and hands it to the write, which is what lets carry-forward tell an input the run left unanswered, whose stored rows it keeps, from one that is not part of the run, whose rows it leaves out as the online path does; a recovery round reads its parent's recording, since it finalizes under `parent_file_name`. | `processing`, `retry`, `logging` |
 | `retrieval.py` | Module | Pulls completed batch results and cleans up state. | `output`, `workflow` |
 | `retry.py` | Module | Facade for `BatchRetryService`. Delegates to `retry_ops` and `shared.retrieve_and_reconcile`. | `retry_ops`, `shared` |
