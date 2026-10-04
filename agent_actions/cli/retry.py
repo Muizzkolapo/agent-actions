@@ -117,8 +117,10 @@ class RetryCommand:
         store_dir = paths.io_dir / "store" / self.agent_name
         manifest_file = _manifest_path(store_dir)
         prior_manifest = _read_manifest(manifest_file)
+        left_by_an_interrupted_retry: set[str] = set()
 
         if prior_manifest:
+            left_by_an_interrupted_retry = set(prior_manifest.get("downstream_actions", []))
             self.console.print(
                 "[yellow]Found incomplete retry manifest — "
                 "prior retry was interrupted. Restoring dispositions...[/yellow]"
@@ -187,17 +189,23 @@ class RetryCommand:
 
         from_idx = execution_order.index(from_action)
         downstream_actions = execution_order[from_idx:]
+        record_ids = {r["record_id"] for r in target_records}
+        repairing = self._records_this_repair_may_process(record_ids, downstream_actions, failures)
 
         # Above the dry-run return as well as the manifest: a refusal costs nothing
         # here, and a dry run that withheld it would describe a retry that is not
-        # going to happen.
+        # going to happen. Unfinished actions first, since abandoning a batch writes.
+        if repairing:
+            self._refuse_to_narrow_the_unfinished(
+                workflow.services.core.state_manager,
+                backend,
+                [a for a in downstream_actions if a not in left_by_an_interrupted_retry],
+            )
         self._settle_batches_in_flight(backend, downstream_actions)
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
             return
-
-        record_ids = {r["record_id"] for r in target_records}
 
         logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
@@ -221,9 +229,7 @@ class RetryCommand:
             snapshot_dispositions,
         )
 
-        workflow.set_retried_records(
-            self._records_this_repair_may_process(record_ids, downstream_actions, failures)
-        )
+        workflow.set_retried_records(repairing)
 
         cleared = 0
         for action in downstream_actions:
@@ -321,6 +327,48 @@ class RetryCommand:
         self.console.print(f"  Failed actions: {', '.join(failed)}")
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
+
+    def _refuse_to_narrow_the_unfinished(self, state_mgr, backend, actions: list[str]) -> None:
+        """Refuse a repair that would narrow an action its last run did not finish.
+
+        A repair carries what each action holds for the records it does not name. An
+        action never run since it was put back to pending, or stopped partway through
+        its records, has answered none of the ones it had not reached, so narrowing it
+        completes it without them and nothing runs it again. A plain run finishes it.
+
+        Callers leave out what an interrupted retry put back to pending: it had
+        finished before that retry, and retrying again resumes it. Not refused either:
+        a failure that reached all of the action's input, which the repair is for, and
+        a halt by ``on_exhausted: raise``, which a plain run will not resume.
+        """
+        from agent_actions.workflow.executor import action_failed_every_input, action_is_halted
+        from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
+
+        unfinished = []
+        for action in actions:
+            status = state_mgr.get_status(action)
+            if status in MID_PROCESSING_STATUSES or status == ActionStatus.PENDING:
+                unfinished.append((action, status))
+            elif status == ActionStatus.FAILED and not (
+                action_failed_every_input(backend, action) or action_is_halted(backend, action)
+            ):
+                unfinished.append((action, status))
+        if not unfinished:
+            return
+
+        listing = ", ".join(
+            f"{action} ({ActionStatus(status).value})" for action, status in unfinished
+        )
+        reason = (
+            f"{len(unfinished)} action(s) did not finish their last run ({listing}). "
+            f"A retry answers only the records it names, and would complete them holding "
+            f"nothing for the records that run had not reached. Run the workflow first "
+            f"— agac run -a {self.agent_name} — then retry."
+        )
+        if self.args.dry_run:
+            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            return
+        raise click.ClickException(reason)
 
     def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
         """Decide what a batch nobody has collected means for this repair.

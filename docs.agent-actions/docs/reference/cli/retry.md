@@ -123,6 +123,36 @@ fails. The remedy is upstream: give the record its `source_guid` back where it
 is produced. A batch run that sends nothing at all refuses it the same way, and
 since nothing in such a run succeeds, the action fails.
 
+## A retry needs every action it re-runs to have finished its last run
+
+Carrying what an action holds for the records the retry did not name is only
+right when that action finished its last run. One that did not — added since the
+last run, put back to pending because something it reads was edited, or stopped
+partway through its records by an interrupt, a kill or an error — holds no answer
+for the records that run had not reached. A retry that narrowed it would complete
+it without them, and nothing would run it again.
+
+So a retry that names records refuses, before it changes anything, when an action
+from its starting point has not finished:
+
+```
+1 action(s) did not finish their last run (enrich (interrupted)). A retry answers
+only the records it names, and would complete them holding nothing for the records
+that run had not reached. Run the workflow first — agac run -a my_workflow — then
+retry.
+```
+
+Run the workflow, which finishes those actions, then retry. `--dry-run` reports
+the refusal instead of raising it.
+
+Three cases are not refused. An action that failed because every record it was
+given failed holds a failure for each of them, which is what a retry is for. An
+action left unfinished by a retry that was itself interrupted had finished before
+that retry, so running `retry` again resumes it. And an action halted by
+`on_exhausted: raise` is not refused, because `agac run` does not resume a halt;
+note that a retry naming a record that failed elsewhere still completes a halted
+action without the records past the halt.
+
 ## Retrying an action that runs in batch mode
 
 An action configured [`run_mode: batch`](../execution/run-modes.md) is repaired

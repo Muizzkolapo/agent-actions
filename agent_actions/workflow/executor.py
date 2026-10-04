@@ -14,6 +14,7 @@ from rich.console import Console
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import (
     AgentActionsError,
+    every_file_failed,
     get_error_detail,
     raised_by_exhaustion_policy,
     raised_by_terminal_failure,
@@ -30,6 +31,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
+    EVERY_INPUT_FAILED,
     GUARD_FILTERED_ALL,
     HALTED_ON_EXHAUSTED,
     NO_INPUT_FILES,
@@ -288,8 +290,19 @@ def _halt_marker(error: Exception) -> str | None:
     return HALTED_ON_EXHAUSTED if raised_by_exhaustion_policy(error) else None
 
 
-def action_is_halted(storage_backend: Any, action_name: str) -> bool:
-    """True if *action_name* failed because an ``on_exhausted: raise`` policy fired."""
+def _failure_marker(error: Exception) -> str | None:
+    """The node-level failure's detail: a halt, or a pass that failed every input file.
+
+    Nothing for any other error, which may have stopped the action partway.
+    """
+    halt = _halt_marker(error)
+    if halt is None and every_file_failed(error):
+        return EVERY_INPUT_FAILED
+    return halt
+
+
+def _failed_as(storage_backend: Any, action_name: str, marker: str) -> bool:
+    """True if *action_name*'s node-level failure carries *marker* as its detail."""
     if storage_backend is None:
         return False
     try:
@@ -297,9 +310,23 @@ def action_is_halted(storage_backend: Any, action_name: str) -> bool:
             action_name, record_id=NODE_LEVEL_RECORD_ID, disposition=DISPOSITION_FAILED
         )
     except Exception as read_err:
-        logger.warning("Could not read halt marker for %s: %s", action_name, read_err)
+        logger.warning("Could not read how %s failed: %s", action_name, read_err)
         return False
-    return any(row.get("detail") == HALTED_ON_EXHAUSTED for row in rows)
+    return any(row.get("detail") == marker for row in rows)
+
+
+def action_is_halted(storage_backend: Any, action_name: str) -> bool:
+    """True if *action_name* failed because an ``on_exhausted: raise`` policy fired."""
+    return _failed_as(storage_backend, action_name, HALTED_ON_EXHAUSTED)
+
+
+def action_failed_every_input(storage_backend: Any, action_name: str) -> bool:
+    """True if *action_name* failed after reaching all of its input.
+
+    Any other failure may have stopped it partway. One written before the marker
+    existed reads as that.
+    """
+    return _failed_as(storage_backend, action_name, EVERY_INPUT_FAILED)
 
 
 def _raised_by_on_empty_error(error: Exception) -> bool:
@@ -1120,7 +1147,7 @@ class ActionExecutor:
         if execution_mode is not None:
             status_kwargs["execution_mode"] = execution_mode
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED, **status_kwargs)
-        self._write_failed_disposition(action_name, reason)
+        self._write_failed_disposition(action_name, reason, detail=EVERY_INPUT_FAILED)
         self._track_action_complete(action_name, duration, ActionStatus.FAILED)
         return ActionExecutionResult(
             success=False,
@@ -1274,7 +1301,9 @@ class ActionExecutor:
             execution_time=duration,
             error_message=str(error),
         )
-        self._write_failed_disposition(params.action_name, str(error), detail=_halt_marker(error))
+        self._write_failed_disposition(
+            params.action_name, str(error), detail=_failure_marker(error)
+        )
 
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(

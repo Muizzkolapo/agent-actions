@@ -7,8 +7,8 @@ for an edit and stopped while running again or never run at all, holds nothing c
 for the records that run had not reached, and the retry completed it on the ones it named.
 
 Two tool actions over six staged records, `flatten` and `enrich`, which reads it. Every
-command is a real `agac` invocation; only the fault that stops a run is stood in for,
-raised where `enrich` marks a record answered.
+command is a real `agac` invocation; only the faults are stood in for: the one that stops
+a run, raised where `enrich` marks a record answered, and a `flatten` tool that fails.
 """
 
 import json
@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.integration.test_an_upstream_edit_reruns_what_reads_it import _filter_the_first_page
 from tests.integration.test_retry_ignores_record_cap import (
@@ -30,6 +31,7 @@ from tests.integration.test_retry_ignores_record_cap import (
     WORKFLOW,
     _disposition,
     _fail,
+    _record_ids,
     _stored_guids,
     chained,  # noqa: F401
     project,  # noqa: F401
@@ -58,14 +60,14 @@ def _status(project, action=SECOND):  # noqa: F811
 
 
 @contextmanager
-def _stopped_at_the_readers_third_record(stop):
+def _stopped_at_the_readers_record(stop, nth=3):
     mark = SQLiteBackend.set_disposition
     answered = []
 
     def marking(self, action_name, record_id, disposition, *args, **kwargs):
         if action_name == SECOND and disposition == "success":
             answered.append(record_id)
-            if len(answered) == 3:
+            if len(answered) == nth:
                 raise stop
         return mark(self, action_name, record_id, disposition, *args, **kwargs)
 
@@ -77,7 +79,7 @@ def _stopped_at_the_readers_third_record(stop):
 def _edit_then_stop_the_reader(project, stop):  # noqa: F811
     """The edit resets both actions; the run re-answers `flatten` and stops in `enrich`."""
     _filter_the_first_page(project)
-    with _stopped_at_the_readers_third_record(stop):
+    with _stopped_at_the_readers_record(stop):
         _run()
     assert len(_stored_guids(project, ACTION)) == RECORDS - 1
     assert len(_stored_guids(project, SECOND)) == RECORDS, "the reset deletes no row"
@@ -155,3 +157,60 @@ def test_a_retry_that_reaches_an_action_that_never_ran_refuses(project):  # noqa
     assert _status(project) == "pending"
     assert _run().exit_code == 0
     assert len(_stored_guids(project, SECOND)) == RECORDS
+
+
+def test_a_retry_stopped_partway_is_resumed_by_retrying_again(chained):  # noqa: F811
+    """What the stopped retry left unfinished had finished before it, and owes only the
+    records that retry named."""
+    named = _a_failure_at_the_first_action(chained)
+    with _stopped_at_the_readers_record(KeyboardInterrupt(), nth=1):
+        _retry("--record", named)
+    assert _status(chained) == "interrupted"
+
+    result = _retry("--record", named)
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(chained, named, SECOND) == "success"
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+@contextmanager
+def _the_first_action_fails_every_record():
+    run_tool = tool_client.execute_user_defined_function
+
+    def flatten_fails(udf_name, *args, **kwargs):
+        if udf_name == "flatten_pages":
+            raise RuntimeError("the tool blew up")
+        return run_tool(udf_name, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(tool_client, "execute_user_defined_function", flatten_fails)
+        yield
+
+
+def test_a_retry_after_an_action_failed_every_record_still_runs(chained):  # noqa: F811
+    """Every record holds its failure there, so none the retry leaves out is lost."""
+    with _the_first_action_fails_every_record():
+        _run("--fresh")
+    assert (_status(chained, ACTION), _status(chained)) == ("failed", "skipped")
+    named = _record_ids(chained, ACTION)[0]
+
+    result = _retry("--record", named)
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(chained, named, ACTION) == "success"
+    assert _disposition(chained, named, SECOND) == "success"
+
+
+def test_a_retry_whose_record_failed_again_can_be_retried_again(chained):  # noqa: F811
+    """The record it named failing again fails the action, which reached all it was given."""
+    named = _a_failure_at_the_first_action(chained)
+    with _the_first_action_fails_every_record():
+        _retry("--record", named)
+    assert _status(chained, ACTION) == "failed"
+
+    result = _retry("--record", named)
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(chained, named, SECOND) == "success"
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)

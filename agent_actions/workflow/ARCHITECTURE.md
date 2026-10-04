@@ -282,6 +282,17 @@ meets an edited action, one it is about to re-run included, and it keeps the com
 completes, so the next plain run still finds the edit and applies it. A retry with no
 record to re-run (only a node-level failure) is a plain run for this purpose.
 
+A repair narrows only what finished its last run. It carries what an action holds for
+the records it does not name, and an action never run since it was put back to pending,
+or stopped partway through its records, holds no answer for the ones that run had not
+reached: narrowed, it completes without them and nothing runs it again. So `agac retry`
+refuses, before it clears anything, when an action from its starting point is pending,
+running, interrupted, stopped while collecting, or failed by anything but reaching all of
+its input, and says to run the workflow first. A failure that reached all of its input
+(`EVERY_INPUT_FAILED`) holds a failure for every record and is what a repair is for. Not
+refused either: what an interrupted retry put back to pending, which had finished before
+that retry and is resumed by retrying again, and a halt, which a plain run will not resume.
+
 Costs and limits:
 
 - A prompt change at the top of a long workflow re-answers everything below it.
@@ -292,8 +303,10 @@ Costs and limits:
   are deleted. One whose input lost some files but not all keeps the rows of the files
   that are gone, and its readers run on them. A re-run that is interrupted and resumed can
   serve the old row for a record it had already answered again (#1226).
-- A retry over an action that a reset left unfinished completes it on the records it
-  named and keeps old rows for the rest (#1227). Run the workflow before retrying.
+- A retry still narrows a halted action when it names a record that failed elsewhere,
+  and completes it without the records past the halt. And a retry clears the checkpoint
+  records of every action it re-runs, so one that resumes a halt after an edit carries,
+  for a record the halted run had answered, the row stored before the edit.
 - The level loop orders by `dependencies` alone. A reader that names an action only in
   its context scope and sits in an earlier level is reset after its level has passed, and
   runs on the next run (#1228).
@@ -508,6 +521,12 @@ Two mechanisms keep it halted, because either alone is insufficient:
 
 `agac retry` clears the node-level disposition, and `--fresh` clears everything,
 so both remain working resume paths.
+
+The same `detail` marks a failure that reached all of the action's input with
+`EVERY_INPUT_FAILED`: every record failed (`_finalize_total_failure`), or every
+input file failed on its own, none to an error fatal to the action
+(`mark_every_file_failed`). Any other failure may have stopped the action partway,
+and a failure recorded before the marker existed reads as one.
 
 ### COMPLETED_WITH_FAILURES is NOT retryable
 

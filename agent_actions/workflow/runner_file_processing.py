@@ -222,7 +222,7 @@ def _raise_all_files_failed(
     chaining the first failure of any kind loses the halt whenever another
     file failed before it.
     """
-    from agent_actions.errors import DependencyError
+    from agent_actions.errors import DependencyError, mark_every_file_failed
 
     # The action-fatal cause leads when there is one: the sample is capped, so
     # a halt that failed after the cap would otherwise appear only on the chain.
@@ -231,7 +231,7 @@ def _raise_all_files_failed(
         or _format_error_sample(errors.messages)
         or "Check logs for details."
     )
-    raise DependencyError(
+    error = DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
             "action": action_name,
@@ -241,6 +241,9 @@ def _raise_all_files_failed(
         },
         cause=errors.action_fatal,
     )
+    if errors.action_fatal is None:
+        mark_every_file_failed(error)
+    raise error
 
 
 def _raise_action_fatal(

@@ -13,7 +13,7 @@
 | `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
 | `terminal_failure` | Function | Build the `RuntimeError` raised when none of an action's records succeeded, tagged so a batch check records the action failed instead of re-raising it for the next run to re-poll. | - |
 | `raised_by_terminal_failure` | Function | True if any error in the chain was built by `terminal_failure`. | - |
-| `classification.py` | Module | Declares and detects errors fatal to a whole action, as opposed to one input. | `errors` |
+| `classification.py` | Module | Declares and detects errors fatal to a whole action, as opposed to one input, and the error a pass raises when it reached every input file and lost each to a failure of that file alone (`mark_every_file_failed`, `every_file_failed`). | `errors` |
 | `mark_action_fatal` | Function | Tag an error as indicting the action's contract. Called where the failure is understood: the record and file processing loops that re-raise instead of tombstoning, and the template renderer. A loop that declares nothing keeps its failures per-item. | - |
 | `is_action_fatal` | Function | True if any error in the chain was marked, or came from an `on_exhausted: raise` policy. Searches the chain because each layer wraps on the way up. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
