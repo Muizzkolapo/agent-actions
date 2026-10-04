@@ -512,6 +512,31 @@ class TestSaveCheckpointRecordsDropGuard:
         assert {r["source_guid"] for r in stored} == {"g1", "g2"}
 
 
+class TestCheckpointKeepsEveryRowOfARecord:
+    """A record answered with several rows checkpoints all of them under its one identity:
+    an expansion's rows share their input's until enrichment mints one for each."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_every_row_a_record_was_answered_with_is_read_back_in_order(self, backend):
+        expanded = [
+            {"source_guid": "g1", "content": "first"},
+            {"source_guid": "g1", "content": "second"},
+        ]
+        single = [{"source_guid": "g2", "content": "only"}]
+
+        backend.save_checkpoint_records("action_a", "output.json", expanded)
+        backend.save_checkpoint_records("action_a", "output.json", single)
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == expanded + single
+
+
 class TestPreviewTargetNullRecordCount:
     """Tests for preview_target fallback when record_count IS NULL."""
 

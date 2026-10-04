@@ -57,6 +57,22 @@ class TestCheckpointResume:
         assert missing == set()
         backend.read_checkpoint_records.assert_not_called()
 
+    def test_a_record_checkpointed_with_several_rows_is_answered_again(self):
+        """Its rows share the record's identity until enrichment gives each its own, and a
+        checkpoint row is saved before that: carried, they would be stored under one."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
+        backend.read_checkpoint_records.return_value = [
+            {"source_guid": "r0", "content": "first of r0"},
+            {"source_guid": "r0", "content": "second of r0"},
+            _make_record("r1"),
+        ]
+
+        found, missing = build_carry_forward({"r0", "r1"}, "action_a", "output.json", backend)
+
+        assert found == [_make_record("r1")]
+        assert missing == {"r0"}
+
 
 class TestAnsweredSinceStored:
     """A file's checkpoint rows are cleared when it is written, so the ones left are
