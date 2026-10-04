@@ -12,6 +12,7 @@ from agent_actions.errors import (
     ConfigValidationError,
     ExternalServiceError,
     mark_action_fatal,
+    mark_submission_refused,
 )
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
@@ -527,9 +528,10 @@ class BatchSubmissionService:
 
         Raises:
             ConfigValidationError: If model_vendor missing
-            ExternalServiceError: If submission fails, declared fatal to the action. A
-                batch the provider took but that could not be recorded is named only
-                here; the next run sends its records again.
+            ExternalServiceError: If submission fails, declared fatal to the action, and
+                refused (``mark_submission_refused``) when the provider did not take the
+                batch. A batch the provider took but that could not be recorded is named
+                only here; the next run sends its records again.
         """
         provider_type = agent_config.get("model_vendor")
         if not provider_type:
@@ -611,9 +613,14 @@ class BatchSubmissionService:
                     )
                 ) from e
             # Fatal to the action, not only to this file: otherwise the action completes on
-            # its other files' batches, and nothing sends this one again.
-            raise mark_action_fatal(
-                ExternalServiceError(
-                    f"Failed to submit batch job: {e}", context={"vendor": provider_type}, cause=e
+            # its other files' batches, and nothing sends this one again. Declared refused
+            # too, so the executor names the other files' batches the failure leaves waiting.
+            raise mark_submission_refused(
+                mark_action_fatal(
+                    ExternalServiceError(
+                        f"Failed to submit batch job: {e}",
+                        context={"vendor": provider_type},
+                        cause=e,
+                    )
                 )
             ) from e

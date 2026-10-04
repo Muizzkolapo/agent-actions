@@ -153,8 +153,11 @@ class TestSubmitToProviderErrorPath:
         assert isinstance(err.cause, RuntimeError)
 
     def test_a_refused_batch_is_fatal_to_the_action(self):
-        """Fatal to one file only, the walk completes the action on its other files."""
-        from agent_actions.errors import is_action_fatal
+        """Fatal to one file only, the walk completes the action on its other files.
+
+        Declared refused as well, so the executor can name the batches the failure leaves out.
+        """
+        from agent_actions.errors import is_action_fatal, is_submission_refused
         from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
         client_resolver = MagicMock()
@@ -179,10 +182,11 @@ class TestSubmitToProviderErrorPath:
                 )
 
         assert is_action_fatal(exc_info.value)
+        assert is_submission_refused(exc_info.value)
 
     def test_a_batch_taken_but_not_recorded_is_named_in_the_error(self):
         """Nothing else names it: the registry never did, and the next run sends again."""
-        from agent_actions.errors import is_action_fatal
+        from agent_actions.errors import is_action_fatal, is_submission_refused
         from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
         client_resolver = MagicMock()
@@ -215,6 +219,7 @@ class TestSubmitToProviderErrorPath:
         assert "batch-7 was submitted but could not be recorded" in str(err)
         assert err.context["batch_id"] == "batch-7"
         assert is_action_fatal(err)
+        assert not is_submission_refused(err), "the provider took it"
 
     def test_provider_error_fires_failure_event(self):
         """Provider exception fires BatchSubmissionFailedEvent before raising."""

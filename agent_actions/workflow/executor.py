@@ -16,6 +16,7 @@ from agent_actions.errors import (
     AgentActionsError,
     every_file_failed,
     get_error_detail,
+    is_submission_refused,
     raised_by_exhaustion_policy,
     raised_by_terminal_failure,
 )
@@ -1338,6 +1339,8 @@ class ActionExecutor:
             execution_time=duration,
             error_message=str(error),
         )
+        if is_submission_refused(error):
+            self._warn_of_held_batches(params.action_name)
         self._write_failed_disposition(
             params.action_name, str(error), detail=_failure_marker(error)
         )
@@ -1358,6 +1361,38 @@ class ActionExecutor:
             error=error,
             metrics=ExecutionMetrics(duration=duration),
         )
+
+    def _warn_of_held_batches(self, action_name: str) -> None:
+        """Name the files whose batches a refusal leaves out.
+
+        Only a run that reaches batch_submitted collects, and an action a refusal
+        fails never does: while the provider keeps refusing one file, the batches
+        of the others wait, and the error names only the refused file.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        try:
+            jobs = BatchRegistryManager(storage_backend, action_name).get_all_jobs()
+        except Exception as read_err:
+            logger.debug("Could not read batch registry for %s: %s", action_name, read_err)
+            return
+        held = sorted(
+            {
+                entry.parent_file_name or name
+                for name, entry in jobs.items()
+                if entry.is_in_flight or entry.awaits_collection
+            }
+        )
+        if held:
+            logger.warning(
+                "Action '%s': the batches already out for %s wait, uncollected, while the "
+                "provider refuses a file of the action; they are collected once a run gets "
+                "every file sent. If the refusal persists, fix the file it names or take "
+                "it out of the input.",
+                action_name,
+                ", ".join(held),
+            )
 
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict

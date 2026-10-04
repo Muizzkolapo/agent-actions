@@ -15,7 +15,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import DependencyError, ExternalServiceError, mark_action_fatal
+from agent_actions.errors import (
+    DependencyError,
+    ExternalServiceError,
+    mark_action_fatal,
+    mark_submission_refused,
+)
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_FAILED,
@@ -44,7 +51,9 @@ def backend(tmp_path):
 
 def _refused() -> DependencyError:
     """What the file walk raises once the provider has refused one file's batch."""
-    refusal = mark_action_fatal(ExternalServiceError("Failed to submit batch job: quota exceeded"))
+    refusal = mark_submission_refused(
+        mark_action_fatal(ExternalServiceError("Failed to submit batch job: quota exceeded"))
+    )
     return DependencyError(
         f"Action '{ACTION}': a.json: {refusal} (Processed 1 of 2 files.)", cause=refusal
     )
@@ -111,3 +120,53 @@ def test_an_edit_since_the_refusal_answers_every_record_again(tmp_path, backend)
     _next_run_resets(tmp_path, backend, {**CONFIG, "prompt": "Answer it again"})
 
     assert _dispositions(backend) == {}
+
+
+def _batches_out_beside_it(backend) -> None:
+    """One file collected, one in flight, one finished and not collected, one failed."""
+    registry = BatchRegistryManager(backend, ACTION)
+    for name, status, collected_at in (
+        ("a.json", "completed", "2026-10-04T00:00:00+00:00"),
+        ("b.json", "in_progress", None),
+        ("c.json", "completed", None),
+        ("d.json", "failed", None),
+    ):
+        registry.save_batch_job(
+            name,
+            BatchJobEntry(
+                batch_id=f"batch-{name}",
+                status=status,
+                timestamp="2026-10-04T00:00:00+00:00",
+                provider="openai",
+                file_name=name,
+                collected_at=collected_at,
+            ),
+        )
+
+
+def test_the_batches_it_leaves_out_are_named(tmp_path, backend, caplog):
+    """Nothing collects them while the refusal lasts, and the error names only its file."""
+    _batches_out_beside_it(backend)
+
+    with caplog.at_level("WARNING", logger="agent_actions.workflow.executor"):
+        _failed(tmp_path, backend, _refused())
+
+    (warning,) = [r.getMessage() for r in caplog.records if "already out" in r.getMessage()]
+    assert "for b.json, c.json wait" in warning
+
+
+def test_a_failure_the_provider_did_not_cause_names_no_batch(tmp_path, backend, caplog):
+    """The action fails all the same, but the warning is about what a refusal holds back."""
+    _batches_out_beside_it(backend)
+
+    with caplog.at_level("WARNING", logger="agent_actions.workflow.executor"):
+        _failed(tmp_path, backend, mark_action_fatal(ExternalServiceError("the template broke")))
+
+    assert not [r for r in caplog.records if "already out" in r.getMessage()]
+
+
+def test_nothing_is_named_when_no_other_batch_is_out(tmp_path, backend, caplog):
+    with caplog.at_level("WARNING", logger="agent_actions.workflow.executor"):
+        _failed(tmp_path, backend, _refused())
+
+    assert not [r for r in caplog.records if "already out" in r.getMessage()]

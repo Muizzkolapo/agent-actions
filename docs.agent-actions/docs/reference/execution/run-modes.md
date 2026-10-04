@@ -78,6 +78,12 @@ file that have no answer yet are sent again. The records the action had already 
 in that file or any other, are kept while its config is unchanged, and a batch still out
 for another file is kept and collected rather than sent again.
 
+A run collects batches only after a run that got every file sent, so while the provider
+refuses a file, the batches already out for the others wait; the run names them.
+A refusal that persists, such as a request the provider rejects every time, holds them
+for as long as it lasts, and a provider keeps results only for a limited time. Fix the file
+the error names, or take it out of the input, and run again.
+
 ### Batch Commands
 
 ```bash
