@@ -226,13 +226,14 @@ class AgentWorkflow:
         them forward on resume.
         """
         state_mgr = self.services.core.state_manager
-        # Snapshot mid-processing actions before reset_retryable() transitions
-        # them to PENDING — must be captured first so we know which actions had
-        # checkpointed progress to preserve.
+        # Captured before reset_retryable() moves them to PENDING: these hold finished
+        # work to preserve. A collect pass that ended in an error reads failed, and
+        # holds what it collected all the same.
         running_actions = {
             name
             for name in state_mgr.execution_order
             if state_mgr.get_status(name) in MID_PROCESSING_STATUSES
+            or state_mgr.stopped_collecting(name)
         }
         halted = {
             name

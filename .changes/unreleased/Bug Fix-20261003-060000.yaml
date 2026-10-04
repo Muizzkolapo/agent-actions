@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A batch collect pass that ends in an error no longer sends the files it had already
+  collected a second time. An error while collecting marks the action failed, and a failed
+  action is reset by forgetting every record it had finished, so on the next run each file
+  already collected and written was submitted, and paid for, again. A run killed while
+  collecting already kept those records; one stopped by an error now does too. An action
+  that fails while running, not collecting, is reset as before, and that includes a resumed
+  run that fails before it is back to collecting: the reset after it forgets the collected
+  files again.
+time: 2026-10-03T06:00:00Z

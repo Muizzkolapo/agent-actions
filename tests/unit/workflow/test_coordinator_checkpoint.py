@@ -4,7 +4,9 @@ When an action is interrupted mid-processing (status=RUNNING), checkpointed
 SUCCESS dispositions must survive the reset so the DispositionGate can carry
 them forward on resume.  FAILED and SKIPPED still get a full bulk wipe because
 they have no SUCCESS dispositions to preserve.  CHECKING_BATCH is kept like
-RUNNING, which ``test_coordinator_interrupt.py`` pins against the real reset.
+RUNNING, and so is a FAILED action that was stopped while collecting;
+``test_coordinator_interrupt.py`` and ``test_a_stopped_collect_keeps_its_records.py``
+pin those against the real reset.  This file tests a copy of the logic.
 """
 
 from unittest.mock import MagicMock
