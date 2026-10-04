@@ -157,8 +157,8 @@ class FileWriter(ProcessorErrorHandlerMixin):
             try:
                 self.storage_backend.write_target(self.action_name, relative_path, data)
             except (OSError, sqlite3.Error) as e:
-                # Not this file's fault, and the store still holds what an earlier run
-                # wrote for it: going on would record the action complete over that.
+                # The store failed, not this file: going on would record the action
+                # complete without the file, or over what an earlier run stored for it.
                 mark_action_fatal(e)
                 raise
 
