@@ -87,10 +87,12 @@ the error names, or take it out of the input, and run again.
 ### When the provider cannot be reached while collecting
 
 A run asks the provider about each finished batch before reading its results. If it cannot
-reach the provider about one, it reads the others, leaves that batch where it is, and pauses
-as it does while a batch is still out, naming the file it could not read. Run again to
-collect it: nothing is sent again, and the files already read are not read again. It keeps
-pausing for as long as the provider cannot be asked; to give up on those batches instead,
+reach the provider about one (the call cannot connect, times out, or gets a server error),
+it reads the others, leaves that batch where it is, and pauses as it does while a batch is
+still out, naming the file it could not read. Run again to collect it: nothing is sent
+again, and the files already read are not read again. A run that cannot reach the provider
+while checking whether its batches have finished pauses the same way. It keeps pausing for
+as long as the provider cannot be asked; to give up on those batches instead,
 `agac run --fresh` sends every record of the workflow again.
 
 A batch the provider answers about but no longer reports finished, such as one it now

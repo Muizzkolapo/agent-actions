@@ -46,10 +46,11 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             api_key: Groq API key
         """
         try:
-            from groq import Groq
+            from groq import APIConnectionError, Groq, InternalServerError
 
             self._groq_module = Groq
             self.client = Groq(api_key=api_key)
+            self._transient_errors = (APIConnectionError, InternalServerError)
         except ImportError as e:
             from agent_actions.errors import DependencyError
 

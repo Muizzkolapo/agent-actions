@@ -10,7 +10,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
+    import httpx
     from google import genai
+    from google.genai import errors as genai_errors
     from google.genai import types
 
     GEMINI_AVAILABLE = True
@@ -46,6 +48,8 @@ class GeminiBatchClient(BaseBatchClient):
                 },
             )
         self.client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
+        # The SDK lets its transport's errors through unwrapped.
+        self._transient_errors = (httpx.TransportError, genai_errors.ServerError)
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None

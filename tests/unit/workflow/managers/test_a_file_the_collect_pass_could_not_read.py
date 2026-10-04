@@ -16,6 +16,8 @@ import json
 import logging
 from pathlib import Path
 
+import httpx
+import openai
 import pytest
 
 from agent_actions.llm.batch.core.batch_constants import (
@@ -29,6 +31,7 @@ from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.processing import BatchProcessingService
+from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
@@ -189,6 +192,39 @@ def test_the_run_names_each_file_it_could_not_read(tmp_path, caplog):
 
     assert "Could not read page2.json" in caplog.text
     assert "Could not read page3.json" in caplog.text
+
+
+def _through_the_openai_sdk(action: _Action, *unreachable: str) -> None:
+    """Ask the provider through the OpenAI batch client, which cannot reach it about those."""
+    client = OpenAIBatchClient(api_key="test")
+    cut_off = {f"batch-{name}" for name in unreachable}
+
+    def fetch_status(batch_id: str) -> str:
+        if batch_id in cut_off:
+            raise openai.APIConnectionError(request=httpx.Request("GET", "https://provider.test"))
+        return action.provider.statuses[batch_id]
+
+    client._fetch_status = fetch_status
+    action.provider.check_status = client.check_status
+
+
+def test_a_vendor_connection_error_is_waited_for_as_any_other(tmp_path):
+    """The SDKs raise their own, none of them an OSError: taken for any other error, it
+    failed the action."""
+    action = _Action(tmp_path)
+    _through_the_openai_sdk(action, "page2.json")
+
+    assert action.check() == (None, "in_progress")
+    assert action.finalized == ["page1.json", "page3.json"]
+
+
+def test_a_vendor_connection_error_while_a_batch_is_out_is_waited_for(tmp_path):
+    """The poll before the pass, which asks about a batch still out, takes it the same way."""
+    action = _Action(tmp_path, statuses={"page2.json": BatchStatus.IN_PROGRESS})
+    _through_the_openai_sdk(action, "page2.json")
+
+    assert action.check() == (None, "in_progress")
+    assert action.finalized == []
 
 
 def test_a_pass_that_could_read_no_file_waits_rather_than_failing(tmp_path):

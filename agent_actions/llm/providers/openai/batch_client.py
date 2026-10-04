@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import openai
 from openai import OpenAI
 
 from agent_actions.prompt.message_builder import MessageBuilder
@@ -28,6 +29,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def __init__(self, api_key: str | None = None):
         """Initialize OpenAI client."""
         self.client = OpenAI(api_key=api_key)
+        self._transient_errors = (openai.APIConnectionError, openai.InternalServerError)
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
