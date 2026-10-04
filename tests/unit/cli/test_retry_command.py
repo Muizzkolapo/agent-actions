@@ -279,7 +279,9 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True, dry_run=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"])
+        command._settle_batches_in_flight(
+            backend, command._batches_owed(backend, ["summarize", "score"])
+        )
 
         backend.set_disposition.assert_not_called()
         reported = " ".join(str(c.args[0]) for c in command.console.print.call_args_list)
@@ -290,7 +292,9 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"])
+        command._settle_batches_in_flight(
+            backend, command._batches_owed(backend, ["summarize", "score"])
+        )
 
         moved = [c.args[1] for c in backend.set_disposition.call_args_list]
         assert moved == ["summarize_r1"], (
@@ -312,6 +316,9 @@ class TestARepairNarrowsOnlyWhatFinished:
         state_mgr.update_status("classify", ActionStatus(status))
         backend = SQLiteBackend(str(tmp_path / "store.db"), "wf")
         backend.initialize()
+        backend.write_target("extract", "pages.json", [{"source_guid": "g0"}])
+        if status.startswith("completed"):
+            backend.write_target("classify", "pages.json", [{"source_guid": "g0"}])
         if status == "failed" and node_failure:
             backend.set_disposition(
                 "classify", NODE_LEVEL_RECORD_ID, "failed", reason="r", detail=failed_as
@@ -367,6 +374,42 @@ class TestARepairNarrowsOnlyWhatFinished:
             target = tmp_path / status
             target.mkdir()
             assert self._refused(target, status) is None, status
+
+    def _refused_holding(self, tmp_path, row, disposition):
+        """`classify` failed on every record it was given and still holds *row*."""
+        state_mgr, backend = self._states(tmp_path, "failed", failed_as=EVERY_INPUT_FAILED)
+        try:
+            backend.write_target("classify", "pages.json", [row])
+            if disposition is not None:
+                backend.set_disposition("classify", "g0", disposition, reason="r")
+            self._command()._refuse_to_narrow_the_unfinished(
+                state_mgr, backend, ["extract", "classify"]
+            )
+        except click.ClickException as refusal:
+            return refusal.message
+        finally:
+            backend.close()
+        return None
+
+    def test_a_failure_still_holding_a_row_its_run_did_not_reach_is_refused(self, tmp_path):
+        """A reset deletes no row and a run failing everything writes none, so a row of a
+        record that run gave no disposition, or filtered or scoped out, which keeps no
+        row, is from before the reset; narrowing would carry it for good."""
+        for disposition in (None, "filtered", "skipped"):
+            target = tmp_path / str(disposition)
+            target.mkdir()
+            refused = self._refused_holding(target, {"source_guid": "g0"}, disposition)
+            assert "classify (failed)" in (refused or ""), disposition
+
+    def test_a_failure_holding_rows_of_records_it_reached_is_narrowed(self, tmp_path):
+        for disposition in ("failed", "success", "passthrough"):
+            target = tmp_path / disposition
+            target.mkdir()
+            assert self._refused_holding(target, {"source_guid": "g0"}, disposition) is None
+
+    def test_a_row_the_action_minted_is_reached_through_its_parent(self, tmp_path):
+        row = {"source_guid": "m0", "parent_source_guid": "g0"}
+        assert self._refused_holding(tmp_path, row, "failed") is None
 
     def test_a_dry_run_reports_the_refusal_instead(self, tmp_path):
         state_mgr, backend = self._states(tmp_path, "interrupted")

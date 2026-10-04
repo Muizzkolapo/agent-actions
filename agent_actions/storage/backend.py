@@ -328,22 +328,31 @@ class StorageBackend(ABC):
         that a plain read would only have complained about later.
         """
         counts: dict[str, int] = {}
+        for guid, _parent in self.target_row_identities(action_name):
+            counts[guid] = counts.get(guid, 0) + 1
+        return counts
+
+    def target_row_identities(self, action_name: str) -> list[tuple[str, str | None]]:
+        """``(source_guid, parent_source_guid)`` of every stored row that has an identity.
+
+        Read as stored, for the reasons :meth:`target_rows_per_source_guid` gives: the
+        envelope is kept whole in a delta row, so nothing here needs reconstructing.
+        """
+        identities: list[tuple[str, str | None]] = []
         for relative_path in self.list_target_files(action_name):
             try:
                 rows = self._read_target_raw(action_name, relative_path)
             except FileNotFoundError:
                 logger.debug(
-                    "Target file listed but unreadable while counting rows: %s/%s",
+                    "Target file listed but unreadable while reading row identities: %s/%s",
                     action_name,
                     relative_path,
                 )
                 continue
             for row in rows:
-                if isinstance(row, dict):
-                    guid = row.get("source_guid")
-                    if guid:
-                        counts[guid] = counts.get(guid, 0) + 1
-        return counts
+                if isinstance(row, dict) and row.get("source_guid"):
+                    identities.append((row["source_guid"], row.get("parent_source_guid")))
+        return identities
 
     def has_target_rows(self, action_name: str) -> bool:
         """Whether any stored file of this action holds at least one row.

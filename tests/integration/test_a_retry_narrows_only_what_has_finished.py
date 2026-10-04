@@ -1,14 +1,14 @@
 """`agac retry` narrows only actions that finished their last run (1227).
 
-A retry answers the records it names at every action from its starting point and carries
-what each action already holds for the rest. That is sound for an action that finished:
-what it holds for the rest is its answer. An action its last run left unfinished, reset
-for an edit and stopped while running again or never run at all, holds nothing current
-for the records that run had not reached, and the retry completed it on the ones it named.
+A retry answers the records it names at every action it runs and carries what each
+action already holds for the rest. That is sound for an action that finished: what it
+holds for the rest is its answer. An action its last run left unfinished, reset for an
+edit and stopped while running again or never run at all, holds nothing current for the
+records that run had not reached, and the retry completed it on the ones it named.
 
 Two tool actions over six staged records, `flatten` and `enrich`, which reads it. Every
 command is a real `agac` invocation; only the faults are stood in for: the one that stops
-a run, raised where `enrich` marks a record answered, and a `flatten` tool that fails.
+a run, raised where an action marks a record answered, and tools that fail.
 """
 
 import json
@@ -18,9 +18,10 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.runner import ActionRunner
 from tests.integration.test_an_upstream_edit_reruns_what_reads_it import _filter_the_first_page
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -29,6 +30,7 @@ from tests.integration.test_retry_ignores_record_cap import (
     SECOND_ACTION,
     TAG_TOOL,
     WORKFLOW,
+    _backend,
     _disposition,
     _fail,
     _record_ids,
@@ -60,12 +62,12 @@ def _status(project, action=SECOND):  # noqa: F811
 
 
 @contextmanager
-def _stopped_at_the_readers_record(stop, nth=3):
+def _stopped_at_the_readers_record(stop, nth=3, action=SECOND):
     mark = SQLiteBackend.set_disposition
     answered = []
 
     def marking(self, action_name, record_id, disposition, *args, **kwargs):
-        if action_name == SECOND and disposition == "success":
+        if action_name == action and disposition == "success":
             answered.append(record_id)
             if len(answered) == nth:
                 raise stop
@@ -214,3 +216,147 @@ def test_a_retry_whose_record_failed_again_can_be_retried_again(chained):  # noq
     assert result.exit_code == 0, result.output
     assert _disposition(chained, named, SECOND) == "success"
     assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+AUDIT_ACTION = """  - name: audit
+    kind: tool
+    dependencies: [flatten]
+    intent: "Audit"
+    schema: tool_action_output
+    impl: tag_density
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+
+@pytest.mark.parametrize("left", ["pending", "interrupted"])
+def test_an_unfinished_action_ordered_before_the_starting_point_refuses(chained, left):  # noqa: F811
+    """`audit` reads `flatten` beside `enrich`. Declared after it, it runs before it, so a
+    retry starting at `enrich` still runs it: added since the last run, or stopped partway."""
+    named = _stored_guids(chained, SECOND)[-1]
+    _fail(chained, named, SECOND)
+    config = chained / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + AUDIT_ACTION)
+    if left == "interrupted":
+        with _stopped_at_the_readers_record(KeyboardInterrupt(), action="audit"):
+            _run()
+    assert _status(chained, "audit") == left
+
+    result = _retry()
+
+    assert result.exit_code != 0, result.output
+    assert f"audit ({left})" in result.output, result.output
+    assert _run().exit_code == 0
+    assert len(_stored_guids(chained, "audit")) == RECORDS
+
+
+@contextmanager
+def _the_readers_tool_raises(error, from_call=1):
+    run_tool = tool_client.execute_user_defined_function
+    calls = []
+
+    def raising(udf_name, *args, **kwargs):
+        if udf_name == "tag_density":
+            calls.append(udf_name)
+            if len(calls) >= from_call:
+                raise error
+        return run_tool(udf_name, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(tool_client, "execute_user_defined_function", raising)
+        yield
+
+
+def test_a_reader_an_error_stopped_partway_on_its_first_run_refuses(chained):  # noqa: F811
+    """A tool output that fails validation ends its file at that record: two answered,
+    three never reached. Taken as a failure on every record, the retry completed it on
+    the one it named."""
+    with _the_readers_tool_raises(SchemaValidationError("output did not validate"), from_call=3):
+        _run("--fresh")
+    assert (_status(chained, ACTION), _status(chained)) == ("completed", "failed")
+    named = _a_failure_at_the_first_action(chained)
+
+    result = _retry("--record", named)
+
+    assert result.exit_code != 0, result.output
+    assert "enrich (failed)" in result.output, result.output
+    assert _run().exit_code == 0
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+@contextmanager
+def _every_file_of_the_reader_fails():
+    process = ActionRunner._process_single_file
+
+    def failing(self, params, *args, **kwargs):
+        if params.action_name == SECOND:
+            raise OSError("the disk was full")
+        return process(self, params, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(ActionRunner, "_process_single_file", failing)
+        yield
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(lambda: _the_readers_tool_raises(RuntimeError("blew up")), id="every_record"),
+        pytest.param(_every_file_of_the_reader_fails, id="every_file"),
+    ],
+)
+def test_a_reader_that_failed_everything_after_a_reset_refuses(chained, fault):  # noqa: F811
+    """The reset deletes no row, and a run that fails everything writes none, so the
+    reader still holds the row of the page its source now filters. Nothing would reach
+    that row again once a retry carried it."""
+    _filter_the_first_page(chained)
+    with fault():
+        _run()
+    assert _status(chained) == "failed"
+    named = _a_failure_at_the_first_action(chained)
+
+    result = _retry("--record", named)
+
+    assert result.exit_code != 0, result.output
+    assert "enrich (failed)" in result.output, result.output
+    assert _run().exit_code == 0
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def test_a_stale_manifest_does_not_lift_the_refusal(chained):  # noqa: F811
+    """Only a retry reads or deletes the manifest of one that was interrupted, so it
+    outlives the plain runs after it. Those runs reset and stop `enrich` on their own."""
+    named = _a_failure_at_the_first_action(chained)
+    with _stopped_at_the_readers_record(KeyboardInterrupt(), nth=1):
+        _retry("--record", named)
+    assert _run().exit_code == 0
+    _edit_then_stop_the_reader(chained, KeyboardInterrupt())
+    named = _a_failure_at_the_first_action(chained)
+
+    result = _retry("--record", named)
+
+    assert result.exit_code != 0, result.output
+    assert "enrich (interrupted)" in result.output, result.output
+    assert _run().exit_code == 0
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def test_a_completed_action_whose_output_is_gone_refuses(chained):  # noqa: F811
+    """A plain run answers everything again for it; narrowed, it completed on one row."""
+    backend = _backend(chained)
+    try:
+        backend.delete_target(SECOND)
+    finally:
+        backend.close()
+    named = _a_failure_at_the_first_action(chained)
+
+    result = _retry("--record", named)
+
+    assert result.exit_code != 0, result.output
+    assert "enrich (its output is gone)" in _unwrapped(result.output), result.output
+    assert _run().exit_code == 0
+    assert len(_stored_guids(chained, SECOND)) == RECORDS
+
+
+def _unwrapped(output):
+    return " ".join(output.split())

@@ -329,6 +329,27 @@ def action_failed_every_input(storage_backend: Any, action_name: str) -> bool:
     return _failed_as(storage_backend, action_name, EVERY_INPUT_FAILED)
 
 
+def completed_output_stands(storage_backend: Any, action_name: str) -> bool:
+    """Whether a completed action still holds its output, or made none on purpose.
+
+    No output and no node-level disposition saying why means its stored output is gone.
+    """
+    if storage_backend.list_target_files(action_name):
+        return True
+    # Guard-filtered every record, WHERE-skipped and the like; FAILED and SKIPPED
+    # are not a completion.
+    for disp in (
+        DISPOSITION_FILTERED,
+        DISPOSITION_PASSTHROUGH,
+        DISPOSITION_SUCCESS,
+        DISPOSITION_UNPROCESSED,
+    ):
+        if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+            logger.info("Action %s has no output but node-level %s — made none", action_name, disp)
+            return True
+    return False
+
+
 def _raised_by_on_empty_error(error: Exception) -> bool:
     """True if *error*, or anything it chains to, is the halt `on_empty: error` asks for."""
     from agent_actions.utils.safe_format import get_error_chain
@@ -586,7 +607,7 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             return []
-        readers = self._readers_of(action_name)
+        readers = self.readers_of(action_name)
         if readers:
             logger.info(
                 "%s is running again: resetting what reads it (%s)",
@@ -595,7 +616,7 @@ class ActionExecutor:
             )
         return readers
 
-    def _readers_of(self, action_name: str) -> list[str]:
+    def readers_of(self, action_name: str) -> list[str]:
         """Every action that reads, directly or through others, what *action_name* writes."""
         configs = {
             name: config
@@ -747,26 +768,8 @@ class ActionExecutor:
                 ),
             )
 
-        if storage_backend.list_target_files(action_name):
+        if completed_output_stands(storage_backend, action_name):
             return _completed_result()
-
-        # No target files. Check if the action intentionally produced no
-        # output (guard-filtered all records, WHERE-skipped, etc.) by
-        # looking for a node-level terminal disposition that is NOT
-        # FAILED/SKIPPED (those were already handled above).
-        for disp in (
-            DISPOSITION_FILTERED,
-            DISPOSITION_PASSTHROUGH,
-            DISPOSITION_SUCCESS,
-            DISPOSITION_UNPROCESSED,
-        ):
-            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
-                logger.info(
-                    "Action %s has no output but node-level %s — intentional, skipping re-run",
-                    action_name,
-                    disp,
-                )
-                return _completed_result()
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)
         return (False, None)

@@ -16,6 +16,7 @@ from tests.integration.test_retry_selection_under_batch import (
     WORKFLOW,
     _agac,
     _backend,
+    _cycle,
     _deferred_ids,
     _dispositions,
     _project,
@@ -24,10 +25,46 @@ from tests.integration.test_retry_selection_under_batch import (
     submitted_and_collected,  # noqa: F401
 )
 
+READER = """  - name: tagger
+    kind: tool
+    run_mode: online
+    dependencies: [summarize]
+    intent: "Tag"
+    schema: batch_field_rules_output
+    impl: tag_density
+    context_scope: { observe: [summarize.summary] }
+    expect: { repair: none }
+"""
+
+TAG_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def tag_density(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "high"}]
+"""
+
 
 @pytest.fixture
 def finished_not_collected(tmp_path):
+    return _submit_and_finish(_project(tmp_path))
+
+
+@pytest.fixture
+def finished_not_collected_with_a_reader(tmp_path):
+    """The same batch, read by an online tool the run has not reached: it stops at the
+    submission, and the next run collects before it goes on."""
     root = _project(tmp_path)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + READER)
+    (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (root / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
+    return _submit_and_finish(root)
+
+
+def _submit_and_finish(root):
     staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json"
     staging.write_text(
         json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
@@ -122,3 +159,63 @@ def test_a_repair_batch_is_owed_though_its_record_still_has_its_old_row(
 
     assert code != 0, output
     assert "finished, not collected" in _unwrapped(output), output
+
+
+@pytest.mark.parametrize("left_as", ["checking_batch", "failed"])
+def test_abandoning_gets_past_an_action_left_collecting_or_failed(finished_not_collected, left_as):
+    """The provider has forgotten the batch, so no run can collect it: abandoning is the
+    only way on, and the batch's records are what the action has left to answer."""
+    project = finished_not_collected
+    named = _deferred_ids(project)[0]
+    _set_disposition(project, named, "failed")
+    _set_action_status(project, left_as)
+
+    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+    assert code == 0, output
+    assert "Abandoning" in _unwrapped(output), output
+
+
+def _statuses(project):
+    (status_file,) = (project / "agent_workflow" / WORKFLOW).rglob("*status*.json")
+    return {
+        name: details["status"] for name, details in json.loads(status_file.read_text()).items()
+    }
+
+
+def _rows_at(project, action):
+    backend = _backend(project)
+    try:
+        return sorted(
+            r["source_guid"]
+            for path in backend.list_target_files(action)
+            for r in backend.read_target(action, path)
+            if r.get("source_guid")
+        )
+    finally:
+        backend.close()
+
+
+def test_a_reader_behind_an_uncollected_batch_is_left_to_the_batch(
+    finished_not_collected_with_a_reader,
+):
+    """The reader is pending only because the run stopped at the batch. Refused for it,
+    a retry that must abandon the batch had no way on."""
+    project = finished_not_collected_with_a_reader
+    assert _statuses(project) == {ACTION: "batch_submitted", "tagger": "pending"}
+    named = _deferred_ids(project)[0]
+    _set_disposition(project, named, "failed")
+
+    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named)
+    assert code != 0, output
+    assert "finished, not collected" in _unwrapped(output), output
+
+    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+    assert code == 0, output
+
+    # The retry stops at its own submission, and the run that collects it runs the
+    # reader whole; the records the abandoned batch held are failures a retry reaches.
+    _cycle(project, "run", "-a", WORKFLOW)
+    _cycle(project, "retry", "-a", WORKFLOW)
+    assert len(_rows_at(project, ACTION)) == RECORDS
+    assert _rows_at(project, "tagger") == _rows_at(project, ACTION)
