@@ -5,7 +5,12 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from agent_actions.errors import ConfigurationError, FunctionNotFoundError, GuardNotAppliedError
+from agent_actions.errors import (
+    ConfigurationError,
+    FunctionNotFoundError,
+    GuardNotAppliedError,
+    mark_action_fatal,
+)
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.guards.consolidated_guard import (
     _UNSUPPORTED_GUARD_BEHAVIORS as _UNSUPPORTED_BEHAVIORS,
@@ -242,20 +247,24 @@ class GuardEvaluator:
 
         # Read-only, since `context` holds the record's own namespaces by reference. Built
         # outside the handler below: that passes a record whose UDF raised, and a record
-        # the UDF could not be shown has not been judged by it at all.
+        # the UDF could not be shown has not been judged by it at all. Fatal to the action
+        # unless a caller can fail the one record: taken as one file's failure, the file's
+        # records go missing while the action completes.
         try:
             view = _readonly_bus(context)
         except Exception as e:
-            raise GuardNotAppliedError(
-                f"Guard UDF '{clause}' was not run: its input could not be made read-only "
-                f"({type(e).__name__}: {e}). A record the guard has not judged is not "
-                "passed to the action.",
-                context={
-                    "udf_name": clause,
-                    "operation": "evaluate_conditional_clause",
-                    "failed_field": "guard",
-                },
-                cause=e,
+            raise mark_action_fatal(
+                GuardNotAppliedError(
+                    f"Guard UDF '{clause}' was not run: its input could not be made read-only "
+                    f"({type(e).__name__}: {e}). A record the guard has not judged is not "
+                    "passed to the action.",
+                    context={
+                        "udf_name": clause,
+                        "operation": "evaluate_conditional_clause",
+                        "failed_field": "guard",
+                    },
+                    cause=e,
+                )
             ) from e
 
         try:

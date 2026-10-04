@@ -94,15 +94,16 @@ How it is built: one loop over a worklist, with a memo of what replaced each con
 recurses, so nesting depth costs no interpreter frames. A container is replaced once however
 many places hold it, so a cycle in the record is the same cycle in the view and a shared
 container is walked once. The walk reads each container's own storage, never a subclass's
-accessors. The user code it can still run is a dict key's `__hash__` and `__eq__`, and the
-`__class__` lookup `isinstance` makes on a value.
+accessors. It still hashes dict keys and looks at each value's type, and that is the only
+user code it can reach (a key's `__hash__` and `__eq__`, a `__class__` property, a metaclass).
 
 What to know:
 
 - The view is a snapshot of the record's structure when it was built. A namespace the record
   gains afterwards is not in it. Nothing changes a record while its guard is evaluated.
 - A slice of a list view is a read-only list of the same items, and its `copy()` is the deep
-  one. `list(view)`, `xs + []` and `reversed(xs)` give plain lists of read-only items.
+  one. `list(view)` and `xs + []` give plain lists of read-only items, and `reversed(xs)`
+  iterates them.
 - Only dict, list, tuple and set are replaced. A dict or list subclass becomes a plain
   read-only dict or list, read from what it stores and in the order it stores it (an
   `OrderedDict` reordered with `move_to_end` is seen in insertion order). A tuple that holds
@@ -113,10 +114,13 @@ What to know:
   `spec=dict`) has no storage to read, so the view cannot be built.
 - The cost is one pass over the record per view, on this path only. Expression guards never
   build one.
+- A dict key whose `__hash__` adds containers to the record each time it is called makes the
+  walk run without end. Only hostile code does that.
 - A view that cannot be built raises `GuardNotAppliedError`, naming the guard. The record is
-  not passed: it has not been judged. The pre-filter adds the record and marks the error
-  fatal to the action, since that pass cannot fail one record; record-mode preparation fails
-  that record alone.
+  not passed: it has not been judged. The error is fatal to the action wherever one record
+  cannot be failed on its own: the pre-filter, which every online action goes through and
+  which adds the record to the message, and the rows a batch rehearses before submitting.
+  Batch preparation of the remaining rows fails that record alone.
 
 ### Safety Validation
 

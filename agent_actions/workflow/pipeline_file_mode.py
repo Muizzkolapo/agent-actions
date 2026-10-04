@@ -428,8 +428,7 @@ def prefilter_by_guard(
             )
         except GuardNotAppliedError as e:
             # The evaluator is handed the record's content; the envelope naming it is here.
-            # Fatal to the action: this pass has no way to fail one record, and taken as
-            # one file's failure the file's records go missing while the action completes.
+            # Still fatal to the action: this pass has no way to fail one record.
             source_guid = stored_record.get("source_guid")
             raise mark_action_fatal(
                 GuardNotAppliedError(
