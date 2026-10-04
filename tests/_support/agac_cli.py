@@ -21,13 +21,14 @@ def run_agac(
     venv's editable install points, which from a second worktree is another
     checkout; pytest.ini's `pythonpath` reaches only the pytest process.
     """
-    inherited = os.environ.get("PYTHONPATH")
-    pythonpath = os.pathsep.join([str(REPO), inherited]) if inherited else str(REPO)
+    merged = {**os.environ, **(env or {})}
+    inherited = merged.get("PYTHONPATH")
+    merged["PYTHONPATH"] = os.pathsep.join([str(REPO), inherited]) if inherited else str(REPO)
     return subprocess.run(
         [str(AGAC), *args],
         cwd=cwd,
         capture_output=True,
         text=True,
         timeout=300,
-        env={**os.environ, **(env or {}), "PYTHONPATH": pythonpath},
+        env=merged,
     )

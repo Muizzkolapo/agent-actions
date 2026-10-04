@@ -9,6 +9,8 @@ pytest.ini's `pythonpath` reaches the pytest process only.
 import re
 from pathlib import Path
 
+import pytest
+
 from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
@@ -34,7 +36,8 @@ def probe(data):
 LAUNCH = re.compile(r"""(/\s*|\[\s*|which\(\s*)["']agac["']""")
 
 
-def test_the_agac_a_test_runs_imports_agent_actions_from_this_tree(tmp_path):
+def test_the_agac_a_test_runs_imports_agent_actions_from_this_tree(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTHONPATH", raising=False)
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "probe.py").write_text(PROBE)
@@ -42,6 +45,36 @@ def test_the_agac_a_test_runs_imports_agent_actions_from_this_tree(tmp_path):
     result = run_agac(tmp_path, "list-udfs", "-u", "tools")
 
     assert result.returncode == 0, result.stdout + result.stderr
+    imported = Path((tools / "imported_from.txt").read_text()).resolve()
+    assert imported == REPO / "agent_actions" / "__init__.py"
+
+
+@pytest.mark.parametrize("handed_over", ["inherited", "passed"])
+def test_a_pythonpath_already_set_stays_on_the_path_behind_this_tree(
+    tmp_path, monkeypatch, handed_over
+):
+    """The entry is a decoy: its `agent_actions` raises on import, so the run fails
+    unless this tree comes first, and the probe imports a module only it holds, so
+    the run fails if the entry is dropped. A PYTHONPATH entry outranks the editable
+    install, so this fails in CI too, where the install is the tree under test."""
+    decoy = tmp_path / "decoy"
+    (decoy / "agent_actions").mkdir(parents=True)
+    (decoy / "agent_actions" / "__init__.py").write_text('raise ImportError("the decoy")\n')
+    (decoy / "only_on_the_decoy_path.py").write_text("")
+    project = tmp_path / "project"
+    tools = project / "tools"
+    tools.mkdir(parents=True)
+    (tools / "probe.py").write_text("import only_on_the_decoy_path\n" + PROBE)
+
+    if handed_over == "inherited":
+        monkeypatch.setenv("PYTHONPATH", str(decoy))
+        result = run_agac(project, "list-udfs", "-u", "tools")
+    else:
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+        result = run_agac(project, "list-udfs", "-u", "tools", env={"PYTHONPATH": str(decoy)})
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tools / "imported_from.txt").exists(), result.stdout + result.stderr
     imported = Path((tools / "imported_from.txt").read_text()).resolve()
     assert imported == REPO / "agent_actions" / "__init__.py"
 
