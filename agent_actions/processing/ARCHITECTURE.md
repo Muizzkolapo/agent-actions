@@ -871,6 +871,12 @@ Why:
   new config. Which config they were answered under is known only from
   the stamp the executor writes when it starts the action's work.
 
+  A batch the provider refuses fails the action, and the walk raises it once
+  every file is walked. The refusal sent and stored nothing, so what the action
+  had answered before still stands, and the reset keeps it as it keeps any
+  failed action's while the config is unchanged. Bulk-wiped, one refused file
+  would send, and pay for, every answered record of every file again.
+
   SKIPPED = no records processed. Nothing to preserve.
 
 If you add COMPLETED_WITH_FAILURES back to RETRYABLE_STATUSES:

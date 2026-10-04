@@ -151,8 +151,8 @@ sys.exit(main())
 """
 
 
-def _project(root: Path) -> Path:
-    """The fixture project on the agac provider, staging a_pages.json and b_pages.json."""
+def _project(root: Path, prefixes: tuple[str, ...] = ("a", "b")) -> Path:
+    """The fixture project on the agac provider, staging two pages in a file per prefix."""
     shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("logs"))
     for config in root.glob("agent_workflow/*/agent_config/*.yml"):
         config.write_text(
@@ -162,7 +162,7 @@ def _project(root: Path) -> Path:
     staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
     for stale in staging.glob("*.json"):
         stale.unlink()
-    for prefix in ("a", "b"):
+    for prefix in prefixes:
         pages = [{"page_id": f"{prefix}{n}", "page_content": f"Page {prefix}{n}."} for n in (1, 2)]
         (staging / f"{prefix}_pages.json").write_text(json.dumps(pages))
     return root
@@ -216,7 +216,7 @@ def _answered(project: Path) -> dict[str, list[str]]:
     return answered
 
 
-def _batch_ids(project: Path) -> dict[str, str]:
+def _registry(project: Path) -> dict[str, dict[str, Any]]:
     con = _store(project)
     try:
         (registry,) = con.execute(
@@ -224,7 +224,11 @@ def _batch_ids(project: Path) -> dict[str, str]:
         ).fetchone()
     finally:
         con.close()
-    return {name: entry["batch_id"] for name, entry in json.loads(registry).items()}
+    return json.loads(registry)
+
+
+def _batch_ids(project: Path) -> dict[str, str]:
+    return {name: entry["batch_id"] for name, entry in _registry(project).items()}
 
 
 EVERY_PAGE = {"a_pages.json": ["a1", "a2"], "b_pages.json": ["b1", "b2"]}
@@ -271,13 +275,56 @@ class TestARefusedResendOverACollectedFile:
         stopped = _agac(project, FAIL="Page a1.", STOP_AT="b_pages.json")
         assert (submitted.status, stopped.status) == ("batch_submitted", "failed"), stopped.output
         refused = _agac(project, REFUSE="a_pages.json")
-        then = [_agac(project), _agac(project)]
-        return SimpleNamespace(project=project, refused=refused, then=then)
+        resent = _agac(project)
+        sent_after = _registry(project)
+        then = [resent, _agac(project)]
+        return SimpleNamespace(project=project, refused=refused, sent_after=sent_after, then=then)
 
     def test_the_run_the_provider_refused_fails(self, runs):
         assert runs.refused.code != 0, runs.refused.output
         assert runs.refused.status == "failed"
 
+    def test_the_run_after_it_sends_only_the_record_left_unanswered(self, runs):
+        """a2 was answered before the refusal, which sent and stored nothing."""
+        assert runs.sent_after["a_pages.json"]["record_count"] == 1
+
     def test_every_record_ends_answered_under_its_own_page(self, runs):
         assert runs.then[-1].status == "completed", runs.then[-1].output
         assert _answered(runs.project) == EVERY_PAGE
+
+
+class TestARefusedResendBesideAFileAlreadyCollected:
+    """A refusal costs the refused file a resend, not the files collected before it.
+
+    a_pages.json and b_pages.json are collected, a1 failed; the collect pass stops before
+    c_pages.json. The run after resends a1, and the provider refuses it.
+    """
+
+    @pytest.fixture(scope="class")
+    def runs(self, tmp_path_factory):
+        project = _project(tmp_path_factory.mktemp("collected") / "project", ("a", "b", "c"))
+        submitted = _agac(project, "--fresh")
+        stopped = _agac(project, FAIL="Page a1.", STOP_AT="c_pages.json")
+        assert (submitted.status, stopped.status) == ("batch_submitted", "failed"), stopped.output
+        collected = _batch_ids(project)
+        refused = _agac(project, REFUSE="a_pages.json")
+        resent = _agac(project)
+        sent_after = _registry(project)
+        then = [resent, _agac(project)]
+        return SimpleNamespace(
+            project=project,
+            collected=collected,
+            refused=refused,
+            sent_after=sent_after,
+            then=then,
+        )
+
+    def test_the_run_after_it_sends_a1_and_nothing_else(self, runs):
+        assert runs.refused.status == "failed", runs.refused.output
+        assert runs.sent_after["a_pages.json"]["record_count"] == 1
+        assert runs.sent_after["b_pages.json"]["batch_id"] == runs.collected["b_pages.json"]
+        assert runs.sent_after["c_pages.json"]["batch_id"] == runs.collected["c_pages.json"]
+
+    def test_every_record_of_every_file_ends_answered(self, runs):
+        assert runs.then[-1].status == "completed", runs.then[-1].output
+        assert _answered(runs.project) == {**EVERY_PAGE, "c_pages.json": ["c1", "c2"]}

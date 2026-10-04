@@ -6,12 +6,13 @@ body: >-
   collected the action read completed, was not run again, and the refused file's records
   were never answered. A record sent again after a failure kept its failed row under a
   completed action, and a file sent for the first time was never written at all. The run
-  now fails. The next run sends the refused file again, and the run after collects every
-  file; a batch still out for another file is kept and collected, not sent again. As after
-  any failed run, records the action had already answered are kept while its config is
-  unchanged. A refused batch also no longer replaces the file's record of what its last
-  batch was sent: that is stored only once the provider has taken the batch, and before the
-  registry names it, so a collect pass never reads one batch against another's record.
+  now fails. The next run sends the refused file's unanswered records again, and the run
+  after collects every file; a batch still out for another file is kept and collected, not
+  sent again, and while the action's config is unchanged, records it had already answered,
+  in any file, are kept rather than paid for again. A refused batch also no longer replaces
+  the file's record of what its last batch was sent: that is stored only once the provider
+  has taken the batch, and before the registry names it, so a collect pass never reads one
+  batch against another's record.
   If that record cannot be stored, the error now names the batch the provider took, which
   nothing else names; the next run sends its records again.
 time: 2026-10-04T18:00:00Z

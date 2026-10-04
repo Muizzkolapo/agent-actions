@@ -265,8 +265,9 @@ def _raise_action_fatal(
 
     The layer below re-raised it deliberately; tolerating it because another
     file processed erases the policy it carries. The processed files keep the
-    output they wrote. A halt is not re-run; any other failure is resumed by the
-    next run, which carries what was finished while the config is unchanged.
+    output they wrote. A halt keeps its dispositions and is not re-run; any other
+    failure, a refused batch among them, is resumed by the next run, which keeps
+    the records the action had answered while its config is unchanged.
     """
     from agent_actions.errors import DependencyError
 
