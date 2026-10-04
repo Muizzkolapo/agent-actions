@@ -562,7 +562,7 @@ class TestRecoveryLoopRootCauses:
         svc = BatchProcessingService.__new__(BatchProcessingService)
         svc._registry_manager_factory = MagicMock(return_value=manager)
         svc._workflow_name = "test_action"
-        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+        svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
 
         calls_received = []
         svc._process_single_batch_file = MagicMock(
@@ -598,7 +598,7 @@ class TestDownstreamBugs:
 
         svc._registry_manager_factory = MagicMock(return_value=manager)
         svc._workflow_name = "test_action"
-        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+        svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
         svc._process_single_batch_file = MagicMock(
             side_effect=RuntimeError("Reprompt validation exhausted")
         )

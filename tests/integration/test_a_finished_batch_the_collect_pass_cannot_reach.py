@@ -98,6 +98,10 @@ class TestTwoOfThreeFilesOutOfReach:
         assert runs.cut_off.code == 0, runs.cut_off.output
         assert runs.cut_off.status == "batch_submitted"
 
+    def test_the_run_that_could_not_reach_them_names_them(self, runs):
+        assert "Could not read b_pages.json" in runs.cut_off.output
+        assert "Could not read c_pages.json" in runs.cut_off.output
+
     def test_the_run_after_it_answers_every_record_of_every_file(self, runs):
         assert runs.after.code == 0, runs.after.output
         assert runs.after.status == "completed"

@@ -17,13 +17,18 @@ from pathlib import Path
 
 import pytest
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_constants import (
+    BatchStatus,
+    ContextMetaKeys,
+    FilterStatus,
+    RecoveryType,
+)
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.processing import BatchProcessingService
-from agent_actions.storage.backend import DISPOSITION_DEFERRED
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 
@@ -106,11 +111,49 @@ class _Action:
         manager.mark_collected(file_name)
         return f"{self.out}/{file_name}"
 
+    def register(self, entry: BatchJobEntry) -> None:
+        BatchRegistryManager(self.backend, ACTION).save_batch_job(entry.file_name, entry)
+        self.provider.statuses[entry.batch_id] = entry.status
+
+    def send(self, file_name: str, *record_ids: str) -> None:
+        """Record what the file's batch was sent, which is where its records are found."""
+        BatchContextManager.save_batch_context_map(
+            self.backend,
+            ACTION,
+            {
+                record_id: {
+                    "source_guid": record_id,
+                    ContextMetaKeys.FILTER_STATUS: str(FilterStatus.INCLUDED),
+                }
+                for record_id in record_ids
+            },
+            file_name,
+        )
+
+    def dispositions(self) -> dict[str, str]:
+        return {
+            row["record_id"]: row["disposition"] for row in self.backend.get_disposition(ACTION)
+        }
+
     def cannot_reach(self, *names: str) -> None:
         self.provider.unreachable = {f"batch-{name}" for name in names}
 
     def check(self) -> tuple[str | None, str]:
         return self.lifecycle.handle_batch_agent(ACTION, self.out, {})
+
+
+def _retry_of(parent: str) -> BatchJobEntry:
+    return BatchJobEntry(
+        batch_id=f"batch-{parent}_retry_1",
+        status=BatchStatus.COMPLETED,
+        timestamp="2026-10-04T09:10:00+00:00",
+        provider="agac-provider",
+        record_count=1,
+        file_name=f"{parent}_retry_1",
+        parent_file_name=parent,
+        recovery_type=RecoveryType.RETRY,
+        recovery_attempt=1,
+    )
 
 
 def test_an_action_does_not_complete_past_a_finished_file_it_could_not_read(tmp_path):
@@ -130,6 +173,17 @@ def test_the_run_after_it_reads_those_files_and_completes(tmp_path):
 
     assert action.check() == (action.out, "completed")
     assert action.finalized == ["page1.json", "page2.json", "page3.json"]
+
+
+def test_the_run_names_each_file_it_could_not_read(tmp_path, caplog):
+    action = _Action(tmp_path)
+    action.cannot_reach("page2.json", "page3.json")
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions.llm.batch.services.processing"):
+        action.check()
+
+    assert "Could not read page2.json" in caplog.text
+    assert "Could not read page3.json" in caplog.text
 
 
 def test_a_pass_that_could_read_no_file_waits_rather_than_failing(tmp_path):
@@ -192,3 +246,43 @@ def test_a_batch_that_ended_without_results_is_not_left_unread(tmp_path, ended):
         [f"{action.out}/page1.json", f"{action.out}/page2.json"],
         [],
     )
+
+
+def test_a_finished_batch_the_provider_reports_running_again_is_waited_for(tmp_path):
+    """Its records are not failed: `agac retry` would send them again while the provider
+    may still answer them."""
+    action = _Action(tmp_path)
+    action.send("page2.json", "page2-a")
+    action.provider.statuses["batch-page2.json"] = BatchStatus.IN_PROGRESS
+
+    assert action.check() == (None, "in_progress")
+    assert action.finalized == ["page1.json", "page3.json"]
+    assert action.dispositions() == {}
+
+
+@pytest.mark.parametrize("answer", [BatchStatus.FAILED, "expired", "unknown"])
+def test_a_finished_batch_the_provider_no_longer_reports_finished_fails_its_records(
+    tmp_path, answer
+):
+    """No later pass can read it, so waiting on it would hold the action for good. Its
+    records are marked failed instead, which is what `agac retry` finds."""
+    action = _Action(tmp_path)
+    action.send("page2.json", "page2-a", "page2-b")
+    action.provider.statuses["batch-page2.json"] = answer
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page3.json"]
+    assert action.dispositions() == {"page2-a": DISPOSITION_FAILED, "page2-b": DISPOSITION_FAILED}
+
+
+def test_a_recovery_round_the_provider_does_not_know_fails_the_records_of_its_file(tmp_path):
+    """A round is sent from its file's context map, and registered under a name of its own
+    that has none."""
+    action = _Action(tmp_path)
+    action.send("page3.json", "page3-a", "page3-b")
+    action.register(_retry_of("page3.json"))
+    action.provider.statuses["batch-page3.json_retry_1"] = "unknown"
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page2.json"]
+    assert action.dispositions() == {"page3-a": DISPOSITION_FAILED, "page3-b": DISPOSITION_FAILED}

@@ -96,9 +96,9 @@ def _failed_disposition_record_ids(backend: MagicMock) -> set[str]:
 
 
 def _run_with_failure(svc, side_effect):
-    """Patch _is_batch_ready + _process_single_batch_file, call process_all_batch_results."""
+    """Patch _provider_status + _process_single_batch_file, call process_all_batch_results."""
     with (
-        patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
+        patch.object(svc, "_provider_status", return_value=BatchStatus.COMPLETED),
         patch.object(svc, "_process_single_batch_file", side_effect=side_effect),
     ):
         with pytest.raises(ProcessingError):
@@ -174,7 +174,7 @@ class TestBatchExceptionDisposition:
             return "/output/file_b.json"
 
         with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
+            patch.object(svc, "_provider_status", return_value=BatchStatus.COMPLETED),
             patch.object(svc, "_process_single_batch_file", side_effect=process_side_effect),
         ):
             result = svc.process_all_batch_results("/output").written
@@ -208,7 +208,7 @@ class TestBatchExceptionDisposition:
         _setup_single_file_failure(svc)
 
         with (
-            patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
+            patch.object(svc, "_provider_status", return_value=BatchStatus.COMPLETED),
             patch.object(svc, "_process_single_batch_file", side_effect=RuntimeError("fatal")),
         ):
             with pytest.raises(RuntimeError, match="fatal"):

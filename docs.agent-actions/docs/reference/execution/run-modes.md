@@ -89,7 +89,13 @@ the error names, or take it out of the input, and run again.
 A run asks the provider about each finished batch before reading its results. If it cannot
 reach the provider about one, it reads the others, leaves that batch where it is, and pauses
 as it does while a batch is still out, naming the file it could not read. Run again to
-collect it: nothing is sent again, and the files already read are not read again.
+collect it: nothing is sent again, and the files already read are not read again. It keeps
+pausing for as long as the provider cannot be asked; to give up on those batches instead,
+`agac run --fresh` sends every record of the workflow again.
+
+A batch the provider answers about but no longer reports finished, such as one it now
+reports failed or expired, cannot be read by a later run either. The run reads the other
+files and marks the records of that batch's file failed, for `agac retry` to send again.
 
 ### Batch Commands
 

@@ -15,6 +15,7 @@ import pytest
 
 from agent_actions.errors import DependencyError
 from agent_actions.errors.processing import EmptyOutputError
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services.collect import _empty_output_halt
 from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -47,7 +48,7 @@ def _service_over(files: dict[str, Exception | str]) -> BatchProcessingService:
         workflow_name="summarize",
         storage_backend=MagicMock(),
     )
-    service._is_batch_ready_for_processing = MagicMock(return_value=True)
+    service._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
 
     def collect(*, file_name, **kwargs):
         outcome = files[file_name]

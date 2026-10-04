@@ -1034,7 +1034,7 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
 
         with (
             patch.object(service, "_registry_manager_factory", return_value=manager),
-            patch.object(service, "_is_batch_ready_for_processing", return_value=True),
+            patch.object(service, "_provider_status", return_value=BatchStatus.COMPLETED),
             patch.object(service, "_process_single_batch_file", side_effect=per_file),
             patch.object(service, "_fail_abandoned_records") as tombstone,
         ):

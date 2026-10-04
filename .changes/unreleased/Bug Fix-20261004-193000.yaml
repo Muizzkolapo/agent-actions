@@ -8,9 +8,10 @@ body: >-
   the action complete and never read the batch. If no file could be read at all, the run
   failed the action, and the run after that only paused, so collecting took a failure and
   two more runs. Both now pause, as a run does while a batch is still out, and say which
-  file could not be read; the next run reads it, without sending anything again. A file
-  whose reading fails, rather than one the provider could not be asked about, still costs
-  only its own records, which are marked failed for `agac retry` to find. An action an
-  earlier version completed this way is not repaired by `agac run` or `agac retry`, which
-  find nothing to do; `agac run --fresh` sends every record of the workflow again.
+  file could not be read; the next run reads it, without sending anything again. A finished
+  batch the provider now reports failed or expired was passed over too, though no later run
+  can read it; its records are now marked failed for `agac retry` to find, as are those of a
+  file whose reading fails, which still costs only its own records. An action an earlier
+  version completed this way is not repaired by `agac run` or `agac retry`, which find
+  nothing to do; `agac run --fresh` sends every record of the workflow again.
 time: 2026-10-04T19:30:00Z
