@@ -234,11 +234,9 @@ def _raise_all_files_failed(
 
     # The action-fatal cause leads when there is one: the sample is capped, so
     # a halt that failed after the cap would otherwise appear only on the chain.
-    detail = (
-        errors.action_fatal_message
-        or _format_error_sample(errors.messages)
-        or "Check logs for details."
-    )
+    fatal = errors.action_fatal_message
+    causes = [fatal, *(m for m in errors.messages if m != fatal)] if fatal else errors.messages
+    detail = _format_error_sample(causes) or "Check logs for details."
     error = DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
@@ -273,8 +271,8 @@ def _raise_action_fatal(
 
     raise DependencyError(
         f"Action '{action_name}': {errors.action_fatal_message} "
-        f"(Processed {files_processed} of {files_found} files, then stopped "
-        f"on the action-fatal error.)",
+        f"(Processed {files_processed} of {files_found} files; the action fails "
+        f"on this error.)",
         context={
             "action": action_name,
             "files_found": files_found,
