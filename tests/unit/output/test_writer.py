@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import AgentActionsError, ProcessingError
+from agent_actions.logging.core.events import BaseEvent, EventLevel
+from agent_actions.logging.core.manager import EventManager
 from agent_actions.output.writer import FileWriter
 
 # ---------------------------------------------------------------------------
@@ -339,3 +342,59 @@ class TestExecuteWriteErrors:
                 with pytest.raises(Exception, match="handled"):
                     writer.write_staging({"x": 1})
             mock_handler.assert_called_once()
+
+
+class _Capture:
+    def __init__(self):
+        self.events: list[BaseEvent] = []
+
+    def accepts(self, event: BaseEvent) -> bool:
+        return True
+
+    def handle(self, event: BaseEvent) -> None:
+        self.events.append(event)
+
+    def flush(self) -> None:
+        pass
+
+
+@pytest.fixture
+def fired():
+    EventManager.reset()
+    capture = _Capture()
+    EventManager.get().register(capture)
+    yield capture.events
+    EventManager.reset()
+
+
+class TestAFailedWriteIsReportedAsAWrite:
+    """The writer shares its error handling with the loaders, whose failure event says a
+    file could not be loaded: a failed write read as a load that never ran."""
+
+    @pytest.mark.parametrize(
+        "raising",
+        [
+            pytest.param(sqlite3.OperationalError("disk I/O error"), id="database"),
+            pytest.param(OSError(28, "No space left on device"), id="disk-full"),
+            pytest.param(ValueError("file name rejected"), id="rejected-by-the-backend"),
+        ],
+    )
+    def test_a_target_write_that_fails_fires_a_write_failure(self, fired, tmp_path, raising):
+        backend = MagicMock()
+        backend.write_target.side_effect = raising
+        fp = str(tmp_path / "out" / "data.json")
+        writer = FileWriter(
+            fp,
+            storage_backend=backend,
+            action_name="node_a",
+            output_directory=str(tmp_path / "out"),
+        )
+
+        with pytest.raises(AgentActionsError):
+            writer.write_target([{"x": 1}])
+
+        failures = [event for event in fired if event.level == EventLevel.ERROR]
+        assert [(event.event_type, event.data["file_path"]) for event in failures] == [
+            ("FileWriteFailedEvent", fp)
+        ]
+        assert failures[0].data["error"] == str(raising)
