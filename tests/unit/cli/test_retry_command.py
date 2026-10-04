@@ -230,12 +230,6 @@ class TestDeferredRecordsAreScopedToTheBatchesBeingAbandoned:
         assert written == [("summarize", "r1", "failed"), ("summarize", "r2", "failed")]
 
 
-def _nothing_completed():
-    state_mgr = MagicMock()
-    state_mgr.is_completed.return_value = False
-    return state_mgr
-
-
 class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
     """Scope decided where it is used, not only in the helper.
 
@@ -280,7 +274,7 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True, dry_run=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"], _nothing_completed())
+        command._settle_batches_in_flight(backend, ["summarize", "score"])
 
         backend.set_disposition.assert_not_called()
         reported = " ".join(str(c.args[0]) for c in command.console.print.call_args_list)
@@ -291,7 +285,7 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"], _nothing_completed())
+        command._settle_batches_in_flight(backend, ["summarize", "score"])
 
         moved = [c.args[1] for c in backend.set_disposition.call_args_list]
         assert moved == ["summarize_r1"], (
