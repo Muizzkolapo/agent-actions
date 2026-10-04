@@ -473,11 +473,16 @@ one exception noted last:
   run's file, without them. Batch holds less there only because online's run aborted, and
   never for a record that is an input of the run.
 
-An empty answer is not one of those differences. Both paths apply the action's `on_empty`:
-`warn` stores a failed row, `skip` a tombstone, and `error` fails the record and halts the
-action. A batch halts after its file is written, since a batch has one write and the other
-answers are in it. An empty answer is never a success with nothing stored: that left the
-record done with no row, and nothing saying the model had returned nothing.
+An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
+and `skip` a tombstone, the same in each. Under `error` online raises at the record and
+stores nothing; a batch stores the record as failed with the other answers, since a batch
+has one write and they are in it, and then halts: the halt leaves the loop over the
+action's files and the executor records the action as failed. An empty answer is never a
+success with nothing stored, which left the record done with no row and nothing saying
+the model had returned nothing. Two things are not empty answers here: a result whose
+content is null is a provider failure (a refusal, a safety block) and goes to recovery,
+and when an expanding input sent again answers empty under `skip`, the rows it minted
+before stay beside its tombstone, as they do beside a failure row.
 
 `tests/integration/test_batch_rerun_matches_online.py` drives both paths from
 `ProcessingPipeline.process` against a real store. For every input of a run it requires

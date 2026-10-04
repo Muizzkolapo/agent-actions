@@ -151,6 +151,16 @@ def _empty_output_halt(
     )
 
 
+def _halt_for(results: list[ProcessingResult], ctx: ProcessingContext) -> Exception | None:
+    """The one halt to raise for this file: the first parked, else the empty-output one."""
+    empty = _empty_output_halt(results, ctx)
+    if ctx.pending_exhaustion is not None and empty is not None:
+        logger.warning(
+            "on_empty: error also stopped this file; raising the halt already parked. %s", empty
+        )
+    return ctx.pending_exhaustion or empty
+
+
 class BatchProcessingService:
     """Service for processing batch job results.
 
@@ -367,13 +377,15 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except (RuntimeError, ExpectationConfigurationError):
+            except (RuntimeError, ExpectationConfigurationError, EmptyOutputError):
                 # An unresolvable `expect:` block is not this file's problem:
                 # every remaining file carries the same action config and fails
                 # the same way, so continuing would finish the run reporting
                 # success with each of them missing from the output. A plain
                 # ConfigurationError is per record — a malformed lifecycle state
-                # — and stays below, costing only its own file.
+                # — and stays below, costing only its own file. The halt `on_empty:
+                # error` asks for is raised once its file is written: taken as that
+                # file's failure, its records are marked failed over what they hold.
                 raise
             except Exception as e:
                 logger.exception(
@@ -1013,7 +1025,7 @@ class BatchProcessingService:
         # to survive the failure here as it does on the recovery contexts.
         with _halt_survives_failure_impl(ctx):
             output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
-        return output_records, stats, ctx.pending_exhaustion or _empty_output_halt(results, ctx)
+        return output_records, stats, _halt_for(results, ctx)
 
     @staticmethod
     def _apply_workflow_session_id(
