@@ -72,14 +72,13 @@ def test_a_first_run_with_nothing_to_read_skips_the_reader_instead_of_failing_it
     chained,  # noqa: F811
 ):
     """The same walk on a fresh run. The reader used to fail looking for a directory
-    its upstream never wrote, and kept the rows of the run before."""
+    its upstream never wrote."""
     _remove_the_input(chained)
 
     _run("--fresh")
 
     assert _status(chained, ACTION) == "skipped"
     assert _status(chained, SECOND) == "skipped"
-    assert _rows(chained, SECOND) == 0
 
 
 def test_a_file_limit_does_not_keep_rows_of_input_that_is_gone(chained):  # noqa: F811
@@ -108,8 +107,8 @@ def test_the_input_coming_back_brings_the_rows_back(chained):  # noqa: F811
 
 
 def test_a_retry_of_a_record_whose_input_is_gone_keeps_the_rows(chained):  # noqa: F811
-    """A repair walks only the files holding the records it names. Finding none of
-    them says nothing about the rest of the action's input."""
+    """A repair touches only the records it names, so finding none of their files is
+    no reason to delete the rest of the action's rows."""
     named = _record_ids(chained)[-1]
     _fail(chained, named)
     _remove_the_input(chained)

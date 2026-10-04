@@ -281,11 +281,11 @@ Costs and limits:
 - A prompt change at the top of a long workflow re-answers everything below it.
 - A limit counts as a change. `--record-limit` on a run resets the actions whose records
   it can reach and their readers, giving up a batch still out below and clearing a halt.
-- Stored rows are not deleted, only replaced as the re-run writes each file. A re-run that
-  is interrupted and resumed can serve the old row for a record it had already answered
-  again (#1226). A re-run that finds no input file at all is skipped and its rows are
-  deleted; one whose input lost some files but not all keeps the rows of the files that
-  are gone, and its readers run on them.
+- A reset does not delete stored rows; the re-run replaces them as it writes each file.
+  The exception is a re-run that finds no input file at all: it is skipped and its rows
+  are deleted. One whose input lost some files but not all keeps the rows of the files
+  that are gone, and its readers run on them. A re-run that is interrupted and resumed can
+  serve the old row for a record it had already answered again (#1226).
 - A retry over an action that a reset left unfinished completes it on the records it
   named and keeps old rows for the rest (#1227). Run the workflow before retrying.
 - The level loop orders by `dependencies` alone. A reader that names an action only in

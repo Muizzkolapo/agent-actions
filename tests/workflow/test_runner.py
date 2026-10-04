@@ -916,7 +916,7 @@ class TestProcessFiles:
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
     def test_no_files_under_a_repair_warns(self, mock_logger, runner, tmp_path):
-        """A repair walks only the files holding its records; finding none is not an empty input."""
+        """A repair touches only its records; finding no file is no reason to delete the rest."""
         runner.retried_records = frozenset({"r1"})
         strategy = _make_strategy()
         empty = tmp_path / "empty"

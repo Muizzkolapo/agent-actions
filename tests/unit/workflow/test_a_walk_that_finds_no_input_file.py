@@ -76,8 +76,8 @@ class TestTheWalkSaysItFoundNothing:
             )
 
     def test_not_under_a_repair(self, tmp_path):
-        """A repair walks only the files holding its records, so finding none of them
-        says nothing about the rest of the input."""
+        """A repair touches only the records it names, so finding none of their files
+        is no reason to delete the rest."""
         runner = ActionRunner(use_tools=True)
         runner.retried_records = frozenset({"g0"})
 

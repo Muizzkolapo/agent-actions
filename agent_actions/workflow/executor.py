@@ -1114,8 +1114,9 @@ class ActionExecutor:
             # Clear-on-execute guarantees this row is current-round. The writer
             # whose row survives here is result_collector.write_node_level_disposition
             # firing during run_action when every input record was filtered.
-            # (_handle_dependency_skip and _handle_all_versions_filtered also
-            # write SKIPPED@NODE_LEVEL but both return before this resolver runs.)
+            # (_handle_dependency_skip and _skip_holding_nothing, which skips an
+            # action with no version source or no input file, also write
+            # SKIPPED@NODE_LEVEL but return before this resolver runs.)
             logger.info(
                 "Action '%s' had all records guard-filtered — marking as skipped",
                 action_name,

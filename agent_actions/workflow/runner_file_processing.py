@@ -433,9 +433,10 @@ def collect_files_from_upstream(
 def _found_no_input(runner: ActionRunner, params: FileProcessParams) -> None:
     """End a walk that found no file: a repair carries on, anything else raises.
 
-    A repair walks only the files holding the records it named, so finding none
-    says nothing about the rest. A file limit needs no exemption: it stops a walk
-    only after it has taken a file.
+    A repair touches only the records it named, so finding nothing is no reason
+    to delete the rest; the single-directory walk narrows to their files, which
+    may all be gone. A file limit needs no exemption: it stops a walk only after
+    it has taken a file.
     """
     if runner.retried_records:
         warn_no_files_found(params)
@@ -503,9 +504,9 @@ def process_directory_files(
             if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
                 continue
         except OSError as e:
-            # Counted as found because `files_found == 0` is the one path where
-            # process_files neither raises nor warns: a walk that lost every entry
-            # would otherwise complete green and empty.
+            # Counted as found because a walk that found nothing is skipped as
+            # having no input and its stored rows deleted; a walk that lost every
+            # entry has to fail instead.
             files_seen += 1
             errors.record(item.relative_to(input_path), e)
             _lose_file(runner, params.action_name)
@@ -783,9 +784,9 @@ def process_from_storage_backend(
 
     data_by_path: dict[str, list[tuple[str, Any]]] = {}
     # Entries that never reached data_by_path. files_found is computed from what was READ,
-    # so without this a walk that loses everything returns (0, 0) and process_files'
-    # `files_found > 0` gate never fires: the action completes as though its input had
-    # never existed. #1026 fixed the same shape for the two filesystem walks by widening
+    # so without this a walk that loses everything returns (0, 0) and falls through to a
+    # walk that finds nothing: the action is skipped and its rows deleted as though its
+    # input were gone. #1026 fixed the same shape for the two filesystem walks by widening
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
 
