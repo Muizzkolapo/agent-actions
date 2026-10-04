@@ -4,12 +4,20 @@ body: >-
   its basename alone, so two files of one name in two directories (`a/page.json`,
   `b/page.json`), or one beside a top-level `page.json`, shared one batch: the second found
   the first's batch out and was never sent, with nothing reported, and on later runs each
-  file's batch dropped the other's answers, so they were paid for again. A file in a
-  subdirectory was also stored under two names, its answers as `page.json` and the write
-  made when the guard left nothing to send as `sub/page.json`, so an action below could read
-  a record twice. A batch now keys and stores the file under its path, `sub/page.json`,
-  which is where an online run stores it. A store written before keeps such a file under
-  its basename, since it and the actions below hold it there, until `agac run --fresh` or
-  until a top-level file of that name needs it; an earlier version cannot run that store
-  again.
+  file's batch dropped the other's answers, so they were paid for again. A batch version
+  merge over such files did the same. A file in a subdirectory was also stored under two
+  names, its answers as `page.json` and the write made when the guard left nothing to send
+  as `sub/page.json`, so an action below could read a record twice; an input of a later
+  action not named `.json`, such as `page.txt`, was split the same way between `page.json`
+  and `page.txt`. A batch now keys a file by its path and stores it there with a `.json`
+  suffix, `sub/page.json`, the write made when nothing is sent included. A store that already holds
+  a nested file under its basename keeps it there, since the actions below hold it there
+  too, until `agac run --fresh` or until a top-level input of that name needs it; of two
+  files that shared that name, the first walked keeps it and the other is sent again under
+  its own. A store already split across two names stays split until `--fresh`: the actions
+  below go on reading the stale `sub/page.json` beside `page.json`, so they answer its
+  records twice and a record limit counts them twice. An earlier version runs a store this
+  one wrote without error, but sends a nested file's records again and stores a second copy
+  under its basename, and never stores the answers of a batch this version left out; run it
+  with `--fresh`, and run `--fresh` again on coming back.
 time: 2026-10-04T11:00:00Z

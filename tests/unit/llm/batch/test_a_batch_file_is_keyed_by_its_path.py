@@ -2,8 +2,8 @@
 
 Keyed by its basename, a file in a subdirectory shares its registry entry, context map,
 recorded inputs and recovery state with every other file of that name, and its output
-with a top-level one. A top-level file's keys are what they always were, so a store
-written before reads the same.
+with a top-level one. A top-level file's key is its name, so a store written by an older
+version reads the same.
 """
 
 from __future__ import annotations

@@ -1,12 +1,15 @@
 """A batch input file in a subdirectory is sent, keyed and stored under one name.
 
-The name is the file's path under the action's input root, which is what online stores it
-under. The code before keyed such a file by its basename alone, so a store it wrote holds
-the file under that name, and every action below joins its rows by it: such a file keeps
-the name until ``--fresh``, or until a file at the top level needs it.
+The name is the file's path under the action's input root, stored with a `.json` suffix.
+A store written by an older version keys such a file by its basename alone, and every
+action below joins its rows by that name: such a file keeps it until ``--fresh``, or until
+a file at the top level needs it.
 
-Driven through the real pipeline, store, registry and collect pass; only the provider is
-fake.
+Later-stage tests drive the real pipeline, store, registry and collect pass, and only the
+provider is fake. First-stage tests drive ``process_initial_stage`` and finalize through
+the harness's ``_collect``, past the collect pass. The retry test runs an action with no
+dependencies through the later-stage pipeline: a retry of one with dependencies is never
+sent at all.
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ def _each_record_held_once(action: _Action) -> bool:
 def _as_stored_before(
     action: _Action, name: str, inputs: list[dict[str, Any]], *, collect: bool = True
 ) -> None:
-    """Store *name* as the code before stored a file in a subdirectory.
+    """Store *name* as an older version stored a file in a subdirectory.
 
     It keyed the file by its basename alone -- registry entry, context map, recorded
     inputs and output -- which is the key a top-level file of that name has now. So the
@@ -187,7 +190,7 @@ def test_a_run_that_sends_nothing_writes_the_file_holding_the_answers(tmp_path, 
     assert batch.backend.list_target_files(ACTION) == [batch_output_name(file)]
 
 
-# A store written by the code before, which keyed the file by its basename.
+# A store written by an older version, which keyed the file by its basename.
 
 
 def test_a_file_stored_under_its_basename_before_keeps_that_name(tmp_path):

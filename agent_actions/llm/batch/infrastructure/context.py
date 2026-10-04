@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 def batch_output_name(file_name: str) -> str:
     """The name a batch's output file is stored under, given the input file it answers.
 
-    Finalize writes under it and submission reads and writes under it; two copies of
-    this rule would let one drift and every carried input read as having no stored row.
+    Finalize writes under it, submission reads stored rows under it, and its callers write
+    there when nothing is sent; two copies of this rule would let one drift and every
+    carried input read as having no stored row.
     """
     return PurePosixPath(file_name).with_suffix(".json").as_posix()
 
