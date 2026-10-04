@@ -569,6 +569,7 @@ class TestRecoveryLoopRootCauses:
             "my_action": parent_entry,
             "my_action_repair_1": recovery_entry,
         }
+        manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
 
         svc = BatchProcessingService.__new__(BatchProcessingService)
         svc._registry_manager_factory = MagicMock(return_value=manager)
@@ -602,6 +603,7 @@ class TestDownstreamBugs:
         manager = MagicMock()
 
         manager.get_all_jobs.return_value = {"my_action": _make_parent_entry()}
+        manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
         manager.get_registry_stats.return_value = BatchRegistryStats(
             total_jobs=1, completed=0, failed=1, in_progress=0, cancelled=0
         )

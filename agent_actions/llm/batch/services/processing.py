@@ -341,6 +341,7 @@ class BatchProcessingService:
         # the registry would then call that parent live again and re-run the
         # original batch. Superseded once, skipped for the whole pass.
         superseded = _superseded_entries(all_jobs)
+        collected_before = False
         for file_name in all_jobs:
             if file_name in superseded:
                 logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
@@ -356,6 +357,15 @@ class BatchProcessingService:
 
             batch_id = entry.batch_id
             if not batch_id:
+                continue
+
+            # Its results are already written, and a later run may have written over
+            # them: read again, a spent batch puts back rows for records that have left.
+            # Before the poll, so a spent batch costs no provider call and cannot fail
+            # the pass. An entry from before the stamp existed reads as uncollected.
+            if entry.collected_at is not None:
+                collected_before = True
+                logger.debug("Skipping %s: collected at %s", file_name, entry.collected_at)
                 continue
 
             # A dead retry recovery is processed without a readiness poll: its
@@ -410,7 +420,9 @@ class BatchProcessingService:
                 )
                 continue
 
-        if not processed_files:
+        # A file already collected counts as one this pass did not fail, as it did when
+        # the pass wrote it again.
+        if not processed_files and not collected_before:
             # Check if recovery batches are pending — not an error
             stats = manager.get_registry_stats()
             if stats.in_progress > 0:

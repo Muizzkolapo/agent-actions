@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A batch collect pass no longer writes a file again from a batch it has already collected.
+  Each pass re-read every finished batch of the action, collected or not, and wrote its
+  file from those old results. So whenever one file of an action had a batch out, every
+  other file was put back to what its last batch said: a later run that had sent nothing
+  for a file, because the guard turned away what was left, saw its write undone, and rows
+  came back for records that were no longer inputs, with their `success` dispositions. A
+  provider that no longer returned an old batch had the file's answers rewritten as
+  `batch_not_returned`. A collect pass now skips a batch whose results it has written,
+  without asking the provider about it. A batch recorded before collection was stamped
+  is read once more, then skipped.
+time: 2026-10-04T10:00:00Z
