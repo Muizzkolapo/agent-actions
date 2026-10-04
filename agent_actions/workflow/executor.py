@@ -1308,7 +1308,9 @@ class ActionExecutor:
         Not under a repair, which touches only the records it names.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is None or getattr(self.deps.action_runner, "retried_records", ()):
+        if storage_backend is None:
+            return
+        if getattr(self.deps.action_runner, "retried_records", ()):
             return
         try:
             # Dispositions and checkpoints first: with the rows gone, carry-forward
