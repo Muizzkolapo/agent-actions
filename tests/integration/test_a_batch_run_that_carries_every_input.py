@@ -92,24 +92,31 @@ def test_rows_a_record_limit_holds_back_stay_while_a_record_that_left_goes(tmp_p
     assert held == ["processed:a1:0@run1", "processed:a2:0@run1", "processed:a3:0@run1"]
 
 
-def test_a_file_in_a_subdirectory_drops_the_row_under_its_one_name(tmp_path):
-    batch = _Batch(tmp_path, "sub/page.json")
+@pytest.mark.parametrize("file", ["sub/page.json", "page.txt", "page.jsonl", "sub/page.txt"])
+def test_a_record_that_leaves_drops_its_row_from_the_file_whatever_the_input_is_called(
+    tmp_path, file
+):
+    """The file is stored under a `.json` name; looked for under the input's own, a
+    `page.txt` finds nothing stored and keeps the row of the record that left."""
+    batch = _Batch(tmp_path, file)
     batch.run(1, [rec("a1"), rec("a2")])
 
     held = batch.run(2, [rec("a1")])
 
     assert held == ["processed:a1:0@run1"]
-    assert batch.backend.list_target_files(ACTION) == ["sub/page.json"]
+    assert batch.backend.list_target_files(ACTION) == [batch_output_name(file)]
 
 
-def test_a_first_stage_record_that_leaves_staging_takes_its_row_with_it(tmp_path):
-    batch = _FirstStageBatch(tmp_path)
+@pytest.mark.parametrize("file", ["page.json", "page.csv", "sub/page.csv"])
+def test_a_first_stage_record_that_leaves_staging_takes_its_row_with_it(tmp_path, file):
+    batch = _FirstStageBatch(tmp_path, file)
     batch.run(1, [{"item": "x1"}, {"item": "x2"}], {})
 
     held = batch.run(2, [{"item": "x1"}], {})
 
     assert batch.sent == [["x1", "x2"], []]
     assert held == ["processed:x1:0@run1"]
+    assert batch.backend.list_target_files(ACTION) == [batch_output_name(file)]
 
 
 def test_an_action_whose_every_input_is_done_completes_as_before(tmp_path):
