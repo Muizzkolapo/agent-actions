@@ -443,12 +443,37 @@ afresh, where the gate here would call a filtered one done for good.
 When the guard leaves nothing to send, submission returns a tombstone that the caller
 writes as a whole file. It goes through the same merge (`with_stored_rows_not_reproduced`),
 so that write carries what a finalize would. Alone it replaced every stored answer with
-nothing while their dispositions still said done. The rows are read from the file the
-tombstone is written to, which the caller names (`tombstone_path`), and from no other. For
-a file in a subdirectory that is not the batch's output file: the runner hands the file's
-own folder as the output directory, so the tombstone lands under `sub/page.json` while the
-batch output is stored as `page.json`. Reading the one and writing the other stores each
-row twice.
+nothing while their dispositions still said done. The rows are read from, and the tombstone
+written to, the one file finalize writes: `batch_output_name` of the batch's name, which
+submission derives itself rather than taking a path from its caller, so the two cannot
+drift.
+
+A batch input file has one name, its identity: its path under the action's input root
+(`sub/page.json`; a top-level file's is its name, as it always was). Its registry entry,
+context map, recorded inputs, recovery state and recovery entries are keyed by it, and its
+output is stored under `batch_output_name` of it: `sub/page.json`, where online stores the
+same file, and the name every action below then reads it under. Keyed by the basename, as
+it was, two files of one name in two directories shared one batch and the second was never
+sent, and a nested file's answers and its nothing-to-send write were two files. A store
+written then holds a nested file, its batch state and every downstream join under the
+basename, and moving them would break the joins. So `batch_file_identity` keeps the
+basename for a file the store already holds under it (its output, or a registry entry),
+unless a top-level input of the action stores under that name or another nested file
+stored under it claimed it first. The choice is recorded per action
+(`batch_file_names:{action}`) and follows the stored rows, not the inputs of the day: a
+reset keeps it, `--fresh` removes it, and a repair records none. What this leaves:
+
+- A store that already holds a file under both names (answers under `page.json`, a
+  nothing-to-send write under `sub/page.json`) keeps the nested file as it stands. Nothing
+  writes it again, its rows count twice toward a record limit, and `--fresh` clears it.
+- Two files of one basename that collided in a store written before: the first walked keeps
+  the flat name. Where that file held the other one's rows, both are sent again, once.
+- A nested file first seen after a top-level file of its basename has left takes the flat
+  name the departed file was stored under.
+- Two inputs in one directory that differ only by suffix (`sub/page.csv`, `sub/page.json`)
+  still share one stored name, as they do online.
+- Code before this cannot read a key with a directory in it, so a store this code wrote
+  cannot be run by it again.
 
 The two paths do not always leave the same file. Where batch differs it holds more, with
 one exception noted last:

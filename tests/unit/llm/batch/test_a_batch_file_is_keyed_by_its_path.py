@@ -85,3 +85,19 @@ def test_a_reset_keeps_the_names_its_files_were_given_and_fresh_forgets_them(tmp
 
     assert backend.load_metadata("batch_file_names:act") is None
     assert backend.load_metadata("batch_file_names:other") is not None
+
+
+def test_a_name_claimed_by_one_file_is_not_claimed_by_another_stored_under_it(tmp_path):
+    """`page.csv` and `page.json` are two basenames, and one stored name."""
+    from agent_actions.llm.batch.infrastructure.context import batch_file_identity
+
+    backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+    backend.initialize()
+    backend.write_target("act", "page.json", [{"source_guid": "a1", "content": {}}])
+
+    def name(path: str) -> str:
+        return batch_file_identity(
+            path, "act", backend, base_owner=lambda legacy: False, remember=True
+        )
+
+    assert [name("sub1/page.csv"), name("sub2/page.json")] == ["page.csv", "sub2/page.json"]

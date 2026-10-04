@@ -74,7 +74,8 @@ class _Provider:
 
 
 def _item(task: dict[str, Any]) -> str:
-    return task["body"]["content"][UPSTREAM]["item"]
+    """The input a task is for, read off the target id `rec` gives it."""
+    return task["body"]["target_id"].removeprefix("t-")
 
 
 class _Action:

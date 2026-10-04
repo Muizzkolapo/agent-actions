@@ -112,7 +112,10 @@ def test_a_top_level_file_and_one_of_its_name_in_a_subdirectory_keep_their_own_r
 
 def test_a_retry_for_a_file_in_a_subdirectory_is_its_own_and_writes_its_file(tmp_path):
     """Two files of one name lose a record each: two retries, and each finds its file."""
-    action = _Action(tmp_path, {"retry": {"enabled": True, "max_attempts": 3}})
+    # Reading no other action: a retry's preparation is given no action indices, so one
+    # with dependencies cannot send a retry at all.
+    no_upstream = {"dependencies": [], "context_scope": {"observe": ["source.*"]}, "guard": None}
+    action = _Action(tmp_path, {**no_upstream, "retry": {"enabled": True, "max_attempts": 3}})
     action.provider.withheld = {"a2", "b2"}
     twins = {
         "sub1/page.json": [rec("a1", keep=True), rec("a2", keep=True)],
@@ -221,6 +224,19 @@ def test_a_file_kept_on_its_basename_gives_it_up_to_a_top_level_file_of_that_nam
     assert action.files() == {
         "page.json": ["processed:t1@batch-2"],
         "sub/page.json": ["processed:a1@batch-3", "processed:a2@batch-3"],
+    }
+
+
+def test_of_two_files_that_shared_a_basename_before_the_first_walked_keeps_it(tmp_path):
+    """The other one is sent under its own name, rather than over the first one's rows."""
+    action = _Action(tmp_path)
+    _as_stored_before(action, "sub1/page.json", [rec("a1", keep=True)])
+
+    action.run({"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]})
+
+    assert action.files() == {
+        "page.json": ["processed:a1@batch-1"],
+        "sub2/page.json": ["processed:b1@batch-2"],
     }
 
 

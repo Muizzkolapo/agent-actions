@@ -634,6 +634,17 @@ class SQLiteBackend(StorageBackend):
             )
             return bool(cursor.fetchone()[0])
 
+    def has_target_file(self, action_name: str, relative_path: str) -> bool:
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT 1 FROM target_data WHERE action_name = ? AND relative_path = ? LIMIT 1",
+                (action_name, relative_path),
+            )
+            return cursor.fetchone() is not None
+
     def list_source_files(self) -> list[str]:
         """List all source file paths."""
         with self._lock:
@@ -1564,6 +1575,8 @@ class SQLiteBackend(StorageBackend):
 
     def delete_target(self, action_name: str) -> int:
         """Delete all target data for a specific action. Returns count deleted."""
+        from agent_actions.llm.batch.infrastructure.context import batch_file_names_key
+
         action_name = self._validate_identifier(action_name, "action_name")
         with self._lock:
             cursor = self.connection.cursor()
@@ -1572,8 +1585,12 @@ class SQLiteBackend(StorageBackend):
                     "DELETE FROM target_data WHERE action_name = ?",
                     (action_name,),
                 )
-                self.connection.commit()
                 deleted = cursor.rowcount
+                cursor.execute(
+                    "DELETE FROM workflow_metadata WHERE key = ?",
+                    (batch_file_names_key(action_name),),
+                )
+                self.connection.commit()
                 logger.debug(
                     "Deleted %d target records for %s",
                     deleted,

@@ -11,7 +11,7 @@ from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
-from agent_actions.output.writer import FileWriter, target_relative_path
+from agent_actions.output.writer import FileWriter
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -683,7 +683,12 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
     from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
-    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+    from agent_actions.llm.batch.infrastructure.context import (
+        BatchContextManager,
+        batch_file_identity,
+        batch_output_name,
+        staged_at_the_top,
+    )
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
@@ -718,18 +723,23 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         storage_backend=ctx.storage_backend,
         disposition_gate=disposition_gate,
     )
-    file_name = Path(ctx.file_path).name
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
     output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
+    batch_name = batch_file_identity(
+        relative_path.as_posix(),
+        ctx.agent_name,
+        ctx.storage_backend,
+        base_owner=staged_at_the_top(ctx.base_directory),
+        remember=not ctx.retried_records,
+    )
     result = submission_service.submit_batch_job(
         ctx.agent_config,
-        file_name,
+        batch_name,
         ctx.data_chunk,
         ctx.output_directory,
         source_data=ctx.data_chunk,
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
         run_inputs=ctx.run_inputs,
-        tombstone_path=target_relative_path(output_file_path, ctx.output_directory),
     )
 
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -737,7 +747,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     passthrough = result.passthrough
     if passthrough is not None and passthrough.get("type") == "tombstone":
         _write_passthrough_result(
-            output_file_path,
+            Path(ctx.output_directory) / batch_output_name(batch_name),
             passthrough["data"],
             storage_backend=ctx.storage_backend,
             action_name=ctx.agent_name,

@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A batch input file in a subdirectory now has one name. A batch keyed every input file by
+  its basename alone, so two files of one name in two directories (`a/page.json`,
+  `b/page.json`), or one beside a top-level `page.json`, shared one batch: the second found
+  the first's batch out and was never sent, with nothing reported, and on later runs each
+  file's batch dropped the other's answers, so they were paid for again. A file in a
+  subdirectory was also stored under two names, its answers as `page.json` and the write
+  made when the guard left nothing to send as `sub/page.json`, so an action below could read
+  a record twice. A batch now keys and stores the file under its path, `sub/page.json`,
+  which is where an online run stores it. A store written before keeps such a file under
+  its basename, since it and the actions below hold it there, until `agac run --fresh` or
+  until a top-level file of that name needs it; an earlier version cannot run that store
+  again.
+time: 2026-10-04T11:00:00Z

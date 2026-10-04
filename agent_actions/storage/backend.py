@@ -667,6 +667,13 @@ class StorageBackend(ABC):
         """List all target file paths for a specific node."""
         ...
 
+    def has_target_file(self, action_name: str, relative_path: str) -> bool:
+        """Whether *action_name* stores a file under *relative_path*.
+
+        Asked per input file, so a backend answers it with a point read.
+        """
+        return relative_path in self.list_target_files(action_name)
+
     @abstractmethod
     def list_source_files(self) -> list[str]:
         """List all source file paths."""
@@ -925,7 +932,8 @@ class StorageBackend(ABC):
 
         Subclasses **must** override — the default raises so that backend
         authors are forced to implement it and ``--fresh`` cannot silently
-        leave stale data behind.
+        leave stale data behind. The stored names of the action's batch input
+        files (``batch_file_names_key``) go with the rows they name.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 
