@@ -76,6 +76,14 @@ DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | 
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
 
+def batch_file_names_key(action_name: str) -> str:
+    """The metadata key recording the name each nested batch input file is stored under.
+
+    It names stored rows, so it lives exactly as long as the action's target data.
+    """
+    return f"batch_file_names:{action_name}"
+
+
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.).
 
@@ -932,8 +940,10 @@ class StorageBackend(ABC):
 
         Subclasses **must** override — the default raises so that backend
         authors are forced to implement it and ``--fresh`` cannot silently
-        leave stale data behind. The stored names of the action's batch input
-        files (``batch_file_names_key``) go with the rows they name.
+        leave stale data behind. An override must also delete the metadata at
+        ``batch_file_names_key(action_name)``: it names the files those rows were
+        stored under, and left behind, a run after ``--fresh`` would store a
+        file under a name nothing holds any more. ``clear_batch_state`` keeps it.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 

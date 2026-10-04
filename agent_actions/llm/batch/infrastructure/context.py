@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
+from agent_actions.storage.backend import batch_file_names_key
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -33,11 +34,6 @@ def checked_batch_file_name(name: str) -> str:
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"Invalid batch file name, outside the input root: {name}")
     return name
-
-
-def batch_file_names_key(action_name: str) -> str:
-    """Where the stored name each nested input file of *action_name* keeps is recorded."""
-    return f"batch_file_names:{action_name}"
 
 
 def batch_file_identity(

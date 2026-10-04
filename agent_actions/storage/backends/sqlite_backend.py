@@ -22,6 +22,7 @@ from agent_actions.storage.backend import (
     Disposition,
     DispositionRow,
     StorageBackend,
+    batch_file_names_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -1575,8 +1576,6 @@ class SQLiteBackend(StorageBackend):
 
     def delete_target(self, action_name: str) -> int:
         """Delete all target data for a specific action. Returns count deleted."""
-        from agent_actions.llm.batch.infrastructure.context import batch_file_names_key
-
         action_name = self._validate_identifier(action_name, "action_name")
         with self._lock:
             cursor = self.connection.cursor()
