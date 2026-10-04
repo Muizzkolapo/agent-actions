@@ -70,6 +70,37 @@ def echo_summary(data: Any, *args) -> list[dict]:
     return [{"summary": (data or {})["summarize"]["summary"], "exam_density": "low"}]
 """
 
+FILE_READER = "tally_file"
+FILE_READER_ACTION = f"""  - name: {FILE_READER}
+    kind: tool
+    granularity: File
+    dependencies: [{ACTION}]
+    run_mode: online
+    intent: "Tally the file"
+    schema: tool_action_output
+    impl: echo_every_summary
+    context_scope: {{ observe: [{ACTION}.summary] }}
+    expect: {{ repair: none }}
+"""
+
+# Logs each summary it is handed, so a test can tell what the reader was asked again.
+FILE_READER_TOOL = """import json
+from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def echo_every_summary(data: Any, *args) -> list[dict]:
+    with Path("handed.jsonl").open("a") as handed:
+        for record in data or []:
+            handed.write(json.dumps(record.get("summary")) + "\\n")
+            record["exam_density"] = "low"
+    return data
+"""
+
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
@@ -487,6 +518,86 @@ def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_
     after = _stored(online, PUBLISHER)
     assert sorted(after) == sorted(before_the_edit)
     assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
+
+
+def _with_a_file_reader(root):
+    config = _config(root)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + FILE_READER_ACTION)
+    (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (root / "tools" / WORKFLOW / "whole_file.py").write_text(FILE_READER_TOOL)
+
+
+@contextmanager
+def _storing_fails(action, raising, *, after=0):
+    """Fail every file *action* stores once *after* of them are stored."""
+    write = SQLiteBackend.write_target
+    stored = []
+
+    def failing(self, action_name, *args, **kwargs):
+        if action_name == action:
+            if len(stored) >= after:
+                raise raising
+            stored.append(action_name)
+        return write(self, action_name, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "write_target", failing)
+        yield
+
+
+@pytest.mark.parametrize(
+    ("fault", "left"),
+    [
+        pytest.param(OSError(28, "No space left on device"), "failed", id="disk-full"),
+        pytest.param(KeyboardInterrupt(), "interrupted", id="interrupt"),
+    ],
+)
+def test_a_file_reader_not_stored_after_its_source_was_edited_keeps_nothing_made_before_it(
+    online, fault, left
+):
+    """The edit resets the reader with its source. The run after it hands the reader every
+    record and fails as it stores each file, which still holds rows made from the summaries
+    the edit replaced. A file tool leaves no checkpoint row to say the file is older."""
+    _with_a_file_reader(online)
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online, FILE_READER)
+
+    _edit_prompt(online)
+    with _storing_fails(FILE_READER, fault):
+        _run()
+    assert _status(online, FILE_READER) == left
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    after = _stored(online, FILE_READER)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
+    assert after == _stored(online)
+
+
+def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its_file_was_collected(
+    online, provider
+):
+    """The run after the edit answers both pages of the first file, but the first page's
+    checkpoint row is not stored, and the run is stopped as it stores the file. Collecting
+    the file must not mark that page answered while the stored file holds its old answer."""
+    provider.answers()
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    with (
+        _storing_the_first_checkpoint_row_fails(sqlite3.OperationalError("disk I/O error")),
+        _storing_fails(ACTION, KeyboardInterrupt()),
+    ):
+        _run()
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
+    assert provider.pages() == EVERY_PAGE
 
 
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
