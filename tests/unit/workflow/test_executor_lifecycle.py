@@ -360,6 +360,7 @@ class TestHandleRunSuccess:
         """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent fired."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         mock_deps.action_runner.storage_backend.list_target_files.return_value = []
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         params = self._make_params()
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -386,6 +387,7 @@ class TestHandleRunSuccess:
         """Guard-all-skipped should record in run_tracker with skip_reason."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         mock_deps.action_runner.storage_backend.list_target_files.return_value = []
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         executor.run_tracker = MagicMock()
         executor.run_id = "run-123"
         params = self._make_params()

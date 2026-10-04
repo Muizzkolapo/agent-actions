@@ -632,7 +632,7 @@ class TestResolveCompletionStatus:
         this round (clear-on-execute wipes prior-round rows). It is written per
         input file, so it is the action's skip while the action holds no record."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
@@ -646,7 +646,7 @@ class TestResolveCompletionStatus:
     def test_guard_skipped_checked_before_failed_items(self, mock_fire, executor, mock_deps):
         """Guard-skipped disposition is checked before item-level failures."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
-        mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]

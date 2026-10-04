@@ -86,3 +86,17 @@ def test_another_file_holding_only_failures_fails_the_action(backend):
     backend.set_disposition(ACTION, "g1", DISPOSITION_FAILED, reason="down")
 
     assert _classify(backend) == ActionStatus.FAILED
+
+
+def test_rows_stored_before_their_count_was_kept_are_held(backend):
+    """A store older than record_count leaves it NULL on rows that hold records, so
+    a summed count reads them as none."""
+    _one_file_wholly_filtered(backend, other=[{"source_guid": "g1"}])
+    backend.set_disposition(ACTION, "g1", DISPOSITION_SUCCESS)
+    backend.connection.execute(
+        "UPDATE target_data SET record_count = NULL WHERE relative_path = 'other.json'"
+    )
+    backend.connection.commit()
+
+    assert _classify(backend) == ActionStatus.COMPLETED
+    assert not _node_skipped(backend)

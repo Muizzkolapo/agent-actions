@@ -1252,7 +1252,7 @@ class ActionExecutor:
             # (_handle_dependency_skip and _skip_holding_nothing, which skips an
             # action with no version source or no input file, also write
             # SKIPPED@NODE_LEVEL but return before this resolver runs.)
-            if self._count_records_for_action(action_name) == 0:
+            if not storage_backend.has_target_rows(action_name):
                 logger.info(
                     "Action '%s' had all records guard-filtered — marking as skipped",
                     action_name,
@@ -1270,12 +1270,9 @@ class ActionExecutor:
                 action_name,
                 extra=DIAGNOSTIC,
             )
-        if (
-            storage_backend.has_disposition(
-                action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
-            )
-            and self._count_records_for_action(action_name) == 0
-        ):
+        if storage_backend.has_disposition(
+            action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+        ) and not storage_backend.has_target_rows(action_name):
             # Batch's spelling of the row above: it returns at the fork in
             # workflow/pipeline.py before the SKIPPED@NODE_LEVEL writer. The row
             # is read, never rewritten — it is the resume path's only marker.
