@@ -13,14 +13,17 @@ body: >-
   config and model it works under when it starts, and the reset compares them with the
   config in force. Unchanged, it keeps what was finished however the run stopped. Edited,
   the action and every action that reads it answer everything again, and a batch still
-  out under the old config is given up with a warning. A record the stopped run answered
-  in a file it had not written yet is asked again when an earlier run had stored that
-  file: the next run used to carry the stored row, which held what was answered before an
-  edit to the action or to what it reads. An `agac retry` of an edited action, stopped or
-  finished, leaves the edit to the next run, which applies it to every record; for an
-  action that had never completed, a finished retry recorded it as complete under the edit
-  and the records the retry did not name kept the old answers. Records the
-  reset keeps now keep their prompt traces as well. An action stopped before this release
-  has nothing recorded and is reset as before: kept if it was interrupted or killed, wiped
-  if it failed.
+  out under the old config is given up with a warning. Only the prompt, schema, guard and
+  model count: a change to a tool's code, to seed data or to the context scope is not
+  seen, and `agac run --fresh` answers everything again after one. A record the stopped
+  run answered in a file it had not written yet is asked again when an earlier run had
+  stored that file: the next run used to carry the stored row, which held what was
+  answered before an edit to the action or to what it reads. An `agac retry` of an edited
+  action, stopped or finished, leaves the edit to the next run, which applies it to every
+  record; for an action that had never completed, a finished retry recorded it as
+  complete under the edit and the records the retry did not name kept the old answers.
+  Records the reset keeps now keep their prompt traces as well. An action stopped before
+  this release, or a batch submitted before it, has nothing recorded and is reset as
+  before: kept if it was interrupted or killed, wiped if it failed, so a collect pass
+  stopped by an error sends what it had collected again.
 time: 2026-10-04T15:00:00Z

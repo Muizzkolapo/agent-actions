@@ -4,5 +4,6 @@ body: >-
   collected a second time. An error while collecting marks the action failed, and a failed
   action is reset by forgetting every record it had finished, so on the next run each file
   already collected and written was submitted, and paid for, again. A run killed while
-  collecting already kept those records; one stopped by an error now does too.
+  collecting already kept those records; one stopped by an error now does too, unless its
+  batch was submitted before this release.
 time: 2026-10-03T06:00:00Z

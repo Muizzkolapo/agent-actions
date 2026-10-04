@@ -123,7 +123,9 @@ that stops partway through an action — killed, interrupted, or stopped by an e
 leaves the records it finished, and the next run keeps them only while these still match
 the config. If the prompt, schema, guard or model was edited in between, the action and
 every action that reads it answer everything again, and a batch still out under the old
-config is given up. A record finished in a file the stopped run had not written yet is
+config is given up. Only those four count as edits: a change to a tool's code, to seed
+data or to the context scope is not seen, so run `agac run --fresh` to answer everything
+again after one. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
 its answer. An `agac retry` records what the records it does not name were answered
 under instead — the stamp of the action's last completion, or what its last run recorded
