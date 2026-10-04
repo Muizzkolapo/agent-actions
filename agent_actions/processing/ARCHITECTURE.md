@@ -539,7 +539,9 @@ Dispositions differ where the rows do not:
 - A record with no `source_guid` that fails preparation is recorded failed under its
   target id, so the action reads failed. Online refuses such a record at enrichment and
   records nothing. `agac retry` selects records by `source_guid`, so it cannot repair it
-  on either path.
+  on either path. Here it names the failure by its target id all the same: a retry sends
+  nothing, clears the failure, and the action reads complete over the failed row it still
+  holds.
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. Under `error` online raises at the record and

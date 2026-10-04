@@ -360,7 +360,7 @@ class BatchSubmissionService:
                 context={"action_name": action_name, "batch_name": batch_name},
             )
         logger.info(
-            "Nothing left to send for %s: writing its %d record(s) without a batch",
+            "Nothing left to send for %s: collecting its %d input(s) without a batch",
             batch_name,
             len(context_map),
         )

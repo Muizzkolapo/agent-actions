@@ -29,6 +29,8 @@ Cohere, etc.).
 | `create_dynamic_agent()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 | `OutputHandler.save_main_output()` | `agent_io/target/{action}/` | Writes | — |
 | `BatchSubmissionService.submit_batch_job()` | `agent_io/staging/` | Reads | — |
+| `BatchSubmissionService.submit_batch_job()` | `agent_io/target/{action}/` | Writes | — |
+| `BatchSubmissionService.submit_batch_job()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `BatchRetrievalService.retrieve_results()` | `agent_io/target/{action}/` | Writes | — |
 | `batch_file_identity()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `batch_file_identity()` | `agent_io/store/{workflow_name}.db` | Writes | — |

@@ -258,25 +258,39 @@ def test_an_answer_whose_record_comes_back_skipped_is_not_read_as_done(tmp_path)
     assert held == ["processed:a1:0@run1", "processed:a2:0@run4"]
 
 
-def test_a_failure_with_no_identity_of_its_own_fails_the_action(tmp_path):
-    """Stored failed with no disposition, it left the action reading complete.
-
-    It is recorded under the target id the batch keys it by. `agac retry` names it
-    there but cannot select it, since a repair selects records by source_guid; this
-    pins only that the action no longer reads complete.
-    """
+def _nameless_failure() -> list[dict[str, Any]]:
+    """Five guard skips, so preparation's sample renders, and n1: no source_guid, and
+    no topic for its prompt."""
     nameless = handed("n1", keep=True)
     del nameless["source_guid"]
+    return [*(handed(f"k{n}", keep=False, topic="dbt") for n in range(1, 6)), nameless]
+
+
+def test_a_failure_with_no_identity_of_its_own_fails_the_action(tmp_path):
+    """Stored failed with no disposition, it left the action reading complete. It is
+    recorded under the target id the batch keys it by."""
     batch = _batch(tmp_path, "quiet")
 
-    batch.run(
-        1,
-        [*(handed(f"k{n}", keep=False, topic="dbt") for n in range(1, 6)), nameless],
-        extra={**SKIP, **NEEDS_TOPIC},
-    )
+    batch.run(1, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
 
     assert _dispositions(batch.backend)["t-n1"][0] == "failed"
     assert _status(batch.backend) == ActionStatus.FAILED
+
+
+def test_a_retry_clears_a_failure_with_no_identity_without_repairing_it(tmp_path):
+    """What `agac retry` does today: it names the failure by its target id, but a repair
+    selects records by source_guid, so nothing is sent and the action reads complete
+    over the failed row it still holds."""
+    batch = _batch(tmp_path, "quiet")
+    batch.run(1, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
+    named = batch.failures()
+
+    held = batch.run(2, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC}, retry=named)
+
+    assert (named, batch.sent[-1], batch.raised[-1]) == (["t-n1"], [], None)
+    assert "failed:t-n1" in held
+    assert batch.failures() == []
+    assert _status(batch.backend) == ActionStatus.COMPLETED
 
 
 def test_a_run_with_nothing_to_send_leaves_the_batch_before_it_alone(tmp_path):
