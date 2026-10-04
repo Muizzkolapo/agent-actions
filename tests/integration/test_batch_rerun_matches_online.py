@@ -898,6 +898,66 @@ def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp
     assert batch.sent == [["a1", "a2"], []]
 
 
+EMPTIED = {
+    "on_a_plain_run": [["a1", "a2"], []],
+    "after_a_reset": [["a1", "a2"], {"inputs": [], "reset": True}],
+    "and_then_filled_again": [["a1", "a2"], [], ["a1", "a2"]],
+}
+
+
+@pytest.mark.parametrize("runs", EMPTIED.values(), ids=EMPTIED.keys())
+def test_a_file_whose_input_is_now_empty_holds_nothing_as_online(tmp_path, runs):
+    """The action above holds nothing for the file, or the runner dropped every record
+    of it a guard filtered upstream. Online stores the file empty. A row kept is built
+    from a record that is gone, and every action below reads it."""
+    for run in compare(tmp_path, runs):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+@pytest.mark.parametrize("file", ["sub/page.json", "page.txt"])
+def test_a_file_whose_input_is_now_empty_is_stored_empty_under_its_one_name(tmp_path, file):
+    """Finalize stores the file under this name; written under another, the old rows
+    stay beside an empty file."""
+    batch = _Batch(tmp_path, file)
+    batch.run(1, [rec("a1"), rec("a2")])
+
+    held = batch.run(2, [])
+
+    assert held == []
+    assert batch.backend.list_target_files(ACTION) == [batch.stored_as]
+
+
+def test_a_file_whose_every_input_is_done_keeps_its_rows(tmp_path):
+    """Nothing is sent here either, but each row answers for an input still there."""
+    batch = _Batch(tmp_path)
+    first = batch.run(1, [rec("a1"), rec("a2")])
+
+    again = batch.run(2, [rec("a1"), rec("a2")])
+
+    assert batch.sent[1] == []
+    assert again == first
+
+
+def test_a_repair_that_finds_its_file_empty_keeps_its_rows(tmp_path):
+    """A repair answers what it named, and online carries every row it did not name."""
+    first, repaired = compare(tmp_path, [["a1", "a2"], {"inputs": [], "retry": ["a1"]}])
+
+    assert repaired["online"] == first["online"]
+    assert repaired["batch"] == first["batch"]
+
+
+def test_a_first_stage_file_emptied_in_staging_holds_nothing(tmp_path):
+    """Online stores it empty: nothing staged is left for a row to answer for."""
+    batch = _FirstStageBatch(tmp_path)
+    batch.run(1, [{"item": "a1"}, {"item": "a2"}], {})
+
+    held = batch.run(2, [], {})
+
+    assert held == []
+    assert batch.sent[1] == []
+
+
 PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
 
 
