@@ -74,7 +74,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
 | `run` | Function | Run agents with a specified agent configuration. | - |
-| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose and no file limit stops the walk before it reaches one. Classifies the finished workflow the way `run.py` does and exits 1 on a failed action. | `cli`, `storage`, `validation` |
+| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose and no file limit stops the walk before it reaches one. Classifies the finished workflow the way `run.py` does and exits 1 on a failed action. Refuses, before it clears anything, while an action in its range holds a batch nobody has collected: one still out, or one that finished and was not collected at an action that has not completed (the repair clears the registry entry, which is all that names it). `--abandon-in-flight` goes ahead and marks every record such a batch holds failed, read from its `deferred` dispositions and from the batch's own context map, so a later retry can still reach them. | `cli`, `storage`, `validation`, `llm` |
 | `RetryCommand` | Class | Implementation of the retry command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the retry command. | - |
 | `retry` | Function | Retry failed/exhausted records from a specific action. | - |

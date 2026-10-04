@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer loses a batch that finished but was not collected. When a batch
+  collect pass was stopped part-way (an error, a kill), a file whose batch had finished at
+  the provider but had not been collected yet was still waiting. Retry treated only a
+  batch still running as owed, so it went ahead, cleared the record of that batch, and
+  nothing could collect it afterwards: its records were never answered and the action was
+  reported complete. Retry now refuses in that case, as it does for a batch still in
+  flight, and says to run the workflow again to collect it first. `--abandon-in-flight`
+  still lets the retry through, and now marks every record the abandoned batch held as
+  failed, including records whose waiting mark an earlier run had cleared, so a later
+  retry can reach them. A workflow whose batches were collected before this release is
+  not affected: a completed action is never treated as owing a batch.
+time: 2026-10-03T07:00:00Z

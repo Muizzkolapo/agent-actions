@@ -191,7 +191,9 @@ class RetryCommand:
         # Above the dry-run return as well as the manifest: a refusal costs nothing
         # here, and a dry run that withheld it would describe a retry that is not
         # going to happen.
-        self._settle_batches_in_flight(backend, downstream_actions)
+        self._settle_batches_in_flight(
+            backend, downstream_actions, workflow.services.core.state_manager
+        )
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
@@ -322,13 +324,18 @@ class RetryCommand:
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
 
-    def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
-        """Decide what a batch still out at the provider means for this repair.
+    def _settle_batches_in_flight(self, backend, actions: list[str], state_mgr) -> None:
+        """Decide what a batch nobody has collected means for this repair.
 
         It owns the records it was submitted for. A repair starting on top of one
         submits a second batch over the same file, and whichever is collected last
         wins while the other is paid for and discarded — so by default this
         refuses, before anything is cleared.
+
+        That holds for a batch that has finished and not been collected as much as
+        for one still out: the repair clears the registry entry, which is all that
+        names it. An action that completed has collected every batch it had, so an
+        entry of its written before ``collected_at`` existed is not read as owed.
 
         Two exceptions. A dry run reports the refusal instead of raising: it is
         the documented way to see what a retry would do, and it changes nothing
@@ -338,17 +345,20 @@ class RetryCommand:
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        in_flight = [
-            (action, entry.batch_id)
-            for action in actions
-            for entry in BatchRegistryManager(backend, action).get_all_jobs().values()
-            if entry.is_in_flight
-        ]
-        if not in_flight:
+        owed: list[tuple[str, str, str, str]] = []
+        for action in actions:
+            collected = state_mgr.is_completed(action)
+            for file_name, entry in BatchRegistryManager(backend, action).get_all_jobs().items():
+                if entry.is_in_flight:
+                    owed.append((action, entry.batch_id, file_name, "in flight"))
+                elif entry.awaits_collection and not collected:
+                    owed.append((action, entry.batch_id, file_name, "finished, not collected"))
+        if not owed:
             return
 
-        listing = ", ".join(f"{batch_id} ({action})" for action, batch_id in sorted(in_flight))
-        actions_in_flight = {action for action, _ in in_flight}
+        listing = ", ".join(
+            f"{batch_id} ({action}, {state})" for action, batch_id, _, state in sorted(owed)
+        )
         remedy = (
             "Collect them first — run the workflow again — then retry. "
             "If the provider no longer has them, pass --abandon-in-flight."
@@ -359,25 +369,25 @@ class RetryCommand:
         # flag documented to change nothing.
         if self.args.dry_run:
             if self.args.abandon_in_flight:
-                waiting = self._deferred_record_ids(backend, actions_in_flight)
+                waiting = self._records_waiting_on(backend, owed)
                 self.console.print(
-                    f"\n[yellow]This retry would abandon {len(in_flight)} batch job(s) "
-                    f"still in flight ({listing}), giving up whatever they return, and "
+                    f"\n[yellow]This retry would abandon {len(owed)} batch job(s) "
+                    f"not collected yet ({listing}), giving up whatever they return, and "
                     f"would mark {len(waiting)} record(s) waiting on them failed so a "
                     f"later retry can still reach them.[/yellow]"
                 )
             else:
                 self.console.print(
-                    f"\n[yellow]This retry would be refused: {len(in_flight)} batch job(s) "
-                    f"in flight ({listing}). {remedy}[/yellow]"
+                    f"\n[yellow]This retry would be refused: {len(owed)} batch job(s) "
+                    f"not collected yet ({listing}). {remedy}[/yellow]"
                 )
             return
 
         if self.args.abandon_in_flight:
-            waiting = self._deferred_record_ids(backend, actions_in_flight)
+            waiting = self._records_waiting_on(backend, owed)
             stranded = self._strand_deferred_records(backend, waiting)
             self.console.print(
-                f"\n[yellow]Abandoning {len(in_flight)} batch job(s) still in flight: "
+                f"\n[yellow]Abandoning {len(owed)} batch job(s) not collected yet: "
                 f"{listing}. Whatever they return will not be collected. "
                 f"{stranded} record(s) waiting on them are marked failed so a later "
                 f"retry can still reach them.[/yellow]"
@@ -385,17 +395,53 @@ class RetryCommand:
             return
 
         raise click.ClickException(
-            f"{len(in_flight)} batch job(s) in flight ({listing}). Their results would "
+            f"{len(owed)} batch job(s) not collected yet ({listing}). Their results would "
             f"be lost to this repair's own submission. {remedy}"
         )
 
-    @staticmethod
-    def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:
-        """Every record still waiting on a batch at *actions*, as (action, record_id).
+    @classmethod
+    def _records_waiting_on(
+        cls, backend, owed: list[tuple[str, str, str, str]]
+    ) -> list[tuple[str, str]]:
+        """Every record the *owed* batches still hold, as (action, record_id).
+
+        The ``deferred`` dispositions say so until a run's reset clears them; finding
+        the batch again does not put them back. Its context map still lists what it
+        was sent, so a record of it with no disposition at all is waiting too.
 
         Read-only, so the dry run can report what abandoning would cost without
         paying it.
         """
+        from agent_actions.errors import ProcessingError
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+        waiting = set(cls._deferred_record_ids(backend, {action for action, *_ in owed}))
+        for action, batch_id, file_name, _state in owed:
+            try:
+                context_map = BatchContextManager.load_batch_context_map(backend, action, file_name)
+            except ProcessingError as e:
+                logger.warning(
+                    "Batch %s (%s) has no readable record of what it was sent, so only "
+                    "its deferred records can be found: %s",
+                    batch_id,
+                    action,
+                    e,
+                )
+                continue
+            held = {row["record_id"] for row in backend.get_disposition(action)}
+            for custom_id, entry in context_map.items():
+                if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
+                    continue
+                record_id = entry.get("source_guid") or custom_id
+                if record_id not in held:
+                    waiting.add((action, record_id))
+        return sorted(waiting)
+
+    @staticmethod
+    def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:
+        """Every record with a ``deferred`` disposition at *actions*, as (action, record_id)."""
         return [
             (action, row["record_id"])
             for action in sorted(actions)
@@ -533,7 +579,7 @@ class RetryCommand:
     "--abandon-in-flight",
     is_flag=True,
     default=False,
-    help="Retry even though a batch is still in flight, giving up its results.",
+    help="Retry even though a batch has not been collected, giving up its results.",
 )
 @handles_user_errors("retry")
 @requires_project

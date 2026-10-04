@@ -71,6 +71,11 @@ class BatchJobEntry:
         """Check if batch is still in progress."""
         return self.status in BatchStatus.in_flight_states()
 
+    @property
+    def awaits_collection(self) -> bool:
+        """Finished at the provider, with nothing yet saying its results were written."""
+        return self.status == BatchStatus.COMPLETED and self.collected_at is None
+
 
 @dataclass
 class BatchRegistryStats:
