@@ -395,8 +395,65 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_after_an_edit_is_asked_fo
     result = _run()
 
     assert result.exit_code == 0, result.output
-    assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
+    after = _stored(online)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    rows = _stored_rows(online)
+    assert len(rows) == len(EVERY_PAGE), "a record's row is stored twice"
+    assert all(row.get("lineage") for row in rows)
     assert provider.pages() == EVERY_PAGE
+
+
+@contextmanager
+def _stopped_once_a_checkpoint_row_is_stored():
+    """Stop the run as it marks answered a record whose checkpoint row it has stored."""
+    store = SQLiteBackend.save_checkpoint_records
+    mark = SQLiteBackend.set_disposition
+    stored: list[str] = []
+
+    def storing(self, action_name, relative_path, records):
+        store(self, action_name, relative_path, records)
+        if action_name == ACTION:
+            stored.extend(row["source_guid"] for row in records)
+
+    def marking(self, action_name, record_id, disposition, *args, **kwargs):
+        if action_name == ACTION and record_id in stored and disposition == "success":
+            raise KeyboardInterrupt()
+        return mark(self, action_name, record_id, disposition, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "save_checkpoint_records", storing)
+        patched.setattr(SQLiteBackend, "set_disposition", marking)
+        yield stored
+
+
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+def test_a_record_stopped_between_storing_its_row_and_marking_it_answered_is_asked_again(
+    online, provider, edited
+):
+    """Nothing carries a row whose record is not marked answered, so the record is asked
+    again and its new answer replaces the row. After an edit, the file stored before it
+    still holds the record's answer from before the edit."""
+    provider.answers()
+    before_the_edit = {}
+    if edited:
+        assert _run("--fresh").exit_code == 0
+        before_the_edit = _stored(online)
+        _edit_prompt(online)
+    with _stopped_once_a_checkpoint_row_is_stored() as stored:
+        _run()
+    assert stored and _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == EVERY_PAGE
+    after = _stored(online)
+    assert len(after) == len(EVERY_PAGE)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    rows = _stored_rows(online)
+    assert len(rows) == len(EVERY_PAGE), "a record's row is stored twice"
+    assert all(row.get("lineage") for row in rows)
 
 
 def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_made_before_it(
