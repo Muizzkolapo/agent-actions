@@ -3,12 +3,16 @@ body: >-
   An online action now finds the rows it stored for a file in a subdirectory, and for a
   staged file that is not `.json`. It stored `staging/sub/page.json` as `sub/page.json`,
   and a staged `page.csv` as `page.json`, but looked its own rows up as `page.json` and
-  `page.csv`, where there were none. So `agac retry` rewrote the file with only the
-  records it named: every other record's answer was deleted while its disposition still
-  said success, and nothing answered it again. And a run that picked an interrupted
-  action back up sent records of a file it had already finished to the model again.
-  Every lookup now uses the name the file is stored under. A top-level `.json` file was
-  not affected. For one of these files, a checkpoint left by a run interrupted before
-  this release sits under the old name and is not found: the resumed run sends those
-  records once more, and nothing is lost.
+  `page.csv`. Mostly nothing was stored under that name, so `agac retry` rewrote the file
+  with only the records it named: every other record's answer was deleted while its
+  disposition still said success, and nothing answered it again. Where a top-level file
+  of that name was stored as well, the rewrite filled the nested file with that file's
+  answers instead of its own. And a run that picked an interrupted action back up sent
+  records of a file it had already finished to the model again. Every lookup now uses
+  the name the file is stored under. A top-level `.json` file was not affected. This does
+  not repair what is already stored: an action rewritten this way keeps what it holds,
+  and a plain re-run skips it as complete, so run the workflow again with
+  `agac run --fresh`. For one of these files, a checkpoint left by a run interrupted
+  before this release sits under the old name and is not found: the resumed run sends
+  those records once more, and nothing is lost.
 time: 2026-10-04T12:30:00Z
