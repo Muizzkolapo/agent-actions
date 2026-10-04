@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  An online action that answers a record with several rows no longer keeps only the last
+  of them when a run stopped on its first pass is resumed. The checkpoint saved a record's
+  rows under the identity they share until they are stored, so each replaced the one
+  before it, and the next run stored one row for every such record it carried from the
+  checkpoint and recorded the action complete, with exit 0. The checkpoint now keeps every
+  row of a record, and the next run asks again for a record answered with several rows
+  rather than carry them under one identity. A record answered with one row is carried as
+  before.
+time: 2026-10-04T22:53:50Z

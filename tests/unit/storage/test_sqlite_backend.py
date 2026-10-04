@@ -1,5 +1,7 @@
 """Tests for SQLite storage backend."""
 
+import json
+
 import pytest
 
 from agent_actions.errors.configuration import ConfigurationError
@@ -535,6 +537,31 @@ class TestCheckpointKeepsEveryRowOfARecord:
         backend.save_checkpoint_records("action_a", "output.json", single)
 
         assert backend.read_checkpoint_records("action_a", "output.json") == expanded + single
+
+    def test_a_record_answered_again_keeps_only_its_new_rows(self, backend):
+        """Rows kept a position apiece would leave the first answer's extra rows behind."""
+        backend.save_checkpoint_records(
+            "action_a",
+            "output.json",
+            [{"source_guid": "g1", "content": "first"}, {"source_guid": "g1", "content": "second"}],
+        )
+        again = [{"source_guid": "g1", "content": "again"}]
+
+        backend.save_checkpoint_records("action_a", "output.json", again)
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == again
+
+    def test_a_row_stored_as_one_record_is_read_as_that_record(self, backend):
+        """A run checkpointed before rows were kept as a list leaves a record, not a list."""
+        row = {"source_guid": "g1", "content": "older"}
+        backend.connection.execute(
+            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+            "VALUES (?, ?, ?, ?)",
+            ("action_a", "output.json", "g1", json.dumps(row)),
+        )
+        backend.connection.commit()
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == [row]
 
 
 class TestPreviewTargetNullRecordCount:

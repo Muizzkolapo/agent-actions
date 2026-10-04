@@ -57,6 +57,8 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `StorageBackend.has_target_rows()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.get_disposition()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.save_checkpoint_records()` | `agent_io/store/{workflow_name}.db` | Writes | — |
+| `StorageBackend.read_checkpoint_records()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.delete_target()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.initialize()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 

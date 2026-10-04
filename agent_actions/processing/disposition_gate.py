@@ -14,6 +14,7 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Collection, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -374,7 +375,13 @@ def build_carry_forward(
     ``producer_source_guids``, since ``carry_ids`` also holds stored-row ids where a
     repair named rows. *rewriting* names every identity this run writes a row under,
     wider than what it reprocesses; a row under one is reported as *missing* instead.
+
+    A record checkpointed with several rows is reported *missing* too: an expansion's rows
+    share their input's identity until enrichment mints one for each, and a checkpoint row
+    is saved before that. Carried, they would keep that one identity, of which the carry
+    keeps a single row.
     """
+    expanded: set[str] = set()
     try:
         prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
     except FileNotFoundError:
@@ -395,6 +402,16 @@ def build_carry_forward(
                 len(carry_ids),
             )
             return [], carry_ids
+        rows_per_record = Counter(row.get("source_guid") for row in prior_output)
+        expanded = {guid for guid, count in rows_per_record.items() if guid and count > 1}
+        prior_output = [row for row in prior_output if row.get("source_guid") not in expanded]
+        if answered_again := expanded & carry_ids:
+            logger.info(
+                "Action '%s': %d checkpointed record(s) answered with several rows will be "
+                "answered again: their checkpoint rows share one identity",
+                action_name,
+                len(answered_again),
+            )
 
     # Walked in stored order rather than over `carry_ids`, which is a set: these
     # rows are written straight back into the file they came from, so iterating the
@@ -442,11 +459,11 @@ def build_carry_forward(
         last_for_guid[prior_output[index]["source_guid"]] = index
     found: list[dict[str, Any]] = [prior_output[index] for index in sorted(last_for_guid.values())]
     missing: set[str] = carry_ids - set(chosen) - producers_found
-    if missing:
+    if not_found := missing - expanded:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",
             action_name,
-            len(missing),
+            len(not_found),
         )
 
     return found, missing
