@@ -62,6 +62,73 @@ class TestMarkPrepFailed:
         BatchTaskPreparator._mark_prep_failed(row, context_map, "test_action", ValueError("boom"))
 
 
+class TestThePreparationErrorIsKeptForCollection:
+    """The record is collected from the context map, in this process when nothing was
+    sent and in a later one when something was. Read off its history, the error is gone
+    where preparation could not move the record to failed, and cut to 200 characters."""
+
+    ERROR = "Template for 'my_action' references undefined variables: topic"
+
+    @staticmethod
+    def _failed(error: Exception, state: str = "active") -> dict[str, Any]:
+        row = {"target_id": "t1", "source_guid": "g1", "content": {}}
+        context_map = {"t1": {**row, "_state": state}}
+        BatchTaskPreparator._mark_prep_failed(row, context_map, "my_action", error)
+        return context_map
+
+    def test_the_error_is_kept_on_the_entry(self):
+        entry = self._failed(ValueError(self.ERROR))["t1"]
+
+        assert entry["_batch_prep_error"] == self.ERROR
+
+    def test_it_is_kept_where_the_entry_cannot_move_to_failed(self):
+        entry = self._failed(ValueError(self.ERROR), state="processed")["t1"]
+
+        assert entry["_batch_prep_error"] == self.ERROR
+
+    def test_it_is_kept_at_the_length_its_disposition_takes(self):
+        entry = self._failed(ValueError("x" * 600))["t1"]
+
+        assert entry["_batch_prep_error"] == "x" * 500
+
+    def test_a_tool_is_never_handed_it(self):
+        entry = self._failed(ValueError(self.ERROR))["t1"]
+
+        assert "_batch_prep_error" in entry
+        assert "_batch_prep_error" not in BatchContextMetadata.strip_internal_fields(entry)
+
+    def test_a_record_collected_from_the_saved_map_fails_with_its_error(self, tmp_path):
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+        from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
+        from agent_actions.processing.types import ProcessingStatus
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+        backend.initialize()
+        BatchContextManager.save_batch_context_map(
+            backend, "my_action", self._failed(ValueError(self.ERROR)), "page.json"
+        )
+        saved = BatchContextManager.load_batch_context_map(backend, "my_action", "page.json")
+
+        (result,) = BatchResultStrategy().process(
+            [], saved, agent_config={"action_name": "my_action"}
+        )
+
+        assert (result.status, result.error) == (ProcessingStatus.FAILED, self.ERROR)
+        assert result.data[0]["_tombstone_reason"] == "prep_failed"
+
+    def test_a_map_saved_without_it_fails_the_record_as_unprepared(self):
+        from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
+
+        saved = {"t1": {"source_guid": "g1", "content": {}, "_batch_filter_status": "failed"}}
+
+        (result,) = BatchResultStrategy().process(
+            [], saved, agent_config={"action_name": "my_action"}
+        )
+
+        assert result.error == "prep_failed"
+
+
 class TestBatchPreparatorCatchBlock:
     """Integration test: prep failure flows through the full prepare_tasks loop."""
 
