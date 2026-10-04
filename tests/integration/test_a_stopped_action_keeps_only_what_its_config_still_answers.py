@@ -520,11 +520,14 @@ def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_
     assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
 
 
-def _with_a_file_reader(root):
+def _with_a_file_reader(root, tool=FILE_READER_TOOL, impl="echo_every_summary"):
     config = _config(root)
-    config.write_text(config.read_text().rstrip("\n") + "\n" + FILE_READER_ACTION)
+    reader = FILE_READER_ACTION.replace("echo_every_summary", impl)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + reader)
     (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
-    (root / "tools" / WORKFLOW / "whole_file.py").write_text(FILE_READER_TOOL)
+    # Named for its tool: discovery imports by module name, so a second module of one
+    # name would be served the first one out of sys.modules.
+    (root / "tools" / WORKFLOW / f"{impl}.py").write_text(tool)
 
 
 @contextmanager
@@ -573,6 +576,105 @@ def test_a_file_reader_not_stored_after_its_source_was_edited_keeps_nothing_made
     assert sorted(after) == sorted(before_the_edit)
     assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
     assert after == _stored(online)
+
+
+def _summaries_in(root, path):
+    backend = _backend(root)
+    try:
+        rows = backend._read_target_raw(ACTION, path)
+    finally:
+        backend.close()
+    return sorted(((row.get("content") or {}).get(ACTION) or {}).get("summary") for row in rows)
+
+
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_other(online, edited):
+    """The file it stored before it stopped holds what its records were answered with, so
+    the next run carries them and hands the tool only the file it did not store."""
+    _with_a_file_reader(online)
+    if edited:
+        assert _run("--fresh").exit_code == 0
+        _edit_prompt(online)
+    with _storing_fails(FILE_READER, KeyboardInterrupt(), after=1):
+        _run(*([] if edited else ["--fresh"]))
+    assert _status(online, FILE_READER) == "interrupted"
+    handed = online / "handed.jsonl"
+    handed.unlink()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert sorted(json.loads(line) for line in handed.read_text().splitlines()) == (
+        _summaries_in(online, "pages2.json")
+    )
+    assert _stored(online, FILE_READER) == _stored(online)
+
+
+SCHEMA_SHAPED_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def shape_a_row_as_a_schema(data: Any, *args) -> Any:
+    shaped = {"title": "T", "type": "object", "properties": {"summary": {"type": "string"}}}
+    return FileUDFResult(
+        [
+            {
+                "source_index": at,
+                "data": {
+                    "summary": record.get("summary"),
+                    "exam_density": "low",
+                    **(shaped if at == 0 else {}),
+                },
+            }
+            for at, record in enumerate(data or [])
+        ]
+    )
+"""
+
+
+def test_a_file_row_the_store_refuses_as_a_schema_echo_stays_failed(online):
+    """The store records the failure as it writes the file. The dispositions collection
+    marks answered are written after the file, and would replace it."""
+    _with_a_file_reader(online, SCHEMA_SHAPED_TOOL, "shape_a_row_as_a_schema")
+
+    _run("--fresh")
+
+    backend = _backend(online)
+    try:
+        failed = {row["record_id"] for row in backend.get_failed_items(FILE_READER)}
+        answered = backend.get_terminal_record_ids(FILE_READER)
+    finally:
+        backend.close()
+    assert len(failed) == len(PAGES), "one row of each file echoes the schema"
+    assert failed.isdisjoint(answered)
+    assert len(answered) == len(EVERY_PAGE) - len(PAGES)
+
+
+def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_stored(online, provider):
+    """The checkpoint marks an answer that holds a parse error answered, and collection
+    fails it. That failure is written as it is collected: left for the file, a run
+    stopped before it carries the checkpoint row as an answer."""
+    answer = AgacClient.call_json
+
+    def unparsed_for_alpha(api_key, agent_config, prompt_config, context_data, schema):
+        if _page_in(prompt_config, context_data) == "Page alpha.":
+            return {"_parse_error": "Failed to parse JSON", "raw_response": "{summary"}
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with (
+        pytest.MonkeyPatch.context() as patched,
+        _storing_fails(ACTION, KeyboardInterrupt()),
+    ):
+        patched.setattr(AgacClient, "call_json", staticmethod(unparsed_for_alpha))
+        _run("--fresh")
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert "Page alpha." in provider.pages()
 
 
 def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its_file_was_collected(

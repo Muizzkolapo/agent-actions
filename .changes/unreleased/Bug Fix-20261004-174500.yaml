@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  A file-granularity action that reads an edited action no longer serves rows made from
+  the answers the edit replaced when its run stops as it stores a file: interrupted,
+  killed, or stopped by an error such as a full disk, now that an action stopped by an
+  error keeps what it finished. Collecting a file marked every record in it answered
+  before the file was stored, and a file tool leaves no checkpoint row to say the stored
+  file is older, so the next run carried every row of the file stored before the edit and
+  recorded the action as complete. A record whose checkpoint write had failed was left
+  marked answered the same way. A record is now marked answered, skipped or filtered only
+  once its file is stored, while a failure is still recorded as it is collected. A file
+  stored before the run stopped keeps its records, and the next run does not ask for them
+  again.
+time: 2026-10-04T17:45:00Z

@@ -20,6 +20,7 @@ from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.record_helpers import derive_relative_path
+from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -585,6 +586,7 @@ class ProcessingPipeline:
             dependency_configs=dependency_configs,
             version_context=version_context,
             storage_backend=self.config.storage_backend,
+            defer_kept_dispositions=True,
         )
 
         # Select processing strategy based on granularity and action kind.
@@ -634,6 +636,10 @@ class ProcessingPipeline:
         )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
+        # Only now that the file holds the rows they vouch for.
+        write_dispositions(
+            self.config.storage_backend, context.kept_dispositions, self.config.action_name
+        )
 
         # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:

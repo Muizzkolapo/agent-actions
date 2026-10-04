@@ -179,7 +179,8 @@ Input records (from staging or upstream action)
 │    - Build tombstones for FAILED (online)            │
 │    - Fire telemetry events                           │
 │                                                      │
-│  Flush all dispositions in single SQLite transaction │
+│  Flush dispositions in single SQLite transaction;    │
+│  online, what a reset keeps waits for the file write │
 │                                                      │
 │  Status → Disposition mapping:                       │
 │    SUCCESS    → DISPOSITION_SUCCESS                  │
@@ -302,6 +303,7 @@ Re-run:
       strategy.invoke(50 remaining records)
       → enrich + collect (all 200)
       → write final output
+      → write_dispositions(what a reset keeps)
       → clear_checkpoint_records(action, that file)
 ```
 
@@ -319,10 +321,9 @@ disposition when the row's write fails. Committed the other way round, a run sto
 between the two, or a failed row write, left a record marked answered with no row, and
 the next run carried the stored row from before the reset.
 
-A record whose row write failed is asked again only when the run stops before collecting
-its file: collection writes SUCCESS for every answered record before the file is written,
-so a run stopped between collection and the end of that write still leaves the record
-marked answered with no row, and the next run carries the stored row for it.
+Collection marks a record answered only once its file is stored (see "Disposition write
+ordering" below), so a record whose row write failed is asked again however the run stops
+before that write.
 
 ### Checkpoint storage
 
@@ -682,6 +683,26 @@ Per-record checkpoint writes happen DURING invocation (step 5):
 
 Batch collection writes happen AFTER enrichment (step 7):
     collect_results_from_processing_results() → set_dispositions_batch()
+
+Online, collection writes there only what a reset clears or the gate does not
+carry (FAILED, EXHAUSTED, DEFERRED, UNPROCESSED). What a reset keeps (SUCCESS,
+PASSTHROUGH, FILTERED, SKIPPED) waits in ProcessingContext.kept_dispositions,
+and the caller writes it after the file:
+    pipeline.py          save_main_output() → write_dispositions()
+    initial_pipeline.py  write_target()     → write_dispositions()
+
+    Written before the file, a run stopped between the two (a full disk, a
+    Ctrl-C at the write) left records marked done while the stored file held
+    an earlier run's rows. After an edit upstream, the reset kept them and the
+    gate carried those rows. A FILE tool leaves no checkpoint row to say the
+    file is older, and a record whose checkpoint row failed has none either.
+
+    A failure is written at once: it replaces the checkpoint's SUCCESS for a
+    parse error, and a reset clears it.
+
+    A row the store refuses as a schema echo is given no SUCCESS: the store
+    records it FAILED as it writes the file, and a SUCCESS written after the
+    file would replace that.
 
 Both write to the SAME disposition table with UNIQUE(action_name, record_id, disposition).
 The collection write overwrites the checkpoint write. This is intentional and idempotent:
