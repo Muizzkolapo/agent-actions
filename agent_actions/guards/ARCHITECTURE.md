@@ -69,6 +69,48 @@ The name is the registered function's own, with no module prefix — the same fo
 
 Validated at parse time: must be a Python identifier, checked against `DANGEROUS_PATTERNS_UDF`. UDF guards **cannot use FILTER behavior** — this is enforced during config expansion in `expander_action_types.py`, which raises `ConfigurationError` if a UDF guard specifies `on_false: filter`.
 
+### The read-only view
+
+Guard evaluation assembles its context by assigning the record's namespaces by reference, so
+what a UDF is handed would otherwise be the record's own content, and a UDF that wrote to it
+would rewrite the record mid-run with nothing logged. It is handed a view instead
+(`agent_actions/utils/readonly.py`, through `ReadOnlyBus`).
+
+What the view guarantees:
+
+- **Its storage holds wrappers, never the record's own containers.** `dict(view)`, `{**view}`,
+  `f(**view)`, `view | {}`, `xs + []`, `reversed(xs)` and the unbound `dict` and `list` methods
+  read stored values below any Python override, so the whole record is wrapped on the way in,
+  before the UDF sees any of it. That is why the view cannot be lazy.
+- **A write is refused**, with a message saying what to do instead, so an author never believes
+  a write took effect.
+- **Taking a copy works.** `copy()`, `copy.copy` and `copy.deepcopy` return a plain, writable
+  structure that shares nothing with the record or the view. It has the record's shape: a
+  container the record holds in two places is one container in the copy, as `copy.deepcopy`
+  of the record gives.
+- **It stays a dict.** These are dict/list/set subclasses, so `isinstance(x, dict)`,
+  `json.dumps(x)` and `**x` work for a UDF that only reads.
+
+How it is built: one loop over a worklist, with a memo of what replaced each container. Nothing
+recurses, so nesting depth costs no interpreter frames. A container is replaced once however
+many places hold it, so a cycle in the record is the same cycle in the view and a shared
+container is walked once. The walk reads each container's own storage, never a subclass's
+accessors, so the only user code it can run is a dict key's `__hash__` and `__eq__`.
+
+What to know:
+
+- The view is a snapshot of the record's structure when it was built. A namespace the record
+  gains afterwards is not in it. Nothing changes a record while its guard is evaluated.
+- A slice of a list view is a new plain list of the view's items, as `list(view)` is.
+- Only dict, list, tuple and set are replaced. A dict or list subclass becomes a plain
+  read-only dict or list, read from what it stores. A tuple that holds a container becomes a
+  plain tuple; one that holds none is handed over as it is. Any other value (an object with
+  attributes, a `MappingProxyType`, a `deque`) is handed over as it is.
+- The cost is one pass over the record per view, on this path only. Expression guards never
+  build one.
+- A view that cannot be built raises `GuardNotAppliedError`, naming the guard and, from the
+  pre-filter, the record. The record is not passed: it has not been judged.
+
 ### Safety Validation
 
 Both types run through safety checks at parse time:
@@ -352,4 +394,4 @@ Two consequences worth stating:
 
 9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds). This prevents runaway AST evaluation from blocking the pipeline. The executor has 4 worker threads and is cleaned up via `atexit`.
 
-10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows exceptions and proceeds (never skips on UDF error). The SQL guard path goes through `_evaluate_guard()` with full error classification.
+10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows the UDF's exceptions and proceeds (never skips on UDF error). The read-only view the UDF is handed is built before that handler, and a failure to build it is not a UDF error: it raises `GuardNotAppliedError`, because a record the UDF was never shown has not been judged and is not passed. The SQL guard path goes through `_evaluate_guard()` with full error classification.

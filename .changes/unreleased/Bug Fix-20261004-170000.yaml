@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A guard written as a Python function (`guard: "udf:name"`) is now applied to every
+  record. The function is handed a read-only view of the record, and building that view
+  failed for a record nested a few hundred levels deep, which JSON allows, and for one that
+  refers back to itself. The failure was taken for the function's own error, and a guard
+  whose function raises passes its record, so such a record went to the action with the
+  guard never run. The view is now built without recursion: depth, cycles and a value held
+  in two places no longer matter, and an ordinary record's view costs about half what it
+  did. If a view cannot be built at all, the run stops with an error naming the guard and
+  the record, where before the record was passed unjudged. Three things a guard function
+  can observe have changed. A copy taken with `.copy()` has the record's shape, so a value
+  the record holds in two places is one value in the copy, as `copy.deepcopy` gives. A
+  slice of a list is a plain list of read-only items. And a dict or list subclass inside a
+  record is read from what it stores, not through methods it overrides.
+time: 2026-10-04T17:00:00Z

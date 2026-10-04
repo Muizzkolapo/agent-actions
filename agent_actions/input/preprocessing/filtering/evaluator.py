@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from agent_actions.errors import ConfigurationError, FunctionNotFoundError
+from agent_actions.errors import ConfigurationError, FunctionNotFoundError, GuardNotAppliedError
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.guards.consolidated_guard import (
     _UNSUPPORTED_GUARD_BEHAVIORS as _UNSUPPORTED_BEHAVIORS,
@@ -240,13 +240,26 @@ class GuardEvaluator:
         if not clause:
             return None
 
+        # Read-only, since `context` holds the record's own namespaces by reference. Built
+        # outside the handler below: that passes a record whose UDF raised, and a record
+        # the UDF could not be shown has not been judged by it at all.
         try:
-            # Read-only: `context` holds the record's own namespaces by reference -- when
-            # no context was supplied it IS the record -- so a UDF that writes to it
-            # rewrites the record mid-run, and the action's input, the enricher and the
-            # skipped tombstones all see the rewritten value with nothing logged. A
-            # mutating UDF now fails loudly instead, naming itself.
-            if not execute_user_defined_function(clause, _readonly_bus(context)):
+            view = _readonly_bus(context)
+        except Exception as e:
+            raise GuardNotAppliedError(
+                f"Guard UDF '{clause}' was not run: its input could not be made read-only "
+                f"({type(e).__name__}: {e}). A record the guard has not judged is not "
+                "passed to the action.",
+                context={
+                    "udf_name": clause,
+                    "operation": "evaluate_conditional_clause",
+                    "failed_field": "guard",
+                },
+                cause=e,
+            ) from e
+
+        try:
+            if not execute_user_defined_function(clause, view):
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
         except FunctionNotFoundError as e:
