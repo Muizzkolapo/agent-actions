@@ -152,6 +152,34 @@ class TestSubmitToProviderErrorPath:
         assert err.cause is not None
         assert isinstance(err.cause, RuntimeError)
 
+    def test_a_refused_batch_is_fatal_to_the_action(self):
+        """Fatal to one file only, the walk completes the action on its other files."""
+        from agent_actions.errors import is_action_fatal
+        from agent_actions.llm.batch.services.submission import BatchSubmissionService
+
+        client_resolver = MagicMock()
+        client_resolver.get_for_config.return_value.submit_batch.side_effect = ConnectionError(
+            "quota exceeded"
+        )
+        service = BatchSubmissionService(
+            task_preparator=MagicMock(),
+            client_resolver=client_resolver,
+            context_manager=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+
+        with patch("agent_actions.llm.batch.services.submission.fire_event"):
+            with pytest.raises(ExternalServiceError) as exc_info:
+                service._submit_to_provider(
+                    agent_config={"model_vendor": "openai"},
+                    batch_name="test",
+                    tasks=[{"id": "1"}],
+                    output_directory=None,
+                    action_name="test",
+                )
+
+        assert is_action_fatal(exc_info.value)
+
     def test_provider_error_fires_failure_event(self):
         """Provider exception fires BatchSubmissionFailedEvent before raising."""
         from agent_actions.llm.batch.services.submission import BatchSubmissionService

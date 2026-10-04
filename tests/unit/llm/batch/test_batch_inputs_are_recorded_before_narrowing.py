@@ -100,6 +100,13 @@ class TestTheRecordedInputRoundTrips:
         assert BatchContextManager.load_batch_inputs(backend, ACTION, "escape.json") is None
 
 
+def _taken(*_args: Any, record_sent: Any = None, **_kwargs: Any) -> SubmissionResult:
+    """A provider that takes the batch, so what it was sent is recorded."""
+    if record_sent is not None:
+        record_sent()
+    return SubmissionResult(batch_id="batch-1")
+
+
 def _service(backend: SQLiteBackend) -> BatchSubmissionService:
     """A submission service whose gate and store are real; the provider is not.
 
@@ -114,9 +121,7 @@ def _service(backend: SQLiteBackend) -> BatchSubmissionService:
         storage_backend=backend,
         disposition_gate=DispositionGate(storage_backend=backend),
     )
-    service._submit_to_provider = MagicMock(  # type: ignore[method-assign]
-        return_value=SubmissionResult(batch_id="batch-1")
-    )
+    service._submit_to_provider = MagicMock(side_effect=_taken)  # type: ignore[method-assign]
     service._stamp_deferred = MagicMock()  # type: ignore[method-assign]
     return service
 

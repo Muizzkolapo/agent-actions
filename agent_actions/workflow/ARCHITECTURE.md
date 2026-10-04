@@ -435,10 +435,15 @@ run_mode == BATCH and not tool/HITL?
 Run 1: Submit
   _handle_batch_generation()
     → submit_batch_job() → provider API (OpenAI/Anthropic batch)
+    → store the context map and recorded inputs (only once the provider
+      has taken the batch)
     → write .batch_registry.json
     → DISPOSITION_DEFERRED for all records
     → action status → BATCH_SUBMITTED
     → workflow pauses
+    A batch the provider refuses fails the action once every file has
+    been walked, whatever the other files sent: completed on their
+    batches, it would never send this one again.
 
 Run 2: Poll
   _handle_batch_check()

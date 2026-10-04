@@ -17,10 +17,11 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, ProcessingError
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from tests.integration.test_a_collect_pass_leaves_collected_files_alone import (
@@ -74,6 +75,34 @@ def test_a_refused_batch_leaves_the_record_of_the_batch_the_registry_names(tmp_p
         "the store describes a batch the provider never took, beside a registry naming "
         "the one before it"
     )
+
+
+def test_a_batch_whose_record_cannot_be_stored_is_not_registered(tmp_path):
+    """The registry names a batch only once the store holds what it was sent.
+
+    A collect pass reads that record for the batch the registry names, so registering
+    first would have it read the new batch against the record of the one before.
+    """
+    action = _Action(tmp_path)
+    action.run({"page1.json": [rec("a1", keep=True)]})
+    before = _recorded_as_sent(action, "page1.json")
+
+    files = {"page1.json": [rec("a1", keep=True), rec("a2", keep=True)]}
+    action.upstream_holds(files)
+    with (
+        patch.object(
+            BatchContextManager,
+            "save_batch_context_map",
+            side_effect=ProcessingError("Failed to save context map: the store is full"),
+        ),
+        pytest.raises(AgentActionsError, match="Failed to submit batch job"),
+    ):
+        action.process("page1.json", files["page1.json"])
+
+    assert sorted(action.provider.batches) == ["batch-1", "batch-2"], "nothing was sent"
+    entry = BatchRegistryManager(action.backend, ACTION).get_batch_job("page1.json")
+    assert entry is not None and entry.batch_id == "batch-1"
+    assert _recorded_as_sent(action, "page1.json") == before
 
 
 # `agac`, with three faults a provider can have, each switched on per run. The agac
@@ -186,6 +215,17 @@ def _answered(project: Path) -> dict[str, list[str]]:
     return answered
 
 
+def _batch_ids(project: Path) -> dict[str, str]:
+    con = _store(project)
+    try:
+        (registry,) = con.execute(
+            "select value from workflow_metadata where key = ?", (f"batch_registry:{CLI_ACTION}",)
+        ).fetchone()
+    finally:
+        con.close()
+    return {name: entry["batch_id"] for name, entry in json.loads(registry).items()}
+
+
 EVERY_PAGE = {"a_pages.json": ["a1", "a2"], "b_pages.json": ["b1", "b2"]}
 
 
@@ -196,8 +236,9 @@ class TestAFileRefusedBesideOneThatIsSent:
     def runs(self, tmp_path_factory):
         project = _project(tmp_path_factory.mktemp("refused") / "project")
         refused = _agac(project, "--fresh", REFUSE="a_pages.json")
+        sent_beside = _batch_ids(project)
         then = [_agac(project), _agac(project)]
-        return SimpleNamespace(project=project, refused=refused, then=then)
+        return SimpleNamespace(project=project, refused=refused, sent_beside=sent_beside, then=then)
 
     def test_the_run_fails_rather_than_waiting_on_the_batch_beside_it(self, runs):
         assert runs.refused.code != 0, runs.refused.output
@@ -207,6 +248,11 @@ class TestAFileRefusedBesideOneThatIsSent:
         assert [run.code for run in runs.then] == [0, 0], runs.then[-1].output
         assert runs.then[-1].status == "completed"
         assert _answered(runs.project) == EVERY_PAGE
+
+    def test_the_batch_sent_beside_it_is_collected_not_sent_again(self, runs):
+        """Failing the action costs the refused file a resend and nothing more."""
+        assert list(runs.sent_beside) == ["b_pages.json"]
+        assert _batch_ids(runs.project)["b_pages.json"] == runs.sent_beside["b_pages.json"]
 
 
 class TestARefusedResendOverACollectedFile:
