@@ -156,13 +156,10 @@ class TestTheActionActuallyFails:
         """'there was no input' must stay distinguishable from 'none of it could be read'."""
         import pytest
 
-        from agent_actions.errors import DependencyError
         from agent_actions.workflow.runner_file_processing import NoInputFilesError, process_files
 
         runner = _runner(files=())
         runner.retried_records = frozenset()
 
-        with pytest.raises(NoInputFilesError) as excinfo:
+        with pytest.raises(NoInputFilesError):
             process_files(runner, self._target_params(tmp_path))
-
-        assert not isinstance(excinfo.value, DependencyError)

@@ -142,6 +142,18 @@ class TestTheActionIsSkippedHoldingNothing:
         )
         assert [row.get("reason") for row in rows] == [NO_INPUT_FILES]
 
+    def test_the_run_history_records_it_as_skipped(self, backend, tmp_path):
+        executor = _executor(backend, tmp_path)
+        executor.run_tracker = MagicMock()
+        executor.run_id = "r"
+
+        executor._execute_action_run(_run_params())
+
+        tracked = executor.run_tracker.record_action_complete
+        tracked.assert_called_once()
+        config = tracked.call_args.kwargs["config"]
+        assert (config.status, config.skip_reason) == ("skipped", NO_INPUT_FILES)
+
     @pytest.mark.asyncio
     async def test_the_async_path_does_the_same(self, backend, tmp_path):
         backend.write_target(ACTION, FILE, [{"source_guid": "g0"}])
