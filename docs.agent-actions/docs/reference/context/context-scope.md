@@ -122,24 +122,34 @@ See [Version Actions](../execution/versions) for complete documentation.
 
 ## Auto-Inferred Context Dependencies
 
-Actions referenced in `context_scope` but **not** in `dependencies` are automatically treated as **context dependencies**. These are loaded from record namespaces with lineage matching.
+Actions referenced in `context_scope` or the prompt but **not** in `dependencies` are automatically treated as **context dependencies**. They are read from the record, which carries the namespace of every action upstream of it, so a context dependency must be upstream of the action through its `dependencies`.
 
 ```yaml
+- name: extract_data
+- name: enrich_data
+  dependencies: [extract_data]
+- name: validate_data
+  dependencies: [enrich_data]
+
 - name: generate_report
-  dependencies: [extract_data]  # Primary input source
+  dependencies: [validate_data]  # Primary input source
   context_scope:
     observe:
-      - extract_data.*         # From input files
-      - enrich_data.*          # Auto-inferred: loaded from record namespaces
-      - validate_data.*        # Auto-inferred: loaded from record namespaces
+      - validate_data.*        # From input files
+      - enrich_data.*          # Auto-inferred: upstream of validate_data
+      - extract_data.*         # Auto-inferred: upstream of enrich_data
 ```
 
 **How it works:**
-1. `extract_data` is in `dependencies` → its output files are processed as input
-2. `enrich_data` and `validate_data` are only in `context_scope` → auto-inferred as context dependencies
-3. Context dependencies are loaded from record namespaces, matched by **lineage** to ensure data from the same record flow
+1. `validate_data` is in `dependencies` → its output files are processed as input
+2. `enrich_data` and `extract_data` are only in `context_scope` → auto-inferred as context dependencies
+3. Context dependencies are read from the namespaces on each input record, so the data comes from the same record
 
-This is especially useful for **fan-in patterns** where multiple upstream actions feed into one action:
+Preflight refuses an action that names one that is not upstream of it, such as an action
+that runs after it or one on a parallel branch: that action's namespace is not on the
+records it reads, and every field of it would be null. To read it, depend on an action
+downstream of it, or on the action itself as well — the **fan-in pattern**, where multiple
+upstream actions feed into one action:
 
 ```yaml
 - name: final_action

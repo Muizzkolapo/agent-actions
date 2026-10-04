@@ -1,12 +1,16 @@
-"""Preflight check: every declared dependency needs an observe/passthrough field."""
+"""Preflight checks that what an action depends on and what it reads agree."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from agent_actions.prompt.context.scope_inference import infer_dependencies
+from agent_actions.prompt.context.scope_inference import (
+    expand_version_base_names,
+    infer_dependencies,
+)
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 logger = logging.getLogger(__name__)
 
@@ -74,5 +78,63 @@ def find_missing_observe_deps(action_configs: dict[str, dict[str, Any]]) -> list
                     f"{name}: dependency '{dep}' declared but not referenced in "
                     f"context_scope. Add '{dep}.*' or '{dep}.<field>' to observe "
                     f"or passthrough, or drop '{dep}' from dependencies."
+                )
+    return findings
+
+
+def _upstream_through_dependencies(
+    action_configs: dict[str, dict[str, Any]],
+) -> dict[str, set[str]]:
+    """Each action's ancestors through ``dependencies``, a version base meaning every branch."""
+    workflow_actions = list(action_configs)
+    direct: dict[str, list[str]] = {}
+    for name, cfg in action_configs.items():
+        declared = cfg.get("dependencies") or []
+        if isinstance(declared, str):
+            declared = [declared]
+        named = [dep for dep in declared if isinstance(dep, str)]
+        direct[name] = expand_version_base_names(named, workflow_actions)
+    upstream: dict[str, set[str]] = {}
+    for name in action_configs:
+        reached: set[str] = set()
+        pending = list(direct[name])
+        while pending:
+            dep = pending.pop()
+            if dep not in reached:
+                reached.add(dep)
+                pending.extend(direct.get(dep, ()))
+        upstream[name] = reached
+    return upstream
+
+
+def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[str]:
+    """Return one finding per action an action reads that is not upstream of it.
+
+    What an action reads is what the run order counts, ``infer_dependencies``:
+    its dependencies and every action its context scope or prompt names. A
+    record carries the namespaces of the actions upstream of it through
+    ``dependencies``, so a name outside them reads null on every record. One
+    on a parallel branch can be rejoined from the store, but only while that
+    branch finishes at an earlier level than the reader's input.
+    """
+    findings: list[str] = []
+    workflow_actions = list(action_configs)
+    operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
+    upstream = _upstream_through_dependencies(action_configs)
+    for name in workflow_actions:
+        if name not in operational:
+            continue
+        input_sources, context_sources = infer_dependencies(
+            action_configs[name], workflow_actions, name, validate=False
+        )
+        for read in dict.fromkeys(input_sources + context_sources):
+            if read == name or read in SPECIAL_NAMESPACES or read not in operational:
+                continue
+            if read not in upstream[name]:
+                findings.append(
+                    f"{name}: reads '{read}', named in its context_scope or prompt, but "
+                    f"'{read}' is not upstream of it through its dependencies, so every "
+                    f"field of '{read}' is null on the records it reads. Add '{read}' to "
+                    f"its dependencies, or depend on an action downstream of '{read}'."
                 )
     return findings

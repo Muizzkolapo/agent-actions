@@ -16,6 +16,7 @@ actions:
     prompt: $p.Summarize
     context_scope: { observe: [source.page_content] }
   - name: summarize
+    dependencies: [extract]
     intent: "Summarise"
     schema: judged_context_under_batch_output
     prompt: $p.Summarize

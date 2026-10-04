@@ -1,6 +1,9 @@
 """Unit tests for the dependency/observe preflight checker."""
 
-from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
+from agent_actions.validation.dep_observe_validator import (
+    find_missing_observe_deps,
+    find_reads_not_upstream,
+)
 
 
 def test_dep_without_observe_is_flagged():
@@ -150,3 +153,102 @@ def test_all_offenders_reported():
     assert any("first" in f and "'ground'" in f for f in findings)
     assert any("second" in f and "'ground'" in f for f in findings)
     assert len(findings) == 2
+
+
+# flatten -> mid -> final, each reading the one before it.
+CHAIN = {
+    "flatten": {"context_scope": {"observe": ["source.page"]}},
+    "mid": {"dependencies": ["flatten"], "context_scope": {"observe": ["flatten.x"]}},
+    "final": {"dependencies": ["mid"], "context_scope": {"observe": ["mid.x"]}},
+}
+
+
+def _with_late(**late):
+    return {**CHAIN, "late": late}
+
+
+def test_a_name_downstream_of_the_readers_input_is_flagged():
+    actions = _with_late(
+        dependencies=["flatten"], context_scope={"observe": ["flatten.x", "final.x"]}
+    )
+    (finding,) = find_reads_not_upstream(actions)
+    assert finding.startswith("late:") and "'final'" in finding
+
+
+def test_a_name_on_another_branch_is_flagged():
+    """It is on the reader's records only while that branch ends at an earlier level."""
+    actions = {
+        **_with_late(dependencies=["side"], context_scope={"observe": ["side.x", "mid.x"]}),
+        "side": {"dependencies": ["flatten"], "context_scope": {"observe": ["flatten.x"]}},
+    }
+    (finding,) = find_reads_not_upstream(actions)
+    assert "'mid'" in finding
+
+
+def test_a_reader_with_no_dependencies_is_flagged():
+    """It reads the staged input, which carries no action's namespace."""
+    actions = _with_late(context_scope={"observe": ["flatten.x", "source.page"]})
+    (finding,) = find_reads_not_upstream(actions)
+    assert finding.startswith("late:") and "'flatten'" in finding
+
+
+def test_a_name_in_the_prompt_is_a_read_too():
+    actions = _with_late(
+        dependencies=["flatten"],
+        context_scope={"observe": ["flatten.x"]},
+        prompt="Compare {{ flatten.x }} with {{ final.x }}",
+    )
+    (finding,) = find_reads_not_upstream(actions)
+    assert "'final'" in finding
+
+
+def test_a_name_upstream_through_the_dependencies_passes():
+    actions = _with_late(
+        dependencies=["final"],
+        context_scope={"observe": ["final.x", "flatten.x"]},
+        prompt="{{ mid.x }}",
+    )
+    assert find_reads_not_upstream(actions) == []
+
+
+def test_framework_namespaces_are_not_actions():
+    actions = _with_late(
+        dependencies=["flatten"],
+        context_scope={"observe": ["flatten.x", "source.page", "seed.rules"]},
+    )
+    assert find_reads_not_upstream(actions) == []
+
+
+def test_a_version_base_dependency_puts_every_branch_and_its_upstream_upstream():
+    actions = {
+        "ground": {"context_scope": {"observe": ["source.page"]}},
+        "vote_1": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
+        "vote_2": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
+        "tally": {
+            "dependencies": ["vote"],
+            "context_scope": {"observe": ["vote_1.*", "vote_2.*", "ground.x"]},
+        },
+    }
+    assert find_reads_not_upstream(actions) == []
+
+
+def test_a_switched_off_action_neither_reads_nor_is_read():
+    """The run order leaves both out, as it leaves out every action switched off."""
+    actions = {
+        **_with_late(dependencies=["flatten"], context_scope={"observe": ["flatten.x", "off.x"]}),
+        "off": {"is_operational": False, "context_scope": {"observe": ["final.x"]}},
+    }
+    assert find_reads_not_upstream(actions) == []
+
+
+def test_every_name_outside_the_lineage_is_reported():
+    actions = {
+        **_with_late(dependencies=["flatten"], context_scope={"observe": ["final.x", "mid.x"]}),
+        "other": {"dependencies": ["mid"], "context_scope": {"observe": ["mid.x", "late.x"]}},
+    }
+    findings = find_reads_not_upstream(actions)
+    assert sorted((f.split(":")[0], f.split("'")[1]) for f in findings) == [
+        ("late", "final"),
+        ("late", "mid"),
+        ("other", "late"),
+    ]
