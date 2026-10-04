@@ -21,6 +21,7 @@ from tests.integration.test_retry_selection_under_batch import (
     _project,
     _set_disposition,
     _unwrapped,
+    submitted_and_collected,  # noqa: F401
 )
 
 
@@ -94,3 +95,30 @@ def test_a_dry_run_over_a_finished_batch_says_so_and_changes_nothing(finished_no
     assert code == 0, output
     assert "would be refused" in _unwrapped(output), output
     assert _dispositions(project) == before
+
+
+def test_a_repair_batch_is_owed_though_its_record_still_has_its_old_row(
+    submitted_and_collected,  # noqa: F811
+):
+    """A retry sent one record again and its batch finished without being collected.
+    A run's reset then cleared the record's deferred mark. The record still has the
+    row that was judged failed, which says nothing about the batch out for it."""
+    project = submitted_and_collected
+    first, second = sorted(_dispositions(project))[:2]
+    _set_disposition(project, first, "failed")
+    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", first)
+    assert code == 0 and "run again" in output, output
+    backend = _backend(project)
+    try:
+        registry = BatchRegistryManager(backend, ACTION)
+        for entry in registry.get_all_jobs().values():
+            registry.update_status(entry.batch_id, BatchStatus.COMPLETED)
+        backend.clear_disposition(ACTION, "deferred")
+    finally:
+        backend.close()
+    _set_disposition(project, second, "failed")
+
+    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", second)
+
+    assert code != 0, output
+    assert "finished, not collected" in _unwrapped(output), output
