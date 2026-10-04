@@ -8,7 +8,8 @@ lookup that misses finds no stored row, so a re-run sends done records to the mo
 again and a repair rewrites the file with only the records it named.
 
 Driven from ``ProcessingPipeline.process`` and ``process_initial_stage`` against a real
-store with only the model swapped, and through ``agac retry`` for what a user sees.
+store, with the strategy swapped or, where the checkpoint matters, only
+``process_record``; and through ``agac retry`` for what a user sees.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -178,7 +180,9 @@ class _FirstStageOnline:
 
     def guid_of(self, item: str) -> str:
         rows = [row for rows in self._rows().values() for row in rows]
-        return next(row["source_guid"] for row in rows if row["content"]["source"]["item"] == item)
+        return str(
+            next(row["source_guid"] for row in rows if row["content"]["source"]["item"] == item)
+        )
 
     def _rows(self) -> dict[str, list[dict[str, Any]]]:
         self.backend._reconstruction_cache.clear()
@@ -187,7 +191,7 @@ class _FirstStageOnline:
             for path in self.backend.list_target_files(ACTION)
         }
 
-    def run(self, run: int, items: list[str], retry: list[str] = ()) -> dict[str, list[str]]:
+    def run(self, run: int, items: list[str], retry: Sequence[str] = ()) -> dict[str, list[str]]:
         self.stage(items)
         config = _config(
             RunMode.ONLINE,
@@ -230,6 +234,26 @@ def test_a_repair_of_a_staged_file_keeps_the_rows_it_did_not_name(tmp_path, file
             "processed:a1:0@run1",
             "processed:a2:0@run2",
             "processed:a3:0@run1",
+        ]
+    }
+
+
+@pytest.mark.parametrize("file", STAGED_FILES)
+def test_a_re_run_of_a_staged_file_sends_only_the_input_it_has_not_answered(tmp_path, file):
+    """The first stage keeps its checkpoints after it writes, and a lookup that misses the
+    stored file falls back to them; with them cleared only the stored file can answer."""
+    first = _FirstStageOnline(tmp_path, file)
+    first.run(1, ["a1", "a2"])
+    first.backend.clear_checkpoint_records(ACTION)
+
+    held = first.run(2, ["a1", "a2", "a3"])
+
+    assert first.sent == [["a1", "a2"], ["a3"]]
+    assert held == {
+        str(Path(file).with_suffix(".json")): [
+            "processed:a1:0@run1",
+            "processed:a2:0@run1",
+            "processed:a3:0@run2",
         ]
     }
 
