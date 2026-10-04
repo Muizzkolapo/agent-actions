@@ -13,8 +13,11 @@ body: >-
   config and model it works under when it starts, and the reset compares them with the
   config in force. Unchanged, it keeps what was finished however the run stopped. Edited,
   the action and every action that reads it answer everything again, and a batch still
-  out under the old config is given up with a warning. A stopped `agac retry` of an edited
-  action leaves the edit to the next run, which applies it to every record. Records the
+  out under the old config is given up with a warning. A record the stopped run answered
+  in a file it had not written yet is asked again when an earlier run had stored that
+  file: the next run used to carry the stored row, which held what was answered before an
+  edit to the action or to what it reads. A stopped `agac retry` of an edited action
+  leaves the edit to the next run, which applies it to every record. Records the
   reset keeps now keep their prompt traces as well. An action stopped before this release
   has nothing recorded and is reset as before: kept if it was interrupted or killed, wiped
   if it failed.

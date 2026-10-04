@@ -302,8 +302,16 @@ Re-run:
       strategy.invoke(50 remaining records)
       → enrich + collect (all 200)
       → write final output
-      → clear_checkpoint_records()
+      → clear_checkpoint_records(action, that file)
 ```
+
+A checkpoint row left beside a stored file is therefore a later answer than the row
+stored for that record: the run that gave it stopped before writing the file again,
+after an edit or an upstream change had reset the action. `answered_since_stored`
+names those records and the online path answers them again. The stored row is not
+the answer their disposition describes, and the checkpoint row is the strategy's
+output before enrichment, without lineage or metadata. Carrying checkpoint rows is
+kept for a file with nothing stored.
 
 ### Checkpoint storage
 
@@ -326,7 +334,8 @@ Every path that resets action state also clears checkpoint records:
 
 | Path | When | Code |
 |------|------|------|
-| Normal completion | After `save_main_output` | `pipeline.py:618` |
+| A file written | After its write, that file's rows only | `pipeline.py`, `initial_pipeline.py` |
+| An action reset to run again | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
 
@@ -350,6 +359,8 @@ NOT terminal (reprocessed on re-run):
 On resume, `build_carry_forward()` reads prior output for carried records:
 
 ```
+answered_since_stored(action_name, path)        ← checkpointed after the file
+    → not carried: answered again                  was stored (online path)
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
@@ -709,11 +720,15 @@ If you add a new RecordState value that should block downstream:
 ### Every reset path must clear checkpoint records
 
 ```
-Three places clear action state. ALL THREE must clear checkpoint_output:
+These places clear action state. ALL must clear checkpoint_output:
 
-1. pipeline.py:618      — after save_main_output (normal completion)
-2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
-3. cli/retry.py:201     — RetryCommand.execute (retry command)
+1. pipeline.py, initial_pipeline.py — after a file's write, that file's rows
+2. coordinator.py       — _clear_for_fresh_run (--fresh flag)
+3. cli/retry.py         — RetryCommand.execute (retry command)
+4. executor.py          — _forget_what_it_did (an action reset to run again)
+
+Clearing every file's rows after one file's write loses the answers of a
+file the run has not written yet: its stored rows are then carried instead.
 
 If you add a new reset path (e.g., a new CLI command that resets actions):
     You MUST also call storage_backend.clear_checkpoint_records(action_name).

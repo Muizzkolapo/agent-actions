@@ -330,6 +330,32 @@ def with_stored_rows_not_reproduced(
     return kept + carry_records
 
 
+def answered_since_stored(
+    storage_backend: StorageBackend, action_name: str, relative_path: str
+) -> set[str]:
+    """Records of *relative_path* answered after its stored file was last written.
+
+    Writing a file clears its checkpoint rows, so one beside a stored file is a later
+    answer than the row stored for that record: the run that gave it stopped before
+    writing the file again, after an edit or an upstream change reset the action. Neither
+    row is fit to carry. The stored one is not the answer the record's disposition
+    describes, and the checkpoint one lacks what enrichment adds, lineage among it.
+    """
+    checkpointed = {
+        guid
+        for row in storage_backend.read_checkpoint_records(action_name, relative_path)
+        if (guid := row.get("source_guid"))
+    }
+    if not checkpointed:
+        return set()
+    try:
+        storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        # Nothing stored to be older than them: the checkpoint rows are what is carried.
+        return set()
+    return checkpointed
+
+
 def build_carry_forward(
     carry_ids: set[str],
     action_name: str,

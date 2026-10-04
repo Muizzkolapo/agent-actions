@@ -19,6 +19,7 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.processing.disposition_gate import positions_named_by_repair
+from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -634,9 +635,11 @@ class ProcessingPipeline:
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
-        # Clean up checkpoint records after successful output write.
+        # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:
-            self.config.storage_backend.clear_checkpoint_records(self.config.action_name)
+            self.config.storage_backend.clear_checkpoint_records(
+                self.config.action_name, derive_relative_path(file_path, output_directory)
+            )
 
     def _select_strategy(self) -> ProcessingStrategy:
         """Select the processing strategy based on granularity and action kind."""

@@ -14,6 +14,7 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.disposition_gate import positions_named_by_repair
+from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
@@ -823,5 +824,9 @@ def _process_online_mode_with_record_processor(
         output_directory=str(output_directory),
     )
     file_writer.write_target(processed_items)
+    # Kept past the write, they would read as answers given after it.
+    ctx.storage_backend.clear_checkpoint_records(
+        ctx.agent_name, derive_relative_path(str(file_path), str(output_directory))
+    )
 
     return str(output_file_path)

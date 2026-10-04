@@ -47,6 +47,16 @@ READER_ACTION = f"""  - name: {READER}
     expect: {{ repair: none }}
 """
 
+PUBLISHER = "publish"
+PUBLISH_ACTION = f"""  - name: {PUBLISHER}
+    intent: "Publish"
+    dependencies: [{ACTION}]
+    schema: batch_field_rules_output
+    prompt: $p.Publish
+    context_scope: {{ observe: [{ACTION}.summary] }}
+    expect: {{ repair: none }}
+"""
+
 ECHO_TOOL = """from typing import Any
 
 from agent_actions import udf_tool
@@ -225,6 +235,31 @@ def _stored_summaries(backend, action):
     return summaries
 
 
+def _stored(root, action=ACTION):
+    backend = _backend(root)
+    try:
+        return _stored_summaries(backend, action)
+    finally:
+        backend.close()
+
+
+def _stored_rows(root, action=ACTION):
+    backend = _backend(root)
+    try:
+        return [
+            row
+            for path in backend.list_target_files(action)
+            for row in backend._read_target_raw(action, path)
+        ]
+    finally:
+        backend.close()
+
+
+def _still_holding(before, after):
+    """The records whose stored answer is the one they held before."""
+    return sorted(guid for guid, summary in after.items() if summary == before.get(guid))
+
+
 @EDITS
 def test_an_interrupted_action_asks_again_for_every_record_once_it_is_edited(
     online, provider, edit, model
@@ -280,6 +315,70 @@ def test_an_action_stopped_by_an_error_asks_again_for_every_record_once_it_is_ed
     assert result.exit_code == 0, result.output
     assert provider.pages() == EVERY_PAGE
     assert {asked_with for _, asked_with in provider.asked} == {model}
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(ConfigurationError("the provider refused the key"), id="error"),
+        pytest.param(KeyboardInterrupt(), id="interrupt"),
+    ],
+)
+def test_an_action_stopped_partway_through_a_file_after_an_edit_keeps_no_answer_from_before_it(
+    online, provider, fault
+):
+    """The run after the edit answers the first page and stops on the second, before it
+    writes their file, which still holds what the old prompt answered. The record that
+    run finished must not be carried from that file, nor from the checkpoint, whose row
+    lacks the lineage the stored one is given."""
+    provider.answers()
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    provider.stops(at_call=2, raising=fault)
+    _run()
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    after = _stored(online)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    assert all(row.get("lineage") for row in _stored_rows(online))
+
+
+def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_made_before_it(
+    online,
+):
+    """The edit resets the reader with its source. The run after it stops the reader on
+    its second record, partway through the first file, and goes on to write the second:
+    the first file still holds rows made from the summaries the edit replaced."""
+    config = _config(online)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + PUBLISH_ACTION)
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online, PUBLISHER)
+
+    _edit_prompt(online)
+    answer = AgacClient.call_json
+    calls = []
+
+    def refused_at_the_readers_second_record(api_key, agent_config, *args):
+        calls.append(AgacClient._action_name(agent_config))
+        if calls.count(PUBLISHER) == 2:
+            raise ConfigurationError("the provider refused the key")
+        return answer(api_key, agent_config, *args)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(AgacClient, "call_json", staticmethod(refused_at_the_readers_second_record))
+        _run()
+    assert _status(online, PUBLISHER) == "failed"
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    after = _stored(online, PUBLISHER)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
 
 
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
