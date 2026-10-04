@@ -17,9 +17,12 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+from agent_actions.processing.helpers import _empty_warn_reason, _is_empty_output
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
@@ -37,6 +40,7 @@ from agent_actions.record.envelope import (
 )
 from agent_actions.record.reasons import (
     BATCH_NOT_RETURNED,
+    EMPTY_OUTPUT,
     GUARD_SKIP,
     PREP_FAILED,
 )
@@ -384,6 +388,9 @@ class BatchResultStrategy:
             )
             generated_obj = _make_schema_echo_error(generated_obj)
 
+        if _is_empty_output(generated_obj):
+            return self._empty_answer(ctx, batch_result, custom_id, generated_obj)
+
         generated_list = DataTransformer.ensure_list(generated_obj)
 
         original_row = ctx.reconciler.get_record_by_id(custom_id)
@@ -466,6 +473,61 @@ class BatchResultStrategy:
         processing_result.processing_context = processing_context
         processing_result.is_expansion = len(structured_items) > 1
         return processing_result
+
+    def _empty_answer(
+        self,
+        ctx: BatchProcessingContext,
+        batch_result: BatchResult,
+        custom_id: str,
+        response: Any,
+    ) -> ProcessingResult:
+        """Apply the action's ``on_empty`` to an empty answer, as the online strategy does.
+
+        Counted as a success it leaves the record done with nothing stored and nothing
+        said. ``error`` is a failed record here too; the caller halts the action after
+        the file is written, since a batch has one write and the other answers are in it.
+        """
+        agent_config = ctx.agent_config or {}
+        action_name = agent_config.get("action_name", "unknown")
+        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+        original_row = ctx.reconciler.get_record_by_id(custom_id)
+        record_index = ctx.reconciler.get_record_index(custom_id)
+        on_empty = agent_config.get("on_empty", "warn")
+        content = original_row.get("content") if isinstance(original_row, dict) else None
+        fire_event(
+            RecordEmptyOutputEvent(
+                action_name=action_name,
+                record_index=record_index,
+                source_guid=source_guid or "",
+                input_field_count=len(content) if isinstance(content, dict) else 0,
+                output=response,
+                on_empty=on_empty,
+            )
+        )
+
+        if on_empty == "skip":
+            tombstone = build_tombstone(
+                action_name, original_row, EMPTY_OUTPUT, source_guid=source_guid
+            )
+            skipped = ProcessingResult.skipped(
+                passthrough_data=tombstone,
+                reason=EMPTY_OUTPUT,
+                source_guid=source_guid,
+                source_snapshot=copy.deepcopy(original_row) if original_row else None,
+                input_record=original_row,
+            )
+            self._attach_passthrough_context(skipped, ctx, original_row, record_index)
+            return skipped
+
+        failed = self._build_error_result(
+            ctx,
+            custom_id,
+            _empty_warn_reason(agent_config, action_name, source_guid),
+            metadata=batch_result.metadata,
+            recovery_metadata=batch_result.recovery_metadata,
+        )
+        failed.skip_reason = EMPTY_OUTPUT
+        return failed
 
     # -- Error / exhausted / unprocessed builders ------------------------------
 
