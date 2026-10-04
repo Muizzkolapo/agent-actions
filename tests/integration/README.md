@@ -140,9 +140,14 @@ A test that drives the CLI as a subprocess calls `run_agac` from
 `agent_actions` from wherever the editable install points, which from a second
 worktree is another checkout, and pytest.ini's `pythonpath` reaches only the
 pytest process. `run_agac` puts this tree first on the subprocess's
-`PYTHONPATH`; `python -m agent_actions.cli.main` would not, since it puts the
-project copy the test runs in on the path instead.
+`PYTHONPATH`, keeping any entry already set, or passed in `env`, behind it;
+`python -m agent_actions.cli.main` would not, since it puts the project copy
+the test runs in on the path instead.
 
 `test_a_cli_test_runs_the_tree_it_lives_in.py` checks that the CLI process
-imports `agent_actions` from this tree, and fails on any test that launches
-`agac` some other way.
+imports `agent_actions` from this tree, ahead of a decoy on `PYTHONPATH`. It
+also fails on any test outside `tests/manual` that names `agac` or
+`agent_actions.cli.main` as a string of its own, or hands a call a command line
+starting with `agac`: a path segment, a list element, a `which()` lookup, `-m`
+and a shell string are all caught. A launch that spells the name some other
+way, assembled from pieces, say, is not.

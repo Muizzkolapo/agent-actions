@@ -6,7 +6,7 @@ would pass or fail on that checkout's code, whatever the change under test.
 pytest.ini's `pythonpath` reaches the pytest process only.
 """
 
-import re
+import ast
 from pathlib import Path
 
 import pytest
@@ -15,6 +15,8 @@ from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 LAUNCHER = REPO / "tests" / "_support" / "agac_cli.py"
+AUDIT = Path(__file__).resolve()
+MANUAL = REPO / "tests" / "manual"
 
 # Tool discovery imports this inside the CLI process, so it sees the
 # `agent_actions` that process imported.
@@ -32,8 +34,31 @@ def probe(data):
     return data
 """
 
-# The console script's name as a path segment, a command's first word, or a lookup.
-LAUNCH = re.compile(r"""(/\s*|\[\s*|which\(\s*)["']agac["']""")
+LAUNCH_NAMES = {"agac", "agent_actions.cli.main"}
+
+
+def launches_in(source: str) -> list[int]:
+    """Lines of *source* that name the console script or its module.
+
+    A string that is exactly one of them counts wherever it sits (a path
+    segment, a command's element, a lookup, `-m`), and so does a command line
+    starting with `agac` handed to a call, as a shell launch is.
+    """
+    lines: set[int] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and node.value in LAUNCH_NAMES:
+            lines.add(node.lineno)
+        elif isinstance(node, ast.Call) and node.args and _first_word(node.args[0]) == "agac":
+            lines.add(node.lineno)
+    return sorted(lines)
+
+
+def _first_word(node: ast.expr) -> str | None:
+    if isinstance(node, ast.JoinedStr) and node.values:
+        node = node.values[0]
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return next(iter(node.value.split()), None)
+    return None
 
 
 def test_the_agac_a_test_runs_imports_agent_actions_from_this_tree(tmp_path, monkeypatch):
@@ -79,16 +104,34 @@ def test_a_pythonpath_already_set_stays_on_the_path_behind_this_tree(
     assert imported == REPO / "agent_actions" / "__init__.py"
 
 
+@pytest.mark.parametrize(
+    "launch",
+    [
+        pytest.param('run([str(Path(sys.executable).parent / "agac"), "x"])', id="path segment"),
+        pytest.param('run([str(Path(sys.executable).with_name("agac")), "x"])', id="sibling name"),
+        pytest.param('run(["agac", "x"])', id="list element"),
+        pytest.param('run(\n    [\n        "agac",\n        "x",\n    ]\n)', id="wrapped list"),
+        pytest.param('run([shutil.which("agac"), "x"])', id="lookup"),
+        pytest.param('run([sys.executable, "-m", "agent_actions.cli.main", "x"])', id="module"),
+        pytest.param('run("agac run -a wf", shell=True)', id="shell string"),
+        pytest.param('run(f"agac run -a {wf}", shell=True)', id="shell f-string"),
+    ],
+)
+def test_the_audit_sees_agac_launched_as_a(launch):
+    """The audit passes when it finds nothing, so it is shown finding each shape."""
+    assert launches_in(launch) != []
+
+
 def test_no_test_launches_agac_but_through_the_shared_launcher():
     """A launch of its own runs whichever checkout the venv points at, and passes
     wherever that checkout is the tree under test, as it is in CI."""
     launches = [
-        f"{path.relative_to(REPO)}:{number}"
+        f"{path.relative_to(REPO)}:{line}"
         for path in sorted((REPO / "tests").rglob("*.py"))
-        # tests/manual is run by hand, against the `agac` on PATH.
-        if path != LAUNCHER and "manual" not in path.relative_to(REPO).parts
-        for number, line in enumerate(path.read_text().splitlines(), start=1)
-        if LAUNCH.search(line)
+        # This file names what it looks for; tests/manual is run by hand,
+        # against the `agac` on PATH.
+        if path not in (LAUNCHER, AUDIT) and not path.is_relative_to(MANUAL)
+        for line in launches_in(path.read_text())
     ]
 
     assert launches == []
