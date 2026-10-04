@@ -9,7 +9,8 @@ changed, so every finished record was asked again, and paid for again.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 fault that stops a run is stood in for, raised where the provider is called or, for a
-record's checkpoint row (1226), where the store saves it.
+record's checkpoint row (1226), where the store saves it, or where the store writes a
+target file (1262).
 """
 
 import json
@@ -603,7 +604,9 @@ def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_ot
     result = _run()
 
     assert result.exit_code == 0, result.output
-    assert sorted(json.loads(line) for line in handed.read_text().splitlines()) == (
+    # Absent when the tool was handed nothing, every record carried.
+    log = handed.read_text() if handed.exists() else ""
+    assert sorted(json.loads(line) for line in log.splitlines()) == (
         _summaries_in(online, "pages2.json")
     )
     assert _stored(online, FILE_READER) == _stored(online)
@@ -700,6 +703,26 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its
     assert result.exit_code == 0, result.output
     assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
     assert provider.pages() == EVERY_PAGE
+
+
+def test_a_first_stage_file_stored_before_the_run_stopped_keeps_a_record_whose_checkpoint_row_failed(
+    online, provider
+):
+    """The first file is stored and the run is stopped as it stores the second. Only the
+    stored file marks the first page answered, its checkpoint row having failed, so the
+    next run carries it rather than paying for it again."""
+    provider.answers()
+    with (
+        _storing_the_first_checkpoint_row_fails(sqlite3.OperationalError("disk I/O error")),
+        _storing_fails(ACTION, KeyboardInterrupt(), after=1),
+    ):
+        _run("--fresh")
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == []
 
 
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
