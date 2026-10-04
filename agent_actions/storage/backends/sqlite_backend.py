@@ -621,6 +621,19 @@ class SQLiteBackend(StorageBackend):
             )
             return [row["relative_path"] for row in cursor.fetchall()]
 
+    def has_target_rows(self, action_name: str) -> bool:
+        """One indexed probe; a row stored before record_count existed is measured from its data."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        with self._lock:
+            cursor = self.connection.cursor()
+            # CAST: a store migrated to record_count holds it as TEXT, where '0' > 0.
+            cursor.execute(
+                "SELECT EXISTS (SELECT 1 FROM target_data WHERE action_name = ? "
+                "AND COALESCE(CAST(record_count AS INTEGER), json_array_length(data)) > 0)",
+                (action_name,),
+            )
+            return bool(cursor.fetchone()[0])
+
     def list_source_files(self) -> list[str]:
         """List all source file paths."""
         with self._lock:

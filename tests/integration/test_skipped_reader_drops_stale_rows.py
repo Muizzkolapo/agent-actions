@@ -3,11 +3,19 @@
 A skip never rewrites the reader's output, so whatever it stored before stands
 unless the skip removes it. Rows made from upstream output that no longer exists
 are removed; rows made from upstream output a failed run carried are not.
+
+Editing an upstream resets everything that reads it (1215), so only the action
+that changes is edited here; the readers are reset by that alone.
 """
 
+import json
+import re
+
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -18,16 +26,20 @@ from tests.integration.test_retry_ignores_record_cap import (
     project,  # noqa: F401
 )
 
-THIRD_ACTION = """  - name: recap
+THIRD = "recap"
+THIRD_ACTION = f"""  - name: {THIRD}
     kind: tool
     dependencies: [enrich]
     intent: "Recap"
     schema: tool_action_output
     impl: tag_density
-    context_scope: { observe: [enrich.summary] }
-    expect: { repair: none }
+    context_scope: {{ observe: [enrich.summary] }}
+    expect: {{ repair: none }}
 """
 
+FILTER_ALL = '{ condition: \'source.page_content == "none"\', on_false: "filter" }'
+RESET_ONLY = "{ condition: 'true', on_false: \"skip\" }"
+MODES = pytest.mark.parametrize("mode", ["sequential", "parallel"])
 
 BROKEN_TOOL = """from typing import Any
 
@@ -44,21 +56,21 @@ def _config(root):
     return root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
 
 
-def _add_guard(root, impl, guard):
+def _add_guard_to(root, action, guard):
+    """Give the named action a guard; editing its config is also what resets it."""
     config = _config(root)
-    config.write_text(
-        config.read_text().replace(f"    impl: {impl}\n", f"    impl: {impl}\n    guard: {guard}\n")
+    text = config.read_text()
+    start = text.index(f"  - name: {action}\n")
+    end = text.find("\n  - name:", start + 1)
+    end = len(text) if end == -1 else end + 1
+    block, n = re.subn(
+        r"(    impl: .*\n)",
+        lambda m: f"{m.group(1)}    guard: {guard}\n",
+        text[start:end],
+        count=1,
     )
-
-
-def _filter_everything_upstream_and_reset_readers(root):
-    """Edit the upstream so it filters every record, and edit its readers so they reset."""
-    _add_guard(
-        root,
-        "flatten_pages",
-        '{ condition: \'source.page_content == "none"\', on_false: "filter" }',
-    )
-    _add_guard(root, "tag_density", "{ condition: 'true', on_false: \"skip\" }")
+    assert n == 1, f"no impl line under {action}"
+    config.write_text(text[:start] + block + text[end:])
 
 
 def _rows(root, action):
@@ -72,23 +84,44 @@ def _rows(root, action):
         backend.close()
 
 
+def _status(root, action):
+    path = root / "agent_workflow" / WORKFLOW / "agent_io" / ".agent_status.json"
+    return json.loads(path.read_text())[action]["status"]
+
+
+def _node_reason(root, action):
+    backend = _backend(root)
+    try:
+        rows = backend.get_disposition(action, record_id=NODE_LEVEL_RECORD_ID)
+        return rows[0].get("reason") if rows else None
+    finally:
+        backend.close()
+
+
 def _run(*extra):
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, *extra])
     assert result.exit_code == 0, result.output
     return result
 
 
-def test_a_reset_reader_skipped_under_an_empty_upstream_keeps_no_rows(chained):  # noqa: F811
-    _filter_everything_upstream_and_reset_readers(chained)
+@MODES
+def test_a_reader_skipped_under_an_upstream_that_filtered_everything_keeps_no_rows(
+    chained,  # noqa: F811
+    mode,
+):
+    _add_guard_to(chained, ACTION, FILTER_ALL)
 
-    _run()
+    _run("-e", mode)
 
     assert _rows(chained, ACTION) == 0
     assert _rows(chained, SECOND) == 0
+    # The path, not just the outcome: the reader was skipped, not run on nothing.
+    assert _status(chained, SECOND) == "skipped"
+    assert _node_reason(chained, SECOND) == f"Upstream dependency '{ACTION}' skipped"
 
 
 def test_a_second_run_keeps_it_empty_and_lifting_the_filter_restores_it(chained):  # noqa: F811
-    _filter_everything_upstream_and_reset_readers(chained)
+    _add_guard_to(chained, ACTION, FILTER_ALL)
     _run()
     _run()
     assert _rows(chained, SECOND) == 0
@@ -101,31 +134,43 @@ def test_a_second_run_keeps_it_empty_and_lifting_the_filter_restores_it(chained)
 
     assert _rows(chained, ACTION) == RECORDS
     assert _rows(chained, SECOND) == RECORDS
+    assert _status(chained, SECOND) == "completed"
 
 
 def test_the_drop_reaches_a_reader_of_the_reader(chained):  # noqa: F811
     config = _config(chained)
     config.write_text(config.read_text().rstrip("\n") + "\n" + THIRD_ACTION)
     _run("--fresh")
-    assert _rows(chained, "recap") == RECORDS
+    assert _rows(chained, THIRD) == RECORDS
 
-    _filter_everything_upstream_and_reset_readers(chained)
+    _add_guard_to(chained, ACTION, FILTER_ALL)
     _run()
 
     assert _rows(chained, SECOND) == 0
-    assert _rows(chained, "recap") == 0
+    assert _rows(chained, THIRD) == 0
+    assert _node_reason(chained, THIRD) == f"Upstream dependency '{SECOND}' skipped"
+
+
+def test_a_reader_whose_own_config_changed_too_keeps_no_rows(chained):  # noqa: F811
+    _add_guard_to(chained, ACTION, FILTER_ALL)
+    _add_guard_to(chained, SECOND, RESET_ONLY)
+
+    _run()
+
+    assert _rows(chained, SECOND) == 0
 
 
 def test_a_reader_of_an_upstream_that_failed_but_kept_its_rows_keeps_its_own(chained):  # noqa: F811
-    # A new module: the tool already imported in this process would not see an edit.
+    # A new module rather than an edit: a tool module already imported in this
+    # process is cached by the loader and would not see the edit.
     (chained / "tools" / WORKFLOW / "broken.py").write_text(BROKEN_TOOL)
     config = _config(chained)
     config.write_text(config.read_text().replace("impl: flatten_pages", "impl: flatten_broken"))
-    _add_guard(chained, "flatten_broken", "{ condition: 'true', on_false: \"skip\" }")
-    _add_guard(chained, "tag_density", "{ condition: 'true', on_false: \"skip\" }")
+    _add_guard_to(chained, SECOND, RESET_ONLY)
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
 
-    assert "Upstream dependency 'flatten' failed" in result.output, result.output
+    assert f"Upstream dependency '{ACTION}' failed" in result.output, result.output
+    assert _status(chained, ACTION) == "failed"
     assert _rows(chained, ACTION) == RECORDS
     assert _rows(chained, SECOND) == RECORDS

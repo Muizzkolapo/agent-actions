@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS target_data (
 
 No additional indexes — the UNIQUE constraint provides one.
 
-The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries.
+The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and falls back to `json_array_length(data)`. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
 
 ### 3. record_disposition — per-record processing status
 
