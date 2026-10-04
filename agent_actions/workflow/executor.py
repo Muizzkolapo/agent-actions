@@ -369,7 +369,8 @@ class ActionExecutor:
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
         """Reset to pending if limit or semantic config changed since last completion."""
-        if current_status not in COMPLETED_STATUSES:
+        repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
+        if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
 
@@ -388,7 +389,9 @@ class ActionExecutor:
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
         # reads this action, with nothing run to replace it. The stamp stays as it is.
-        if getattr(self.deps.action_runner, "retried_records", ()):
+        if repairing:
+            # Said for an action the retry is about to re-run as well: it answers the
+            # named records under the edit and the rest still hold what came before.
             if config_changed or model_changed:
                 logger.warning(
                     "%s was edited since it completed. A retry answers only the records it "
@@ -459,7 +462,13 @@ class ActionExecutor:
                     ", ".join(given_up),
                 )
         for batch_id in BatchRegistryManager.batch_ids(storage_backend, action_name):
-            release_local_batch_record(batch_id)
+            if not release_local_batch_record(batch_id):
+                logger.warning(
+                    "The provider's local record of batch %s (%s) would not go and is left "
+                    "on disk; the registry naming it is cleared with the reset",
+                    batch_id,
+                    action_name,
+                )
         storage_backend.clear_disposition(action_name)
         storage_backend.clear_checkpoint_records(action_name)
         # The batch this reset replaces left a registry entry, recovery state and
@@ -514,7 +523,7 @@ class ActionExecutor:
         """The actions whose output *action_name* is handed.
 
         Its inputs, and the ones it only names in its context scope or prompt: those
-        reach it through the record all the same, and the run order counts them.
+        reach it through the record all the same, and the execution order counts them.
         """
         from agent_actions.prompt.context.scope_inference import infer_dependencies
 
