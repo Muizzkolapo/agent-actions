@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An action skipped because its upstream holds no rows now holds none either. After a reset, an upstream that filtered every record left its readers skipped but still holding the rows they stored before, made from output that no longer exists, and `agac preview` showed them. A reader skipped under an upstream that failed but kept its rows still keeps its own."
+time: 2026-10-04T08:00:00Z
