@@ -718,7 +718,7 @@ class ActionExecutor:
             should_skip, result = self._check_prior_output(storage_backend, action_name)
         except Exception as e:
             logger.warning(
-                "Failed to verify output for %s, resetting to pending: %s",
+                "Failed to clear the node-level failure of %s, resetting to pending: %s",
                 action_name,
                 e,
                 exc_info=True,
@@ -741,15 +741,12 @@ class ActionExecutor:
     def _check_prior_output(
         self, storage_backend: Any, action_name: str
     ) -> tuple[bool, ActionExecutionResult | None]:
-        """Check if prior run left valid output or a blocking disposition."""
-        # Disposition is authoritative — a failed/skipped action must re-run
-        # even if partial output exists.
-        for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
-            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
-                logger.info("Action %s has %s from prior run — re-running", action_name, disp)
-                storage_backend.clear_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID)
-                self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                return (False, None)
+        """Check if prior run left valid output or a blocking disposition.
+
+        A store that cannot be read leaves the action completed. One failed read is no
+        evidence its output changed, and run again it would answer the records it failed,
+        which no plain run of a completed action does, adding rows nothing reading it sees.
+        """
 
         # The cached-completion path discovered an action that already
         # finished in a prior run.  This execution did NOT run the action,
@@ -768,7 +765,32 @@ class ActionExecutor:
                 ),
             )
 
-        if completed_output_stands(storage_backend, action_name):
+        try:
+            # Disposition is authoritative — a failed/skipped action must re-run
+            # even if partial output exists.
+            blocking: str | None = None
+            for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+                if storage_backend.has_disposition(
+                    action_name, disp, record_id=NODE_LEVEL_RECORD_ID
+                ):
+                    blocking = disp
+                    break
+            stands = blocking is None and completed_output_stands(storage_backend, action_name)
+        except Exception as e:
+            logger.warning(
+                "Could not read whether %s still holds its output, so it stays completed: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            return _completed_result()
+
+        if blocking is not None:
+            logger.info("Action %s has %s from prior run — re-running", action_name, blocking)
+            storage_backend.clear_disposition(action_name, blocking, record_id=NODE_LEVEL_RECORD_ID)
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+        if stands:
             return _completed_result()
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)

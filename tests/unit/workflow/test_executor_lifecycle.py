@@ -573,6 +573,21 @@ class TestVerifyCompletionStatus:
         storage.clear_disposition.assert_not_called()
         mock_deps.state_manager.update_status.assert_not_called()
 
+    def test_a_node_level_failure_that_cannot_be_cleared_still_runs_it_again(
+        self, executor, mock_deps
+    ):
+        """Only a failed read leaves it completed. The failure was read, and reading a
+        failed clear as the output standing would serve it as finished."""
+        storage = MagicMock()
+        storage.has_disposition.side_effect = lambda action, disp, **kw: disp == "failed"
+        storage.clear_disposition.side_effect = OSError("storage down")
+        mock_deps.action_runner.storage_backend = storage
+
+        should_skip, _ = executor._verify_completion_status("agent_a")
+
+        assert should_skip is False
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
+
     def test_no_backend_returns_skip(self, executor, mock_deps):
         """No storage backend should skip (trust the status)."""
         mock_deps.action_runner.storage_backend = None
