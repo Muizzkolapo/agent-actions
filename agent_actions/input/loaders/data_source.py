@@ -214,7 +214,7 @@ def _as_staging_document(payload: Any) -> list[Any]:
     return payload if isinstance(payload, list) else [payload]
 
 
-def _would_be_staged(item: Path) -> bool:
+def _would_be_staged(item: Path, cache_dir: Path) -> bool:
     """Whether a cache entry is one the walk would stage, so rewriting it is worth it.
 
     Deliberately NOT the runner's `should_skip_item`, which this once claimed to mirror and
@@ -225,7 +225,11 @@ def _would_be_staged(item: Path) -> bool:
     `processed_paths` and `file_type_filter` are the runner's too, and do not apply to a
     cache directory.
     """
-    return item.is_file() and not item.name.startswith(".") and "batch" not in item.parts
+    return (
+        item.is_file()
+        and not item.name.startswith(".")
+        and "batch" not in item.relative_to(cache_dir).parts
+    )
 
 
 def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
@@ -237,7 +241,7 @@ def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
     going to be staged.
     """
     for cache_file in sorted(cache_dir.rglob("*.json")):
-        if not _would_be_staged(cache_file):
+        if not _would_be_staged(cache_file, cache_dir):
             continue
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))

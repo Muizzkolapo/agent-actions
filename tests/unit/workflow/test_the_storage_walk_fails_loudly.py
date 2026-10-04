@@ -109,7 +109,7 @@ class TestTheActionActuallyFails:
     """The walker's count only matters if it reaches process_files' gate.
 
     These call process_files, not the walker: upstream dirs must satisfy
-    is_target_directory ("target" in path, "staging" not in it) or the storage branch is
+    is_target_directory (a parent named "target") or the storage branch is
     skipped entirely and the walker is never consulted.
     """
 

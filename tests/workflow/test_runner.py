@@ -578,7 +578,7 @@ class TestProcessFromStorageBackend:
             action_config={"agent_type": "test"},
             action_name="test_agent",
             strategy=_make_strategy(),
-            upstream_data_dirs=[str(tmp_path / "staging" / "dep")],
+            upstream_data_dirs=[str(tmp_path / "agent_io" / "staging")],
             output_directory=str(tmp_path / "output"),
             idx=0,
         )

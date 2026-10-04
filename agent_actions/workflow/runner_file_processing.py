@@ -95,8 +95,12 @@ class CollectedErrors:
 
 
 def is_target_directory(path: str) -> bool:
-    """Return True if path is a target directory (not staging)."""
-    return "target" in path and "staging" not in path
+    """Whether *path* is an action's output, ``.../target/<action>``.
+
+    Judged by its own components: a substring test on the whole path let the
+    directories a project sits under, such as ``staging-env/``, decide it.
+    """
+    return Path(path).parent.name == "target"
 
 
 _MAX_TRACKED_ERRORS = 10  # Cap to avoid unbounded memory on mass failure
@@ -154,12 +158,13 @@ def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]]) -> list[Path
     Not ``rglob``: it drops such a directory's whole subtree and raises nothing,
     handing back the directory entry alone — which the question above answers
     correctly as "not a regular file", so no loss is ever declared. A ``batch``
-    directory is left out, its files being skipped whether or not it opens.
+    directory below *root* is left out, its files being skipped whether or not it
+    opens.
     """
 
     def _note(exc: OSError) -> None:
         failed = Path(exc.filename) if exc.filename else root
-        if "batch" not in failed.parts:
+        if "batch" not in failed.relative_to(root).parts:
             unreadable.append((failed, exc))
 
     return walk_files(root, _note)
@@ -316,12 +321,15 @@ def should_skip_item(
     an entry that survives all of them is asked whether it is a regular file, and
     that question can fail — the caller has to treat the failure as a loss rather
     than as a skip.
+
+    A ``batch`` directory counts only below *input_path*: one the project sits
+    under would leave out every file it stages.
     """
-    if "batch" in item.parts:
+    relative_path = item.relative_to(input_path)
+    if "batch" in relative_path.parts:
         return True
     if item.name.startswith("."):
         return True
-    relative_path = item.relative_to(input_path)
     if relative_path in processed_paths:
         return True
     if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
@@ -401,7 +409,8 @@ def collect_files_from_upstream(
             continue
 
         for item in _walk_files(input_path, lost):
-            if "batch" in item.parts:
+            relative_path = item.relative_to(input_path)
+            if "batch" in relative_path.parts:
                 continue
             if item.name.startswith("."):
                 continue
@@ -413,7 +422,6 @@ def collect_files_from_upstream(
                 lost.append((item, e))
                 continue
 
-            relative_path = item.relative_to(input_path)
             if relative_path not in files_by_relative_path:
                 files_by_relative_path[relative_path] = []
             files_by_relative_path[relative_path].append(item)
@@ -785,7 +793,7 @@ def process_from_storage_backend(
         input_path = Path(input_directory)
         action_name = input_path.name
 
-        if "staging" in str(input_path):
+        if input_path.name == "staging":
             continue
 
         try:

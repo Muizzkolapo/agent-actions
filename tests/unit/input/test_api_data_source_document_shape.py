@@ -117,6 +117,12 @@ class TestACacheWrittenBeforeTheDocumentRule:
         _cache_of(tmp_path, 42)
         assert json.loads(_resolve_again(tmp_path).read_text()) == [42]
 
+    def test_it_is_brought_over_in_a_project_under_a_directory_named_batch(self, tmp_path):
+        """The walk stages it there, so the rule has to reach it there too."""
+        project = tmp_path / "batch" / "project"
+        _cache_of(project, ENVELOPE)
+        assert json.loads(_resolve_again(project).read_text()) == [ENVELOPE]
+
 
 class TestACacheAlreadyHoldingADocument:
     def test_it_is_left_exactly_as_it_was(self, tmp_path):
