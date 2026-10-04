@@ -73,7 +73,7 @@ def _polled(service) -> list[str]:
 def test_an_entry_already_collected_is_neither_polled_nor_finalized():
     service = _service({"page1.json": "2026-10-04T09:05:00+00:00", "page2.json": None})
 
-    written = service.process_all_batch_results("/out", action_name=ACTION)
+    written = service.process_all_batch_results("/out", action_name=ACTION).written
 
     assert _finalized(service) == ["page2.json"]
     assert _polled(service) == ["batch-page2.json"]
@@ -83,7 +83,7 @@ def test_an_entry_already_collected_is_neither_polled_nor_finalized():
 def test_a_pass_over_entries_that_are_all_collected_writes_nothing_and_is_not_an_error():
     service = _service({"page1.json": "2026-10-04T09:05:00+00:00"})
 
-    assert service.process_all_batch_results("/out", action_name=ACTION) == []
+    assert service.process_all_batch_results("/out", action_name=ACTION).written == []
     assert _finalized(service) == []
 
 
@@ -98,10 +98,12 @@ def test_an_entry_from_before_the_stamp_is_still_collected():
 
 
 def test_a_skipped_collected_entry_keeps_a_pass_that_wrote_nothing_from_failing():
-    """As a replay of the collected file that succeeded did: the entry still owed beside
-    it is left for a later pass rather than failing this one."""
+    """As a replay of the collected file that succeeded did. The entry still owed beside it
+    is handed back unread, for the action to wait on: not failed, and not passed over."""
     service = _service({"page1.json": "2026-10-04T09:05:00+00:00", "page2.json": None})
     service._is_batch_ready_for_processing.return_value = False
 
-    assert service.process_all_batch_results("/out", action_name=ACTION) == []
+    collected = service.process_all_batch_results("/out", action_name=ACTION)
+
+    assert (collected.written, collected.unread) == ([], ["page2.json"])
     assert _finalized(service) == []

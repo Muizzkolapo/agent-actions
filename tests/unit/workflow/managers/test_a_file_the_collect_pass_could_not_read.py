@@ -12,15 +12,18 @@ provider, and the one that can fail.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.processing import BatchProcessingService
+from agent_actions.storage.backend import DISPOSITION_DEFERRED
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 
@@ -29,15 +32,16 @@ PAGES = ("page1.json", "page2.json", "page3.json")
 
 
 class _Provider:
-    """Has finished every batch, and cannot be reached about the ones in ``unreachable``."""
+    """Says what the registry says of each batch, and cannot be reached about ``unreachable``."""
 
-    def __init__(self) -> None:
+    def __init__(self, statuses: dict[str, str]) -> None:
+        self.statuses = statuses
         self.unreachable: set[str] = set()
 
     def check_status(self, batch_id: str) -> str:
         if batch_id in self.unreachable:
             raise ConnectionError("the provider could not be reached")
-        return BatchStatus.COMPLETED
+        return self.statuses[batch_id]
 
 
 class _Resolver:
@@ -49,7 +53,13 @@ class _Resolver:
 
 
 class _Action:
-    def __init__(self, tmp_path: Path, collected: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        collected: tuple[str, ...] = (),
+        statuses: dict[str, str] | None = None,
+    ) -> None:
+        statuses = {name: (statuses or {}).get(name, BatchStatus.COMPLETED) for name in PAGES}
         self.out = str(tmp_path / "target" / ACTION)
         self.backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
         self.backend.initialize()
@@ -59,23 +69,24 @@ class _Action:
                 {
                     name: BatchJobEntry(
                         batch_id=f"batch-{name}",
-                        status=BatchStatus.COMPLETED,
+                        status=status,
                         timestamp="2026-10-04T09:00:00+00:00",
                         provider="agac-provider",
                         record_count=2,
                         file_name=name,
                         collected_at="2026-10-04T09:05:00+00:00" if name in collected else None,
                     ).to_dict()
-                    for name in PAGES
+                    for name, status in statuses.items()
                 }
             ),
         )
-        self.provider = _Provider()
+        self.provider = _Provider({f"batch-{name}": s for name, s in statuses.items()})
         resolver = _Resolver(self.provider)
         self.finalized: list[str] = []
+        self.broken: set[str] = set()
         service = BatchProcessingService(
             client_resolver=resolver,
-            context_manager=None,
+            context_manager=BatchContextManager(),
             result_processor=None,
             registry_manager_factory=lambda name: BatchRegistryManager(self.backend, name),
             storage_backend=self.backend,
@@ -89,6 +100,8 @@ class _Action:
         )
 
     def _finalize(self, *, file_name: str, manager: BatchRegistryManager, **_kwargs) -> str:
+        if file_name in self.broken:
+            raise ValueError(f"{file_name} cannot be read")
         self.finalized.append(file_name)
         manager.mark_collected(file_name)
         return f"{self.out}/{file_name}"
@@ -107,6 +120,16 @@ def test_an_action_does_not_complete_past_a_finished_file_it_could_not_read(tmp_
 
     assert action.check() == (None, "in_progress")
     assert action.finalized == ["page1.json"]
+
+
+def test_the_run_after_it_reads_those_files_and_completes(tmp_path):
+    action = _Action(tmp_path)
+    action.cannot_reach("page2.json", "page3.json")
+    action.check()
+    action.cannot_reach()
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page2.json", "page3.json"]
 
 
 def test_a_pass_that_could_read_no_file_waits_rather_than_failing(tmp_path):
@@ -132,3 +155,40 @@ def test_files_collected_before_do_not_stand_in_for_one_left_unread(tmp_path, co
 
     assert action.check() == (None, "in_progress")
     assert action.finalized == []
+
+
+def test_the_records_of_a_file_left_unread_are_not_reported_as_orphans(tmp_path, caplog):
+    """They are waited for; the warning tells the user they were left behind."""
+    action = _Action(tmp_path)
+    action.backend.set_disposition(ACTION, "page2-a", DISPOSITION_DEFERRED)
+    action.cannot_reach("page2.json")
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions.workflow.managers.batch"):
+        action.check()
+
+    assert "orphan" not in caplog.text
+
+
+def test_a_file_whose_reading_failed_does_not_hold_the_action(tmp_path):
+    """Its records are marked failed, which is what `agac retry` finds. Waited for, a file
+    that fails the same way every time would hold the action for good."""
+    action = _Action(tmp_path)
+    action.broken = {"page2.json"}
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page3.json"]
+
+
+@pytest.mark.parametrize("ended", [BatchStatus.FAILED, BatchStatus.CANCELLED])
+def test_a_batch_that_ended_without_results_is_not_left_unread(tmp_path, ended):
+    """There are no results to wait for: waiting on it would hold the action for good."""
+    action = _Action(tmp_path, statuses={"page3.json": ended})
+
+    collected = action.lifecycle.processing_service.process_all_batch_results(
+        action.out, {}, action_name=ACTION
+    )
+
+    assert (collected.written, collected.unread) == (
+        [f"{action.out}/page1.json", f"{action.out}/page2.json"],
+        [],
+    )

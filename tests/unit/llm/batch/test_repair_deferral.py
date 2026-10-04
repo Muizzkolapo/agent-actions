@@ -1041,7 +1041,7 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
             try:
                 written = service.process_all_batch_results(
                     output_directory="/out", agent_config=_agent_config(), action_name=ACTION
-                )
+                ).written
             except BaseException as exc:  # noqa: BLE001 - the test is about which one
                 return exc, None, tombstone
         return None, written, tombstone

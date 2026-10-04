@@ -84,6 +84,13 @@ A refusal that persists, such as a request the provider rejects every time, hold
 for as long as it lasts, and a provider keeps results only for a limited time. Fix the file
 the error names, or take it out of the input, and run again.
 
+### When the provider cannot be reached while collecting
+
+A run asks the provider about each finished batch before reading its results. If it cannot
+reach the provider about one, it reads the others, leaves that batch where it is, and pauses
+as it does while a batch is still out, naming the file it could not read. Run again to
+collect it: nothing is sent again, and the files already read are not read again.
+
 ### Batch Commands
 
 ```bash

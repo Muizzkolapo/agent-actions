@@ -103,6 +103,9 @@ class TestTwoOfThreeFilesOutOfReach:
         assert runs.after.status == "completed"
         assert _stored_rows(runs.project) == _answered("a", "b", "c")
 
+    def test_their_batches_are_collected_not_sent_again(self, runs):
+        assert _batch_ids(runs.project) == runs.sent
+
 
 class TestEveryFileOutOfReach:
     """No file read is the same case, not a failure: nothing about the batches is wrong."""

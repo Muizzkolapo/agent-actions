@@ -177,7 +177,7 @@ class TestBatchExceptionDisposition:
             patch.object(svc, "_is_batch_ready_for_processing", return_value=True),
             patch.object(svc, "_process_single_batch_file", side_effect=process_side_effect),
         ):
-            result = svc.process_all_batch_results("/output")
+            result = svc.process_all_batch_results("/output").written
 
         assert result == ["/output/file_b.json"]
 

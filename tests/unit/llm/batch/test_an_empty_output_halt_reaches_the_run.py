@@ -85,7 +85,7 @@ def test_any_other_processing_error_still_costs_only_its_own_file():
         {"one.json": ProcessingError("this file cannot be read"), "two.json": "/out/two.json"}
     )
 
-    written = service.process_all_batch_results("/out", {}, action_name="summarize")
+    written = service.process_all_batch_results("/out", {}, action_name="summarize").written
 
     assert written == ["/out/two.json"]
     assert service._fail_abandoned_records.call_count == 1

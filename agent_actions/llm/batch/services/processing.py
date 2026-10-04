@@ -3,6 +3,7 @@
 import logging
 import time
 from collections.abc import Callable, Collection
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -131,6 +132,18 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
     )
     return superseded
+
+
+@dataclass
+class CollectPass:
+    """The files a collect pass wrote, and the finished ones it could not read.
+
+    A file left unread still owes its results, so the action waits for it as for a batch
+    still out: completed, the action is not run again and nothing reads that batch.
+    """
+
+    written: list[str] = field(default_factory=list)
+    unread: list[str] = field(default_factory=list)
 
 
 class BatchProcessingService:
@@ -278,13 +291,14 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
-    ) -> list[str]:
+    ) -> CollectPass:
         """Process the completed batch jobs whose results are still owed.
 
         Recovery entries are processed in their own right; the parent they
         superseded is skipped instead, and so is an entry already collected.
-        Tolerates empty processed_files when recovery batches are pending
-        (in_progress) or a collected entry was skipped.
+        A finished entry the provider cannot be asked about is left unread.
+        Tolerates writing nothing when recovery batches are pending
+        (in_progress), a collected entry was skipped, or an entry was left unread.
 
         Args:
             output_directory: Output directory path
@@ -292,11 +306,11 @@ class BatchProcessingService:
             action_name: Override action_name for storage backend writes (uses self._workflow_name if not provided)
 
         Returns:
-            List of output file paths
+            The output file paths written, and the files left unread
 
         Raises:
             ProcessingError: If no registry found, or no files processed while none
-                was skipped as collected and no recovery is pending
+                was skipped as collected or left unread and no recovery is pending
         """
         effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
@@ -307,6 +321,7 @@ class BatchProcessingService:
             )
 
         processed_files = []
+        unread: list[str] = []
         # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
         # one: that restarts recovery at attempt 1, or finalizes on stale results
         # and deletes the live attempt. Stores written before this can hold them.
@@ -347,6 +362,14 @@ class BatchProcessingService:
             if not _is_dead_retry(entry) and not self._is_batch_ready_for_processing(
                 batch_id, output_directory, agent_config, action_name=effective_action_name
             ):
+                # Its last poll said finished, so its results are owed all the same.
+                if entry.status == BatchStatus.COMPLETED:
+                    logger.warning(
+                        "Could not read %s (batch %s) in this pass; the action waits for it",
+                        file_name,
+                        batch_id,
+                    )
+                    unread.append(file_name)
                 continue
 
             try:
@@ -400,17 +423,17 @@ class BatchProcessingService:
                 continue
 
         # A file already collected counts as one this pass did not fail, as a replay of
-        # it that succeeded did. An entry still owed beside it is left for a later pass.
-        if not processed_files and not collected_before:
+        # it that succeeded did. One left unread is waited for, not failed.
+        if not processed_files and not collected_before and not unread:
             # Check if recovery batches are pending — not an error
             stats = manager.get_registry_stats()
             if stats.in_progress > 0:
-                return processed_files
+                return CollectPass()
             raise ProcessingError(
                 "No batch results were successfully processed",
                 context={"output_directory": output_directory},
             )
-        return processed_files
+        return CollectPass(written=processed_files, unread=unread)
 
     def _is_batch_ready_for_processing(
         self,
