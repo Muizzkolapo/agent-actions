@@ -962,7 +962,13 @@ class ActionExecutor:
         self, params: ActionRunParams, nothing: NoInputFilesError
     ) -> ActionExecutionResult:
         """Skip an action whose walk found no input file, so its readers skip under it."""
-        logger.info("%s found no input file in %s", params.action_name, nothing.upstream_data_dirs)
+        logger.warning(
+            "'%s' found no input file in %s, so it is skipped and any output it stored "
+            "before is deleted, with its readers'. Restore the input and run again to "
+            "rebuild them.",
+            params.action_name,
+            nothing.upstream_data_dirs,
+        )
         return self._skip_holding_nothing(
             params, NO_INPUT_FILES, because="its input holds no file", detail=str(nothing)
         )

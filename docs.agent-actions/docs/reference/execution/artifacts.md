@@ -117,6 +117,11 @@ coarse throughout: any change to it re-runs the action, including a change to a
 value larger than the number of files. If anything else in the stamp differs on a
 later run, the action is reset to `pending` and re-executed rather than skipped.
 
+Staged input is the source of truth for what an action holds. An action reset after
+its input was removed — by an edit, or by a limit or model given on the command
+line — finds no input file, is skipped, and its stored output is deleted along with
+its readers'. Restore the input and run again to rebuild them.
+
 | Status | Description |
 |--------|-------------|
 | `pending` | Not yet executed |
