@@ -280,10 +280,10 @@ snapshot puts failures back on the actions that retry completed, and leaves them
 when it then stops before running (`--dry-run`, a `--from` with nothing failed).
 
 A store that cannot be read while a completed action is verified leaves it completed, with
-a warning. One failed read is no evidence its output changed. Run again, the action
-answered the records it had failed, which no plain run of a completed action does, and a
-record that now succeeded reached nothing reading it: each reader held it as one its
-upstream never answered, which `agac retry` does not look for.
+a warning. One failed read is no evidence its output changed. Run again, the action would
+answer the records it had failed, which no plain run of a completed action does, and a
+record that then succeeded would reach nothing reading it: each reader would hold it as
+one its upstream never answered, which `agac retry` does not look for.
 
 A run that is repairing records (`agac retry` with records to re-run) acts on no
 comparison and resets no reader. It answers only the records it named, so a reset under it clears

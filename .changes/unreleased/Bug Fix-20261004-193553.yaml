@@ -6,7 +6,7 @@ body: >-
   answered the records it had failed, which a plain run of a completed action never does,
   and a record that now succeeded gained a row nothing reading the action ever saw: each
   reader stayed completed, holding the record as one its upstream never answered, and
-  neither `agac run` nor `agac retry` reached it again, so only `--fresh` brought it back.
+  neither `agac run` nor `agac retry` reached it again.
   A store that cannot be read at that check now leaves the action completed, with a warning
   naming it, and its failed records are left for `agac retry`.
-time: 2026-10-04T18:00:00Z
+time: 2026-10-04T19:35:53Z

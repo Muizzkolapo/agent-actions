@@ -718,7 +718,7 @@ class ActionExecutor:
             should_skip, result = self._check_prior_output(storage_backend, action_name)
         except Exception as e:
             logger.warning(
-                "Failed to clear the node-level failure of %s, resetting to pending: %s",
+                "Could not put %s back to pending over its node-level failure: %s",
                 action_name,
                 e,
                 exc_info=True,
