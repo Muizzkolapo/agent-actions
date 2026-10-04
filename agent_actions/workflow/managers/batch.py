@@ -151,7 +151,8 @@ class BatchLifecycleManager:
             )
             if not processed_files:
                 logger.info(
-                    "No files processed for %s — recovery batches may be pending",
+                    "Nothing collected for %s in this pass — recovery batches may be "
+                    "pending, or every file was collected before",
                     agent_name,
                 )
 

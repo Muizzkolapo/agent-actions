@@ -307,11 +307,12 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
     ) -> list[str]:
-        """Process all completed batch jobs in the registry.
+        """Process the completed batch jobs whose results are still owed.
 
         Recovery entries are processed in their own right; the parent they
-        superseded is skipped instead. Tolerates empty processed_files when
-        recovery batches are pending (in_progress).
+        superseded is skipped instead, and so is an entry already collected.
+        Tolerates empty processed_files when recovery batches are pending
+        (in_progress) or a collected entry was skipped.
 
         Args:
             output_directory: Output directory path
@@ -322,7 +323,8 @@ class BatchProcessingService:
             List of output file paths
 
         Raises:
-            ProcessingError: If no registry found or no files processed (and no recovery pending)
+            ProcessingError: If no registry found, or no files processed while none
+                was skipped as collected and no recovery is pending
         """
         effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
@@ -365,7 +367,7 @@ class BatchProcessingService:
             # the pass. An entry from before the stamp existed reads as uncollected.
             if entry.collected_at is not None:
                 collected_before = True
-                logger.debug("Skipping %s: collected at %s", file_name, entry.collected_at)
+                logger.info("Skipping %s: collected at %s", file_name, entry.collected_at)
                 continue
 
             # A dead retry recovery is processed without a readiness poll: its
@@ -420,8 +422,8 @@ class BatchProcessingService:
                 )
                 continue
 
-        # A file already collected counts as one this pass did not fail, as it did when
-        # the pass wrote it again.
+        # A file already collected counts as one this pass did not fail, as a replay of
+        # it that succeeded did. An entry still owed beside it is left for a later pass.
         if not processed_files and not collected_before:
             # Check if recovery batches are pending — not an error
             stats = manager.get_registry_stats()

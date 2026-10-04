@@ -95,3 +95,13 @@ def test_an_entry_from_before_the_stamp_is_still_collected():
     service.process_all_batch_results("/out", action_name=ACTION)
 
     assert _finalized(service) == ["page1.json"]
+
+
+def test_a_skipped_collected_entry_keeps_a_pass_that_wrote_nothing_from_failing():
+    """As a replay of the collected file that succeeded did: the entry still owed beside
+    it is left for a later pass rather than failing this one."""
+    service = _service({"page1.json": "2026-10-04T09:05:00+00:00", "page2.json": None})
+    service._is_batch_ready_for_processing.return_value = False
+
+    assert service.process_all_batch_results("/out", action_name=ACTION) == []
+    assert _finalized(service) == []
