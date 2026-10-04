@@ -8,7 +8,8 @@ body: >-
   old answer. This is met on resuming a run that died, and on running again after an edit
   that resets the action. The run now drops the rows of records that are no longer inputs,
   writes an emptied input's file empty, and keeps the rows of records a record limit holds
-  back, since they are still inputs. A file nothing left is not written again, and
-  `agac retry` writes nothing over a file it names no record of. A record that leaves a
-  file while that file's batch is out still keeps its row.
+  back, since they are still inputs. A file nothing left is not written again, unless it
+  holds two rows under one `source_guid`: it is then written with one of them, as online
+  writes it. `agac retry` writes nothing over a file it names no record of. A record that
+  leaves a file while that file's batch is out still keeps its row.
 time: 2026-10-04T16:15:47Z

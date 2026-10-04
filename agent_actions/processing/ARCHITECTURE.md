@@ -518,8 +518,9 @@ none recorded and keep every row. Nothing is collected, since no batch or contex
 exists for the run, and no node-level `passthrough` is recorded, so the action completes
 as it did. A repair, or a run that recorded no inputs, writes nothing, so every row it did
 not answer stands; and a file the merge would leave as it stands is not written again, as
-on a resume where nothing left. Where nothing is stored, none is made: online writes an
-empty input's file empty.
+on a resume where nothing left. The merge keeps one row per identity, so a file holding two
+rows under one is written even then, with one of them, as online and finalize write it.
+Where nothing is stored, none is made: online writes an empty input's file empty.
 
 A batch input file has one name, its identity: its path under the action's input root
 (`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
@@ -552,9 +553,10 @@ What this leaves:
   file's records twice, and a record limit counts them twice, until `--fresh`.
 - Two files of one basename that collided in such a store: the first walked keeps the flat
   name, and the other is sent again under its own. Where the flat file held only the
-  other's rows, the first is sent again too. Where it held both files' rows, the other's
-  stay in it, read twice below, until a batch for the first file writes it again; a run in
-  which every record of the first file is already answered writes nothing.
+  other's rows, the first is sent again too. Where it held both files' rows, the flat file
+  is written for the first file's inputs alone, which leaves the other's out: in that same
+  run when every record of the first file is already answered, otherwise once its batch is
+  collected, and until then the other's rows are read twice below.
 - A nested file from the older version whose batch is still out when a top-level file of
   its basename appears moves to its own name in that run. Its records are sent a second
   time, and held under both names until the top-level file, which finds that batch under
