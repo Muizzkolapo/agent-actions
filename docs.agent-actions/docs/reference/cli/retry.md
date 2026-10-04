@@ -112,6 +112,12 @@ Dispositions are cleared by the ids the retry was given, so an id that names no
 input of an action is simply not found there — nothing at that action is
 re-run, and nothing it holds is removed.
 
+A record that reaches an action without a `source_guid` — from an upstream file
+edited by hand, say — has no id to name. In either run mode it gets no
+disposition, and is stored as a failed row, so `retry` neither lists nor repairs
+it. The remedy is upstream: give the record its `source_guid` back where it is
+produced.
+
 ## Retrying an action that runs in batch mode
 
 An action configured [`run_mode: batch`](../execution/run-modes.md) is repaired

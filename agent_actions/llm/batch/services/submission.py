@@ -399,13 +399,19 @@ class BatchSubmissionService:
         action_name: str,
         batch_id: str | None,
     ) -> None:
-        """Stamp DISPOSITION_DEFERRED for all INCLUDED records after submission."""
+        """Stamp DISPOSITION_DEFERRED for every INCLUDED record that has a source_guid.
+
+        One without has no identity to mark. Under its custom_id the mark would stand for
+        good: collection refuses the record at enrichment and records nothing for it.
+        """
         if not self._storage_backend:
             return
-        for custom_id, entry in context_map.items():
+        for entry in context_map.values():
             if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
                 continue
-            record_id = entry.get("source_guid") or custom_id
+            record_id = entry.get("source_guid")
+            if not record_id:
+                continue
             _safe_set_disposition(
                 self._storage_backend,
                 action_name,

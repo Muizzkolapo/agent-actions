@@ -684,6 +684,21 @@ For first-stage records: source_guid = UUID5 content hash (deterministic).
 
 For non-first-stage records: source_guid comes from upstream action output.
     Already set on the record dict when it enters the pipeline.
+
+A record that arrives without one has no identity, in either mode, and is
+    given none: no disposition is written for it under any other id.
+    RequiredFieldsEnricher refuses what it produced, so it is stored as a failed
+    row with no source_guid; the exceptions are an expansion, whose rows
+    LineageEnricher gives identities of their own, and a guard filter, which
+    leaves nothing. Batch knows a sent record by its custom_id, which is its
+    target_id, but never records it under that: a run whose input has none mints
+    a new one, and nothing that selects a record reads it, so a failure there
+    would be one `agac retry` names, clears, and cannot repair.
+    BatchResultReconciler.get_source_guid returns None for it, submission marks
+    it no `deferred`, and `--abandon-in-flight` marks it no `failed`. It is still
+    sent to the model before it is refused, in both modes. A batch run with
+    nothing to send writes such a record no disposition either, but stores its
+    row with its target_id as its source_guid.
 ```
 
 ### Disposition write ordering (checkpoint vs collection)

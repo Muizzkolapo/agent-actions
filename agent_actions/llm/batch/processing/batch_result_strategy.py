@@ -683,7 +683,7 @@ class BatchResultStrategy:
         custom_id: str,
         original_row: dict[str, Any],
         action_name: str,
-        source_guid: str,
+        source_guid: str | None,
         record_index: int,
     ) -> ProcessingResult:
         """Build an EXHAUSTED result for a retry-exhausted record."""
@@ -719,7 +719,7 @@ class BatchResultStrategy:
         ctx: BatchProcessingContext,
         original_row: dict[str, Any],
         action_name: str,
-        source_guid: str,
+        source_guid: str | None,
         record_index: int,
     ) -> ProcessingResult:
         """Build an UNPROCESSED result for a passthrough record."""
@@ -753,7 +753,7 @@ class BatchResultStrategy:
         ctx: BatchProcessingContext,
         original_row: dict[str, Any],
         action_name: str,
-        source_guid: str,
+        source_guid: str | None,
         record_index: int,
     ) -> ProcessingResult:
         """Build a FAILED result for a record that failed during batch preparation.

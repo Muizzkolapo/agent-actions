@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A batch action no longer records a record that reached it without a `source_guid`
+  under its target id. Every record is stamped where it is staged or by the action that
+  produces it, so such a record comes from data edited outside the framework. When it
+  failed, `agac retry` named the failure by that target id and cleared it, but a retry
+  selects records by `source_guid`, so it sent nothing, and the action then read complete
+  over the failed row it still held; `--abandon-in-flight` marked it failed under that id
+  too. When it was answered, its row went downstream with the target id as its identity.
+  A batch run now does what an online run does: the record is refused at enrichment and
+  stored as a failed row with no `source_guid`, and nothing is recorded under any other
+  id, so `agac retry` is never handed a failure it cannot repair. To process the record,
+  give it back its `source_guid` upstream. A failure an earlier release recorded under a
+  target id stays in the store, and `agac retry` still clears it without repairing it.
+time: 2026-10-04T19:00:00Z
