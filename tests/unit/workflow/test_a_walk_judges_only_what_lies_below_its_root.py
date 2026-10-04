@@ -22,11 +22,11 @@ from agent_actions.workflow.runner_file_processing import (
 )
 
 
-def _params(dirs) -> FileProcessParams:
+def _params(dirs, strategy=None) -> FileProcessParams:
     return FileProcessParams(
         action_config={},
         action_name="flatten",
-        strategy=MagicMock(),
+        strategy=strategy or MagicMock(),
         upstream_data_dirs=[str(d) for d in dirs],
         output_directory="out",
         idx=0,
@@ -41,11 +41,12 @@ def _staged(directory: Path) -> Path:
 
 class TestAProjectUnderADirectoryNamedBatch:
     def test_its_staged_file_is_processed(self, tmp_path):
-        params = _params([_staged(tmp_path / "batch" / "project" / "agent_io" / "staging")])
+        staging = _staged(tmp_path / "batch" / "project" / "agent_io" / "staging")
+        strategy = MagicMock()
 
-        process_files(ActionRunner(use_tools=True), params)
+        process_files(ActionRunner(use_tools=True), _params([staging], strategy))
 
-        params.strategy.execute.assert_called_once()
+        strategy.execute.assert_called_once()
 
     def test_a_merged_walk_groups_its_files(self, tmp_path):
         upstreams = [_staged(tmp_path / "batch" / "target" / name) for name in ("a", "b")]
@@ -75,12 +76,12 @@ class TestABatchDirectoryInsideTheWalk:
     def test_is_still_left_out(self, tmp_path):
         staging = _staged(tmp_path / "staging")
         _staged(staging / "batch")
-        params = _params([staging])
+        strategy = MagicMock()
 
-        process_files(ActionRunner(use_tools=True), params)
+        process_files(ActionRunner(use_tools=True), _params([staging], strategy))
 
-        assert params.strategy.execute.call_count == 1
-        assert params.strategy.execute.call_args.args[0].file_path == str(staging / "pages.json")
+        assert strategy.execute.call_count == 1
+        assert strategy.execute.call_args.args[0].file_path == str(staging / "pages.json")
 
     def test_an_unopened_one_is_not_reported(self, tmp_path, monkeypatch):
         root = tmp_path / "staging"
