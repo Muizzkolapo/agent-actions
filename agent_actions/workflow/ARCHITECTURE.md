@@ -236,6 +236,11 @@ WHERE clause says skip?
 _execute_action_run()
     → set RUNNING
     → ActionRunner.run_action()
+        walk found no input file (not under a repair)?
+        YES → NoInputFilesError → _handle_no_input()
+              set SKIPPED, forget and delete its stored rows,
+              write node-level DISPOSITION_SKIPPED
+              (its readers skip under it, holding nothing)
     → _resolve_completion_status()
 ```
 
@@ -278,7 +283,9 @@ Costs and limits:
   it can reach and their readers, giving up a batch still out below and clearing a halt.
 - Stored rows are not deleted, only replaced as the re-run writes each file. A re-run that
   is interrupted and resumed can serve the old row for a record it had already answered
-  again (#1226).
+  again (#1226). A re-run that finds no input file at all is skipped and its rows are
+  deleted; one whose input lost some files but not all keeps the rows of the files that
+  are gone, and its readers run on them.
 - A retry over an action that a reset left unfinished completes it on the records it
   named and keeps old rows for the rest (#1227). Run the workflow before retrying.
 - The level loop orders by `dependencies` alone. A reader that names an action only in

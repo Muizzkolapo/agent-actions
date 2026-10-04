@@ -6,13 +6,18 @@ it stored before stood, made from input that is gone, and its readers ran again
 on them. Editing the action is what resets it; its readers are reset by that.
 """
 
+import json
+
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
+    RECORDS,
     SECOND,
     WORKFLOW,
+    _fail,
+    _record_ids,
     chained,  # noqa: F401
     project,  # noqa: F401
 )
@@ -27,8 +32,12 @@ from tests.integration.test_skipped_reader_drops_stale_rows import (
 )
 
 
+def _input(root):
+    return root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json"
+
+
 def _remove_the_input(root):
-    (root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json").unlink()
+    _input(root).unlink()
 
 
 @MODES
@@ -83,3 +92,31 @@ def test_a_file_limit_does_not_keep_rows_of_input_that_is_gone(chained):  # noqa
 
     assert _rows(chained, ACTION) == 0
     assert _rows(chained, SECOND) == 0
+
+
+def test_the_input_coming_back_brings_the_rows_back(chained):  # noqa: F811
+    _remove_the_input(chained)
+    _add_guard_to(chained, ACTION, RESET_ONLY)
+    _run()
+
+    _input(chained).write_text(json.dumps([{"page_content": f"page {i}"} for i in range(RECORDS)]))
+    _run()
+
+    assert _rows(chained, ACTION) == RECORDS
+    assert _rows(chained, SECOND) == RECORDS
+    assert _status(chained, SECOND) == "completed"
+
+
+def test_a_retry_of_a_record_whose_input_is_gone_keeps_the_rows(chained):  # noqa: F811
+    """A repair walks only the files holding the records it names. Finding none of
+    them says nothing about the rest of the action's input."""
+    named = _record_ids(chained)[-1]
+    _fail(chained, named)
+    _remove_the_input(chained)
+
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named])
+
+    assert result.exit_code == 0, result.output
+    assert _status(chained, ACTION) == "completed"
+    assert _rows(chained, ACTION) == RECORDS
+    assert _rows(chained, SECOND) == RECORDS

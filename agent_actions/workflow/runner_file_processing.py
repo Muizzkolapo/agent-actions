@@ -36,6 +36,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class NoInputFilesError(RuntimeError):
+    """A full walk found no input file, so the action has nothing to answer from.
+
+    Raised rather than returned so the executor skips the action and deletes what
+    it stored before: a run that walks no file rewrites none of it.
+    """
+
+    def __init__(self, action_name: str, upstream_data_dirs: list[str]) -> None:
+        self.action_name = action_name
+        self.upstream_data_dirs = upstream_data_dirs
+        super().__init__(f"'{action_name}' found no input file in {upstream_data_dirs}")
+
+
 @dataclass
 class CollectedErrors:
     """Per-file failures for one collector pass."""
@@ -407,6 +420,19 @@ def collect_files_from_upstream(
 
     grouped = {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
     return grouped, sorted(lost, key=lambda pair: pair[0])
+
+
+def _found_no_input(runner: ActionRunner, params: FileProcessParams) -> None:
+    """End a walk that found no file: a repair carries on, anything else raises.
+
+    A repair walks only the files holding the records it named, so finding none
+    says nothing about the rest. A file limit needs no exemption: it stops a walk
+    only after it has taken a file.
+    """
+    if runner.retried_records:
+        warn_no_files_found(params)
+        return
+    raise NoInputFilesError(params.action_name, params.upstream_data_dirs)
 
 
 def warn_no_files_found(params: FileProcessParams) -> None:
@@ -938,7 +964,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                 _raise_all_files_failed(
                     params.action_name, files_found, params.upstream_data_dirs, errors
                 )
-            warn_no_files_found(params)
+            _found_no_input(runner, params)
         elif errors.action_fatal is not None:
             _raise_action_fatal(
                 params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
@@ -969,7 +995,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             _raise_all_files_failed(
                 params.action_name, total_found, params.upstream_data_dirs, all_errors
             )
-        warn_no_files_found(params)
+        _found_no_input(runner, params)
     elif all_errors.action_fatal is not None:
         _raise_action_fatal(
             params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors

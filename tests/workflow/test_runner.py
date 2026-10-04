@@ -915,8 +915,9 @@ class TestProcessFiles:
         assert strategy.execute.call_count == 2
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
-    def test_no_files_warns(self, mock_logger, runner, tmp_path):
-        """No files found → calls _warn_no_files_found."""
+    def test_no_files_under_a_repair_warns(self, mock_logger, runner, tmp_path):
+        """A repair walks only the files holding its records; finding none is not an empty input."""
+        runner.retried_records = frozenset({"r1"})
         strategy = _make_strategy()
         empty = tmp_path / "empty"
         empty.mkdir()

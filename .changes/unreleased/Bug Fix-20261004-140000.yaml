@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  An action that runs and finds no input file now holds nothing. When an action was reset
+  (its config changed, or an upstream it reads ran again) after its input was removed, the
+  re-run found no file, reported `0 records` and completed without writing, so the rows it
+  stored before stood, its readers ran again on them, and `agac preview` showed them as
+  current. Such an action is now skipped with "No input file found", the rows it stored
+  before are deleted, and its readers are skipped under it and lose theirs. On a first run
+  with nothing to read, a reader used to fail looking for output its upstream never wrote;
+  it is now skipped too, and the run succeeds. A retry of named records whose files are gone
+  still keeps every row. An input that lost only some of its files still keeps the rows of
+  the files that are gone.
+time: 2026-10-04T14:00:00Z

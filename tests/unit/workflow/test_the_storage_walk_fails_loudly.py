@@ -152,8 +152,17 @@ class TestTheActionActuallyFails:
         message = str(excinfo.value)
         assert "r1.json" in message and "r2.json" in message, message
 
-    def test_a_genuinely_empty_backend_does_not_raise(self, tmp_path):
+    def test_a_genuinely_empty_backend_is_not_reported_as_unreadable(self, tmp_path):
         """'there was no input' must stay distinguishable from 'none of it could be read'."""
-        from agent_actions.workflow.runner_file_processing import process_files
+        import pytest
 
-        process_files(_runner(files=()), self._target_params(tmp_path))
+        from agent_actions.errors import DependencyError
+        from agent_actions.workflow.runner_file_processing import NoInputFilesError, process_files
+
+        runner = _runner(files=())
+        runner.retried_records = frozenset()
+
+        with pytest.raises(NoInputFilesError) as excinfo:
+            process_files(runner, self._target_params(tmp_path))
+
+        assert not isinstance(excinfo.value, DependencyError)

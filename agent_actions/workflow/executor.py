@@ -31,6 +31,7 @@ from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
     GUARD_FILTERED_ALL,
     HALTED_ON_EXHAUSTED,
+    NO_INPUT_FILES,
 )
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
@@ -50,6 +51,7 @@ from agent_actions.utils.limits import (
 )
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+from agent_actions.workflow.runner_file_processing import NoInputFilesError
 
 logger = logging.getLogger(__name__)
 
@@ -942,22 +944,42 @@ class ActionExecutor:
         Resolve the action as SKIPPED with reason=all_versions_filtered and let
         the pipeline continue instead of crashing.
         """
+        # The raise is the proof: no version source holds a row.
+        result = self._skip_holding_nothing(
+            params,
+            ALL_VERSIONS_FILTERED,
+            because=f"no version source holds a row ({avf.version_sources})",
+            detail=f"All version sources filtered: {avf.version_sources}",
+        )
+        logger.warning(
+            "All version sources filtered for '%s' (%s) — cascade-skipping; no output produced.",
+            params.action_name,
+            avf.version_sources,
+        )
+        return result
+
+    def _handle_no_input(
+        self, params: ActionRunParams, nothing: NoInputFilesError
+    ) -> ActionExecutionResult:
+        """Skip an action whose walk found no input file, so its readers skip under it."""
+        logger.info("%s found no input file in %s", params.action_name, nothing.upstream_data_dirs)
+        return self._skip_holding_nothing(
+            params, NO_INPUT_FILES, because="its input holds no file", detail=str(nothing)
+        )
+
+    def _skip_holding_nothing(
+        self, params: ActionRunParams, skip_reason: str, *, because: str, detail: str
+    ) -> ActionExecutionResult:
+        """Skip an action that had nothing to read, deleting the rows it stored before."""
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.SKIPPED,
             execution_time=duration,
-            skip_reason=ALL_VERSIONS_FILTERED,
+            skip_reason=skip_reason,
         )
-        # The raise is the proof: no version source holds a row.
-        self._forget_stored_rows(
-            params.action_name, f"no version source holds a row ({avf.version_sources})"
-        )
-        self._write_skipped_disposition(
-            params.action_name,
-            ALL_VERSIONS_FILTERED,
-            detail=f"All version sources filtered: {avf.version_sources}",
-        )
+        self._forget_stored_rows(params.action_name, because)
+        self._write_skipped_disposition(params.action_name, skip_reason, detail=detail)
         total_actions = (
             len(self.deps.action_runner.execution_order)
             if hasattr(self.deps.action_runner, "execution_order")
@@ -968,17 +990,12 @@ class ActionExecutor:
                 action_name=params.action_name,
                 action_index=params.action_idx,
                 total_actions=total_actions,
-                skip_reason=ALL_VERSIONS_FILTERED,
+                skip_reason=skip_reason,
                 mode=params.action_config.get("run_mode", ""),
             )
         )
         self._track_action_complete(
-            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=ALL_VERSIONS_FILTERED
-        )
-        logger.warning(
-            "All version sources filtered for '%s' (%s) — cascade-skipping; no output produced.",
-            params.action_name,
-            avf.version_sources,
+            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=skip_reason
         )
         return ActionExecutionResult(
             success=True,
@@ -1327,7 +1344,7 @@ class ActionExecutor:
         if deleted:
             logger.info(
                 "Deleted %d stored file(s) of skipped '%s': %s, so they were made from "
-                "output that no longer exists",
+                "input that no longer exists",
                 deleted,
                 action_name,
                 because,
@@ -1837,6 +1854,8 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
+        except NoInputFilesError as nothing:
+            return self._handle_no_input(params, nothing)
         except Exception as e:
             return self._handle_run_failure(params, e)
 
@@ -1873,6 +1892,8 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
+        except NoInputFilesError as nothing:
+            return self._handle_no_input(params, nothing)
         except Exception as e:
             return self._handle_run_failure(params, e)
 
