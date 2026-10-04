@@ -101,6 +101,24 @@ def _halt_for(results: list[ProcessingResult], ctx: ProcessingContext) -> Except
     return ctx.pending_exhaustion or empty
 
 
+def _nothing_succeeded_halt(
+    results: list[ProcessingResult], stats: CollectionStats, ctx: ProcessingContext
+) -> RuntimeError | None:
+    """Online's breaker, for a file holding a record with no source_guid.
+
+    Such a record is refused at enrichment and recorded nowhere, so the dispositions
+    batch reads an action's outcome from cannot say it failed. Any other file is left
+    to them.
+    """
+    if all(result.source_guid for result in results):
+        return None
+    try:
+        stats.raise_if_terminal_failure(ctx.agent_name, results, [])
+    except RuntimeError as halt:
+        return halt
+    return None
+
+
 def collect_batch_rows(
     storage_backend: StorageBackend | None,
     action_name: str,
@@ -117,8 +135,8 @@ def collect_batch_rows(
 
     Every entry no result answers is collected as what preparation found it to be,
     so no results at all collects a run that sent nothing. The halt
-    `on_exhausted: raise` or `on_empty: error` decided is returned, not raised: the
-    caller raises it once the file is written.
+    `on_exhausted: raise` or `on_empty: error` decided, or online's breaker, is
+    returned, not raised: the caller raises it once the file is written.
     """
     config = {**(agent_config or {}), "action_name": action_name}
     results = (result_processor or BatchResultStrategy()).process(
@@ -145,7 +163,7 @@ def collect_batch_rows(
             # The reconciler hands the collector no filtered entry.
             write_filtered_dispositions(storage_backend, action_name, context_map or {})
             update_prompt_trace_responses(storage_backend, action_name, rows)
-    return rows, stats, _halt_for(results, ctx)
+    return rows, stats, _halt_for(results, ctx) or _nothing_succeeded_halt(results, stats, ctx)
 
 
 def write_batch_file(

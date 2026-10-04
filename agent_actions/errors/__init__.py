@@ -7,6 +7,8 @@ from agent_actions.errors.base import (
     exhaustion_halt,
     get_error_detail,
     raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
+    terminal_failure,
 )
 
 # Classification
@@ -93,6 +95,8 @@ __all__ = [
     "exhaustion_halt",
     "get_error_detail",
     "raised_by_exhaustion_policy",
+    "raised_by_terminal_failure",
+    "terminal_failure",
     # Classification
     "is_action_fatal",
     "mark_action_fatal",
