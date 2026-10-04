@@ -290,7 +290,9 @@ class ProcessingPipeline:
             params.pipeline_action_name,
             params.storage_backend,
             base_owner=held_by_a_dependency(
-                params.storage_backend, params.pipeline_action_config.get("dependencies") or []
+                params.storage_backend,
+                params.pipeline_action_config.get("dependencies") or [],
+                params.dependency_configs,
             ),
             remember=not (disposition_gate is not None and disposition_gate.repairing),
         )

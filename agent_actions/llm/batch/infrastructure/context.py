@@ -2,7 +2,7 @@
 
 import json
 import logging
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -142,10 +142,27 @@ def staged_at_the_top(base_directory: str) -> Callable[[str], bool]:
 
 
 def held_by_a_dependency(
-    storage_backend: "StorageBackend | None", dependencies: Iterable[Any]
+    storage_backend: "StorageBackend | None",
+    dependencies: Iterable[Any],
+    action_configs: Mapping[str, Any] | None,
 ) -> Callable[[str], bool]:
-    """Whether an action this one reads stores a file under *legacy*'s name."""
-    upstream = [name for name in dependencies if isinstance(name, str)]
+    """Whether an action this one reads stores a file under *legacy*'s name.
+
+    A dependency naming a version base reads each of its versions, as the executor
+    expands it; the base itself stores nothing.
+    """
+    versions: dict[str, list[str]] = {}
+    for name, config in (action_configs or {}).items():
+        if isinstance(config, Mapping) and config.get("is_versioned_agent"):
+            base = config.get("version_base_name")
+            if base:
+                versions.setdefault(base, []).append(name)
+    upstream = [
+        name
+        for dependency in dependencies
+        if isinstance(dependency, str)
+        for name in versions.get(dependency, [dependency])
+    ]
 
     def owns(legacy: str) -> bool:
         if storage_backend is None:
