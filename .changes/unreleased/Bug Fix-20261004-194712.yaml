@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  A run in which the store fails to write one of an action's files, on a full disk or a
+  database error, now fails the action instead of recording it complete. The failure was
+  taken as that file's own, like an unreadable input: the run logged it, wrote the other
+  files, recorded the action complete and exited 0. After an edit, that file still held the
+  rows answered before it, so the action's readers ran on them and no later run asked for
+  them again; on a first run the file was never stored, and never asked for again either.
+  The run now writes the other files, then fails the action with the store's error and
+  exits 1, and the next run answers that file without asking again for the files it
+  stored. Anything else that keeps one file from being stored, such as a file name the
+  store rejects, still costs only that file. A batch collect pass that fails to store a
+  file still records the action partly complete over that file's earlier rows.
+time: 2026-10-04T19:47:12Z

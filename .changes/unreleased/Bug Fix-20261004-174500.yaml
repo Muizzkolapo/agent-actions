@@ -11,8 +11,6 @@ body: >-
   through only once its file is stored, while a failure or a guard's filter is still
   recorded as it is collected; at record granularity an answer is also marked as its
   checkpoint row is stored. A file stored before the run stopped keeps its records, and
-  the next run does not ask for them again. A write that fails for one file of several
-  does not stop the run, and still leaves that file's earlier rows (#1265). A reader left
-  this way by an earlier version keeps those rows until the workflow is run with
-  `--fresh`.
+  the next run does not ask for them again. A reader left this way by an earlier version
+  keeps those rows until the workflow is run with `--fresh`.
 time: 2026-10-04T17:45:00Z

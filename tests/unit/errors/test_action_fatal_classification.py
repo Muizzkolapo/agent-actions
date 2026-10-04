@@ -262,3 +262,9 @@ class TestTheTargetWriterDeclaresWhatTheStoreFails:
     )
     def test_a_write_the_store_fails_is_fatal(self, tmp_path, error):
         assert is_action_fatal(self._write(tmp_path, error)) is True
+
+    def test_a_file_name_the_store_rejects_is_not(self, tmp_path):
+        """The name is that file's own; the store keeps every other file."""
+        rejected = ValueError("Invalid characters in relative_path: {'('}")
+
+        assert is_action_fatal(self._write(tmp_path, rejected)) is False

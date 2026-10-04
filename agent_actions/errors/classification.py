@@ -8,7 +8,7 @@ _EVERY_RECORD_FAILED_KEY = "every_record_failed"
 
 
 def mark_action_fatal(error: Exception) -> Exception:
-    """Declare *error* an indictment of the action's contract, not of one input.
+    """Declare *error* fatal to the whole action, not to the one input it was raised for.
 
     Tags in place and returns the same error, so a re-raise can mark and then
     ``raise`` bare, keeping the original traceback.
