@@ -323,12 +323,18 @@ class RetryCommand:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
 
     def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
-        """Decide what a batch still out at the provider means for this repair.
+        """Decide what a batch nobody has collected means for this repair.
 
         It owns the records it was submitted for. A repair starting on top of one
         submits a second batch over the same file, and whichever is collected last
         wins while the other is paid for and discarded — so by default this
         refuses, before anything is cleared.
+
+        That holds for a batch that has finished and not been collected as much as
+        for one still out: the repair clears the registry entry, which is all that
+        names it. Whether such a batch is still owed is asked of its records, not
+        of the entry or the action: an entry written before ``collected_at`` existed
+        has no stamp either, and an action can complete past a file it skipped.
 
         Two exceptions. A dry run reports the refusal instead of raising: it is
         the documented way to see what a retry would do, and it changes nothing
@@ -338,17 +344,21 @@ class RetryCommand:
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
-        in_flight = [
-            (action, entry.batch_id)
-            for action in actions
-            for entry in BatchRegistryManager(backend, action).get_all_jobs().values()
-            if entry.is_in_flight
-        ]
-        if not in_flight:
+        owed: list[tuple[str, str, str, str]] = []
+        for action in actions:
+            for file_name, entry in BatchRegistryManager(backend, action).get_all_jobs().items():
+                if entry.is_in_flight:
+                    owed.append((action, entry.batch_id, file_name, "in flight"))
+                elif entry.awaits_collection and self._records_waiting_on(
+                    backend, [(action, entry.batch_id, file_name, "")]
+                ):
+                    owed.append((action, entry.batch_id, file_name, "finished, not collected"))
+        if not owed:
             return
 
-        listing = ", ".join(f"{batch_id} ({action})" for action, batch_id in sorted(in_flight))
-        actions_in_flight = {action for action, _ in in_flight}
+        listing = ", ".join(
+            f"{batch_id} ({action}, {state})" for action, batch_id, _, state in sorted(owed)
+        )
         remedy = (
             "Collect them first — run the workflow again — then retry. "
             "If the provider no longer has them, pass --abandon-in-flight."
@@ -359,25 +369,25 @@ class RetryCommand:
         # flag documented to change nothing.
         if self.args.dry_run:
             if self.args.abandon_in_flight:
-                waiting = self._deferred_record_ids(backend, actions_in_flight)
+                waiting = self._records_waiting_on(backend, owed)
                 self.console.print(
-                    f"\n[yellow]This retry would abandon {len(in_flight)} batch job(s) "
-                    f"still in flight ({listing}), giving up whatever they return, and "
+                    f"\n[yellow]This retry would abandon {len(owed)} batch job(s) "
+                    f"not collected yet ({listing}), giving up whatever they return, and "
                     f"would mark {len(waiting)} record(s) waiting on them failed so a "
                     f"later retry can still reach them.[/yellow]"
                 )
             else:
                 self.console.print(
-                    f"\n[yellow]This retry would be refused: {len(in_flight)} batch job(s) "
-                    f"in flight ({listing}). {remedy}[/yellow]"
+                    f"\n[yellow]This retry would be refused: {len(owed)} batch job(s) "
+                    f"not collected yet ({listing}). {remedy}[/yellow]"
                 )
             return
 
         if self.args.abandon_in_flight:
-            waiting = self._deferred_record_ids(backend, actions_in_flight)
+            waiting = self._records_waiting_on(backend, owed)
             stranded = self._strand_deferred_records(backend, waiting)
             self.console.print(
-                f"\n[yellow]Abandoning {len(in_flight)} batch job(s) still in flight: "
+                f"\n[yellow]Abandoning {len(owed)} batch job(s) not collected yet: "
                 f"{listing}. Whatever they return will not be collected. "
                 f"{stranded} record(s) waiting on them are marked failed so a later "
                 f"retry can still reach them.[/yellow]"
@@ -385,17 +395,70 @@ class RetryCommand:
             return
 
         raise click.ClickException(
-            f"{len(in_flight)} batch job(s) in flight ({listing}). Their results would "
+            f"{len(owed)} batch job(s) not collected yet ({listing}). Their results would "
             f"be lost to this repair's own submission. {remedy}"
         )
 
-    @staticmethod
-    def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:
-        """Every record still waiting on a batch at *actions*, as (action, record_id).
+    @classmethod
+    def _records_waiting_on(
+        cls, backend, owed: list[tuple[str, str, str, str]]
+    ) -> list[tuple[str, str]]:
+        """Every record these batches hold that nothing has answered, as (action, record_id).
+
+        Read from each batch's own context map, which lists what it was sent. A record
+        is waiting while its disposition says ``deferred``, and also when it has none:
+        a run's reset clears ``deferred``, and finding the batch again does not put it
+        back. A stored row says nothing either way, since a batch sent to repair a
+        record finds that record's old row still there.
 
         Read-only, so the dry run can report what abandoning would cost without
         paying it.
         """
+        from agent_actions.errors import ProcessingError
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        waiting: set[tuple[str, str]] = set()
+        for action in sorted({action for action, *_ in owed}):
+            dispositions = {
+                row["record_id"]: row["disposition"] for row in backend.get_disposition(action)
+            }
+            jobs = BatchRegistryManager(backend, action).get_all_jobs()
+            for owed_action, batch_id, file_name, _state in owed:
+                if owed_action != action:
+                    continue
+                # A recovery round is registered under its own name and sent from the
+                # map of the file it recovers.
+                entry = jobs.get(file_name)
+                sent_as = (entry.parent_file_name if entry else None) or file_name
+                try:
+                    context_map = BatchContextManager.load_batch_context_map(
+                        backend, action, sent_as
+                    )
+                except ProcessingError as e:
+                    logger.warning(
+                        "Batch %s (%s) has no readable record of what it was sent, so every "
+                        "deferred record of the action is taken as waiting on it: %s",
+                        batch_id,
+                        action,
+                        e,
+                    )
+                    waiting.update(cls._deferred_record_ids(backend, {action}))
+                    continue
+                for custom_id, sent in context_map.items():
+                    if BatchContextMetadata.get_filter_status(sent) != FilterStatus.INCLUDED:
+                        continue
+                    record_id = sent.get("source_guid") or custom_id
+                    held = dispositions.get(record_id)
+                    if held is None or held == DISPOSITION_DEFERRED:
+                        waiting.add((action, record_id))
+        return sorted(waiting)
+
+    @staticmethod
+    def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:
+        """Every record with a ``deferred`` disposition at *actions*, as (action, record_id)."""
         return [
             (action, row["record_id"])
             for action in sorted(actions)
@@ -533,7 +596,7 @@ class RetryCommand:
     "--abandon-in-flight",
     is_flag=True,
     default=False,
-    help="Retry even though a batch is still in flight, giving up its results.",
+    help="Retry even though a batch has not been collected, giving up its results.",
 )
 @handles_user_errors("retry")
 @requires_project

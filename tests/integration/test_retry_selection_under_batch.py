@@ -64,6 +64,11 @@ def _agac(project, *args):
     return result.returncode, result.stdout + result.stderr
 
 
+def _unwrapped(output):
+    """The console wraps a message wherever the line fills, so a phrase can straddle two."""
+    return " ".join(output.split())
+
+
 def _cycle(project, *args):
     """Drive one command to completion: it submits and pauses, the next run collects."""
     transcript = []
@@ -528,7 +533,7 @@ class TestARepairArrivingWhileABatchIsInFlight:
         # The number, not the word: `_display_retry_plan` already prints
         # "Records to retry: 1" above this, so a substring check for "record"
         # passes whether or not the strand is reported at all.
-        assert f"{stranded} record(s) waiting on them" in output, (
+        assert f"{stranded} record(s) waiting on them" in _unwrapped(output), (
             f"the count of records stranded by abandoning is not reported: {output}"
         )
 
@@ -536,6 +541,118 @@ class TestARepairArrivingWhileABatchIsInFlight:
         """The refusal names a way forward, so the way forward has to work."""
         project = submitted_not_collected
         _cycle(project, "run", "-a", WORKFLOW)
+        selected = _guids(project)[0]
+        _set_disposition(project, selected, "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
+
+        assert code == 0, output
+
+
+class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
+    """A batch that finished at the provider and was not collected owns its records too.
+
+    The registry entry is all that names it. A repair that clears the entry leaves
+    nothing able to collect the batch, its records are not sent again, and the action
+    then reads complete without them.
+    """
+
+    @pytest.fixture
+    def finished_not_collected(self, tmp_path):
+        """Submitted, then found finished by a poll, in a run stopped before collecting."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        root = _project(tmp_path)
+        staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json"
+        staging.write_text(
+            json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
+        )
+        code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
+        assert code == 0, output
+        assert "run again" in output, "the fixture collected the batch instead of pausing on it"
+        backend = _backend(root)
+        try:
+            registry = BatchRegistryManager(backend, ACTION)
+            for entry in registry.get_all_jobs().values():
+                registry.update_status(entry.batch_id, BatchStatus.COMPLETED)
+        finally:
+            backend.close()
+        return root
+
+    def test_the_repair_is_refused(self, finished_not_collected):
+        project = finished_not_collected
+        named = _deferred_ids(project)[0]
+        _set_disposition(project, named, "failed")
+
+        code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named)
+
+        assert code != 0, output
+        assert "finished, not collected" in _unwrapped(output), output
+
+    def test_the_batch_is_still_there_for_a_run_to_collect(self, finished_not_collected):
+        project = finished_not_collected
+        named, *others = _deferred_ids(project)
+        _set_disposition(project, named, "failed")
+
+        _agac(project, "retry", "-a", WORKFLOW, "--record", named)
+        _cycle(project, "run", "-a", WORKFLOW)
+
+        after = _dispositions(project)
+        assert [after[r] for r in others] == ["success"] * len(others), after
+        assert len(_guids(project)) == RECORDS
+
+    def test_abandoning_it_leaves_its_other_records_reachable(self, finished_not_collected):
+        project = finished_not_collected
+        named, *others = _deferred_ids(project)
+        _set_disposition(project, named, "failed")
+
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        after = _dispositions(project)
+        assert after[named] == "success"
+        assert [after[r] for r in others] == ["failed"] * len(others), after
+
+    def test_abandoning_reaches_records_a_reset_left_with_no_disposition(
+        self, finished_not_collected
+    ):
+        """A run's reset clears `deferred`, and finding the batch again does not put it
+        back. The batch still holds those records; only its own context map says so."""
+        project = finished_not_collected
+        named, *others = _deferred_ids(project)
+        _set_disposition(project, named, "failed")
+        backend = _backend(project)
+        try:
+            backend.clear_disposition(ACTION, "deferred")
+        finally:
+            backend.close()
+
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+
+        after = _dispositions(project)
+        assert {r: after.get(r) for r in others} == dict.fromkeys(others, "failed")
+
+
+class TestACompletedActionWithAnEntryThatPredatesTheCollectedStamp:
+    """An entry written before `collected_at` existed reads as never collected.
+
+    The action completed, so the batch was collected. Refusing here would refuse every
+    repair of a store older than the stamp.
+    """
+
+    def test_the_repair_goes_through(self, submitted_and_collected):
+        import dataclasses
+
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        project = submitted_and_collected
+        backend = _backend(project)
+        try:
+            registry = BatchRegistryManager(backend, ACTION)
+            for file_name, entry in registry.get_all_jobs().items():
+                registry.save_batch_job(file_name, dataclasses.replace(entry, collected_at=None))
+        finally:
+            backend.close()
         selected = _guids(project)[0]
         _set_disposition(project, selected, "failed")
 

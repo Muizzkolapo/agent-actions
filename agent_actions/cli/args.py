@@ -59,7 +59,7 @@ class RetryCommandArgs(BaseModel):
     )
     abandon_in_flight: bool = Field(
         default=False,
-        description="Proceed even though a batch is still in flight, giving up its results.",
+        description="Proceed even though a batch has not been collected, giving up its results.",
     )
 
 
