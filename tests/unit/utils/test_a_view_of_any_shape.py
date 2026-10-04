@@ -5,11 +5,32 @@ and a container held in two places is walked once. These pin that, and what the 
 """
 
 import copy
+import signal
 from collections import namedtuple
 
 import pytest
 
-from agent_actions.utils.readonly import ReadOnlyDict, ReadOnlyList, readonly_view
+from agent_actions.utils.readonly import ReadOnlyDict, ReadOnlyList, ReadOnlySet, readonly_view
+from agent_actions.utils.udf_management.bus import ReadOnlyBus
+
+
+@pytest.fixture(autouse=True)
+def _a_walk_that_does_not_end_fails_here():
+    """Without the memo a cycle is walked for ever, taking memory as it goes. Stopped
+    here, that is one failed test and not a run that never reports."""
+    if not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def stop(*_):
+        raise AssertionError("the walk did not end within ten seconds")
+
+    before = signal.signal(signal.SIGALRM, stop)
+    signal.setitimer(signal.ITIMER_REAL, 10)
+    yield
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    signal.signal(signal.SIGALRM, before)
+
 
 # Past every interpreter's recursion limit.
 DEPTH = 5000
@@ -128,6 +149,13 @@ class TestASharedContainerIsWalkedOnce:
         assert view["p"] is view["q"] is view["xs"][0]
         assert view["p"] is not shared
 
+    @pytest.mark.parametrize("empty", [{}, []], ids=["an empty dict", "an empty list"])
+    def test_an_empty_container_held_twice_is_one_wrapper_too(self, empty):
+        """It is found in the memo while still empty, so the memo cannot be read by truth."""
+        view = readonly_view({"p": empty, "q": empty})
+
+        assert view["p"] is view["q"]
+
     def test_sharing_at_every_level_costs_one_wrapper_a_level(self):
         """Wrapped once per reference, eighteen levels are half a million wrappers."""
         levels = 18
@@ -150,10 +178,11 @@ class TestASharedContainerIsWalkedOnce:
         record = {"p": shared, "q": shared}
 
         taken = readonly_view(record).copy()
-        taken["p"]["n"] = 99
+        plain = copy.deepcopy(record)
 
-        assert taken["q"]["n"] == 99
-        assert copy.deepcopy(record)["p"] is copy.deepcopy(record)["p"] or True
+        assert taken["p"] is taken["q"]
+        assert plain["p"] is plain["q"], "copy.deepcopy no longer keeps sharing"
+        taken["p"]["n"] = 99
         assert shared["n"] == 1
 
 
@@ -186,6 +215,12 @@ class TestTheWalkReadsStorageNotAccessors:
             def __iter__(self):
                 raise AssertionError("the walk ran a subclass accessor")
 
+            def __getitem__(self, index):
+                raise AssertionError("the walk ran a subclass accessor")
+
+            def copy(self):
+                raise AssertionError("the walk ran a subclass accessor")
+
         view = readonly_view({"xs": Fabricates([{"n": 1}])})
 
         assert type(view["xs"]) is ReadOnlyList
@@ -201,9 +236,55 @@ class TestTheWalkReadsStorageNotAccessors:
         assert type(view["t"]) is tuple
         assert isinstance(view["t"][0], ReadOnlyDict)
 
+    def test_a_tuple_subclass_nested_in_a_tuple_is_read_as_stored_too(self):
+        class Raises(tuple):
+            def __iter__(self):
+                raise AssertionError("the walk ran a subclass accessor")
+
+        view = readonly_view({"t": (Raises(({"n": 1},)), 2)})
+
+        assert isinstance(view["t"][0][0], ReadOnlyDict)
+
+    def test_a_dict_that_grows_while_its_keys_are_hashed_is_read_as_it_was(self):
+        """The storage is read all at once, so it cannot change size under the loop."""
+        grown: dict = {}
+
+        class Grows:
+            def __init__(self) -> None:
+                self.hashed = 0
+
+            def __hash__(self) -> int:
+                self.hashed += 1
+                if self.hashed == 2:
+                    grown["added"] = {"n": 2}
+                return 5
+
+        grown[Grows()] = {"n": 1}
+
+        view = readonly_view({"ns": grown})
+
+        assert len(view["ns"]) == 1
+
     def test_pairs_are_still_accepted_where_a_dict_is_built_from_them(self):
         assert ReadOnlyDict([("a", {"n": 1})])["a"]["n"] == 1
         assert ReadOnlyList(iter([{"n": 1}]))[0]["n"] == 1
+
+
+class TestAValueThatOnlyClaimsToBeAContainer:
+    """`isinstance` believes a `weakref.proxy` to a dict, and a mock with `spec=dict`.
+    Neither has a dict's storage. Handed over raw, a proxy would let a write through to
+    what it stands for, so the view is not built at all."""
+
+    def test_a_proxy_to_a_dict_is_refused_not_handed_over(self):
+        import weakref
+
+        class Weakable(dict):
+            pass
+
+        held = Weakable(a=[1])
+
+        with pytest.raises(TypeError):
+            readonly_view({"ns": weakref.proxy(held)})
 
 
 Point = namedtuple("Point", "x y")
@@ -229,18 +310,120 @@ class TestTuples:
         assert view["t"][1] == "x"
 
 
-class TestASliceIsANewList:
-    def test_it_is_a_plain_list_of_the_view_s_items(self):
+class TestASliceIsReadOnlyToo:
+    """Whatever is read from a view is read-only until `copy()` is called on it, and
+    that copy is the deep one. A slice is no exception."""
+
+    def test_it_holds_the_view_s_own_items_and_refuses_a_write(self):
         view = readonly_view({"xs": [{"n": 1}, {"n": 2}]})
 
         head = view["xs"][:1]
-        head.append("mine")
 
-        assert type(head) is list
+        assert isinstance(head, ReadOnlyList)
         assert head[0] is view["xs"][0]
         with pytest.raises(TypeError, match="read-only"):
+            head.append("mine")
+        with pytest.raises(TypeError, match="read-only"):
             head[0]["n"] = 9
-        assert len(view["xs"]) == 2
+
+    def test_its_copy_is_deep_and_writable(self):
+        record = {"xs": [{"n": 1}, {"n": 2}]}
+
+        taken = readonly_view(record)["xs"][:1].copy()
+        taken[0]["n"] = 9
+        taken.append("mine")
+
+        assert type(taken) is list and type(taken[0]) is dict
+        assert record == {"xs": [{"n": 1}, {"n": 2}]}
+
+    def test_a_negative_or_stepped_slice_is_what_a_list_gives(self):
+        view = readonly_view({"xs": [1, 2, 3, 4]})
+
+        assert view["xs"][::-2] == [4, 2]
+        assert view["xs"][-1] == 4
+
+
+class TestASetIsReadOnlyWhereverItSits:
+    @pytest.mark.parametrize(
+        "holder",
+        [lambda s: [s], lambda s: (s, 1), lambda s: {"k": s}],
+        ids=["list", "tuple", "dict"],
+    )
+    def test_a_set_held_in_any_container_refuses_a_write(self, holder):
+        members = {1, 2}
+
+        view = readonly_view({"h": holder(members)})
+        held = view["h"]["k"] if isinstance(view["h"], dict) else view["h"][0]
+
+        assert isinstance(held, ReadOnlySet)
+        with pytest.raises(TypeError, match="read-only"):
+            held.add(3)
+        assert members == {1, 2}
+
+
+class TestEveryCopyIsPlainAndDeep:
+    @pytest.mark.parametrize("take", [lambda v: v.copy(), copy.copy, copy.deepcopy])
+    def test_a_list_view(self, take):
+        record = {"xs": [{"n": 1}]}
+
+        taken = take(readonly_view(record)["xs"])
+        taken[0]["n"] = 9
+        taken.append("mine")
+
+        assert type(taken) is list and type(taken[0]) is dict
+        assert record == {"xs": [{"n": 1}]}
+
+    @pytest.mark.parametrize("take", [lambda v: v.copy(), copy.copy, copy.deepcopy])
+    def test_a_set_view(self, take):
+        record = {"tags": {"a", "b"}}
+
+        taken = take(readonly_view(record)["tags"])
+        taken.add("c")
+
+        assert type(taken) is set
+        assert record["tags"] == {"a", "b"}
+
+
+class TestValuesAndItemsAreLists:
+    """A guard that indexes them must not raise: a guard whose UDF raises passes its record."""
+
+    def test_below_the_top_level_too(self):
+        namespace = readonly_view({"ns": {"a": {"n": 1}}})["ns"]
+
+        assert namespace.values()[0]["n"] == 1
+        assert namespace.items()[0][0] == "a"
+        assert isinstance(namespace.values()[0], ReadOnlyDict)
+
+
+class TestTheBusIsTheViewOfItsContext:
+    def test_a_context_that_holds_itself_is_the_bus_all_the_way_round(self):
+        context: dict = {"a1": {"tier": "keep"}}
+        context["self"] = context
+        context["a1"]["up"] = context
+
+        bus = ReadOnlyBus(context)
+
+        assert bus["self"] is bus
+        assert bus["a1"]["up"] is bus
+        assert bus.require("a1")["tier"] == "keep"
+
+    def test_its_copy_is_one_plain_dict_with_the_same_shape(self):
+        context: dict = {"a1": {"tier": "keep"}}
+        context["self"] = context
+
+        taken = ReadOnlyBus(context).copy()
+        taken["a1"]["tier"] = "mine"
+
+        assert type(taken) is dict
+        assert taken["self"] is taken
+        assert context["a1"]["tier"] == "keep"
+
+    def test_keyword_namespaces_are_still_accepted(self):
+        bus = ReadOnlyBus({"a1": {"n": 1}}, other={"n": 2})
+
+        assert bus["other"]["n"] == 2
+        with pytest.raises(TypeError, match="read-only"):
+            bus["other"]["n"] = 3
 
 
 class _Swaps:
@@ -271,12 +454,15 @@ class TestAReplacedContainerIsKeptAliveForTheWalk:
         ids=["a tuple", "a set"],
     )
     def test_one_freed_mid_walk_does_not_lend_its_replacement(self, old, new):
-        record: dict = {"first": [old()], "second": None, "later": []}
+        # `between` is walked after `first`, so nothing the walk still holds from reading
+        # `first` keeps its old item alive: only the memo's own hold can.
+        record: dict = {"first": [old()], "between": [0], "second": None, "later": []}
 
         def swap():
             # Nothing else holds what `first` held; these are built where it was.
             record["first"].clear()
-            record["later"].extend(new(i) for i in range(50))
+            # A list, not a generator: its frame would take the freed address first.
+            record["later"].extend([new(i) for i in range(50)])
 
         record["second"] = {_Swaps(swap): 1}
 

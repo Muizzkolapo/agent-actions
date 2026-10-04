@@ -7,6 +7,8 @@ UDF raises passes its record. The UDF never ran and the record went to the actio
 """
 
 import json
+import signal
+import weakref
 
 import pytest
 
@@ -35,6 +37,23 @@ def _register():
     for probe in (shape_probe_rejects_everything, shape_probe_admits_everything):
         udf_tool(probe)
     _seen.clear()
+
+
+@pytest.fixture(autouse=True)
+def _a_walk_that_does_not_end_fails_here():
+    """A view of a cycle built without a memo never finishes. One failed test, not a hung run."""
+    if not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def stop(*_):
+        raise AssertionError("building the view did not end within ten seconds")
+
+    before = signal.signal(signal.SIGALRM, stop)
+    signal.setitimer(signal.ITIMER_REAL, 10)
+    yield
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    signal.signal(signal.SIGALRM, before)
 
 
 def _nested(kind: str, depth: int = DEPTH):
@@ -156,6 +175,76 @@ class TestARecordTheGuardCouldNotBeShown:
         message = str(raised.value)
         assert "Record 2 of 2" in message
         assert "g-second" in message
+
+    def test_the_errors_carry_what_names_the_guard_and_the_record(self):
+        with pytest.raises(ProcessingError) as from_the_evaluator:
+            _verdict(shape_probe_admits_everything, _unviewable())
+        with pytest.raises(ProcessingError) as from_the_pre_filter:
+            prefilter_by_guard(
+                [{**_unviewable(), "source_guid": "g-only"}],
+                {"conditional_clause": "shape_probe_admits_everything"},
+                "decide",
+            )
+
+        assert from_the_evaluator.value.context["udf_name"] == "shape_probe_admits_everything"
+        assert from_the_pre_filter.value.context["source_guid"] == "g-only"
+        assert from_the_pre_filter.value.context["record_index"] == 0
+        assert from_the_pre_filter.value.context["udf_name"] == "shape_probe_admits_everything"
+
+    def test_the_pre_filter_leaves_every_other_error_as_it_is(self):
+        """A guard naming a function that does not exist is a configuration error, and
+        stays one: relabelled, it would read as a problem with the record."""
+        with pytest.raises(Exception) as raised:
+            prefilter_by_guard(
+                [{"source_guid": "g1", "content": {"a1": {"tier": "keep"}}}],
+                {"conditional_clause": "shape_probe_that_was_never_registered"},
+                "decide",
+            )
+
+        assert type(raised.value).__name__ == "ConfigurationError"
+
+    def test_a_value_that_only_claims_to_be_a_dict_stops_the_guard_by_name(self):
+        """A proxy to a dict has no storage to read. Handed over raw it would let a write
+        through to the dict it stands for."""
+
+        class Weakable(dict):
+            pass
+
+        held = Weakable(n=1)
+
+        with pytest.raises(ProcessingError) as raised:
+            _verdict(shape_probe_admits_everything, _record({"p": weakref.proxy(held)}))
+
+        assert type(raised.value).__name__ == "GuardNotAppliedError"
+        assert _seen == []
+
+    def test_the_pre_filter_s_error_stops_the_action_not_one_file(self):
+        """That pass cannot fail one record. Taken as one file's failure, the walk over
+        the action's files logs it and carries on: the file's records are simply
+        missing, and the action is reported complete."""
+        from agent_actions.workflow.runner_file_processing import CollectedErrors
+
+        with pytest.raises(ProcessingError) as raised:
+            prefilter_by_guard(
+                [{**_unviewable(), "source_guid": "g-only"}],
+                {"conditional_clause": "shape_probe_admits_everything"},
+                "decide",
+            )
+        seen_by_the_file_walk = CollectedErrors()
+        seen_by_the_file_walk.record("pages.json", raised.value)
+
+        assert seen_by_the_file_walk.action_fatal is raised.value
+
+    def test_record_mode_preparation_does_not_admit_it_either(self):
+        from agent_actions.processing.task_preparer import TaskPreparer
+
+        with pytest.raises(ProcessingError) as raised:
+            TaskPreparer._evaluate_guard(
+                _unviewable()["content"], None, "shape_probe_admits_everything", {"other": 1}
+            )
+
+        assert type(raised.value).__name__ == "GuardNotAppliedError"
+        assert _seen == []
 
     def test_a_udf_that_raises_still_passes_its_record(self):
         """The legacy rule for the UDF's own errors is untouched."""
