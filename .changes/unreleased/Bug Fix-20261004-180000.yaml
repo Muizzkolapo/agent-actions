@@ -11,9 +11,10 @@ body: >-
   sent again, and while the action's config is unchanged, records it had already answered,
   in any file, are kept rather than paid for again. While the provider refuses a file, the
   run names the files whose batches are out and wait to be collected. A refused batch also
-  no longer replaces the file's record of what its last batch was sent: that is stored only
-  once the provider has taken the batch, and before the registry names it, so a collect
-  pass never reads one batch against another's record.
-  If that record cannot be stored, the error now names the batch the provider took, which
-  nothing else names; the next run sends its records again.
+  no longer replaces the file's record of what its last batch was sent: that record now
+  changes only for a batch the provider has taken. If it cannot be stored, the error now
+  names the batch the provider took, which nothing else names; the next run sends its
+  records again. A project an earlier version left with a refused file's failed row under a
+  completed action is not repaired by `agac run` or `agac retry`, which find nothing to do;
+  `agac run --fresh` sends every record of the workflow again.
 time: 2026-10-04T18:00:00Z
