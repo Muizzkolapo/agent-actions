@@ -18,11 +18,14 @@ from typing import Any
 
 import pytest
 
+from agent_actions.llm.batch.infrastructure.context import batch_output_name
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.integration.test_a_collect_pass_leaves_collected_files_alone import _Action
 from tests.integration.test_batch_rerun_matches_online import (
     ACTION,
+    SKIP,
+    _Batch,
     _FirstStageBatch,
     _Online,
     rec,
@@ -156,16 +159,32 @@ def test_a_first_stage_file_in_a_subdirectory_is_keyed_by_its_path(tmp_path, fil
     assert batch.backend.list_target_files(ACTION) == ["sub/page.json"]
 
 
-def test_a_first_stage_file_in_a_subdirectory_keeps_one_name_when_nothing_is_sent(tmp_path):
-    guard = {"guard": {"clause": "source.keep == true", "behavior": "skip"}}
-    batch = _FirstStageBatch(tmp_path, "sub/page.json")
-    first = batch.run(1, STAGED, guard)
+SKIPS_F1 = {"guard": {"clause": "source.item != 'f1'", "behavior": "skip"}}
 
-    again = batch.run(2, [*STAGED, {"item": "f1", "keep": False}], guard)
+
+@pytest.mark.parametrize("file", ["sub/page.json", "sub/page.csv"])
+def test_a_first_stage_file_in_a_subdirectory_keeps_one_name_when_nothing_is_sent(tmp_path, file):
+    """The write lands on the file's stored name, `.json` whatever the staged suffix."""
+    batch = _FirstStageBatch(tmp_path, file)
+    first = batch.run(1, STAGED, SKIPS_F1)
+
+    again = batch.run(2, [*STAGED, {"item": "f1", "keep": False}], SKIPS_F1)
 
     assert batch.sent == [["a1", "a2"], []]
     assert [row for row in again if row.startswith("processed:")] == first
     assert batch.backend.list_target_files(ACTION) == ["sub/page.json"]
+
+
+@pytest.mark.parametrize("file", ["page.txt", "sub/page.txt"])
+def test_a_run_that_sends_nothing_writes_the_file_holding_the_answers(tmp_path, file):
+    """An input not named `.json` is answered into its `.json` name, and so is that write."""
+    batch = _Batch(tmp_path, file)
+    batch.run(1, A_PAGE, extra=SKIP)
+
+    batch.run(2, [*A_PAGE, rec("f1", keep=False)], extra=SKIP)
+
+    assert batch.sent == [["a1", "a2"], []]
+    assert batch.backend.list_target_files(ACTION) == [batch_output_name(file)]
 
 
 # A store written by the code before, which keyed the file by its basename.
@@ -370,6 +389,18 @@ def test_a_first_stage_file_kept_on_its_basename_gives_it_up_to_a_staged_file_of
     assert batch.sent[2] == ["a1", "a2"]
     assert held == ["processed:a1:0@run3", "processed:a2:0@run3"]
     assert batch.backend.list_target_files(ACTION) == ["page.json", "sub/page.json"]
+
+
+def test_a_first_stage_file_kept_on_its_basename_is_written_there_when_nothing_is_sent(
+    tmp_path,
+):
+    """Written under its path instead, the answers and that write were two files."""
+    batch = _first_stage_kept_on_its_basename(tmp_path)
+
+    batch.run(3, [*STAGED, {"item": "f1", "keep": False}], SKIPS_F1)
+
+    assert batch.sent[2] == []
+    assert batch.backend.list_target_files(ACTION) == ["page.json"]
 
 
 def test_a_staged_file_of_that_stem_and_another_suffix_takes_the_basename(tmp_path):

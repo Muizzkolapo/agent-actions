@@ -8,10 +8,14 @@ written before reads the same.
 
 from __future__ import annotations
 
+import json
+import logging
+
 import pytest
 
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
+    batch_file_identity,
     batch_output_name,
 )
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryStateManager
@@ -88,21 +92,45 @@ def test_a_reset_keeps_the_names_its_files_were_given_and_fresh_forgets_them(tmp
     assert backend.load_metadata("batch_file_names:other") is not None
 
 
-def test_a_name_claimed_by_one_file_is_not_claimed_by_another_stored_under_it(tmp_path):
-    """`page.csv` and `page.json` are two basenames, and one stored name."""
-    from agent_actions.llm.batch.infrastructure.context import batch_file_identity
-
+def _holding_page_json(tmp_path) -> SQLiteBackend:
+    """A store whose action `act` holds `page.json`, as one from before holds a nested file."""
     backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
     backend.initialize()
     backend.write_target("act", "page.json", [{"source_guid": "a1", "content": {}}])
+    return backend
 
-    def name(path: str) -> str:
-        return batch_file_identity(
-            path,
-            "act",
-            backend,
-            base_owner=lambda legacy: False,
-            registry=lambda action: BatchRegistryManager(backend, action),
-        )
 
-    assert [name("sub1/page.csv"), name("sub2/page.json")] == ["page.csv", "sub2/page.json"]
+def _named(backend: SQLiteBackend, path: str) -> str:
+    return batch_file_identity(
+        path,
+        "act",
+        backend,
+        base_owner=lambda legacy: False,
+        registry=lambda action: BatchRegistryManager(backend, action),
+    )
+
+
+def test_a_name_claimed_by_one_file_is_not_claimed_by_another_stored_under_it(tmp_path):
+    """`page.csv` and `page.json` are two basenames, and one stored name."""
+    backend = _holding_page_json(tmp_path)
+
+    assert [_named(backend, "sub1/page.csv"), _named(backend, "sub2/page.json")] == [
+        "page.csv",
+        "sub2/page.json",
+    ]
+
+
+@pytest.mark.parametrize("recorded", ["not json", "[1, 2]"], ids=["not-json", "not-a-mapping"])
+def test_an_unreadable_record_of_names_is_decided_again_with_a_warning(tmp_path, caplog, recorded):
+    """Raising would stop every batch of the action over a name the store can decide again."""
+    backend = _holding_page_json(tmp_path)
+    backend.save_metadata("batch_file_names:act", recorded)
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        name = _named(backend, "sub/page.json")
+
+    assert name == "page.json"
+    assert "Unreadable batch_file_names:act" in caplog.text
+    assert json.loads(backend.load_metadata("batch_file_names:act") or "{}") == {
+        "sub/page.json": "page.json"
+    }
