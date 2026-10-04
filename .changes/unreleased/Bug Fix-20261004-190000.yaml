@@ -1,15 +1,26 @@
 kind: Bug Fix
 body: >-
-  A batch action no longer records a record that reached it without a `source_guid`
-  under its target id. Every record is stamped where it is staged or by the action that
-  produces it, so such a record comes from data edited outside the framework. When it
-  failed, `agac retry` named the failure by that target id and cleared it, but a retry
-  selects records by `source_guid`, so it sent nothing, and the action then read complete
-  over the failed row it still held; `--abandon-in-flight` marked it failed under that id
-  too. When it was answered, its row went downstream with the target id as its identity.
-  A batch run now does what an online run does: the record is refused at enrichment and
-  stored as a failed row with no `source_guid`, and nothing is recorded under any other
-  id, so `agac retry` is never handed a failure it cannot repair. To process the record,
-  give it back its `source_guid` upstream. A failure an earlier release recorded under a
-  target id stays in the store, and `agac retry` still clears it without repairing it.
+  A batch action no longer records a record that reached it without a `source_guid` under
+  its target id. Every record is stamped where it is staged or by the action that produces
+  it, so such a record comes from data edited outside the framework. When it failed,
+  `agac retry` named the failure by that target id and cleared it, but a retry selects
+  records by `source_guid`, so it sent nothing, and the action then read complete over the
+  failed row it still held; `--abandon-in-flight` marked it failed under that id too. When
+  it was answered, its row went downstream with the target id as its identity. A batch run
+  now does what an online run does: the record is refused at enrichment and stored as a
+  failed row that keeps its target id and the content it arrived with but has no
+  `source_guid`, and nothing is recorded for it under any other id, so a batch run no
+  longer hands `agac retry` a failure it cannot repair. A line of the provider's results
+  that could not be read, failed until now under the placeholder id the parser gave it,
+  which names no record, is refused the same way. An answer that expands into several rows
+  is the exception, in both modes: each row gets an identity of its own. Where the
+  action's other records succeeded it now reads complete, as online, where a failure of
+  such a record made it read completed with failures; the failed row and the run log say
+  what was refused. Where nothing in the file succeeded the action now fails, as online,
+  where it could read complete and let the actions below it run. To process the record,
+  give it back its `source_guid` upstream. A batch run that sends nothing at all still
+  stores such a record's row with its target id as its `source_guid`, though it records
+  nothing for it. A failure an earlier release recorded under a target id stays in the
+  store, and `agac retry` still clears it without repairing it; a `deferred` mark it left
+  for a batch still out is cleared when that batch is collected.
 time: 2026-10-04T19:00:00Z
