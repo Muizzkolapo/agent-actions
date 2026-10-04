@@ -6,6 +6,7 @@ and a container held in two places is walked once. These pin that, and what the 
 
 import copy
 import signal
+import threading
 from collections import namedtuple
 
 import pytest
@@ -18,7 +19,7 @@ from agent_actions.utils.udf_management.bus import ReadOnlyBus
 def _a_walk_that_does_not_end_fails_here():
     """Without the memo a cycle is walked for ever, taking memory as it goes. Stopped
     here, that is one failed test and not a run that never reports."""
-    if not hasattr(signal, "SIGALRM"):
+    if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
         yield
         return
 
@@ -264,6 +265,22 @@ class TestTheWalkReadsStorageNotAccessors:
         view = readonly_view({"ns": grown})
 
         assert len(view["ns"]) == 1
+
+    def test_a_subclass_handed_straight_to_a_wrapper_is_read_as_stored_too(self):
+        class Raises(dict):
+            def keys(self):
+                raise AssertionError("the walk ran a subclass accessor")
+
+            def __iter__(self):
+                raise AssertionError("the walk ran a subclass accessor")
+
+        class RaisesToo(list):
+            def __iter__(self):
+                raise AssertionError("the walk ran a subclass accessor")
+
+        assert ReadOnlyDict(Raises(a={"n": 1}))["a"]["n"] == 1
+        assert ReadOnlyList(RaisesToo([{"n": 1}]))[0]["n"] == 1
+        assert ReadOnlyBus(Raises(a1={"n": 1})).require("a1")["n"] == 1
 
     def test_pairs_are_still_accepted_where_a_dict_is_built_from_them(self):
         assert ReadOnlyDict([("a", {"n": 1})])["a"]["n"] == 1

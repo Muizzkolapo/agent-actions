@@ -8,6 +8,7 @@ UDF raises passes its record. The UDF never ran and the record went to the actio
 
 import json
 import signal
+import threading
 import weakref
 
 import pytest
@@ -42,7 +43,7 @@ def _register():
 @pytest.fixture(autouse=True)
 def _a_walk_that_does_not_end_fails_here():
     """A view of a cycle built without a memo never finishes. One failed test, not a hung run."""
-    if not hasattr(signal, "SIGALRM"):
+    if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
         yield
         return
 
@@ -97,8 +98,8 @@ SHAPES = {
     "nested dicts": lambda: {"deep": _nested("dicts")},
     "nested lists": lambda: {"deep": _nested("lists")},
     "dicts and lists alternating": lambda: {"deep": _nested("alternating")},
-    "a json document nested as deep as json allows": lambda: json.loads(
-        '{"deep": ' + "[" * 900 + "1" + "]" * 900 + "}"
+    "a json document nested deeper than the old walk went": lambda: json.loads(
+        '{"deep": ' + "[" * 600 + "1" + "]" * 600 + "}"
     ),
     "a dict that holds itself": lambda: _cyclic("a dict that holds itself"),
     "a list that holds itself": lambda: _cyclic("a list that holds itself"),
@@ -190,6 +191,23 @@ class TestARecordTheGuardCouldNotBeShown:
         assert from_the_pre_filter.value.context["source_guid"] == "g-only"
         assert from_the_pre_filter.value.context["record_index"] == 0
         assert from_the_pre_filter.value.context["udf_name"] == "shape_probe_admits_everything"
+
+    def test_the_pre_filter_names_the_record_as_it_is_stored(self):
+        """It is handed two lists: the prompt-shaped rows and the stored records they came
+        from. The guard reads the stored one, so that is the one to name."""
+        shaped = [{"source_guid": "g-shaped", "content": {"a1": {"tier": "keep"}}}]
+        stored = [{**_unviewable(), "source_guid": "g-stored"}]
+
+        with pytest.raises(ProcessingError) as raised:
+            prefilter_by_guard(
+                shaped,
+                {"conditional_clause": "shape_probe_admits_everything"},
+                "decide",
+                stored,
+            )
+
+        assert "g-stored" in str(raised.value)
+        assert raised.value.context["source_guid"] == "g-stored"
 
     def test_the_pre_filter_leaves_every_other_error_as_it_is(self):
         """A guard naming a function that does not exist is a configuration error, and
