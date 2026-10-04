@@ -156,6 +156,7 @@ def write_batch_file(
     output_root: str,
     stored_name: str,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
 ) -> Path:
     """Store *rows* as the file *stored_name*, with every stored row they do not replace.
 
@@ -163,6 +164,8 @@ def write_batch_file(
     stored under exactly *stored_name* whichever folder the caller was handed.
     *batch_inputs* is the file's input before narrowing: once the action above mints
     its own identities, the rows alone cannot say which producers still exist.
+    *filtered* is ``filtered_inputs`` of the file's context map: a record the guard
+    filtered holds no row, so none stored for it is kept.
     """
     output_file = Path(output_root) / stored_name
     if storage_backend is None:
@@ -171,7 +174,12 @@ def write_batch_file(
         from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
         rows = with_stored_rows_not_reproduced(
-            rows, action_name, stored_name, storage_backend, batch_inputs=batch_inputs
+            rows,
+            action_name,
+            stored_name,
+            storage_backend,
+            batch_inputs=batch_inputs,
+            filtered=filtered,
         )
     FileWriter(
         str(output_file),
@@ -190,6 +198,16 @@ def clear_deferred_dispositions(
         source_guid = row.get("source_guid")
         if source_guid:
             _try_clear_deferred(storage_backend, action_name, source_guid)
+
+
+def filtered_inputs(context_map: dict[str, Any]) -> set[str]:
+    """The inputs this run's guard filtered, by ``source_guid``."""
+    return {
+        source_guid
+        for entry in context_map.values()
+        if BatchContextMetadata.get_filter_status(entry) == FilterStatus.FILTERED
+        and (source_guid := entry.get("source_guid"))
+    }
 
 
 def write_filtered_dispositions(

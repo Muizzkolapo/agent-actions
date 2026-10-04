@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  A batch action no longer keeps the rows of records its guard filters. Its write merged
+  back every stored row whose record was one of the run's inputs and was not answered
+  again, and a record the guard filters is never answered. So a completed batch action
+  given a guard that filters a record kept that record's old answer, where online holds
+  no row for it; given one that filters every record, it kept all of them, ended
+  `completed` instead of `skipped`, and its readers ran on and kept their own rows, where
+  online skips and empties them. A batch action now holds no row for a record its guard
+  filtered in that run, as online, and one whose guard filters every record holds nothing
+  and is skipped. A run in which everything sent failed still keeps every stored answer, as
+  online, which writes nothing then. An action already holding such rows drops them the
+  next time it runs.
+time: 2026-10-04T13:39:00Z

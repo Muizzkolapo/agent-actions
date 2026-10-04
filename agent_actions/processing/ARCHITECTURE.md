@@ -407,6 +407,15 @@ batch path the same pre-narrowing input it already hands the online path
 the merge reads it back. Reading anything narrower deletes the rows of every record the run
 left out, which on an ordinary incremental run is everything already done.
 
+An input the guard filtered holds no row, whether or not the run recorded its inputs:
+online's guard runs above its gate and writes nothing for it. Its stored rows answer for a
+record the guard now excludes, and carried they reach every action below; where the guard
+filters every input they also keep the action reading complete over them, so its readers
+are never skipped. The batch's context map says which inputs the guard filtered
+(`filtered_inputs`), and both writes hand them to the merge, which carries no stored row
+that answers for one. A run online would refuse to write, below, is the exception: there
+its stored answer stands.
+
 Two kinds of run carry more than their inputs' rows, each because online does:
 
 - **A repair records no inputs.** `agac retry` answers the records it named and nothing

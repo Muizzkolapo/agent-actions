@@ -104,6 +104,44 @@ class TestARowWhoseInputIsNotInTheRunIsLeftOut:
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"}) == set()
 
 
+class TestARowWhoseInputTheGuardFilteredIsLeftOut:
+    """A filtered record holds no row, as online writes none for it."""
+
+    def test_though_the_input_is_one_of_the_runs(self):
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, filtered={"a2"}
+        )
+
+        assert carry == set()
+
+    def test_a_minted_row_goes_with_the_filtered_input_it_named(self):
+        stored = [_row("m1", ["a1"]), _row("m2", ["a2"]), _row("m3", ["a2"])]
+
+        carry = stored_rows_not_reproduced(stored, [], batch_inputs={"a1", "a2"}, filtered={"a2"})
+
+        assert carry == {"m1"}
+
+    def test_where_no_input_was_recorded(self):
+        """A repair records none; online writes no row for a named record its guard filters."""
+        stored = [_row("a1"), _row("a2")]
+
+        assert stored_rows_not_reproduced(stored, [], filtered={"a2"}) == {"a1"}
+
+    def test_not_where_the_run_failed_and_answered_nothing(self):
+        """Online raises before it writes, so its stored answer stands with the rest."""
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, filtered={"a2"}
+        )
+
+        assert carry == {"a1", "a2"}
+
+
 class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
     """Online raises before it writes when everything it sent failed, so its answers stand."""
 

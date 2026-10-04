@@ -194,16 +194,18 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
 ) -> set[str]:
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A stored row is carried where the input it answered for is one of *batch_inputs* and
     this run did not answer it; otherwise it is no part of this run's output, as online
-    leaves it. Matching is by input, since a minting action's runs share no identity: a
-    processed row answers for the producer it names, else for the identity it carries.
-    With no inputs recorded every unanswered row is carried. Where something failed and
-    nothing was answered online raises before it writes, so every stored answer stands,
-    over a row produced under its identity too.
+    leaves it. An input in *filtered*, which this run's guard filtered, holds no row, as
+    online writes none for it. Matching is by input, since a minting action's runs share
+    no identity: a processed row answers for the producer it names, else for the identity
+    it carries. With no inputs recorded every other unanswered row is carried. Where
+    something failed and nothing was answered online raises before it writes, so every
+    stored answer stands, over a row produced under its identity too.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -225,6 +227,7 @@ def stored_rows_not_reproduced(
 
     refused = failed and not answered
     inputs = frozenset(batch_inputs)
+    excluded = frozenset(filtered)
     carry: set[str] = set()
     left: set[str] = set()
     for row in stored:
@@ -243,7 +246,7 @@ def stored_rows_not_reproduced(
             carry.add(guid)
             continue
         answers_for = next(iter(producers), guid)
-        if answers_for in answered:
+        if answers_for in answered or (answers_for in excluded and not stands):
             continue
         if inputs and answers_for not in inputs and not stands:
             left.add(guid)
@@ -270,6 +273,7 @@ def with_stored_rows_not_reproduced(
     storage_backend: StorageBackend,
     *,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
 ) -> list[dict[str, Any]]:
     """*produced* followed by every stored row it does not replace: the file to write.
 
@@ -284,7 +288,9 @@ def with_stored_rows_not_reproduced(
         # Nothing stored for this file yet, so nothing to carry.
         return produced
 
-    carry_guids = stored_rows_not_reproduced(stored, produced, batch_inputs=batch_inputs)
+    carry_guids = stored_rows_not_reproduced(
+        stored, produced, batch_inputs=batch_inputs, filtered=filtered
+    )
     if not carry_guids:
         return produced
 
