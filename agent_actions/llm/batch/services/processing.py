@@ -297,8 +297,8 @@ class BatchProcessingService:
         Recovery entries are processed in their own right; the parent they
         superseded is skipped instead, and so is an entry already collected.
         A finished entry the provider cannot be asked about, or reports running again,
-        is left unread; one it reports ended any other way, or does not know, has its
-        records marked failed.
+        is left unread, as is the parent a recovery dropped in the pass hands back; one
+        it reports ended any other way, or does not know, has its records marked failed.
         Tolerates writing nothing when recovery batches are pending
         (in_progress), a collected entry was skipped, or an entry was left unread.
 
@@ -450,6 +450,18 @@ class BatchProcessingService:
                     error=e,
                 )
                 continue
+
+        # A recovery dropped in this pass hands back the parent it superseded, which
+        # the loop has already skipped. One that finalized stamped its parent collected.
+        for name in sorted(superseded - _superseded_entries(manager.get_all_jobs())):
+            parent = manager.get_batch_job(name)
+            if parent is not None and parent.awaits_collection:
+                logger.warning(
+                    "Could not read %s in this pass: it was skipped for a recovery since "
+                    "dropped. The action waits for it",
+                    name,
+                )
+                unread.append(name)
 
         # A file already collected counts as one this pass did not fail, as a replay of
         # it that succeeded did. One left unread is waited for, not failed.

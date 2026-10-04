@@ -2,7 +2,8 @@
 
 Driven through the real lifecycle manager, job manager, registry and collect pass over a
 SQLite store. Only the provider is fake, and finalizing a file is reduced to the stamp
-finalize writes, which is all the decision to complete reads of it.
+finalize writes, which is all the decision to complete reads of it; a file a test names in
+``read_through`` is read for real.
 
 Every entry starts out finished, as a run finds them once an earlier run's poll has
 recorded that: the collect pass's own status check is then the only call to the
@@ -89,6 +90,7 @@ class _Action:
         resolver = _Resolver(self.provider)
         self.finalized: list[str] = []
         self.broken: set[str] = set()
+        self.read_through: set[str] = set()
         service = BatchProcessingService(
             client_resolver=resolver,
             context_manager=BatchContextManager(),
@@ -97,6 +99,7 @@ class _Action:
             storage_backend=self.backend,
             workflow_name=ACTION,
         )
+        self._read = service._process_single_batch_file
         service._process_single_batch_file = self._finalize
         self.lifecycle = BatchLifecycleManager(
             BatchJobManager(client_resolver=resolver, storage_backend=self.backend),
@@ -104,7 +107,9 @@ class _Action:
             storage_backend=self.backend,
         )
 
-    def _finalize(self, *, file_name: str, manager: BatchRegistryManager, **_kwargs) -> str:
+    def _finalize(self, *, file_name: str, manager: BatchRegistryManager, **kwargs) -> str | None:
+        if file_name in self.read_through:
+            return self._read(file_name=file_name, manager=manager, **kwargs)
         if file_name in self.broken:
             raise ValueError(f"{file_name} cannot be read")
         self.finalized.append(file_name)
@@ -286,3 +291,18 @@ def test_a_recovery_round_the_provider_does_not_know_fails_the_records_of_its_fi
     assert action.check() == (action.out, "completed")
     assert action.finalized == ["page1.json", "page2.json"]
     assert action.dispositions() == {"page3-a": DISPOSITION_FAILED, "page3-b": DISPOSITION_FAILED}
+
+
+def test_a_file_handed_back_by_a_recovery_dropped_in_the_pass_is_waited_for(tmp_path):
+    """The recovery superseded the file for the whole pass, which skipped it; dropped for
+    want of a recovery state, it hands the file back to be read from scratch. Completed,
+    the action would never read it."""
+    action = _Action(tmp_path)
+    action.register(_retry_of("page3.json"))
+    action.read_through = {"page3.json_retry_1"}
+
+    assert action.check() == (None, "in_progress")
+    assert action.finalized == ["page1.json", "page2.json"]
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page2.json", "page3.json"]
