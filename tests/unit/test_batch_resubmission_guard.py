@@ -1,4 +1,4 @@
-"""Tests for batch resubmission prevention when completed batch exists."""
+"""Tests for batch resubmission prevention when a completed batch is still to collect."""
 
 from unittest.mock import MagicMock, patch
 
@@ -46,7 +46,7 @@ def _stub_submission_path(svc: BatchSubmissionService, batch_id: str = "batch-ne
 
 
 class TestCompletedBatchSkipsResubmission:
-    """Completed batch in registry must block new submission."""
+    """A completed batch whose results are not collected yet must block new submission."""
 
     def test_completed_batch_returns_existing_batch_id(self, tmp_path):
         """When a completed batch exists, submit_batch_job returns its ID without resubmitting."""
@@ -81,6 +81,31 @@ class TestCompletedBatchSkipsResubmission:
 
         assert result.batch_id == "batch-5"
         svc._task_preparator.prepare_tasks.assert_not_called()
+
+
+class TestACollectedBatchNoLongerBlocks:
+    """Its results are written, so it is no reason to skip an action that has to run."""
+
+    def test_a_collected_batch_allows_new_submission(self, tmp_path):
+        svc = _make_service()
+        entry = _make_entry(BatchStatus.COMPLETED, batch_id="batch-spent")
+        entry.collected_at = "2026-04-19T01:00:00+00:00"
+        svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
+        _stub_submission_path(svc, batch_id="batch-new")
+
+        with (
+            patch("agent_actions.llm.batch.services.submission.fire_event"),
+            patch("agent_actions.llm.batch.services.submission.get_manager"),
+        ):
+            result = svc.submit_batch_job(
+                agent_config={"model_vendor": "openai"},
+                batch_name="my_action",
+                data=[{"id": 1}],
+                output_directory=str(tmp_path),
+            )
+
+        assert result.batch_id == "batch-new"
+        svc._task_preparator.prepare_tasks.assert_called_once()
 
 
 class TestInFlightBatchStillBlocks:

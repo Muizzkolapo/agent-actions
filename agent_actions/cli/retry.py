@@ -235,9 +235,9 @@ class RetryCommand:
             # Clear checkpoint records so stale partial output from a prior
             # interrupted run is not carried forward instead of reprocessing.
             backend.clear_checkpoint_records(action)
-            # Spent registry entries are not marked spent, so left in place they
-            # hand this repair the prior batch id instead of its own narrowed
-            # submission, and the collecting run replays that batch whole.
+            # A registry entry not yet collected hands this repair the prior batch id
+            # instead of its own narrowed submission, and the collecting run replays
+            # that batch whole.
             backend.clear_batch_state(action)
 
         self.console.print(

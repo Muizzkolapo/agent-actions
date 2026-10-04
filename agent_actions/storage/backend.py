@@ -890,9 +890,9 @@ class StorageBackend(ABC):
         self.delete_metadata(f"{BatchRegistryManager.METADATA_KEY_PREFIX}{action_name}")
         self.delete_metadata_prefix(f"recovery_state:{action_name}:")
         self.delete_metadata_prefix(f"batch_context:{action_name}:")
-        # Carry-forward reads this to decide which stored rows a run replaced, so a
-        # recording left behind by cleared state answers for a run that no longer has
-        # one. It shares the context map's scope and must share its lifetime.
+        # Carry-forward reads this as the inputs a run's output is for. It shares the
+        # context map's scope and must share its lifetime: a repair records none, and
+        # one left behind would be read as the repair's.
         self.delete_metadata_prefix(f"batch_inputs:{action_name}:")
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:

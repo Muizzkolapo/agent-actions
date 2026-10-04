@@ -388,57 +388,102 @@ and holds no answer; and because producers are named during enrichment, before
 collection settles the state, a row can name an input it holds nothing for. Either
 credited as an answer deletes what the last run produced. Such a row does still replace
 a stored row of its own identity, which is decided first — carried rows are appended to
-the run's own output, so an identity in both lists would be written twice.
+the run's own output, so an identity in both lists would be written twice. The one
+exception is a run online would refuse to write, below: there the stored answer is the one
+row kept under that identity.
 
-A stored row naming exactly one input is inferred away; naming several, never. That
-reads one producer as a mint, which holds on this path — a batch row that names producers
-has been re-keyed — but not in general. The FILE writer records the inputs a row consumed
-*minus* its own, so a two-input merge keeps one identity and names one producer; inferred
-away, its own input's content goes with it. `build_carry_forward` carries the stricter
-reading for rows of that shape, and a future caller reading them wants it rather than
-this. Where several inputs are named the row is handed back regardless, a duplicate being
-visible where a dropped row is not.
+Which unanswered rows come back is the online path's rule. Online writes rows for this
+run's inputs and nothing else: what it processed, and what the gate carried. So a stored
+row is carried where the input it answered for is one of the run's and the run did not
+answer it again, and a row whose input is not among them is left out. Below an expansion
+that is what stops the output growing: the upstream children are minted again every run, so
+the previous generation's rows answer for inputs this run never took.
 
-Matching by input still leaves one case open: where the action above is *itself* an
-expansion, its children are minted again every run, so a stored row names a producer this
-run's rows never name and neither generation replaces the other. The two are told apart by
-what the action took as input — a producer named by none of it is a generation that is
-gone, one still standing in the input is an input this run did not answer for. That set is
-not the batch context map, which holds only what was submitted. Several narrowings sit
-between the two — the action's `record_limit`, a repair's named records, the disposition
-gate, and above the pipeline entirely the runner's drop of records an upstream guard
-filtered — and a record dropped by any of them still holds stored rows this action must
-carry. So the pipeline hands the batch path the same pre-narrowing input it already hands
-the online path (`offered_to_repair`), submission records it
-(`BatchContextManager.save_batch_inputs`), and the merge reads it back. Reading anything
-narrower deletes the rows of every record the run left out: on an ordinary incremental run
-that is everything already done, and on `agac retry` everything the repair did not name.
-The recording sits above the pipeline's own narrowings but not above the runner's, which is
-why the rule below is generational — what the recording cannot be trusted to include, the
-rule does not decide from.
+"This run's inputs" is not the batch context map, which holds only what was submitted.
+The action's `record_limit` and the disposition gate both sit between the two, and a record
+either drops is still an input whose stored rows must be carried. So the pipeline hands the
+batch path the same pre-narrowing input it already hands the online path
+(`offered_to_repair`), submission records it (`BatchContextManager.save_batch_inputs`), and
+the merge reads it back. Reading anything narrower deletes the rows of every record the run
+left out, which on an ordinary incremental run is everything already done.
 
-Because the inference deletes, it is made only where the evidence is whole. Three
-conditions, all of them: the input was recorded at all; this run settled *every* input it
-recorded, so what replaces the stored generation is actually in this write; and *no* stored
-producer is still an input. The second stops a run that failed, or returned nothing, from
-reading its own stored answers as replaced and deleting them. The third makes the decision
-generational rather than per row — one producer missing while others are still inputs is an
-individual record that left the input, filtered upstream or dropped, and its rows are its
-own. An unrecorded input infers nothing, so a batch submitted before this was recorded
-carries its rows exactly as it did; an input recorded as empty is reported apart from an
-unrecorded one but read the same way. A drop is logged once per write at INFO, not WARNING,
-with how many rows went and the counts that decided it, since the healthy re-run this case
-exists for makes one every time.
+Two kinds of run carry more than their inputs' rows, each because online does:
 
-One case stays open. An action that mints no identity of its own carries its input's and
-records no producer, which happens for a 1:1 action and for an expansion on any input it
-answered with a single row (`is_expansion` is `len(structured_items) > 1`). Below an
-expansion its stored rows then carry the previous run's upstream child identity and match
-nothing, so they accumulate exactly as described above. The lever that would close it —
-reading an identity absent from the input as a gone generation — is the one
-`build_carry_forward` and the stored-row rule deliberately refuse, because an input that is
-merely absent still keeps its rows. It wants its own decision; the gap is recorded as a
-strict xfail in `tests/unit/processing/test_superseding_is_limited_to_one_producer.py`.
+- **A repair records no inputs.** `agac retry` answers the records it named and nothing
+  else, and online hands back every stored row it did not name (`carried_past_repair`). A
+  stored row can sit under an identity the repair's input does not derive -- its record
+  absent that run, or stored under another file's identity -- and read against the inputs it
+  would be left out. With nothing recorded every unanswered row is carried, which is also
+  what a batch submitted before inputs were recorded gets. The repair's submission removes
+  any recording an earlier run left, so that does not rest on who cleared batch state first.
+- **A run in which something failed and nothing was answered replaces no answer.** Online
+  raises before it writes when nothing succeeded (`raise_if_terminal_failure`), so its
+  stored answers stand. Here
+  the failures are written, beside every stored answer whichever input it was for; a
+  failure row under a stored answer's own identity gives way to it, so the identity is
+  still stored once. Stored rows that are not answers follow the inputs as usual. Without
+  a failure the run did produce this run's file, however little is in it, and the inputs
+  rule applies in full, as online writes it. A record that fails prompt preparation when
+  nothing else is sent is such a failure, though it reaches the write as a guard tombstone
+  and not a failure row; submission says so to the merge (`also_failed`).
+
+A row naming several inputs is always carried: it holds what each gave it, so no one input
+accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
+logged once per write at INFO with the counts, since a healthy re-run below an expansion
+leaves rows out every time.
+
+Leaving a row out is safe only because an input that returns is answered again. The gate
+carries any input with a terminal disposition, and one whose row was left out has the
+disposition and no row. Online re-queues those (`build_carry_forward` reports them
+`missing`); submission does the same, looking the stored file up under the name finalize
+writes it (`batch_output_name`), so the two cannot disagree about whether a row exists. An
+input the guard filtered is not looked up, since it holds no row by design. It is sent on
+to the guard again instead: online's guard runs above its gate and judges every input
+afresh, where the gate here would call a filtered one done for good.
+
+When the guard leaves nothing to send, submission returns a tombstone that the caller
+writes as a whole file. It goes through the same merge (`with_stored_rows_not_reproduced`),
+so that write carries what a finalize would. Alone it replaced every stored answer with
+nothing while their dispositions still said done. The rows are read from the file the
+tombstone is written to, which the caller names (`tombstone_path`), and from no other. For
+a file in a subdirectory that is not the batch's output file: the runner hands the file's
+own folder as the output directory, so the tombstone lands under `sub/page.json` while the
+batch output is stored as `page.json`. Reading the one and writing the other stores each
+row twice.
+
+The two paths do not always leave the same file. Where batch differs it holds more, with
+one exception noted last:
+
+- A run whose every input the gate carries submits nothing and finalizes nothing, so the
+  file is left as it stands. It can still hold rows of inputs that have left; online writes
+  the file again without them and answers them again when they return. A record that moves
+  from one input file to another is answered in its new file while the old one, if nothing
+  is submitted for it, still holds its row.
+- Rows of inputs a record limit holds back are carried, since they are still inputs. Online
+  drops them and answers them again when the limit admits them.
+- A run in which something fails and nothing succeeds writes its failed rows. Online writes
+  nothing.
+- The gate runs above the guard here, so an answered input that now fails the guard keeps
+  its answer. Online replaces it with a tombstone, or with nothing.
+- An expanding input sent again that fails, while something else succeeds, keeps the rows
+  it minted before beside its failure row. Online holds the failure row alone.
+- An input sent again that answers with no rows keeps the rows it had, since nothing was
+  produced to replace them.
+- A failure beside an input that answers with no rows. Online counts the empty answer as a
+  success, so it does not raise, and writes the failure row. Batch sees no answer row,
+  reads the run as one online would refuse, and keeps every stored answer with no failure
+  row.
+- A row naming several inputs is always carried.
+- The exception: an online run that raised wrote nothing, so its file still holds answers
+  for records that are no input of that run. A batch run over the same inputs that writes
+  a file, whether it answered something or wrote only what the guard left, writes this
+  run's file, without them. Batch holds less there only because online's run aborted, and
+  never for a record that is an input of the run.
+
+`tests/integration/test_batch_rerun_matches_online.py` drives both paths from
+`ProcessingPipeline.process` against a real store. For every input of a run it requires
+that batch never loses an answer online still holds, never leaves unanswered what online
+answers, and never pays for an input twice running where online did not.
 
 ---
 
@@ -596,17 +641,22 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED)
+  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED, CHECKING_BATCH)
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
                     Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
 
-  All other retryable statuses (FAILED, SKIPPED, CHECKING_BATCH)
+  All other retryable statuses (FAILED, SKIPPED)
                  → bulk clear ALL dispositions
 
 Why the asymmetry:
   RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
   dispositions that should survive for carry-forward on resume.
+
+  CHECKING_BATCH = died while collecting a batch. The files it reached are
+  written and their records done. A finished batch job stops its file being
+  submitted again only until it is collected, so with those dispositions
+  wiped each collected file is submitted, and paid for, a second time.
 
   FAILED = zero successes whenever _resolve_completion_status classified it
   (it returns FAILED only when has_successful_items() is False). An action

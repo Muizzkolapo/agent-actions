@@ -278,3 +278,33 @@ class TestInterruptedRunResumesFromCheckpoint:
         _, status_file = self._interrupt_then_resume(tmp_path)
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.PENDING
+
+
+class TestARunThatDiedCollectingABatchKeepsWhatItCollected:
+    """Left at CHECKING_BATCH, the action has already written the files it collected.
+
+    Wiped, their records hold no disposition, and a finished job stops a file being
+    submitted again only until it is collected: each such file would be paid for twice.
+    """
+
+    def _died_collecting_then_resumed(self, tmp_path):
+        status_file = tmp_path / ".agent_status.json"
+        state_manager = ActionStateManager(status_file, EXECUTION_ORDER)
+        state_manager.update_status("agent_a", ActionStatus.CHECKING_BATCH)
+        wf = _build_workflow(state_manager)
+        wf.storage_backend = MagicMock()
+        wf._reset_retryable_actions()
+        return wf, status_file
+
+    def test_only_what_is_still_owed_is_cleared(self, tmp_path):
+        wf, _ = self._died_collecting_then_resumed(tmp_path)
+
+        cleared = wf.storage_backend.clear_disposition.call_args_list
+        assert {call.args for call in cleared} == {
+            ("agent_a", disposition) for disposition in RUNNING_CLEAR_DISPOSITIONS
+        }
+
+    def test_the_action_is_run_again(self, tmp_path):
+        _, status_file = self._died_collecting_then_resumed(tmp_path)
+
+        assert _persisted_status(status_file, "agent_a") == ActionStatus.PENDING
