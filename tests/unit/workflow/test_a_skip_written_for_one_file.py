@@ -78,6 +78,7 @@ def test_a_failure_beside_a_success_in_another_file_completes_with_failures(back
     backend.set_disposition(ACTION, "g2", DISPOSITION_FAILED, reason="down")
 
     assert _classify(backend) == ActionStatus.COMPLETED_WITH_FAILURES
+    assert not _node_skipped(backend)
 
 
 def test_another_file_holding_only_failures_fails_the_action(backend):
@@ -86,6 +87,7 @@ def test_another_file_holding_only_failures_fails_the_action(backend):
     backend.set_disposition(ACTION, "g1", DISPOSITION_FAILED, reason="down")
 
     assert _classify(backend) == ActionStatus.FAILED
+    assert not _node_skipped(backend)
 
 
 def test_rows_stored_before_their_count_was_kept_are_held(backend):

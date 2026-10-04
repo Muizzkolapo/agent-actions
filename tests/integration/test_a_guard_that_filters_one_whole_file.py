@@ -159,3 +159,7 @@ def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_r
         FIRST: ActionStatus.COMPLETED.value,
         READER: ActionStatus.COMPLETED.value,
     }, transcript
+    if run_mode == "online":
+        # The file's warning must not say its readers get nothing: the other file feeds them.
+        assert "None of them reaches downstream actions" in transcript
+        assert "Downstream actions will receive no input" not in transcript
