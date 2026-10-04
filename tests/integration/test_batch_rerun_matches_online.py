@@ -33,9 +33,10 @@ from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.batch.services.processing import BatchProcessingService
+from agent_actions.llm.batch.services.processing_recovery import raise_pending_exhaustion
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.record_helpers import build_exhausted_tombstone
+from agent_actions.processing.record_helpers import build_exhausted_tombstone, build_tombstone
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
@@ -43,6 +44,7 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.record.envelope import RecordEnvelope
+from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.storage.backend import FAILURE_DISPOSITIONS
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
@@ -83,7 +85,7 @@ class Answerer:
 
     def __call__(self, guid: str, run: int) -> Any:
         want = self.shape.get((guid, run), self.shape.get(guid, 1))
-        if want in ("fail", "exhaust"):
+        if want in ("fail", "exhaust", "empty object"):
             return want
         return [{"answer": f"{guid}:{position}@run{run}"} for position in range(want)]
 
@@ -248,7 +250,24 @@ class _Online(_Mode):
                     guid = record["source_guid"]
                     taken.append(guid)
                     said = answer(guid, run)
-                    if said == "fail":
+                    if said in ([], "empty object"):
+                        # What the real strategy does with an empty answer (`on_empty`).
+                        if context.agent_config.get("on_empty", "warn") == "skip":
+                            result = ProcessingResult.skipped(
+                                passthrough_data=build_tombstone(
+                                    ACTION, record, EMPTY_OUTPUT, source_guid=guid
+                                ),
+                                reason=EMPTY_OUTPUT,
+                                source_guid=guid,
+                                input_record=record,
+                            )
+                        else:
+                            result = ProcessingResult.failed(
+                                error=f"Empty LLM response for record '{guid}'",
+                                source_guid=guid,
+                                input_record=record,
+                            )
+                    elif said == "fail":
                         result = ProcessingResult.failed(
                             error="provider error", source_guid=guid, input_record=record
                         )
@@ -385,6 +404,8 @@ def _collect(
             results.append(
                 BatchResult(custom_id=custom_id, content=None, success=False, error="boom")
             )
+        elif said == "empty object":
+            results.append(BatchResult(custom_id=custom_id, content={}, success=True))
         else:
             content = said if len(said) != 1 else said[0]
             results.append(BatchResult(custom_id=custom_id, content=content, success=True))
@@ -400,21 +421,24 @@ def _collect(
         workflow_name=ACTION,
         storage_backend=backend,
     )
+    context = RecoveryContext(
+        service=service,
+        manager=manager,
+        provider=provider,
+        agent_config=dict(config),
+        output_directory=str(out),
+        action_name=ACTION,
+        start_time=0.0,
+    )
     service._finalize_batch_output(
-        context=RecoveryContext(
-            service=service,
-            manager=manager,
-            provider=provider,
-            agent_config=dict(config),
-            output_directory=str(out),
-            action_name=ACTION,
-            start_time=0.0,
-        ),
+        context=context,
         identity=BatchIdentity(batch_id=entry.batch_id, file_name=name, entry=entry),
         batch_results=results,
         context_map=context_map,
         exhausted_recovery=exhausted or None,
     )
+    # As the finalisers' callers do: a halt parked during the write is raised after it.
+    raise_pending_exhaustion(context)
     return [label(included[custom_id]) for custom_id in submitted]
 
 
@@ -901,6 +925,69 @@ def test_a_record_blocked_upstream_is_stored_as_blocked_when_nothing_is_sent(tmp
     assert held == ["cascade_skipped:u1", "guard_skipped:s1"]
     (row,) = [row for row in batch.held() if row["source_guid"] == "u1"]
     assert row["_tombstone_reason"] == "upstream_unprocessed"
+
+
+EMPTY = pytest.mark.parametrize(
+    "empty", [0, "empty object"], ids=["an_empty_list", "an_empty_object"]
+)
+
+
+@EMPTY
+def test_an_empty_answer_is_a_failure_by_default(tmp_path, empty):
+    """`on_empty` defaults to warn. Counted as a success, the record holds no row and a
+    done disposition, and nothing says the model returned nothing."""
+    from agent_actions.storage.backend import DISPOSITION_FAILED
+
+    batch = _Batch(tmp_path)
+
+    held = batch.run(1, [rec("a1"), rec("a2")], Answerer({"a1": empty}))
+
+    assert held == ["failed:a1", "processed:a2:0@run1"]
+    (failed,) = batch.backend.get_disposition(ACTION, disposition=DISPOSITION_FAILED)
+    assert (failed["record_id"], failed["reason"]) == ("a1", "Empty LLM response for record 'a1'")
+
+
+@EMPTY
+def test_an_empty_answer_is_a_tombstone_where_the_action_says_skip(tmp_path, empty):
+    batch = _Batch(tmp_path)
+
+    batch.run(1, [rec("a1"), rec("a2")], Answerer({"a1": empty}), {"on_empty": "skip"})
+
+    (row,) = [row for row in batch.held() if row["source_guid"] == "a1"]
+    assert (row["_state"], row["_tombstone_reason"]) == ("guard_skipped", "empty_output")
+    assert row["content"][ACTION] is None
+
+
+@EMPTY
+def test_an_empty_answer_halts_the_action_where_it_says_error_after_the_write(tmp_path, empty):
+    """A batch has one write, and the other answers are in it: raised before it, the halt
+    would take them down too."""
+    from agent_actions.errors.processing import EmptyOutputError
+
+    batch = _Batch(tmp_path)
+
+    with pytest.raises(EmptyOutputError, match="on_empty=error"):
+        batch.run(1, [rec("a1"), rec("a2")], Answerer({"a1": empty}), {"on_empty": "error"})
+
+    assert answers(batch.held()) == ["failed:a1", "processed:a2:0@run1"]
+
+
+def test_no_halt_is_raised_where_no_answer_was_empty(tmp_path):
+    batch = _Batch(tmp_path)
+
+    held = batch.run(1, [rec("a1"), rec("a2")], extra={"on_empty": "error"})
+
+    assert held == ["processed:a1:0@run1", "processed:a2:0@run1"]
+
+
+@pytest.mark.parametrize("on_empty", ["warn", "skip"])
+def test_an_empty_answer_leaves_batch_where_it_leaves_online(tmp_path, on_empty):
+    """Through a re-run too: a failure is sent again, a tombstone is not."""
+    runs = [["a1", "a2"], ["a1", "a2"], ["a1", "a2", "a3"]]
+
+    for run in compare(tmp_path, runs, {"on_empty": on_empty}, {"a1": 0}):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
 def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
