@@ -9,7 +9,9 @@ from __future__ import annotations
 import functools
 import re
 import shlex
+import signal
 from pathlib import Path
+from unittest import mock
 
 import click
 import pytest
@@ -55,8 +57,13 @@ def _pages() -> list[Path]:
 
 @functools.cache
 def _agac() -> click.Group:
-    """The command tree `agac` runs; built on first use, not at collection."""
-    return CLI().click_group
+    """The command tree `agac` runs; built on first use, not at collection.
+
+    Without the signal handlers CLI() installs: they exit 130 on Ctrl-C, which
+    would fail the running test instead of stopping the test run.
+    """
+    with mock.patch.object(CLI, "_register_signal_handlers"):
+        return CLI().click_group
 
 
 def _walk(words: list[str]) -> tuple[list[str], str | None]:
@@ -138,6 +145,13 @@ def test_the_walk_refuses_a_command_agac_does_not_have():
         ["batch", "retry"],
         "No such command 'retry'.",
     )
+
+
+def test_reading_the_command_tree_leaves_the_runs_signal_handlers_alone():
+    """CLI() exits 130 on Ctrl-C; left installed, Ctrl-C fails a test instead of ending the run."""
+    before = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+    _agac.__wrapped__()
+    assert {s: signal.getsignal(s) for s in before} == before
 
 
 @pytest.mark.parametrize("page", _pages(), ids=_relative)
