@@ -290,7 +290,7 @@ First run (interrupted at record 150 of 200):
 Re-run:
 
   _reset_retryable_actions():
-      action was RUNNING → selective clear (failures only)
+      action stopped partway, config unchanged → selective clear (failures only)
       150 SUCCESS dispositions preserved
 
   UnifiedProcessor.process():
@@ -728,35 +728,36 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED, CHECKING_BATCH)
+  Stopped partway (RUNNING, INTERRUPTED, CHECKING_BATCH, FAILED), with the
+  config its run recorded as it started (`answered_under`) still in force
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
-                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
+                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED,
+                    and the prompt traces of what it keeps
 
-  All other retryable statuses (FAILED, SKIPPED)
-                 → bulk clear ALL dispositions
+  Stopped partway, edited since (prompt, schema, guard, model)
+                 → it and every action reading it are forgotten and
+                   answer everything again (ActionExecutor.reopen_with_readers)
 
-Why the asymmetry:
-  RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
-  dispositions that should survive for carry-forward on resume.
+  Stopped partway, nothing recorded (state from before the stamp)
+                 → by status: selective for RUNNING, INTERRUPTED,
+                   CHECKING_BATCH; bulk for FAILED
 
-  CHECKING_BATCH = died while collecting a batch. The files it reached are
-  written and their records done. A finished batch job stops its file being
-  submitted again only until it is collected, so with those dispositions
-  wiped each collected file is submitted, and paid for, a second time.
+  SKIPPED        → bulk clear ALL dispositions
 
-  A collect pass that ends in an error, not a kill, is marked FAILED by the
-  error handler. It holds what it collected all the same, so the state
-  manager records that it was stopped while collecting (`stopped_collecting`)
-  and the reset clears it selectively too. The mark goes with the next status
-  change, so the protection covers one reset: if the resumed run then fails
-  while running, before it is back to collecting, the reset after that wipes.
+Why:
+  A stopped action may hold checkpointed SUCCESS dispositions, however it
+  stopped: killed (RUNNING), interrupted, killed while collecting a batch
+  (CHECKING_BATCH: the files it reached are written and their records done),
+  or stopped by an error (FAILED: an action that raised may hold successes).
+  Wiped, they are answered again; a finished batch job stops its file being
+  submitted again only until it is collected, so each collected file is
+  submitted, and paid for, a second time.
 
-  FAILED = zero successes whenever _resolve_completion_status classified it
-  (it returns FAILED only when has_successful_items() is False). An action
-  that raised instead of returning is also FAILED and may hold successes:
-  their output survives the clear, their dispositions do not, so those
-  records are processed again on the next run.
+  Kept after an edit, they are answers to another prompt or from another
+  model, carried as current, and the action is stamped complete under the
+  new config. Which config they were answered under is known only from
+  the stamp the executor writes when it starts the action's work.
 
   SKIPPED = no records processed. Nothing to preserve.
 

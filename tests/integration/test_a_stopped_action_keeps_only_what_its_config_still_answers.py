@@ -54,7 +54,7 @@ from agent_actions import udf_tool
 
 @udf_tool
 def echo_summary(data: Any, *args) -> list[dict]:
-    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "low"}]
+    return [{"summary": (data or {})["summarize"]["summary"], "exam_density": "low"}]
 """
 
 
@@ -242,6 +242,17 @@ def test_an_interrupted_action_asks_again_for_every_record_once_it_is_edited(
     assert {asked_with for _, asked_with in provider.asked} == {model}
 
 
+def test_an_interrupted_action_asks_only_for_what_it_had_not_finished(online, provider):
+    provider.stops(at_call=3, raising=KeyboardInterrupt())
+    _run("--fresh")
+
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == ["Page delta.", "Page gamma."]
+
+
 def test_an_action_stopped_by_an_error_does_not_ask_again_for_what_it_finished(online, provider):
     provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
     _run("--fresh")
@@ -253,6 +264,22 @@ def test_an_action_stopped_by_an_error_does_not_ask_again_for_what_it_finished(o
     assert result.exit_code == 0, result.output
     assert provider.pages() == ["Page delta.", "Page gamma."]
     assert _status(online) == "completed"
+
+
+@EDITS
+def test_an_action_stopped_by_an_error_asks_again_for_every_record_once_it_is_edited(
+    online, provider, edit, model
+):
+    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
+    _run("--fresh")
+
+    edit(online)
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == EVERY_PAGE
+    assert {asked_with for _, asked_with in provider.asked} == {model}
 
 
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
@@ -270,6 +297,20 @@ def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
         backend.close()
     assert len(preview) == len(EVERY_PAGE)
     assert [record.get("_trace") is not None for record in preview] == [True] * len(preview)
+
+
+def test_a_collect_pass_stopped_by_an_error_does_not_send_what_it_collected_again(project):
+    """A finished job stops its file being sent again only until it is collected, so the
+    collected file is held back by its records alone."""
+    _stop_collecting_after_the_first_file()
+
+    before = _sent(project)
+    _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _sent_since(project, before) == []
+    assert _status(project) == "completed"
 
 
 def test_a_collect_pass_stopped_by_an_error_sends_everything_again_once_its_model_is_edited(

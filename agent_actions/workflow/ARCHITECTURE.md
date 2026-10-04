@@ -104,8 +104,9 @@ One transition sits outside the diagram because it is driven by the process
 dying rather than by the workflow: on Ctrl-C, SIGTERM or cancellation the
 coordinator sweeps `RUNNING`/`CHECKING_BATCH` to `INTERRUPTED` on its way out.
 It is terminal and retryable, so the next run resets it to `PENDING` like any
-other retryable status — but it is deliberately not `FAILED`, because
-`_reset_retryable_actions` preserves checkpointed dispositions for it.
+other retryable status — but it is deliberately not `FAILED`: in a status file written
+before an action's start recorded its config, the status is all the reset can go by, and
+it keeps the checkpointed dispositions of an interrupted action but not of a failed one.
 
 ### Status Sets
 
@@ -125,7 +126,8 @@ RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH, INTERRUPTED}
 
 MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED, CHECKING_BATCH}
   → "Died mid-processing; may hold checkpointed SUCCESS dispositions"
-  → Used by: _reset_retryable_actions selective-vs-bulk disposition clearing
+  → Used by: _reset_retryable_actions, which with FAILED takes them as stopped
+    partway, and keeps what one finished while its config is unchanged
 ```
 
 ### Completion Classification
@@ -262,6 +264,10 @@ write leaves every status as it was and the reason for the reset still readable,
 next run does all of it again; one that dies after it leaves all of them pending. It is
 done when the action is reset and not as each reader is reached, because a batch action
 pauses the run and the next process no longer knows which action was reset.
+
+An action stopped partway is reset the same way when its config differs from the one its
+run recorded as it started, at the start of the next run (`_reset_retryable_actions`); see
+"A stopped action keeps what it finished while its config is unchanged".
 
 Two routes run a completed action again and leave its readers alone: a node-level
 failure it recorded, and output that could not be read. There the action still holds its
@@ -516,57 +522,66 @@ The retry command is the dedicated path for fixing partial failures.
 It clears only the failed records' dispositions, preserving successes.
 ```
 
-### Mid-processing actions get selective disposition clearing
+### A stopped action keeps what it finished while its config is unchanged
 
 ```
-_reset_retryable_actions clears RUNNING_CLEAR_DISPOSITIONS
-(FAILED, EXHAUSTED, DEFERRED) for actions that died mid-processing.
+When the executor starts an action's work it records, in the write that
+sets RUNNING, what that work is answered under: `answered_under`, holding
+the config hash, model_name and model_vendor. The status changes after it
+(FAILED, INTERRUPTED, BATCH_SUBMITTED, CHECKING_BATCH, a sweep) leave it.
 
-It does NOT clear SUCCESS, PASSTHROUGH, FILTERED, SKIPPED.
-
-Why: such actions may have checkpointed SUCCESS dispositions.
-Bulk-wiping them destroys resume progress.
-
-Which statuses count is MID_PROCESSING_STATUSES:
+_reset_retryable_actions takes an action stopped partway and compares
+that with the config in force, as the executor compares a completed one.
+Stopped partway is one of:
     RUNNING        — the process died without unwinding (SIGKILL, OOM,
                      power loss), so nothing rewrote the status.
     INTERRUPTED    — the coordinator caught Ctrl-C/SIGTERM/cancellation
                      and recorded a terminal status on the way out.
     CHECKING_BATCH — the process died while collecting a batch. The
                      files it reached are written and their records done.
+    FAILED         — an error stopped it, running or collecting; one that
+                     raised may hold successes. Not one halted by
+                     `on_exhausted: raise`, which is not reset at all.
 
-One FAILED action counts too: one the error handler swept from
-CHECKING_BATCH. The state manager marks it (`stopped_collecting`) in
-the write that gives it the new status, because FAILED alone no longer
-says it was collecting. Any later status change drops the mark.
+    unchanged → clear only RUNNING_CLEAR_DISPOSITIONS
+                (FAILED, EXHAUSTED, DEFERRED); SUCCESS, PASSTHROUGH,
+                FILTERED, SKIPPED and the prompt traces stay, and the
+                DispositionGate carries them
+    edited    → ActionExecutor.reopen_with_readers: it and every action
+                reading it are forgotten (dispositions, checkpoints, batch
+                state, a batch still out given up) and put back to pending
+    unknown   → state written before the stamp existed: reset by status,
+                selective for MID_PROCESSING_STATUSES, bulk for FAILED
 
-If you change this to bulk-clear for any of them:
-    Checkpoint resume breaks — the DispositionGate finds no terminal
-    IDs and reprocesses everything from scratch. For a batch that means
+A repair (`agac retry`) records the completion stamp it keeps, not the
+config it runs under: the records it does not name were answered under
+that, so a stopped retry of an edited action leaves the edit to the next
+run, as a finished one does.
+
+If you clear a stopped action in bulk while its config is unchanged:
+    Checkpoint resume breaks — the DispositionGate finds no terminal IDs
+    and reprocesses everything from scratch. For a batch that means
     submitting, and paying for, every collected file again.
 
-The same trap applies to routing an interrupt through FAILED: every
-other FAILED action the reset takes is bulk-wiped by design, so
-collapsing INTERRUPTED into it silently destroys the checkpoint it
-exists to protect. (A FAILED action halted by `on_exhausted: raise` is
-not reset at all.)
+If you keep what it finished after an edit:
+    The gate carries answers given under the old prompt or model, the
+    batch jobs still out are collected as they are, and the action is then
+    stamped complete under the new config, so nothing re-runs it.
 ```
 
-### The snapshot ordering in _reset_retryable_actions matters
+### The reset decides before it writes a status
 
 ```
-running_actions = {... status in MID_PROCESSING_STATUSES
-                       or stopped_collecting(name) ...}   ← snapshot BEFORE
+for each stopped action:  edited → reopen_with_readers (one status write)
+                          else   → keeps.add(name)
 reset_actions = state_mgr.reset_retryable(exclude=halted)  ← mutates to PENDING
 
-The snapshot MUST be captured before reset_retryable() because
-reset_retryable() transitions all matching statuses to PENDING and
-drops the stopped_collecting mark with them. After the call, you
-can't tell which actions were mid-processing.
-
-If you swap the order:
-    running_actions is always empty → all actions get bulk-cleared
-    → checkpoint resume breaks.
+Both MUST happen before reset_retryable(). It moves every retryable
+status to PENDING, after which nothing says which actions were stopped
+partway. And an edited action reset after it would sit PENDING, which
+is not retryable: a process that died in between would leave it to run
+on with what it holds. Before it, the stamp still differs and the next
+run repeats the reset.
 ```
 
 ### Config hash invalidation scope
@@ -581,7 +596,9 @@ If you change one of these fields and re-run WITHOUT --fresh:
     and clears its dispositions, and does the same to every action that
     reads it. They re-run with new config. Not while `agac retry` is
     re-running records: it acts on no mismatch and keeps the stamps it
-    found, so the next plain run still sees the mismatch.
+    found, so the next plain run still sees the mismatch. An action stopped
+    partway is compared at the start of the next run, against the
+    `answered_under` its run recorded (_edits_since serves both).
 
 If you add a new config field that affects output but don't add it
 to the hash computation:

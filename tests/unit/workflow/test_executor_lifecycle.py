@@ -467,7 +467,8 @@ class TestExecuteAgentRun:
             result = executor._execute_action_run(params)
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.RUNNING)
+        statuses = [call.args for call in mock_deps.state_manager.update_status.call_args_list]
+        assert ("agent_a", ActionStatus.RUNNING) in statuses
 
     def test_failure_calls_handle_run_failure(self, executor, mock_deps):
         """Exception should result in _handle_run_failure path."""

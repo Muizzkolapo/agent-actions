@@ -251,12 +251,13 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   These records are "done" from the disposition gate's perspective.
   The gate carries them forward without reprocessing.
 
-RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an interrupted action):
+RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED
 
-  When a RUNNING action resumes, these dispositions are deleted so the
-  records flow through again. SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
-  are preserved so checkpointed progress survives.
+  When an action stopped partway resumes under the config its run started
+  with, these dispositions are deleted so the records flow through again.
+  SUCCESS, PASSTHROUGH, FILTERED, SKIPPED are preserved so checkpointed
+  progress survives.
 
 FAILURE_DISPOSITIONS (eligible for retry):
   FAILED, EXHAUSTED

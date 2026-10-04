@@ -74,8 +74,7 @@ def _compute_action_config_hash(
     NOT the model: the ``"model"`` key below is permanently ``""`` because
     configs declare ``model_vendor``/``model_name``.  It is kept so the digest
     does not rotate.  A model change is caught by comparing those two fields
-    against the completion stamp in ``_maybe_invalidate_completed_status`` —
-    do not delete that as redundant.
+    against the stamps in ``_edits_since`` — do not delete that as redundant.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
@@ -122,6 +121,44 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "max_records",
     }
 )
+
+# Recorded beside the status when an action starts work: the config the records it then
+# holds are answered under. The completion stamp says so only once it completes, and the
+# startup reset needs it for an action that stopped partway.
+ANSWERED_UNDER = "answered_under"
+
+
+def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> tuple[bool, bool]:
+    """Whether the semantic config, then the model, differ from what *stamp* recorded.
+
+    A key the stamp holds no value for never differs, so state written before a key
+    was recorded is left alone.
+    """
+    # The hash reads a "model" key and configs write model_name/model_vendor; adding
+    # them would change every stored digest and re-run every workflow.
+    model_changed = any(
+        stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
+        for key in ("model_name", "model_vendor")
+    )
+    stored_hash = stamp.get("config_hash")
+    config_changed = stored_hash is not None and stored_hash != _compute_action_config_hash(
+        action_config
+    )
+    return config_changed, model_changed
+
+
+def edited_since_its_work_began(
+    details: dict[str, Any], action_config: ActionConfigDict | None
+) -> bool | None:
+    """Whether *action_config* differs from the one the action's records were answered under.
+
+    None when that is unknown: nothing was recorded when its work began, or it has no
+    config now.
+    """
+    stamp = details.get(ANSWERED_UNDER)
+    if not isinstance(stamp, dict) or stamp.get("config_hash") is None or action_config is None:
+        return None
+    return any(_edits_since(stamp, action_config))
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -314,6 +351,20 @@ class ActionExecutor:
             return self.deps.state_manager.get_status_details(action_name).get(key)
         return in_force
 
+    def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
+        """The config the work this run starts is answered under, for a later reset to compare.
+
+        A repair is held to the completion stamp it keeps: the records it does not name
+        were answered under that, and an edit is the next plain run's to apply.
+        """
+        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+        in_force = {
+            "config_hash": _compute_action_config_hash(action_config),
+            "model_name": cfg.get("model_name"),
+            "model_vendor": cfg.get("model_vendor"),
+        }
+        return {key: self._stamped(action_name, key, value) for key, value in in_force.items()}
+
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
         """What the slices admitted, unless this run is only repairing records.
 
@@ -383,18 +434,7 @@ class ActionExecutor:
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-
-        # The hash reads a "model" key and configs write model_name/model_vendor; adding
-        # them would change every stored digest and re-run every workflow. Compared from
-        # the stamp instead, and only where one was written, so older state is left alone.
-        model_changed = any(
-            details.get(key) is not None and details.get(key) != action_config.get(key)
-            for key in ("model_name", "model_vendor")
-        )
-        stored_hash = details.get("config_hash")
-        config_changed = stored_hash is not None and stored_hash != _compute_action_config_hash(
-            action_config
-        )
+        config_changed, model_changed = _edits_since(details, action_config)
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
@@ -449,12 +489,17 @@ class ActionExecutor:
                     file_limit,
                     reason,
                 )
-            readers = self._stale_readers(action_name)
-            for name in (*readers, action_name):
-                self._forget_what_it_did(name)
-            self.deps.state_manager.reopen([*readers, action_name])
+            self.reopen_with_readers(action_name)
             return ActionStatus.PENDING
         return current_status
+
+    def reopen_with_readers(self, action_name: str) -> None:
+        """Forget what *action_name* and everything reading it hold, and put them all back
+        to pending, about to answer everything again."""
+        readers = self._stale_readers(action_name)
+        for name in (*readers, action_name):
+            self._forget_what_it_did(name)
+        self.deps.state_manager.reopen([*readers, action_name])
 
     def _forget_what_it_did(self, action_name: str) -> None:
         """Clear what an action about to run again called done. Its status is not touched."""
@@ -467,7 +512,7 @@ class ActionExecutor:
             given_up = BatchRegistryManager.uncollected_batch_ids(storage_backend, action_name)
             if given_up:
                 logger.warning(
-                    "%s is running again from new input: giving up %s, sent what it read before",
+                    "%s is running again from scratch: giving up %s, sent before it was reset",
                     action_name,
                     ", ".join(given_up),
                 )
@@ -1836,7 +1881,11 @@ class ActionExecutor:
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
         self._clear_stale_node_disposition(params.action_name)
-        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.RUNNING,
+            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
+        )
         self._track_action_start(params)
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
@@ -1879,7 +1928,11 @@ class ActionExecutor:
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
         self._clear_stale_node_disposition(params.action_name)
-        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.RUNNING,
+            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
+        )
         self._track_action_start(params)
 
         # See sync counterpart for the rationale on snapshot placement.
