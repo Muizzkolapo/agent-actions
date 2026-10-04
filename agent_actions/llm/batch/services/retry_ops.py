@@ -48,6 +48,9 @@ def submit_retry_batch(
     output_directory: str,
     file_name: str | None,
     agent_config: dict[str, Any] | None,
+    *,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
 ) -> tuple[str, int] | None:
     """Submit a retry batch for missing records without blocking.
 
@@ -62,6 +65,9 @@ def submit_retry_batch(
         output_directory: Output directory path
         file_name: Original file name
         agent_config: Agent configuration
+        action_indices: The workflow's action positions, which rebuilding the
+            prompt of an action with dependencies needs
+        dependency_configs: The workflow's action configs, for the same rebuild
 
     Returns:
         Tuple of (batch_id, record_count) if submitted, None if nothing to submit
@@ -86,7 +92,11 @@ def submit_retry_batch(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = BatchTaskPreparator(storage_backend=storage_backend)
+        preparator = BatchTaskPreparator(
+            action_indices=action_indices,
+            dependency_configs=dependency_configs,
+            storage_backend=storage_backend,
+        )
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=missing_records,
@@ -127,6 +137,9 @@ def resubmit_missing_records(
     output_directory: str,
     file_name: str | None,
     agent_config: dict[str, Any] | None,
+    *,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
 ) -> list[BatchResult]:
     """Resubmit missing records as a new batch and wait for completion."""
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -145,7 +158,11 @@ def resubmit_missing_records(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = BatchTaskPreparator(storage_backend=storage_backend)
+        preparator = BatchTaskPreparator(
+            action_indices=action_indices,
+            dependency_configs=dependency_configs,
+            storage_backend=storage_backend,
+        )
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=missing_records,

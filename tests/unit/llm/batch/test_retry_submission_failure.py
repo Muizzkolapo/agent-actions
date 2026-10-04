@@ -63,6 +63,8 @@ class TestRetrySubmissionFailure:
                 output_directory="/tmp/output",
                 file_name="batch_001",
                 agent_config={"model": "gpt-4"},
+                action_indices={},
+                dependency_configs={},
             )
 
         assert result is None
@@ -84,6 +86,8 @@ class TestRetrySubmissionFailure:
                 output_directory="/tmp/output",
                 file_name="batch_002",
                 agent_config=None,
+                action_indices={},
+                dependency_configs={},
             )
 
         assert result is None
@@ -101,6 +105,8 @@ class TestRetrySubmissionFailure:
                 output_directory="/tmp/output",
                 file_name="batch_003",
                 agent_config=None,
+                action_indices={},
+                dependency_configs={},
             )
 
     def test_empty_prepared_tasks_is_permanent_not_transient(self, mock_provider, context_map):
@@ -120,6 +126,8 @@ class TestRetrySubmissionFailure:
                 output_directory="/tmp/output",
                 file_name="batch_004",
                 agent_config=None,
+                action_indices={},
+                dependency_configs={},
             )
         mock_provider.submit_batch.assert_not_called()
 
@@ -139,6 +147,8 @@ class TestRetrySubmissionFailure:
                 output_directory="/tmp/output",
                 file_name="batch_005",
                 agent_config={"model": "gpt-4"},
+                action_indices={},
+                dependency_configs={},
             )
 
         assert result == ("retry_batch_999", 2)
