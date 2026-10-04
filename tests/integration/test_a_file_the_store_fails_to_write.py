@@ -112,7 +112,9 @@ def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_befo
 
     _edit_prompt(online)
     with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
-        _run()
+        failed = _run()
+    assert failed.exit_code == 1, failed.output
+    assert _status(online, READER) == "skipped"
     result = _run()
 
     assert result.exit_code == 0, result.output
@@ -160,6 +162,24 @@ def test_a_first_run_whose_store_fails_to_write_a_file_stores_it_on_the_next_run
     assert result.exit_code == 0, result.output
     assert _status(online) == "completed"
     assert len(_stored(online)) == len(EVERY_PAGE)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "The next run stores the file from its records' checkpoint rows without asking for "
+        "them again, and a checkpoint row carries no lineage or metadata, so the file's "
+        "rows lack what the rows of the file stored on the first run have."
+    ),
+)
+def test_a_file_stored_on_the_run_after_its_store_failed_carries_its_lineage(
+    online,  # noqa: F811
+):
+    with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
+        assert _run("--fresh").exit_code == 1
+
+    assert _run().exit_code == 0
+    assert all(row.get("lineage") for row in _stored_rows(online))
 
 
 def test_a_batch_file_the_store_fails_to_collect_after_an_edit_is_collected_by_a_later_run(
