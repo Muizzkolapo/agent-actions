@@ -458,7 +458,13 @@ class _FirstStageBatch:
         self.provider = _Provider()
         self.sent: list[list[str]] = []
 
-    def run(self, run: int, staged: list[dict[str, Any]], extra: dict[str, Any]) -> list[str]:
+    def run(
+        self,
+        run: int,
+        staged: list[dict[str, Any]],
+        extra: dict[str, Any],
+        retried: frozenset[str] = frozenset(),
+    ) -> list[str]:
         self.backend.clear_batch_state(ACTION)
         staged_file = self.staging / self.file
         staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -490,6 +496,7 @@ class _FirstStageBatch:
                     storage_backend=self.backend,
                     action_configs={ACTION: config},
                     workflow_metadata={},
+                    retried_records=retried,
                     file_type_filter=self.file_type_filter,
                 )
             )

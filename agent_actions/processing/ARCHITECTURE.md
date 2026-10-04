@@ -461,7 +461,8 @@ basename for a file the store already holds under it (its output, or a registry 
 unless a top-level input of the action stores under that name or another nested file
 stored under it claimed it first. The choice is recorded per action
 (`batch_file_names:{action}`) and follows the stored rows, not the inputs of the day: a
-reset keeps it, `--fresh` removes it, and a repair records none. What this leaves:
+reset keeps it, `--fresh` removes it, and a repair records its choice as any run does. What
+this leaves:
 
 - A store that already holds a file under both names (answers under `page.json`, a
   nothing-to-send write under `sub/page.json`) keeps the nested file as it stands. Nothing

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.errors import ProcessingError
 
 if TYPE_CHECKING:
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -45,16 +46,17 @@ def batch_file_identity(
     storage_backend: "StorageBackend | None",
     *,
     base_owner: Callable[[str], bool],
-    remember: bool,
+    registry: Callable[[str], "BatchRegistryManager"],
 ) -> str:
     """The name a batch keys an input file by: its path under the action's input root.
 
-    Code before this keyed a file by its basename alone, and a store it wrote holds a
+    A store written by an older version keyed a file by its basename alone, and holds a
     nested file's rows, batch state and every downstream join under that name. Such a
-    file keeps it, unless *base_owner* says a top-level input of the action now stores
-    under that name, or another nested file stored under it claimed it first. The choice
-    is recorded and outlives a reset, since the stored rows do; ``delete_target``
-    forgets it. A repair (*remember* False) decides for itself alone.
+    file keeps it, unless *base_owner* says a top-level input of the action stores under
+    that name, or another nested file stored under it claimed it first. The choice is
+    recorded, a repair's too, so two files cannot claim one name, and it outlives a
+    reset, since the stored rows do; ``delete_target`` forgets it. *registry* is the
+    submission's, so the registry is read once for both.
     """
     identity = PurePosixPath(relative_path).as_posix()
     legacy = PurePosixPath(identity).name
@@ -79,7 +81,7 @@ def batch_file_identity(
         )
     else:
         decided = identity
-        if _stored_under(storage_backend, action_name, legacy):
+        if _stored_under(storage_backend, registry(action_name), action_name, legacy):
             holder = _claimant(names, identity, legacy) or (
                 "a top-level input" if base_owner(legacy) else None
             )
@@ -103,9 +105,8 @@ def batch_file_identity(
                     batch_output_name(legacy),
                     holder,
                 )
-    if remember:
-        names[identity] = decided
-        storage_backend.save_metadata(key, json.dumps(names, sort_keys=True))
+    names[identity] = decided
+    storage_backend.save_metadata(key, json.dumps(names, sort_keys=True))
     return decided
 
 
@@ -136,13 +137,16 @@ def _claimant(names: dict[str, str], identity: str, legacy: str) -> str | None:
     )
 
 
-def _stored_under(storage_backend: "StorageBackend", action_name: str, legacy: str) -> bool:
+def _stored_under(
+    storage_backend: "StorageBackend",
+    registry: "BatchRegistryManager",
+    action_name: str,
+    legacy: str,
+) -> bool:
     """Whether the store keeps a file under *legacy*: its output, or a batch entry."""
     if storage_backend.has_target_file(action_name, batch_output_name(legacy)):
         return True
-    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-
-    return BatchRegistryManager(storage_backend, action_name).get_batch_job(legacy) is not None
+    return registry.get_batch_job(legacy) is not None
 
 
 def held_by_a_dependency(

@@ -15,6 +15,7 @@ from agent_actions.llm.batch.infrastructure.context import (
     batch_output_name,
 )
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryStateManager
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 KEYS = {
@@ -97,7 +98,11 @@ def test_a_name_claimed_by_one_file_is_not_claimed_by_another_stored_under_it(tm
 
     def name(path: str) -> str:
         return batch_file_identity(
-            path, "act", backend, base_owner=lambda legacy: False, remember=True
+            path,
+            "act",
+            backend,
+            base_owner=lambda legacy: False,
+            registry=lambda action: BatchRegistryManager(backend, action),
         )
 
     assert [name("sub1/page.csv"), name("sub2/page.json")] == ["page.csv", "sub2/page.json"]

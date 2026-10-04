@@ -263,19 +263,47 @@ def test_fresh_moves_a_file_kept_on_its_basename_to_its_own_name(tmp_path):
     assert action.files() == {"sub/page.json": ["processed:a1@batch-2", "processed:a2@batch-2"]}
 
 
-def test_a_repair_does_not_decide_which_name_a_file_keeps(tmp_path):
-    """It walks only what it was asked to repair, so the next ordinary run decides."""
+def _names(action: _Action) -> dict[str, str]:
+    return json.loads(action.backend.load_metadata(NAMES) or "{}")
+
+
+def test_a_repair_names_a_file_as_a_full_run_would_and_records_it(tmp_path):
+    """The name rests on what the store holds, not on which records a run answers."""
     action = _Action(tmp_path)
     _as_stored_before(action, "sub/page.json", [rec("a1", keep=True), rec("a2", keep=False)])
 
     action.run({"sub/page.json": A_PAGE}, retry=["a2"])
 
-    assert action.backend.load_metadata(NAMES) is None
+    assert _names(action) == {"sub/page.json": "page.json"}
     assert action.files() == {"page.json": ["processed:a1@batch-1", "processed:a2@batch-2"]}
 
-    action.run({"sub/page.json": A_PAGE})
 
-    assert json.loads(action.backend.load_metadata(NAMES) or "{}") == {"sub/page.json": "page.json"}
+def test_two_files_of_one_basename_cannot_both_claim_it_in_a_repair(tmp_path):
+    """Unrecorded, the second file claimed the name too, and wrote its answers over it."""
+    action = _Action(tmp_path)
+    _as_stored_before(action, "sub1/page.json", [rec("a1", keep=True)])
+    twins = {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+
+    action.run(twins, retry=["b1"])
+
+    assert _names(action) == {"sub1/page.json": "page.json", "sub2/page.json": "sub2/page.json"}
+    assert action.files() == {
+        "page.json": ["processed:a1@batch-1"],
+        "sub2/page.json": ["processed:b1@batch-2"],
+    }
+
+
+def test_a_first_stage_repair_names_a_file_as_a_full_run_would_and_records_it(tmp_path):
+    batch = _FirstStageBatch(tmp_path, "page.json")
+    batch.run(1, STAGED, {})
+    (batch.staging / "page.json").unlink()
+    batch.file = "sub/page.json"
+    batch.backend = _reopened(batch.backend)
+
+    batch.run(2, STAGED, {}, retried=frozenset({"a-record-of-no-file"}))
+
+    assert batch.sent[1] == []
+    assert json.loads(batch.backend.load_metadata(NAMES) or "{}") == {"sub/page.json": "page.json"}
 
 
 def test_a_file_kept_on_its_basename_is_reported_once(tmp_path, caplog):

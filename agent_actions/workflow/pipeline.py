@@ -294,7 +294,7 @@ class ProcessingPipeline:
                 params.pipeline_action_config.get("dependencies") or [],
                 params.dependency_configs,
             ),
-            remember=not (disposition_gate is not None and disposition_gate.repairing),
+            registry=registry_manager_factory,
         )
 
         result = submission_service.submit_batch_job(

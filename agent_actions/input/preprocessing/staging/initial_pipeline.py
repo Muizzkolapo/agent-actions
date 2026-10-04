@@ -766,7 +766,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         ctx.agent_name,
         ctx.storage_backend,
         base_owner=_staged_at_the_top(ctx.base_directory, ctx.file_type_filter),
-        remember=not ctx.retried_records,
+        registry=registry_manager_factory,
     )
     result = submission_service.submit_batch_job(
         ctx.agent_config,
