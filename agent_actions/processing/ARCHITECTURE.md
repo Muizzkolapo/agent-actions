@@ -480,7 +480,8 @@ has one write and they are in it, and then halts: the halt leaves the loop over 
 action's files and the executor records the action as failed. An empty answer is never a
 success with nothing stored, which left the record done with no row and nothing saying
 the model had returned nothing. Two things are not empty answers here: a result whose
-content is null is a provider failure (a refusal, a safety block) and goes to recovery,
+content is null is a provider failure (a refusal, a safety block), retried where `retry` is
+on and stored failed otherwise,
 and when an expanding input sent again answers empty under `skip`, the rows it minted
 before stay beside its tombstone, as they do beside a failure row.
 
