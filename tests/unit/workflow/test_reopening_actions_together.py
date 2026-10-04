@@ -81,3 +81,33 @@ def test_a_completed_reader_is_not_said_to_give_up_a_batch_it_collected_long_ago
 
     assert state.get_status("define") == ActionStatus.PENDING
     assert [r.getMessage() for r in caplog.records if "giving up" in r.getMessage()] == []
+
+
+def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, caplog):
+    """Retry has put it back to pending. It answers the named records under the edit,
+    and the records it did not name still hold what the old config wrote."""
+    config = {"prompt": "X", "model": "m"}
+    state = ActionStateManager(tmp_path / "status.json", ["split"])
+    state.update_status(
+        "split", ActionStatus.COMPLETED, config_hash=_compute_action_config_hash(config)
+    )
+    state.update_status("split", ActionStatus.PENDING)
+    runner = MagicMock()
+    runner.retried_records = frozenset({"r1"})
+    executor = ActionExecutor(
+        ExecutorDependencies(
+            action_runner=runner,
+            state_manager=state,
+            skip_evaluator=MagicMock(),
+            batch_manager=MagicMock(),
+            output_manager=MagicMock(),
+        )
+    )
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        status = executor._maybe_invalidate_completed_status(
+            "split", {**config, "prompt": "Y"}, ActionStatus.PENDING
+        )
+
+    assert status == ActionStatus.PENDING
+    assert [r.getMessage() for r in caplog.records if "agac run" in r.getMessage()] != []
