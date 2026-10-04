@@ -21,6 +21,7 @@ from agent_actions.cli.main import CLI
 _DOCS = Path(__file__).resolve().parents[3] / "docs.agent-actions" / "docs"
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _PROMPT = re.compile(r"^\s*\$\s+")
+_CI_RUN_KEY = re.compile(r"^\s*(-\s+)?run:\s+")
 _SHELL_SEPARATOR = re.compile(r"\|\|?|&&|;")
 _ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=\S*")
 
@@ -42,7 +43,8 @@ def _shown_commands(page: Path) -> list[tuple[int, list[str]]]:
             continue
         if not in_block:
             continue
-        for segment in _SHELL_SEPARATOR.split(_PROMPT.sub("", line)):
+        command_line = _CI_RUN_KEY.sub("", _PROMPT.sub("", line))
+        for segment in _SHELL_SEPARATOR.split(command_line):
             words = segment.split()
             while words and _ENV_ASSIGNMENT.fullmatch(words[0]):
                 words.pop(0)
@@ -70,26 +72,18 @@ def _walk(words: list[str]) -> tuple[list[str], str | None]:
     """Read the words as `agac` does, down to the command they run.
 
     Returns the command names read and None or, where `agac` refuses a word,
-    the names up to and including that word and what `agac` says about it.
+    the names up to and including that word and why `agac` refuses it.
     """
     command: click.Command = _agac()
     ctx = click.Context(command, info_name="agac")
     path: list[str] = []
     while isinstance(command, click.Group):
-        while words and words[0].startswith("-"):
-            flag = words[0].split("=", 1)[0]
-            option = next(
-                (
-                    p
-                    for p in command.get_params(ctx)
-                    if isinstance(p, click.Option) and flag in p.opts + p.secondary_opts
-                ),
-                None,
-            )
-            if option is None:
-                return [*path, flag], click.NoSuchOption(flag).format_message()
-            takes_value = not (option.is_flag or option.count) and "=" not in words[0]
-            words = words[1 + (option.nargs if takes_value else 0) :]
+        # The group's own parser reads its options as `agac` does (`-vq`,
+        # `--opt=value`) but runs no callback: `--version` would exit.
+        try:
+            words = command.make_parser(ctx).parse_args(list(words))[1]
+        except (click.NoSuchOption, click.BadOptionUsage) as error:
+            return [*path, error.option_name], error.format_message()
         # A synopsis names a slot, not a command: `agac batch <subcommand> [options]`.
         if not words or words[0].startswith(("<", "[")):
             break
@@ -97,6 +91,7 @@ def _walk(words: list[str]) -> tuple[list[str], str | None]:
             name, sub, words = command.resolve_command(ctx, words)
         except click.UsageError as error:
             return [*path, words[0]], error.format_message()
+        assert name is not None and sub is not None, "None only under resilient parsing"
         path.append(name)
         command = sub
         ctx = click.Context(command, info_name=name, parent=ctx)
@@ -128,6 +123,7 @@ def test_the_scan_still_finds_the_documented_commands():
     [
         (["run", "-a", "wf"], ["run"]),
         (["--debug", "run", "-a", "wf"], ["run"]),
+        (["-vq", "batch", "status"], ["batch", "status"]),
         (["inspect", "-a", "wf", "action", "summarize"], ["inspect", "action"]),
         (["docs", "--port", "3000"], ["docs"]),
         (["init", "my_project"], ["init", "new"]),
@@ -145,6 +141,42 @@ def test_the_walk_refuses_a_command_agac_does_not_have():
         ["batch", "retry"],
         "No such command 'retry'.",
     )
+
+
+@pytest.mark.parametrize(
+    "words, refused",
+    [
+        (["--bogus", "run"], (["--bogus"], "No such option: --bogus Did you mean --verbose?")),
+        (["batch", "--bogus", "status"], (["batch", "--bogus"], "No such option: --bogus")),
+        (["--debug=yes", "run"], (["--debug"], "Option '--debug' does not take a value.")),
+    ],
+)
+def test_the_walk_refuses_a_group_option_as_agac_does(words, refused):
+    """Guards the walk: an option it skips unread could hide the command after it."""
+    assert _walk(words) == refused
+
+
+def test_the_scan_reads_a_command_however_a_block_writes_it(tmp_path):
+    """Guards the scan: a prompt, an env prefix, a CI step or a pipe must not hide a command."""
+    page = tmp_path / "page.md"
+    page.write_text(
+        "agac prose is not read\n"
+        "```bash\n"
+        "$ agac run -a wf\n"
+        "FOO=1 agac batch status\n"
+        "cd proj && agac docs\n"
+        "agac inspect -a wf --json | jq .\n"
+        "  run: agac expect report -a wf\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    assert _shown_commands(page) == [
+        (3, ["run", "-a", "wf"]),
+        (4, ["batch", "status"]),
+        (5, ["docs"]),
+        (6, ["inspect", "-a", "wf", "--json"]),
+        (7, ["expect", "report", "-a", "wf"]),
+    ]
 
 
 def test_reading_the_command_tree_leaves_the_runs_signal_handlers_alone():
