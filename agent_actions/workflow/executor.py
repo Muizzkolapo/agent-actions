@@ -949,6 +949,10 @@ class ActionExecutor:
             execution_time=duration,
             skip_reason=ALL_VERSIONS_FILTERED,
         )
+        # The raise is the proof: no version source holds a row.
+        self._forget_stored_rows(
+            params.action_name, f"no version source holds a row ({avf.version_sources})"
+        )
         self._write_skipped_disposition(
             params.action_name,
             ALL_VERSIONS_FILTERED,
@@ -1270,6 +1274,74 @@ class ActionExecutor:
             )
         return False
 
+    def _drop_rows_read_from_nothing(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> None:
+        """Forget a circuit-broken action's stored rows when an upstream it waits on holds none.
+
+        A skip never rewrites stored output, so rows from before stay unless
+        removed here. While every upstream still holds rows (a refused run carries
+        them) they stand. Only the upstreams the circuit breaker judges: an action
+        runs past a source it names only in its context scope, so rows it built
+        while that source held nothing are not made stale by it holding nothing.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        workflow_actions = list(getattr(self.deps.state_manager, "execution_order", None) or [])
+        upstreams = set(self._collect_upstream_deps(action_name, action_config))
+        # Concrete actions only: `dependencies` may name a version base, which holds nothing.
+        empty = next(
+            (
+                name
+                for name in workflow_actions
+                if name in upstreams
+                and name != action_name
+                and not self._holds_rows(storage_backend, name)
+            ),
+            None,
+        )
+        if empty is not None:
+            self._forget_stored_rows(action_name, f"upstream '{empty}' holds no rows")
+
+    def _forget_stored_rows(self, action_name: str, because: str) -> None:
+        """Delete a skipped action's rows and what called them done; a failure only warns.
+
+        Not under a repair, which touches only the records it names.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            return
+        try:
+            # Dispositions and checkpoints first: with the rows gone, carry-forward
+            # falls back to checkpoint records and would serve them again.
+            self._forget_what_it_did(action_name)
+            deleted = storage_backend.delete_target(action_name)
+        except Exception as e:
+            logger.warning(
+                "Could not delete stored rows of skipped '%s' (%s): %s", action_name, because, e
+            )
+            return
+        if deleted:
+            logger.info(
+                "Deleted %d stored file(s) of skipped '%s': %s, so they were made from "
+                "output that no longer exists",
+                deleted,
+                action_name,
+                because,
+            )
+
+    @staticmethod
+    def _holds_rows(storage_backend: Any, action_name: str) -> bool:
+        """has_target_rows, read as True when the store cannot say: a wrong True only keeps rows."""
+        try:
+            return bool(storage_backend.has_target_rows(action_name))
+        except Exception as e:
+            logger.warning("Could not tell whether '%s' holds rows: %s", action_name, e)
+            return True
+
     def _handle_dependency_skip(
         self,
         action_name: str,
@@ -1291,6 +1363,7 @@ class ActionExecutor:
         self.deps.state_manager.update_status(
             action_name, ActionStatus.SKIPPED, skip_reason=reason, execution_time=duration
         )
+        self._drop_rows_read_from_nothing(action_name, action_config)
         self._write_skipped_disposition(action_name, reason)
         total_actions = (
             len(self.deps.action_runner.execution_order)
