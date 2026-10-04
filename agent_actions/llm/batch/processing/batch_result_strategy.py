@@ -97,7 +97,7 @@ class BatchResultStrategy:
     Each returned result carries a ``processing_context`` field that the
     caller (``BatchProcessingService``) uses to run enrichment through the
     shared enrichment pipeline.  Error results have ``processing_context``
-    set to ``None`` and are intentionally not enriched.
+    set to ``None`` and are enriched under the caller's shared context.
 
     Implements ``ProcessingStrategy`` (via structural typing) so it can
     flow through ``UnifiedProcessor``.  Call ``prepare_invoke()`` to
@@ -163,7 +163,8 @@ class BatchResultStrategy:
         exhausted, or unprocessed).  Successful, exhausted, and unprocessed
         results carry a ``processing_context`` field; the caller uses it to
         run enrichment through the shared enrichment pipeline.  Error
-        results have ``processing_context=None`` and are not enriched.
+        results have ``processing_context=None`` and are enriched under the
+        caller's shared context.
 
         The caller is responsible for enriching, flattening ``result.data``
         into output records, and writing dispositions.
@@ -472,6 +473,8 @@ class BatchResultStrategy:
 
         processing_result.processing_context = processing_context
         processing_result.is_expansion = len(structured_items) > 1
+        # Read only if enrichment refuses the answer: the failed row is built from it.
+        processing_result.input_record = original_row
         return processing_result
 
     def _empty_answer(
@@ -489,7 +492,7 @@ class BatchResultStrategy:
         """
         agent_config = ctx.agent_config or {}
         action_name = agent_config.get("action_name", "unknown")
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+        source_guid = ctx.reconciler.get_source_guid(custom_id)
         original_row = ctx.reconciler.get_record_by_id(custom_id)
         record_index = ctx.reconciler.get_record_index(custom_id)
         on_empty = agent_config.get("on_empty", "warn")
@@ -555,9 +558,9 @@ class BatchResultStrategy:
         per-item error context while online errors are handled at the
         result-status level in ``collect_results()``.
 
-        Error results are NOT enriched (matching the original pipeline behaviour).
+        Enriched like any other result, so one with no source_guid is refused there.
         """
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+        source_guid = ctx.reconciler.get_source_guid(custom_id)
 
         error_item: dict[str, Any] = {
             "source_guid": source_guid,
@@ -627,7 +630,7 @@ class BatchResultStrategy:
             is_failed = BatchContextMetadata.get_filter_status(original_row) == FilterStatus.FAILED
 
             record_index = ctx.reconciler.get_record_index(custom_id)
-            source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "NOT_SET")
+            source_guid = ctx.reconciler.get_source_guid(custom_id)
 
             if not ctx.agent_config or "action_name" not in ctx.agent_config:
                 raise ValueError("agent_config must contain 'action_name' for content namespacing")

@@ -92,18 +92,16 @@ class BatchResultReconciler:
         """Get original record data by custom_id, or empty dict if not found."""
         return self.context_map.get(str(custom_id), {})  # type: ignore[no-any-return]
 
-    def get_source_guid(self, custom_id: str, fallback: str | None = None) -> str | None:
+    def get_source_guid(self, custom_id: str) -> str | None:
         """The source_guid of the record sent as *custom_id*, or None where it has none.
 
-        Never the custom_id of a record the map holds: that is its target_id, minted afresh
-        by a run whose input has none, and nothing that selects a record reads it, so a
-        disposition under it is one ``agac retry`` clears and cannot repair. An id the map
-        does not hold falls back to *fallback*, else to itself.
+        Never the custom_id itself. For a record the map holds that is its target_id,
+        minted afresh by a run whose input has none; an id it does not hold, such as a
+        parser placeholder, names no record at all. Nothing that selects a record reads
+        either, so a disposition under one is a failure ``agac retry`` clears and cannot
+        repair.
         """
-        original_row = self.context_map.get(str(custom_id))
-        if original_row is None:
-            return fallback or custom_id
-        return original_row.get("source_guid") or None
+        return self.get_record_by_id(custom_id).get("source_guid") or None
 
     def get_record_index(self, custom_id: str) -> int:
         """Get the index of a custom_id in context_map order, or -1 if not found."""

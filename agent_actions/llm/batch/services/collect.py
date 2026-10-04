@@ -81,14 +81,24 @@ def _empty_output_halt(
     """The halt ``on_empty: error`` asks for, raised by the caller after the file is written."""
     if ctx.agent_config.get("on_empty", "warn") != "error":
         return None
-    empty = [result.source_guid for result in results if result.skip_reason == EMPTY_OUTPUT]
+    empty = [result for result in results if result.skip_reason == EMPTY_OUTPUT]
     if not empty:
         return None
+    # Where a record has no source_guid, "None" would name nothing.
+    named = [result.source_guid or _target_id_of(result) for result in empty]
     return EmptyOutputError(
         f"Action '{ctx.agent_name}' produced empty output for {len(empty)} record(s) "
-        f"(on_empty=error): {', '.join(str(guid) for guid in empty[:5])}",
-        context={"agent_name": ctx.agent_name, "source_guids": empty},
+        f"(on_empty=error): {', '.join(str(name) for name in named[:5])}",
+        context={
+            "agent_name": ctx.agent_name,
+            "source_guids": [result.source_guid for result in empty],
+        },
     )
+
+
+def _target_id_of(result: ProcessingResult) -> str | None:
+    row = result.input_record or result.source_snapshot or {}
+    return row.get("target_id")
 
 
 def _halt_for(results: list[ProcessingResult], ctx: ProcessingContext) -> Exception | None:
@@ -160,6 +170,9 @@ def collect_batch_rows(
         rows, stats = processor.enrich_and_collect(results, ctx)
         if storage_backend is not None:
             clear_deferred_dispositions(storage_backend, action_name, rows)
+            clear_deferred_of_records_with_no_identity(
+                storage_backend, action_name, context_map or {}
+            )
             # The reconciler hands the collector no filtered entry.
             write_filtered_dispositions(storage_backend, action_name, context_map or {})
             update_prompt_trace_responses(storage_backend, action_name, rows)
@@ -217,6 +230,19 @@ def clear_deferred_dispositions(
         source_guid = row.get("source_guid")
         if source_guid:
             _try_clear_deferred(storage_backend, action_name, source_guid)
+
+
+def clear_deferred_of_records_with_no_identity(
+    storage_backend: StorageBackend, action_name: str, context_map: dict[str, Any]
+) -> None:
+    """Clear the `deferred` an earlier release marked under such a record's custom_id.
+
+    Collection records nothing for a record with no source_guid, so nothing else
+    clears it, and every collect after would warn of it as orphaned.
+    """
+    for custom_id, entry in context_map.items():
+        if BatchContextMetadata.is_included(entry) and not entry.get("source_guid"):
+            _try_clear_deferred(storage_backend, action_name, str(custom_id))
 
 
 def filtered_inputs(context_map: dict[str, Any]) -> set[str]:
