@@ -572,9 +572,7 @@ class ProcessingPipeline:
             )
             return
 
-        # Where save_main_output writes this file, so the action reads its rows back
-        # from the name it stores them under.
-        output_file_path = Path(output_directory) / Path(file_path).relative_to(base_directory)
+        output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
