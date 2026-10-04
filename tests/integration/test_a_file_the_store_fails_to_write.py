@@ -1,0 +1,157 @@
+"""A file the store fails to write fails its action, and the next run answers it (1265).
+
+A failure confined to one input file costs only that file: the walk records it, goes on
+with the others, and the action completes holding fewer records. A store that failed to
+write one file of several was treated the same way. After an edit, the reset leaves each
+file's rows in place until the run writes it again, so the action was recorded complete,
+with exit 0, over the rows that file held from before the edit; its readers ran on them,
+and nothing asked for them again. On a first run the file was simply never stored.
+
+Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
+store's failure is stood in for, raised where it writes the one target file.
+"""
+
+import json
+import sqlite3
+from contextlib import contextmanager
+
+import pytest
+
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
+    ACTION,
+    ECHO_TOOL,
+    EVERY_PAGE,
+    FILE_READER,
+    PAGES,
+    READER,
+    READER_ACTION,
+    WORKFLOW,
+    _config,
+    _edit_prompt,
+    _run,
+    _status,
+    _still_holding,
+    _stored,
+    _stored_rows,
+    _summaries_in,
+    _with_a_file_reader,
+    online,  # noqa: F401
+    project,  # noqa: F401
+    provider,  # noqa: F401
+)
+
+NOT_STORED = "pages1.json"
+
+
+@contextmanager
+def _the_store_fails_to_write(action, relative_path, raising):
+    write = SQLiteBackend.write_target
+
+    def failing(self, action_name, path, *args, **kwargs):
+        if (action_name, path) == (action, relative_path):
+            raise raising
+        return write(self, action_name, path, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "write_target", failing)
+        yield
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(sqlite3.OperationalError("disk I/O error"), id="database"),
+        pytest.param(OSError(28, "No space left on device"), id="disk-full"),
+    ],
+)
+def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_next_run(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+    fault,
+):
+    """The file still holds what the prompt answered before the edit, and the file the
+    store did write holds the new answers, so only the first is asked for again."""
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
+        failed = _run()
+    assert failed.exit_code == 1, failed.output
+    assert _status(online) == "failed"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _status(online) == "completed"
+    assert provider.pages() == sorted(PAGES[NOT_STORED])
+    after = _stored(online)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    assert all(row.get("lineage") for row in _stored_rows(online))
+
+
+def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_before_the_edit(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+):
+    """The edit resets the reader with its source. Run while the source still held its
+    old answers for that file, the reader would make its rows from them."""
+    config = _config(online)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
+    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (online / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
+        _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    answers = _stored(online)
+    assert _still_holding(before_the_edit, answers) == [], "an answer from before the edit"
+    assert _stored(online, READER) == answers
+
+
+def test_a_reader_file_the_store_fails_to_write_after_its_source_was_edited_is_made_again(
+    online,  # noqa: F811
+):
+    """A file tool leaves no checkpoint row; the file it did store keeps its records."""
+    _with_a_file_reader(online)
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online, FILE_READER)
+
+    _edit_prompt(online)
+    with _the_store_fails_to_write(FILE_READER, NOT_STORED, OSError(28, "No space left")):
+        failed = _run()
+    assert failed.exit_code == 1, failed.output
+    assert _status(online, FILE_READER) == "failed"
+    handed = online / "handed.jsonl"
+    handed.unlink()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert sorted(json.loads(line) for line in handed.read_text().splitlines()) == (
+        _summaries_in(online, NOT_STORED)
+    )
+    after = _stored(online, FILE_READER)
+    assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
+    assert after == _stored(online)
+
+
+def test_a_first_run_whose_store_fails_to_write_a_file_stores_it_on_the_next_run(
+    online,  # noqa: F811
+):
+    with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
+        failed = _run("--fresh")
+    assert failed.exit_code == 1, failed.output
+    assert _status(online) == "failed"
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _status(online) == "completed"
+    assert len(_stored(online)) == len(EVERY_PAGE)
