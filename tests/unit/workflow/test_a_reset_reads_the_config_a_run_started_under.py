@@ -7,6 +7,7 @@ in force. Store, status file, executor and reset are real; the work is stood in 
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
@@ -17,6 +18,7 @@ import pytest
 from agent_actions.errors import AgentActionsError
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
+    DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
 )
@@ -69,7 +71,17 @@ def _process(tmp_path, backend, configs=CONFIGS, *, retried=()):
     return state, executor
 
 
-def _stopped(tmp_path, backend, then: BaseException, *, retried=()) -> ActionStateManager:
+def _sequential(executor: ActionExecutor, params: ActionRunParams) -> None:
+    executor._execute_action_run(params)
+
+
+def _parallel(executor: ActionExecutor, params: ActionRunParams) -> None:
+    asyncio.run(executor._execute_action_run_async(params))
+
+
+def _stopped(
+    tmp_path, backend, then: BaseException, *, retried=(), run=_sequential
+) -> ActionStateManager:
     """A run starts define, finishes two records and fails a third, and is stopped."""
     state, executor = _process(tmp_path, backend, retried=retried)
 
@@ -81,7 +93,7 @@ def _stopped(tmp_path, backend, then: BaseException, *, retried=()) -> ActionSta
 
     executor.deps.action_runner.run_action.side_effect = work
     try:
-        executor._execute_action_run(ActionRunParams("define", 0, DEFINE, False, datetime.now()))
+        run(executor, ActionRunParams("define", 0, DEFINE, False, datetime.now()))
     except _Killed:
         pass
     return state
@@ -111,13 +123,18 @@ STOPS = pytest.mark.parametrize(
     "stop",
     [pytest.param(_Killed(), id="killed"), pytest.param(RuntimeError("timed out"), id="error")],
 )
+# `agac run` starts actions on the parallel path; each path records its own start.
+RUNS = pytest.mark.parametrize(
+    "run", [pytest.param(_sequential, id="sequential"), pytest.param(_parallel, id="parallel")]
+)
 
 
+@RUNS
 @STOPS
 def test_a_stopped_action_keeps_what_it_finished_while_its_config_is_unchanged(
-    tmp_path, backend, stop
+    tmp_path, backend, stop, run
 ):
-    _stopped(tmp_path, backend, stop)
+    _stopped(tmp_path, backend, stop, run=run)
 
     state = _next_run_resets(tmp_path, backend)
 
@@ -137,8 +154,11 @@ def test_a_stopped_action_keeps_what_it_finished_while_its_config_is_unchanged(
     ],
     ids=lambda edit: next(iter(edit)),
 )
-def test_a_stopped_action_edited_since_its_run_started_keeps_nothing(tmp_path, backend, stop, edit):
-    _stopped(tmp_path, backend, stop)
+@RUNS
+def test_a_stopped_action_edited_since_its_run_started_keeps_nothing(
+    tmp_path, backend, stop, edit, run
+):
+    _stopped(tmp_path, backend, stop, run=run)
 
     state = _next_run_resets(tmp_path, backend, _edited(**edit))
 
@@ -177,6 +197,59 @@ def test_a_status_written_before_the_start_was_recorded_is_reset_by_status_alone
     _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
 
     assert _held(backend) == kept
+
+
+def test_a_start_recorded_without_a_config_hash_is_reset_by_status_alone(tmp_path, backend):
+    """A repair keeping a completion stamped before the digest existed records none, so
+    nothing says what the records were answered under."""
+    state, _ = _process(tmp_path, backend)
+    state.update_status(
+        "define",
+        ActionStatus.FAILED,
+        answered_under={"config_hash": None, "model_name": "m", "model_vendor": "v"},
+    )
+    for guid, disposition in FINISHED.items():
+        backend.set_disposition("define", guid, disposition)
+
+    _next_run_resets(tmp_path, backend)
+
+    assert _held(backend) == {}
+
+
+def test_a_skipped_action_is_cleared_whole_though_its_config_is_unchanged(tmp_path, backend):
+    """A run that skips an action after starting it, finding no input file, answered
+    nothing: what the action holds is not that run's work to carry."""
+    _stopped(tmp_path, backend, _Killed())
+    state, _ = _process(tmp_path, backend)
+    state.update_status("define", ActionStatus.SKIPPED)
+    backend.set_disposition("define", NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED)
+
+    _next_run_resets(tmp_path, backend)
+
+    assert _held(backend) == {}
+
+
+def test_a_reset_stopped_while_forgetting_an_edited_action_is_done_again_by_the_next_run(
+    tmp_path, backend, monkeypatch
+):
+    """The reset forgets what an edited action holds before it writes any status, so a
+    process killed in between leaves the action as it found it, and the edit to be
+    found again."""
+    _stopped(tmp_path, backend, _Killed())
+    edited = _edited(prompt="Define it briefly")
+    forget = ActionExecutor._forget_what_it_did
+
+    def killed_while_forgetting(self, action_name):
+        raise _Killed()
+
+    monkeypatch.setattr(ActionExecutor, "_forget_what_it_did", killed_while_forgetting)
+    with pytest.raises(_Killed):
+        _next_run_resets(tmp_path, backend, edited)
+    monkeypatch.setattr(ActionExecutor, "_forget_what_it_did", forget)
+
+    _next_run_resets(tmp_path, backend, edited)
+
+    assert _held(backend) == {}
 
 
 def test_an_action_halted_on_purpose_is_left_alone_though_it_was_edited(tmp_path, backend):

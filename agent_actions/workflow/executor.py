@@ -1894,8 +1894,8 @@ class ActionExecutor:
             record_id=NODE_LEVEL_RECORD_ID,
         )
 
-    def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
-        """Execute action run (synchronous)."""
+    def _start_work(self, params: ActionRunParams) -> None:
+        """Set the action running, recording what the work it starts is answered under."""
         self._clear_stale_node_disposition(params.action_name)
         self.deps.state_manager.update_status(
             params.action_name,
@@ -1903,6 +1903,10 @@ class ActionExecutor:
             **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
         )
         self._track_action_start(params)
+
+    def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
+        """Execute action run (synchronous)."""
+        self._start_work(params)
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
@@ -1943,13 +1947,7 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
-        self._clear_stale_node_disposition(params.action_name)
-        self.deps.state_manager.update_status(
-            params.action_name,
-            ActionStatus.RUNNING,
-            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
-        )
-        self._track_action_start(params)
+        self._start_work(params)
 
         # See sync counterpart for the rationale on snapshot placement.
         pre_run_count = self._count_records_for_action(params.action_name)
