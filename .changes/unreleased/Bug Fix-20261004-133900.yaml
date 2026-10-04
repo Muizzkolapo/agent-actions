@@ -8,7 +8,8 @@ body: >-
   `completed` instead of `skipped`, and its readers ran on and kept their own rows, where
   online skips and empties them. A batch action now holds no row for a record its guard
   filtered in that run, as online, and one whose guard filters every record holds nothing
-  and is skipped. A run in which everything sent failed still keeps every stored answer, as
-  online, which writes nothing then. An action already holding such rows drops them the
-  next time it runs.
+  and is skipped. A run in which everything sent failed still keeps what it held for such a
+  record, as online, which writes nothing then. An action already holding such rows drops
+  them the next time its records reach the guard again: after an edit resets it, or with
+  `agac run --fresh`.
 time: 2026-10-04T13:39:00Z

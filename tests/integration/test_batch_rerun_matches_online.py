@@ -1058,6 +1058,19 @@ def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
+def test_a_run_that_failed_and_answered_nothing_keeps_what_a_filtered_input_held(tmp_path):
+    """Online raises before it writes, so the filtered input's row stays until a run
+    that writes, whether or not that row was an answer."""
+    runs = [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}, _NOW_FILTERED]
+    shape = {("a2", 1): "exhaust", ("a1", 2): "fail"}
+
+    findings = compare(tmp_path, runs, FILTER, shape)
+
+    assert "exhausted:a2" in findings[1]["online"]
+    for run in findings:
+        assert run["batch"] == run["online"], f"run {run['run']}"
+
+
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
     """Nothing is left to send, and what is written in its place must not be nothing."""
     batch = _Batch(tmp_path)

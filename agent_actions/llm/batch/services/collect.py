@@ -165,7 +165,8 @@ def write_batch_file(
     *batch_inputs* is the file's input before narrowing: once the action above mints
     its own identities, the rows alone cannot say which producers still exist.
     *filtered* is ``filtered_inputs`` of the file's context map: a record the guard
-    filtered holds no row, so none stored for it is kept.
+    filtered holds no row, so none stored for it is kept, unless the run failed and
+    answered nothing.
     """
     output_file = Path(output_root) / stored_name
     if storage_backend is None:

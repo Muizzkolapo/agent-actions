@@ -205,7 +205,8 @@ def stored_rows_not_reproduced(
     no identity: a processed row answers for the producer it names, else for the identity
     it carries. With no inputs recorded every other unanswered row is carried. Where
     something failed and nothing was answered online raises before it writes, so every
-    stored answer stands, over a row produced under its identity too.
+    stored answer stands, over a row produced under its identity too, and a filtered
+    input keeps what it held.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -230,6 +231,7 @@ def stored_rows_not_reproduced(
     excluded = frozenset(filtered)
     carry: set[str] = set()
     left: set[str] = set()
+    filtered_out: set[str] = set()
     for row in stored:
         guid = row.get("source_guid")
         if not guid:
@@ -246,14 +248,17 @@ def stored_rows_not_reproduced(
             carry.add(guid)
             continue
         answers_for = next(iter(producers), guid)
-        if answers_for in answered or (answers_for in excluded and not stands):
+        if answers_for in answered:
             continue
-        if inputs and answers_for not in inputs and not stands:
+        if answers_for in excluded and not refused:
+            filtered_out.add(guid)
+        elif inputs and answers_for not in inputs and not stands:
             left.add(guid)
         else:
             carry.add(guid)
     # An identity still carried through another of its rows has lost nothing.
     left -= carry
+    filtered_out -= carry
 
     if left:
         logger.info(
@@ -262,6 +267,13 @@ def stored_rows_not_reproduced(
             "input that returns is answered again.",
             len(left),
             len(inputs),
+        )
+    if filtered_out:
+        logger.info(
+            "%d stored row(s) not carried forward: the inputs they answered for are among "
+            "the %d this run's guard filtered, and a filtered input holds no row.",
+            len(filtered_out),
+            len(excluded),
         )
     return carry
 
