@@ -40,6 +40,7 @@ def _context(backend, action="action_a"):
         storage_backend=backend,
         file_path="/out/output.json",
         output_directory="/out",
+        target_relative_path="output.json",
     )
 
 

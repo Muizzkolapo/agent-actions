@@ -134,7 +134,7 @@ class UnifiedProcessor:
                 if raw_records is not None:
                     raw_records = [raw_records[i] for i in kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
-                context.action_name, self._get_carry_forward_path(context), repair_inputs
+                context.action_name, context.target_relative_path, repair_inputs
             )
 
         if raw_records is not None:
@@ -171,7 +171,7 @@ class UnifiedProcessor:
                 )
                 carry_ids |= gate_carry_ids
             if carry_ids:
-                relative_path = self._get_carry_forward_path(context)
+                relative_path = context.target_relative_path
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
                         CARRY_FORWARD_REASON,
@@ -252,16 +252,6 @@ class UnifiedProcessor:
             enriched.extend(carry_results)
 
         return self._collect(enriched, context)
-
-    @staticmethod
-    def _get_carry_forward_path(context: ProcessingContext) -> str | None:
-        """Derive relative_path for read_target from ProcessingContext."""
-        from agent_actions.processing.record_helpers import derive_relative_path
-
-        return derive_relative_path(
-            getattr(context, "file_path", None),
-            getattr(context, "output_directory", None),
-        )
 
     def _guard_filter(
         self,

@@ -572,7 +572,9 @@ class ProcessingPipeline:
             )
             return
 
-        # Create processing context
+        # Where save_main_output writes this file, so the action reads its rows back
+        # from the name it stores them under.
+        output_file_path = Path(output_directory) / Path(file_path).relative_to(base_directory)
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
@@ -582,6 +584,7 @@ class ProcessingPipeline:
             parent_records=parent_records,  # Previous-stage output (lineage source)
             file_path=file_path,
             output_directory=output_directory,
+            target_relative_path=target_relative_path(output_file_path, output_directory),
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             version_context=version_context,

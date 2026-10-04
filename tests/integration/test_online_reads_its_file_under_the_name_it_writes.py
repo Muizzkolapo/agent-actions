@@ -129,6 +129,30 @@ def test_a_resumed_run_takes_what_it_checkpointed_before_it_stopped(tmp_path, fi
     }
 
 
+def test_a_checkpoint_left_under_the_bare_name_costs_a_resend_and_loses_nothing(tmp_path):
+    """What an earlier release left when a run over a nested file was interrupted: its
+    answers checkpointed under ``page.json``. The resume does not look there, so it
+    answers those records once more."""
+    online = _Online(tmp_path, "sub/page.json")
+    inputs = [rec("a1"), rec("a2")]
+    online._upstream_wrote(inputs)
+    answered = RecordEnvelope.build(ACTION, {"answer": "a1:0@run1"}, rec("a1"))
+    online.backend.set_disposition(ACTION, "a1", "success")
+    online.backend.save_checkpoint_records(
+        ACTION, "page.json", [{**answered, "source_guid": "a1", "_state": "processed"}]
+    )
+
+    sent: list[str] = []
+    _config_, pipeline = online._pipeline({}, ())
+    with _answering(2, sent):
+        online._process(pipeline, inputs)
+
+    assert sorted(sent) == ["a1", "a2"]
+    assert _held(online.backend) == {
+        "sub/page.json": ["processed:a1:0@run2", "processed:a2:0@run2"]
+    }
+
+
 class _FirstStageOnline:
     """An online action with no action above it, given one staged file."""
 

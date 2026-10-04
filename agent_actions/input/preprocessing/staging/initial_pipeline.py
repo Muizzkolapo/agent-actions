@@ -786,6 +786,7 @@ def _process_online_mode_with_record_processor(
         is_first_stage=True,
         file_path=str(file_path),
         output_directory=str(output_directory),
+        target_relative_path=target_relative_path(output_file_path, str(output_directory)),
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": str(file_path)},
         storage_backend=ctx.storage_backend,
         defer_kept_dispositions=True,

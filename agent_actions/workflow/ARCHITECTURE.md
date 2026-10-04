@@ -366,6 +366,7 @@ run_mode == BATCH and not tool/HITL?
     │       └── Write placeholder JSON + registry
     │
     NO → Build ProcessingContext
+         ├── target_relative_path = the name save_main_output stores the file under
          ├── _select_strategy()
          │     ├── FILE + tool → FileToolStrategy
          │     ├── FILE + HITL → HITLStrategy
