@@ -345,12 +345,13 @@ checkpoint_output table:
 (`pipeline.py` from what `save_main_output` writes, `initial_pipeline.py` from its
 `.json` output path). That is the file's path below the input root, so a file in a
 subdirectory is `sub/page.json` and a staged `page.csv` is `page.json`. Carry-forward,
-the carry of a repair and the checkpoint all use it: the resume reads the stored file
-and falls back to the checkpoint by that one name, and a repair that cannot find the
-stored file has nothing to carry and rewrites it with only the records it named.
-Downstream that fallback lasts only until the resume saves a file: `pipeline.py` then
-clears every checkpoint of the action, not that file's alone, so an interrupted file the
-resume reaches after another one has its checkpointed records answered again.
+the carry of a repair, the checkpoint, `answered_since_stored` and the clear after a
+write all use it. A resume reads the stored file, answers again a record checkpointed
+beside it, and falls back to the checkpoint by that one name only where nothing is
+stored; a repair that cannot find the stored file has nothing to carry and rewrites it
+with only the records it named. Writing a file clears that name's checkpoint rows and no
+other's, so a resume that saves one file still carries the checkpoint of a file it
+reaches after it.
 
 ### Cleanup paths
 

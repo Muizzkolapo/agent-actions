@@ -131,6 +131,39 @@ def test_a_resumed_run_takes_what_it_checkpointed_before_it_stopped(tmp_path, fi
     }
 
 
+@pytest.mark.parametrize(
+    ("saved", "stopped"), [("sub/page.json", "page.json"), ("page.json", "sub/page.json")]
+)
+def test_a_resume_carries_the_checkpoint_of_a_file_it_reaches_after_saving_another(
+    tmp_path, saved, stopped
+):
+    """Saving one file clears that file's checkpoint rows alone, under the name it is
+    stored by, so the file the run stopped in still carries what it answered."""
+    online = _Online(tmp_path, stopped)
+    inputs = {saved: [rec("b1"), rec("b2")], stopped: [rec("a1"), rec("a2"), rec("a3")]}
+
+    def walk(run: int, sent: list[str], stop_at: str | None = None) -> None:
+        for file in (saved, stopped):
+            online.file = online.stored_as = file
+            online._upstream_wrote(inputs[file])
+            _config_, pipeline = online._pipeline({}, ())
+            with _answering(run, sent, stop_at=stop_at):
+                online._process(pipeline, inputs[file])
+
+    first: list[str] = []
+    with pytest.raises(KeyboardInterrupt):
+        walk(1, first, stop_at="a2")
+    again: list[str] = []
+    walk(2, again)
+
+    assert first == ["b1", "b2", "a1"]
+    assert again == ["a2", "a3"]
+    assert _held(online.backend) == {
+        saved: ["processed:b1:0@run1", "processed:b2:0@run1"],
+        stopped: ["processed:a1:0@run1", "processed:a2:0@run2", "processed:a3:0@run2"],
+    }
+
+
 def test_a_checkpoint_left_under_the_bare_name_costs_a_resend_and_loses_nothing(tmp_path):
     """What an earlier release left when a run over a nested file was interrupted: its
     answers checkpointed under ``page.json``. The resume does not look there, so it
@@ -240,11 +273,10 @@ def test_a_repair_of_a_staged_file_keeps_the_rows_it_did_not_name(tmp_path, file
 
 @pytest.mark.parametrize("file", STAGED_FILES)
 def test_a_re_run_of_a_staged_file_sends_only_the_input_it_has_not_answered(tmp_path, file):
-    """The first stage keeps its checkpoints after it writes, and a lookup that misses the
-    stored file falls back to them; with them cleared only the stored file can answer."""
+    """The write clears the file's checkpoint rows by the name it stores the file under.
+    A row left under it would read as an answer given after the write, and be asked again."""
     first = _FirstStageOnline(tmp_path, file)
     first.run(1, ["a1", "a2"])
-    first.backend.clear_checkpoint_records(ACTION)
 
     held = first.run(2, ["a1", "a2", "a3"])
 

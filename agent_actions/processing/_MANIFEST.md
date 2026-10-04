@@ -49,9 +49,10 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `EnrichmentPipeline.enrich()` | `agent_io/target/{action}/` | Transforms | — |
 | `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 
-`UnifiedProcessor.process()` reads the action's stored rows for one file (carry-forward, and
-the carry of a repair) and `OnlineLLMStrategy.invoke()` writes a checkpoint row per record,
-both under `ProcessingContext.target_relative_path`: the name the caller stores the file under.
+`UnifiedProcessor.process()` reads the action's stored rows for one file (carry-forward, the
+carry of a repair, and `answered_since_stored`) and `OnlineLLMStrategy.invoke()` writes a
+checkpoint row per record, both under `ProcessingContext.target_relative_path`: the name the
+caller stores the file under, and by which it clears the file's checkpoint rows once written.
 
 **Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `EvaluationMetadata`, `ExpectationsMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.
 
