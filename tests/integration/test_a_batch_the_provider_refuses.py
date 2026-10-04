@@ -81,7 +81,8 @@ def test_a_batch_whose_record_cannot_be_stored_is_not_registered(tmp_path):
     """The registry names a batch only once the store holds what it was sent.
 
     A collect pass reads that record for the batch the registry names, so registering
-    first would have it read the new batch against the record of the one before.
+    first would have it read the new batch against the record of the one before. The
+    provider holds the batch all the same, and only the error names it.
     """
     action = _Action(tmp_path)
     action.run({"page1.json": [rec("a1", keep=True)]})
@@ -95,7 +96,7 @@ def test_a_batch_whose_record_cannot_be_stored_is_not_registered(tmp_path):
             "save_batch_context_map",
             side_effect=ProcessingError("Failed to save context map: the store is full"),
         ),
-        pytest.raises(AgentActionsError, match="Failed to submit batch job"),
+        pytest.raises(AgentActionsError, match="batch-2 was submitted but could not be recorded"),
     ):
         action.process("page1.json", files["page1.json"])
 

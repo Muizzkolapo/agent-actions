@@ -527,7 +527,9 @@ class BatchSubmissionService:
 
         Raises:
             ConfigValidationError: If model_vendor missing
-            ExternalServiceError: If submission fails, declared fatal to the action
+            ExternalServiceError: If submission fails, declared fatal to the action. A
+                batch the provider took but that could not be recorded is named only
+                here; the next run sends its records again.
         """
         provider_type = agent_config.get("model_vendor")
         if not provider_type:
@@ -537,10 +539,12 @@ class BatchSubmissionService:
             )
         provider_type = provider_type.lower()
         batch_id = "unknown"  # Initialize for error handling
+        taken = False
 
         try:
             provider = self._client_resolver.get_for_config(agent_config)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+            taken = True
 
             get_manager().set_context(batch_id=batch_id)
 
@@ -597,6 +601,15 @@ class BatchSubmissionService:
                     error=str(e),
                 )
             )
+            if taken:
+                raise mark_action_fatal(
+                    ExternalServiceError(
+                        f"Batch {batch_id} was submitted but could not be recorded, so its "
+                        f"records will be sent again: {e}",
+                        context={"vendor": provider_type, "batch_id": batch_id},
+                        cause=e,
+                    )
+                ) from e
             # Fatal to the action, not only to this file: otherwise the action completes on
             # its other files' batches, and nothing sends this one again.
             raise mark_action_fatal(

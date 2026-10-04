@@ -180,6 +180,42 @@ class TestSubmitToProviderErrorPath:
 
         assert is_action_fatal(exc_info.value)
 
+    def test_a_batch_taken_but_not_recorded_is_named_in_the_error(self):
+        """Nothing else names it: the registry never did, and the next run sends again."""
+        from agent_actions.errors import is_action_fatal
+        from agent_actions.llm.batch.services.submission import BatchSubmissionService
+
+        client_resolver = MagicMock()
+        client_resolver.get_for_config.return_value.submit_batch.return_value = (
+            "batch-7",
+            "in_progress",
+        )
+        service = BatchSubmissionService(
+            task_preparator=MagicMock(),
+            client_resolver=client_resolver,
+            context_manager=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+
+        def store_full():
+            raise OSError("the store is full")
+
+        with patch("agent_actions.llm.batch.services.submission.fire_event"):
+            with pytest.raises(ExternalServiceError) as exc_info:
+                service._submit_to_provider(
+                    agent_config={"model_vendor": "openai"},
+                    batch_name="test",
+                    tasks=[{"id": "1"}],
+                    output_directory="out",
+                    action_name="test",
+                    record_sent=store_full,
+                )
+
+        err = exc_info.value
+        assert "batch-7 was submitted but could not be recorded" in str(err)
+        assert err.context["batch_id"] == "batch-7"
+        assert is_action_fatal(err)
+
     def test_provider_error_fires_failure_event(self):
         """Provider exception fires BatchSubmissionFailedEvent before raising."""
         from agent_actions.llm.batch.services.submission import BatchSubmissionService

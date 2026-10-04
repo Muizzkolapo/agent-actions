@@ -12,4 +12,6 @@ body: >-
   unchanged. A refused batch also no longer replaces the file's record of what its last
   batch was sent: that is stored only once the provider has taken the batch, and before the
   registry names it, so a collect pass never reads one batch against another's record.
+  If that record cannot be stored, the error now names the batch the provider took, which
+  nothing else names; the next run sends its records again.
 time: 2026-10-04T18:00:00Z
