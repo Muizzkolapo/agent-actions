@@ -306,3 +306,19 @@ def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_st
     _next_run_resets(tmp_path, backend, edited)
 
     assert _held(backend) == {}
+
+
+def test_an_edited_action_and_its_readers_lose_the_prompt_traces_of_what_they_answered(
+    tmp_path, backend
+):
+    """Every record is about to be answered again under the edit, so these traces show
+    prompts that answer nothing any more, listed beside the ones that replace them."""
+    state, _ = _process(tmp_path, backend)
+    state.update_status("grade", ActionStatus.COMPLETED)
+    for action in ORDER:
+        backend.write_prompt_trace(action, "t1", "an old prompt", source_guid="r1")
+    _stopped(tmp_path, backend, _Killed())
+
+    _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+
+    assert [backend.get_prompt_traces(action) for action in ORDER] == [[], []]

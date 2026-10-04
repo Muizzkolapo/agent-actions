@@ -509,13 +509,14 @@ class ActionExecutor:
             return ActionStatus.PENDING
         return current_status
 
-    def reopen_with_readers(self, action_name: str) -> None:
+    def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
-        to pending, about to answer everything again."""
-        readers = self._stale_readers(action_name)
-        for name in (*readers, action_name):
+        to pending, about to answer everything again. Returns the names put back."""
+        reopened = [*self._stale_readers(action_name), action_name]
+        for name in reopened:
             self._forget_what_it_did(name)
-        self.deps.state_manager.reopen([*readers, action_name])
+        self.deps.state_manager.reopen(reopened)
+        return reopened
 
     def _forget_what_it_did(self, action_name: str) -> None:
         """Clear what an action about to run again called done. Its status is not touched."""

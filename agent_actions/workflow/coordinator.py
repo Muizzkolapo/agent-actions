@@ -256,7 +256,8 @@ class AgentWorkflow:
                     "answer everything again",
                     name,
                 )
-                self.services.core.action_executor.reopen_with_readers(name)
+                for reopened in self.services.core.action_executor.reopen_with_readers(name):
+                    self._clear_prompt_traces(reopened)
             elif edited is False or status in MID_PROCESSING_STATUSES:
                 # Written before the config was recorded as work began, the state is reset
                 # as it was then: by its status alone.
@@ -273,13 +274,15 @@ class AgentWorkflow:
                     self.storage_backend.clear_disposition(action_name)
             except Exception as e:
                 logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
-            if action_name in keeps:
-                continue
-            try:
-                self.storage_backend.clear_prompt_traces(action_name)
-            except Exception as e:
-                logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
+            if action_name not in keeps:
+                self._clear_prompt_traces(action_name)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
+
+    def _clear_prompt_traces(self, action_name: str) -> None:
+        try:
+            self.storage_backend.clear_prompt_traces(action_name)
+        except Exception as e:
+            logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
 
     # ── Properties ──────────────────────────────────────────────────────
 

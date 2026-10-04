@@ -751,8 +751,9 @@ When _reset_retryable_actions resets action statuses to PENDING:
                     and the prompt traces of what it keeps
 
   Stopped partway, edited since (prompt, schema, guard, model)
-                 → it and every action reading it are forgotten and
-                   answer everything again (ActionExecutor.reopen_with_readers)
+                 → it and every action reading it are forgotten, prompt
+                   traces too, and answer everything again
+                   (ActionExecutor.reopen_with_readers)
 
   Stopped partway, nothing recorded (state from before the stamp)
                  → by status: selective for RUNNING, INTERRUPTED,
