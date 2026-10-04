@@ -348,6 +348,9 @@ subdirectory is `sub/page.json` and a staged `page.csv` is `page.json`. Carry-fo
 the carry of a repair and the checkpoint all use it: the resume reads the stored file
 and falls back to the checkpoint by that one name, and a repair that cannot find the
 stored file has nothing to carry and rewrites it with only the records it named.
+Downstream that fallback lasts only until the resume saves a file: `pipeline.py` then
+clears every checkpoint of the action, not that file's alone, so an interrupted file the
+resume reaches after another one has its checkpointed records answered again.
 
 ### Cleanup paths
 
