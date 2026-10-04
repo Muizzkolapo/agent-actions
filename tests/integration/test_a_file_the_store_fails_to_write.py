@@ -7,6 +7,9 @@ file's rows in place until the run writes it again, so the action was recorded c
 with exit 0, over the rows that file held from before the edit; its readers ran on them,
 and nothing asked for them again. On a first run the file was simply never stored.
 
+A batch collect pass took the failure the same way, and recorded the action partly
+complete over that file's earlier rows.
+
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 store's failure is stood in for, raised where it writes the one target file.
 """
@@ -30,6 +33,8 @@ from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_an
     _config,
     _edit_prompt,
     _run,
+    _sent,
+    _sent_since,
     _status,
     _still_holding,
     _stored,
@@ -155,3 +160,33 @@ def test_a_first_run_whose_store_fails_to_write_a_file_stores_it_on_the_next_run
     assert result.exit_code == 0, result.output
     assert _status(online) == "completed"
     assert len(_stored(online)) == len(EVERY_PAGE)
+
+
+def test_a_batch_file_the_store_fails_to_collect_after_an_edit_is_collected_by_a_later_run(
+    project,  # noqa: F811
+):
+    """The collect pass took the failure as that file's own, recorded the action partly
+    complete over the file's rows from before the edit and exited 0, and no later run
+    collected it. The edit's batch for the file is answered and waiting, so a later run
+    collects it rather than sending the file again."""
+    assert _run("--fresh").exit_code == 0
+    assert _run().exit_code == 0
+    assert _status(project) == "completed"
+    before_the_edit = _stored(project)
+
+    _edit_prompt(project)
+    assert _run().exit_code == 0
+    with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
+        failed = _run()
+    assert failed.exit_code == 1, failed.output
+    assert _status(project) == "failed"
+    sent = _sent(project)
+    _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _status(project) == "completed"
+    assert _sent_since(project, sent) == []
+    after = _stored(project)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"

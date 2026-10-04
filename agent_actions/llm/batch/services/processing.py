@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ProcessingError, is_action_fatal
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
@@ -372,6 +372,11 @@ class BatchProcessingService:
                 # file's failure, its records are marked failed over what they hold.
                 raise
             except Exception as e:
+                # Declared where it was raised: a store that failed to write the file,
+                # or the halt `on_exhausted: raise` asks for. Taken as this file's
+                # failure, the action completes over what the file held before.
+                if is_action_fatal(e):
+                    raise
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,

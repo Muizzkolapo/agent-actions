@@ -128,11 +128,13 @@ data or to the context scope is not seen, so run `agac run --fresh` to answer ev
 again after one. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
 its answer. A file the store fails to write, on a full disk or a database error, stops
-the action this way once its other files are written: the run ends `failed`, and the
-next one writes that file. An `agac retry` records what the records it does not name
-were answered under instead — the stamp of the action's last completion, or what its
-last run recorded if it never completed — so a retry, stopped or finished, leaves an
-edit to the next run.
+the action this way: the run ends `failed`, and the next one writes that file. Online,
+the run writes the action's other files first, and after an edit each run that fails to
+store the file asks for its records again, as above. A batch collect pass stops at the
+file, and a later run collects it and the files after it without sending any of them
+again. An `agac retry` records what the records it does not name were answered under
+instead — the stamp of the action's last completion, or what its last run recorded if it
+never completed — so a retry, stopped or finished, leaves an edit to the next run.
 
 Staged input is the source of truth for what an action holds. An action reset after
 its input was removed — by an edit, or by a limit or model given on the command
