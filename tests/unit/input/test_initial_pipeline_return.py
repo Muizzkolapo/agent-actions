@@ -83,6 +83,7 @@ class TestBatchModeReturnsPath:
         assert result.endswith(".json")
         assert not (output / "sample.json").exists()
         storage.write_target.assert_not_called()
+        storage.set_disposition.assert_not_called()
 
 
 class TestOnlineModeReturnsPath:

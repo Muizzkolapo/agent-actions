@@ -363,7 +363,8 @@ def test_a_first_stage_run_with_nothing_to_send_is_written_once_and_recorded(tmp
         sorted(_dispositions(batch.backend).values())
         == [("unprocessed", "guard_skip", None, False)] * 2
     )
-    assert batch.backend.has_disposition(ACTION, "passthrough", record_id=NODE_LEVEL_RECORD_ID)
+    (node,) = batch.backend.get_disposition(ACTION, record_id=NODE_LEVEL_RECORD_ID)
+    assert (node["disposition"], node["reason"]) == ("passthrough", "All records tombstoned")
 
 
 def test_a_file_with_nothing_to_send_keeps_this_runs_rows_through_the_collect_pass(tmp_path):

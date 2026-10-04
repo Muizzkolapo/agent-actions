@@ -351,13 +351,8 @@ class TestFinalizeBatchOutput:
         service._cleanup_recovery_entries.assert_not_called()
 
     def test_finalize_hands_the_context_map_to_the_collect_step(self):
-        """Phase 7b parity: FILTERED records in context_map must reach DISPOSITION_FILTERED.
-
-        The reconciler strips FILTERED rows before the collector sees them, so the
-        collect step writes them from the context map. Not handed it, FILTERED records
-        stay stuck at DISPOSITION_DEFERRED (stamped at submit by Phase 7a) and never
-        transition to DISPOSITION_FILTERED.
-        """
+        """The reconciler strips FILTERED rows before the collector sees them, so the
+        collect step writes them from the context map; not handed it, they stay DEFERRED."""
         service = _mock_service()
         manager = MagicMock()
         context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}

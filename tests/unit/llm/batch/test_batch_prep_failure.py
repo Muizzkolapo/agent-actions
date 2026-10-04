@@ -8,6 +8,9 @@ and written as a disposition, not silently dropped.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -263,10 +266,12 @@ class TestEachEntryIsCollectedAsWhatPreparationFoundIt:
 class TestEveryRecordFailingPreparation:
     """Nothing is sent, and the run writes each failure itself."""
 
-    def test_the_file_holds_each_failure_and_each_is_recorded_with_its_error(self, tmp_path):
+    ROW = {"target_id": "t1", "source_guid": "sg_001", "content": {}}
+
+    def _service(self, tmp_path) -> tuple[BatchSubmissionService, SQLiteBackend]:
         backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
         backend.initialize()
-        row = {"target_id": "t1", "source_guid": "sg_001", "content": {}}
+        row = dict(self.ROW)
         context_map = {"t1": {**row, "_state": "active"}}
         BatchTaskPreparator._mark_prep_failed(
             row, context_map, "my_action", ValueError("references undefined variables: topic")
@@ -281,11 +286,15 @@ class TestEveryRecordFailingPreparation:
             storage_backend=backend,
         )
         service.prepare_batch_tasks = MagicMock(return_value=([], context_map))
+        return service, backend
+
+    def test_the_file_holds_each_failure_and_each_is_recorded_with_its_error(self, tmp_path):
+        service, backend = self._service(tmp_path)
 
         result = service.submit_batch_job(
             agent_config={"action_name": "my_action"},
             batch_name="sub/page.csv",
-            data=[row],
+            data=[dict(self.ROW)],
             output_directory=str(tmp_path / "out" / "sub"),
         )
 
@@ -299,3 +308,17 @@ class TestEveryRecordFailingPreparation:
             "references undefined variables: topic",
             "references undefined variables: topic",
         )
+
+    def test_a_run_with_nowhere_to_write_is_refused_before_anything_is_recorded(self, tmp_path):
+        service, backend = self._service(tmp_path)
+
+        with pytest.raises(ConfigurationError, match="output_directory is required"):
+            service.submit_batch_job(
+                agent_config={"action_name": "my_action"},
+                batch_name="page.csv",
+                data=[dict(self.ROW)],
+                output_directory=None,
+            )
+
+        assert backend.list_target_files("my_action") == []
+        assert backend.get_disposition("my_action", disposition="failed") == []
