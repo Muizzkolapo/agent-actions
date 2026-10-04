@@ -106,34 +106,26 @@ class TestExecuteAgentSync:
         assert result.success is True
         mock_deps.state_manager.reopen.assert_called_once_with(["agent_a"])
 
-    def test_storage_error_during_verify_reruns_agent(self, executor, mock_deps):
-        """Storage error during verification should reset to pending and re-run the agent.
+    def test_storage_error_during_verify_skips_agent(self, executor, mock_deps):
+        """A store that cannot be read during verification leaves the agent completed.
 
         Flow: get_status returns "completed" → _verify_completion_status hits OSError
-        → resets to "pending" and returns (False, None) → execution falls through to
-        skip evaluation → _execute_action_run.
+        → the status stands and the agent is skipped, as it is with output present.
         """
         mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
         storage.list_target_files.side_effect = OSError("SQLite lock")
         storage.has_disposition.return_value = False
-        storage.get_failed_items.return_value = []
         mock_deps.action_runner.storage_backend = storage
 
-        mock_deps.skip_evaluator.should_skip_action.return_value = False
-        mock_deps.action_runner.run_action.return_value = "/output"
-        mock_deps.output_manager.resolve_correlated_input.return_value = None
-        mock_deps.batch_manager.check_batch_submission.return_value = None
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor.execute_action_sync(
-                "agent_a", action_idx=0, action_config={}, is_last_action=False
-            )
+        result = executor.execute_action_sync(
+            "agent_a", action_idx=0, action_config={}, is_last_action=False
+        )
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.PENDING)
-        mock_deps.skip_evaluator.should_skip_action.assert_called_once()
-        mock_deps.action_runner.run_action.assert_called_once()
+        assert result.status == ActionStatus.COMPLETED
+        mock_deps.action_runner.run_action.assert_not_called()
+        mock_deps.state_manager.update_status.assert_not_called()
 
     def test_batch_submitted_dispatches(self, executor, mock_deps):
         """Batch_submitted status should dispatch to batch check handler."""
@@ -555,8 +547,8 @@ class TestVerifyCompletionStatus:
         ],
         ids=["OSError", "ValueError", "RuntimeError"],
     )
-    def test_storage_error_resets_to_pending(self, executor, mock_deps, exc):
-        """Any exception during verification should reset to pending and re-run."""
+    def test_storage_error_leaves_it_completed(self, executor, mock_deps, exc):
+        """A read that fails during verification is no reason to run the agent again."""
         storage = MagicMock()
         storage.list_target_files.side_effect = exc
         storage.has_disposition.return_value = False
@@ -564,9 +556,22 @@ class TestVerifyCompletionStatus:
 
         should_skip, result = executor._verify_completion_status("agent_a")
 
-        assert should_skip is False
-        assert result is None
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
+        assert should_skip is True
+        assert result.success is True
+        mock_deps.state_manager.update_status.assert_not_called()
+
+    def test_a_node_level_failure_that_cannot_be_read_leaves_it_completed(
+        self, executor, mock_deps
+    ):
+        storage = MagicMock()
+        storage.has_disposition.side_effect = OSError("storage down")
+        mock_deps.action_runner.storage_backend = storage
+
+        should_skip, _ = executor._verify_completion_status("agent_a")
+
+        assert should_skip is True
+        storage.clear_disposition.assert_not_called()
+        mock_deps.state_manager.update_status.assert_not_called()
 
     def test_no_backend_returns_skip(self, executor, mock_deps):
         """No storage backend should skip (trust the status)."""
