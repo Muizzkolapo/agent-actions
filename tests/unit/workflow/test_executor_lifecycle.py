@@ -111,16 +111,24 @@ class TestExecuteAgentSync:
 
         Flow: get_status returns "completed" → _verify_completion_status hits OSError
         → the status stands and the agent is skipped, as it is with output present.
+        Everything a run needs is set up, so one would reach ``run_action``.
         """
         mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
         storage.list_target_files.side_effect = OSError("SQLite lock")
         storage.has_disposition.return_value = False
+        storage.get_failed_items.return_value = []
         mock_deps.action_runner.storage_backend = storage
 
-        result = executor.execute_action_sync(
-            "agent_a", action_idx=0, action_config={}, is_last_action=False
-        )
+        mock_deps.skip_evaluator.should_skip_action.return_value = False
+        mock_deps.action_runner.run_action.return_value = "/output"
+        mock_deps.output_manager.resolve_correlated_input.return_value = None
+        mock_deps.batch_manager.check_batch_submission.return_value = None
+
+        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
+            result = executor.execute_action_sync(
+                "agent_a", action_idx=0, action_config={}, is_last_action=False
+            )
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED

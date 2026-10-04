@@ -13,6 +13,7 @@ on one record, and one read of the store that fails.
 """
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 
@@ -75,6 +76,25 @@ def _the_first_read_of_flattens_output_fails():
     assert failed, "the store was never read for flatten's output"
 
 
+@contextmanager
+def _executor_warnings():
+    """Read at the executor's own logger: a run stops `agent_actions` logging from
+    propagating to the root logger, where caplog listens."""
+    warnings = []
+
+    class Collecting(logging.Handler):
+        def emit(self, record):
+            warnings.append(record.getMessage())
+
+    executor_log = logging.getLogger("agent_actions.workflow.executor")
+    handler = Collecting(logging.WARNING)
+    executor_log.addHandler(handler)
+    try:
+        yield warnings
+    finally:
+        executor_log.removeHandler(handler)
+
+
 @pytest.fixture
 def one_record_failed(chained):  # noqa: F811
     """`flatten` completed with one failure, `enrich` completed without that record."""
@@ -90,12 +110,16 @@ def one_record_failed(chained):  # noqa: F811
 
 
 def test_a_plain_run_leaves_the_failed_record_to_retry(one_record_failed):
+    """The warning says the failed read was the one verifying `flatten`, not a read the
+    run made anywhere else."""
     root, failed = one_record_failed
 
-    with _the_first_read_of_flattens_output_fails():
+    with _the_first_read_of_flattens_output_fails(), _executor_warnings() as warnings:
         result = _run()
 
     assert result.exit_code == 0, result.output
+    verifying = f"Could not read whether {ACTION} still holds its output"
+    assert any(verifying in w for w in warnings), warnings
     assert _status(root, ACTION) == "completed_with_failures"
     assert _disposition(root, failed) == "failed"
     assert _disposition(root, failed, SECOND) == "unprocessed"

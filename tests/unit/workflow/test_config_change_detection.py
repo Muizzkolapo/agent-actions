@@ -637,7 +637,21 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert state_mgr.get_status("split") == ActionStatus.COMPLETED
         assert state_mgr.get_status("define") == ActionStatus.COMPLETED
         assert len(backend.get_disposition("define")) == 1
-        assert "split" in caplog.text and "unreadable" in caplog.text
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("split" in m and "unreadable" in m for m in warnings), warnings
+
+    def test_a_node_level_failure_read_before_the_output_fails_still_runs_it_again(self, tmp_path):
+        """The failure was read, so the action has something to run again for whatever its
+        output says, and a read of that output that fails cannot excuse it."""
+        from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        backend.set_disposition("split", NODE_LEVEL_RECORD_ID, DISPOSITION_FAILED)
+        backend.list_target_files = MagicMock(side_effect=RuntimeError("unreadable"))
+
+        assert executor.verify_completion_status("split") is False
+
+        assert state_mgr.get_status("split") == ActionStatus.PENDING
 
     def test_a_reset_that_fails_part_way_is_not_read_as_a_failure_to_verify(self, tmp_path):
         """Swallowed, the run goes on with some readers reset and the rest left stale."""
