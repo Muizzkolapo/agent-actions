@@ -22,6 +22,7 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.processing.disposition_gate import found_by_repair
 from agent_actions.record.reasons import BATCH_ABANDONED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -305,6 +306,9 @@ class RetryCommand:
         error_message = None
         try:
             workflow.run()
+            self._put_back_what_the_repair_never_found(
+                backend, workflow, from_action, record_ids, snapshot_dispositions
+            )
             status = _classify_outcome(state_mgr)
         except Exception:
             error_message = traceback.format_exc()
@@ -336,6 +340,66 @@ class RetryCommand:
             raise SystemExit(1)
 
         self.console.print("\n[green]Retry complete.[/green]")
+
+    def _put_back_what_the_repair_never_found(
+        self,
+        backend,
+        workflow,
+        from_action: str,
+        cleared_ids: set[str],
+        cleared_rows: list[dict],
+    ) -> None:
+        """Put back what was cleared at *from_action* for a record its re-run never found.
+
+        A repair selects records by the source_guid they arrive with, so a failure under
+        an id no input carries — an earlier release's batch target_id, one set by hand,
+        a record whose input is gone — is cleared and never re-decided. Left cleared, it
+        is forgotten and the action reads complete over the row it still holds. A record
+        the action wrote anything for is left alone, whether or not it was found: an
+        input that is not a list is never narrowed.
+        """
+        found = found_by_repair(workflow.services.core.action_runner.storage_backend, from_action)
+        decided = {row["record_id"] for row in backend.get_disposition(from_action)}
+        never_found = cleared_ids - found - decided - {NODE_LEVEL_RECORD_ID}
+        if not never_found:
+            return
+        for row in cleared_rows:
+            if row["action_name"] == from_action and row["record_id"] in never_found:
+                backend.set_disposition(
+                    from_action,
+                    row["record_id"],
+                    row["disposition"],
+                    reason=row.get("reason"),
+                    detail=row.get("detail"),
+                    input_snapshot=row.get("input_snapshot"),
+                )
+
+        # Deferred import: avoid circular import at module load time.
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        # The run read the action complete without these; read it again as the executor
+        # does, so it does not stay complete over the failures it holds.
+        state_mgr = workflow.services.core.state_manager
+        if state_mgr.get_status(from_action) == ActionStatus.COMPLETED and backend.get_failed_items(
+            from_action
+        ):
+            state_mgr.update_status(
+                from_action,
+                ActionStatus.COMPLETED_WITH_FAILURES
+                if backend.has_successful_items(from_action)
+                else ActionStatus.FAILED,
+            )
+
+        named = sorted(never_found)
+        listing = ", ".join(named[:10]) + (
+            f" and {len(named) - 10} more" if len(named) > 10 else ""
+        )
+        self.console.print(
+            f"\n[yellow]{len(named)} record(s) named at '{from_action}' were not in its input, "
+            f"so nothing repaired them and their failures stand: {listing}. Retry finds a "
+            f"record by the source_guid it arrives with: put each back in the input with "
+            f"its source_guid, or start over with `agac run --fresh`.[/yellow]"
+        )
 
     def _report_failures(self, state_mgr, execution_order: list[str]) -> None:
         failed = state_mgr.get_failed_actions(execution_order)

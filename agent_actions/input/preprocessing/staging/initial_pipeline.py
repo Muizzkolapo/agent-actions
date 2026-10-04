@@ -216,7 +216,12 @@ def process_initial_stage(ctx: InitialStageContext):
     # above the source save: anything still in the chunk becomes a stored input
     # row, and a file edited since the run being repaired would otherwise enter
     # the store as new input on the strength of a repair that never named it.
-    admitted = positions_named_by_repair(data_chunk, ctx.retried_records)
+    admitted = positions_named_by_repair(
+        data_chunk,
+        ctx.retried_records,
+        storage_backend=ctx.storage_backend,
+        action_name=ctx.agent_name,
+    )
     if admitted is not None:
         data_chunk = [data_chunk[i] for i in admitted]
         if isinstance(src_text, list):

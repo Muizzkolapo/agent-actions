@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer erases a failure it cannot repair. A retry clears the failures it
+  names at the action it starts from, then re-runs that action on the records whose
+  `source_guid` it named. A failure under an id no record arrives with — one an earlier
+  release recorded under a batch record's target id, one set by hand, or one whose
+  record's input file is gone — was cleared and never found: the retry said it had cleared
+  it and was complete, the failure was gone, and the action read complete over the failed
+  row it still held, so neither `agac status` nor a later retry showed anything left to
+  do. A record the re-run never finds in that action's input, and writes nothing for, now
+  gets back what was cleared for it there; the action is read again, completed with
+  failures or failed if nothing in it succeeded, and the retry names each such record and
+  says how to clear it: put the record back in the input with its `source_guid`, or start
+  over with `agac run --fresh`. Records the re-run finds are repaired as before, including
+  one a file tool rolls into rows no single record produced.
+time: 2026-10-04T22:25:31Z

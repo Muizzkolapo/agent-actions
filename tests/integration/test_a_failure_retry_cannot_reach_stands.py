@@ -17,9 +17,11 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from tests.integration import test_retry_selection_under_batch as under_batch
+from tests.integration.test_a_file_tool_that_invents_rows import inventing  # noqa: F401
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     WORKFLOW,
+    _backend,
     _disposition,
     _fail,
     _record_ids,
@@ -107,6 +109,36 @@ def test_a_record_whose_input_is_gone_keeps_its_failure(project):  # noqa: F811
 
     assert result.exit_code == 0, result.output
     assert _disposition(project, named) == "failed"
+
+
+def test_an_action_holding_nothing_but_such_a_failure_reads_failed(project):  # noqa: F811
+    """What an earlier release left for a batch file none of whose records had a
+    source_guid: failures under target ids and no success. The action read failed
+    before the retry, and the retry repaired nothing."""
+    backend = _backend(project)
+    try:
+        backend.clear_disposition(ACTION)
+    finally:
+        backend.close()
+    _fail(project, LEGACY)
+
+    result = _retry()
+
+    assert result.exit_code == 1, result.output
+    assert (_status(project), _disposition(project, LEGACY)) == ("failed", "failed")
+
+
+def test_a_record_a_file_tool_rolled_up_is_not_put_back(inventing):  # noqa: F811
+    """Rolled into rows no single input produced, it gets no disposition of its own.
+    The retry found it and the tool answered it, so its failure is not put back."""
+    named = _record_ids(inventing, ACTION)[0]
+    _fail(inventing, named, "roll_up")
+
+    result = _retry()
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(inventing, named, "roll_up") is None
+    assert "were not in its input" not in result.output
 
 
 def _hold_a_failure_under_its_target_id(root):

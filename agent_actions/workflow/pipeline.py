@@ -544,7 +544,12 @@ class ProcessingPipeline:
 
         # Above the context scope, which writes `skipped` for every record it drops:
         # a repair must not disposition a record it never named.
-        repair_kept = positions_named_by_repair(data, self.config.retried_records)
+        repair_kept = positions_named_by_repair(
+            data,
+            self.config.retried_records,
+            storage_backend=self.config.storage_backend,
+            action_name=self.config.action_name,
+        )
         if repair_kept is not None:
             data = [data[i] for i in repair_kept]
 

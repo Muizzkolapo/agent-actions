@@ -112,6 +112,25 @@ Dispositions are cleared by the ids the retry was given, so an id that names no
 input of an action is simply not found there — nothing at that action is
 re-run, and nothing it holds is removed.
 
+The action the retry starts from is the exception: every failure the retry names
+is cleared there before the re-run. A record the re-run then never finds in that
+action's input — a failure an earlier release recorded under a batch record's
+target id, one written by hand, or a record whose input file is gone — would lose
+its failure without being repaired. So the retry puts back what it cleared for
+each such record, reads the action again (completed with failures, or failed if
+nothing in it succeeded) and names them:
+
+```
+1 record(s) named at 'summarize' were not in its input, so nothing repaired them
+and their failures stand: t-3f9a1c2e. Retry finds a record by the source_guid it
+arrives with: put each back in the input with its source_guid, or start over with
+`agac run --fresh`.
+```
+
+A record the re-run did find is not put back, even where the action wrote nothing
+under its id: a file tool that rolls its input into rows no single record
+produced answers it that way.
+
 A record that reaches an action without a `source_guid` — from an upstream file
 edited by hand, say — has no id to name. In either run mode it is refused: it
 gets no disposition, and is stored as a failed row that keeps its target id but

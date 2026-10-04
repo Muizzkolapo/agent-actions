@@ -17,6 +17,7 @@ import logging
 from collections import Counter
 from collections.abc import Collection, Iterable
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
 from agent_actions.record.state import RecordState
 
@@ -28,6 +29,11 @@ logger = logging.getLogger(__name__)
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
 _FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
+
+# The named records each action found in its input, per run. Keyed by the run's backend,
+# as utils/limits.py keys what each slice admitted: `agac retry` runs a workflow in the
+# process that just finished one.
+_FOUND_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 
 
 class DispositionGate:
@@ -170,7 +176,13 @@ class DispositionGate:
         return to_process, carry_ids
 
 
-def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[int] | None:
+def positions_named_by_repair(
+    records: Any,
+    repairing: Collection[str],
+    *,
+    storage_backend: Any = None,
+    action_name: str | None = None,
+) -> list[int] | None:
     """Positions of the records a repair named, or None when nothing is being repaired.
 
     None rather than every position so a caller neither re-slices nor re-pairs the
@@ -180,14 +192,31 @@ def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[
     input — staged text beside staged records, pre-observe records beside scoped
     ones — and a repair has to take the same slice out of each. Lists that are not
     matched position-for-position are each asked separately.
+
+    Given the run's backend and the action, records what it found for
+    ``found_by_repair``.
     """
     if not repairing or not isinstance(records, list):
         return None
-    return [
+    kept = [
         index
         for index, record in enumerate(records)
         if isinstance(record, dict) and record.get("source_guid") in repairing
     ]
+    if storage_backend is not None and action_name:
+        found = _FOUND_BY_REPAIR.setdefault(storage_backend, {}).setdefault(action_name, set())
+        found.update(records[index]["source_guid"] for index in kept)
+    return kept
+
+
+def found_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """The named records *action_name* found in its input during the run on this backend.
+
+    A record a repair names and never finds is one it cleared and did not re-decide.
+    """
+    if storage_backend is None:
+        return frozenset()
+    return frozenset(_FOUND_BY_REPAIR.get(storage_backend, {}).get(action_name, ()))
 
 
 def stored_rows_not_reproduced(
