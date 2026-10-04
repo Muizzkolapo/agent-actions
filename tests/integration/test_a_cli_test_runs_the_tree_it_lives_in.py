@@ -48,12 +48,18 @@ def launches_in(source: str) -> list[int]:
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Constant) and node.value in LAUNCH_NAMES:
             lines.add(node.lineno)
-        elif isinstance(node, ast.Call) and node.args and _first_word(node.args[0]) == "agac":
+        elif isinstance(node, ast.Call) and _first_word(_command(node)) == "agac":
             lines.add(node.lineno)
     return sorted(lines)
 
 
-def _first_word(node: ast.expr) -> str | None:
+def _command(call: ast.Call) -> ast.expr | None:
+    if call.args:
+        return call.args[0]
+    return next((kw.value for kw in call.keywords if kw.arg == "args"), None)
+
+
+def _first_word(node: ast.expr | None) -> str | None:
     if isinstance(node, ast.JoinedStr) and node.values:
         node = node.values[0]
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -115,6 +121,7 @@ def test_a_pythonpath_already_set_stays_on_the_path_behind_this_tree(
         pytest.param('run([sys.executable, "-m", "agent_actions.cli.main", "x"])', id="module"),
         pytest.param('run("agac run -a wf", shell=True)', id="shell string"),
         pytest.param('run(f"agac run -a {wf}", shell=True)', id="shell f-string"),
+        pytest.param('run(args="agac run -a wf", shell=True)', id="shell string by keyword"),
     ],
 )
 def test_the_audit_sees_agac_launched_as_a(launch):
