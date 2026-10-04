@@ -21,12 +21,13 @@ from tests.integration.test_a_reader_with_a_batch_out_follows_an_upstream_edit i
     _config,
     _guids,
     _rows,
+    _run,
+    _run_to_the_end,
     _statuses,
 )
 from tests.integration.test_retry_selection_under_batch import (
     RECORDS,
     WORKFLOW,
-    _agac,
     _backend,
     _project,
 )
@@ -36,16 +37,6 @@ FILTER_PAGE_0 = (
     '    guard: { condition: \'source.page_content != "page 0"\', on_false: "filter" }\n'
 )
 MODES = pytest.mark.parametrize("mode", ["sequential", "parallel"])
-
-
-def _run_to_the_end(project, *extra):
-    transcript = []
-    while not transcript or "run again" in transcript[-1]:
-        assert len(transcript) <= 6, "the workflow never stopped asking to be run again"
-        code, output = _agac(project, "run", "-a", WORKFLOW, *extra)
-        assert code == 0, output
-        transcript.append(output)
-    return "\n".join(transcript)
 
 
 def _add_guard(project, guard):
@@ -73,9 +64,7 @@ def both_collected(tmp_path):
     config = _config(root)
     config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
 
-    code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-    assert code == 0, output
-    assert "run again" in output, "the fixture did not pause on submission"
+    assert "run again" in _run(root, "--fresh"), "the fixture did not pause on submission"
     _run_to_the_end(root)
 
     assert _statuses(root) == {
