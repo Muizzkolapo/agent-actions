@@ -1043,6 +1043,16 @@ GUARD_NOW_FILTERS = {
         [_PASSES, {"inputs": _NOW_FILTERED, "retry": "failures"}],
         {("a2", 1): "exhaust"},
     ),
+    "a_repair_that_also_sends_another_named_input": (
+        [
+            [rec("a1", keep=True), rec("a2", keep=True), rec("a3", keep=True)],
+            {
+                "inputs": [rec("a1", keep=True), rec("a2", keep=False), rec("a3", keep=True)],
+                "retry": "failures",
+            },
+        ],
+        {("a2", 1): "exhaust", ("a3", 1): "exhaust"},
+    ),
 }
 
 
