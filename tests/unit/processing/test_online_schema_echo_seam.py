@@ -95,6 +95,20 @@ class TestOnlineNoLLMSeam:
         assert "_parse_error" in ns
         assert "title" not in ns and "properties" not in ns
 
+    def test_a_schema_echo_checkpointed_directly_is_not_recorded_as_success(self, backend):
+        """The store's own echo gate records the failure as it saves the row, and the
+        checkpoint writes the record's disposition after the row."""
+        result = ProcessingResult.success(
+            data=[{"source_guid": "g1", "content": {"action_a": _compiled_schema()}}],
+            source_guid="g1",
+        )
+
+        OnlineLLMStrategy._checkpoint_record(result, _context(backend))
+
+        assert backend.get_terminal_record_ids("action_a") == set()
+        disps = backend.get_disposition("action_a", record_id="g1")
+        assert [d["disposition"] for d in disps] == ["failed"]
+
     def test_clean_success_result_is_untouched(self, backend, monkeypatch):
         """A clean success result flows through the seam unchanged — no over-gating."""
         strategy = OnlineLLMStrategy(agent_config={}, agent_name="action_a")

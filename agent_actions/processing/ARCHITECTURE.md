@@ -672,6 +672,8 @@ For non-first-stage records: source_guid comes from upstream action output.
 ```
 Per-record checkpoint writes happen DURING invocation (step 5):
     _checkpoint_record() → save_checkpoint_records(), then set_disposition(SUCCESS)
+    A schema echo is failed before either write: the store's echo gate records FAILED
+    as it saves the row, and the SUCCESS written after it would replace that.
 
 Batch collection writes happen AFTER enrichment (step 7):
     collect_results_from_processing_results() → set_dispositions_batch()

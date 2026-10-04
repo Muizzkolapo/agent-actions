@@ -341,9 +341,12 @@ class OnlineLLMStrategy:
         Called after each record's LLM call completes so that interrupted
         runs can resume via the DispositionGate carry-forward path. The row goes
         first because the disposition is what the gate carries, and the row is what
-        tells the carry that a file stored earlier is older than this answer.
+        tells the carry that a file stored earlier is older than this answer. A schema
+        echo is failed here as well, since the failure the store records as it saves
+        the row would be replaced by the disposition written after it.
         """
         backend = context.storage_backend
+        result = _reject_schema_echo_result(result, context.action_name)
         if not backend or not result.source_guid:
             return
 
