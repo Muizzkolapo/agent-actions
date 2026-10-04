@@ -117,6 +117,16 @@ class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
 
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1", "m1"}
 
+    def test_it_stands_over_a_guard_tombstone_when_the_failure_is_another_row(self):
+        """One record failed, so the run is refused whole: the tombstone the guard wrote
+        over an answered record gives way to the answer, as the failure row would."""
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="guard_skipped"), _row("p6", state="failed")]
+
+        carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a1", "a2", "p6"})
+
+        assert carry == {"a1", "a2"}
+
     def test_it_stands_over_the_failure_row_written_under_its_own_identity(self):
         stored = [_row("a1"), _row("a2")]
         produced = [_row("a1", state="failed"), _row("a2", state="exhausted")]
@@ -124,27 +134,6 @@ class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
         carry = stored_rows_not_reproduced(stored, produced, batch_inputs={"a1", "a2"})
 
         assert carry == {"a1", "a2"}
-
-    def test_a_failure_the_rows_do_not_show_counts_as_one(self):
-        """A record that fails preparation reaches the write as a guard tombstone."""
-        stored = [_row("a1"), _row("a2"), _row("gone")]
-        produced = [_row("a1", state="guard_skipped")]
-
-        carry = stored_rows_not_reproduced(
-            stored, produced, batch_inputs={"a1", "a2"}, also_failed=True
-        )
-
-        assert carry == {"a1", "a2", "gone"}
-
-    def test_a_failure_the_rows_do_not_show_refuses_nothing_once_something_is_answered(self):
-        stored = [_row("a1"), _row("gone")]
-        produced = [_row("a1", state="guard_skipped"), _row("a2")]
-
-        carry = stored_rows_not_reproduced(
-            stored, produced, batch_inputs={"a1", "a2"}, also_failed=True
-        )
-
-        assert carry == set()
 
     @pytest.mark.parametrize(
         "produced",

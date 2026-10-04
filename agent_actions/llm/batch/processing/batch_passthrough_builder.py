@@ -4,7 +4,8 @@ from typing import Any
 
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-from agent_actions.record.reasons import PREP_FAILED
+from agent_actions.record.reasons import PREP_FAILED, UPSTREAM_UNPROCESSED
+from agent_actions.record.state import RecordState
 from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
 
 
@@ -31,11 +32,27 @@ class BatchPassthroughBuilder:
         processed_data = []
         for custom_id, original_row in context_map.items():
             status = BatchContextMetadata.get_filter_status(original_row)
-            if status in (FilterStatus.SKIPPED, FilterStatus.FAILED):
-                entry_reason = PREP_FAILED if status == FilterStatus.FAILED else reason
-                item = self._build_item(original_row, entry_reason, custom_id)
-                item.pop(ContextMetaKeys.FILTER_STATUS, None)
-                processed_data.append(item)
+            # Each entry as what preparation found it to be, not as the caller's reason
+            # for all of them: stored as a guard skip, a failed or upstream-blocked
+            # record reads as one this action passed over, and the action below takes it.
+            if status == FilterStatus.FAILED:
+                item = self._build_item(
+                    original_row,
+                    PREP_FAILED,
+                    custom_id,
+                    RecordState.FAILED,
+                    _recorded_error(original_row),
+                )
+            elif status != FilterStatus.SKIPPED:
+                continue
+            elif BatchContextMetadata.get_skip_reason(original_row) == UPSTREAM_UNPROCESSED:
+                item = self._build_item(
+                    original_row, UPSTREAM_UNPROCESSED, custom_id, RecordState.CASCADE_SKIPPED
+                )
+            else:
+                item = self._build_item(original_row, reason, custom_id)
+            item.pop(ContextMetaKeys.FILTER_STATUS, None)
+            processed_data.append(item)
 
         return {
             "type": "tombstone",
@@ -44,7 +61,12 @@ class BatchPassthroughBuilder:
         }
 
     def _build_item(
-        self, row: dict[str, Any], reason: str, custom_id: str | None = None
+        self,
+        row: dict[str, Any],
+        reason: str,
+        custom_id: str | None = None,
+        state: RecordState = RecordState.GUARD_SKIPPED,
+        cause: str | None = None,
     ) -> dict[str, Any]:
         return PassthroughItemBuilder.build_item(
             row=row,
@@ -53,4 +75,19 @@ class BatchPassthroughBuilder:
             source_guid=row.get("source_guid"),
             custom_id=custom_id,
             mode="batch",
+            state=state,
+            cause=cause,
         )
+
+
+def _recorded_error(entry: dict[str, Any]) -> str | None:
+    """The error preparation recorded on *entry* when it failed it, if it left one."""
+    history = entry.get("_state_history")
+    if not isinstance(history, list) or not history:
+        return None
+    last = history[-1]
+    # Preparation records nothing where the entry's state cannot move to failed, and
+    # the last entry is then an earlier action's, not this failure's.
+    if not isinstance(last, dict) or last.get("to") != RecordState.FAILED.value:
+        return None
+    return last.get("reason")
