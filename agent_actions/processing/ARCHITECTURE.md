@@ -319,6 +319,11 @@ disposition when the row's write fails. Committed the other way round, a run sto
 between the two, or a failed row write, left a record marked answered with no row, and
 the next run carried the stored row from before the reset.
 
+A record whose row write failed is asked again only when the run stops before collecting
+its file: collection writes SUCCESS for every answered record before the file is written,
+so a run stopped between collection and the end of that write still leaves the record
+marked answered with no row, and the next run carries the stored row for it.
+
 ### Checkpoint storage
 
 ```
