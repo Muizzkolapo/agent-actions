@@ -1277,30 +1277,32 @@ class ActionExecutor:
     def _drop_rows_read_from_nothing(
         self, action_name: str, action_config: ActionConfigDict
     ) -> None:
-        """Forget a skipped action's stored rows when something it reads holds none.
+        """Forget a circuit-broken action's stored rows when an upstream it waits on holds none.
 
         A skip never rewrites stored output, so rows from before stay unless
-        removed here. While every action they were computed from still holds
-        rows (a refused run carries them) they stand.
+        removed here. While every upstream still holds rows (a refused run carries
+        them) they stand. Only the upstreams the circuit breaker judges: an action
+        runs past a source it names only in its context scope, so rows it built
+        while that source held nothing are not made stale by it holding nothing.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return
         workflow_actions = list(getattr(self.deps.state_manager, "execution_order", None) or [])
-        sources = self._reads(action_name, action_config, workflow_actions)
+        upstreams = set(self._collect_upstream_deps(action_name, action_config))
         # Concrete actions only: `dependencies` may name a version base, which holds nothing.
         empty = next(
             (
                 name
                 for name in workflow_actions
-                if name in sources
+                if name in upstreams
                 and name != action_name
                 and not self._holds_rows(storage_backend, name)
             ),
             None,
         )
         if empty is not None:
-            self._forget_stored_rows(action_name, f"'{empty}', which it reads, holds no rows")
+            self._forget_stored_rows(action_name, f"upstream '{empty}' holds no rows")
 
     def _forget_stored_rows(self, action_name: str, because: str) -> None:
         """Delete a skipped action's rows and what called them done; a failure only warns.

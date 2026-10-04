@@ -1,4 +1,4 @@
-"""A skipped action's rows go when anything it reads holds no row at all (1230).
+"""A circuit-broken action's rows go when an upstream it waits on holds no row (1230).
 
 Over a real store: whether an upstream "holds rows" is the storage question the
 drop turns on, and a mock would answer it however the test wanted.
@@ -58,14 +58,20 @@ def test_an_upstream_holding_rows_without_an_identity_leaves_the_readers_rows(ba
     assert backend.has_target_rows("reader") is True
 
 
-def test_whether_the_empty_upstream_failed_does_not_matter(backend):
-    """The reader is skipped this run, so nothing will rebuild what that upstream no longer holds."""
-    backend.write_target("up", "a.json", [])
+def test_a_source_named_only_in_the_context_scope_is_not_an_upstream(backend):
+    """The reader ran past it, so rows built while it held nothing are not stale for it."""
+    backend.write_target("up", "a.json", [{"source_guid": "g0"}])
+    backend.write_target("side", "a.json", [])
     backend.write_target("reader", "a.json", [{"source_guid": "g0"}])
+    executor = _executor(backend)
+    executor.deps.state_manager.execution_order = ["up", "side", "reader"]
 
-    _executor(backend)._drop_rows_read_from_nothing("reader", READER_CONFIG)
+    executor._drop_rows_read_from_nothing(
+        "reader",
+        {"dependencies": ["up"], "context_scope": {"observe": ["up.summary", "side.summary"]}},
+    )
 
-    assert backend.has_target_rows("reader") is False
+    assert backend.has_target_rows("reader") is True
 
 
 def test_a_version_base_named_in_dependencies_is_not_an_empty_upstream(backend):
@@ -140,3 +146,19 @@ def test_a_store_that_cannot_say_whether_it_holds_rows_keeps_the_readers(backend
 
     monkeypatch.undo()
     assert backend.has_target_rows("reader") is True
+
+
+def test_rows_stay_when_forgetting_what_called_them_done_fails(backend, monkeypatch, caplog):
+    """Deleted rows with their checkpoints left behind would be served again by carry-forward."""
+    backend.write_target("up", "a.json", [])
+    backend.write_target("reader", "a.json", [{"source_guid": "g0"}])
+
+    def refuse(action_name):
+        raise OSError("locked")
+
+    monkeypatch.setattr(backend, "clear_checkpoint_records", refuse)
+
+    _executor(backend)._drop_rows_read_from_nothing("reader", READER_CONFIG)
+
+    assert backend.has_target_rows("reader") is True
+    assert "Could not delete stored rows of skipped 'reader'" in caplog.text

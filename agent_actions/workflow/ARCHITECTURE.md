@@ -221,9 +221,10 @@ BATCH_SUBMITTED?
     ▼
 Upstream dependency FAILED or SKIPPED?
     YES → _handle_dependency_skip()
-          set SKIPPED; if anything it reads holds no rows, forget its
-          dispositions, checkpoints and batch state and delete its stored
-          rows (not under a repair); write node-level DISPOSITION_SKIPPED
+          set SKIPPED; if a dependency or version source holds no rows,
+          forget its dispositions, checkpoints and batch state and delete
+          its stored rows (not under a repair of named records); write
+          node-level DISPOSITION_SKIPPED
           (cascade — all downstream will also skip)
     │
     ▼
