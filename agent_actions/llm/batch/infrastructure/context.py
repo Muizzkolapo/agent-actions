@@ -3,7 +3,7 @@
 import json
 import logging
 from collections.abc import Callable, Collection, Iterable, Mapping
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
@@ -78,23 +78,31 @@ def batch_file_identity(
             batch_output_name(identity),
         )
     else:
-        claimed = {batch_output_name(name) for name in names.values()}
-        decided = (
-            legacy
-            if batch_output_name(legacy) not in claimed
-            and _stored_under(storage_backend, action_name, legacy)
-            and not base_owner(legacy)
-            else identity
-        )
-        if decided == legacy:
-            logger.info(
-                "%s: %s keeps the name %s, under which this store already holds it; "
-                "--fresh moves it to %s",
-                action_name,
-                identity,
-                batch_output_name(legacy),
-                batch_output_name(identity),
+        decided = identity
+        if _stored_under(storage_backend, action_name, legacy):
+            holder = _claimant(names, identity, legacy) or (
+                "a top-level input" if base_owner(legacy) else None
             )
+            if holder is None:
+                decided = legacy
+                logger.info(
+                    "%s: %s keeps the name %s, under which this store already holds it; "
+                    "--fresh moves it to %s",
+                    action_name,
+                    identity,
+                    batch_output_name(legacy),
+                    batch_output_name(identity),
+                )
+            else:
+                logger.info(
+                    "%s: %s is stored as %s, since %s, which this store already holds, "
+                    "belongs to %s; any of its records held there are sent again",
+                    action_name,
+                    identity,
+                    batch_output_name(identity),
+                    batch_output_name(legacy),
+                    holder,
+                )
     if remember:
         names[identity] = decided
         storage_backend.save_metadata(key, json.dumps(names, sort_keys=True))
@@ -115,6 +123,19 @@ def _recorded_names(storage_backend: "StorageBackend", key: str) -> dict[str, st
     return {k: v for k, v in names.items() if isinstance(k, str) and isinstance(v, str)}
 
 
+def _claimant(names: dict[str, str], identity: str, legacy: str) -> str | None:
+    """Another file already recorded as stored under *legacy*'s name, if any."""
+    stored = batch_output_name(legacy)
+    return next(
+        (
+            other
+            for other, chosen in names.items()
+            if other != identity and batch_output_name(chosen) == stored
+        ),
+        None,
+    )
+
+
 def _stored_under(storage_backend: "StorageBackend", action_name: str, legacy: str) -> bool:
     """Whether the store keeps a file under *legacy*: its output, or a batch entry."""
     if storage_backend.has_target_file(action_name, batch_output_name(legacy)):
@@ -122,23 +143,6 @@ def _stored_under(storage_backend: "StorageBackend", action_name: str, legacy: s
     from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
     return BatchRegistryManager(storage_backend, action_name).get_batch_job(legacy) is not None
-
-
-def staged_at_the_top(base_directory: str) -> Callable[[str], bool]:
-    """Whether a file directly under *base_directory* stores under *legacy*'s name."""
-
-    def owns(legacy: str) -> bool:
-        stem = PurePosixPath(legacy).stem
-        try:
-            return any(
-                entry.stem == stem and not entry.name.startswith(".") and entry.is_file()
-                for entry in Path(base_directory).iterdir()
-            )
-        except OSError as e:
-            logger.debug("Could not list %s for top-level inputs: %s", base_directory, e)
-            return False
-
-    return owns
 
 
 def held_by_a_dependency(

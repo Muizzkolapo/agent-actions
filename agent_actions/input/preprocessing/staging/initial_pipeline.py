@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -45,6 +46,8 @@ class InitialStageContext:
     workflow_metadata: dict[str, Any] | None = None
     # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
+    # The start node's file types: the staged files the walk processes.
+    file_type_filter: set[str] | None = None
 
 
 @dataclass
@@ -82,6 +85,7 @@ class BatchProcessingContext:
     # of a record this run left out is not read as one that is gone. None means
     # unrecorded, and nothing is inferred from it.
     run_inputs: list[dict[str, Any]] | None = None
+    file_type_filter: set[str] | None = None
 
 
 def _save_source_items_helper(
@@ -254,6 +258,7 @@ def process_initial_stage(ctx: InitialStageContext):
             workflow_metadata=ctx.workflow_metadata,
             retried_records=ctx.retried_records,
             run_inputs=offered_to_repair,
+            file_type_filter=ctx.file_type_filter,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -680,6 +685,38 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
     atomic_json_write(output_file_path, placeholder)
 
 
+def _staged_at_the_top(
+    base_directory: str, file_type_filter: set[str] | None
+) -> Callable[[str], bool]:
+    """Whether a file the walk processes directly under *base_directory* stores as *legacy*.
+
+    The walk's own skip rule decides, so a file it leaves out, or one it cannot read this
+    run, owns no name.
+    """
+    from agent_actions.llm.batch.infrastructure.context import batch_output_name
+    from agent_actions.workflow.runner_file_processing import should_skip_item
+
+    root = Path(base_directory)
+
+    def walked(entry: Path) -> bool:
+        try:
+            return not should_skip_item(entry, root, set(), file_type_filter)
+        except OSError as e:
+            logger.debug("Could not read %s while naming a batch file: %s", entry, e)
+            return False
+
+    def owns(legacy: str) -> bool:
+        stored = batch_output_name(legacy)
+        try:
+            entries = list(root.iterdir())
+        except OSError as e:
+            logger.debug("Could not list %s for top-level inputs: %s", base_directory, e)
+            return False
+        return any(batch_output_name(entry.name) == stored and walked(entry) for entry in entries)
+
+    return owns
+
+
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
     from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
@@ -687,7 +724,6 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         BatchContextManager,
         batch_file_identity,
         batch_output_name,
-        staged_at_the_top,
     )
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
@@ -729,7 +765,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         relative_path.as_posix(),
         ctx.agent_name,
         ctx.storage_backend,
-        base_owner=staged_at_the_top(ctx.base_directory),
+        base_owner=_staged_at_the_top(ctx.base_directory, ctx.file_type_filter),
         remember=not ctx.retried_records,
     )
     result = submission_service.submit_batch_job(

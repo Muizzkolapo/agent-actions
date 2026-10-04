@@ -292,6 +292,23 @@ def test_a_file_kept_on_its_basename_is_reported_once(tmp_path, caplog):
     ]
 
 
+def test_a_file_given_its_own_name_over_a_name_the_store_holds_is_reported_once(tmp_path, caplog):
+    """It is sent again under its own name, and the log says why."""
+    action = _Action(tmp_path)
+    _as_stored_before(action, "sub1/page.json", [rec("a1", keep=True)])
+    twins = {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+
+    with caplog.at_level(logging.INFO, logger="agent_actions"):
+        action.run(twins)
+        action.run(twins)
+
+    assert [r.getMessage() for r in caplog.records if "since page.json" in r.getMessage()] == [
+        f"{ACTION}: sub2/page.json is stored as sub2/page.json, since page.json, which this "
+        "store already holds, belongs to sub1/page.json; any of its records held there are "
+        "sent again"
+    ]
+
+
 def _reopened(backend: SQLiteBackend) -> SQLiteBackend:
     """The same store as a new process opens it, with nothing the last run kept in memory."""
     backend.close()
@@ -300,10 +317,10 @@ def _reopened(backend: SQLiteBackend) -> SQLiteBackend:
     return again
 
 
-def test_a_first_stage_file_kept_on_its_basename_gives_it_up_to_a_staged_file_of_it(tmp_path):
+def _first_stage_kept_on_its_basename(tmp_path) -> _FirstStageBatch:
+    """staging/sub/page.json, stored as a store from before stores it: as page.json."""
     batch = _FirstStageBatch(tmp_path, "page.json")
     batch.run(1, STAGED, {})
-    # Stored as the code before stored staging/sub/page.json.
     (batch.staging / "page.json").unlink()
     batch.file = "sub/page.json"
     batch.backend = _reopened(batch.backend)
@@ -312,12 +329,49 @@ def test_a_first_stage_file_kept_on_its_basename_gives_it_up_to_a_staged_file_of
 
     assert batch.sent[1] == []
     assert batch.backend.list_target_files(ACTION) == ["page.json"]
-
-    (batch.staging / "page.json").write_text(json.dumps([{"item": "t1", "keep": True}]))
     batch.backend = _reopened(batch.backend)
+    return batch
+
+
+def test_a_first_stage_file_kept_on_its_basename_gives_it_up_to_a_staged_file_of_it(tmp_path):
+    batch = _first_stage_kept_on_its_basename(tmp_path)
+    (batch.staging / "page.json").write_text(json.dumps([{"item": "t1", "keep": True}]))
 
     held = batch.run(3, STAGED, {})
 
     assert batch.sent[2] == ["a1", "a2"]
     assert held == ["processed:a1:0@run3", "processed:a2:0@run3"]
     assert batch.backend.list_target_files(ACTION) == ["page.json", "sub/page.json"]
+
+
+def test_a_staged_file_of_that_stem_and_another_suffix_takes_the_basename(tmp_path):
+    """`page.csv` is stored as `page.json` too."""
+    batch = _first_stage_kept_on_its_basename(tmp_path)
+    (batch.staging / "page.csv").write_text("item,keep\nt1,True\n")
+
+    batch.run(3, STAGED, {})
+
+    assert batch.sent[2] == ["a1", "a2"]
+
+
+def test_a_staged_directory_named_like_the_file_takes_nothing(tmp_path):
+    batch = _first_stage_kept_on_its_basename(tmp_path)
+    (batch.staging / "page").mkdir()
+    (batch.staging / "page" / "other.json").write_text("[]")
+
+    batch.run(3, STAGED, {})
+
+    assert batch.sent[2] == []
+    assert batch.backend.list_target_files(ACTION) == ["page.json"]
+
+
+def test_a_staged_file_the_walk_leaves_out_takes_nothing(tmp_path):
+    """The start node reads only `.json`, so a top-level `page.csv` is no input of it."""
+    batch = _first_stage_kept_on_its_basename(tmp_path)
+    batch.file_type_filter = {"json"}
+    (batch.staging / "page.csv").write_text("item,keep\nt1,True\n")
+
+    batch.run(3, STAGED, {})
+
+    assert batch.sent[2] == []
+    assert batch.backend.list_target_files(ACTION) == ["page.json"]

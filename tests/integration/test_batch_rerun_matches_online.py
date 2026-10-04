@@ -454,6 +454,7 @@ class _FirstStageBatch:
         self.staging.mkdir(parents=True)
         self.target.mkdir(parents=True)
         self.file = file
+        self.file_type_filter: set[str] | None = None
         self.provider = _Provider()
         self.sent: list[list[str]] = []
 
@@ -489,6 +490,7 @@ class _FirstStageBatch:
                     storage_backend=self.backend,
                     action_configs={ACTION: config},
                     workflow_metadata={},
+                    file_type_filter=self.file_type_filter,
                 )
             )
         self.sent.append(
