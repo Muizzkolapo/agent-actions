@@ -949,6 +949,10 @@ class ActionExecutor:
             execution_time=duration,
             skip_reason=ALL_VERSIONS_FILTERED,
         )
+        # The raise is the proof: no version source holds a row.
+        self._forget_stored_rows(
+            params.action_name, f"no version source holds a row ({avf.version_sources})"
+        )
         self._write_skipped_disposition(
             params.action_name,
             ALL_VERSIONS_FILTERED,
@@ -1273,47 +1277,66 @@ class ActionExecutor:
     def _drop_rows_read_from_nothing(
         self, action_name: str, action_config: ActionConfigDict
     ) -> None:
-        """Delete a skipped reader's stored rows when an unhealthy upstream holds none.
+        """Forget a skipped action's stored rows when something it reads holds none.
 
-        A skip never rewrites the reader's output, so rows it stored before stay
-        unless removed here — and if the upstream now holds no rows, they were made
-        from output that no longer exists. An upstream that failed but kept its
-        rows (a refused run carries them) leaves the reader's rows standing too.
+        A skip never rewrites stored output, so rows from before stay unless
+        removed here. While every action they were computed from still holds
+        rows (a refused run carries them) they stand.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return
-        state = self.deps.state_manager
-        for dep in self._collect_upstream_deps(action_name, action_config):
-            unhealthy = (
-                state.is_failed(dep)
-                or state.is_skipped(dep)
-                or any(
-                    storage_backend.has_disposition(dep, disp, record_id=NODE_LEVEL_RECORD_ID)
-                    for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED)
-                )
-            )
-            if not unhealthy or storage_backend.target_rows_per_source_guid(dep):
-                continue
-            try:
-                deleted = storage_backend.delete_target(action_name)
-            except Exception as e:
-                logger.warning(
-                    "Could not delete stored rows of skipped '%s' (upstream '%s' holds none): %s",
-                    action_name,
-                    dep,
-                    e,
-                )
-                return
-            if deleted:
-                logger.info(
-                    "Deleted %d stored file(s) of skipped '%s': upstream '%s' holds no rows, "
-                    "so they were made from output that no longer exists",
-                    deleted,
-                    action_name,
-                    dep,
-                )
+        workflow_actions = list(getattr(self.deps.state_manager, "execution_order", None) or [])
+        sources = self._reads(action_name, action_config, workflow_actions)
+        # Concrete actions only: `dependencies` may name a version base, which holds nothing.
+        empty = next(
+            (
+                name
+                for name in workflow_actions
+                if name in sources
+                and name != action_name
+                and not self._holds_rows(storage_backend, name)
+            ),
+            None,
+        )
+        if empty is not None:
+            self._forget_stored_rows(action_name, f"'{empty}', which it reads, holds no rows")
+
+    def _forget_stored_rows(self, action_name: str, because: str) -> None:
+        """Delete a skipped action's rows and what called them done; a failure only warns.
+
+        Not under a repair, which touches only the records it names.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None or getattr(self.deps.action_runner, "retried_records", ()):
             return
+        try:
+            # Dispositions and checkpoints first: with the rows gone, carry-forward
+            # falls back to checkpoint records and would serve them again.
+            self._forget_what_it_did(action_name)
+            deleted = storage_backend.delete_target(action_name)
+        except Exception as e:
+            logger.warning(
+                "Could not delete stored rows of skipped '%s' (%s): %s", action_name, because, e
+            )
+            return
+        if deleted:
+            logger.info(
+                "Deleted %d stored file(s) of skipped '%s': %s, so they were made from "
+                "output that no longer exists",
+                deleted,
+                action_name,
+                because,
+            )
+
+    @staticmethod
+    def _holds_rows(storage_backend: Any, action_name: str) -> bool:
+        """has_target_rows, read as True when the store cannot say: a wrong True only keeps rows."""
+        try:
+            return bool(storage_backend.has_target_rows(action_name))
+        except Exception as e:
+            logger.warning("Could not tell whether '%s' holds rows: %s", action_name, e)
+            return True
 
     def _handle_dependency_skip(
         self,

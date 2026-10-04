@@ -337,6 +337,20 @@ class StorageBackend(ABC):
                         counts[guid] = counts.get(guid, 0) + 1
         return counts
 
+    def has_target_rows(self, action_name: str) -> bool:
+        """Whether any stored file of this action holds at least one row.
+
+        Not whether it has a file: an action whose guard filtered every record
+        still stores its empty list. Any row counts, whatever its shape.
+        """
+        for relative_path in self.list_target_files(action_name):
+            try:
+                if self._read_target_raw(action_name, relative_path):
+                    return True
+            except FileNotFoundError:
+                continue
+        return False
+
     @abstractmethod
     def _write_target_raw(
         self, action_name: str, relative_path: str, data: list[dict[str, Any]]

@@ -124,7 +124,7 @@ later run, the action is reset to `pending` and re-executed rather than skipped.
 | `completed` | Successfully finished |
 | `failed` | Terminated with error |
 | `interrupted` | The run was killed while this action was executing, or the process that owned it no longer exists |
-| `skipped` | Skipped by guard |
+| `skipped` | Skipped by guard, or because an action it reads failed or was skipped. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
 Re-running a workflow skips completed actions and resumes from the failure point.
