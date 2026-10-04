@@ -8,7 +8,8 @@ complete under the new config. One stopped by an error kept nothing even when no
 changed, so every finished record was asked again, and paid for again.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-fault that stops a run is stood in for, raised where the provider is called.
+fault that stops a run is stood in for, raised where the provider is called or, for a
+record's checkpoint row (1226), where the store saves it.
 """
 
 import json

@@ -120,7 +120,7 @@ Input records (from staging or upstream action)
 │  │         retry, then the expectations loop       │ │
 │  │       → BatchStrategy: queue for deferred API   │ │
 │  │    3. _checkpoint_record()                      │ │
-│  │       → write disposition + output to SQLite    │ │
+│  │       → write output then disposition to SQLite │ │
 │  │         immediately (resume on interrupt)       │ │
 │  │    4. Transform response → output records       │ │
 │  └─────────────────────────────────────────────────┘ │
@@ -282,8 +282,8 @@ First run (interrupted at record 150 of 200):
   for each record:
       result = process_record(item)           ← LLM call (slow)
       _checkpoint_record(result, context)     ← SQLite write (instant)
-          ├── set_disposition(source_guid, SUCCESS)
-          └── save_checkpoint_records(output data)
+          ├── save_checkpoint_records(output data)
+          └── set_disposition(source_guid, SUCCESS)   ← only once the row is stored
       # record 150 → Ctrl+C here
       # SQLite has 150 SUCCESS dispositions + 150 output records
 
@@ -312,6 +312,12 @@ names those records and the online path answers them again. The stored row is no
 the answer their disposition describes, and the checkpoint row is the strategy's
 output before enrichment, without lineage or metadata. Carrying checkpoint rows is
 kept for a file with nothing stored.
+
+That makes the row the only sign a record was answered after its file was stored, so
+`_checkpoint_record` stores it before the disposition the gate carries, and writes no
+disposition when the row's write fails. Committed the other way round, a run stopped
+between the two, or a failed row write, left a record marked answered with no row, and
+the next run carried the stored row from before the reset.
 
 ### Checkpoint storage
 
@@ -665,7 +671,7 @@ For non-first-stage records: source_guid comes from upstream action output.
 
 ```
 Per-record checkpoint writes happen DURING invocation (step 5):
-    _checkpoint_record() → set_disposition(SUCCESS) + save_checkpoint_records()
+    _checkpoint_record() → save_checkpoint_records(), then set_disposition(SUCCESS)
 
 Batch collection writes happen AFTER enrichment (step 7):
     collect_results_from_processing_results() → set_dispositions_batch()

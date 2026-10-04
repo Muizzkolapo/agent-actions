@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A record an online run answered after an edit is no longer served with its answer from
+  before the edit when the run was stopped as that answer was being recorded. A record
+  the stopped run answered in a file it had not written yet is asked again when an
+  earlier run had stored that file, and what says it was answered since is the row the
+  run keeps for it until the file is written. The run marked the record answered first
+  and kept the row second, so a run interrupted between the two, or a row that failed to
+  save, left the record marked answered with no row: the next run carried the stored row,
+  which held what was answered before the edit, and recorded the action as complete. The
+  row is now kept first, and a record whose row fails to save is asked again on the next
+  run, as the warning for that failure already said.
+time: 2026-10-04T16:00:00Z
