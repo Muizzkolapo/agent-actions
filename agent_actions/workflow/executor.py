@@ -1270,6 +1270,51 @@ class ActionExecutor:
             )
         return False
 
+    def _drop_rows_read_from_nothing(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> None:
+        """Delete a skipped reader's stored rows when an unhealthy upstream holds none.
+
+        A skip never rewrites the reader's output, so rows it stored before stay
+        unless removed here — and if the upstream now holds no rows, they were made
+        from output that no longer exists. An upstream that failed but kept its
+        rows (a refused run carries them) leaves the reader's rows standing too.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        state = self.deps.state_manager
+        for dep in self._collect_upstream_deps(action_name, action_config):
+            unhealthy = (
+                state.is_failed(dep)
+                or state.is_skipped(dep)
+                or any(
+                    storage_backend.has_disposition(dep, disp, record_id=NODE_LEVEL_RECORD_ID)
+                    for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED)
+                )
+            )
+            if not unhealthy or storage_backend.target_rows_per_source_guid(dep):
+                continue
+            try:
+                deleted = storage_backend.delete_target(action_name)
+            except Exception as e:
+                logger.warning(
+                    "Could not delete stored rows of skipped '%s' (upstream '%s' holds none): %s",
+                    action_name,
+                    dep,
+                    e,
+                )
+                return
+            if deleted:
+                logger.info(
+                    "Deleted %d stored file(s) of skipped '%s': upstream '%s' holds no rows, "
+                    "so they were made from output that no longer exists",
+                    deleted,
+                    action_name,
+                    dep,
+                )
+            return
+
     def _handle_dependency_skip(
         self,
         action_name: str,
@@ -1291,6 +1336,7 @@ class ActionExecutor:
         self.deps.state_manager.update_status(
             action_name, ActionStatus.SKIPPED, skip_reason=reason, execution_time=duration
         )
+        self._drop_rows_read_from_nothing(action_name, action_config)
         self._write_skipped_disposition(action_name, reason)
         total_actions = (
             len(self.deps.action_runner.execution_order)
