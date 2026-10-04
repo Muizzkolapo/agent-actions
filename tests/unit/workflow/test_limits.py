@@ -816,8 +816,7 @@ class TestLimitStatusInvalidation:
         )
 
         # Should have reset to pending, then run the action
-        update_calls = mock_deps.state_manager.update_status.call_args_list
-        assert update_calls[0] == (("act_a", ActionStatus.PENDING),)
+        mock_deps.state_manager.reopen.assert_called_once_with(["act_a"])
 
     def test_same_limits_skips_action(self, executor, mock_deps):
         """Action completed with same limits should be skipped."""

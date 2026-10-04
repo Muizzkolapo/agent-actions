@@ -1,0 +1,21 @@
+kind: Bug Fix
+body: >-
+  Changing an upstream step now re-runs the steps below it. When a completed action's
+  prompt, schema, guard, model or record limit changed, the next run reset that action and
+  ran it again, but the actions depending on it were left as they were. They kept output
+  computed from the upstream output that had just been replaced, holding answers for
+  records that no longer existed and none for the new ones, and the workflow was reported
+  complete. Every action that reads the reset action's output, directly or through other
+  actions, is now reset with it and runs again, whatever state it was left in. One that
+  names the action only in its context scope counts as reading it, and one with a batch
+  still out gives that batch up, since it was sent the old output. The same holds when an
+  action is run again because its stored output has gone missing. Be aware of the cost: a
+  prompt change at the top of a long workflow now re-answers everything below it, which is
+  the correct result and not a cheap one. A limit counts as a change too, so a run with a
+  different `--record-limit` gives up a batch still out below it. `agac retry`, when it has
+  records to re-run, no longer resets an action whose config changed, and no longer records
+  the actions it completes as answered under the new config. A retry answers only the
+  records it names; the reset cleared the failure records of every other record, and the
+  new stamp hid the edit from every later run. It now warns that the action was edited and
+  the next `agac run` applies the edit to everything.
+time: 2026-10-03T04:00:00Z

@@ -19,7 +19,7 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.workflow.executor import ActionExecutor
-from agent_actions.workflow.managers.state import ActionStatus
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
 def _make_executor():
@@ -27,6 +27,18 @@ def _make_executor():
     deps = MagicMock()
     executor = object.__new__(ActionExecutor)
     executor.deps = deps
+    return executor
+
+
+def _completed(tmp_path):
+    """One completed action over a real status file, a plain run, a mocked store."""
+    executor = _make_executor()
+    state_manager = ActionStateManager(tmp_path / "status.json", ["my_action"])
+    state_manager.update_status("my_action", ActionStatus.COMPLETED)
+    executor.deps.state_manager = state_manager
+    executor.deps.action_runner.retried_records = frozenset()
+    executor.deps.action_runner.action_configs = {"my_action": {}}
+    executor.deps.action_runner.storage_backend = MagicMock()
     return executor
 
 
@@ -63,19 +75,17 @@ class TestCheckPriorOutputIntentionalNoOutput:
         # Must NOT reset to PENDING
         executor.deps.state_manager.update_status.assert_not_called()
 
-    def test_no_disposition_no_files_resets_to_pending(self):
-        executor = _make_executor()
-        backend = MagicMock()
+    def test_no_disposition_no_files_resets_to_pending(self, tmp_path):
+        executor = _completed(tmp_path)
+        backend = executor.deps.action_runner.storage_backend
         backend.list_target_files.return_value = []
         backend.has_disposition.return_value = False
 
-        has_output, result = executor._check_prior_output(backend, "my_action")
+        has_output, result = executor._verify_completion_status("my_action")
 
         assert has_output is False
         assert result is None
-        executor.deps.state_manager.update_status.assert_called_once_with(
-            "my_action", ActionStatus.PENDING
-        )
+        assert executor.deps.state_manager.get_status("my_action") == ActionStatus.PENDING
 
     def test_target_files_exist_returns_completed(self):
         executor = _make_executor()
@@ -89,25 +99,23 @@ class TestCheckPriorOutputIntentionalNoOutput:
         assert has_output is True
         assert result.status == ActionStatus.COMPLETED
 
-    def test_failed_disposition_triggers_rerun(self):
-        executor = _make_executor()
-        backend = MagicMock()
+    def test_failed_disposition_triggers_rerun(self, tmp_path):
+        executor = _completed(tmp_path)
+        backend = executor.deps.action_runner.storage_backend
 
         def has_disp(action, disp, record_id=None):
             return disp == DISPOSITION_FAILED and record_id == NODE_LEVEL_RECORD_ID
 
         backend.has_disposition.side_effect = has_disp
 
-        has_output, result = executor._check_prior_output(backend, "my_action")
+        has_output, result = executor._verify_completion_status("my_action")
 
         assert has_output is False
         assert result is None
         backend.clear_disposition.assert_called_once_with(
             "my_action", DISPOSITION_FAILED, record_id=NODE_LEVEL_RECORD_ID
         )
-        executor.deps.state_manager.update_status.assert_called_once_with(
-            "my_action", ActionStatus.PENDING
-        )
+        assert executor.deps.state_manager.get_status("my_action") == ActionStatus.PENDING
 
     def test_skipped_disposition_triggers_rerun(self):
         executor = _make_executor()

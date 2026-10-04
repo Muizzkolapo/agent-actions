@@ -37,6 +37,10 @@ def _make_executor(storage_has_data: bool) -> ActionExecutor:
     storage_backend.list_target_files.return_value = ["output.json"] if storage_has_data else []
     storage_backend.has_disposition.return_value = False
     action_runner.storage_backend = storage_backend
+    # A completed action on a plain run. Left as mocks, the status reads as nothing
+    # and `retried_records` as a repair in progress.
+    state_manager.get_status.return_value = ActionStatus.COMPLETED
+    action_runner.retried_records = frozenset()
     # No known config: these cases exercise the storage check in isolation.
     # The config-change check is covered in test_config_change_reruns_action.py.
     action_runner.action_configs = {}
@@ -65,15 +69,14 @@ class TestVerifyCompletionStatus:
         result = executor.verify_completion_status("write_description")
         assert result is True
         executor.deps.state_manager.update_status.assert_not_called()
+        executor.deps.state_manager.reopen.assert_not_called()
 
     def test_returns_false_and_resets_to_pending_when_storage_empty(self):
         """Stale completion (no SQLite data) → reset to 'pending' for re-run."""
         executor = _make_executor(storage_has_data=False)
         result = executor.verify_completion_status("write_description")
         assert result is False
-        executor.deps.state_manager.update_status.assert_called_once_with(
-            "write_description", ActionStatus.PENDING
-        )
+        executor.deps.state_manager.reopen.assert_called_once_with(["write_description"])
 
     def test_returns_false_when_storage_backend_raises(self):
         """Any error during verification → conservative reset to pending."""

@@ -30,6 +30,13 @@ def mock_deps():
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)
     deps.action_runner.workflow_name = "test_workflow"
+    # A bare MagicMock answers `retried_records` with a truthy mock, which reads as a
+    # repair in progress: nothing is compared and nothing is reset.
+    deps.action_runner.retried_records = frozenset()
+    deps.action_runner.action_configs = {}
+    # No completion stamp and no cap recorded: a mock in their place reads as a changed model.
+    deps.state_manager.get_status_details.return_value = {}
+    deps.state_manager.adopt_truncation_marker.return_value = False
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
     # Default: no item-level failures (so actions complete as "completed", not "completed_with_failures")
@@ -97,7 +104,7 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.PENDING)
+        mock_deps.state_manager.reopen.assert_called_once_with(["agent_a"])
 
     def test_storage_error_during_verify_reruns_agent(self, executor, mock_deps):
         """Storage error during verification should reset to pending and re-run the agent.
@@ -530,12 +537,13 @@ class TestVerifyCompletionStatus:
         storage.list_target_files.return_value = []
         storage.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend = storage
+        mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
 
         should_skip, result = executor._verify_completion_status("agent_a")
 
         assert should_skip is False
         assert result is None
-        mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
+        mock_deps.state_manager.reopen.assert_called_once_with(["agent_a"])
 
     @pytest.mark.parametrize(
         "exc",
