@@ -406,10 +406,10 @@ class RetryCommand:
         """Every record these batches hold that nothing has answered, as (action, record_id).
 
         Read from each batch's own context map, which lists what it was sent. A record
-        is waiting while its disposition says ``deferred``, and also when it has none
-        and no stored row: a run's reset clears ``deferred``, and finding the batch
-        again does not put it back. One with a row was answered by an earlier
-        collection, whatever the entry says.
+        is waiting while its disposition says ``deferred``, and also when it has none:
+        a run's reset clears ``deferred``, and finding the batch again does not put it
+        back. A stored row says nothing either way, since a batch sent to repair a
+        record finds that record's old row still there.
 
         Read-only, so the dry run can report what abandoning would cost without
         paying it.
@@ -424,11 +424,6 @@ class RetryCommand:
         for action in sorted({action for action, *_ in owed}):
             dispositions = {
                 row["record_id"]: row["disposition"] for row in backend.get_disposition(action)
-            }
-            answered = {
-                row.get("source_guid")
-                for path in backend.list_target_files(action)
-                for row in backend.read_target(action, path)
             }
             jobs = BatchRegistryManager(backend, action).get_all_jobs()
             for owed_action, batch_id, file_name, _state in owed:
@@ -457,7 +452,7 @@ class RetryCommand:
                         continue
                     record_id = sent.get("source_guid") or custom_id
                     held = dispositions.get(record_id)
-                    if held == DISPOSITION_DEFERRED or (held is None and record_id not in answered):
+                    if held is None or held == DISPOSITION_DEFERRED:
                         waiting.add((action, record_id))
         return sorted(waiting)
 

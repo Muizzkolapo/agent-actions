@@ -6,7 +6,9 @@ body: >-
   batch still running as owed, so it went ahead, cleared the record of that batch, and
   nothing could collect it afterwards: its records were never answered and the action was
   reported complete. Retry now refuses in that case, as it does for a batch still in
-  flight, and says to run the workflow again to collect it first. `--abandon-in-flight`
+  flight, and says to run the workflow again to collect it first (where the action already
+  reads completed that run does not collect it, see #1234, and `--abandon-in-flight` is the
+  way through). `--abandon-in-flight`
   still lets the retry through, and now marks every record the abandoned batch held as
   failed, including records whose waiting mark an earlier run had cleared, so a later
   retry can reach them. Whether a finished batch is
