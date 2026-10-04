@@ -5,9 +5,10 @@ body: >-
   command 'retry'` and exited 2. The page now shows `agac retry -a <workflow>`, which
   retries a batch action's failed records as it does an online action's, and says that a
   batch still out at the provider must be collected first, with `--abandon-in-flight` only
-  for one the provider no longer has. A test now reads every `agac` command a docs code
-  block shows and resolves it through the CLI's own command groups, so a page cannot show a
-  command agac lacks. Separately noted, not fixed: the inspect reference still documents
-  `agac inspect field-flow` and `agac inspect conflicts`, which were removed from the CLI;
-  the test holds them as known gaps until that page is rewritten.
+  for one the provider no longer has. A test now resolves the command path of each docs
+  code-block line that runs `agac` directly through the CLI's own command groups, so a page
+  cannot name a command group or subcommand agac lacks; the options and arguments after the
+  command are not checked yet. Separately noted, not fixed: the inspect reference still
+  documents `agac inspect field-flow` and `agac inspect conflicts`, which were removed from
+  the CLI; the test holds them as known gaps until that page is rewritten or retired.
 time: 2026-10-04T22:12:47Z

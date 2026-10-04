@@ -1,7 +1,8 @@
 """A command a docs code block shows must be one `agac` has.
 
 Code blocks only: a block is what a reader types, while prose may name a
-command to say it is gone.
+command to say it is gone. Only the command path is read, not the options and
+arguments the command itself takes.
 """
 
 from __future__ import annotations
