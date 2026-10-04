@@ -228,6 +228,20 @@ def test_every_record_filtered_with_nothing_to_send_is_recorded_and_the_action_s
     assert _status(batch.backend) == ActionStatus.SKIPPED
 
 
+def test_an_action_whose_guard_now_filters_every_record_holds_nothing_and_is_skipped(tmp_path):
+    """Its answers from before are for records the guard now excludes. Carried, the
+    action reads complete and the actions below go on reading them."""
+    batch = _batch(tmp_path, "quiet")
+    batch.run(1, [handed("a1", keep=True), handed("a2", keep=True)], extra=FILTER)
+
+    held = batch.run(
+        2, [handed("a1", keep=False), handed("a2", keep=False)], extra=FILTER, reset=True
+    )
+
+    assert held == []
+    assert _status(batch.backend) == ActionStatus.SKIPPED
+
+
 def test_an_expect_block_that_cannot_be_resolved_stops_a_first_stage_run_with_nothing_to_send(
     tmp_path,
 ):

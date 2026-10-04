@@ -1027,6 +1027,37 @@ def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
     assert len(batch.provider.submitted) == 1
 
 
+_NOW_FILTERED = [rec("a1", keep=True), rec("a2", keep=False)]
+
+GUARD_NOW_FILTERS = {
+    "one_answered_input": ([_PASSES, {"inputs": _NOW_FILTERED, "reset": True}], None),
+    "every_answered_input": (
+        [_PASSES, {"inputs": [rec("a1", keep=False), rec("a2", keep=False)], "reset": True}],
+        None,
+    ),
+    "an_input_that_gave_several_rows": (
+        [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}],
+        {"a2": 2},
+    ),
+    "the_input_a_repair_names": (
+        [_PASSES, {"inputs": _NOW_FILTERED, "retry": "failures"}],
+        {("a2", 1): "exhaust"},
+    ),
+}
+
+
+@pytest.mark.parametrize("case", GUARD_NOW_FILTERS.values(), ids=GUARD_NOW_FILTERS.keys())
+def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
+    """Editing the guard resets the action, so every input reaches it again. A row
+    carried for one it filters is an answer to a record the guard now excludes, and
+    every action below reads it."""
+    runs, shape = case
+
+    for run in compare(tmp_path, runs, FILTER, shape):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
     """Nothing is left to send, and what is written in its place must not be nothing."""
     batch = _Batch(tmp_path)
