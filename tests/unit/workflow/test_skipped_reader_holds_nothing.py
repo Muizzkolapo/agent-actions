@@ -143,3 +143,25 @@ def test_a_merge_whose_every_version_is_empty_keeps_no_rows(backend, state_manag
 
     assert result.status == ActionStatus.SKIPPED
     assert _rows(backend, "merge") == 0
+    # Forgetting clears every disposition; the skip it records has to come after.
+    assert backend.has_disposition("merge", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID)
+
+
+def test_a_merge_skipped_during_a_repair_keeps_its_rows(backend, state_manager):
+    """A retry touches only the records it names, on this skip as on the other."""
+    backend._write_target_raw("merge", FILE, _stored(3))
+    executor = _executor(backend, state_manager)
+    executor.deps.action_runner.retried_records = frozenset({"g0"})
+    params = ActionRunParams(
+        action_name="merge",
+        action_idx=2,
+        action_config={"version_consumption_config": {"source": "draft", "pattern": "merge"}},
+        is_last_action=True,
+        start_time=datetime.now(),
+    )
+
+    executor._handle_all_versions_filtered(
+        params, AllVersionsFilteredError("merge", ["draft_1", "draft_2"])
+    )
+
+    assert _rows(backend, "merge") == 3
