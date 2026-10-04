@@ -343,27 +343,39 @@ class ActionExecutor:
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
         next ordinary run would read a change, clear the action's dispositions
-        and re-run it. Nor does it say the rest of the action was answered under
-        the config it ran with: stamped with that, an edit is never applied to
-        the records the retry did not name.
+        and re-run it.
         """
         if self._repair_is_keeping_an_earlier_stamp(action_name):
             return self.deps.state_manager.get_status_details(action_name).get(key)
         return in_force
 
-    def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
-        """The config the work this run starts is answered under, for a later reset to compare.
+    def _held_to_earlier_answers(self, action_name: str, key: str, in_force: Any) -> Any:
+        """*in_force*, unless a repair answers beside records answered under another config.
 
-        A repair is held to the completion stamp it keeps: the records it does not name
-        were answered under that, and an edit is the next plain run's to apply.
+        Those were answered under the completion stamp the repair keeps or, for an action
+        that never completed, under what its last run recorded as it started. Held to that,
+        an edit is the next plain run's to apply, to every record.
         """
+        if self._repair_is_keeping_an_earlier_stamp(action_name):
+            return self.deps.state_manager.get_status_details(action_name).get(key)
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            earlier = self.deps.state_manager.get_status_details(action_name).get(ANSWERED_UNDER)
+            if isinstance(earlier, dict) and earlier.get("config_hash") is not None:
+                return earlier.get(key)
+        return in_force
+
+    def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
+        """The config the work this run starts is answered under, for a later reset to compare."""
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         in_force = {
             "config_hash": _compute_action_config_hash(action_config),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
         }
-        return {key: self._stamped(action_name, key, value) for key, value in in_force.items()}
+        return {
+            key: self._held_to_earlier_answers(action_name, key, value)
+            for key, value in in_force.items()
+        }
 
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
         """What the slices admitted, unless this run is only repairing records.
@@ -411,9 +423,13 @@ class ActionExecutor:
             "file_limit": self._stamped(
                 action_name, "file_limit", resolve_file_limit(action_config)[0]
             ),
-            "model_name": self._stamped(action_name, "model_name", cfg.get("model_name")),
-            "model_vendor": self._stamped(action_name, "model_vendor", cfg.get("model_vendor")),
-            "config_hash": self._stamped(
+            "model_name": self._held_to_earlier_answers(
+                action_name, "model_name", cfg.get("model_name")
+            ),
+            "model_vendor": self._held_to_earlier_answers(
+                action_name, "model_vendor", cfg.get("model_vendor")
+            ),
+            "config_hash": self._held_to_earlier_answers(
                 action_name, "config_hash", _compute_action_config_hash(action_config)
             ),
             # What the run did, not what it was asked for: the limit alone

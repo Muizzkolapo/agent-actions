@@ -496,3 +496,39 @@ def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_reader
         backend.close()
     assert len(answers) == len(EVERY_PAGE)
     assert echoed == answers, "the reader holds what it made from answers that were replaced"
+
+
+@pytest.mark.parametrize("retry_stops", [True, False], ids=["retry-interrupted", "retry-finished"])
+def test_a_retry_of_an_edited_action_that_never_completed_leaves_the_edit_to_the_next_run(
+    online, provider, retry_stops
+):
+    """No completion stamp holds this retry to the old config. The records it does not
+    name were answered under what the interrupted run recorded as it started, and must
+    still read so once the retry has run, or the next run carries them under the edit."""
+    answer = AgacClient.call_json
+    calls = []
+
+    def beta_empty_then_interrupted(api_key, agent_config, prompt_config, context_data, schema):
+        calls.append(_page_in(prompt_config, context_data))
+        if len(calls) == 3:
+            raise KeyboardInterrupt()
+        if calls[-1] == "Page beta.":
+            return [{}]
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(AgacClient, "call_json", staticmethod(beta_empty_then_interrupted))
+        _run("--fresh")
+    assert _status(online) == "interrupted"
+
+    _edit_prompt(online)
+    if retry_stops:
+        provider.stops(at_call=1, raising=KeyboardInterrupt())
+    else:
+        provider.answers()
+    CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == EVERY_PAGE

@@ -214,3 +214,22 @@ def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backen
     _next_run_resets(tmp_path, backend, edited)
 
     assert _held(backend) == {}
+
+
+def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_started_under(
+    tmp_path, backend
+):
+    """No completion stamp says what the records a retry does not name were answered
+    under; the start the stopped run recorded does, and the edit is the next run's."""
+    _stopped(tmp_path, backend, _Killed())
+    edited = _edited(prompt="Define it briefly")
+    state, executor = _process(tmp_path, backend, edited, retried={"r3"})
+    executor.deps.action_runner.run_action.side_effect = _Killed()
+    with pytest.raises(_Killed):
+        executor._execute_action_run(
+            ActionRunParams("define", 0, edited["define"], False, datetime.now())
+        )
+
+    _next_run_resets(tmp_path, backend, edited)
+
+    assert _held(backend) == {}

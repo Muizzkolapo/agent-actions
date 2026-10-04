@@ -125,8 +125,9 @@ the config. If the prompt, schema, guard or model was edited in between, the act
 every action that reads it answer everything again, and a batch still out under the old
 config is given up. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
-its answer. An `agac retry` records the stamp it keeps instead, so a retry stopped
-partway leaves an edit to the next run as a finished one does.
+its answer. An `agac retry` records what the records it does not name were answered
+under instead — the stamp of the action's last completion, or what its last run recorded
+if it never completed — so a retry, stopped or finished, leaves an edit to the next run.
 
 Staged input is the source of truth for what an action holds. An action reset after
 its input was removed — by an edit, or by a limit or model given on the command

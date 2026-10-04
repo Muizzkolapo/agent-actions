@@ -553,10 +553,12 @@ Stopped partway is one of:
     unknown   → state written before the stamp existed: reset by status,
                 selective for MID_PROCESSING_STATUSES, bulk for FAILED
 
-A repair (`agac retry`) records the completion stamp it keeps, not the
-config it runs under: the records it does not name were answered under
-that, so a stopped retry of an edited action leaves the edit to the next
-run, as a finished one does.
+A repair (`agac retry`) records what the records it does not name were
+answered under, not the config it runs under: the completion stamp it
+keeps, or, for an action that never completed, the `answered_under` its
+last run recorded (_held_to_earlier_answers). It stamps the same when it
+completes the action. A retry of an edited action, stopped or finished,
+leaves the edit to the next run, which applies it to every record.
 
 If you clear a stopped action in bulk while its config is unchanged:
     Checkpoint resume breaks — the DispositionGate finds no terminal IDs
