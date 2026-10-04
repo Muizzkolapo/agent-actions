@@ -120,6 +120,7 @@ def test_an_action_whose_every_input_is_done_completes_as_before(tmp_path):
 
     batch.run(2, [rec("a1")])
 
+    assert batch.raised == [None, None]
     assert batch.backend.get_disposition(ACTION, record_id=NODE_LEVEL_RECORD_ID) == []
     assert _status(batch.backend) == ActionStatus.COMPLETED
 
@@ -133,7 +134,7 @@ def test_a_file_that_would_be_written_as_it_stands_is_not_written(tmp_path):
     with watching:
         held = batch.run(2, [rec("a1"), rec("a2")])
 
-    assert (held, written) == (first, [])
+    assert (held, written, batch.raised[-1]) == (first, [], None)
 
 
 def test_a_repair_that_names_no_record_of_the_file_leaves_it_as_it_stands(tmp_path):
@@ -147,7 +148,7 @@ def test_a_repair_that_names_no_record_of_the_file_leaves_it_as_it_stands(tmp_pa
         held = batch.run(2, [rec("a1"), rec("a3")], retry=["a2"])
 
     assert batch.sent[-1] == []
-    assert (held, written) == (first, [])
+    assert (held, written, batch.raised[-1]) == (first, [], None)
 
 
 # ── through `agac run` ────────────────────────────────────────────────────────

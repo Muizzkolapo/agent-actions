@@ -1,7 +1,8 @@
 """Collect a batch file's rows and write the file: once results are in, or with none.
 
 Finalize and a run that sends nothing both come here, so every row is built, every
-disposition written and every file stored by one path.
+disposition written and every file stored by one path. A run whose every input is
+already done collects nothing and stores its file here too.
 """
 
 from __future__ import annotations
@@ -191,18 +192,13 @@ def write_batch_file(
 ) -> Path:
     """Store *rows* as the file *stored_name*, with every stored row they do not replace.
 
-    The path is built from the name, never the other way round, so the file is
-    stored under exactly *stored_name* whichever folder the caller was handed.
     *batch_inputs* is the file's input before narrowing: once the action above mints
     its own identities, the rows alone cannot say which producers still exist.
     *filtered* is ``filtered_inputs`` of the file's context map: a record the guard
     filtered holds no row, so none stored for it is kept, unless the run failed and
     answered nothing.
     """
-    output_file = Path(output_root) / stored_name
-    if storage_backend is None:
-        ensure_directory_exists(output_file, is_file=True)
-    else:
+    if storage_backend is not None:
         from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
         rows = with_stored_rows_not_reproduced(
@@ -213,6 +209,27 @@ def write_batch_file(
             batch_inputs=batch_inputs,
             filtered=filtered,
         )
+    return store_batch_file(
+        storage_backend, action_name, rows, output_root=output_root, stored_name=stored_name
+    )
+
+
+def store_batch_file(
+    storage_backend: StorageBackend | None,
+    action_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    output_root: str,
+    stored_name: str,
+) -> Path:
+    """Store *rows* as the whole file *stored_name*, merging nothing.
+
+    The path is built from the name, never the other way round, so the file is
+    stored under exactly *stored_name* whichever folder the caller was handed.
+    """
+    output_file = Path(output_root) / stored_name
+    if storage_backend is None:
+        ensure_directory_exists(output_file, is_file=True)
     FileWriter(
         str(output_file),
         storage_backend=storage_backend,
