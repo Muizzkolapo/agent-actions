@@ -196,8 +196,12 @@ def _store(project: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"file:{sorted(store.glob('*.db'))[0]}?mode=ro", uri=True)
 
 
-def _answered(project: Path) -> dict[str, list[str]]:
-    """Each stored file, with the page of every row answered for one."""
+def _stored_rows(project: Path) -> dict[str, list[tuple[str, str]]]:
+    """Each stored file, with the page and state of every row in it.
+
+    Every row, not only the answered ones: a stale failed row beside the answer for the
+    same page is what a record sent again used to leave.
+    """
     con = _store(project)
     try:
         stored = con.execute(
@@ -205,15 +209,22 @@ def _answered(project: Path) -> dict[str, list[str]]:
         ).fetchall()
     finally:
         con.close()
-    answered = {}
+    rows_by_file = {}
     for path, data in stored:
         rows = json.loads(data)
-        answered[path] = sorted(
-            str(((row.get("content") or {}).get("source") or {}).get("page_id"))
+        rows_by_file[path] = sorted(
+            (
+                str(((row.get("content") or {}).get("source") or {}).get("page_id")),
+                str(row.get("_state")),
+            )
             for row in (rows if isinstance(rows, list) else [rows])
-            if row.get("_state") == "processed"
         )
-    return answered
+    return rows_by_file
+
+
+def _answered(*prefixes: str) -> dict[str, list[tuple[str, str]]]:
+    """Two pages per file, each with one row, answered."""
+    return {f"{p}_pages.json": [(f"{p}{n}", "processed") for n in (1, 2)] for p in prefixes}
 
 
 def _registry(project: Path) -> dict[str, dict[str, Any]]:
@@ -229,9 +240,6 @@ def _registry(project: Path) -> dict[str, dict[str, Any]]:
 
 def _batch_ids(project: Path) -> dict[str, str]:
     return {name: entry["batch_id"] for name, entry in _registry(project).items()}
-
-
-EVERY_PAGE = {"a_pages.json": ["a1", "a2"], "b_pages.json": ["b1", "b2"]}
 
 
 class TestAFileRefusedBesideOneThatIsSent:
@@ -252,7 +260,7 @@ class TestAFileRefusedBesideOneThatIsSent:
     def test_the_runs_after_it_answer_every_record_of_both_files(self, runs):
         assert [run.code for run in runs.then] == [0, 0], runs.then[-1].output
         assert runs.then[-1].status == "completed"
-        assert _answered(runs.project) == EVERY_PAGE
+        assert _stored_rows(runs.project) == _answered("a", "b")
 
     def test_the_batch_sent_beside_it_is_collected_not_sent_again(self, runs):
         """Failing the action costs the refused file a resend and nothing more."""
@@ -261,7 +269,7 @@ class TestAFileRefusedBesideOneThatIsSent:
 
 
 class TestARefusedResendOverACollectedFile:
-    """The sequence the issue was found with, one process per step.
+    """A resend over a file already collected, refused while another file's batch is owed.
 
     a_pages.json is collected with a1 failed; the collect pass stops before b_pages.json.
     The run after resends a1, and the provider refuses it while b_pages.json's batch is
@@ -290,7 +298,7 @@ class TestARefusedResendOverACollectedFile:
 
     def test_every_record_ends_answered_under_its_own_page(self, runs):
         assert runs.then[-1].status == "completed", runs.then[-1].output
-        assert _answered(runs.project) == EVERY_PAGE
+        assert _stored_rows(runs.project) == _answered("a", "b")
 
 
 class TestARefusedResendBesideAFileAlreadyCollected:
@@ -327,4 +335,4 @@ class TestARefusedResendBesideAFileAlreadyCollected:
 
     def test_every_record_of_every_file_ends_answered(self, runs):
         assert runs.then[-1].status == "completed", runs.then[-1].output
-        assert _answered(runs.project) == {**EVERY_PAGE, "c_pages.json": ["c1", "c2"]}
+        assert _stored_rows(runs.project) == _answered("a", "b", "c")
