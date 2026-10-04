@@ -123,13 +123,27 @@ class RetryCommand:
         manifest_file = _manifest_path(store_dir)
         prior_manifest = _read_manifest(manifest_file)
 
-        if prior_manifest:
+        # read_only in BOTH modes: _find_failures below reads the disposition
+        # rows the startup reset would have cleared, and the non-dry-run path
+        # makes its own status transitions once it knows what to retry.
+        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
+        execution_order = list(workflow.execution_order)
+        state_mgr = workflow.services.core.state_manager
+
+        resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
+        restoring = self._snapshot_to_restore(prior_manifest, resumed, state_mgr)
+        if prior_manifest and self.args.dry_run:
+            self.console.print(
+                "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
+                f"A retry would restore {len(restoring)} disposition(s) first, and this "
+                "plan counts them.[/yellow]"
+            )
+        elif prior_manifest:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — "
                 "prior retry was interrupted. Restoring dispositions...[/yellow]"
             )
-            disposition_rows = prior_manifest.get("dispositions", [])
-            for row in disposition_rows:
+            for row in restoring:
                 backend.set_disposition(
                     row["action_name"],
                     row["record_id"],
@@ -140,18 +154,11 @@ class RetryCommand:
                 )
             _delete_manifest(manifest_file)
             self.console.print(
-                f"[cyan]Restored {len(disposition_rows)} disposition(s). "
-                f"Proceeding with retry.[/cyan]"
+                f"[cyan]Restored {len(restoring)} disposition(s). Proceeding with retry.[/cyan]"
             )
 
-        # read_only in BOTH modes: _find_failures below reads the disposition
-        # rows the startup reset would have cleared, and the non-dry-run path
-        # makes its own status transitions once it knows what to retry.
-        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
-        execution_order = list(workflow.execution_order)
-        state_mgr = workflow.services.core.state_manager
-
-        failures = self._find_failures(backend, execution_order)
+        unwritten = restoring if self.args.dry_run else []
+        failures = self._find_failures(backend, execution_order, unwritten)
 
         if not failures:
             self.console.print(
@@ -202,7 +209,6 @@ class RetryCommand:
         # going to happen. Unfinished actions first, since abandoning a batch writes.
         # Every action, not only the range: the run executes whatever is not complete.
         if repairing:
-            resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
             holding = {action for action, *_ in owed}
             readers = workflow.services.core.action_executor.readers_of
             self._refuse_to_narrow_the_unfinished(
@@ -356,6 +362,34 @@ class RetryCommand:
             for action in manifest.get("downstream_actions", [])
             if state_mgr.get_status_details(action).get(REPAIRED_BY) == manifest["created_at"]
         }
+
+    @staticmethod
+    def _snapshot_to_restore(
+        manifest: dict[str, Any] | None, resumed: set[str], state_mgr
+    ) -> list[dict]:
+        """The rows of an interrupted retry's snapshot that go back before this one plans.
+
+        None once every action that retry put back to pending has completed: what they
+        hold is newer. Otherwise those actions' rows, the completed ones' included, since
+        the next retry starts where that one did, from its starting action's failures;
+        the readers hold what they had not answered as ``unprocessed``, which no retry
+        starts from. An action a reset has touched since holds newer rows and gets none.
+        Nor does a completed action get a node-level failure back, which a plain run
+        would take as a reason to run it again over what its readers hold.
+        """
+        from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+
+        completed = {
+            action for action in resumed if state_mgr.get_status(action) in COMPLETED_STATUSES
+        }
+        if not manifest or completed == resumed:
+            return []
+        return [
+            row
+            for row in manifest.get("dispositions", [])
+            if row["action_name"] in resumed
+            and not (row["record_id"] == NODE_LEVEL_RECORD_ID and row["action_name"] in completed)
+        ]
 
     def _refuse_to_narrow_the_unfinished(
         self,
@@ -699,11 +733,20 @@ class RetryCommand:
     def _find_failures(
         backend,
         execution_order: list[str],
+        unwritten: list[dict] | None = None,
     ) -> dict[str, list[dict]]:
-        """Query disposition table for failed/exhausted records per action."""
+        """Query disposition table for failed/exhausted records per action.
+
+        *unwritten* rows are read as written, each replacing what its action holds for
+        its record: a dry run plans over the snapshot it does not restore.
+        """
         failures: dict[str, list[dict]] = {}
         for action in execution_order:
-            rows = backend.get_disposition(action)
+            replacing = {r["record_id"]: r for r in unwritten or [] if r["action_name"] == action}
+            rows = [
+                r for r in backend.get_disposition(action) if r.get("record_id") not in replacing
+            ]
+            rows.extend(replacing.values())
             action_failures = [r for r in rows if r.get("disposition") in FAILURE_DISPOSITIONS]
             if action_failures:
                 failures[action] = action_failures

@@ -437,6 +437,31 @@ class TestManifestRestoreOnNextInvocation:
         assert restored == [("classify", "r1", "failed")]
 
 
+class TestADryRunPlansOverTheSnapshot:
+    """A dry run restores nothing, so it reads the snapshot's rows as if it had."""
+
+    def test_a_row_it_would_restore_replaces_what_the_action_holds(self):
+        backend = make_mock_backend(
+            {
+                "classify": [
+                    {"action_name": "classify", "record_id": "r1", "disposition": "success"},
+                    {"action_name": "classify", "record_id": "r2", "disposition": "failed"},
+                ],
+            }
+        )
+        unwritten = [
+            {"action_name": "classify", "record_id": "r1", "disposition": "failed"},
+            {"action_name": "classify", "record_id": "r2", "disposition": "exhausted"},
+        ]
+
+        failures = RetryCommand._find_failures(backend, ["classify"], unwritten)
+
+        assert [(r["record_id"], r["disposition"]) for r in failures["classify"]] == [
+            ("r1", "failed"),
+            ("r2", "exhausted"),
+        ]
+
+
 class TestManifestWriteFailureAborts:
     """If manifest write fails, dispositions must NOT be cleared."""
 

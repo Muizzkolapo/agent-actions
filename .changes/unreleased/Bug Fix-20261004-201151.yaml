@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  `agac retry --dry-run` no longer changes anything after a retry that was interrupted. It
+  put that retry's failures back and deleted its manifest, though it said no changes were
+  made. And any retry put them back on every action the interrupted one covered: on one
+  it had completed, its answers were replaced by the failures it had already repaired,
+  and when the action it started from had failed every record, that action's node-level
+  failure went back too, so the next `agac run` answered every record of it again while
+  the actions reading it kept what they had built from the replaced rows. A dry run now
+  puts nothing back and keeps the manifest, and the plan it shows counts what a retry
+  would put back. A retry puts nothing back once every action the interrupted retry put
+  back to pending has completed, or on an action a run has reset since, and never a
+  node-level failure on an action that has completed. Retrying again still resumes an
+  interrupted retry from where it started.
+time: 2026-10-04T20:11:51Z
