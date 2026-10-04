@@ -120,8 +120,8 @@ expands into several rows is the exception: each row gets an identity of its
 own. If the action's other records succeeded, it reads complete, and the failed
 row and the run log say what was refused; if nothing succeeded, the action
 fails. The remedy is upstream: give the record its `source_guid` back where it
-is produced. A batch run that sends nothing at all still stores such a record's
-row with its target id as its `source_guid`, though it records nothing for it.
+is produced. A batch run that sends nothing at all refuses it the same way, and
+since nothing in such a run succeeds, the action fails.
 
 ## Retrying an action that runs in batch mode
 

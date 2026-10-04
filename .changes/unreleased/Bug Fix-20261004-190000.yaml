@@ -17,10 +17,10 @@ body: >-
   action's other records succeeded it now reads complete, as online, where a failure of
   such a record made it read completed with failures; the failed row and the run log say
   what was refused. Where nothing in the file succeeded the action now fails, as online,
-  where it could read complete and let the actions below it run. To process the record,
-  give it back its `source_guid` upstream. A batch run that sends nothing at all still
-  stores such a record's row with its target id as its `source_guid`, though it records
-  nothing for it. A failure an earlier release recorded under a target id stays in the
+  where it could read complete and let the actions below it run. A batch run that sends
+  nothing at all refuses such a record the same way, and since nothing in such a run
+  succeeds, the action fails. To process the record, give it back its `source_guid`
+  upstream. A failure an earlier release recorded under a target id stays in the
   store, and `agac retry` still clears it without repairing it; a `deferred` mark it left
   for a batch still out is cleared when that batch is collected.
 time: 2026-10-04T19:00:00Z

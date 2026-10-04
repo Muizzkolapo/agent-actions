@@ -584,12 +584,9 @@ Dispositions differ where the rows do not:
 - A guard skip is `unprocessed` here and `passthrough` online. The gate runs above the
   guard here, so a terminal disposition would carry the skip for good; `unprocessed` sends
   the record to the guard again on the next run.
-- A record with no `source_guid` that fails preparation is recorded failed under its
-  target id, so the action reads failed. Online refuses such a record at enrichment and
-  records nothing. `agac retry` selects records by `source_guid`, so it cannot repair it
-  on either path. Here it names the failure by its target id all the same: a retry sends
-  nothing, clears the failure, and the action reads complete over the failed row it still
-  holds.
+
+A record with no `source_guid` is not among them: both paths refuse it at enrichment and
+record nothing for it, under its target id or any other (see the identity notes below).
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. Under `error` online raises at the record and
@@ -705,9 +702,10 @@ Refused, it leaves no disposition, and batch reads an action's outcome from
     is written, and the executor records the action failed, as online. Where
     something succeeded, both read complete.
 
-The one batch path that does not collect, a run with nothing to send, builds
-    its rows apart: it writes such a record no disposition either, but stores its
-    row with its target_id as its source_guid.
+A batch run with nothing to send collects through the same step
+    (`collect_batch_rows`), so there too such a record is recorded nowhere and
+    stored as the same failed row. Nothing in such a run succeeds, so the same
+    breaker is raised once the file is written.
 ```
 
 ### Disposition write ordering (checkpoint vs collection)
