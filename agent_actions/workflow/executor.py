@@ -888,7 +888,12 @@ class ActionExecutor:
 
         if final_status == ActionStatus.FAILED:
             return self._finalize_total_failure(
-                params.action_name, duration, output_folder, execution_mode=execution_mode
+                params.action_name,
+                duration,
+                output_folder,
+                execution_mode=execution_mode,
+                reached_every_input=params.action_name
+                not in self.deps.action_runner.input_left_unreached,
             )
 
         if batch_status == "passthrough":
@@ -1137,8 +1142,13 @@ class ActionExecutor:
         output_folder: str | None = None,
         *,
         execution_mode: str | None = None,
+        reached_every_input: bool = True,
     ) -> ActionExecutionResult:
-        """Handle total item-level failure: update state, write disposition, track, return result."""
+        """Handle total item-level failure: update state, write disposition, track, return result.
+
+        Every record it holds failed, which says it failed all of its input only if the
+        walk lost no file partway.
+        """
         reason = f"Action '{action_name}' failed: all records produced errors"
         status_kwargs: dict[str, Any] = {
             "execution_time": duration,
@@ -1147,7 +1157,9 @@ class ActionExecutor:
         if execution_mode is not None:
             status_kwargs["execution_mode"] = execution_mode
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED, **status_kwargs)
-        self._write_failed_disposition(action_name, reason, detail=EVERY_INPUT_FAILED)
+        self._write_failed_disposition(
+            action_name, reason, detail=EVERY_INPUT_FAILED if reached_every_input else None
+        )
         self._track_action_complete(action_name, duration, ActionStatus.FAILED)
         return ActionExecutionResult(
             success=False,
