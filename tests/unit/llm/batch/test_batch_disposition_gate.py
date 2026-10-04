@@ -238,19 +238,19 @@ class TestBatchDispositionGate:
 
         assert "not found in prior output" not in caplog.text
 
-    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_caller_names(self):
-        """And no other: a file in a subdirectory keeps its batch output under another name."""
-        result = self._nothing_left_to_send(tombstone_path="sub/data.json")
+    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_batch_is_named_for(self):
+        """And no other: the top-level file of the same name holds another file's rows."""
+        result = self._nothing_left_to_send(batch_name="sub/data.json")
 
         assert [row["source_guid"] for row in result.passthrough["data"]] == ["x1"]
 
-    def test_a_caller_naming_no_file_is_handed_the_tombstone_alone(self):
-        result = self._nothing_left_to_send(tombstone_path=None)
+    def test_a_top_level_file_carries_its_own_rows_when_nothing_is_sent(self):
+        result = self._nothing_left_to_send(batch_name="data.json")
 
-        assert result.passthrough["data"] == []
+        assert [row["source_guid"] for row in result.passthrough["data"]] == ["r0"]
 
     @staticmethod
-    def _nothing_left_to_send(*, tombstone_path: str | None):
+    def _nothing_left_to_send(*, batch_name: str):
         backend = _mock_backend(terminal_ids={"r0"})
         files = {
             "data.json": [{"source_guid": "r0", "content": {}}],
@@ -265,10 +265,9 @@ class TestBatchDispositionGate:
         with tempfile.TemporaryDirectory() as tmpdir:
             return service.submit_batch_job(
                 agent_config={"agent_type": "test_action", "action_name": "test_action"},
-                batch_name="data.json",
+                batch_name=batch_name,
                 data=[_make_record("r0"), _make_record("r1")],
                 output_directory=tmpdir,
-                tombstone_path=tombstone_path,
             )
 
     def test_terminal_records_filtered_before_prepare(self):
