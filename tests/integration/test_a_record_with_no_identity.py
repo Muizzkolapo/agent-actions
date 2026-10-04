@@ -314,9 +314,22 @@ def test_abandoning_a_batch_marks_no_failure_under_the_target_id_of_a_record_wit
     does not repair."""
     batch = _Batch(tmp_path)
     _submit(batch, answered())
+    command = RetryCommand(RetryCommandArgs(agent="w", abandon_in_flight=True))
 
-    RetryCommand(RetryCommandArgs(agent="w", abandon_in_flight=True))._settle_batches_in_flight(
-        batch.backend, [ACTION]
-    )
+    command._settle_batches_in_flight(batch.backend, command._batches_owed(batch.backend, [ACTION]))
 
     assert batch.failures() == ["a1"]
+
+
+def test_a_record_with_no_source_guid_does_not_keep_a_retry_from_a_failed_batch_action(tmp_path):
+    """A retry narrows a failed batch action whose batches hold an answer or a failure for
+    every record they were sent. The refused record holds neither, and no run gives it
+    one: counted, it refused the retry for good, while online's action, its every record
+    reached and failed, is narrowed."""
+    batch = _Batch(tmp_path)
+
+    with pytest.raises(RuntimeError, match="produced 0 successful records"):
+        batch.run(1, answered(), answer=Answerer({"a1": "fail"}), extra=EXTRA)
+
+    assert batch.failures() == ["a1"]
+    assert RetryCommand._unfinished_as(batch.backend, ACTION, ActionStatus.FAILED) is None
