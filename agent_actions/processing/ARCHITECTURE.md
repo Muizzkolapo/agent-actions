@@ -180,7 +180,7 @@ Input records (from staging or upstream action)
 │    - Fire telemetry events                           │
 │                                                      │
 │  Flush dispositions in single SQLite transaction;    │
-│  online, what a reset keeps waits for the file write │
+│  online, SUCCESS/PASSTHROUGH wait for the file write │
 │                                                      │
 │  Status → Disposition mapping:                       │
 │    SUCCESS    → DISPOSITION_SUCCESS                  │
@@ -303,7 +303,7 @@ Re-run:
       strategy.invoke(50 remaining records)
       → enrich + collect (all 200)
       → write final output
-      → write_dispositions(what a reset keeps)
+      → write_dispositions(SUCCESS, PASSTHROUGH)
       → clear_checkpoint_records(action, that file)
 ```
 
@@ -684,10 +684,9 @@ Per-record checkpoint writes happen DURING invocation (step 5):
 Batch collection writes happen AFTER enrichment (step 7):
     collect_results_from_processing_results() → set_dispositions_batch()
 
-Online, collection writes there only what a reset clears or the gate does not
-carry (FAILED, EXHAUSTED, DEFERRED, UNPROCESSED). What a reset keeps (SUCCESS,
-PASSTHROUGH, FILTERED, SKIPPED) waits in ProcessingContext.kept_dispositions,
-and the caller writes it after the file:
+Online, what the gate carries a record from the stored file by (SUCCESS,
+PASSTHROUGH) waits in ProcessingContext.kept_dispositions, and the caller
+writes it after the file:
     pipeline.py          save_main_output() → write_dispositions()
     initial_pipeline.py  write_target()     → write_dispositions()
 
@@ -697,12 +696,25 @@ and the caller writes it after the file:
     gate carried those rows. A FILE tool leaves no checkpoint row to say the
     file is older, and a record whose checkpoint row failed has none either.
 
-    A failure is written at once: it replaces the checkpoint's SUCCESS for a
-    parse error, and a reset clears it.
+    The rest (FAILED, EXHAUSTED, DEFERRED, UNPROCESSED, FILTERED) is written
+    at once, because a file whose records all failed or were exhausted raises
+    before it is stored. A failure replaces the checkpoint's SUCCESS for a
+    parse error, and a reset clears it; `agac retry` reads FAILED and
+    EXHAUSTED. FILTERED is what a fan-in drops a record by (filter is
+    authoritative), and a filtered record has no row to carry: the guard
+    filters it again above the gate.
+
+    Still written before the file: SKIPPED for a record the context scope drops
+    (pipeline.py), which the scope pass drops again before the gate; and, at
+    record granularity, the checkpoint's SUCCESS, whose checkpoint row tells
+    answered_since_stored that the stored file is older.
 
     A row the store refuses as a schema echo is given no SUCCESS: the store
     records it FAILED as it writes the file, and a SUCCESS written after the
     file would replace that.
+
+    A write that fails for one file of several does not stop the run, which
+    records the action complete over that file's earlier rows (#1265).
 
 Both write to the SAME disposition table with UNIQUE(action_name, record_id, disposition).
 The collection write overwrites the checkpoint write. This is intentional and idempotent:

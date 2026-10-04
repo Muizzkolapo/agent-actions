@@ -725,6 +725,68 @@ def test_a_first_stage_file_stored_before_the_run_stopped_keeps_a_record_whose_c
     assert provider.pages() == []
 
 
+SIDE = "side"
+JOIN = "join"
+FAN_IN_ACTIONS = f"""  - name: {SIDE}
+    intent: "Summarise again"
+    schema: batch_field_rules_output
+    prompt: $p.Summarize
+    context_scope: {{ observe: [source.page_content] }}
+    expect: {{ repair: none }}
+  - name: {JOIN}
+    kind: tool
+    dependencies: [{ACTION}, {SIDE}]
+    run_mode: online
+    intent: "Join"
+    schema: tool_action_output
+    impl: join_summaries
+    context_scope: {{ observe: [{ACTION}.summary, {SIDE}.summary] }}
+    expect: {{ repair: none }}
+"""
+
+JOIN_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def join_summaries(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("side", {}).get("summary")), "exam_density": "low"}]
+"""
+
+
+def test_a_record_filtered_beside_a_file_of_failures_stays_out_of_a_fan_in(online):
+    """The guard filters the first page and the model's answer for the second does not
+    parse, so the first file answers nothing and is not stored. A fan-in drops a record a
+    guard filtered anywhere upstream by its disposition alone, which vouches for no stored
+    row, so it is written though the file is not."""
+    config = _config(online)
+    guard = "    guard: { condition: 'source.page_content != \"Page alpha.\"', on_false: filter }\n"
+    text = config.read_text().replace(
+        "    expect: { repair: none }\n", "    expect: { repair: none }\n" + guard, 1
+    )
+    config.write_text(text.rstrip("\n") + "\n" + FAN_IN_ACTIONS)
+    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (online / "tools" / WORKFLOW / "join_summaries.py").write_text(JOIN_TOOL)
+    answer = AgacClient.call_json
+
+    def unparsed_for_beta(api_key, agent_config, prompt_config, context_data, schema):
+        if _page_in(prompt_config, context_data) == "Page beta.":
+            return {"_parse_error": "Failed to parse JSON", "raw_response": "{summary"}
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(AgacClient, "call_json", staticmethod(unparsed_for_beta))
+        _run("--fresh")
+
+    (alpha,) = [
+        row["source_guid"] for row in _stored_rows(online, SIDE) if "Page alpha." in json.dumps(row)
+    ]
+    joined = {row["source_guid"] for row in _stored_rows(online, JOIN)}
+    assert joined, "the fan-in ran"
+    assert alpha not in joined
+
+
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
     """The trace is where a stored answer's prompt is read back from."""
     provider.stops(at_call=3, raising=KeyboardInterrupt())

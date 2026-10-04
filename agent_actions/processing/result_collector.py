@@ -38,8 +38,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     NODE_LEVEL_RECORD_ID,
-    RUNNING_CLEAR_DISPOSITIONS,
-    TERMINAL_DISPOSITIONS,
     DispositionRow,
 )
 from agent_actions.utils.schema_echo import is_schema_echo
@@ -49,9 +47,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# What a reset keeps of an action stopped partway, and the gate then carries from the
-# stored file without asking again.
-_KEPT_ACROSS_A_RESET = TERMINAL_DISPOSITIONS - RUNNING_CLEAR_DISPOSITIONS
+# What a reset keeps and the gate carries a record from the stored file by. A reset keeps
+# FILTERED too, but a filtered record has no row to carry, and the guard filters it again
+# above the gate.
+_CARRIED_FROM_THE_STORED_FILE = frozenset({DISPOSITION_SUCCESS, DISPOSITION_PASSTHROUGH})
 
 
 def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
@@ -904,15 +903,17 @@ def collect_results_from_processing_results(
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
     if context is not None and context.defer_kept_dispositions:
-        # Written after the file, these would replace the failure the store records for
-        # a schema echo as it writes the row.
+        # They vouch for rows of a file not stored yet; the caller writes them once it is.
         context.kept_dispositions.extend(
             row
             for row in pending_dispositions
-            if row[2] in _KEPT_ACROSS_A_RESET and row[1] not in echoed
+            if row[2] in _CARRIED_FROM_THE_STORED_FILE
+            # The store records a schema echo failed as it writes the row, and a SUCCESS
+            # written after would replace that.
+            and row[1] not in echoed
         )
         pending_dispositions = [
-            row for row in pending_dispositions if row[2] not in _KEPT_ACROSS_A_RESET
+            row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
         ]
     write_dispositions(storage_backend, pending_dispositions, action_name)
 

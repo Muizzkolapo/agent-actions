@@ -337,8 +337,8 @@ class ProcessingContext:
     defer_exhaustion: bool = False
     pending_exhaustion: Exception | None = None
 
-    # Online stores a file after collecting it. When set, the dispositions a reset keeps,
-    # which let the gate carry a record from the stored file, wait here and the caller
+    # Online stores a file after collecting it. When set, the dispositions the gate carries
+    # a record from the stored file by (SUCCESS, PASSTHROUGH) wait here, and the caller
     # writes them once the file is stored. Written before it, a run stopped in between
     # left them vouching for the rows an earlier run had stored.
     defer_kept_dispositions: bool = False
