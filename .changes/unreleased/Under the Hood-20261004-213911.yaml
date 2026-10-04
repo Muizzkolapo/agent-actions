@@ -1,0 +1,14 @@
+kind: Under the Hood
+body: >-
+  The integration tests that drive the CLI as a subprocess now run the `agac` of the tree they
+  live in. They launched the venv's console script, which imports `agent_actions` from wherever
+  the editable install points, and pytest.ini's `pythonpath` reaches only the pytest process.
+  From a second worktree they ran the main checkout's code and passed or failed on it, whatever
+  the change under test: with the main checkout behind, all four tests of a batch guard's
+  filtering failed on a worktree that held the fix they pin. Every launch now goes through one
+  helper that puts the tree first on the subprocess's `PYTHONPATH`. A test has `agac list-udfs`
+  import a tool that records which `agent_actions` the CLI process loaded, and another fails on
+  any test that launches `agac` some other way. Running `python -m agent_actions.cli.main`
+  instead would not have helped: the tests run the CLI from a copy of the project, and `-m`
+  puts that directory on the path, not the tree.
+time: 2026-10-04T21:39:11Z

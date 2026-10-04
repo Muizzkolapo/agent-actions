@@ -9,11 +9,11 @@ tally, so the counts are asserted rather than described.
 import json
 import re
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 EXAMPLE = REPO / "examples" / "species_id_cards"
@@ -32,21 +32,7 @@ def run(tmp_path_factory) -> str:
     )
     (project / ".env").write_text("OPENAI_API_KEY=sk-not-used\n")
 
-    result = subprocess.run(
-        [
-            str(Path(sys.executable).parent / "agac"),
-            "run",
-            "-a",
-            WORKFLOW,
-            "-u",
-            "tools",
-            "--fresh",
-        ],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh")
     output = result.stdout + result.stderr
     assert result.returncode == 0, f"run failed:\n{output[-3000:]}"
     return output

@@ -132,3 +132,17 @@ needs a live Ollama and cannot run here. `agac-provider`'s batch client has no
 failure path at all. Porting it means giving that provider count-based injection
 mirroring the ollama one — worth doing, but it is a change to a shipped provider
 rather than a test addition.
+
+## Running `agac` from a test
+
+A test that drives the CLI as a subprocess calls `run_agac` from
+`tests/_support/agac_cli.py`. The venv's `agac` console script imports
+`agent_actions` from wherever the editable install points, which from a second
+worktree is another checkout, and pytest.ini's `pythonpath` reaches only the
+pytest process. `run_agac` puts this tree first on the subprocess's
+`PYTHONPATH`; `python -m agent_actions.cli.main` would not, since it puts the
+project copy the test runs in on the path instead.
+
+`test_a_cli_test_runs_the_tree_it_lives_in.py` checks that the CLI process
+imports `agent_actions` from this tree, and fails on any test that launches
+`agac` some other way.
