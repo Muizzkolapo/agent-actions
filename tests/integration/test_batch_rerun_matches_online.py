@@ -1169,6 +1169,33 @@ def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
+_EVERY_ONE_REFUSED = [rec("a1", keep=False), rec("a2", keep=False)]
+
+CARRIED_AS_DONE_AND_TURNED_AWAY = {
+    "every_input_filtered": ([_PASSES, _EVERY_ONE_REFUSED], FILTER),
+    "one_input_filtered": ([_PASSES, _NOW_FILTERED], FILTER),
+    "one_filtered_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], FILTER),
+    "one_filtered_that_then_passes_again": ([_PASSES, _NOW_FILTERED, _PASSES], FILTER),
+    "every_input_skipped": ([_PASSES, _EVERY_ONE_REFUSED], SKIP),
+    "one_input_skipped": ([_PASSES, _NOW_FILTERED], SKIP),
+    "one_skipped_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], SKIP),
+}
+
+
+@pytest.mark.parametrize(
+    "case", CARRIED_AS_DONE_AND_TURNED_AWAY.values(), ids=CARRIED_AS_DONE_AND_TURNED_AWAY.keys()
+)
+def test_an_input_carried_as_done_meets_the_guard_as_online(tmp_path, case):
+    """Nothing resets the action between the runs, so the gate carries every input it
+    answered. Online's guard runs above its gate and turns one away whatever it holds;
+    a row carried for it answers a record the guard now excludes."""
+    runs, guard = case
+
+    for run in compare(tmp_path, runs, guard):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
 def test_a_reset_that_failed_and_answered_nothing_keeps_no_row_for_a_filtered_input(tmp_path):
     """The reset took back the answer stored for the input that failed, so the run writes
     its file as one that answered something would, and a filtered input holds no row."""
