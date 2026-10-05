@@ -33,12 +33,42 @@ def guard_probe_appends_to_a_slice(data):
     return _a1(data)["tier"] == "keep"
 
 
+def guard_probe_marks_its_input_seen(data):
+    data["seen"] = True
+    return False
+
+
+def guard_probe_sets_a_default_on_its_input(data):
+    data.setdefault("opts", {})
+    return False
+
+
+def guard_probe_merges_into_its_input(data):
+    data.update(seen=True)
+    return False
+
+
+def guard_probe_pops_from_its_input(data):
+    data.pop("source_guid", None)
+    return False
+
+
 def guard_probe_raises_while_handling_the_refusal(data):
     try:
         _a1(data)["tier"] = "keep"
     except TypeError as error:
         raise ValueError("could not tidy the record") from error
     return True
+
+
+def guard_probe_defaults_a_missing_field(data):
+    namespace = _a1(data)
+    try:
+        threshold = namespace["threshold"]
+    except KeyError:
+        namespace["threshold"] = 0
+        threshold = 0
+    return threshold > 1
 
 
 def guard_probe_catches_the_refusal(data):
@@ -50,8 +80,24 @@ def guard_probe_catches_the_refusal(data):
     return namespace["tier"].strip().lower() == "keep"
 
 
-def guard_probe_raises_its_own_error(data):
-    raise KeyError("no such field")
+def guard_probe_reads_a_missing_field(data):
+    return _a1(data)["threshold"] > 1
+
+
+def guard_probe_adds_none_to_a_number(data):
+    return len(_a1(data)["tier"]) + None > 1
+
+
+_TOP_LEVEL_WRITES = pytest.mark.parametrize(
+    "udf",
+    [
+        guard_probe_marks_its_input_seen,
+        guard_probe_sets_a_default_on_its_input,
+        guard_probe_merges_into_its_input,
+        guard_probe_pops_from_its_input,
+    ],
+    ids=lambda udf: udf.__name__.removeprefix("guard_probe_"),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -61,9 +107,15 @@ def _register_probes():
     for fn in (
         guard_probe_tidies_its_input,
         guard_probe_appends_to_a_slice,
+        guard_probe_marks_its_input_seen,
+        guard_probe_sets_a_default_on_its_input,
+        guard_probe_merges_into_its_input,
+        guard_probe_pops_from_its_input,
         guard_probe_raises_while_handling_the_refusal,
+        guard_probe_defaults_a_missing_field,
         guard_probe_catches_the_refusal,
-        guard_probe_raises_its_own_error,
+        guard_probe_reads_a_missing_field,
+        guard_probe_adds_none_to_a_number,
     ):
         udf_tool(fn)
 
@@ -78,7 +130,7 @@ def _evaluate(udf, item, context):
 
 class TestARefusedWriteStopsTheAction:
     @_CONTEXTS
-    def test_the_guard_raises_naming_the_udf_and_what_to_do_instead(self, context):
+    def test_the_guard_raises_naming_the_udf_and_what_to_do_instead(self, context, caplog):
         item = _item()
 
         with pytest.raises(ConfigurationError) as raised:
@@ -89,6 +141,7 @@ class TestARefusedWriteStopsTheAction:
         assert "wrote to its input" in message
         assert "return a value instead of mutating the input" in message
         assert item == _item(), "the refusal must still keep the write off the record"
+        assert "passing record" not in caplog.text, "the action stops; nothing is passed"
 
     @_CONTEXTS
     def test_the_error_is_fatal_to_the_action(self, context):
@@ -104,6 +157,20 @@ class TestARefusedWriteStopsTheAction:
         """The write comes before the answer, so the guard has no answer either way."""
         with pytest.raises(ConfigurationError, match="wrote to its input"):
             _evaluate(guard_probe_tidies_its_input, _item(" Keep "), context)
+
+    @_CONTEXTS
+    @_TOP_LEVEL_WRITES
+    def test_a_write_to_the_top_level_of_the_input_stops_it_too(self, udf, context):
+        """The top level is the Bus the guard is handed, which refuses a write itself:
+        no namespace is involved, so the Bus's refusal has to be told apart as well."""
+        item = _item()
+
+        with pytest.raises(ConfigurationError, match="wrote to its input") as raised:
+            _evaluate(udf, item, context)
+
+        assert udf.__name__ in str(raised.value)
+        assert is_action_fatal(raised.value)
+        assert item == _item()
 
     @_CONTEXTS
     def test_a_write_to_a_slice_of_a_list_in_the_input_is_refused_the_same_way(self, context):
@@ -122,6 +189,17 @@ class TestARefusedWriteStopsTheAction:
         with pytest.raises(ConfigurationError, match="wrote to its input"):
             _evaluate(guard_probe_raises_while_handling_the_refusal, _item(), context)
 
+    @_CONTEXTS
+    def test_a_write_made_while_handling_another_error_is_refused_the_same_way(self, context):
+        """The refusal is what the UDF raised, carrying the KeyError it was handling: the
+        write is found where it is, not only at the root of the chain."""
+        item = _item()
+
+        with pytest.raises(ConfigurationError, match="guard_probe_defaults_a_missing_field"):
+            _evaluate(guard_probe_defaults_a_missing_field, item, context)
+
+        assert item == _item()
+
 
 class TestWhatTheGuardPathStillAllows:
     @_CONTEXTS
@@ -134,10 +212,16 @@ class TestWhatTheGuardPathStillAllows:
         assert result.should_execute is should_execute
 
     @_CONTEXTS
-    def test_a_udf_that_raises_its_own_error_still_passes_its_record(self, context, caplog):
-        """Documented: UDF conditions always pass records through on error, and the config
-        refuses `passthrough_on_error: false` on one. Only the refusal is singled out."""
-        result = _evaluate(guard_probe_raises_its_own_error, _item(), context)
+    @pytest.mark.parametrize(
+        "udf",
+        [guard_probe_reads_a_missing_field, guard_probe_adds_none_to_a_number],
+        ids=["KeyError", "TypeError"],
+    )
+    def test_a_udf_that_raises_its_own_error_still_passes_its_record(self, udf, context, caplog):
+        """Documented: a UDF condition passes its record when the function raises, and the
+        config refuses `passthrough_on_error: false` on one. Only the view's refusal is singled
+        out, not every TypeError: the UDF's own TypeError is a bug like any other."""
+        result = _evaluate(udf, _item(), context)
 
         assert result.should_execute is True
         assert "passing record" in caplog.text

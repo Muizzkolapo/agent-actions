@@ -13,6 +13,7 @@ import pytest
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardBehavior
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
+from agent_actions.utils.readonly import ReadOnlyError
 from agent_actions.utils.udf_management.bus import Bus
 from agent_actions.utils.udf_management.registry import udf_tool
 
@@ -45,6 +46,9 @@ def guard_probe_reads(data):
 
 
 def _refused(error: TypeError) -> str:
+    if not isinstance(error, ReadOnlyError):
+        # The guard path stops the action only on the view's own type.
+        return f"refused as a plain {type(error).__name__}: {error}"
     return "refused" if "read-only" in str(error) else f"refused without the guidance: {error}"
 
 
