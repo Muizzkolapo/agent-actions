@@ -452,3 +452,21 @@ def test_the_run_that_collects_it_repairs_one_and_keeps_the_other(
     dispositions = under_batch._dispositions(root)
     assert (dispositions[reached], dispositions[LEGACY]) == ("success", "failed")
     assert _status(root, under_batch.ACTION, under_batch.WORKFLOW) == "completed_with_failures"
+
+
+def test_a_failure_put_back_with_no_reason_is_collected_over(
+    submitted_and_collected,  # noqa: F811
+):
+    """One set by hand may carry no reason, and the run that collects the batch logs each
+    failure it reads."""
+    root = submitted_and_collected
+    under_batch._set_disposition(root, under_batch._guids(root)[0], "failed")
+    backend = under_batch._backend(root)
+    try:
+        backend.set_disposition(under_batch.ACTION, LEGACY, "failed")
+    finally:
+        backend.close()
+
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+
+    assert under_batch._dispositions(root)[LEGACY] == "failed"
