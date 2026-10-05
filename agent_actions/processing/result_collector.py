@@ -6,7 +6,8 @@ import logging
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsError, mark_every_record_failed, terminal_failure
+from agent_actions.errors import AgentActionsError, mark_every_record_failed
+from agent_actions.errors import terminal_failure as build_terminal_failure
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -134,7 +135,19 @@ class CollectionStats:
         output: list,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> None:
-        """Raise RuntimeError if all active records failed.
+        """Raise what ``terminal_failure`` returns, if anything."""
+        failure = self.terminal_failure(action_name, data, output, storage_backend)
+        if failure is not None:
+            raise failure
+
+    def terminal_failure(
+        self,
+        action_name: str,
+        data: list,
+        output: list,
+        storage_backend: Optional["StorageBackend"] = None,
+    ) -> RuntimeError | None:
+        """The RuntimeError to raise if all active records failed, else None.
 
         Handles two cases:
 
@@ -146,10 +159,14 @@ class CollectionStats:
            the row as the action's skip only while the action holds no
            record.
         2. **zero successes** among active (non-unprocessed) input records
-           with at least one failure — raise ``RuntimeError`` for the
+           with at least one failure — return ``RuntimeError`` for the
            circuit breaker.  Unprocessed (cascade-quarantined) records are
            excluded from the denominator so pass-through-only actions
            don't erroneously trip the breaker.
+
+        Returned rather than raised so a caller can write the file first where
+        leaving it unwritten would leave rows a reset took back
+        (``stored_answers_stand``).
         """
         if data and self.only_guard_outcomes and not output:
             write_node_level_disposition(
@@ -158,7 +175,7 @@ class CollectionStats:
                 DISPOSITION_SKIPPED,
                 "All records filtered — no output produced",
             )
-            return
+            return None
 
         active_input_count = len(data) - self.unprocessed
         if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
@@ -178,9 +195,10 @@ class CollectionStats:
             cause = self.dominant_cause
             named = f"Action '{action_name}' {tally}"
             # Every record was reached: the loop re-raises anything that stops it partway.
-            raise mark_every_record_failed(
-                terminal_failure(f"{cause} — {named}" if cause else named)
-            )
+            failure = build_terminal_failure(f"{cause} — {named}" if cause else named)
+            mark_every_record_failed(failure)
+            return failure
+        return None
 
     @property
     def dominant_cause(self) -> str:

@@ -136,6 +136,13 @@ again. An `agac retry` records what the records it does not name were answered u
 instead — the stamp of the action's last completion, or what its last run recorded if it
 never completed — so a retry, stopped or finished, leaves an edit to the next run.
 
+A reset leaves what the action stored in place, and the re-run replaces it file by file.
+A file in which every record of the re-run fails — the model's answers do not parse, or a
+tool raises on each — is stored with those failures, as a file in which only some fail
+is, so neither the action nor what reads it keeps a row answered before the edit, and
+`agac retry` asks for them again. Outside a reset, a run that answers nothing in a file
+and fails some of it leaves what that file held.
+
 Staged input is the source of truth for what an action holds. An action reset after
 its input was removed — by an edit, or by a limit or model given on the command
 line — finds no input file, is skipped, and its stored output is deleted along with

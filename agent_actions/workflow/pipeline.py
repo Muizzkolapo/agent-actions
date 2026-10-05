@@ -22,6 +22,7 @@ from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.disposition_gate import (
     note_answered_by_repair,
     positions_named_by_repair,
+    stored_answers_stand,
 )
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
@@ -646,9 +647,18 @@ class ProcessingPipeline:
                 data, context, strategy, repair_inputs=offered_to_repair
             )
 
-        stats.raise_if_terminal_failure(
+        failure = stats.terminal_failure(
             self.config.action_name, data, output, self.config.storage_backend
         )
+        if failure is not None and (
+            self.config.storage_backend is None
+            or stored_answers_stand(
+                self.config.storage_backend,
+                self.config.action_name,
+                target_relative_path(output_file_path, output_directory),
+            )
+        ):
+            raise failure
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
         # Only now that the file holds the rows they vouch for.
@@ -661,6 +671,8 @@ class ProcessingPipeline:
             self.config.storage_backend.clear_checkpoint_records(
                 self.config.action_name, context.target_relative_path
             )
+        if failure is not None:
+            raise failure
 
     def _select_strategy(self) -> ProcessingStrategy:
         """Select the processing strategy based on granularity and action kind."""

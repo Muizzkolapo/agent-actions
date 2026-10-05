@@ -6,7 +6,7 @@ not answer it again; a row whose input is not among them, or whose input the gua
 filtered, is left out. Where no input was recorded every other unanswered row is carried,
 since nothing is known about the run, and a run in which something failed and nothing was
 answered replaces no stored answer and drops nothing of a filtered input's, as online
-raises before it writes.
+leaves the file unwritten -- while the action still calls each stored answer answered.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ from typing import Any
 
 import pytest
 
-from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
+from agent_actions.processing.disposition_gate import (
+    every_answer_vouched_for,
+    stored_rows_not_reproduced,
+)
 
 GATE_LOGGER = "agent_actions.processing.disposition_gate"
 
@@ -146,7 +149,7 @@ class TestARowWhoseInputTheGuardFilteredIsLeftOut:
 
 
 class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
-    """Online raises before it writes when everything it sent failed, so its answers stand."""
+    """Online leaves the file unwritten when everything it sent failed, so its answers stand."""
 
     @pytest.mark.parametrize(
         "produced",
@@ -211,6 +214,77 @@ class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
         produced = [_row("a3", state="failed")]
 
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1"}
+
+
+class TestOnlyAnAnswerTheActionStillCallsAnsweredStands:
+    """A reset clears every disposition and leaves the stored rows for the re-run to
+    replace, so an answer it took back would be served as one to the config it replaced."""
+
+    def test_every_stored_answer_still_answered_stands(self):
+        stored = [_row("a1"), _row("m1", ["a2"])]
+        produced = [_row("a1", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1"}, still_answered=lambda: {"a1", "a2"}
+        )
+
+        assert carry == {"a1", "m1"}
+
+    @pytest.mark.parametrize(
+        ("inputs", "produced"),
+        [
+            ({"a1", "a2"}, [_row("a1", state="failed"), _row("a2", state="exhausted")]),
+            ({"a3"}, [_row("a3", state="failed")]),
+        ],
+        ids=["the_same_inputs", "inputs_minted_again"],
+    )
+    def test_after_a_reset_the_file_follows_its_inputs_as_one_that_answered_would(
+        self, inputs, produced
+    ):
+        stored = [_row("a1"), _row("a2")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs=inputs, still_answered=lambda: set()
+        )
+
+        assert carry == set()
+
+    def test_one_answer_taken_back_is_enough_to_write_the_file(self):
+        """Online's choice is the file's, not the row's: it writes the file or leaves it."""
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="failed"), _row("a2", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, still_answered=lambda: {"a2"}
+        )
+
+        assert carry == set()
+
+    def test_the_dispositions_are_not_read_for_a_run_that_answered_something(self):
+        def unread() -> set[str]:
+            raise AssertionError("read the dispositions")
+
+        stored_rows_not_reproduced(
+            [_row("a1")], [_row("a1"), _row("a2", state="failed")], still_answered=unread
+        )
+
+
+class TestEveryAnswerVouchedFor:
+    def test_by_the_identity_it_carries(self):
+        assert every_answer_vouched_for([_row("a1")], {"a1"})
+
+    def test_by_an_input_it_names_as_producer(self):
+        assert every_answer_vouched_for([_row("m1", ["a1", "a2"])], {"a2"})
+
+    def test_not_an_answer_whose_record_holds_no_success(self):
+        assert not every_answer_vouched_for([_row("a1"), _row("a2")], {"a1"})
+
+    @pytest.mark.parametrize("state", ["failed", "exhausted", "guard_skipped", "cascade_skipped"])
+    def test_a_row_that_is_no_answer_needs_nothing_to_vouch_for_it(self, state):
+        assert every_answer_vouched_for([_row("a1", state=state)], set())
+
+    def test_nothing_stored_needs_nothing(self):
+        assert every_answer_vouched_for([], set())
 
 
 class TestARowAnsweredAgainIsReplaced:

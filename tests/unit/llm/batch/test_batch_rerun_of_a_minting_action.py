@@ -48,12 +48,23 @@ def _failed(input_guid: str) -> dict[str, Any]:
     }
 
 
-def _rerun(tmp_path: Path, stored: list[dict], produced: list[dict]) -> list[dict]:
-    """Store *stored* as the previous run's output, then merge *produced* over it."""
+def _rerun(
+    tmp_path: Path, stored: list[dict], produced: list[dict], *, reset: bool = False
+) -> list[dict]:
+    """Store *stored* as the previous run's output, then merge *produced* over it.
+
+    The previous run marked each answer's input answered, as collection does, unless
+    *reset* cleared that since.
+    """
     backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
     backend.initialize()
     backend._write_target_raw(ACTION, RELATIVE, stored)
     backend._reconstruction_cache.clear()
+    if not reset:
+        for row in stored:
+            if row["_state"] == "processed":
+                for guid in row.get("producer_source_guids") or [row["source_guid"]]:
+                    backend.set_disposition(ACTION, guid, "success")
 
     service = BatchProcessingService(
         client_resolver=MagicMock(),
@@ -205,6 +216,18 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
         assert [r["source_guid"] for r in result] == ["r1", "r2"]
         assert result[0]["answer"] == "answer-for-r1"
         assert "error" not in result[0]
+
+    def test_after_a_reset_the_failure_replaces_the_answer_under_that_identity(self, tmp_path):
+        """The reset took the answer back, so it would stand as one to the config it
+        replaced: the run writes its file as one that answered something does."""
+        stored = [_row("r1"), _row("r2")]
+        produced = [_failed("r1")]
+
+        result = _rerun(tmp_path, stored, produced, reset=True)
+
+        assert [r["source_guid"] for r in result] == ["r1", "r2"]
+        assert result[0].get("error")
+        assert "answer" not in result[0]
 
     @pytest.mark.parametrize("state", ["failed", "exhausted", "cascade_skipped"])
     def test_a_row_that_named_its_input_but_did_not_settle_answers_for_nothing(

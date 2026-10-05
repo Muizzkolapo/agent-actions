@@ -18,7 +18,7 @@ body: >-
   ordinary one does. `agac retry` keeps every row it did not name, including the rows of a
   record absent from that run, as online does. And a run in which everything sent fails keeps
   the stored answers, including one stored under the same identity as a failure, where online
-  refuses to write at all. A record the guard filtered is now judged by the guard again on
+  refuses to write at all, unless a reset took them back (#1283). A record the guard filtered is now judged by the guard again on
   each run, as online judges it, instead of being called done for good. A run in which
   nothing is sent because the one record that passed the guard failed prompt preparation
   counts as a run in which everything failed.

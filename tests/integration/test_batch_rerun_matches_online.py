@@ -1243,6 +1243,19 @@ def test_a_run_whose_every_answer_fails_keeps_the_stored_answers(tmp_path):
     assert held == ["failed:a3", "failed:a4", "processed:a1:0@run1", "processed:a2:0@run1"]
 
 
+def test_a_run_whose_every_answer_fails_keeps_what_it_still_calls_answered_in_either_mode(
+    tmp_path,
+):
+    """No reset took the stored answers back: each record still holds success."""
+    runs = [["a1", "a2"], ["a3", "a4"]]
+
+    findings = compare(tmp_path, runs, None, {("a3", 2): "fail", ("a4", 2): "fail"})
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert _answered(findings[1][mode]) == {"processed:a1:0", "processed:a2:0"}, mode
+
+
 def test_a_run_that_answers_something_leaves_out_what_is_not_its_input(tmp_path):
     """The other edge of the one above: one answer is enough to make it this run's file."""
     batch = _Batch(tmp_path)

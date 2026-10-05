@@ -497,14 +497,23 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   repair's submission removes any recording an earlier run left, so that does not rest on
   who cleared batch state first.
 - **A run in which something failed and nothing was answered replaces no answer.** Online
-  raises before it writes when nothing succeeded (`raise_if_terminal_failure`), so its
-  stored answers stand. Here
+  leaves the file unwritten when nothing succeeded (`terminal_failure`), so its stored
+  answers stand. Here
   the failures are written, beside every stored answer whichever input it was for; a
   failure row under a stored answer's own identity gives way to it, so the identity is
   still stored once. Stored rows that are not answers follow the inputs as usual. Without
   a failure the run did produce this run's file, however little is in it, and the inputs
   rule applies in full, as online writes it. A record that fails prompt preparation when
   nothing else is sent is such a failure: it reaches the write as a failed row.
+
+  An answer stands only while the action still calls it answered: its identity, or the
+  input it names as producer, holds `success` (`every_answer_vouched_for`). A reset clears
+  every disposition and leaves the stored rows for the re-run to replace, so after one no
+  stored answer is vouched for; kept, they would be served as answers to the config the
+  reset replaced, or to inputs the action above has since minted anew. Where any stored
+  answer of the file is not vouched for, online writes the file with its failures before
+  it raises (`stored_answers_stand`), and the merge here applies the inputs rule in full,
+  as for a run that answered something. Only that case reads the dispositions.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
@@ -820,7 +829,8 @@ writes it after the file:
 
     The rest (FAILED, EXHAUSTED, DEFERRED, UNPROCESSED, FILTERED) is written
     at once, because a file whose records all failed or were exhausted raises
-    before it is stored. A failure replaces the checkpoint's SUCCESS for a
+    without being stored, unless a reset took back the answers stored for it
+    (`stored_answers_stand`). A failure replaces the checkpoint's SUCCESS for a
     parse error, and a reset clears it; `agac retry` reads FAILED and
     EXHAUSTED. FILTERED is what a fan-in drops a record by (filter is
     authoritative), and a filtered record has no row to carry: the guard

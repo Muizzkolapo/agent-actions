@@ -7,21 +7,26 @@ action was recorded partly complete, with exit 0, over them; a reader reset with
 them and was recorded complete; and no later plain run asked for them again.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-provider's answers are stood in for: answers that do not parse, for the pages of one file.
+provider's answers are stood in for, for the pages of one file: answers that do not parse,
+or one a reader's tool raises on.
 """
 
 import json
 from contextlib import contextmanager
 
 import pytest
+from click.testing import CliRunner
 
+from agent_actions.cli.main import cli
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
+    ACTION,
     PAGES,
     READER,
     READER_ACTION,
     WORKFLOW,
+    _backend,
     _config,
     _edit_prompt,
     _page_in,
@@ -165,3 +170,50 @@ def test_a_batch_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_fro
     assert result.exit_code == 0, result.output
     assert _status(project) == "completed_with_failures"
     assert _still_holding(before_the_edit, _stored(project)) == [], "an answer from before the edit"
+
+
+def _stored_files(root, action):
+    backend = _backend(root)
+    try:
+        return sorted(backend.list_target_files(action))
+    finally:
+        backend.close()
+
+
+def test_a_first_run_whose_every_answer_for_a_file_fails_stores_nothing_for_it(
+    online,  # noqa: F811
+):
+    """Nothing was stored for it, so nothing could be served from before."""
+    _with_a_reader(online)
+    with _unparsed():
+        result = _run("--fresh")
+
+    assert result.exit_code == 0, result.output
+    assert _status(online) == "completed_with_failures"
+    assert _stored_files(online, ACTION) == ["pages2.json"]
+    assert _stored_files(online, READER) == ["pages2.json"]
+
+
+def test_a_retry_answers_the_file_again_and_its_reader_with_it(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+):
+    """The run stored that file's failures, so the next plain run asks nothing, and a retry
+    asks for that file alone and leaves both actions holding its new answers."""
+    _with_a_reader(online)
+    assert _run("--fresh").exit_code == 0
+    _edit_prompt(online)
+    with _unparsed():
+        assert _run().exit_code == 0
+
+    provider.answers()
+    assert _run().exit_code == 0
+    assert provider.pages() == []
+    retried = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+    assert retried.exit_code == 0, retried.output
+    assert provider.pages() == sorted(PAGES[FAILING])
+    answers = _stored(online)
+    assert len(answers) == 4
+    assert None not in answers.values()
+    assert _stored(online, READER) == answers

@@ -16,6 +16,7 @@ from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.disposition_gate import (
     note_answered_by_repair,
     positions_named_by_repair,
+    stored_answers_stand,
 )
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -810,9 +811,18 @@ def _process_online_mode_with_record_processor(
         data_chunk, processing_context, strategy, repair_inputs=offered_to_repair
     )
 
-    stats.raise_if_terminal_failure(
+    failure = stats.terminal_failure(
         ctx.agent_name, data_chunk, processed_items, ctx.storage_backend
     )
+    if failure is not None and (
+        ctx.storage_backend is None
+        or stored_answers_stand(
+            ctx.storage_backend,
+            ctx.agent_name,
+            target_relative_path(output_file_path, str(output_directory)),
+        )
+    ):
+        raise failure
 
     # Tool actions that return empty output should be treated as failures
     # rather than silently succeeding (mirrors pipeline.py check).
@@ -847,5 +857,7 @@ def _process_online_mode_with_record_processor(
     ctx.storage_backend.clear_checkpoint_records(
         ctx.agent_name, processing_context.target_relative_path
     )
+    if failure is not None:
+        raise failure
 
     return str(output_file_path)

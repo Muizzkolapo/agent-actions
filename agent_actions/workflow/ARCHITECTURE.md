@@ -389,6 +389,9 @@ Costs and limits:
   a removed input's file is kept with the files the walk did not open; a version merge
   deletes it all the same, before its walk. A file the store fails to write fails the
   action, so the next run writes it instead of the action completing over its old rows.
+  A file in which the re-run answered nothing and something failed is still written, with
+  its failures, where the action no longer calls what it stored answered, as after any
+  reset; elsewhere such a file is left as stored (processing/ARCHITECTURE.md).
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a
@@ -484,10 +487,13 @@ run_mode == BATCH and not tool/HITL?
                UnifiedProcessor.process(data)
          │
          ▼
-    stats.raise_if_terminal_failure()
+    stats.terminal_failure()         ← nothing succeeded: raise without writing,
+                                       unless a reset took back the answers
+                                       stored for the file (stored_answers_stand)
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records(action, target_relative_path)
+    raise the terminal failure held back for the write, if any
 ```
 
 ---
