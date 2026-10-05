@@ -150,4 +150,7 @@ also fails on any test outside `tests/manual` that names `agac` or
 `agent_actions.cli.main` as a string of its own, or hands a call a command line
 starting with `agac`: a path segment, a list element, a `which()` lookup, `-m`
 and a shell string are all caught. A launch that spells the name some other
-way, assembled from pieces, say, is not.
+way, assembled from pieces, say, is not. It does not read
+`tests/unit/cli/test_a_documented_command_exists.py`, which names `agac` to
+find the commands the docs' code blocks show and walks the command tree
+in-process rather than launching anything.

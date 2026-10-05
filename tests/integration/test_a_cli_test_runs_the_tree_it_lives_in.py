@@ -16,6 +16,9 @@ from tests._support.agac_cli import run_agac
 REPO = Path(__file__).resolve().parents[2]
 LAUNCHER = REPO / "tests" / "_support" / "agac_cli.py"
 AUDIT = Path(__file__).resolve()
+# Reads the `agac` commands the docs' code blocks show as text, and walks the
+# command tree in-process: it names the program but launches nothing.
+DOCS_CHECK = REPO / "tests" / "unit" / "cli" / "test_a_documented_command_exists.py"
 MANUAL = REPO / "tests" / "manual"
 
 # Tool discovery imports this inside the CLI process, so it sees the
@@ -135,9 +138,9 @@ def test_no_test_launches_agac_but_through_the_shared_launcher():
     launches = [
         f"{path.relative_to(REPO)}:{line}"
         for path in sorted((REPO / "tests").rglob("*.py"))
-        # This file names what it looks for; tests/manual is run by hand,
-        # against the `agac` on PATH.
-        if path not in (LAUNCHER, AUDIT) and not path.is_relative_to(MANUAL)
+        # This file and the docs check name what they look for; tests/manual
+        # is run by hand, against the `agac` on PATH.
+        if path not in (LAUNCHER, AUDIT, DOCS_CHECK) and not path.is_relative_to(MANUAL)
         for line in launches_in(path.read_text())
     ]
 
