@@ -993,9 +993,11 @@ PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
 
 
 @pytest.mark.parametrize("guard", [SKIP, FILTER], ids=["skipping", "filtering"])
-def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer(tmp_path, guard):
-    """Nothing is sent and a record failed, so online raises before it writes, and the
-    answers stored under the tombstones and the failure row stand."""
+def test_a_reset_where_the_one_record_left_cannot_be_prepared_keeps_no_answer_from_before_it(
+    tmp_path, guard
+):
+    """Nothing is sent and a record failed, so nothing was answered. The reset took back
+    every answer stored, which answered the config it replaced: none of them stands."""
     names = ["s1", "s2", "s3", "s4", "s5", "p6"]
     batch = _Batch(tmp_path)
     first = batch.run(
@@ -1006,7 +1008,8 @@ def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer
     held = batch.run(2, refused, extra={**guard, **PREPARED}, reset=True)
 
     assert first == [f"processed:{name}:0@run1" for name in sorted(names)]
-    assert [row for row in held if row.startswith("processed:")] == first
+    assert [row for row in held if row.startswith("processed:")] == []
+    assert "failed:p6" in held
     assert batch.sent[1] == []
 
 
@@ -1165,17 +1168,42 @@ def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
-def test_a_run_that_failed_and_answered_nothing_keeps_what_a_filtered_input_held(tmp_path):
-    """Online raises before it writes, so the filtered input's row stays until a run
-    that writes, whether or not that row was an answer."""
+def test_a_reset_that_failed_and_answered_nothing_keeps_no_row_for_a_filtered_input(tmp_path):
+    """The reset took back the answer stored for the input that failed, so the run writes
+    its file as one that answered something would, and a filtered input holds no row."""
     runs = [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}, _NOW_FILTERED]
     shape = {("a2", 1): "exhaust", ("a1", 2): "fail"}
 
     findings = compare(tmp_path, runs, FILTER, shape)
 
-    assert "exhausted:a2" in findings[1]["online"]
+    assert findings[1]["online"] == ["failed:a1"]
     for run in findings:
         assert run["batch"] == run["online"], f"run {run['run']}"
+
+
+EVERY_INPUT_FAILS_AFTER_A_RESET = {
+    "the_same_inputs": (["a1", "a2"], {("a1", 2): "fail", ("a2", 2): "fail"}),
+    "the_same_inputs_exhausted": (["a1", "a2"], {("a1", 2): "exhaust", ("a2", 2): "exhaust"}),
+    "inputs_minted_again": (["a3", "a4"], {("a3", 2): "fail", ("a4", 2): "fail"}),
+}
+
+
+@pytest.mark.parametrize(
+    ("inputs", "shape"),
+    EVERY_INPUT_FAILS_AFTER_A_RESET.values(),
+    ids=EVERY_INPUT_FAILS_AFTER_A_RESET.keys(),
+)
+def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(tmp_path, inputs, shape):
+    """Nothing is answered, and every stored answer is one the reset took back: it
+    answered the config the reset replaced, or an input the action above minted anew."""
+    runs = [["a1", "a2"], {"inputs": inputs, "reset": True}]
+
+    findings = compare(tmp_path, runs, None, shape)
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert not _answered(findings[1][mode]), mode
+    assert findings[1]["batch"] == findings[1]["online"]
 
 
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
