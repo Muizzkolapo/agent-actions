@@ -44,7 +44,8 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
             if guard_config.passthrough_on_error is not True:
                 raise ConfigurationError(
                     "passthrough_on_error is only supported for SQL-style guards; "
-                    "UDF conditions always pass records through on error.",
+                    "UDF conditions pass a record through when the function raises, "
+                    "except a write to its read-only input, which stops the action.",
                     context={
                         "action_name": action.get("name", "unknown"),
                         "operation": "expand_actions_to_agents",
