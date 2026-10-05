@@ -71,6 +71,40 @@ actions:
       observe: [{ACTION}.*]
 """
 
+# The same action run first, on the staged items, which the staging pipeline runs.
+FIRST_STAGE_CONFIG = f"""name: {WORKFLOW}
+description: "A first action answering each item with rows of its own, and its reader"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  is_operational: true
+  run_mode: online
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+  - name: {ACTION}
+    kind: tool
+    impl: tag_source
+    intent: "Tag each item, twice where it is told to"
+    schema: {{ tag: string }}
+    context_scope:
+      observe: [source.item_id]
+
+  - name: {READER}
+    kind: tool
+    impl: read_tag
+    dependencies: [{ACTION}]
+    intent: "Read each tag"
+    schema: {{ seen: string }}
+    context_scope:
+      observe: [{ACTION}.*]
+"""
+
 # Logs each item it is asked for, so a test can tell what a run asked again.
 TOOLS = f"""import os
 from pathlib import Path
@@ -79,9 +113,7 @@ from typing import Any
 from agent_actions import udf_tool
 
 
-@udf_tool()
-def tag_item(data: dict[str, Any]) -> list[dict[str, Any]]:
-    item = (data.get("stage_items") or {{}}).get("item_id", "")
+def _tagged(item: str) -> list[dict[str, Any]]:
     if os.environ.get("{STOP_AT}") == item:
         raise KeyboardInterrupt()
     with Path("asked.txt").open("a") as asked:
@@ -89,6 +121,16 @@ def tag_item(data: dict[str, Any]) -> list[dict[str, Any]]:
     if os.environ.get("{ONE_ROW}") == item:
         return [{{"tag": item}}]
     return [{{"tag": f"{{item}}-a"}}, {{"tag": f"{{item}}-b"}}]
+
+
+@udf_tool()
+def tag_item(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return _tagged((data.get("stage_items") or {{}}).get("item_id", ""))
+
+
+@udf_tool()
+def tag_source(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return _tagged((data.get("source") or {{}}).get("item_id", ""))
 
 
 @udf_tool()
@@ -213,6 +255,26 @@ def test_a_record_answered_with_several_rows_is_asked_again_and_one_with_a_row_i
     assert result.exit_code == 0, result.output
     assert _tags(_stored(project, ACTION)) == ["alpha-a", "alpha-b", "beta", "gamma-a", "gamma-b"]
     assert _asked(project) == ["alpha", "gamma"]
+
+
+def test_a_resumed_first_action_stores_every_row_of_the_records_its_checkpoint_holds(
+    project, monkeypatch
+):
+    """The staging pipeline runs a workflow's first action, a route of its own to the
+    checkpoint the carry reads."""
+    (project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml").write_text(
+        FIRST_STAGE_CONFIG
+    )
+    _interrupted_at_gamma(project, monkeypatch)
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _status(project) == "completed"
+    rows = _stored(project, ACTION)
+    assert _tags(rows) == ["alpha-a", "alpha-b", "beta-a", "beta-b", "gamma-a", "gamma-b"]
+    assert len({row["source_guid"] for row in rows}) == len(rows), "rows share an identity"
+    assert _seen(_stored(project, READER)) == _tags(rows)
 
 
 def test_a_run_an_earlier_version_stopped_asks_again_for_the_records_it_checkpointed(
