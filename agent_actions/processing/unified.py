@@ -161,6 +161,7 @@ class UnifiedProcessor:
         }
 
         carry_results: list[ProcessingResult] = []
+        checkpointed_results: list[ProcessingResult] = []
         to_process = passing
         carry_ids: set[str] = set(repair_carry_ids)
         gate_carry_ids: set[str] = set()
@@ -201,6 +202,22 @@ class UnifiedProcessor:
                     missing_ids |= answer_again
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
+                    # With nothing stored for the file the carry read its checkpoint rows:
+                    # what the strategy returned for records a stopped run answered, before
+                    # the enrichment and collection that run never reached. A FILE strategy
+                    # checkpoints nothing.
+                    from_checkpoint = (
+                        raw_records is None
+                        and bool(carry_data)
+                        and not context.storage_backend.has_target_file(
+                            context.action_name, relative_path
+                        )
+                    )
+                    inputs = (
+                        {guid: r for r in passing if (guid := r.get("source_guid"))}
+                        if from_checkpoint
+                        else {}
+                    )
                     for record in carry_data:
                         if raw_records is not None:
                             carry_results.append(
@@ -209,6 +226,10 @@ class UnifiedProcessor:
                                     reason=CARRY_FORWARD_REASON,
                                     source_guid=record.get("source_guid"),
                                 )
+                            )
+                        elif from_checkpoint:
+                            checkpointed_results.append(
+                                self._answered_from_checkpoint(record, inputs)
                             )
                         else:
                             carry_results.append(
@@ -243,15 +264,33 @@ class UnifiedProcessor:
         if raw_records is not None:
             all_results = quarantined_results + invocation_results + guard_results
         else:
-            all_results = guard_results + quarantined_results + invocation_results
+            all_results = (
+                guard_results + quarantined_results + invocation_results + checkpointed_results
+            )
 
         enriched = self._enrich(all_results, context)
 
-        # Carry-forward bypasses enrichment (already has correct lineage)
+        # Rows carried from the stored file were enriched when it was written.
         if carry_results:
             enriched.extend(carry_results)
 
         return self._collect(enriched, context)
+
+    @staticmethod
+    def _answered_from_checkpoint(
+        row: dict[str, Any], inputs: dict[str, dict[str, Any]]
+    ) -> ProcessingResult:
+        """A checkpoint row as the answer it was, for enrichment and collection to finish.
+
+        The checkpoint stamps the state collection gives, and a processed record cannot be
+        failed: left on, it would keep collection from failing an answer that failed to parse.
+        """
+        guid = row.get("source_guid")
+        return ProcessingResult.success(
+            data=[{key: value for key, value in row.items() if key != "_state"}],
+            source_guid=guid,
+            input_record=inputs.get(guid) if guid else None,
+        )
 
     def _guard_filter(
         self,
