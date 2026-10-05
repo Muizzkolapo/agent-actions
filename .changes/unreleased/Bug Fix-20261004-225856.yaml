@@ -1,10 +1,10 @@
 kind: Bug Fix
 body: >-
-  A target file the run fails to store, on a full disk, a database error or a file name the
-  store rejects, is now reported as a failed write. Before the line saying the write failed,
-  the run printed `Failed to load data from <target file>`, an error-level `D002`
-  `DataLoadingErrorEvent` also recorded in `events.json` and `errors.json`, for a load that
-  never ran. It now fires `FileWriteFailedEvent` (`FIO007`), `Failed to write <target
-  file>: <error>`, online and in a batch collect pass alike. A filter on `D002` no longer
-  sees write failures; one on `FIO007` does.
+  A target file the run fails to store, on a full disk or a database error, is now reported
+  as a failed write. Before the line saying the write failed, the run printed `Failed to
+  load data from <target file>`, an error-level `D002` `DataLoadingErrorEvent` also
+  recorded in `events.json` and `errors.json`, for a load that never ran. It now fires
+  `FileWriteFailedEvent` (`FIO007`), `Failed to write <target file>: <error>`, online and
+  in a batch collect pass alike. A filter on `D002` no longer sees write failures; one on
+  `FIO007` does.
 time: 2026-10-04T22:58:56Z
