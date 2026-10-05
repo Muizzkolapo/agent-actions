@@ -825,6 +825,14 @@ class StorageBackend(ABC):
         """Every row checkpointed for an action/path, in the order their records were saved."""
         return []
 
+    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
+        """Records of an action/path whose checkpoint cannot say how many rows answered them.
+
+        An earlier version kept one row per record, the last given under its identity, so
+        such a row may be one of several.
+        """
+        return set()
+
     def clear_checkpoint_records(  # noqa: B027
         self,
         action_name: str,

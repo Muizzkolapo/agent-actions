@@ -7,5 +7,9 @@ body: >-
   checkpoint and recorded the action complete, with exit 0. The checkpoint now keeps every
   row of a record, and the next run asks again for a record answered with several rows
   rather than carry them under one identity. A record answered with one row is carried as
-  before.
+  before. A run an earlier version stopped is resumed without that loss too: its checkpoint
+  holds one row of each record, so the next run asks again for every record it holds. An
+  action an earlier version recorded complete this way keeps those rows until the
+  workflow is run with `--fresh`. An earlier version cannot resume a run this one stopped,
+  and fails the action; resume it with this version, or run the workflow with `--fresh`.
 time: 2026-10-04T22:53:50Z

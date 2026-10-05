@@ -379,22 +379,16 @@ def build_carry_forward(
     A record checkpointed with several rows is reported *missing* too: an expansion's rows
     share their input's identity until enrichment mints one for each, and a checkpoint row
     is saved before that. Carried, they would keep that one identity, of which the carry
-    keeps a single row.
+    keeps a single row. So is a record an earlier version checkpointed: it kept the last row.
     """
-    expanded: set[str] = set()
+    answered_again: set[str] = set()
     try:
         prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
     except FileNotFoundError:
         # No final output yet — check for checkpointed records from an
         # interrupted run.
         prior_output = storage_backend.read_checkpoint_records(action_name, relative_path)
-        if prior_output:
-            logger.info(
-                "Action '%s': using %d checkpointed records for carry-forward",
-                action_name,
-                len(prior_output),
-            )
-        else:
+        if not prior_output:
             logger.warning(
                 "Prior output missing for %s/%s — all %d carry-forward records will be reprocessed",
                 action_name,
@@ -403,14 +397,22 @@ def build_carry_forward(
             )
             return [], carry_ids
         rows_per_record = Counter(row.get("source_guid") for row in prior_output)
-        expanded = {guid for guid, count in rows_per_record.items() if guid and count > 1}
-        prior_output = [row for row in prior_output if row.get("source_guid") not in expanded]
-        if answered_again := expanded & carry_ids:
+        answered_again = {guid for guid, count in rows_per_record.items() if guid and count > 1}
+        answered_again.update(
+            storage_backend.checkpointed_without_row_count(action_name, relative_path)
+        )
+        prior_output = [row for row in prior_output if row.get("source_guid") not in answered_again]
+        logger.info(
+            "Action '%s': using %d checkpointed records for carry-forward",
+            action_name,
+            len(prior_output),
+        )
+        if asked := answered_again & carry_ids:
             logger.info(
-                "Action '%s': %d checkpointed record(s) answered with several rows will be "
-                "answered again: their checkpoint rows share one identity",
+                "Action '%s': %d checkpointed record(s) will be answered again: answered with "
+                "several rows, or checkpointed by an earlier version that kept only the last",
                 action_name,
-                len(answered_again),
+                len(asked),
             )
 
     # Walked in stored order rather than over `carry_ids`, which is a set: these
@@ -459,7 +461,7 @@ def build_carry_forward(
         last_for_guid[prior_output[index]["source_guid"]] = index
     found: list[dict[str, Any]] = [prior_output[index] for index in sorted(last_for_guid.values())]
     missing: set[str] = carry_ids - set(chosen) - producers_found
-    if not_found := missing - expanded:
+    if not_found := missing - answered_again:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",
             action_name,

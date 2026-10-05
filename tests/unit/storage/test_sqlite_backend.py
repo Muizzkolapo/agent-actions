@@ -563,6 +563,20 @@ class TestCheckpointKeepsEveryRowOfARecord:
 
         assert backend.read_checkpoint_records("action_a", "output.json") == [row]
 
+    def test_a_row_stored_as_one_record_is_named_as_holding_an_unknown_number(self, backend):
+        """That version kept the last row of each record it saved, so its row cannot say
+        whether the record was answered with others."""
+        backend.connection.execute(
+            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+            "VALUES (?, ?, ?, ?)",
+            ("action_a", "output.json", "g1", json.dumps({"source_guid": "g1"})),
+        )
+        backend.connection.commit()
+        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g2"}])
+        backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g3"}])
+
+        assert backend.checkpointed_without_row_count("action_a", "output.json") == {"g1"}
+
 
 class TestPreviewTargetNullRecordCount:
     """Tests for preview_target fallback when record_count IS NULL."""

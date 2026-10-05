@@ -330,7 +330,9 @@ A record answered with several rows is checkpointed with all of them, under the 
 and the checkpoint is saved before it. With nothing stored, `build_carry_forward` reports
 that record missing rather than carry its rows, and the run answers it again. Carried,
 they would keep that one identity, of which the carry keeps a single row. A record
-answered with one row is carried as before.
+answered with one row is carried as before. A record an earlier version checkpointed is
+answered again as well: that version kept one row per `source_guid`, the last, and the
+row cannot say whether the record had others (`checkpointed_without_row_count`).
 
 ### Checkpoint storage
 
@@ -400,7 +402,8 @@ try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
     if found → use as carry-forward data,
-               but a record checkpointed with several rows is answered again
+               but a record checkpointed with several rows, or by an
+               earlier version, is answered again
     else → reprocess all
 ```
 

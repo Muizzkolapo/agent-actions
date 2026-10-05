@@ -5,6 +5,7 @@ are carried forward by the DispositionGate when target_data is missing
 (interrupted run before save_main_output).
 """
 
+import logging
 from unittest.mock import MagicMock
 
 from agent_actions.processing.disposition_gate import answered_since_stored, build_carry_forward
@@ -12,6 +13,20 @@ from agent_actions.processing.disposition_gate import answered_since_stored, bui
 
 def _make_record(guid: str) -> dict:
     return {"source_guid": guid, "content": f"data_{guid}"}
+
+
+def _two_rows_one_older_one_carried():
+    """r0 answered with two rows, r1 checkpointed by an earlier version, r2 with one row."""
+    backend = MagicMock()
+    backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
+    backend.read_checkpoint_records.return_value = [
+        {"source_guid": "r0", "content": "first of r0"},
+        {"source_guid": "r0", "content": "second of r0"},
+        _make_record("r1"),
+        _make_record("r2"),
+    ]
+    backend.checkpointed_without_row_count.return_value = {"r1"}
+    return backend
 
 
 class TestCheckpointResume:
@@ -72,6 +87,39 @@ class TestCheckpointResume:
 
         assert found == [_make_record("r1")]
         assert missing == {"r0"}
+
+    def test_a_record_an_earlier_version_checkpointed_is_answered_again(self):
+        """That version kept one row per record, the last it was answered with, so the row
+        cannot say whether the record had others."""
+        backend = MagicMock()
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
+        backend.read_checkpoint_records.return_value = [_make_record("r0"), _make_record("r1")]
+        backend.checkpointed_without_row_count.return_value = {"r0"}
+
+        found, missing = build_carry_forward({"r0", "r1"}, "action_a", "output.json", backend)
+
+        assert found == [_make_record("r1")]
+        assert missing == {"r0"}
+
+    def test_a_record_answered_again_is_not_reported_as_lost(self, caplog):
+        """Its rows are in the checkpoint, so the warning for carried records nothing holds
+        would point the user at a loss that did not happen."""
+        with caplog.at_level(logging.INFO, logger="agent_actions.processing.disposition_gate"):
+            build_carry_forward(
+                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_one_older_one_carried()
+            )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert not [m for m in messages if "not found in prior output" in m]
+        assert [m for m in messages if "2 checkpointed record(s)" in m and "answered again" in m]
+
+    def test_the_checkpointed_records_counted_as_carried_are_the_ones_carried(self, caplog):
+        with caplog.at_level(logging.INFO, logger="agent_actions.processing.disposition_gate"):
+            build_carry_forward(
+                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_one_older_one_carried()
+            )
+
+        assert "using 1 checkpointed records for carry-forward" in caplog.text
 
 
 class TestAnsweredSinceStored:
