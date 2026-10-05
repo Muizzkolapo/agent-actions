@@ -22,7 +22,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
 )
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.readonly import ReadOnlyError
-from agent_actions.utils.safe_format import get_error_chain
+from agent_actions.utils.safe_format import get_error_chain, safe_format_error
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
@@ -203,8 +203,18 @@ def _readonly_bus(context: Any) -> Any:
 
 
 def _refused_write(error: Exception) -> ReadOnlyError | None:
-    """The view's refusal, where a write it refused is what stopped the UDF."""
+    """The view's refusal, if the UDF let it escape or raised while handling it."""
     return next((link for link in get_error_chain(error) if isinstance(link, ReadOnlyError)), None)
+
+
+def _raised_after(error: Exception, refusal: ReadOnlyError) -> str:
+    """What the UDF raised in the refusal's place, so a bug of its own there is not hidden."""
+    raised = error.__cause__ or error
+    if raised is refusal:
+        return ""
+    return (
+        f" After the refused write it raised {type(raised).__name__}: {safe_format_error(raised)}."
+    )
 
 
 class GuardEvaluator:
@@ -278,7 +288,8 @@ class GuardEvaluator:
                 raise mark_action_fatal(
                     ConfigurationError(
                         f"Guard UDF '{clause}' wrote to its input, so it gave no answer and "
-                        f"no record is passed to the action unjudged. {refusal}",
+                        f"no record is passed to the action unjudged."
+                        f"{_raised_after(e, refusal)} {refusal}",
                         context={
                             "udf_name": clause,
                             "operation": "evaluate_conditional_clause",

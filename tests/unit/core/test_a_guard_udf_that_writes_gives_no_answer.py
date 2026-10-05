@@ -61,6 +61,17 @@ def guard_probe_raises_while_handling_the_refusal(data):
     return True
 
 
+def guard_probe_copies_after_the_refusal_then_misses_a_field(data):
+    namespace = _a1(data)
+    try:
+        namespace["tier"] = namespace["tier"].strip().lower()
+    except TypeError:
+        namespace = namespace.copy()
+        namespace["tier"] = namespace["tier"].strip().lower()
+        return namespace["threshold"] > 1
+    return namespace["tier"] == "keep"
+
+
 def guard_probe_defaults_a_missing_field(data):
     namespace = _a1(data)
     try:
@@ -112,6 +123,7 @@ def _register_probes():
         guard_probe_merges_into_its_input,
         guard_probe_pops_from_its_input,
         guard_probe_raises_while_handling_the_refusal,
+        guard_probe_copies_after_the_refusal_then_misses_a_field,
         guard_probe_defaults_a_missing_field,
         guard_probe_catches_the_refusal,
         guard_probe_reads_a_missing_field,
@@ -140,6 +152,7 @@ class TestARefusedWriteStopsTheAction:
         assert "guard_probe_tidies_its_input" in message
         assert "wrote to its input" in message
         assert "return a value instead of mutating the input" in message
+        assert "raised" not in message, "the write is all the UDF raised; nothing else to name"
         assert item == _item(), "the refusal must still keep the write off the record"
         assert "passing record" not in caplog.text, "the action stops; nothing is passed"
 
@@ -186,8 +199,21 @@ class TestARefusedWriteStopsTheAction:
     def test_an_error_raised_in_answer_to_the_refusal_is_the_refusal(self, context):
         """The UDF gave up because its write was refused; passing the record would hide
         the write behind an error of the author's own wording."""
-        with pytest.raises(ConfigurationError, match="wrote to its input"):
+        with pytest.raises(ConfigurationError, match="wrote to its input") as raised:
             _evaluate(guard_probe_raises_while_handling_the_refusal, _item(), context)
+
+        assert "raised ValueError: could not tidy the record" in str(raised.value)
+
+    @_CONTEXTS
+    def test_an_error_raised_while_handling_the_refusal_counts_and_is_named(self, context):
+        """Unchained, as most handlers raise. Python records the refusal as the error being
+        handled, and a handler that catches TypeError for its own reasons and then raises
+        leaves the guard with no answer just the same. Here a bug of the UDF's own fires
+        inside the handler, so the message names it as well as the write."""
+        with pytest.raises(ConfigurationError, match="wrote to its input") as raised:
+            _evaluate(guard_probe_copies_after_the_refusal_then_misses_a_field, _item(), context)
+
+        assert "raised KeyError: 'threshold'" in str(raised.value)
 
     @_CONTEXTS
     def test_a_write_made_while_handling_another_error_is_refused_the_same_way(self, context):
