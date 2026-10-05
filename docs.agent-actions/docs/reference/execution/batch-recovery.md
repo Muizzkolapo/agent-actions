@@ -50,6 +50,11 @@ After retrieving batch results, the system compares the expected record IDs agai
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 
+A retry is prepared again from each record's stored context, with the action's dependencies
+and version, so its prompt reads the same upstream answers and its guard decides as it did for
+the first request. A record whose prompt or guard reads `workflow.*` cannot be prepared again
+this way, and is not retried.
+
 ### Configuration
 
 Retry is configured at the action or defaults level:
