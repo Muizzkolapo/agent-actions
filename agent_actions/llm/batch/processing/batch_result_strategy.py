@@ -765,7 +765,21 @@ class BatchResultStrategy:
         They must still appear in output so downstream consumers see all records.
         The result's error, which its disposition records, is the one preparation
         recorded, as online's is; the row says only that preparation failed.
+
+        A record with no source_guid gets no row here: a tombstone without the identity
+        would be refused again at enrichment, under that refusal's error. The collector
+        builds its row from the record, as it builds online's, with preparation's error.
         """
+        if source_guid is None:
+            processing_result = ProcessingResult.failed(
+                error=BatchContextMetadata.get_prep_error(original_row) or PREP_FAILED,
+                source_guid=None,
+                source_snapshot=copy.deepcopy(original_row),
+                input_record=copy.deepcopy(original_row),
+            )
+            self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
+            return processing_result
+
         skip_reason = BatchContextMetadata.get_skip_reason(original_row)
         reason = skip_reason or PREP_FAILED
 

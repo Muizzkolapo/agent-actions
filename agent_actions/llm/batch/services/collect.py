@@ -117,9 +117,8 @@ def _nothing_succeeded_halt(
 ) -> RuntimeError | None:
     """Online's breaker, for a file holding a record with no source_guid.
 
-    Such a record is refused at enrichment and recorded nowhere, so the dispositions
-    batch reads an action's outcome from cannot say it failed. Any other file is left
-    to them.
+    Such a record is refused and recorded nowhere, so the dispositions batch reads an
+    action's outcome from cannot say it failed. Any other file is left to them.
     """
     if all(result.source_guid for result in results):
         return None

@@ -2,10 +2,13 @@
 
 Every record is stamped where it is staged or by the action that produced it. The store,
 the gate, a repair and ``agac retry --record`` all know it by that, so one that arrives
-without it was made outside those rules: an edited upstream file, say. Online refuses it
-at enrichment and records nothing. Batch recorded it under the id it was sent by, its
+without it was made outside those rules: an edited upstream file, say. Both modes refuse
+it once the guard has decided it, before its prompt is rendered or sent, store it as a
+failed row and record nothing for it. Batch recorded it under the id it was sent by, its
 target_id, which nothing that selects records reads: ``agac retry`` named that failure,
 cleared it, sent nothing, and the action read complete over the failed row it still held.
+A batch an earlier release sent can still hold such a record, and collecting it refuses
+the record the same way.
 
 Driven as in ``test_batch_rerun_matches_online``: the pipeline, the store, the preparator,
 submission, enrichment, the collector and finalize are the production objects.
@@ -14,6 +17,8 @@ submission, enrichment, the collector and finalize are the production objects.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,11 +35,13 @@ from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.invocation.result import InvocationResult
+from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.executor import ActionExecutor
 from agent_actions.workflow.managers.state import ActionStatus
 from tests.integration.test_batch_rerun_matches_online import (
     ACTION,
+    FILTER,
     PREPARED,
     SKIP,
     UPSTREAM,
@@ -114,9 +121,14 @@ class _Online(_Mode):
 
     run_mode = RunMode.ONLINE
 
-    def run(self, inputs: list[dict[str, Any]], answer: Answerer | None = None) -> list[str]:
+    def run(
+        self,
+        inputs: list[dict[str, Any]],
+        answer: Answerer | None = None,
+        extra: dict[str, Any] = EXTRA,
+    ) -> list[str]:
         self._upstream_wrote(inputs)
-        _config, pipeline = self._pipeline(EXTRA, ())
+        _config, pipeline = self._pipeline(extra, ())
         self.model = _Model(answer or Answerer())
         pipeline._online_strategy._invocation_strategy = self.model
         self._process(pipeline, inputs)
@@ -143,6 +155,16 @@ def _submit(batch: _Batch, inputs: list[dict[str, Any]]) -> dict[str, Any]:
         batch._process(pipeline, inputs)
     assert batch.raised[-1] is None and batch.provider.submitted, "nothing was submitted"
     return config
+
+
+@contextmanager
+def _sent_as_an_earlier_release() -> Iterator[None]:
+    """Prepare as a release before this one did: a record with no source_guid is sent.
+
+    Such a batch can still be out when this release collects it.
+    """
+    with patch.object(TaskPreparer, "_require_identity"):
+        yield
 
 
 @pytest.mark.parametrize(
@@ -172,11 +194,13 @@ def test_batch_records_nothing_under_the_target_id_of_a_record_with_no_source_gu
     """No failure, no success, and no deferred mark left behind once it is collected.
 
     A target_id is minted afresh by any run whose input has none, and nothing that
-    selects a record reads it. Each shape is built apart, so each is asked.
+    selects a record reads it. Such a record is no longer sent, but a batch an earlier
+    release sent can hold it in any of these shapes, each built apart, so each is asked.
     """
     batch = _Batch(tmp_path)
 
-    batch.run(1, inputs, answer=answer, extra=extra)
+    with _sent_as_an_earlier_release():
+        batch.run(1, inputs, answer=answer, extra=extra)
 
     assert batch.raised[-1] is None
     assert _recorded(batch) == {"a1": "success"}
@@ -223,7 +247,7 @@ def test_every_failure_agac_retry_names_is_one_its_repair_can_select(tmp_path, u
 def test_batch_holds_and_records_what_online_does_for_a_record_with_no_source_guid(
     tmp_path, inputs
 ):
-    """Online refuses it at enrichment: a failed row with no identity, and no disposition.
+    """Both refuse it: a failed row with no identity, and no disposition.
 
     So the action reads complete in both, with the refusal in the run log and the row.
     """
@@ -304,11 +328,57 @@ def test_a_record_with_no_source_guid_does_not_stop_a_batch_at_its_preflight(tmp
     assert held == ["failed:None", "processed:a1:0@run1"]
 
 
+@pytest.mark.parametrize(
+    "guard, held",
+    [
+        (FILTER, ["processed:a1:0@run1"]),
+        (SKIP, ["failed:None", "processed:a1:0@run1"]),
+    ],
+    ids=["filtered", "skipped"],
+)
+def test_the_guard_decides_a_record_with_no_source_guid_before_it_is_refused(tmp_path, guard, held):
+    """Online's guard runs above its strategy and batch's inside preparation; the refusal
+    comes after both. A record the guard filters leaves nothing, and one it skips is
+    refused at enrichment, in both modes."""
+    (tmp_path / "online").mkdir()
+    (tmp_path / "batch").mkdir()
+    online = _Online(tmp_path / "online")
+    batch = _Batch(tmp_path / "batch")
+    extra = {**guard, **PREPARED}
+
+    online_held = online.run(skipped(), extra=extra)
+    batch_held = batch.run(1, skipped(), extra=extra)
+
+    assert online_held == batch_held == held
+    assert _recorded(online) == _recorded(batch) == {"a1": "success"}
+
+
 def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_online_does(
     tmp_path,
 ):
-    """Recorded nowhere, its records leave no disposition to read the action failed by,
-    so it read complete and the action below went on. Online's breaker stops it there.
+    """Recorded nowhere, its records leave no disposition to read the action failed by.
+    Refused before anything is sent, the run sends nothing and raises online's breaker
+    once the file is written."""
+    (tmp_path / "online").mkdir()
+    (tmp_path / "batch").mkdir()
+    online = _Online(tmp_path / "online")
+    batch = _Batch(tmp_path / "batch")
+    inputs = [nameless(topic="dbt")]
+
+    online.run(inputs)
+    batch.run(1, inputs, extra=EXTRA)
+
+    assert batch.provider.submitted == []
+    assert batch.raised[-1] == online.raised[-1]
+    assert "produced 0 successful records" in batch.raised[-1]
+    assert answers(batch.held()) == ["failed:None"]
+
+
+def test_collecting_such_records_from_an_earlier_release_fails_the_action_as_online_does(
+    tmp_path,
+):
+    """Sent by an earlier release, they left no disposition either, so the action read
+    complete and the action below went on. Online's breaker stops it there.
 
     Raised once the file is written, as a batch's other halts are, and the executor
     records the action failed on it rather than leaving it to re-poll a collected batch.
@@ -320,10 +390,12 @@ def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_onl
     inputs = [nameless(topic="dbt")]
 
     online.run(inputs)
-    with pytest.raises(RuntimeError, match="produced 0 successful records") as halt:
+    with (
+        _sent_as_an_earlier_release(),
+        pytest.raises(RuntimeError, match="produced 0 successful records") as halt,
+    ):
         batch.run(1, inputs, extra=EXTRA)
 
-    assert f"RuntimeError: {halt.value}" == online.raised[-1]
     assert raised_by_terminal_failure(halt.value)
     assert answers(batch.held()) == ["failed:None"]
     executor = ActionExecutor(
@@ -338,10 +410,14 @@ def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_onl
 
 
 def test_the_on_empty_error_halt_names_a_record_with_no_source_guid_by_its_target_id(tmp_path):
-    """Named by its source_guid, it was named "None"."""
+    """Named by its source_guid, it was named "None". Only a batch an earlier release
+    sent can still hold such a record's answer."""
     batch = _Batch(tmp_path)
 
-    with pytest.raises(EmptyOutputError, match=r"\(on_empty=error\): t-n1$"):
+    with (
+        _sent_as_an_earlier_release(),
+        pytest.raises(EmptyOutputError, match=r"\(on_empty=error\): t-n1$"),
+    ):
         batch.run(
             1,
             answered(),
@@ -357,7 +433,8 @@ def test_collecting_clears_a_deferred_mark_left_under_the_target_id_by_an_earlie
     Collection now records nothing for it, so that mark was never cleared, and every
     collect after warned of it as orphaned."""
     batch = _Batch(tmp_path)
-    config = _submit(batch, answered())
+    with _sent_as_an_earlier_release():
+        config = _submit(batch, answered())
     batch.backend.set_disposition(ACTION, "t-n1", DISPOSITION_DEFERRED)
 
     _collect(batch.backend, batch.provider, config, batch.out, Path(batch.file).name, 1, Answerer())
@@ -370,9 +447,10 @@ def test_abandoning_a_batch_marks_no_failure_under_the_target_id_of_a_record_wit
 ):
     """`--abandon-in-flight` marks what waits on the batch failed so a later retry can
     reach it. Marked under its target_id, that is a failure the later retry clears and
-    does not repair."""
+    does not repair. A batch an earlier release sent can still hold it."""
     batch = _Batch(tmp_path)
-    _submit(batch, answered())
+    with _sent_as_an_earlier_release():
+        _submit(batch, answered())
     command = RetryCommand(RetryCommandArgs(agent="w", abandon_in_flight=True))
 
     command._settle_batches_in_flight(batch.backend, command._batches_owed(batch.backend, [ACTION]))
@@ -384,10 +462,13 @@ def test_a_record_with_no_source_guid_does_not_keep_a_retry_from_a_failed_batch_
     """A retry narrows a failed batch action whose batches hold an answer or a failure for
     every record they were sent. The refused record holds neither, and no run gives it
     one: counted, it refused the retry for good, while online's action, its every record
-    reached and failed, is narrowed."""
+    reached and failed, is narrowed. Only a batch an earlier release sent can hold it."""
     batch = _Batch(tmp_path)
 
-    with pytest.raises(RuntimeError, match="produced 0 successful records"):
+    with (
+        _sent_as_an_earlier_release(),
+        pytest.raises(RuntimeError, match="produced 0 successful records"),
+    ):
         batch.run(1, answered(), answer=Answerer({"a1": "fail"}), extra=EXTRA)
 
     assert batch.failures() == ["a1"]

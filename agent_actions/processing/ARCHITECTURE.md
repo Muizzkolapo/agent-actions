@@ -210,6 +210,7 @@ OnlineLLMStrategy.process_record()
     │     ├── _normalize_input() → source_guid, snapshot
     │     ├── _load_full_context() → context data for LLM
     │     ├── _evaluate_guard() → per-record guard check
+    │     ├── _require_identity() → refuse a later-stage record with no source_guid
     │     └── _render_prompt() → formatted prompt string
     │
     └── InvocationStrategy.invoke(prepared_task)
@@ -641,8 +642,8 @@ Dispositions differ where the rows do not:
   guard here, so a terminal disposition would carry the skip for good; `unprocessed` sends
   the record to the guard again on the next run.
 
-A record with no `source_guid` is not among them: both paths refuse it at enrichment and
-record nothing for it, under its target id or any other (see the identity notes below).
+A record with no `source_guid` is not among them: both paths refuse it before it is sent
+and record nothing for it, under its target id or any other (see the identity notes below).
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. Under `error` online raises at the record and
@@ -745,23 +746,40 @@ For non-first-stage records: source_guid comes from upstream action output.
 
 A record that arrives without one has no identity, in either mode, and is
     given none: no disposition is written for it under any other id.
-    RequiredFieldsEnricher refuses what it produced, so it is stored as a failed
-    row with no source_guid, keeping the target_id and content it arrived with;
-    the exceptions are an expansion, whose rows LineageEnricher gives identities
-    of their own, and a guard filter, which leaves nothing. Batch knows a sent
-    record by its custom_id, which is its target_id, but never records it under
-    that: a run whose input has none mints a new one, and nothing that selects a
-    record reads it, so a failure there would be one `agac retry` names and
-    cannot repair. BatchResultReconciler.get_source_guid returns None for it,
-    and for an id the context map does not hold, such as a parser placeholder;
-    submission marks it no `deferred`, and `--abandon-in-flight` marks it no
-    `failed`. It is still sent to the model before it is refused, in both modes.
+    TaskPreparer.prepare refuses it (MissingSourceGuidError) once the guard has
+    decided it and before its prompt is rendered, traced or sent: an LLM action
+    in either mode, and a record-level tool, never sees it. It is stored as a
+    failed row with no source_guid, keeping the target_id and content it arrived
+    with, which the collector builds from the record in both modes. The guard
+    comes first because online's runs above the strategy and batch's inside
+    preparation: a record it filters leaves nothing, and one it skips gets a
+    tombstone RequiredFieldsEnricher refuses, stored as the same failed row.
+    Batch's preflight sample passes over a refused record as over a guard skip.
+    Refused when its answer came back, it was paid for, and an answer of several
+    rows was kept under identities minted for each row while the record itself
+    still had none, so every run sent it again.
+
+RequiredFieldsEnricher still refuses whatever reaches it without one, which is
+    how a batch an earlier release sent, and which can hold such a record, is
+    collected. Batch knows a sent record by its custom_id, which is its
+    target_id, but never records it under that: a run whose input has none mints
+    a new one, and nothing that selects a record reads it, so a failure there
+    would be one `agac retry` names and cannot repair.
+    BatchResultReconciler.get_source_guid returns None for it, and for an id the
+    context map does not hold, such as a parser placeholder; submission marks it
+    no `deferred`, and `--abandon-in-flight` marks it no `failed`.
 
 Refused, it leaves no disposition, and batch reads an action's outcome from
     dispositions alone. So where nothing in a file holding such a record
     succeeded, batch raises online's breaker (`terminal_failure`) once the file
     is written, and the executor records the action failed, as online. Where
-    something succeeded, both read complete.
+    something succeeded, both read complete, and that is deliberate. No
+    per-record failure can be written without an identity, and the node-level
+    one is what the executor writes for an action that failed: the next run
+    runs such an action again, and `agac retry` names it, though running the
+    action again only refuses the record again. The remedy is
+    upstream, so the failed row and the run log, which name the record by its
+    target_id, are what say it was refused.
 
 A batch run with nothing to send collects through the same step
     (`collect_batch_rows`), so there too such a record is recorded nowhere and

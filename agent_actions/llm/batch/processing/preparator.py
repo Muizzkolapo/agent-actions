@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, MissingSourceGuidError
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
@@ -390,7 +390,10 @@ class BatchTaskPreparator:
         for row in data[:sample_size]:
             prep_context.current_item = row
 
-            prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
+            try:
+                prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
+            except MissingSourceGuidError:
+                continue  # Refused before its template renders; the run refuses it alone
 
             if prepared.guard_status in (
                 GuardStatus.SKIPPED,
@@ -401,9 +404,9 @@ class BatchTaskPreparator:
 
             return  # Template rendered successfully — preflight passed
 
-        # All sampled rows guard-skipped/filtered — nothing to validate
+        # All sampled rows guard-skipped/filtered or refused — nothing to validate
         logger.info(
-            "Preflight skipped: all %d sampled rows filtered by guard for '%s'",
+            "Preflight skipped: no prompt rendered for the %d sampled rows of '%s'",
             sample_size,
             agent_config.get("name"),
         )

@@ -92,6 +92,7 @@ from agent_actions.errors.resources import (
 from agent_actions.errors.validation import (
     AmbiguousAgentName,
     DataValidationError,
+    MissingSourceGuidError,
     PromptValidationError,
     SchemaValidationError,
     ValidationError,
@@ -130,6 +131,7 @@ __all__ = [
     "ValidationError",
     "PromptValidationError",
     "DataValidationError",
+    "MissingSourceGuidError",
     "SchemaValidationError",
     "AmbiguousAgentName",
     # Processing

@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from agent_actions.errors.validation import DataValidationError
+from agent_actions.errors.validation import DataValidationError, MissingSourceGuidError
 from agent_actions.guards import GuardBehavior
 from agent_actions.processing.prepared_task import (
     GuardStatus,
@@ -112,6 +112,8 @@ class TaskPreparer:
                     guard_clause,
                 )
 
+        self._require_identity(item, source_guid, context)
+
         prep_result = self._render_prompt(content, context, field_context)
 
         prepared = PreparedTask(
@@ -178,10 +180,28 @@ class TaskPreparer:
                     return item, source_guid, snapshot
                 source_guid = item.get("source_guid")
                 if source_guid == "":
-                    source_guid = None  # Preserve None for fallback lineage/recovery
+                    source_guid = None  # Left to the guard, then refused by _require_identity
                 return content, source_guid, item
             else:
                 return item, None, None
+
+    @staticmethod
+    def _require_identity(item: Any, source_guid: str | None, context: PreparationContext) -> None:
+        """Refuse a record below the first stage that arrived without a source_guid.
+
+        Nothing that carries, selects or repairs a record could name it, and enrichment
+        would refuse its answer. Called after the guard, so a record it filters or skips
+        is decided as online's guard above the strategy decides it, and before anything
+        is rendered, traced or sent.
+        """
+        if context.is_first_stage or source_guid:
+            return
+        target_id = item.get("target_id") if isinstance(item, dict) else None
+        raise MissingSourceGuidError(
+            f"Record {target_id or '(no target_id)'} reached '{context.agent_name}' without "
+            "a source_guid and was not sent; it must be stamped at its source or producer",
+            context={"action": context.agent_name, "target_id": target_id},
+        )
 
     @staticmethod
     def _prepare_source_snapshot(item: Any) -> Any:

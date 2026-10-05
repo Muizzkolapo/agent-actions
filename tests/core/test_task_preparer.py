@@ -415,7 +415,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "source_guid": "sg-1"}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -447,7 +447,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "source_guid": "sg-1"}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
