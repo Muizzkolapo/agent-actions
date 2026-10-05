@@ -18,6 +18,7 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration import test_retry_selection_under_batch as under_batch
 from tests.integration.test_a_file_tool_that_invents_rows import inventing  # noqa: F401
 from tests.integration.test_retry_ignores_record_cap import (
@@ -365,6 +366,24 @@ def test_a_record_the_retry_never_found_keeps_its_failure_below_too(chained):  #
     assert _status(chained, SECOND) == "completed_with_failures"
 
 
+def test_an_action_level_failure_is_not_put_back(project):  # noqa: F811
+    """It speaks for the action, not a record. Put back, it would have the next run skip
+    the action the retry just ran."""
+    backend = _backend(project)
+    try:
+        backend.set_disposition(ACTION, NODE_LEVEL_RECORD_ID, "failed", reason="action failed")
+    finally:
+        backend.close()
+    _fail(project, LEGACY)
+
+    _retry()
+
+    assert (_disposition(project, NODE_LEVEL_RECORD_ID), _disposition(project, LEGACY)) == (
+        None,
+        "failed",
+    )
+
+
 def test_the_failure_put_back_is_the_one_that_was_cleared(project):  # noqa: F811
     held = {
         "reason": "why it failed",
@@ -402,3 +421,34 @@ def test_a_retry_stopped_after_its_put_back_restores_only_that(project, monkeypa
 
     assert "Records to retry: 1" in result.output, result.output
     assert (_disposition(project, reached), _disposition(project, LEGACY)) == ("success", "failed")
+
+
+def test_a_batch_retry_that_reaches_one_record_still_pauses_for_it(
+    submitted_and_collected,  # noqa: F811
+):
+    """Read complete over the failure put back, the action would never collect the batch
+    sent for the record the retry did reach."""
+    root = submitted_and_collected
+    under_batch._set_disposition(root, under_batch._guids(root)[0], "failed")
+    under_batch._set_disposition(root, LEGACY, "failed")
+
+    code, output = under_batch._agac(root, "retry", "-a", under_batch.WORKFLOW)
+
+    assert code == 0, output
+    assert "run again" in output, output
+    assert _status(root, under_batch.ACTION, under_batch.WORKFLOW) == "batch_submitted"
+
+
+def test_the_run_that_collects_it_repairs_one_and_keeps_the_other(
+    submitted_and_collected,  # noqa: F811
+):
+    root = submitted_and_collected
+    reached = under_batch._guids(root)[0]
+    under_batch._set_disposition(root, reached, "failed")
+    under_batch._set_disposition(root, LEGACY, "failed")
+
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+
+    dispositions = under_batch._dispositions(root)
+    assert (dispositions[reached], dispositions[LEGACY]) == ("success", "failed")
+    assert _status(root, under_batch.ACTION, under_batch.WORKFLOW) == "completed_with_failures"
