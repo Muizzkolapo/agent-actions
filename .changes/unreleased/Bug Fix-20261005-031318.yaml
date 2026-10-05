@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A batch action now puts every record it carries as done to its guard again, as an online
+  action does. A record it had already answered was carried without reaching the guard, so
+  when the guard's verdict on it changed with nothing resetting the action, its old answer
+  stayed in the output and every action below read it: an action stopped partway and run
+  again after its guard's UDF was changed kept its answer to a record the guard now skips.
+  A record the guard now filters is left out, and one it now skips is replaced by its
+  tombstone, as online writes them; where it filters every record, the action holds nothing
+  and is skipped. Nothing is sent to the model for either, and a record the guard still
+  passes is carried as before, with no prompt prepared for it.
+time: 2026-10-05T03:13:18Z

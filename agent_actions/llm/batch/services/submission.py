@@ -301,6 +301,15 @@ class BatchSubmissionService:
         if self._disposition_gate is not None:
             to_process, carry_ids = self._disposition_gate.filter(data, action_name)
             again = self._carried_to_look_at_again(to_process, carry_ids, action_name, batch_name)
+            if still_carried := carry_ids - again:
+                # Online's guard runs above its gate. Prepared again, one the guard now
+                # filters or skips is marked so, and nothing is sent for it.
+                again |= self._task_preparator.turned_away(
+                    agent_config,
+                    [record for record in data if record.get("source_guid") in still_carried],
+                    source_data,
+                    workflow_metadata,
+                )
             carry_ids = carry_ids - again
             # Read off the input, so one looked at again keeps its place in it.
             data = (

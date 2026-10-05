@@ -49,7 +49,11 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import EMPTY_OUTPUT
-from agent_actions.storage.backend import FAILURE_DISPOSITIONS
+from agent_actions.storage.backend import (
+    DISPOSITION_PASSTHROUGH,
+    FAILURE_DISPOSITIONS,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.executor import ActionExecutor
 from agent_actions.workflow.managers.state import ActionStatus
@@ -557,10 +561,16 @@ def compare(
         if retry == "failures":
             retry = online.failures()
         reset = step.get("reset", False)
+        turned_away = {
+            record["source_guid"]
+            for record in inputs
+            if extra.get("guard") and record["content"].get(UPSTREAM, {}).get("keep") is False
+        }
         findings.append(
             {
                 "run": number,
                 "inputs": {record["source_guid"] for record in inputs},
+                "turned_away": turned_away,
                 "online": online.run(number, inputs, answer, extra, retry, reset),
                 "batch": batch.run(number, inputs, answer, extra, retry, reset),
                 "online_sent": online.sent[-1],
@@ -594,9 +604,12 @@ def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
         held = _answered(run["batch"])
         for answer in sorted(_answered(run["online"]) - held):
             # An online run that raised can have left its file unwritten, so it still
-            # holds answers for records that are no input of this run. A batch run that
-            # answered something has written this run's file, without them.
-            if run["online_raised"] and _input_of(answer) not in run["inputs"]:
+            # holds answers for records that are no input of this run, or that its guard
+            # now turns away. A batch run that wrote has written this run's file, without
+            # them.
+            if run["online_raised"] and (
+                _input_of(answer) not in run["inputs"] or _input_of(answer) in run["turned_away"]
+            ):
                 continue
             # An answer batch had, or one both modes were just given. One batch never
             # had is the next check's to find.
@@ -1194,6 +1207,34 @@ def test_an_input_carried_as_done_meets_the_guard_as_online(tmp_path, case):
     for run in compare(tmp_path, runs, guard):
         assert run["batch"] == run["online"], f"run {run['run']}"
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_again(tmp_path):
+    """Judging it stops at the guard: preparing it would render and trace a prompt that
+    no batch is sent with."""
+    batch = _Batch(tmp_path)
+    batch.run(1, _PASSES, extra=FILTER)
+    traced = batch.backend.get_prompt_traces(ACTION)
+
+    held = batch.run(2, _NOW_FILTERED, extra=FILTER)
+
+    assert held == ["processed:a1:0@run1"]
+    assert batch.sent[1] == []
+    assert batch.backend.get_prompt_traces(ACTION) == traced
+
+
+def test_an_action_whose_guard_now_filters_every_carried_input_reads_as_skipped(tmp_path):
+    """As online, which records the action skipped: it holds nothing, under the node-level
+    mark the executor reads as skipped when no row is stored."""
+    batch = _Batch(tmp_path)
+    batch.run(1, _PASSES, extra=FILTER)
+
+    held = batch.run(2, _EVERY_ONE_REFUSED, extra=FILTER)
+
+    assert held == []
+    assert batch.backend.has_disposition(
+        ACTION, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+    )
 
 
 def test_a_reset_that_failed_and_answered_nothing_keeps_no_row_for_a_filtered_input(tmp_path):

@@ -533,6 +533,15 @@ input the guard filtered is not looked up, since it holds no row by design. It i
 to the guard again instead: online's guard runs above its gate and judges every input
 afresh, where the gate here would call a filtered one done for good.
 
+Every other input the gate carries is put to the guard too, since its verdict can change
+while the disposition stands: a stopped action resumed after its guard's code changed keeps
+what it had finished. Each is judged as preparation judges it, stopping at the guard
+(`BatchTaskPreparator.turned_away`, through `TaskPreparer.judge`), so no prompt is rendered
+or traced and nothing is sent. One the guard now filters or skips is prepared again, which
+marks it so on the context map; the write then leaves its stored row out or replaces it with
+the tombstone, as online's guard does, and where the guard filters every input the action
+holds nothing and reads skipped. One the guard still passes stays carried.
+
 When preparation leaves nothing to send -- the guard skipped or filtered every input, the
 action above blocked it, or its prompt could not be prepared -- submission collects and
 writes the file itself, by the two functions finalize uses (`llm/batch/services/collect.py`).
