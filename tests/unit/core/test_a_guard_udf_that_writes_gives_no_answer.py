@@ -41,6 +41,19 @@ def guard_probe_raises_while_handling_the_refusal(data):
     return True
 
 
+def guard_probe_catches_the_refusal(data):
+    namespace = _a1(data)
+    try:
+        namespace["tier"] = namespace["tier"].strip().lower()
+    except TypeError:
+        pass
+    return namespace["tier"].strip().lower() == "keep"
+
+
+def guard_probe_raises_its_own_error(data):
+    raise KeyError("no such field")
+
+
 @pytest.fixture(autouse=True)
 def _register_probes():
     """Registered per test: an earlier test clearing the registry would leave the guard
@@ -49,6 +62,8 @@ def _register_probes():
         guard_probe_tidies_its_input,
         guard_probe_appends_to_a_slice,
         guard_probe_raises_while_handling_the_refusal,
+        guard_probe_catches_the_refusal,
+        guard_probe_raises_its_own_error,
     ):
         udf_tool(fn)
 
@@ -106,3 +121,23 @@ class TestARefusedWriteStopsTheAction:
         the write behind an error of the author's own wording."""
         with pytest.raises(ConfigurationError, match="wrote to its input"):
             _evaluate(guard_probe_raises_while_handling_the_refusal, _item(), context)
+
+
+class TestWhatTheGuardPathStillAllows:
+    @_CONTEXTS
+    @pytest.mark.parametrize(("tier", "should_execute"), [(" Keep ", True), (" Drop ", False)])
+    def test_a_udf_that_catches_the_refusal_still_decides(self, tier, should_execute, context):
+        """The refusal is still a TypeError, so a UDF that guards its write keeps working,
+        and its answer applies."""
+        result = _evaluate(guard_probe_catches_the_refusal, _item(tier), context)
+
+        assert result.should_execute is should_execute
+
+    @_CONTEXTS
+    def test_a_udf_that_raises_its_own_error_still_passes_its_record(self, context, caplog):
+        """Documented: UDF conditions always pass records through on error, and the config
+        refuses `passthrough_on_error: false` on one. Only the refusal is singled out."""
+        result = _evaluate(guard_probe_raises_its_own_error, _item(), context)
+
+        assert result.should_execute is True
+        assert "passing record" in caplog.text

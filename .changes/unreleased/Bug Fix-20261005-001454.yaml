@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A guard written as a Python function (`guard: "udf:name"`) that writes to its input, for
+  instance to tidy a field before deciding, is no longer skipped over. The function is
+  handed a read-only view of the record, which refuses the write by raising, and a guard
+  whose function raises passes its record, so such a guard filtered nothing: every record
+  went to the action, the ones it would reject included, with a warning in the log and exit
+  0. The refused write now stops the action with an error naming the function and saying to
+  copy what it needs and return a value, and no record reaches the action unjudged. Under
+  `run_mode: batch` the rows checked before anything is submitted stop it the same way, and
+  a write on a later row fails that record alone. A function that catches the refusal still
+  decides, and any other error a guard function raises still passes the record.
+time: 2026-10-05T00:14:54Z

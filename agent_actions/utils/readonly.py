@@ -17,7 +17,8 @@ Two separate things are going on, and it is worth being exact about which does w
   which is why `items`, `values` and list iteration are overridden too.
 * **Refusing mutation is what makes it honest.** Without it a UDF's write would silently
   succeed against a copy and the author would believe it had taken effect. Raising names
-  the offending UDF instead.
+  the offending UDF instead: the guard path stops the action on a `ReadOnlyError`, where
+  it passes the record for any other error the UDF raises.
 * **Taking a copy has to work.** `copy()`, `copy.copy` and `copy.deepcopy` all return a
   plain, deep, writable structure. A shallow copy would share the record's nested
   containers, so the hatch offered to avoid rewriting the record would have rewritten it;
@@ -94,8 +95,16 @@ def _unwrap(value: Any) -> Any:
     return value
 
 
+class ReadOnlyError(TypeError):
+    """A write the view refused.
+
+    A TypeError, as a write to any immutable value is, so code that catches one still
+    does; its own type lets the guard path tell the refusal from the UDF's own errors.
+    """
+
+
 def _refuse(*_args: Any, **_kwargs: Any) -> NoReturn:
-    raise TypeError(_MESSAGE)
+    raise ReadOnlyError(_MESSAGE)
 
 
 class ReadOnlyDict(dict):
@@ -296,4 +305,4 @@ def readonly_view(data: Any) -> Any:
     return _readonly(data)
 
 
-__all__ = ["ReadOnlyDict", "ReadOnlyList", "readonly_view"]
+__all__ = ["ReadOnlyDict", "ReadOnlyError", "ReadOnlyList", "readonly_view"]

@@ -209,6 +209,10 @@ guard:
 When a guard silently lets records through unexpectedly, check `target/errors.json` for `G002` events — these indicate evaluation failures that were swallowed by `passthrough_on_error: true`.
 :::
 
+### UDF guards
+
+A UDF guard (`condition: "udf:name"`) always passes its record when the function raises; `passthrough_on_error` cannot be turned off on one. The function is handed a read-only view of the record, so the record cannot be changed from inside a guard. A write to it raises, and that one error is not passed through: the function gave no answer, so the action stops with an error naming the function, and no record reaches it unjudged. Under `run_mode: batch`, only the check run before submitting (the first rows, up to the first one the guard admits) stops the action this way; a write on a later row fails that record alone. To work on a value, copy it first (`data["ns"].copy()` is deep and writable) and return the answer.
+
 ## Common Mistakes
 
 ### Unquoted String Literals

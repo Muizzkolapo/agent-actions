@@ -64,9 +64,9 @@ class ReadOnlyBus(Bus):
         self._refuse()
 
     def _refuse(self, *args: Any, **kwargs: Any) -> NoReturn:
-        from agent_actions.utils.readonly import _MESSAGE
+        from agent_actions.utils.readonly import _MESSAGE, ReadOnlyError
 
-        raise TypeError(_MESSAGE)
+        raise ReadOnlyError(_MESSAGE)
 
     def __setitem__(self, *args: Any, **kwargs: Any) -> NoReturn:
         self._refuse()
