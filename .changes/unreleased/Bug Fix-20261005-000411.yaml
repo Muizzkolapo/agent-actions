@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  A batch action now stores a file that took no input empty on its first run, as online
+  stores it: one the action above holds nothing for, or one whose every record a guard
+  upstream filtered. With nothing stored for that file yet, the run stored nothing for
+  it, so the actions reading it found no such file where online hands them an empty one.
+  A file the action stored before was already written empty in that case, and a repair
+  still writes nothing over it.
+time: 2026-10-05T00:04:11Z

@@ -247,9 +247,10 @@ class BatchSubmissionService:
         that no longer exists. None records nothing, and neither does a repair.
         When preparation leaves nothing to send, the file is collected and written
         here, as finalize would; the caller has nothing left to write. When no record
-        is left to send at all, the file is written here for this run's inputs. A batch
-        the provider refuses raises an error fatal to the action, and leaves the record
-        of what the file's last batch was sent as it stood.
+        is left to send at all, the file is written here for this run's inputs, and a
+        file that took no input is stored empty, as online stores it. A batch the
+        provider refuses raises an error fatal to the action, and leaves the record of
+        what the file's last batch was sent as it stood.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -437,18 +438,24 @@ class BatchSubmissionService:
         """Write the file for this run's inputs when nothing is left to send, as online does.
 
         Every input left is carried, so the merge keeps each stored row whose input is
-        one of the run's and drops the rest. Nothing is collected: no batch and no
-        context map exist for this run. A repair, or a run that recorded no inputs,
-        writes nothing, so every stored row it did not answer stands. Nor is a file
-        written that the merge would leave as it stands.
+        one of the run's and drops the rest. A file that took no input is stored empty,
+        though nothing is stored for it yet. Nothing is collected and no node-level row
+        is written: no batch and no context map exist for this run. A repair, or a run
+        that recorded no inputs, writes nothing, so every stored row it did not answer
+        stands. Nor is a file written that would be stored as it stands.
         """
         if run_input_guids is None or self._storage_backend is None or not output_directory:
             return
         stored_name = batch_output_name(batch_name)
         try:
-            stored = self._storage_backend.read_target_for_rewrite(action_name, stored_name)
+            stored: list[dict[str, Any]] | None = self._storage_backend.read_target_for_rewrite(
+                action_name, stored_name
+            )
         except FileNotFoundError:
-            return
+            if run_inputs:
+                return
+            # Online stores a file that took no input empty, on a first run too.
+            stored = None
         if run_inputs:
             from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
@@ -460,14 +467,14 @@ class BatchSubmissionService:
             # An empty input is a file online writes empty.
             rows = []
         # The merge keeps a subsequence of the stored rows, so an equal count is no change.
-        if len(rows) == len(stored):
+        if stored is not None and len(rows) == len(stored):
             return
         logger.info(
             "Writing %s for this run's %d input(s): %d of %d stored row(s) kept",
             stored_name,
             len(run_input_guids),
             len(rows),
-            len(stored),
+            len(stored or ()),
         )
         store_batch_file(
             self._storage_backend,

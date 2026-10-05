@@ -159,7 +159,9 @@ guard filtered, but the row names the action, so it holds only while the action
 holds no record: an action that filters every record of one file and keeps rows
 from another completes, and its readers run on those rows. The classifier clears
 the row then. Left in place, it would show in `agac dispositions`, and the next run
-would read it as a skip from before and run the action again.
+would read it as a skip from before and run the action again. A reader's input for
+the filtered file is then empty, and it stores that file empty in either run mode
+(`processing/ARCHITECTURE.md`, the batch write for a file that took no input).
 
 ---
 
