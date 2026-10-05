@@ -52,16 +52,24 @@ def _write_manifest(
     record_ids: list[str],
     downstream_actions: list[str],
     dispositions: list[dict],
+    *,
+    put_back_from: str | None = None,
 ) -> str:
-    """Write a retry manifest before clearing dispositions, returning its ``created_at``."""
-    created_at = datetime.datetime.now(datetime.UTC).isoformat()
-    manifest = {
+    """Write a retry manifest before clearing dispositions, returning its ``created_at``.
+
+    ``put_back_from`` is the ``created_at`` of the manifest a finished re-run narrows to
+    what it puts back. It is kept, since the actions that retry left are stamped with it.
+    """
+    created_at = put_back_from or datetime.datetime.now(datetime.UTC).isoformat()
+    manifest: dict[str, Any] = {
         "from_action": from_action,
         "record_ids": sorted(record_ids),
         "downstream_actions": downstream_actions,
         "dispositions": dispositions,
         "created_at": created_at,
     }
+    if put_back_from:
+        manifest["put_back"] = True
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_json_write(path, manifest, indent=2)
     return created_at
@@ -311,6 +319,7 @@ class RetryCommand:
                 backend,
                 workflow,
                 manifest_file,
+                created_at,
                 from_action,
                 downstream_actions,
                 record_ids,
@@ -353,6 +362,7 @@ class RetryCommand:
         backend,
         workflow,
         manifest_file: Path,
+        created_at: str,
         from_action: str,
         downstream_actions: list[str],
         cleared_ids: set[str],
@@ -387,7 +397,12 @@ class RetryCommand:
             )
         # From here an interruption restores these rows, and nothing the re-run decided.
         _write_manifest(
-            manifest_file, from_action, list(never_answered), downstream_actions, put_back
+            manifest_file,
+            from_action,
+            list(never_answered),
+            downstream_actions,
+            put_back,
+            put_back_from=created_at,
         )
         backend.set_dispositions_batch(
             [
@@ -504,14 +519,16 @@ class RetryCommand:
         the readers hold what they had not answered as ``unprocessed``, which no retry
         starts from. An action a reset has touched since holds newer rows and gets none.
         Nor does a completed action get a node-level failure back, which a plain run
-        would take as a reason to run it again over what its readers hold.
+        would take as a reason to run it again over what its readers hold. A manifest the
+        finished re-run narrowed to what it puts back (``put_back``) goes back even where
+        every action completed: it holds only records that re-run did not decide again.
         """
         from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
         completed = {
             action for action in resumed if state_mgr.get_status(action) in COMPLETED_STATUSES
         }
-        if not manifest or completed == resumed:
+        if not manifest or (completed == resumed and not manifest.get("put_back")):
             return []
         return [
             row

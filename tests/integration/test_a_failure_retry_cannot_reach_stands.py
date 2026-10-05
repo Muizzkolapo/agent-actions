@@ -17,6 +17,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli import retry as retry_module
 from agent_actions.cli.main import cli
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration import test_retry_selection_under_batch as under_batch
@@ -416,6 +417,38 @@ def test_a_retry_stopped_after_its_put_back_restores_only_that(project, monkeypa
     with monkeypatch.context() as patched:
         patched.setattr("agent_actions.cli.retry._classify_outcome", stopped)
         assert _retry().exit_code != 0
+
+    result = _retry()
+
+    assert "Records to retry: 1" in result.output, result.output
+    assert (_disposition(project, reached), _disposition(project, LEGACY)) == ("success", "failed")
+
+
+def test_a_retry_stopped_before_writing_its_put_back_has_the_next_put_it_back(
+    project,  # noqa: F811
+    monkeypatch,
+):
+    """Stopped once its manifest holds only what it puts back, before writing those rows,
+    the retry has cleared a failure nothing decided again, though every action it ran has
+    completed. The next retry restores it from that manifest."""
+    reached = _record_ids(project)[0]
+    _fail(project, reached)
+    _fail(project, LEGACY)
+    write_manifest = retry_module._write_manifest
+    written: list[list[str]] = []
+
+    def stopped_once_narrowed(path, from_action, record_ids, *args, **kwargs):
+        created_at = write_manifest(path, from_action, record_ids, *args, **kwargs)
+        written.append(sorted(record_ids))
+        if len(written) == 2:
+            raise RuntimeError("stopped")
+        return created_at
+
+    with monkeypatch.context() as patched:
+        patched.setattr("agent_actions.cli.retry._write_manifest", stopped_once_narrowed)
+        assert _retry().exit_code != 0
+    assert written[1] == [LEGACY]
+    assert (_status(project), _disposition(project, LEGACY)) == ("completed", None)
 
     result = _retry()
 

@@ -14,8 +14,9 @@ body: >-
   many more) with what to do: where a file or the action failed, fix that and run the retry
   again; where a record's input is gone, restore it; an id no input carries is cleared only
   by `agac run --fresh`. Records the re-run repairs are repaired as before, including one a
-  file tool rolls into rows no single record produced. A retry that puts back an interrupted
-  one's failures now keeps each one's `relative_path` as well, as the put-back does;
-  nothing in agac sets that field today, so only a value set through the storage API was
-  lost.
+  file tool rolls into rows no single record produced. A retry stopped while putting back
+  the failures it did not repair has the next retry put them back, even where every action
+  it ran completed. A retry that puts back an interrupted one's failures now keeps each
+  one's `relative_path` as well, as the put-back does; nothing in agac sets that field
+  today, so only a value set through the storage API was lost.
 time: 2026-10-04T22:25:31Z

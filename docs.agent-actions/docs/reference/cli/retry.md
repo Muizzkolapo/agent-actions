@@ -206,9 +206,11 @@ there.
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
-reset since. And an action the stopped retry completed never gets back a failure
-recorded against the action as a whole, which would make the next `agac run` run
-it again.
+reset since. The exception is a retry stopped while putting back the failures it
+could not repair: those go back though every action has completed, since nothing
+decided them again. And an action the stopped retry completed never gets back a
+failure recorded against the action as a whole, which would make the next
+`agac run` run it again.
 
 `--dry-run` puts nothing back and leaves the record of the stopped retry where it
 is. The plan it shows counts what a retry would put back.
