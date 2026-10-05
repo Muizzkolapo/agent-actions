@@ -85,6 +85,25 @@ def _failures_naming_a_file(root):
     ]
 
 
+def _reported_as_a_failed_write(root, result, action, fault):
+    assert result.exit_code == 1, result.output
+    assert "Failed to load data" not in result.output
+    assert "Failed to write" in result.output
+    assert "D002" not in {event["code"] for event in _events(root)}
+    failures = _failures_naming_a_file(root)
+    assert [event_type for event_type, _ in failures] == ["FileWriteFailedEvent"]
+    ((_, message),) = failures
+    assert message.startswith("Failed to write "), message
+    assert message.endswith(f"/target/{action}/{NOT_STORED}: {fault}"), message
+
+
+def _with_a_reader(root):
+    config = _config(root)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
+    (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (root / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+
+
 @FAULTS
 def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_next_run(
     online,  # noqa: F811
@@ -123,15 +142,20 @@ def test_a_file_the_store_fails_to_write_is_reported_as_a_failed_write_not_a_loa
     with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
         result = _run("--fresh")
 
-    assert result.exit_code == 1, result.output
-    assert "Failed to load data" not in result.output
-    assert "Failed to write" in result.output
-    assert "D002" not in {event["code"] for event in _events(online)}
-    failures = _failures_naming_a_file(online)
-    assert [event_type for event_type, _ in failures] == ["FileWriteFailedEvent"]
-    ((_, message),) = failures
-    assert message.startswith("Failed to write "), message
-    assert message.endswith(f"/target/{ACTION}/{NOT_STORED}: {fault}"), message
+    _reported_as_a_failed_write(online, result, ACTION, fault)
+
+
+def test_a_file_a_downstream_action_fails_to_store_is_reported_as_a_failed_write(
+    online,  # noqa: F811
+):
+    """An action reading another's output stores its file through the same writer, by
+    another route than the first stage's, so it said the same."""
+    _with_a_reader(online)
+    fault = sqlite3.OperationalError("disk I/O error")
+    with _the_store_fails_to_write(READER, NOT_STORED, fault):
+        result = _run("--fresh")
+
+    _reported_as_a_failed_write(online, result, READER, fault)
 
 
 def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_write(
@@ -143,13 +167,7 @@ def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_writ
     with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
         result = _run()
 
-    assert result.exit_code == 1, result.output
-    assert "Failed to load data" not in result.output
-    assert "D002" not in {event["code"] for event in _events(project)}
-    failures = _failures_naming_a_file(project)
-    assert [event_type for event_type, _ in failures] == ["FileWriteFailedEvent"]
-    ((_, message),) = failures
-    assert message.endswith(f"/target/{ACTION}/{NOT_STORED}: {fault}"), message
+    _reported_as_a_failed_write(project, result, ACTION, fault)
 
 
 def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_before_the_edit(
@@ -158,10 +176,7 @@ def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_befo
 ):
     """The edit resets the reader with its source. Run while the source still held its
     old answers for that file, the reader would make its rows from them."""
-    config = _config(online)
-    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
-    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
-    (online / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+    _with_a_reader(online)
     assert _run("--fresh").exit_code == 0
     before_the_edit = _stored(online)
 

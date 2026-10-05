@@ -376,7 +376,7 @@ class TestAFailedWriteIsReportedAsAWrite:
         [
             pytest.param(sqlite3.OperationalError("disk I/O error"), id="database"),
             pytest.param(OSError(28, "No space left on device"), id="disk-full"),
-            pytest.param(ValueError("file name rejected"), id="rejected-by-the-backend"),
+            pytest.param(ValueError("row not storable"), id="anything-else-the-store-raises"),
         ],
     )
     def test_a_target_write_that_fails_fires_a_write_failure(self, fired, tmp_path, raising):
@@ -398,3 +398,23 @@ class TestAFailedWriteIsReportedAsAWrite:
             ("FileWriteFailedEvent", fp)
         ]
         assert failures[0].data["error"] == str(raising)
+        assert (failures[0].code, failures[0].category, failures[0].data["file_type"]) == (
+            "FIO007",
+            "file_io",
+            ".json",
+        )
+
+    def test_a_staging_write_that_fails_fires_a_write_failure_not_a_parse_failure(
+        self, fired, tmp_path
+    ):
+        """The csv module's error is one the loaders report as a file that failed to parse."""
+        fp = str(tmp_path / "data.csv")
+
+        with pytest.raises(AgentActionsError):
+            FileWriter(fp).write_staging([1, 2])
+
+        assert [
+            (event.event_type, event.data["file_path"])
+            for event in fired
+            if event.level == EventLevel.ERROR
+        ] == [("FileWriteFailedEvent", fp)]
