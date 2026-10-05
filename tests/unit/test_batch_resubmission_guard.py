@@ -9,7 +9,7 @@ from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
 
-def _make_service(force_batch: bool = False) -> BatchSubmissionService:
+def _make_service(force_batch: bool = False, storage_backend=None) -> BatchSubmissionService:
     """Create a BatchSubmissionService with mocked dependencies."""
     return BatchSubmissionService(
         task_preparator=MagicMock(),
@@ -17,6 +17,7 @@ def _make_service(force_batch: bool = False) -> BatchSubmissionService:
         context_manager=MagicMock(),
         registry_manager_factory=MagicMock(),
         force_batch=force_batch,
+        storage_backend=storage_backend,
     )
 
 
@@ -129,6 +130,31 @@ class TestInFlightBatchStillBlocks:
 
         assert result.batch_id == "batch-inflight"
         svc._task_preparator.prepare_tasks.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            *sorted(BatchStatus.in_flight_states(), key=lambda s: s.value),
+            BatchStatus.COMPLETED,
+        ],
+    )
+    def test_a_job_still_owed_blocks_when_the_input_is_now_empty(self, tmp_path, status):
+        """Its results are owed for this file. Stored empty and reported written
+        instead, the file would read done while its job is still out."""
+        svc = _make_service(storage_backend=MagicMock())
+        entry = _make_entry(status, batch_id="batch-owed")
+        svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
+
+        result = svc.submit_batch_job(
+            agent_config={"model_vendor": "openai"},
+            batch_name="my_action",
+            data=[],
+            output_directory=str(tmp_path),
+            run_inputs=[],
+        )
+
+        assert result.batch_id == "batch-owed"
+        assert result.passthrough is None
 
 
 class TestFailedCancelledBatchAllowsResubmission:
