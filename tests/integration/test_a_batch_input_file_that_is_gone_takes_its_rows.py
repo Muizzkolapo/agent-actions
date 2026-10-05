@@ -15,13 +15,17 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.storage import get_storage_backend
+from tests.integration import test_a_batch_version_merge_over_files_of_one_name as version_merge
 
 FIXTURE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "batch_field_rules"
 ACTION = "summarize"
 PAGES = 2
 MORE = 3
+MERGE_WORKFLOW = version_merge.WORKFLOW
+MERGE = version_merge.MERGE
 
 
 def _staging(root):
@@ -108,3 +112,74 @@ def test_collecting_does_not_bring_them_back(project):
     _run()
 
     assert _stored(project) == {"pages.json": PAGES}
+
+
+@pytest.fixture
+def merged(tmp_path, monkeypatch):
+    """A version merge in batch over a top-level and a nested file, answered once."""
+    root = tmp_path / "project"
+    shutil.copytree(
+        version_merge.SOURCE, root, ignore=shutil.ignore_patterns("logs", "store", "__pycache__")
+    )
+    workflow = root / "agent_workflow" / MERGE_WORKFLOW
+    (workflow / "agent_config" / f"{MERGE_WORKFLOW}.yml").write_text(version_merge.CONFIG)
+    staging = workflow / "agent_io" / "staging"
+    for name in ("items.json", "sub/items.json"):
+        (staging / name).parent.mkdir(parents=True, exist_ok=True)
+        (staging / name).write_text(
+            json.dumps([{"item_id": f"{name}-{i}", "text": f"{name} {i}"} for i in range(2)])
+        )
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
+    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
+    _run_merge("--fresh")
+    _run_merge()
+    assert _merge_holds(root)[0] == {"items.json": 2, "sub/items.json": 2}
+    return root
+
+
+def _run_merge(*extra):
+    result = CliRunner().invoke(cli, ["run", "-a", MERGE_WORKFLOW, "-u", "tools", *extra])
+    assert result.exit_code == 0, result.output
+    return result
+
+
+def _merge_holds(root):
+    """Rows per file the merge stores, and the files it has a batch for."""
+    paths = ProjectPathsFactory.create_project_paths(
+        MERGE_WORKFLOW, MERGE_WORKFLOW, auto_create=False, project_root=root
+    )
+    backend = get_storage_backend(
+        workflow_path=str(paths.io_dir.parent), workflow_name=MERGE_WORKFLOW
+    )
+    backend.initialize()
+    try:
+        rows = {
+            path: len(backend._read_target_raw(MERGE, path))
+            for path in backend.list_target_files(MERGE)
+        }
+        return rows, sorted(BatchRegistryManager(backend, MERGE).get_all_jobs())
+    finally:
+        backend.close()
+
+
+def test_a_version_merge_does_not_send_its_own_rows_for_a_file_that_is_gone(merged):
+    """It walks its own stored files, the correlated input among them; with no version
+    holding the file any more, what it stored for it would be sent as its input."""
+    workflow = merged / "agent_workflow" / MERGE_WORKFLOW
+    (workflow / "agent_io" / "staging" / "sub" / "items.json").unlink()
+    config = workflow / "agent_config" / f"{MERGE_WORKFLOW}.yml"
+    config.write_text(
+        config.read_text().replace(
+            "    impl: stage_items\n",
+            "    impl: stage_items\n    guard: { condition: 'true', on_false: \"skip\" }\n",
+        )
+    )
+
+    _run_merge()
+    rows, sent = _merge_holds(merged)
+    assert sent == ["items.json"]
+    assert list(rows) == ["items.json"]
+
+    _run_merge()
+    assert _merge_holds(merged)[0] == {"items.json": 2}

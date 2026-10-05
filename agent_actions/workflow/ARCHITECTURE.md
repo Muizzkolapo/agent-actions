@@ -260,8 +260,29 @@ _execute_action_run()
               set SKIPPED, forget and delete its stored rows,
               write node-level DISPOSITION_SKIPPED
               (its readers skip under it, holding nothing)
+        walk reached every input file (no file limit stopped it,
+        no entry lost, not under a repair)?
+        YES → delete the stored files no input maps to
+              (a batch action: as it submits)
     → _resolve_completion_status()
 ```
+
+**A file whose input is gone goes with it.** A reset relies on the re-run writing each
+file again, and a file whose input was removed is never written again. So once a walk has
+reached every input there is, `process_files` deletes what the action stores under any
+name no input it reached maps to: a file's path, a first stage's with a `.json` suffix
+(`batch_output_name`), or the name recorded for a nested batch input file
+(`batch_file_names:{action}`, whose entries for inputs that are gone go too). A reader's
+inputs are its upstreams' stored files, so it lets go of what its upstream no longer
+holds; the run that walks is the run that submits, so a batch action does it before
+anything is collected. A file that failed to process was reached and keeps its rows. A
+walk deletes nothing when a file limit stopped it with files left (a file it never opened
+keeps what the last run put there, on purpose), when it lost an entry (a directory it
+could not list, a file it could not stat, an upstream listing or stored file it could not
+read: it cannot say which inputs are gone), or under a repair. A version merge walks its
+own stored files, the correlated input among them, so its walk finds nothing to delete;
+the correlator deletes instead, before the walk, each stored file of the merge that no
+version source lists, which would otherwise be walked and sent on as its own input.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to
@@ -358,10 +379,11 @@ Costs and limits:
 - A limit counts as a change. `--record-limit` on a run resets the actions whose records
   it can reach and their readers, giving up a batch still out below and clearing a halt.
 - A reset does not delete stored rows; the re-run replaces them as it writes each file.
-  The exception is a re-run that finds no input file at all: it is skipped and its rows
-  are deleted. One whose input lost some files but not all keeps the rows of the files
-  that are gone, and its readers run on them. A file the store fails to write fails the
-  action, so the next run writes it instead of the action completing over its old rows.
+  A file whose input is gone is deleted when the walk ends, and a re-run that finds no
+  input file at all is skipped and its rows are deleted. Under a file limit that stops the
+  walk, a removed input's file is kept with the files the walk did not open. A file the
+  store fails to write fails the action, so the next run writes it instead of the action
+  completing over its old rows.
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a

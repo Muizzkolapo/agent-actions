@@ -98,3 +98,18 @@ def test_a_file_limit_the_walk_never_reaches_deletes_them_too(chained):  # noqa:
 
     assert _stored(chained, ACTION) == {"pages.json": PAGES}
     assert _stored(chained, SECOND) == {"pages.json": PAGES}
+
+
+def test_the_input_coming_back_is_answered_on_the_next_reset(chained):  # noqa: F811
+    """A completed action does not look for new input; once reset, nothing left by the
+    deletion keeps it from answering the file again."""
+    _two_files(chained)
+    (_staging(chained) / "more.json").unlink()
+    _add_guard_to(chained, ACTION, RESET_ONLY)
+    _run()
+
+    _stage(chained, "more.json", MORE)
+    _run("--file-limit", "5")
+
+    assert _stored(chained, ACTION) == {"more.json": MORE, "pages.json": PAGES}
+    assert _stored(chained, SECOND) == {"more.json": MORE, "pages.json": PAGES}

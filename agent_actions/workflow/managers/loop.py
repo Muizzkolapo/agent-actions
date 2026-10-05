@@ -182,6 +182,7 @@ class VersionOutputCorrelator:
             self._process_version_files(
                 version_outputs, version_filenames, correlation_dir, action_name=agent_name
             )
+            self._forget_files_no_version_holds(agent_name, version_sources)
             return str(correlation_dir)
         except (AllVersionsFilteredError, AgentActionsError):
             raise
@@ -193,6 +194,29 @@ class VersionOutputCorrelator:
                 f"{version_sources}: {e}",
                 context={"agent": agent_name, "version_sources": version_sources},
             ) from e
+
+    def _forget_files_no_version_holds(self, agent_name: str, version_sources: list[str]) -> None:
+        """Delete the merge's stored files that no version source lists: their input is gone.
+
+        The merge walks its own stored files as input, expecting each to be one just
+        correlated, so such a file would be sent on as its own input. A failure only warns.
+        """
+        from agent_actions.workflow.runner_file_processing import forget_files_of_inputs_gone
+
+        backend = self.storage_backend
+        if backend is None:
+            return
+        try:
+            listed = {
+                name for source in version_sources for name in backend.list_target_files(source)
+            }
+            gone = [name for name in backend.list_target_files(agent_name) if name not in listed]
+            if gone:
+                forget_files_of_inputs_gone(backend, agent_name, gone, listed)
+        except Exception as e:
+            logger.warning(
+                "Could not delete what '%s' stores for input that is gone: %s", agent_name, e
+            )
 
     def _build_correlation_groups(
         self, version_outputs: dict[str, list[dict[str, Any]]]

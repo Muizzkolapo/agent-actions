@@ -965,6 +965,15 @@ class StorageBackend(ABC):
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 
+    def delete_target_files(self, action_name: str, relative_paths: Iterable[str]) -> int:
+        """Delete the files at *relative_paths* an action stores, keeping the rest.
+
+        Returns how many were deleted. Raises unless overridden, as ``delete_target``
+        does. The names recorded for batch input files are the caller's to forget:
+        which of them name these files is a batch rule.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_target_files()")
+
     def perform_maintenance(  # noqa: B027
         self,
         prompt_trace_retention_runs: int = _MAINTENANCE_RETENTION_DEFAULT,

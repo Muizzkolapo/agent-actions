@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  An action re-run after one of its input files was removed no longer keeps the rows it
+  stored for that file. When an action was reset (its config changed, or an upstream it
+  reads ran again) after some of its staged files were removed, the re-run wrote the files
+  still there and left the others' rows as they were: the action read `completed` over
+  them, its readers ran again on them, and `agac preview` showed them as current. Once a
+  run has walked every input file, it now deletes what the action stored for any file no
+  input maps to, logging a warning that names them, and each reader does the same for
+  the files its upstream no longer holds. A batch action does this when it submits. A file
+  that failed to process keeps its rows. Nothing is deleted under a file limit that stopped
+  the walk before its last file, by a run that could not read part of its input, or by a
+  retry of named records. Restore the input and run with `--fresh` to rebuild a file's
+  rows.
+time: 2026-10-05T03:09:21Z

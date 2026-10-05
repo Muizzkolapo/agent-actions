@@ -13,7 +13,7 @@ import logging
 import sqlite3
 import stat as stat_module
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -92,6 +92,19 @@ class CollectedErrors:
     @property
     def action_fatal_message(self) -> str | None:
         return self.halt_message if self.halt is not None else self.fatal_message
+
+
+@dataclass
+class Reached:
+    """The input files a walk reached, by their path below its root.
+
+    A file whose processing failed was reached. ``complete`` is False once the walk
+    cannot say which inputs it missed: it lost an entry, or a file limit stopped it
+    with files left.
+    """
+
+    paths: set[str] = field(default_factory=set)
+    complete: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +302,7 @@ def _file_limit_reached(
     params: FileProcessParams,
     count: int,
     more_remain: Callable[[], bool],
+    reached: Reached | None = None,
 ) -> bool:
     """Whether the walk has taken as many files as the limit in force allows.
 
@@ -305,6 +319,8 @@ def _file_limit_reached(
     if limit is None or count < limit:
         return False
     if more_remain():
+        if reached is not None:
+            reached.complete = False
         logger.log(
             logging.INFO if source == "file_limit" else logging.WARNING,
             "%s=%d: %s stopped after %d file(s)",
@@ -482,8 +498,10 @@ def process_directory_files(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
+    reached: Reached | None = None,
 ) -> tuple[int, int, CollectedErrors]:
     """Process a directory → (files_found, files_processed, per_file_errors)."""
+    reached = reached if reached is not None else Reached()
     count = 0
     errors = CollectedErrors()
     files_seen = 0
@@ -502,6 +520,7 @@ def process_directory_files(
         files_seen += 1
         errors.record(where, error)
         _lose_file(runner, params.action_name)
+        reached.complete = False
         logger.warning(
             "Could not list the staging directory %s, so every file beneath it "
             "went unprocessed: %s",
@@ -519,6 +538,7 @@ def process_directory_files(
             files_seen += 1
             errors.record(item.relative_to(input_path), e)
             _lose_file(runner, params.action_name)
+            reached.complete = False
             logger.warning(
                 "Could not read the staged file %s, so it went unprocessed: %s",
                 item.relative_to(input_path),
@@ -528,6 +548,7 @@ def process_directory_files(
 
         relative_path = item.relative_to(input_path)
         processed_paths.add(relative_path)
+        reached.paths.add(relative_path.as_posix())
         files_seen += 1
 
         try:
@@ -562,7 +583,7 @@ def process_directory_files(
 
             return any(_would_process(later) for later in items[position + 1 :])
 
-        if _file_limit_reached(runner, params, count, _unread):
+        if _file_limit_reached(runner, params, count, _unread, reached):
             break
 
     _log_processing_errors(
@@ -611,9 +632,10 @@ def _files_holding_retried_records(
 
 
 def process_merged_files(
-    runner: ActionRunner, params: FileProcessParams
+    runner: ActionRunner, params: FileProcessParams, reached: Reached | None = None
 ) -> tuple[int, int, CollectedErrors]:
     """Merge and process files from several upstreams → (found, processed, per_file_errors)."""
+    reached = reached if reached is not None else Reached()
     output_path = Path(params.output_directory)
     files_by_path, lost = collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
@@ -630,11 +652,13 @@ def process_merged_files(
         files_seen += 1
         errors.record(_upstream_relative(item, params.upstream_data_dirs), error)
         _lose_file(runner, params.action_name)
+        reached.complete = False
         logger.warning("Could not read the upstream path %s, so it went unmerged: %s", item, error)
 
     for relative_path, file_paths in files_by_path.items():
         files_seen += 1
         groups_seen += 1
+        reached.paths.add(relative_path.as_posix())
         try:
             if len(file_paths) == 1:
                 file_path = file_paths[0]
@@ -690,7 +714,7 @@ def process_merged_files(
             """Whether any group past this one is still to be merged."""
             return seen < total
 
-        if _file_limit_reached(runner, params, files_processed_count, _unread):
+        if _file_limit_reached(runner, params, files_processed_count, _unread, reached):
             break
 
     _log_processing_errors(
@@ -781,12 +805,13 @@ def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, in
 
 
 def process_from_storage_backend(
-    runner: ActionRunner, params: FileProcessParams
+    runner: ActionRunner, params: FileProcessParams, reached: Reached | None = None
 ) -> tuple[int, int, CollectedErrors]:
     """Process backend data instead of filesystem → (found, processed, per_file_errors)."""
 
     if runner.storage_backend is None:
         return (0, 0, CollectedErrors())
+    reached = reached if reached is not None else Reached()
 
     output_path = Path(params.output_directory)
     errors = CollectedErrors()
@@ -816,6 +841,7 @@ def process_from_storage_backend(
             lost += 1
             errors.record(f"{action_name}/*", e)
             _lose_file(runner, params.action_name)
+            reached.complete = False
             logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
@@ -837,6 +863,7 @@ def process_from_storage_backend(
                 lost += 1
                 errors.record(f"{action_name}/{relative_path}", e)
                 _lose_file(runner, params.action_name)
+                reached.complete = False
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,
@@ -861,6 +888,7 @@ def process_from_storage_backend(
     )
 
     for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
+        reached.paths.add(relative_path)
         try:
             if len(data_sources) == 1:
                 _, data = data_sources[0]
@@ -925,7 +953,7 @@ def process_from_storage_backend(
             """Whether any stored entry past this one is still to be read."""
             return taken < total
 
-        if _file_limit_reached(runner, params, files_processed, _unread):
+        if _file_limit_reached(runner, params, files_processed, _unread, reached):
             break
 
     _log_processing_errors(
@@ -936,6 +964,61 @@ def process_from_storage_backend(
         "Storage backend processing",
     )
     return (files_found, files_processed, errors)
+
+
+def forget_files_of_inputs_gone(
+    storage_backend: Any, action_name: str, gone: list[str], inputs: Collection[str]
+) -> None:
+    """Delete *gone*, files an action stores from input that is gone.
+
+    The names recorded for batch input files not among *inputs* go too. Raises what
+    the store raises.
+    """
+    from agent_actions.llm.batch.infrastructure.context import forget_batch_file_names
+
+    storage_backend.delete_target_files(action_name, gone)
+    forget_batch_file_names(storage_backend, action_name, inputs)
+    logger.warning(
+        "'%s' has no input for %s any more, so what it stored for them is deleted. "
+        "Restore the input and run with --fresh to rebuild it.",
+        action_name,
+        ", ".join(gone),
+    )
+
+
+def _forget_files_no_input_maps_to(
+    runner: ActionRunner, params: FileProcessParams, reached: Reached
+) -> None:
+    """Delete what the action stores for an input no file of a complete walk maps to.
+
+    A reset relies on the re-run writing each file again, and a file whose input is
+    gone is never written. A file is stored under its path, a first stage's with a
+    `.json` suffix, or the name recorded for a batch input file. A version merge walks
+    its own stored files, so it finds none here. Not under a repair, which touches
+    only the records it named. A failure only warns: the rows stay.
+    """
+    from agent_actions.llm.batch.infrastructure.context import (
+        batch_output_name,
+        recorded_batch_file_names,
+    )
+
+    backend = runner.storage_backend
+    if backend is None or runner.retried_records or not reached.complete:
+        return
+    action_name = params.action_name
+    try:
+        kept = reached.paths | {batch_output_name(path) for path in reached.paths}
+        gone = [name for name in backend.list_target_files(action_name) if name not in kept]
+        if gone:
+            recorded = recorded_batch_file_names(backend, action_name)
+            kept |= {batch_output_name(recorded[p]) for p in reached.paths if p in recorded}
+            gone = [name for name in gone if name not in kept]
+        if gone:
+            forget_files_of_inputs_gone(backend, action_name, gone, reached.paths)
+    except Exception as e:
+        logger.warning(
+            "Could not delete what '%s' stores for input that is gone: %s", action_name, e
+        )
 
 
 def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
@@ -953,10 +1036,13 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
 
 def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> CollectedErrors:
     """The walk behind ``process_files``, returning the per-file errors it tolerated."""
+    reached = Reached()
     if runner.storage_backend is not None:
         all_targets = all(is_target_directory(d) for d in params.upstream_data_dirs)
         if all_targets:
-            files_found, files_processed, errors = process_from_storage_backend(runner, params)
+            files_found, files_processed, errors = process_from_storage_backend(
+                runner, params, reached
+            )
             if files_processed > 0:
                 if errors.action_fatal is not None:
                     _raise_action_fatal(
@@ -966,6 +1052,7 @@ def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> Collec
                         params.upstream_data_dirs,
                         errors,
                     )
+                _forget_files_no_input_maps_to(runner, params, reached)
                 return errors
             if files_found > 0:
                 # Data was found in DB but processing failed
@@ -989,7 +1076,7 @@ def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> Collec
         else:
             logger.info("Multiple dependencies detected: %s. Merging all inputs.", dep_names)
 
-        files_found, files_processed, errors = process_merged_files(runner, params)
+        files_found, files_processed, errors = process_merged_files(runner, params, reached)
         if files_processed == 0:
             if files_found > 0:
                 _raise_all_files_failed(
@@ -1000,6 +1087,7 @@ def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> Collec
             _raise_action_fatal(
                 params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
             )
+        _forget_files_no_input_maps_to(runner, params, reached)
         return errors
 
     total_found = 0
@@ -1015,7 +1103,13 @@ def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> Collec
             continue
 
         found, processed, errors = process_directory_files(
-            runner, input_path, output_path, input_directory, params, processed_relative_paths
+            runner,
+            input_path,
+            output_path,
+            input_directory,
+            params,
+            processed_relative_paths,
+            reached,
         )
         total_found += found
         total_processed += processed
@@ -1031,4 +1125,5 @@ def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> Collec
         _raise_action_fatal(
             params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors
         )
+    _forget_files_no_input_maps_to(runner, params, reached)
     return all_errors
