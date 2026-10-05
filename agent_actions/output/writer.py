@@ -9,10 +9,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import AgentActionsError, mark_action_fatal
+from agent_actions.errors import AgentActionsError, get_error_detail, mark_action_fatal
+from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     FileWriteCompleteEvent,
+    FileWriteFailedEvent,
     FileWriteStartedEvent,
 )
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
@@ -61,6 +63,11 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self.storage_backend = storage_backend
         self.action_name = action_name
         self.output_directory = output_directory
+
+    def _failure_event(self, error: Exception, file_path: str) -> BaseEvent:
+        return FileWriteFailedEvent(
+            file_path=file_path, file_type=self.file_type, error=get_error_detail(error)
+        )
 
     def _execute_write(self, write_kind: str, write_fn: Callable[[], int]) -> None:
         """Execute a write operation with event firing and error handling.

@@ -211,7 +211,7 @@ Event types are spread across 8 source files in `events/`:
 | `llm_events.py` | LLM requests, responses, errors | 6 |
 | `validation_events.py` | Validation, recovery, guard | 12 |
 | `initialization_events.py` | CLI, config, project, UDF | 13 |
-| `io_events.py` | File I/O, schema, context | 13 |
+| `io_events.py` | File I/O, schema, context | 14 |
 | `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
 | `cache_events.py` | Cache hit/miss/invalidation | 5 |
 

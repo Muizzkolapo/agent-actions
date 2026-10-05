@@ -277,7 +277,7 @@ same string as `category`.
 | G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
 | R | `recovery` | `RetryExhaustedEvent` (R001) |
 | SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
-| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006) |
+| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007) |
 | C | `cache` | `CacheHitEvent` (C001), `CacheMissEvent` (C002), `CacheInvalidationEvent` (C003) |
 | F | `configuration` | `ConfigLoadStartEvent` (F001), `ConfigLoadEvent` (F002) |
 | I | `initialization` | `CLIInitStartEvent` (I001), `WorkflowInitializationStartEvent` (I008), `ProjectInitializedEvent` (I013) |

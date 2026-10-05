@@ -19,7 +19,7 @@ serving schema/guard metadata to downstream tooling.
 |------|------|-------------|---------|
 | `file_handler.py` | Module | Backward-compatibility shim — re-exports `FileHandler` from `utils.file_handler`. | `utils.file_handler` |
 | `saver.py` | Module | Persistent saver for workflow outputs and guard results. | `workflow`, `logging` |
-| `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. A target write the store fails (`OSError`, `sqlite3.Error`) is marked action-fatal, so the file walk fails the action rather than completing it over the rows an earlier run stored for that file; anything else the backend raises stays that file's failure. | `output.response`, `logging`, `errors` |
+| `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. A target write the store fails (`OSError`, `sqlite3.Error`) is marked action-fatal, so the file walk fails the action rather than completing it over the rows an earlier run stored for that file; anything else the backend raises stays that file's failure. A write that fails fires `FileWriteFailedEvent`, not the loaders' `DataLoadingErrorEvent`. | `output.response`, `logging`, `errors` |
 
 ## FileWriter Interface
 
