@@ -93,11 +93,19 @@ def _failed_row(mode: _Mode) -> tuple[Any, ...]:
 
 
 class _Model:
-    """What online asks: the answer names the record it was asked about."""
+    """What online asks, answered as batch's harness answers it: by source_guid, or by
+    target_id where the record has none."""
+
+    def __init__(self, answer: Answerer) -> None:
+        self.answer = answer
+        self.asked: list[str] = []
 
     def invoke(self, prepared: Any, context: Any) -> InvocationResult:
+        label = prepared.source_guid or prepared.source_snapshot["target_id"]
+        self.asked.append(label)
+        said = self.answer(label, 1)
         return InvocationResult.immediate(
-            response={"answer": f"{prepared.source_guid}:0@run1"}, executed=True
+            response=said if len(said) != 1 else said[0], executed=True
         )
 
 
@@ -106,12 +114,18 @@ class _Online(_Mode):
 
     run_mode = RunMode.ONLINE
 
-    def run(self, inputs: list[dict[str, Any]]) -> list[str]:
+    def run(self, inputs: list[dict[str, Any]], answer: Answerer | None = None) -> list[str]:
         self._upstream_wrote(inputs)
         _config, pipeline = self._pipeline(EXTRA, ())
-        pipeline._online_strategy._invocation_strategy = _Model()
+        self.model = _Model(answer or Answerer())
+        pipeline._online_strategy._invocation_strategy = self.model
         self._process(pipeline, inputs)
         return answers(self.held())
+
+
+def _traced(mode: _Mode) -> list[Any]:
+    """Whose prompt was rendered for the model: a trace is written as it is."""
+    return [trace["source_guid"] for trace in mode.backend.get_prompt_traces(ACTION)]
 
 
 def _submit(batch: _Batch, inputs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -243,6 +257,51 @@ def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_wi
     batch.run(1, inputs, extra=EXTRA)
 
     assert _failed_row(batch) == _failed_row(online) == (None, "t-n1", [UPSTREAM, ACTION])
+
+
+def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mode(tmp_path):
+    """It was refused only once its answer came back: paid for, and the answer thrown
+    away. The prompt trace written as its prompt was rendered was the one sign left that
+    it had been sent."""
+    (tmp_path / "online").mkdir()
+    (tmp_path / "batch").mkdir()
+    online = _Online(tmp_path / "online")
+    batch = _Batch(tmp_path / "batch")
+
+    online.run(answered())
+    batch.run(1, answered(), extra=EXTRA)
+
+    assert online.model.asked == ["a1"]
+    assert [task["custom_id"] for task in batch.provider.submitted[-1]] == ["t-a1"]
+    assert _traced(online) == _traced(batch) == ["a1"]
+
+
+def test_a_record_with_no_source_guid_is_refused_whatever_its_answer_would_have_been(tmp_path):
+    """An answer of several rows was kept, each row given an identity of its own, while
+    the record it answered still had none, so no run could carry it."""
+    (tmp_path / "online").mkdir()
+    (tmp_path / "batch").mkdir()
+    online = _Online(tmp_path / "online")
+    batch = _Batch(tmp_path / "batch")
+    answer = Answerer({"t-n1": 2})
+
+    online_held = online.run(answered(), answer=answer)
+    batch_held = batch.run(1, answered(), answer=answer, extra=EXTRA)
+
+    assert online_held == batch_held == ["failed:None", "processed:a1:0@run1"]
+    assert _recorded(online) == _recorded(batch) == {"a1": "success"}
+
+
+def test_a_record_with_no_source_guid_does_not_stop_a_batch_at_its_preflight(tmp_path):
+    """The preflight renders the first prompts to catch a broken template before anything
+    is sent, and stops the action at the first that fails. It rendered this one, whose
+    prompt cannot be rendered, so one record with no identity stopped the whole action."""
+    batch = _Batch(tmp_path)
+
+    held = batch.run(1, [nameless(), rec("a1", keep=True, topic="dbt")], extra=EXTRA)
+
+    assert batch.raised[-1] is None
+    assert held == ["failed:None", "processed:a1:0@run1"]
 
 
 def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_online_does(
