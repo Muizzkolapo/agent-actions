@@ -30,10 +30,11 @@ CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
 _FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
 
-# The named records each action found in its input, per run. Keyed by the run's backend,
-# as utils/limits.py keys what each slice admitted: `agac retry` runs a workflow in the
-# process that just finished one.
+# The named records each action found in its input, and those of them in a file it then
+# processed to the end, per run. Keyed by the run's backend, as utils/limits.py keys what
+# each slice admitted: `agac retry` runs a workflow in the process that just finished one.
 _FOUND_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
+_ANSWERED_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 
 
 class DispositionGate:
@@ -193,8 +194,7 @@ def positions_named_by_repair(
     ones — and a repair has to take the same slice out of each. Lists that are not
     matched position-for-position are each asked separately.
 
-    Given the run's backend and the action, records what it found for
-    ``found_by_repair``.
+    Given the run's backend and the action, notes what it found for ``found_by_repair``.
     """
     if not repairing or not isinstance(records, list):
         return None
@@ -204,19 +204,59 @@ def positions_named_by_repair(
         if isinstance(record, dict) and record.get("source_guid") in repairing
     ]
     if storage_backend is not None and action_name:
-        found = _FOUND_BY_REPAIR.setdefault(storage_backend, {}).setdefault(action_name, set())
-        found.update(records[index]["source_guid"] for index in kept)
+        _note(_FOUND_BY_REPAIR, storage_backend, action_name, (records[i] for i in kept))
     return kept
 
 
-def found_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
-    """The named records *action_name* found in its input during the run on this backend.
+def note_answered_by_repair(
+    records: Any,
+    repairing: Collection[str],
+    *,
+    storage_backend: Any,
+    action_name: str,
+) -> None:
+    """Note the named records among *records* as answered: their file was processed to the end.
 
-    A record a repair names and never finds is one it cleared and did not re-decide.
+    Called once the file returns, not where it is narrowed: a file that raises is caught
+    and the walk carries on, so a record found in it was cleared and never re-decided.
     """
+    if storage_backend is None or not repairing or not isinstance(records, list):
+        return
+    named = (r for r in records if isinstance(r, dict) and r.get("source_guid") in repairing)
+    _note(_ANSWERED_BY_REPAIR, storage_backend, action_name, named)
+
+
+def found_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """The named records *action_name* found in its input during the run on this backend."""
+    return _noted(_FOUND_BY_REPAIR, storage_backend, action_name)
+
+
+def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """The named records found in a file *action_name* processed to the end in this run.
+
+    A record a repair names and does not answer is one it cleared and did not re-decide.
+    """
+    return _noted(_ANSWERED_BY_REPAIR, storage_backend, action_name)
+
+
+def _note(
+    registry: WeakKeyDictionary[Any, dict[str, set[str]]],
+    storage_backend: Any,
+    action_name: str,
+    records: Iterable[dict[str, Any]],
+) -> None:
+    noted = registry.setdefault(storage_backend, {}).setdefault(action_name, set())
+    noted.update(record["source_guid"] for record in records)
+
+
+def _noted(
+    registry: WeakKeyDictionary[Any, dict[str, set[str]]],
+    storage_backend: Any,
+    action_name: str,
+) -> frozenset[str]:
     if storage_backend is None:
         return frozenset()
-    return frozenset(_FOUND_BY_REPAIR.get(storage_backend, {}).get(action_name, ()))
+    return frozenset(registry.get(storage_backend, {}).get(action_name, ()))
 
 
 def stored_rows_not_reproduced(

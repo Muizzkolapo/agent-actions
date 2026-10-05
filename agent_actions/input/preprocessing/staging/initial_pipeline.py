@@ -13,7 +13,10 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter, target_relative_path
-from agent_actions.processing.disposition_gate import positions_named_by_repair
+from agent_actions.processing.disposition_gate import (
+    note_answered_by_repair,
+    positions_named_by_repair,
+)
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -264,16 +267,23 @@ def process_initial_stage(ctx: InitialStageContext):
             run_inputs=offered_to_repair,
             file_type_filter=ctx.file_type_filter,
         )
-        return _process_batch_mode(batch_ctx)
-
-    return _process_online_mode_with_record_processor(
-        data_chunk,
-        ctx,
-        ctx.file_path,
-        ctx.base_directory,
-        ctx.output_directory,
+        written = _process_batch_mode(batch_ctx)
+    else:
+        written = _process_online_mode_with_record_processor(
+            data_chunk,
+            ctx,
+            ctx.file_path,
+            ctx.base_directory,
+            ctx.output_directory,
+            offered_to_repair,
+        )
+    note_answered_by_repair(
         offered_to_repair,
+        ctx.retried_records,
+        storage_backend=ctx.storage_backend,
+        action_name=ctx.agent_name,
     )
+    return written
 
 
 def _save_source_data(
