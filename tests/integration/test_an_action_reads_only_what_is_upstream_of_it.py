@@ -1,12 +1,12 @@
 """An action reads only what is upstream of it through its dependencies (1228).
 
 A record carries the namespace of every action it passed through, so an action can
-read an action it names only in its context scope when that action is upstream of
-its input. One that ran beside or after it read null on every run, with no error,
-and one on a parallel branch was read only while that branch happened to finish
-first. The run order counted the name as a dependency and the level loop did not, so
-the reader could also run before the action it named, and an action failed, reset
-and run again left that reader completed with what it had read.
+read an action it names only in its context scope or guard when that action is
+upstream of its input. One that ran beside or after it read null on every run, with
+no error, and one on a parallel branch was read only while that branch happened to
+finish first. The run order counted the name as a dependency and the level loop did
+not, so the reader could also run before the action it named, and an action failed,
+reset and run again left that reader completed with what it had read.
 
 Three tool actions in a chain, `flatten` -> `mid` -> `final`, over three staged
 records, and `late`, which names some of them. Every command is a real `agac run`.
@@ -61,7 +61,7 @@ def step_late(data: Any, *args) -> list[dict]:
 """
 
 
-def _action(name, impl, dependencies, observe):
+def _action(name, impl, dependencies, observe, guard=None):
     return (
         f"  - name: {name}\n"
         f"    kind: tool\n"
@@ -71,6 +71,7 @@ def _action(name, impl, dependencies, observe):
         f"    impl: {impl}\n"
         f"    context_scope: {{ observe: [{', '.join(observe)}] }}\n"
         f"    expect: {{ repair: none }}\n"
+        + (f"    guard: {{ condition: '{guard}', on_false: filter }}\n" if guard else "")
     )
 
 
@@ -101,7 +102,7 @@ def project(tmp_path, monkeypatch):
     return root
 
 
-def _late(project, dependencies, observe, *, extra=""):
+def _late(project, dependencies, observe, *, extra="", guard=None):
     """Add mid -> final after flatten, *extra*, and `late` naming what *observe* names."""
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(
@@ -109,7 +110,7 @@ def _late(project, dependencies, observe, *, extra=""):
         + "\n"
         + CHAIN
         + extra
-        + _action("late", "step_late", dependencies, observe)
+        + _action("late", "step_late", dependencies, observe, guard)
     )
     return project
 
@@ -189,6 +190,13 @@ class TestANameOutsideTheLineageIsRefused:
         record is rejoined with the actions of every earlier level. So `late` read
         `final` here, but only while the d-branch stays the longer one."""
         _late(project, ["d"], ["d.summary", "final.summary"], extra=BRANCH)
+
+        _assert_refused(_run("--fresh"), project, "final")
+
+    def test_an_action_named_only_in_the_readers_guard(self, project):
+        """`final` is on none of the records the guard is evaluated on, so it filtered
+        every one and `late` was skipped, with exit 0."""
+        _late(project, ["flatten"], ["flatten.summary"], guard="final.summary != null")
 
         _assert_refused(_run("--fresh"), project, "final")
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent_actions.expectations.expression import referenced_field_paths
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.prompt.context.scope_inference import (
     expand_version_base_names,
     infer_dependencies,
@@ -106,20 +108,35 @@ def _upstream_through_dependencies(
     return upstream
 
 
+def _guard_namespaces(cfg: dict[str, Any], parser: WhereClauseParser) -> list[str]:
+    """Namespaces a guard clause names; a clause that does not parse is left to the guard check."""
+    guard = cfg.get("guard")
+    clause = guard.get("clause") if isinstance(guard, dict) else None
+    if not isinstance(clause, str) or not clause:
+        return []
+    parsed = parser.parse_cached(clause)
+    if not parsed.success or parsed.ast is None:
+        return []
+    paths = referenced_field_paths(parsed.ast.root)
+    return list(dict.fromkeys(path.split(".", 1)[0] for path in paths if "." in path))
+
+
 def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[str]:
     """Return one finding per action an action names that is not upstream of it.
 
     A name in the context scope or prompt is what the run order counts
-    (``infer_dependencies``). A record carries the namespaces of the actions
-    upstream of it through ``dependencies``, so any other name is there at best
-    while a parallel branch happens to finish first, and the reader is not reset
-    when that action fails and runs again. A version merge whose every branch is
-    missing is reported by its base, the name ``dependencies`` takes.
+    (``infer_dependencies``); a guard reads its names off the same record. A
+    record carries the namespaces of the actions upstream of it through
+    ``dependencies``, so any other name is there at best while a parallel branch
+    happens to finish first, and the reader is not reset when that action fails
+    and runs again. A version merge whose every branch is missing is reported by
+    its base, the name ``dependencies`` takes.
     """
     findings: list[str] = []
     workflow_actions = list(action_configs)
     operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
     upstream = _upstream_through_dependencies(action_configs)
+    parser = WhereClauseParser()
     branches: dict[str, set[str]] = {}
     for name in workflow_actions:
         base = action_configs[name].get("version_base_name")
@@ -131,17 +148,25 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
         input_sources, context_sources = infer_dependencies(
             action_configs[name], workflow_actions, name, validate=False
         )
-        missing = [
-            read
-            for read in dict.fromkeys(input_sources + context_sources)
+        where: dict[str, str] = {}
+        for read in input_sources + context_sources:
+            where.setdefault(read, "context_scope or prompt")
+        for read in _guard_namespaces(action_configs[name], parser):
+            where.setdefault(read, "guard")
+        missing = {
+            read: place
+            for read, place in where.items()
             if read != name and read in operational and read not in upstream[name]
-        ]
+        }
         for base, members in branches.items():
-            if members <= set(missing):
-                missing = [read for read in missing if read not in members] + [base]
-        for read in missing:
+            if members <= missing.keys():
+                place = missing[min(members)]
+                for member in members:
+                    del missing[member]
+                missing[base] = place
+        for read, place in missing.items():
             findings.append(
-                f"{name}: names '{read}' in its context_scope or prompt, but '{read}' is "
+                f"{name}: names '{read}' in its {place}, but '{read}' is "
                 f"not upstream of it through its dependencies, so '{read}' is not sure to "
                 f"be on the records it reads, and '{name}' is not run again when '{read}' "
                 f"fails and runs again. Add '{read}' to its dependencies, or depend on an "

@@ -217,7 +217,7 @@ Downstream actions can use `context_scope.observe` to load data from any ancesto
 
 ## What a Record Carries
 
-A record carries the namespace of every action upstream of it through `dependencies`, so an action names, in its `context_scope` or prompt, only those. Preflight refuses any other name: an action that runs beside or after it, or one on a parallel branch, is not sure to be on the records it reads. To read one, add it to `dependencies` (the fan-in pattern) or depend on an action downstream of it.
+A record carries the namespace of every action upstream of it through `dependencies`, so an action names, in its `context_scope`, prompt or guard, only those. Preflight refuses any other name: an action that runs beside or after it, or one on a parallel branch, is not sure to be on the records it reads. To read one, add it to `dependencies` (the fan-in pattern) or depend on an action downstream of it.
 
 ## Debugging Lineage
 

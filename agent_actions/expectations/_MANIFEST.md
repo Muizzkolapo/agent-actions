@@ -41,7 +41,7 @@ their results, and the service that runs them around generation.
 |---------|-----------|-----|
 | `processing` | inbound | `OnlineStrategy` composes `ExpectationService` as the outermost recovery layer, and converts an exhausted run into `RecoveryMetadata.expectations` for the `expectations_exhausted` tombstone arm |
 | `processing` | outbound | `service.py` consumes `SchemaValidator` and `_extract_field_names` for the structural gate — constructed per call, since the validator carries per-call feedback state |
-| `validation` | inbound | `expectations_validator` reads the registry, field selectors, and expression parsing at preflight |
+| `validation` | inbound | `expectations_validator` reads the registry, field selectors, and expression parsing at preflight; `dep_observe_validator` reads a guard clause's names with `referenced_field_paths` |
 | `input` | inbound | `input/loaders/udf.py` imports `tools/` files declaring `expectation_check`, registering user types before preflight |
 | `config` | outbound | `ExpectConfig` lives in `config/schema.py` |
 | `output` | outbound | `loader.py` resolves suite names through `SchemaLoader`, exactly as `schema:` resolves |

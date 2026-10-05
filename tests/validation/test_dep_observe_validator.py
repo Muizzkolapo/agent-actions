@@ -289,6 +289,27 @@ def test_one_branch_of_a_version_merge_is_reported_by_its_own_name():
     assert "Add 'vote_1' to its dependencies" in finding
 
 
+def test_a_name_in_the_guard_is_a_read_too():
+    """A guard is evaluated on the record the action reads, where a name not upstream is
+    missing, so under `on_false: filter` it dropped every record."""
+    actions = _with_late(
+        dependencies=["flatten"],
+        context_scope={"observe": ["flatten.x"]},
+        guard={"clause": "final.x != null", "behavior": "filter"},
+    )
+    (finding,) = find_reads_not_upstream(actions)
+    assert finding.startswith("late:") and "'final'" in finding and "guard" in finding
+
+
+def test_a_guard_naming_only_what_is_upstream_passes():
+    actions = _with_late(
+        dependencies=["final"],
+        context_scope={"observe": ["final.x"]},
+        guard={"clause": "len(mid.x) > 0 and source.page != null and score > 1"},
+    )
+    assert find_reads_not_upstream(actions) == []
+
+
 def test_a_switched_off_action_neither_reads_nor_is_read():
     """The run order leaves both out, as it leaves out every action switched off."""
     actions = {
