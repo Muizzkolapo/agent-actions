@@ -10,6 +10,7 @@ import copy
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardBehavior
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
 from agent_actions.utils.udf_management.bus import Bus
@@ -344,13 +345,15 @@ def _evaluate(udf, item, context):
 
 class TestAMutatingUdfCannotReachTheRecord:
     def test_the_record_survives_a_mutating_udf_with_no_context(self):
-        """context=None means eval_data IS the record — the worst of the two paths."""
+        """context=None means eval_data IS the record — the worst of the two paths. The
+        refused write stops the guard (test_a_guard_udf_that_writes_gives_no_answer)."""
         item = _item()
-        GuardEvaluator().evaluate(
-            item,
-            {"clause": "a1.tier == 'keep'", "on_false": "filter"},
-            conditional_clause="guard_probe_mutates_raw",
-        )
+        with pytest.raises(ConfigurationError, match="wrote to its input"):
+            GuardEvaluator().evaluate(
+                item,
+                {"clause": "a1.tier == 'keep'", "on_false": "filter"},
+                conditional_clause="guard_probe_mutates_raw",
+            )
 
         assert _ran == ["raw"], "the UDF must have run, or the record survived for no reason"
         assert item["content"]["a1"]["tier"] == "keep", item
@@ -358,12 +361,13 @@ class TestAMutatingUdfCannotReachTheRecord:
     def test_the_record_survives_a_mutating_udf_with_a_context(self):
         """With a context the namespaces are promoted, still by reference."""
         item = _item()
-        GuardEvaluator().evaluate(
-            item,
-            {"clause": "a1.tier == 'keep'", "on_false": "filter"},
-            context={"source": {}},
-            conditional_clause="guard_probe_mutates_promoted",
-        )
+        with pytest.raises(ConfigurationError, match="wrote to its input"):
+            GuardEvaluator().evaluate(
+                item,
+                {"clause": "a1.tier == 'keep'", "on_false": "filter"},
+                context={"source": {}},
+                conditional_clause="guard_probe_mutates_promoted",
+            )
 
         assert _ran == ["promoted"], "the UDF must have run"
         assert item["content"]["a1"]["tier"] == "keep", item
