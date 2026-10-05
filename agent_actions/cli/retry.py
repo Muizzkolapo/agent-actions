@@ -9,7 +9,7 @@ import datetime
 import json
 import logging
 import traceback
-from collections.abc import Container
+from collections.abc import Container, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.processing.disposition_gate import answered_by_repair, found_by_repair
-from agent_actions.record.reasons import BATCH_ABANDONED
+from agent_actions.record.reasons import BATCH_ABANDONED, HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
@@ -99,6 +99,23 @@ def _classify_outcome(state_mgr: Any) -> str:
     if not state_mgr.is_workflow_done():
         return "PAUSED"
     return "FAILED" if state_mgr.has_any_failed() else "SUCCESS"
+
+
+def _halted_among(failures: dict[str, list[dict]], actions: list[str]) -> list[str]:
+    """The *actions* halted by ``on_exhausted: raise``, in order.
+
+    Read from the failures the retry plans over, not from the store, so a dry run sees
+    the halt an interrupted retry's snapshot would put back.
+    """
+    return [
+        action
+        for action in actions
+        if any(
+            row.get("record_id") == NODE_LEVEL_RECORD_ID
+            and row.get("detail") == HALTED_ON_EXHAUSTED
+            for row in failures.get(action, [])
+        )
+    ]
 
 
 def _delete_manifest(path: Path) -> None:
@@ -225,8 +242,15 @@ class RetryCommand:
                 state_mgr,
                 backend,
                 [a for a in execution_order if a not in resumed],
+                halted=_halted_among(failures, downstream_actions),
                 holding_a_batch=holding,
                 reading_a_batch={reader for action in holding for reader in readers(action)},
+            )
+        elif _halted_among(failures, [from_action]):
+            self.console.print(
+                f"\n[cyan]{from_action} is halted by on_exhausted: raise, so this retry "
+                f"resumes it in full: it and the actions after it run on every record they "
+                f"hold no answer for, not only those listed.[/cyan]"
             )
         self._settle_batches_in_flight(backend, owed)
 
@@ -543,6 +567,7 @@ class RetryCommand:
         backend,
         actions: list[str],
         *,
+        halted: Sequence[str] = (),
         holding_a_batch: Container[str] = (),
         reading_a_batch: Container[str] = (),
     ) -> None:
@@ -552,14 +577,16 @@ class RetryCommand:
         action never run since it was put back to pending, stopped partway through its
         records, or whose output is gone has answered none of the ones it had not
         reached, so narrowing it completes it without them and nothing runs it again.
-        A plain run finishes it.
+        A plain run finishes it. Nor has one *halted* by ``on_exhausted: raise``, which
+        the repair would clear, answered the records past the halt. A plain run will not
+        resume it; a retry from it, which names no record, runs it in full.
 
         Callers leave out what an interrupted retry put back to pending: it had
         finished before that retry, and retrying again resumes it. Not refused either:
         a failure that reached all of the action's input, which the repair is for, and
-        a halt by ``on_exhausted: raise``, which a plain run will not resume. An action
-        holding a batch nobody has collected, or reading one that does, is left to
-        that batch's own refusal, which ``--abandon-in-flight`` is the way past.
+        a halt the repair does not clear, which stays halted. An action holding a batch
+        nobody has collected, or reading one that does, is left to that batch's own
+        refusal, which ``--abandon-in-flight`` is the way past.
         """
         from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
@@ -567,8 +594,10 @@ class RetryCommand:
         # past a file it skipped.
         # A run stopped while submitting cannot be told from one stopped collecting.
         left_by_collecting = {ActionStatus.CHECKING_BATCH, ActionStatus.FAILED, *COMPLETED_STATUSES}
-        unfinished = []
+        unfinished = [f"{action} (halted)" for action in halted]
         for action in actions:
+            if action in halted:
+                continue
             status = state_mgr.get_status(action)
             if action in reading_a_batch or (
                 action in holding_a_batch and status in left_by_collecting
@@ -580,12 +609,22 @@ class RetryCommand:
         if not unfinished:
             return
 
+        remedy = f"Run the workflow first — agac run -a {self.agent_name} — then retry."
+        if halted:
+            resume = (
+                f"resume {halted[0]} with a retry from it, which names no record and runs it "
+                f"in full — agac retry -a {self.agent_name} --from {halted[0]} — then retry."
+            )
+            remedy = (
+                f"Run the workflow first — agac run -a {self.agent_name} — then {resume}"
+                if len(unfinished) > len(halted)
+                else f"First {resume}"
+            )
         reason = (
             f"{len(unfinished)} action(s) hold no current answer for some of their records "
             f"({', '.join(unfinished)}). A retry answers only the records it names and "
             f"carries what each action holds for the rest, so it would complete them "
-            f"without those answers. Run the workflow first — agac run -a "
-            f"{self.agent_name} — then retry."
+            f"without those answers. {remedy}"
         )
         if self.args.dry_run:
             self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
@@ -610,6 +649,7 @@ class RetryCommand:
             return None if completed_output_stands(backend, action) else "its output is gone"
         if status in MID_PROCESSING_STATUSES or status == ActionStatus.PENDING:
             return ActionStatus(status).value
+        # A halt is refused only where the repair clears it, which the caller decides.
         if status != ActionStatus.FAILED or action_is_halted(backend, action):
             return None
         reached_all = action_failed_every_input(backend, action) or cls._batches_answer_all_sent(
@@ -865,10 +905,15 @@ class RetryCommand:
 
         Empty when the only failures are node-level: that sentinel is a signal about
         an action, not a record, and a selection holding nothing else would narrow
-        every real record out of the run it is supposed to repair.
+        every real record out of the run it is supposed to repair. Empty too when the
+        repair starts at an action halted by ``on_exhausted: raise`` and ``--record``
+        names nothing: the halt owes every record past it, so the repair resumes it in
+        full.
         """
         if self.args.record:
             repairing = set(cleared_ids)
+        elif _halted_among(failures, downstream_actions[:1]):
+            return set()
         else:
             repairing = set(cleared_ids)
             for action in downstream_actions:

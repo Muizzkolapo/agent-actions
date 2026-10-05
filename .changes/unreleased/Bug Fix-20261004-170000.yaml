@@ -17,9 +17,8 @@ body: >-
   left unfinished by a retry that was itself interrupted is resumed by running `retry`
   again, as before, unless a run has reset it since. An action holding a batch that has
   not been collected, and one reading it, are left to the batch's own refusal, so
-  `--abandon-in-flight` still gets past a batch the provider has forgotten. An action
-  halted by `on_exhausted: raise` is not refused. A failure recorded before this release
-  cannot say whether every record failed, and a retry interrupted before it left nothing
-  to say which actions it put back, so a retry over either is refused until the workflow
-  has run.
+  `--abandon-in-flight` still gets past a batch the provider has forgotten. A failure
+  recorded before this release cannot say whether every record failed, and a retry
+  interrupted before it left nothing to say which actions it put back, so a retry over
+  either is refused until the workflow has run.
 time: 2026-10-04T17:00:00Z

@@ -58,7 +58,8 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 `retry` selects records by id — the ones that failed, or the single one given to
 `--record`. Those are the records it processes at every action it re-runs, and
-they are the only ones.
+they are the only ones. The exception is a retry that
+[resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
 
 Nothing else in the input joins them. A record limit —
 [`record_limit`](../configuration/defaults) or
@@ -192,10 +193,42 @@ Not refused either: an action left unfinished by a retry that was itself
 interrupted had finished before that retry, so running `retry` again resumes it,
 as long as no run has reset it since. An action holding a batch nobody has
 collected, and one that reads it, are left to the batch's own refusal below,
-which `--abandon-in-flight` gets past. And an action halted by `on_exhausted:
-raise` is not refused, because `agac run` does not resume a halt; a retry with a
-record to re-run still completes a halted action without the records past the
-halt (#1267).
+which `--abandon-in-flight` gets past. An action halted by `on_exhausted: raise`
+has its own way on, below.
+
+## A retry resumes a halted action in full
+
+An action halted by
+[`on_exhausted: raise`](../validation/expectations.md#repairing-instead-of-observing)
+stopped partway through its records, and `agac run` leaves it halted. `retry` is
+the way on. The halted action holds no answer, and no failure, for the records
+past the halt, so a retry narrowed to the records it names would complete it
+without them.
+
+A retry that starts at the halted action and is not given `--record` names no
+record: it runs that action, and every action after it, on each record they hold
+no answer for — the ones past the halt and the ones that failed — and says so in
+its plan. A plain `retry` does this when the halt is the earliest failure.
+
+```bash
+agac retry -a my_workflow --from extract_facts
+```
+
+A retry that names records and would clear a halt — one starting before the
+halted action, or given `--record` — is refused before it changes anything, and
+names the retry that resumes it:
+
+```
+1 action(s) hold no current answer for some of their records (extract_facts
+(halted)). A retry answers only the records it names and carries what each
+action holds for the rest, so it would complete them without those answers.
+First resume extract_facts with a retry from it, which names no record and runs
+it in full — agac retry -a my_workflow --from extract_facts — then retry.
+```
+
+Run that retry, then the one you wanted. `--dry-run` reports the refusal
+instead of raising it. A halted action before the retry's starting point is not
+refused: the retry leaves its halt in place, so it stays halted.
 
 ## When a retry is interrupted
 

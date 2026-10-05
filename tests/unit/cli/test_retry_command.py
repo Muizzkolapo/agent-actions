@@ -182,6 +182,37 @@ class TestRecordsThisRepairMayProcess:
         )
         assert repairing == set()
 
+    _HALTED_WITH_FAILURES = {
+        "classify": [
+            {"record_id": "__node__", "detail": HALTED_ON_EXHAUSTED},
+            {"record_id": "r1"},
+        ],
+        "enrich": [{"record_id": "r9"}],
+    }
+
+    def test_a_repair_starting_at_a_halt_selects_nothing(self):
+        """The halt owes every record past it, which no failure names."""
+        repairing = self._command()._records_this_repair_may_process(
+            {"__node__", "r1"}, ["classify", "enrich"], self._HALTED_WITH_FAILURES
+        )
+        assert repairing == set()
+
+    def test_naming_a_record_at_a_halt_still_selects_it(self):
+        """Left for the refusal: `--record` answers that record and no other."""
+        repairing = self._command(record="r1")._records_this_repair_may_process(
+            {"r1"}, ["classify", "enrich"], self._HALTED_WITH_FAILURES
+        )
+        assert repairing == {"r1"}
+
+    def test_a_halt_below_the_starting_action_selects_as_before(self):
+        """Left for the refusal, which names the retry that resumes it."""
+        repairing = self._command()._records_this_repair_may_process(
+            {"r0"},
+            ["extract", "classify", "enrich"],
+            {"extract": [{"record_id": "r0"}], **self._HALTED_WITH_FAILURES},
+        )
+        assert repairing == {"r0", "r1", "r9"}
+
 
 class TestDeferredRecordsAreScopedToTheBatchesBeingAbandoned:
     """Abandoning strands the records waiting on the batches it gives up.
@@ -331,11 +362,11 @@ class TestARepairNarrowsOnlyWhatFinished:
         command.console = MagicMock()
         return command
 
-    def _refused(self, tmp_path, status, **kwargs):
+    def _refused(self, tmp_path, status, *, halted=(), **kwargs):
         state_mgr, backend = self._states(tmp_path, status, **kwargs)
         try:
             self._command()._refuse_to_narrow_the_unfinished(
-                state_mgr, backend, ["extract", "classify"]
+                state_mgr, backend, ["extract", "classify"], halted=halted
             )
         except click.ClickException as refusal:
             return refusal.message
@@ -363,9 +394,26 @@ class TestARepairNarrowsOnlyWhatFinished:
         """Every record holds its failure, so the records not named are still found."""
         assert self._refused(tmp_path, "failed", failed_as=EVERY_INPUT_FAILED) is None
 
-    def test_a_halted_action_is_narrowed(self, tmp_path):
-        """A plain run does not resume a halt, so refusing would leave no way on."""
+    def test_a_halt_the_repair_does_not_clear_is_not_refused(self, tmp_path):
+        """It stays halted and refuses to run, so the repair completes nothing there."""
         assert self._refused(tmp_path, "failed", failed_as=HALTED_ON_EXHAUSTED) is None
+
+    def test_a_halt_the_repair_would_clear_is_refused_with_the_retry_that_resumes_it(
+        self, tmp_path
+    ):
+        """A plain run does not resume a halt; a retry from it, naming no record, does."""
+        refused = self._refused(
+            tmp_path, "failed", failed_as=HALTED_ON_EXHAUSTED, halted=["classify"]
+        )
+        assert "(classify (halted))" in refused
+        assert "agac retry -a wf --from classify" in refused
+        assert "agac run" not in refused
+
+    def test_a_halt_beside_an_unfinished_action_names_both_ways_on(self, tmp_path):
+        refused = self._refused(tmp_path, "interrupted", halted=["extract"])
+
+        assert "extract (halted), classify (interrupted)" in refused
+        assert refused.index("agac run -a wf") < refused.index("agac retry -a wf --from extract")
 
     def test_completed_skipped_and_submitted_actions_are_narrowed(self, tmp_path):
         """A skipped action owes nothing its source has not failed, and a batch still
