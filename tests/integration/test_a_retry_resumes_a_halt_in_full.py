@@ -8,8 +8,8 @@ next plain run found nothing to do.
 
 Two tool actions, `flatten` and `enrich`, which reads it, over six staged records. Every
 command is a real `agac` invocation; only the faults are stood in for: the halt, raised by
-`enrich`'s tool as an exhausted `on_exhausted: raise` policy raises it, a tool that fails
-a record, and a failure marked on a record of `flatten`.
+a tool as an exhausted `on_exhausted: raise` policy raises it, a tool that fails a record,
+a failure marked on a record of `flatten`, and the interrupt that stops a retry.
 """
 
 import json
@@ -23,6 +23,9 @@ from agent_actions.errors import exhaustion_halt
 from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.record.reasons import HALTED_ON_EXHAUSTED
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
+from tests.integration.test_a_retry_narrows_only_what_has_finished import (
+    _stopped_at_the_readers_record,
+)
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -67,13 +70,14 @@ def _unwrapped(output):
 
 
 @contextmanager
-def _the_readers_tool(*, halts_at, fails_at=None):
-    """`enrich`'s tool, failing its call *fails_at* and halting the action at *halts_at*."""
+def _the_readers_tool(*, halts_at, fails_at=None, udf="tag_density"):
+    """*udf*, `enrich`'s tool unless named, failing its call *fails_at* and halting the
+    action at *halts_at*."""
     run_tool = tool_client.execute_user_defined_function
     calls = []
 
     def faulty(udf_name, *args, **kwargs):
-        if udf_name == "tag_density":
+        if udf_name == udf:
             calls.append(udf_name)
             if len(calls) == fails_at:
                 raise RuntimeError("the tool blew up")
@@ -148,6 +152,93 @@ def test_a_retry_with_only_the_halt_to_retry_resumes_it_in_full(chained):  # noq
     result = _retry()
 
     assert result.exit_code == 0, result.output
+    assert "resumes it in full" in _unwrapped(result.output), result.output
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def _an_interrupted_resume(project):  # noqa: F811
+    """A retry from the halt, stopped partway: its snapshot keeps the halt, and `enrich`
+    is left interrupted under the stamp that marks it as that retry's to resume."""
+    _halt_the_reader(project)
+    with _stopped_at_the_readers_record(KeyboardInterrupt(), nth=2):
+        assert _retry("--from", SECOND).exit_code != 0
+    assert _status(project) == "interrupted" and not _halted(project)
+    return _a_failure_at_the_first_action(project)
+
+
+def test_a_dry_run_after_an_interrupted_resume_still_sees_the_halt(chained):  # noqa: F811
+    """The halt is back only in the snapshot, which a dry run plans over but does not
+    restore."""
+    named = _an_interrupted_resume(chained)
+
+    result = _retry("--record", named, "--dry-run")
+
+    assert result.exit_code == 0, result.output
+    said = _unwrapped(result.output)
+    assert "would be refused" in said and "(enrich (halted))" in said, said
+
+
+def test_a_retry_after_an_interrupted_resume_refuses_until_the_halt_is_resumed(chained):  # noqa: F811
+    """The stamp spares an action the stopped retry would finish, but that retry was
+    resuming a halt, and one naming records would complete it on those alone."""
+    named = _an_interrupted_resume(chained)
+
+    refusals = [_retry("--record", named), _retry("--record", named)]
+
+    for refused in refusals:
+        assert refused.exit_code != 0, refused.output
+        said = _unwrapped(refused.output)
+        assert "1 action(s)" in said and "(enrich (halted))" in said, said
+        assert "Run the workflow first" not in said and f"--from {SECOND}" in said, said
+    assert _halted(chained) and _disposition(chained, named, ACTION) == "failed"
+    resumed = _retry("--from", SECOND)
+    assert resumed.exit_code == 0, resumed.output
+    assert len(_stored_guids(chained, SECOND)) == RECORDS
+    repaired = _retry("--record", named)
+    assert repaired.exit_code == 0, repaired.output
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+SIDE_ACTION = """  - name: side
+    kind: tool
+    dependencies: [flatten]
+    intent: "Note"
+    schema: tool_action_output
+    impl: note_side
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
+SIDE_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def note_side(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "side"}]
+"""
+
+
+def test_a_halt_before_the_starting_point_stays_halted_and_the_repair_goes_ahead(chained):  # noqa: F811
+    """Only a retry from the halt clears it, so one starting past it completes nothing
+    there. `side`, declared after `enrich`, runs before it and feeds nothing."""
+    config = chained / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + SIDE_ACTION)
+    (chained / "tools" / WORKFLOW / "side.py").write_text(SIDE_TOOL)
+    with _the_readers_tool(halts_at=3, udf="note_side"):
+        assert _run("--fresh").exit_code != 0
+    assert _halted(chained, "side") and _status(chained) == "completed"
+    named = _stored_guids(chained, SECOND)[-1]
+    _fail(chained, named, SECOND)
+
+    result = _retry("--from", SECOND, "--record", named)
+
+    said = _unwrapped(result.output)
+    assert f"Actions to re-run: {SECOND} Records" in said, said
+    assert "would complete them" not in said and "Failed actions: side" in said, said
+    assert _halted(chained, "side")
+    assert _disposition(chained, named, SECOND) == "success"
     assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
 
 

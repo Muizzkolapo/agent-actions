@@ -362,11 +362,18 @@ class TestARepairNarrowsOnlyWhatFinished:
         command.console = MagicMock()
         return command
 
-    def _refused(self, tmp_path, status, *, halted=(), **kwargs):
+    def _refused(
+        self, tmp_path, status, *, halted=(), holding_a_batch=(), reading_a_batch=(), **kwargs
+    ):
         state_mgr, backend = self._states(tmp_path, status, **kwargs)
         try:
             self._command()._refuse_to_narrow_the_unfinished(
-                state_mgr, backend, ["extract", "classify"], halted=halted
+                state_mgr,
+                backend,
+                ["extract", "classify"],
+                halted=halted,
+                holding_a_batch=holding_a_batch,
+                reading_a_batch=reading_a_batch,
             )
         except click.ClickException as refusal:
             return refusal.message
@@ -407,6 +414,29 @@ class TestARepairNarrowsOnlyWhatFinished:
         )
         assert "(classify (halted))" in refused
         assert "agac retry -a wf --from classify" in refused
+        assert "agac run" not in refused
+
+    def test_a_halt_beside_a_batch_nobody_has_collected_is_still_refused(self, tmp_path):
+        """`--abandon-in-flight` gets past the batch's own refusal, which would leave
+        nothing to stop the repair completing the halt on the records it names."""
+        for batch in ("holding_a_batch", "reading_a_batch"):
+            target = tmp_path / batch
+            target.mkdir()
+            refused = self._refused(
+                target,
+                "failed",
+                failed_as=HALTED_ON_EXHAUSTED,
+                halted=["classify"],
+                **{batch: {"classify"}},
+            )
+            assert "(classify (halted))" in (refused or ""), batch
+
+    def test_a_halt_an_interrupted_resume_left_is_named_once_as_a_halt(self, tmp_path):
+        """What a stopped retry from the halt leaves once its snapshot is back. A plain
+        run would not resume it, so the remedy is the retry alone."""
+        refused = self._refused(tmp_path, "interrupted", halted=["classify"])
+
+        assert "1 action(s)" in refused and "(classify (halted))" in refused
         assert "agac run" not in refused
 
     def test_a_halt_beside_an_unfinished_action_names_both_ways_on(self, tmp_path):
