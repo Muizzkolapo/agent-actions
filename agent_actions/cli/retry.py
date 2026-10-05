@@ -150,6 +150,7 @@ class RetryCommand:
                     row["record_id"],
                     row["disposition"],
                     reason=row.get("reason"),
+                    relative_path=row.get("relative_path"),
                     detail=row.get("detail"),
                     input_snapshot=row.get("input_snapshot"),
                 )
