@@ -165,7 +165,7 @@ That covers every action the retry runs, not only those from its starting point:
 the run behind it executes whatever is not complete, wherever it sits, so an
 action added beside the one that failed, which may run before it, counts too.
 
-So a retry that names records refuses, before it changes anything, when such an
+So a retry that names records refuses, before it clears anything, when such an
 action is in the workflow:
 
 ```
@@ -207,15 +207,22 @@ without them.
 
 A retry that starts at the halted action and is not given `--record` names no
 record: it runs that action, and every action after it, on each record they hold
-no answer for — the ones past the halt and the ones that failed — and says so in
-its plan. A plain `retry` does this when the halt is the earliest failure.
+no stored answer for — the ones past the halt and the ones that failed — and says
+so in its plan. That includes what the halted action answered in the file it
+halted in: the file was never stored, so those records are asked, and paid for,
+again. A plain `retry` does this when the halt is the earliest failure.
 
 ```bash
 agac retry -a my_workflow --from extract_facts
 ```
 
+Naming no record, it is held to limits as `agac run` is: each action keeps to
+[`record_limit`](../configuration/defaults) and `file_limit` and whatever
+overrides them, and one whose stored limit differs from the one that applies
+re-executes under it.
+
 A retry that names records and would clear a halt — one starting before the
-halted action, or given `--record` — is refused before it changes anything, and
+halted action, or given `--record` — is refused before it clears anything, and
 names the retry that resumes it:
 
 ```
@@ -227,15 +234,20 @@ it in full — agac retry -a my_workflow --from extract_facts — then retry.
 ```
 
 Run that retry, then the one you wanted. `--dry-run` reports the refusal
-instead of raising it. A halted action before the retry's starting point is not
-refused: the retry leaves its halt in place, so it stays halted.
+instead of raising it.
+
+A halted action before the retry's starting point is not refused, and the retry
+leaves it halted. An action in the retry's range that reads it cannot run while
+it is halted: it is skipped, and the failures the retry cleared there are gone
+until a retry resumes the halt and runs it again. Resume the halt first.
 
 ## When a retry is interrupted
 
 A retry writes down the failures it is about to clear before it clears them. If it
 is stopped before its run reaches the end, the next `retry` puts them back and
 starts where the stopped one did, so the records it named are answered again from
-there.
+there. It puts them back before anything else, so even a retry that is then refused
+has put them back.
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has

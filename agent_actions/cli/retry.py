@@ -250,7 +250,8 @@ class RetryCommand:
             self.console.print(
                 f"\n[cyan]{from_action} is halted by on_exhausted: raise, so this retry "
                 f"resumes it in full: it and the actions after it run on every record they "
-                f"hold no answer for, not only those listed.[/cyan]"
+                f"hold no stored answer for, not only those listed. What it answered in the "
+                f"file it halted in was never stored, so it is asked again.[/cyan]"
             )
         self._settle_batches_in_flight(backend, owed)
 

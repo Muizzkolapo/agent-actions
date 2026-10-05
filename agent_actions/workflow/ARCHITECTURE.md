@@ -347,9 +347,10 @@ nobody has collected, since a halted action has answered nothing past the halt, 
 its own remedy, since a plain run will not resume it: a retry from the halted action. That
 retry names no record unless given `--record` (`_records_this_repair_may_process`), so it
 runs the action, and every one after it, in full: the disposition gate carries what each
-holds an answer for and the rest is asked again. Which actions are halted is read from the
-failures the retry plans over, which a dry run reads with an interrupted retry's snapshot
-put back (`_halted_among`).
+holds a stored answer for and the rest is asked again, what the halted action answered in
+the file it halted in among them. Which actions are halted is read from the failures the
+retry plans over, which a dry run reads with an interrupted retry's snapshot put back
+(`_halted_among`).
 
 Costs and limits:
 
@@ -364,8 +365,12 @@ Costs and limits:
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a
-  halt after an edit carries, for a record the halted run had answered, the row stored
-  before the edit.
+  halt asks again what the halted action answered in the file it halted in, which was never
+  stored, and after an edit carries, for a record the halted run had answered, the row
+  stored before the edit.
+- A retry starting past a halted action is not refused, though its range may read it. Such
+  a reader is skipped, since the halt refuses to run, and the failures the retry cleared
+  there are gone until the halt is resumed.
 
 
 ---
