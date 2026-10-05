@@ -112,13 +112,14 @@ class PreflightService:
                 hint="Add an observe or passthrough field for each dependency, "
                 "or drop the unused dependency.",
             )
-        # A name not upstream of the reader is never on its records; the run reads null.
+        # A name not upstream of its reader is not sure to be on the records it reads.
         unreachable = find_reads_not_upstream(self.action_configs)
         if unreachable:
             raise PreFlightValidationError(
                 "\n".join(unreachable),
-                hint="An action reads only the actions upstream of it: add each one it names "
-                "to its dependencies, or depend on an action downstream of it.",
+                hint="An action reads only the actions upstream of it through its dependencies: "
+                "add each one it names to its dependencies, or depend on an action downstream "
+                "of it.",
             )
 
         # 5. Resolution checks (API keys, seed files, vendor batch)

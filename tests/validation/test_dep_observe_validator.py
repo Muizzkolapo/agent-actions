@@ -219,7 +219,7 @@ def test_framework_namespaces_are_not_actions():
     assert find_reads_not_upstream(actions) == []
 
 
-def test_a_version_base_dependency_puts_every_branch_and_its_upstream_upstream():
+def test_a_version_base_in_the_dependencies_puts_every_branch_upstream():
     actions = {
         "ground": {"context_scope": {"observe": ["source.page"]}},
         "vote_1": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
@@ -230,6 +230,63 @@ def test_a_version_base_dependency_puts_every_branch_and_its_upstream_upstream()
         },
     }
     assert find_reads_not_upstream(actions) == []
+
+
+def test_a_name_behind_a_version_merge_further_up_passes():
+    """A version base expands wherever it sits on the way up, not only on the reader."""
+    actions = {
+        "ground": {"context_scope": {"observe": ["source.page"]}},
+        "vote_1": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
+        "vote_2": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
+        "tally": {"dependencies": ["vote"], "context_scope": {"observe": ["vote_1.*", "vote_2.*"]}},
+        "report": {
+            "dependencies": ["tally"],
+            "context_scope": {"observe": ["tally.x", "vote_1.x", "ground.x"]},
+        },
+    }
+    assert find_reads_not_upstream(actions) == []
+
+
+def test_a_version_merge_left_out_of_the_dependencies_is_reported_by_its_base():
+    """The base is the name the author wrote, and the one `dependencies` takes."""
+    actions = {
+        "ground": {"context_scope": {"observe": ["source.page"]}},
+        "vote_1": {
+            "version_base_name": "vote",
+            "dependencies": ["ground"],
+            "context_scope": {"observe": ["ground.x"]},
+        },
+        "vote_2": {
+            "version_base_name": "vote",
+            "dependencies": ["ground"],
+            "context_scope": {"observe": ["ground.x"]},
+        },
+        "tally": {"context_scope": {"observe": ["vote_1.*", "vote_2.*"]}},
+    }
+    (finding,) = find_reads_not_upstream(actions)
+    assert finding.startswith("tally:") and "Add 'vote' to its dependencies" in finding
+
+
+def test_one_branch_of_a_version_merge_is_reported_by_its_own_name():
+    actions = {
+        "ground": {"context_scope": {"observe": ["source.page"]}},
+        "vote_1": {
+            "version_base_name": "vote",
+            "dependencies": ["ground"],
+            "context_scope": {"observe": ["ground.x"]},
+        },
+        "vote_2": {
+            "version_base_name": "vote",
+            "dependencies": ["ground"],
+            "context_scope": {"observe": ["ground.x"]},
+        },
+        "tally": {
+            "dependencies": ["vote_2"],
+            "context_scope": {"observe": ["vote_1.*", "vote_2.*"]},
+        },
+    }
+    (finding,) = find_reads_not_upstream(actions)
+    assert "Add 'vote_1' to its dependencies" in finding
 
 
 def test_a_switched_off_action_neither_reads_nor_is_read():

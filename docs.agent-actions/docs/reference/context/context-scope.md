@@ -146,10 +146,10 @@ Actions referenced in `context_scope` or the prompt but **not** in `dependencies
 3. Context dependencies are read from the namespaces on each input record, so the data comes from the same record
 
 Preflight refuses an action that names one that is not upstream of it, such as an action
-that runs after it or one on a parallel branch: that action's namespace is not on the
-records it reads, and every field of it would be null. To read it, depend on an action
-downstream of it, or on the action itself as well — the **fan-in pattern**, where multiple
-upstream actions feed into one action:
+that runs beside or after it or one on a parallel branch: that action's namespace is not
+sure to be on the records it reads. To read it, depend on an action downstream of it, or
+on the action itself as well — the **fan-in pattern**, where multiple upstream actions
+feed into one action:
 
 ```yaml
 - name: final_action
@@ -157,8 +157,8 @@ upstream actions feed into one action:
   context_scope:
     observe:
       - action_A.*   # Primary input (first in list)
-      - action_B.*   # Context dependency (lineage-matched)
-      - action_C.*   # Context dependency (lineage-matched)
+      - action_B.*   # Fan-in dependency
+      - action_C.*   # Fan-in dependency
 ```
 
 ## Resolution Order

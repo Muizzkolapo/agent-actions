@@ -10,7 +10,6 @@ from agent_actions.prompt.context.scope_inference import (
     infer_dependencies,
 )
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 logger = logging.getLogger(__name__)
 
@@ -108,33 +107,44 @@ def _upstream_through_dependencies(
 
 
 def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[str]:
-    """Return one finding per action an action reads that is not upstream of it.
+    """Return one finding per action an action names that is not upstream of it.
 
-    What an action reads is what the run order counts, ``infer_dependencies``:
-    its dependencies and every action its context scope or prompt names. A
-    record carries the namespaces of the actions upstream of it through
-    ``dependencies``, so a name outside them reads null on every record. One
-    on a parallel branch can be rejoined from the store, but only while that
-    branch finishes at an earlier level than the reader's input.
+    A name in the context scope or prompt is what the run order counts
+    (``infer_dependencies``). A record carries the namespaces of the actions
+    upstream of it through ``dependencies``, so any other name is there at best
+    while a parallel branch happens to finish first, and the reader is not reset
+    when that action fails and runs again. A version merge whose every branch is
+    missing is reported by its base, the name ``dependencies`` takes.
     """
     findings: list[str] = []
     workflow_actions = list(action_configs)
     operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
     upstream = _upstream_through_dependencies(action_configs)
+    branches: dict[str, set[str]] = {}
+    for name in workflow_actions:
+        base = action_configs[name].get("version_base_name")
+        if name in operational and isinstance(base, str) and base not in action_configs:
+            branches.setdefault(base, set()).add(name)
     for name in workflow_actions:
         if name not in operational:
             continue
         input_sources, context_sources = infer_dependencies(
             action_configs[name], workflow_actions, name, validate=False
         )
-        for read in dict.fromkeys(input_sources + context_sources):
-            if read == name or read in SPECIAL_NAMESPACES or read not in operational:
-                continue
-            if read not in upstream[name]:
-                findings.append(
-                    f"{name}: reads '{read}', named in its context_scope or prompt, but "
-                    f"'{read}' is not upstream of it through its dependencies, so every "
-                    f"field of '{read}' is null on the records it reads. Add '{read}' to "
-                    f"its dependencies, or depend on an action downstream of '{read}'."
-                )
+        missing = [
+            read
+            for read in dict.fromkeys(input_sources + context_sources)
+            if read != name and read in operational and read not in upstream[name]
+        ]
+        for base, members in branches.items():
+            if members <= set(missing):
+                missing = [read for read in missing if read not in members] + [base]
+        for read in missing:
+            findings.append(
+                f"{name}: names '{read}' in its context_scope or prompt, but '{read}' is "
+                f"not upstream of it through its dependencies, so '{read}' is not sure to "
+                f"be on the records it reads, and '{name}' is not run again when '{read}' "
+                f"fails and runs again. Add '{read}' to its dependencies, or depend on an "
+                f"action downstream of '{read}'."
+            )
     return findings

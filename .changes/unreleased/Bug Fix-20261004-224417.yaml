@@ -1,18 +1,19 @@
 kind: Bug Fix
 body: >-
   Pre-flight now refuses an action that names, in its `context_scope` or prompt, an action
-  that is not upstream of it through `dependencies`, instead of running it on nulls. Such a
-  name is never on the records the action reads, since a record carries the namespaces of
-  the actions it passed through, so every field of it read null, on every run, with no
-  error. The run could also start the reader before the action it named, because it orders
-  by `dependencies` while the run order counted the name, and when that action failed and
-  ran again the reader stayed completed with what it had read. Running the reader later
-  would not have helped: its input was stored before that action ran. A name on a parallel
-  branch is refused as well. It was read only while that branch happened to finish at an
-  earlier step than the reader's input, and its reader was left completed the same way when
-  it failed and ran again. A reader with no dependencies, which failed at run time on such a
-  name, is now refused before the run starts. The message names the reader and the action,
-  and says to add that action to its dependencies (the fan-in pattern) or to depend on one
-  downstream of it. An action named upstream of the reader's dependencies is read as before,
-  and none of the example workflows is refused.
+  that is not upstream of it through `dependencies`, instead of running it on nulls. A record
+  carries the namespaces of the actions it passed through, so an action that ran beside or
+  after the reader was never on the records it read: every field of it read null, on every
+  run, with no error. The run could also start the reader before the action it named,
+  because it orders by `dependencies` while the run order counted the name, and when that
+  action failed and ran again the reader stayed completed with what it had read. Running the
+  reader later would not have helped: its input was stored before that action ran. A name on
+  a parallel branch is refused as well. It was read only while that branch happened to finish
+  at an earlier step than the reader's input, and its reader was left completed the same way
+  when it failed and ran again. A reader with no dependencies, which failed at run time on
+  such a name, is now refused before the run starts. The message names the reader and the
+  action, or the base of a version merge none of whose versions is upstream, and says to add
+  that action to its dependencies (the fan-in pattern) or to depend on one downstream of it.
+  An action named upstream of the reader's dependencies is read as before, and none of the
+  example workflows is refused.
 time: 2026-10-04T22:44:17Z

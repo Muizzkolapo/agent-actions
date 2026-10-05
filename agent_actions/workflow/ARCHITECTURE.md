@@ -259,12 +259,13 @@ named in a warning, since it was sent the old output. A reader is an action that
 on it, merges its versions, or only names it in its context scope or prompt, and the
 reader of a reader.
 
-An action names only what is upstream of it through `dependencies`: preflight refuses
-any other name (`find_reads_not_upstream`), because its namespace is not on the records
-the action reads (#1228). So the level loop, which orders by `dependencies`, the run
-order, which counts every name, and this reset agree on what reads what. A reader always
-sits in a later level than what it reads, and a failed action skips every action that
-names it, which the startup reset puts back to pending with it.
+An action names, in its context scope or prompt, only what is upstream of it through
+`dependencies`: preflight refuses any other name (`find_reads_not_upstream`), because
+only those are sure to be on the records the action reads (#1228). So the level loop,
+which orders by `dependencies`, the run order, which counts every name, and this reset
+agree on what reads what. A reader always sits
+in a later level than every action it names, and a failed action skips every action
+that names it, which the startup reset puts back to pending with it.
 
 The stores are cleared first, readers and then the action (its own are left where only
 its output is gone), and the statuses are written last, all in one write (`ActionStateManager.reopen`). A process that dies before that

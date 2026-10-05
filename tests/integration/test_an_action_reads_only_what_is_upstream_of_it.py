@@ -2,10 +2,11 @@
 
 A record carries the namespace of every action it passed through, so an action can
 read an action it names only in its context scope when that action is upstream of
-its input. One that is not upstream is never on the records it reads: it read null
-on every run, with no error. The run order counted the name as a dependency and the
-level loop did not, so the reader could also run before the action it named, and an
-action failed, reset and run again left that reader completed with what it had read.
+its input. One that ran beside or after it read null on every run, with no error,
+and one on a parallel branch was read only while that branch happened to finish
+first. The run order counted the name as a dependency and the level loop did not, so
+the reader could also run before the action it named, and an action failed, reset
+and run again left that reader completed with what it had read.
 
 Three tool actions in a chain, `flatten` -> `mid` -> `final`, over three staged
 records, and `late`, which names some of them. Every command is a real `agac run`.
@@ -163,8 +164,9 @@ def _mid_fails():
 
 def _assert_refused(result, project, named):
     assert result.exit_code != 0, result.output
-    assert "late" in result.output and f"'{named}'" in result.output, result.output
-    assert "dependencies" in result.output, result.output
+    assert f"late: names '{named}'" in result.output, result.output
+    assert "is not upstream of it through its dependencies" in result.output, result.output
+    assert f"Add '{named}' to its dependencies" in result.output, result.output
     assert not _ran_anything(project), "the run started before refusing"
 
 
