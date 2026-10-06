@@ -71,8 +71,10 @@ actions:
 FAIL_AT = "AGAC_TEST_FAIL_AT"
 
 # Named apart from the other tests' tools: discovery keeps a tool module by its name, and
-# the registry a tool by its own.
+# the registry a tool by its own. Logs each item it is asked for, so a test can tell what a
+# run asked again.
 TOOLS = f"""import os
+from pathlib import Path
 from typing import Any
 
 from agent_actions import udf_tool
@@ -83,6 +85,8 @@ def tag_once(data: dict[str, Any]) -> dict[str, Any]:
     item = (data.get("stage_items") or {{}}).get("item_id", "")
     if os.environ.get("{tagging.STOP_AT}") == item:
         raise KeyboardInterrupt()
+    with Path("asked.txt").open("a") as asked:
+        asked.write(item + "\\n")
     if os.environ.get("{FAIL_AT}") == item:
         raise ValueError(f"no tag for {{item}}")
     return {{"tag": item}}
@@ -124,6 +128,11 @@ def _interrupted_at_gamma(root, monkeypatch):
     monkeypatch.delenv(tagging.STOP_AT)
     assert tagging._status(root) == "interrupted"
     assert tagging._stored(root, tagging.ACTION) == []
+    (root / "asked.txt").unlink()
+
+
+def _asked(root):
+    return (root / "asked.txt").read_text().split()
 
 
 def _by_guid(rows):
@@ -147,6 +156,7 @@ def test_a_record_carried_from_its_checkpoint_keeps_the_lineage_of_its_input(tag
     result = tagging._run()
 
     assert result.exit_code == 0, result.output
+    assert _asked(tagged) == ["gamma"]
     staged = _by_guid(tagging._stored(tagged, "stage_items"))
     tags = _by_guid(tagging._stored(tagged, tagging.ACTION))
     assert sorted(row["content"][tagging.ACTION]["tag"] for row in tags.values()) == [
@@ -179,6 +189,7 @@ def test_a_resumed_run_whose_one_answered_record_fails_counts_what_it_carried(ta
     result = tagging._run()
 
     assert result.exit_code == 0, result.output
+    assert _asked(tagged) == ["gamma"]
     assert tagging._status(tagged) == "completed_with_failures"
     assert tagging._status(tagged, tagging.READER) == "completed"
     items = {
@@ -223,7 +234,8 @@ def test_an_answer_that_failed_to_parse_is_failed_though_the_run_stopped_after_i
 ):
     """Collection fails an answer that failed to parse, and its checkpoint row is saved
     before collection, marked answered. Carried as it was, it was stored as processed and
-    the action recorded complete; a run not stopped records it failed."""
+    the action recorded complete; a run not stopped records it failed, and so does the
+    next run, without asking for it again."""
     answer = AgacClient.call_json
     asked = []
 
@@ -239,10 +251,12 @@ def test_an_answer_that_failed_to_parse_is_failed_though_the_run_stopped_after_i
     monkeypatch.setattr(AgacClient, "call_json", staticmethod(call_json))
     summarizing._run("--fresh")
     assert summarizing._status(online) == "interrupted"
+    asked.clear()
 
     result = summarizing._run()
 
     assert result.exit_code == 0, result.output
+    assert asked == ["Page delta."]
     assert summarizing._status(online) == "completed_with_failures"
     states = {_page(row): row.get("_state") for row in summarizing._stored_rows(online)}
     assert states == {

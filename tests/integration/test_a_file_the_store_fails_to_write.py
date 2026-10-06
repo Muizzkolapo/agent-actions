@@ -236,14 +236,17 @@ def test_a_first_run_whose_store_fails_to_write_a_file_stores_it_on_the_next_run
 
 def test_a_file_stored_on_the_run_after_its_store_failed_carries_its_lineage(
     online,  # noqa: F811
+    provider,  # noqa: F811
 ):
     """The next run stores the file from its records' checkpoint rows without asking for
     them again, so those rows are enriched there, as the run that answered them would
     have."""
     with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
         assert _run("--fresh").exit_code == 1
+    provider.answers()
 
     assert _run().exit_code == 0
+    assert provider.pages() == []
     assert all(row.get("lineage") for row in _stored_rows(online))
 
 
