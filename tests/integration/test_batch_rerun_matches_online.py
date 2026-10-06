@@ -1192,6 +1192,17 @@ CARRIED_AS_DONE_AND_TURNED_AWAY = {
     "every_input_skipped": ([_PASSES, _EVERY_ONE_REFUSED], SKIP),
     "one_input_skipped": ([_PASSES, _NOW_FILTERED], SKIP),
     "one_skipped_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], SKIP),
+    "one_skipped_that_then_passes_again": pytest.param(
+        ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
+        marks=pytest.mark.xfail(
+            strict=True,
+            reason=(
+                "Batch records a guard skip as unprocessed, online as passthrough, so once "
+                "the guard passes again batch answers the record and online keeps its "
+                "tombstone. A new record the guard skips and then passes splits the same way."
+            ),
+        ),
+    ),
 }
 
 
