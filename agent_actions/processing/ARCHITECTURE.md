@@ -457,9 +457,9 @@ and holds no answer; and because producers are named during enrichment, before
 collection settles the state, a row can name an input it holds nothing for. Either
 credited as an answer deletes what the last run produced. Such a row does still replace
 a stored row of its own identity, which is decided first — carried rows are appended to
-the run's own output, so an identity in both lists would be written twice. The one
-exception is a run online would refuse to write, below: there the stored answer is the one
-row kept under that identity.
+the run's own output, so an identity in both lists would be written twice. A run online
+would leave unwritten, below, keeps the stored answer instead only while it is still
+vouched for, and by then a failure has replaced its own record's `success`.
 
 Which unanswered rows come back is the online path's rule. Online writes rows for this
 run's inputs and nothing else: what it processed, and what the gate carried. So a stored
@@ -482,9 +482,8 @@ record the guard now excludes, and carried they reach every action below; where 
 filters every input they also keep the action reading complete over them, so its readers
 are never skipped. The batch's context map says which inputs the guard filtered
 (`filtered_inputs`), and both writes hand them to the merge, which carries no stored row
-that answers for one. A run online would refuse to write, below, is the exception: online
-writes nothing then, so a filtered input keeps what it held, answer or not, until a run
-that writes.
+that answers for one. A run online would leave unwritten, below, is the exception: a
+filtered input keeps what it held then, answer or not, until a run that writes.
 
 Two kinds of run carry more than their inputs' rows, each because online does:
 
@@ -496,24 +495,27 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   carried, which is also what a batch submitted before inputs were recorded gets. The
   repair's submission removes any recording an earlier run left, so that does not rest on
   who cleared batch state first.
-- **A run in which something failed and nothing was answered replaces no answer.** Online
-  leaves the file unwritten when nothing succeeded (`terminal_failure`), so its stored
-  answers stand. Here
-  the failures are written, beside every stored answer whichever input it was for; a
-  failure row under a stored answer's own identity gives way to it, so the identity is
-  still stored once. Stored rows that are not answers follow the inputs as usual. Without
-  a failure the run did produce this run's file, however little is in it, and the inputs
-  rule applies in full, as online writes it. A record that fails prompt preparation when
-  nothing else is sent is such a failure: it reaches the write as a failed row.
+- **A run in which something failed and nothing was answered replaces no answer the
+  action still calls answered.** Online leaves the file unwritten when nothing succeeded
+  (`terminal_failure`) while the answers stored for it stand. Here the failures are
+  written beside every stored answer, whichever input it was for. Stored rows that are not
+  answers follow the inputs as usual. Without a failure the run did produce this run's
+  file, however little is in it, and the inputs rule applies in full, as online writes it.
+  A record that fails prompt preparation when nothing else is sent is such a failure: it
+  reaches the write as a failed row.
 
   An answer stands only while the action still calls it answered: its identity, or the
-  input it names as producer, holds `success` (`every_answer_vouched_for`). A reset clears
-  every disposition and leaves the stored rows for the re-run to replace, so after one no
-  stored answer is vouched for; kept, they would be served as answers to the config the
-  reset replaced, or to inputs the action above has since minted anew. Where any stored
-  answer of the file is not vouched for, online writes the file with its failures before
-  it raises (`stored_answers_stand`), and the merge here applies the inputs rule in full,
-  as for a run that answered something. Only that case reads the dispositions.
+  input it names as producer, holds `success` (`every_answer_vouched_for`). The gate sends
+  only records that hold none, and a failure is recorded before the write, so the answer
+  stored for a record the run sent is not vouched for by it. A reset clears every
+  disposition and leaves the stored rows for the re-run to replace, so after one no stored
+  answer is vouched for; kept, they would be served as answers to the config the reset
+  replaced, or to inputs the action above has since minted anew. Where any stored answer
+  of the file is not vouched for, online writes the file with its failures before it
+  raises (`stored_answers_stand`), and the merge here applies the inputs rule in full, as
+  for a run that answered something: an input the run wrote a row for keeps none of its
+  stored rows, minted ones included, as online writes only that row. Only that case reads
+  the dispositions.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is

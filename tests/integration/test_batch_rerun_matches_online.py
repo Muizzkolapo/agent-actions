@@ -1185,6 +1185,10 @@ EVERY_INPUT_FAILS_AFTER_A_RESET = {
     "the_same_inputs": (["a1", "a2"], {("a1", 2): "fail", ("a2", 2): "fail"}),
     "the_same_inputs_exhausted": (["a1", "a2"], {("a1", 2): "exhaust", ("a2", 2): "exhaust"}),
     "inputs_minted_again": (["a3", "a4"], {("a3", 2): "fail", ("a4", 2): "fail"}),
+    "inputs_this_action_gave_several_rows": (
+        ["a1", "a2"],
+        {"a1": 2, "a2": 2, ("a1", 2): "fail", ("a2", 2): "fail"},
+    ),
 }
 
 

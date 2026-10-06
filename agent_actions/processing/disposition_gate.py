@@ -322,8 +322,10 @@ def stored_rows_not_reproduced(
     something failed and nothing was answered online leaves the stored file as it is, so
     every stored answer stands, over a row produced under its identity too, and a filtered
     input keeps what it held -- unless a stored answer is one the action no longer calls
-    answered (``stored_answers_stand``). *still_answered* gives the records it holds
-    ``success`` for, and is asked only then; without it every stored answer counts as one.
+    answered (``stored_answers_stand``). Then the file follows its inputs, and an input
+    the run wrote a row for keeps none of its stored rows, minted ones included, as online
+    writes only that row. *still_answered* gives the records it holds ``success`` for, and
+    is asked only then; without it every stored answer counts as one.
     """
     stored = list(stored)
     answered: set[str] = set()
@@ -349,6 +351,7 @@ def stored_rows_not_reproduced(
         and not answered
         and (still_answered is None or every_answer_vouched_for(stored, still_answered()))
     )
+    taken_back = failed and not answered and not refused
     inputs = frozenset(batch_inputs)
     excluded = frozenset(filtered)
     carry: set[str] = set()
@@ -371,6 +374,9 @@ def stored_rows_not_reproduced(
             continue
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
+            continue
+        # Online writes only this run's row for an input whose answers were taken back.
+        if taken_back and answers_for in rewritten:
             continue
         if answers_for in excluded and not refused:
             filtered_out.add(guid)

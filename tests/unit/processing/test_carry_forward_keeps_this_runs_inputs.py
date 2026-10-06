@@ -249,6 +249,18 @@ class TestOnlyAnAnswerTheActionStillCallsAnsweredStands:
 
         assert carry == set()
 
+    def test_a_failed_input_keeps_none_of_the_rows_it_minted_once_they_are_taken_back(self):
+        """Online writes only the failure for it, and carries what the gate still calls
+        answered: here the input the run did not send."""
+        stored = [_row("m1", ["a1"]), _row("m2", ["a2"]), _row("m3", ["a3"])]
+        produced = [_row("a1", state="failed"), _row("a2", state="exhausted")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2", "a3"}, still_answered=lambda: {"a3"}
+        )
+
+        assert carry == {"m3"}
+
     def test_one_answer_taken_back_is_enough_to_write_the_file(self):
         """Online's choice is the file's, not the row's: it writes the file or leaves it."""
         stored = [_row("a1"), _row("a2")]
