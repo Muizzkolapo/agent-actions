@@ -161,7 +161,7 @@ How guard results affect downstream actions in a multi-action workflow:
 | on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
 | `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
-| `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
+| `filter` | Record excluded from output | **Never sees it** — record is removed from every action below the filter |
 
 An action left holding no record because its guard filtered them all is skipped, and so is every action that depends on it. With several input files, filtering all of one file's records is not enough: an action that keeps records from another file completes, and the actions that depend on it run on what it kept and hold nothing for the file it filtered, in either run mode. Records it keeps from a file the run did not read, such as one beyond `--file-limit`, count too.
 
@@ -181,6 +181,14 @@ actions:
     # Receives ALL records from extract_facts, including skipped ones
     # Can define its own guard or process everything
 ```
+
+### Filtered records leave only what is below the filter
+
+A record an action filters is gone from that action and from every action that depends on
+it, directly or through others. An action on another branch, one that does not depend on
+the filtering action, still receives the record, and so does one under another start node.
+Where the branches meet again, in an action that depends on both, the record stays out: it
+does not come back through the branch that kept it.
 
 ### Upstream failures are short-circuited
 

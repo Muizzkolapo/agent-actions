@@ -186,9 +186,9 @@ class TestANameOutsideTheLineageIsRefused:
         _assert_refused(_run("--fresh"), project, "mid")
 
     def test_an_action_on_another_branch_that_happens_to_run_earlier(self, project):
-        """`late` reads `d`'s records, which are stored after `final`'s, and a stored
-        record is rejoined with the actions of every earlier level. So `late` read
-        `final` here, but only while the d-branch stays the longer one."""
+        """`final` is stored before `d` is, on another branch, and is on none of the
+        records `late` reads: a stored record is rejoined only with what is upstream
+        of it."""
         _late(project, ["d"], ["d.summary", "final.summary"], extra=BRANCH)
 
         _assert_refused(_run("--fresh"), project, "final")

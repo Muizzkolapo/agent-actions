@@ -345,18 +345,17 @@ class AgentWorkflow:
     # ── Execution ───────────────────────────────────────────────────────
 
     def _persist_execution_metadata(self, levels: list[list[str]]) -> None:
-        """Store execution order and dependency graph in workflow metadata."""
+        """Store the execution order, and each action's ancestors as the dependency graph.
+
+        Readers take the graph as exactly what is upstream of an action: the storage
+        walk drops what a guard filtered there, and delta storage rejoins its namespaces.
+        """
         backend = getattr(self, "storage_backend", None)
         if backend is None:
             return
         backend.save_metadata("execution_order", json.dumps(self.execution_order))
-        prior_actions: list[str] = []
-        dep_graph: dict[str, list[str]] = {}
-        for level_actions in levels:
-            for action in level_actions:
-                dep_graph[action] = list(prior_actions)
-            prior_actions.extend(level_actions)
-        backend.save_metadata("dependency_graph", json.dumps(dep_graph))
+        orchestrator = self.services.core.action_level_orchestrator
+        backend.save_metadata("dependency_graph", json.dumps(orchestrator.upstream_actions(levels)))
 
     async def async_run(self, concurrency_limit: int = 5):
         """Execute workflow level-by-level with parallelism within each level."""

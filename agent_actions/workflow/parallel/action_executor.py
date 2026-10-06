@@ -3,7 +3,6 @@ Action-level execution orchestration module.
 """
 
 import asyncio
-import copy
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -84,30 +83,47 @@ class ActionLevelOrchestrator:
                 expanded.append(dep)
         return expanded
 
+    def _direct_dependencies(self) -> dict[str, list[str]]:
+        """Each action's ``dependencies`` in this run, a version base meaning every version."""
+        version_base_map = self._build_version_base_name_map()
+        execution_set = set(self.execution_order)
+
+        deps_map = {}
+        for action in self.execution_order:
+            raw_deps = [
+                d for d in self.action_configs[action].get("dependencies", []) if isinstance(d, str)
+            ]
+            expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
+            # Filter out dependencies not in execution_order (e.g. version base names)
+            deps_map[action] = [d for d in expanded_deps if d in execution_set]
+        return deps_map
+
+    def upstream_actions(self, levels: list[list[str]]) -> dict[str, list[str]]:
+        """Each action's ancestors through ``dependencies``, in the order *levels* runs them.
+
+        Not every action of an earlier level: one beside an action, or under another
+        start node, never reaches its records.
+        """
+        deps_map = self._direct_dependencies()
+        reached: dict[str, set[str]] = {}
+        upstream: dict[str, list[str]] = {}
+        earlier: list[str] = []
+        for level in levels:
+            for action in level:
+                reached[action] = set(deps_map[action]).union(
+                    *(reached[dep] for dep in deps_map[action])
+                )
+                upstream[action] = [a for a in earlier if a in reached[action]]
+            earlier.extend(level)
+        return upstream
+
     def compute_execution_levels(self) -> list[list[str]]:
         """Compute execution levels from dependency graph.
 
         Raises:
             WorkflowError: If circular dependencies are detected.
         """
-        # Build mapping of version base names to their expanded variants
-        version_base_map = self._build_version_base_name_map()
-
-        local_configs = copy.deepcopy(self.action_configs)
-        execution_set = set(self.execution_order)
-
-        deps_map = {}
-        for action in self.execution_order:
-            raw_deps = [
-                d for d in local_configs[action].get("dependencies", []) if isinstance(d, str)
-            ]
-            # Expand any version base name references to their expanded variants
-            expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
-            # Filter out dependencies not in execution_order (e.g. version base names)
-            expanded_deps = [d for d in expanded_deps if d in execution_set]
-            deps_map[action] = expanded_deps
-            if expanded_deps != raw_deps:
-                local_configs[action]["dependencies"] = expanded_deps
+        deps_map = self._direct_dependencies()
 
         levels = []
         assigned: set[str] = set()

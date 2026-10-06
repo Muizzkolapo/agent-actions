@@ -597,10 +597,9 @@ class StorageBackend(ABC):
     def _get_upstream_actions(self, action_name: str) -> list[str]:
         """Get the transitive upstream actions for a given action.
 
-        Uses the dependency graph if available, falling back to
-        execution_order[:idx]. Either way the answer is a superset of the action's
-        true ancestors: the stored graph records every action of every earlier
-        execution level, so it includes actions this one never reads.
+        Uses the dependency graph if available: the action's ancestors through
+        ``dependencies``, in the order they run. The fallback, execution_order[:idx],
+        is a superset that includes actions this one never reads.
         """
         # Try dependency graph first (correct for parallel pipelines)
         if self._dependency_graph_cache is None:
