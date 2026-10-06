@@ -97,9 +97,11 @@ def _status(mode: _Mode) -> ActionStatus:
     return executor._resolve_completion_status(ACTION)
 
 
-def _failed_row(mode: _Mode) -> tuple[Any, ...]:
+def _failed_row(mode: _Mode) -> dict[str, Any]:
+    """The one failed row, less its state history: batch's also carries the transition
+    preparation made, as the row of every record batch fails to prepare does."""
     (row,) = [row for row in mode.held() if row.get("_state") == "failed"]
-    return row.get("source_guid"), row.get("target_id"), sorted(row.get("content") or {})
+    return {key: value for key, value in row.items() if key != "_state_history"}
 
 
 class _Model:
@@ -274,7 +276,7 @@ def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_wi
     tmp_path, inputs
 ):
     """Its target_id and what the action above said are all that tell a reader which
-    record it was."""
+    record it was, and the reason names it by that target_id."""
     (tmp_path / "online").mkdir()
     (tmp_path / "batch").mkdir()
     online = _Online(tmp_path / "online")
@@ -283,20 +285,37 @@ def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_wi
     online.run(inputs)
     batch.run(1, inputs, extra=EXTRA)
 
-    assert _failed_row(batch) == _failed_row(online) == (None, "t-n1", [UPSTREAM, ACTION])
+    row = _failed_row(online)
+    assert _failed_row(batch) == row
+    assert (row["source_guid"], row["target_id"], sorted(row["content"])) == (
+        None,
+        "t-n1",
+        [UPSTREAM, ACTION],
+    )
+    assert row["_tombstone_reason"].startswith(
+        f"Record t-n1 reached '{ACTION}' without a source_guid"
+    )
 
 
-def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mode(tmp_path):
+_DELETED = object()
+
+
+@pytest.mark.parametrize("lost", [_DELETED, None, ""], ids=["deleted", "null", "empty"])
+def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mode(tmp_path, lost):
     """It was refused only once its answer came back: paid for, and the answer thrown
     away. The prompt trace written as its prompt was rendered was the one sign left that
-    it had been sent."""
+    it had been sent. An edit can drop the field or blank it, and a blank one names no
+    record either."""
     (tmp_path / "online").mkdir()
     (tmp_path / "batch").mkdir()
     online = _Online(tmp_path / "online")
     batch = _Batch(tmp_path / "batch")
+    inputs = answered()
+    if lost is not _DELETED:
+        inputs[1]["source_guid"] = lost
 
-    online.run(answered())
-    batch.run(1, answered(), extra=EXTRA)
+    online.run(inputs)
+    batch.run(1, inputs, extra=EXTRA)
 
     assert online.model.asked == ["a1"]
     assert [task["custom_id"] for task in batch.provider.submitted[-1]] == ["t-a1"]
@@ -329,6 +348,19 @@ def test_a_record_with_no_source_guid_does_not_stop_a_batch_at_its_preflight(tmp
 
     assert batch.raised[-1] is None
     assert held == ["failed:None", "processed:a1:0@run1"]
+
+
+def test_the_preflight_still_stops_a_broken_template_behind_a_record_with_no_source_guid(
+    tmp_path,
+):
+    """Passing over the refused record, it renders the next prompt, which is what it is
+    there to check: a1 has no topic."""
+    batch = _Batch(tmp_path)
+
+    batch.run(1, [nameless(topic="dbt"), rec("a1", keep=True)], extra=EXTRA)
+
+    assert "references undefined variables" in batch.raised[-1]
+    assert batch.provider.submitted == []
 
 
 @pytest.mark.parametrize(
