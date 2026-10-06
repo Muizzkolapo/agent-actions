@@ -40,6 +40,30 @@ def flatten_unless_blank(data: Any, *args) -> list[dict]:
     return [{"summary": json.dumps(data)[:80], "exam_density": "low"}]
 '''
 
+GATHER_TOOL = '''from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def gather_nothing(data: Any, *args) -> list[dict]:
+    """Nothing for the whole file."""
+    return []
+'''
+
+# A FILE action cannot be a workflow's first, so it reads what `flatten` stored.
+GATHER_ACTION = """  - name: gather
+    kind: tool
+    granularity: File
+    dependencies: [flatten]
+    intent: "Gather the file into nothing"
+    schema: tool_action_output
+    impl: gather_nothing
+    context_scope: { observe: [flatten.summary] }
+    expect: { repair: none }
+"""
+
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
@@ -152,6 +176,18 @@ class TestOnEmptyOnTheAction:
 
         assert result.exit_code == 0, result.output
         assert _records(project, TOOL_WORKFLOW, "flatten") == ["failed", "success"]
+
+    def test_error_fails_a_file_tool_that_returns_nothing(self, project):
+        """A FILE tool's empty answer is judged by a reader of its own, over the whole file."""
+        config = _config(project, TOOL_WORKFLOW)
+        config.write_text(config.read_text().rstrip("\n") + "\n" + GATHER_ACTION)
+        (project / "tools" / TOOL_WORKFLOW / "gather_nothing.py").write_text(GATHER_TOOL)
+        _on_empty(project, TOOL_WORKFLOW, action="error")
+
+        result = _run(TOOL_WORKFLOW)
+
+        assert result.exit_code != 0, result.output
+        assert _halted_on_empty(project, TOOL_WORKFLOW, "gather")
 
 
 class TestOnEmptyInheritedFromADefault:
