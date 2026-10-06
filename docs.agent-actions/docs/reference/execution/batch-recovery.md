@@ -52,8 +52,9 @@ After retrieving batch results, the system compares the expected record IDs agai
 
 A retry is prepared again from each record's stored context, with the action's dependencies
 and version, so its prompt reads the same upstream answers and its guard decides as it did for
-the first request. A record whose prompt or guard reads `workflow.*` cannot be prepared again
-this way, and is not retried.
+the first request. The run's `workflow.*` values are not handed to it yet. A record whose
+prompt reads them is not retried: nothing is sent for it, and it is stored `cascade_skipped`.
+A guard that reads them cannot be evaluated on a retry, and the collect run fails.
 
 ### Configuration
 
