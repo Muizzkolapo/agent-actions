@@ -632,8 +632,8 @@ the action without the records past the halt.
 The same `detail` marks a failure that reached all of the action's input with
 `EVERY_INPUT_FAILED`: every record it holds failed and its file walk lost no file
 partway (`_finalize_total_failure`, reading `ActionRunner.input_left_unreached`), or
-every input file failed on all of its records (`mark_every_record_failed`, raised by
-`raise_if_terminal_failure`), none to an error fatal to the action
+every input file failed on all of its records (`mark_every_record_failed`, on the error
+`CollectionStats.terminal_failure` returns), none to an error fatal to the action
 (`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
 such as a UDF output that fails validation — or never read leaves records unreached.
 Any other failure may have stopped the action partway, and a failure recorded before

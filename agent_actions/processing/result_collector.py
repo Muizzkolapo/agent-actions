@@ -128,18 +128,6 @@ class CollectionStats:
         )
         return bool((self.skipped + self.filtered) == total)
 
-    def raise_if_terminal_failure(
-        self,
-        action_name: str,
-        data: list,
-        output: list,
-        storage_backend: Optional["StorageBackend"] = None,
-    ) -> None:
-        """Raise what ``terminal_failure`` returns, if anything."""
-        failure = self.terminal_failure(action_name, data, output, storage_backend)
-        if failure is not None:
-            raise failure
-
     def terminal_failure(
         self,
         action_name: str,

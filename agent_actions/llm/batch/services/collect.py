@@ -122,11 +122,7 @@ def _nothing_succeeded_halt(
     """
     if all(result.source_guid for result in results):
         return None
-    try:
-        stats.raise_if_terminal_failure(ctx.agent_name, results, [])
-    except RuntimeError as halt:
-        return halt
-    return None
+    return stats.terminal_failure(ctx.agent_name, results, [])
 
 
 def collect_batch_rows(

@@ -44,7 +44,10 @@ def _executor(backend):
 
 def _one_file_wholly_filtered(backend, other=()):
     filtered = [{"page_content": f"page {i}"} for i in range(3)]
-    CollectionStats(filtered=len(filtered)).raise_if_terminal_failure(ACTION, filtered, [], backend)
+    assert (
+        CollectionStats(filtered=len(filtered)).terminal_failure(ACTION, filtered, [], backend)
+        is None
+    )
     backend.write_target(ACTION, "pages.json", [])
     backend.write_target(ACTION, "other.json", list(other))
 
