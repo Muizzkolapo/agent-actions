@@ -41,7 +41,6 @@ lineage helpers, recovery flows, and transformation pipelines.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `UnifiedProcessor.process()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].granularity`, `actions[].kind` |
-| `UnifiedProcessor.process()` | `agent_io/store/` | Reads | — |
 | `TaskPreparer.prepare()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard`, `actions[].conditional_clause` |
 | `ResultCollector.collect_results()` | `agent_io/target/{action}/` | Writes | — |
 | `write_dispositions()` | `agent_io/store/` | Writes | — |
@@ -51,7 +50,8 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `ExhaustedRecordBuilder.build_empty_content()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 
 `UnifiedProcessor.process()` reads the action's stored rows for one file (carry-forward, the
-carry of a repair, and `answered_since_stored`) and `OnlineLLMStrategy.invoke()` writes a
+carry of a repair, `answered_since_stored`, and `has_target_file`, which tells a carry from
+checkpoint rows from one from the stored file) and `OnlineLLMStrategy.invoke()` writes a
 checkpoint row per record, both under `ProcessingContext.target_relative_path`: the name the
 caller stores the file under, and by which it clears the file's checkpoint rows once written.
 
