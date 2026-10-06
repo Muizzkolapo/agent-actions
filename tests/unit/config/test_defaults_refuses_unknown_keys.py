@@ -155,6 +155,7 @@ class TestWhatTheFrameworkReadsFromADefaultsBlock:
             ("tokenizer_model", "gpt2"),
             ("split_method", "sentence"),
             ("where_clause", {"field": "x"}),
+            ("on_empty", "skip"),
         ],
     )
     def test_it_reaches_the_agent(self, key, value):
