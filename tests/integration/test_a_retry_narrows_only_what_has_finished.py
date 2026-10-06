@@ -300,15 +300,12 @@ def _every_file_of_the_reader_fails():
 
 @pytest.mark.parametrize(
     "fault",
-    [
-        pytest.param(lambda: _the_readers_tool_raises(RuntimeError("blew up")), id="every_record"),
-        pytest.param(_every_file_of_the_reader_fails, id="every_file"),
-    ],
+    [pytest.param(_every_file_of_the_reader_fails, id="every_file")],
 )
 def test_a_reader_that_failed_everything_after_a_reset_refuses(chained, fault):  # noqa: F811
-    """The reset deletes no row, and a run that fails everything writes none, so the
-    reader still holds the row of the page its source now filters. Nothing would reach
-    that row again once a retry carried it."""
+    """The reset deletes no row, and a run whose every file fails before it is processed
+    writes none, so the reader still holds the row of the page its source now filters.
+    Nothing would reach that row again once a retry carried it."""
     _filter_the_first_page(chained)
     with fault():
         _run()
@@ -319,6 +316,26 @@ def test_a_reader_that_failed_everything_after_a_reset_refuses(chained, fault): 
 
     assert result.exit_code != 0, result.output
     assert "enrich (failed)" in result.output, result.output
+    assert _run().exit_code == 0
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def test_a_reader_whose_every_record_failed_after_a_reset_is_narrowed(chained):  # noqa: F811
+    """A file in which every record fails after a reset is written with its failures
+    (1283), so the reader keeps no row of the page its source now filters, only a failure
+    for each record it reached. That failure reached all of its input, which is what a
+    retry is for, so the retry narrows it."""
+    _filter_the_first_page(chained)
+    with _the_readers_tool_raises(RuntimeError("blew up")):
+        _run()
+    assert _status(chained) == "failed"
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+    named = _a_failure_at_the_first_action(chained)
+
+    result = _retry("--record", named)
+
+    assert result.exit_code == 0, result.output
+    assert _disposition(chained, named, SECOND) == "success"
     assert _run().exit_code == 0
     assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
 
