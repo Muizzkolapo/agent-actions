@@ -213,11 +213,6 @@ class UnifiedProcessor:
                             context.action_name, relative_path
                         )
                     )
-                    inputs = (
-                        {guid: r for r in passing if (guid := r.get("source_guid"))}
-                        if from_checkpoint
-                        else {}
-                    )
                     for record in carry_data:
                         if raw_records is not None:
                             carry_results.append(
@@ -228,9 +223,7 @@ class UnifiedProcessor:
                                 )
                             )
                         elif from_checkpoint:
-                            checkpointed_results.append(
-                                self._answered_from_checkpoint(record, inputs)
-                            )
+                            checkpointed_results.append(self._answered_from_checkpoint(record))
                         else:
                             carry_results.append(
                                 ProcessingResult(
@@ -277,19 +270,15 @@ class UnifiedProcessor:
         return self._collect(enriched, context)
 
     @staticmethod
-    def _answered_from_checkpoint(
-        row: dict[str, Any], inputs: dict[str, dict[str, Any]]
-    ) -> ProcessingResult:
+    def _answered_from_checkpoint(row: dict[str, Any]) -> ProcessingResult:
         """A checkpoint row as the answer it was, for enrichment and collection to finish.
 
         The checkpoint stamps the state collection gives, and a processed record cannot be
         failed: left on, it would keep collection from failing an answer that failed to parse.
         """
-        guid = row.get("source_guid")
         return ProcessingResult.success(
             data=[{key: value for key, value in row.items() if key != "_state"}],
-            source_guid=guid,
-            input_record=inputs.get(guid) if guid else None,
+            source_guid=row.get("source_guid"),
         )
 
     def _guard_filter(
