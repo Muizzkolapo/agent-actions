@@ -7,13 +7,15 @@ body: >-
   the answer was back: the answer was paid for and thrown away, or, where it held several
   rows, kept under identities minted for each row while the record still had none, so
   every run sent it again. It is now refused once the action's guard has passed it, before
-  its prompt is rendered, and stored as the same failed row, which keeps its target id and
-  the content it arrived with; a record-level tool below the first stage is not called for
-  it either, and a batch retry or repair round does not send it again. A guard that
-  filters or skips it still decides it first, alike in both modes. Batch's preflight,
-  which renders the first prompts to catch a broken template, now passes over such a
-  record, where one at the head of the input whose prompt could not be rendered stopped
-  the whole action. Where the action's other records succeeded it still reads complete: no
-  failure can be recorded for a record without an identity, and the failed row and the run
-  log name it by its target id. To process it, give it back its `source_guid` upstream.
+  its prompt is rendered, and stored, as before, as a failed row that keeps its target id
+  and the content it arrived with; the row's reason now names it by that id. A
+  record-level tool below the first stage is not called for it either, and a batch retry
+  or repair round does not send it again. A guard that filters or skips it still decides
+  it first, alike in both modes: filtered, it leaves nothing, and skipped, it is refused
+  at enrichment as before. Batch's preflight, which renders the first prompts to catch a
+  broken template, now passes over such a record, where one at the head of the input whose
+  prompt could not be rendered stopped the whole action. Where the action's other records
+  succeeded it still reads complete: no failure can be recorded for a record without an
+  identity, and the failed row and the run log say what was refused. To process it, give
+  it back its `source_guid` upstream.
 time: 2026-10-05T02:06:03Z

@@ -750,11 +750,16 @@ A record that arrives without one has no identity, in either mode, and is
     decided it and before its prompt is rendered, traced or sent: an LLM action
     in either mode, and a record-level tool, never sees it. It is stored as a
     failed row with no source_guid, keeping the target_id and content it arrived
-    with, which the collector builds from the record in both modes. The guard
-    comes first because online's runs above the strategy and batch's inside
-    preparation: a record it filters leaves nothing, and one it skips gets a
-    tombstone RequiredFieldsEnricher refuses, stored as the same failed row.
-    Batch's preflight sample passes over a refused record as over a guard skip.
+    with, which the collector builds from the record in both modes; the row's
+    reason and the run log name it by its target_id. Batch's row also carries
+    preparation's own transition to failed in its history, as the row of every
+    record batch fails to prepare does. The guard comes first because online's
+    runs above the strategy and batch's inside preparation: a record it filters
+    leaves nothing, and one it skips gets a tombstone RequiredFieldsEnricher
+    refuses, in both modes. That refusal names the record by its position, and
+    online's row for it keeps neither its target_id nor its content, since the
+    guard's skip result carries no input record; batch's keeps both. Batch's
+    preflight sample passes over a refused record as over a guard skip.
     Refused when its answer came back, it was paid for, and an answer of several
     rows was kept under identities minted for each row while the record itself
     still had none, so every run sent it again.
@@ -781,9 +786,8 @@ Refused, it leaves no disposition, and batch reads an action's outcome from
     per-record failure can be written without an identity, and the node-level
     one is what the executor writes for an action that failed: the next run
     runs such an action again, and `agac retry` names it, though running the
-    action again only refuses the record again. The remedy is
-    upstream, so the failed row and the run log, which name the record by its
-    target_id, are what say it was refused.
+    action again only refuses the record again. The remedy is upstream, so
+    the failed row and the run log are what say it was refused.
 
 A batch run with nothing to send collects through the same step
     (`collect_batch_rows`), so there too such a record is recorded nowhere and
