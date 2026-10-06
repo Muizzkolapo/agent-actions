@@ -1223,6 +1223,16 @@ def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_aga
     assert batch.backend.get_prompt_traces(ACTION) == traced
 
 
+def test_a_carried_input_the_action_above_blocked_keeps_its_answer_as_online(tmp_path):
+    """Preparation puts no blocked record to the guard, so judging one must not turn it
+    away: prepared again, its answer would be replaced by a cascade tombstone."""
+    blocked = {**rec("a1", keep=True), "_state": "failed"}
+
+    for run in compare(tmp_path, [_PASSES, [blocked, rec("a2", keep=False)]], FILTER):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
 def test_an_action_whose_guard_now_filters_every_carried_input_reads_as_skipped(tmp_path):
     """As online, which records the action skipped: it holds nothing, under the node-level
     mark the executor reads as skipped when no row is stored."""

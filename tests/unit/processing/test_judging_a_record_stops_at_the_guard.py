@@ -7,11 +7,12 @@ batch is sent with.
 
 import pytest
 
+from agent_actions.errors.validation import DataValidationError
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.task_preparer import TaskPreparer
 
 
-def _context(guard=None):
+def _context(guard=None, source_data=None):
     config = {
         "granularity": "record",
         "context_scope": {"observe": ["a1.n"]},
@@ -21,7 +22,10 @@ def _context(guard=None):
     if guard is not None:
         config["guard"] = guard
     return PreparationContext(
-        agent_config=config, agent_name="a2", agent_indices={"a1": 0, "a2": 1}
+        agent_config=config,
+        agent_name="a2",
+        agent_indices={"a1": 0, "a2": 1},
+        source_data=source_data,
     )
 
 
@@ -46,6 +50,31 @@ VERDICTS = {
 def test_judging_a_record_gives_the_status_preparing_it_gives(guard, status):
     assert TaskPreparer().judge(_record(), _context(guard)) == status
     assert TaskPreparer().prepare(_record(), _context(guard)).guard_status == status
+
+
+@pytest.mark.parametrize(
+    ("page", "status"), [("kept", GuardStatus.PASSED), ("dropped", GuardStatus.FILTERED)]
+)
+def test_a_guard_reading_the_source_judges_a_record_as_preparing_it_does(page, status):
+    """The record carries no ``source``; only the pool row its guid names does, so the
+    guard sees it only through the field context preparing the record builds."""
+    reads_the_source = _context(
+        _guard('source.page == "kept"', "filter"),
+        source_data=[{"source_guid": "G0", "content": {"page": page}}],
+    )
+
+    assert TaskPreparer().judge(_record(), reads_the_source) == status
+    assert TaskPreparer().prepare(_record(), reads_the_source).guard_status == status
+
+
+def test_judging_a_record_for_an_action_with_no_guard_resolves_nothing():
+    """Batch judges every record it carries; resolving the source for an action with
+    no guard would fail the file on a pool row nothing reads for a carried record."""
+    unreadable = _context(source_data=[{"source_guid": "G0", "page": "no envelope"}])
+
+    assert TaskPreparer().judge(_record(), unreadable) == GuardStatus.PASSED
+    with pytest.raises(DataValidationError):
+        TaskPreparer().prepare(_record(), unreadable)
 
 
 def test_a_record_the_action_above_blocked_is_not_put_to_the_guard():
