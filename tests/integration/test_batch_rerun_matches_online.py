@@ -536,6 +536,7 @@ def compare(
     shape: dict[Any, Any] | None = None,
     *,
     clears_batch_state: bool = True,
+    file: str = FILE,
 ) -> list[dict[str, Any]]:
     """Run every step through both modes and report what each held and sent.
 
@@ -544,8 +545,8 @@ def compare(
     ``retry``: the records a repair names, or ``"failures"`` for whichever online's store
     says failed. Both modes are given the same names, so both run the same repair.
     """
-    online = _Online(tmp_path)
-    batch = _Batch(tmp_path, clears_batch_state=clears_batch_state)
+    online = _Online(tmp_path, file)
+    batch = _Batch(tmp_path, file, clears_batch_state=clears_batch_state)
     answer = Answerer(shape)
     findings = []
     for number, step in enumerate(runs, start=1):
@@ -1192,22 +1193,48 @@ EVERY_INPUT_FAILS_AFTER_A_RESET = {
 }
 
 
+@pytest.mark.parametrize("file", [FILE, "sub/page.json"], ids=["a_top_level_file", "a_nested_one"])
 @pytest.mark.parametrize(
     ("inputs", "shape"),
     EVERY_INPUT_FAILS_AFTER_A_RESET.values(),
     ids=EVERY_INPUT_FAILS_AFTER_A_RESET.keys(),
 )
-def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(tmp_path, inputs, shape):
+def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
+    tmp_path, inputs, shape, file
+):
     """Nothing is answered, and every stored answer is one the reset took back: it
-    answered the config the reset replaced, or an input the action above minted anew."""
+    answered the config the reset replaced, or an input the action above minted anew.
+    A nested file is looked up by its path below the action's folder, not its name."""
     runs = [["a1", "a2"], {"inputs": inputs, "reset": True}]
 
-    findings = compare(tmp_path, runs, None, shape)
+    findings = compare(tmp_path, runs, None, shape, file=file)
 
     assert findings[1]["online_raised"], "the file answered nothing"
     for mode in ("online", "batch"):
         assert not _answered(findings[1][mode]), mode
     assert findings[1]["batch"] == findings[1]["online"]
+
+
+def test_a_reset_that_answered_nothing_records_the_skip_it_held_back_for_the_write(tmp_path):
+    """The file is written with its failure, then what collection held back for the write
+    is recorded, as after any write; raised first, the guard's skip goes unrecorded."""
+    online = _Online(tmp_path)
+    online.run(1, _PASSES, extra=SKIP)
+
+    online.run(
+        2,
+        [rec("a1", keep=True), rec("a2", keep=False)],
+        Answerer({("a1", 2): "fail"}),
+        SKIP,
+        reset=True,
+    )
+
+    assert online.raised[-1], "the file answered nothing"
+    recorded = online.backend.get_disposition(ACTION)
+    assert sorted((row["record_id"], row["disposition"]) for row in recorded) == [
+        ("a1", "failed"),
+        ("a2", "passthrough"),
+    ]
 
 
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):

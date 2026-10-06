@@ -112,11 +112,34 @@ def _batch_answers_unparsed():
         yield
 
 
+def _staged_in(root, folder):
+    """Move the staged files into *folder* below the staging root."""
+    staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    (staging / folder).mkdir()
+    for name in PAGES:
+        (staging / name).rename(staging / folder / name)
+    return f"{folder}/"
+
+
+def _checkpointed(root, name):
+    """The checkpoint rows of the staged file *name*, keyed as the first stage keys them."""
+    backend = _backend(root)
+    try:
+        return backend.read_checkpoint_records(ACTION, name)
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("nested", [False, True], ids=["at_the_top", "in_a_subfolder"])
 def test_a_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_before_it(
     online,  # noqa: F811
+    nested,
 ):
     """The other file is answered, so the action completes partly, as it does on a first
-    run; what it must not do is hold the summaries the edit replaced, or hand them on."""
+    run; what it must not do is hold the summaries the edit replaced, or hand them on.
+    The file is written before the run reports it failed, and is found by its path below
+    the action's folder, not its name."""
+    folder = _staged_in(online, "sub") if nested else ""
     _with_a_reader(online)
     assert _run("--fresh").exit_code == 0
     before_the_edit = _stored(online)
@@ -127,12 +150,14 @@ def test_a_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_befo
         result = _run()
 
     assert result.exit_code == 0, result.output
+    assert f"Failed to process file {folder}{FAILING}" in result.output
     assert _status(online) == "completed_with_failures"
     assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
     assert _still_holding(before_the_edit, _stored(online, READER)) == [], (
         "a row made from a replaced summary"
     )
     assert not set(_handed(online)) & set(before_the_edit.values())
+    assert _checkpointed(online, FAILING) == []
 
 
 def test_a_reader_whose_every_record_of_a_file_fails_keeps_nothing_made_before_the_edit(
