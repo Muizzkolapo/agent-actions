@@ -272,9 +272,11 @@ file again, and a file whose input was removed is never written again. So once a
 reached every input there is, `process_files` deletes what the action stores under any
 name no input it reached maps to: a file's path, a first stage's with a `.json` suffix
 (`batch_output_name`), or the name recorded for a nested batch input file
-(`batch_file_names:{action}`, whose entries for inputs that are gone go too). A reader's
-inputs are its upstreams' stored files, so it lets go of what its upstream no longer
-holds; the run that walks is the run that submits, so a batch action does it before
+(`batch_file_names:{action}`, whose entries for inputs that are gone go too), each as the
+store lists it (`stored_path`: SQLite strips the whitespace around a name and turns a
+backslash into a slash, so a name matched as staged would lose the file just written). A
+reader's inputs are its upstreams' stored files, so it lets go of what its upstream no
+longer holds; the run that walks is the run that submits, so a batch action does it before
 anything is collected. A file that failed to process was reached and keeps its rows. A
 walk deletes nothing when a file limit stopped it with files left (a file it never opened
 keeps what the last run put there, on purpose), when it lost an entry (a directory it

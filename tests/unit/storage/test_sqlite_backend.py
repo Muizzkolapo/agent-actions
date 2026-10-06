@@ -396,6 +396,18 @@ class TestValidation:
         backend.write_target("node_1", " file.json ", [{"_state": "active", "id": 1}])
         assert backend.read_target("node_1", " file.json ") == [{"_state": "active", "id": 1}]
 
+    def test_a_file_is_listed_under_the_name_stored_path_gives(self, backend):
+        """A caller comparing its own names with the listing goes through it."""
+        names = [" file.json ", "export\\part.json"]
+        for name in names:
+            backend.write_target("node_1", name, [{"_state": "active", "id": 1}])
+
+        assert backend.list_target_files("node_1") == ["export/part.json", "file.json"]
+        assert {backend.stored_path(name) for name in names} == {"export/part.json", "file.json"}
+
+    def test_a_name_the_store_refuses_is_given_back_unchanged(self, backend):
+        assert backend.stored_path("../x.json") == "../x.json"
+
     def test_space_in_action_name_allowed(self, backend):
         """Test that spaces in action_name are accepted."""
         backend.write_target("node 1", "file.json", [{"_state": "active", "id": 1}])

@@ -88,6 +88,20 @@ def test_a_file_in_a_subdirectory_is_matched_by_its_path(chained):  # noqa: F811
     assert _stored(chained, SECOND) == {"pages.json": PAGES, "sub/kept.json": 2}
 
 
+def test_a_staged_name_the_store_rewrites_keeps_its_rows(chained):  # noqa: F811
+    """The store strips the whitespace around a name and turns a backslash into a slash,
+    which is what a Windows archive extracted on Linux leaves. Matched as staged, such a
+    file was deleted by the run that wrote it."""
+    _stage(chained, " lead.json", 2)
+    _stage(chained, "export\\part.json", 2)
+
+    _run("--fresh")
+
+    held = {"export/part.json": 2, "lead.json": 2, "pages.json": PAGES}
+    assert _stored(chained, ACTION) == held
+    assert _stored(chained, SECOND) == held
+
+
 def test_a_file_limit_the_walk_never_reaches_deletes_them_too(chained):  # noqa: F811
     """Every file left was opened, so none is kept for being unopened."""
     _two_files(chained)

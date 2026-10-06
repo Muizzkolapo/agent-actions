@@ -420,6 +420,8 @@ Blocked:
 
 This is defense-in-depth. All SQL uses parameterized queries, so injection is not possible through values. The validation catches malformed identifiers early with clear error messages rather than letting them propagate to confusing SQL errors.
 
+It also rewrites a path: surrounding whitespace is stripped and a backslash becomes `/`, so ` lead.json` is stored and listed as `lead.json`. A caller that compares its own names with `list_target_files()` passes them through `stored_path()` first, which applies the same rewrite.
+
 ---
 
 ## File Index

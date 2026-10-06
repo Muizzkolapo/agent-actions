@@ -104,6 +104,16 @@ class TestAStagingWalk:
 
         assert _held(backend) == ["notes.json", "sub/pages.json"]
 
+    def test_an_input_is_matched_by_the_name_the_store_gives_it(self, backend, tmp_path):
+        """The store strips the whitespace around a name and turns a backslash into a slash."""
+        _store(backend, " lead.json", "export\\part.json", "gone.json")
+
+        process_files(
+            _runner(backend), _params([_staged(tmp_path, " lead.json", "export\\part.json")])
+        )
+
+        assert _held(backend) == ["export/part.json", "lead.json"]
+
     def test_a_file_that_failed_keeps_its_rows(self, backend, tmp_path):
         _store(backend, "broken.json", "gone.json", "pages.json")
 
@@ -196,6 +206,19 @@ class TestABatchInputFile:
         assert json.loads(backend.load_metadata(batch_file_names_key(ACTION))) == {
             "sub/pages.json": "pages.json"
         }
+
+    def test_the_name_recorded_for_a_nested_file_is_matched_as_the_store_lists_it(
+        self, backend, tmp_path
+    ):
+        """Its basename ` pages.json` was stored as `pages.json`."""
+        backend.save_metadata(
+            batch_file_names_key(ACTION), json.dumps({"sub/ pages.json": " pages.json"})
+        )
+        _store(backend, " pages.json", "gone.json")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "sub/ pages.json")]))
+
+        assert _held(backend) == ["pages.json"]
 
 
 class TestAStorageWalk:

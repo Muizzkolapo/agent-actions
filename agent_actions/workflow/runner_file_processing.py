@@ -993,9 +993,10 @@ def _forget_files_no_input_maps_to(
 
     A reset relies on the re-run writing each file again, and a file whose input is
     gone is never written. A file is stored under its path, a first stage's with a
-    `.json` suffix, or the name recorded for a batch input file. A version merge walks
-    its own stored files, so it finds none here. Not under a repair, which touches
-    only the records it named. A failure only warns: the rows stay.
+    `.json` suffix, or the name recorded for a batch input file, each as the store
+    lists it. A version merge walks its own stored files, so it finds none here. Not
+    under a repair, which touches only the records it named. A failure only warns:
+    the rows stay.
     """
     from agent_actions.llm.batch.infrastructure.context import (
         batch_output_name,
@@ -1007,11 +1008,16 @@ def _forget_files_no_input_maps_to(
         return
     action_name = params.action_name
     try:
-        kept = reached.paths | {batch_output_name(path) for path in reached.paths}
+        names = reached.paths | {batch_output_name(path) for path in reached.paths}
+        kept = {backend.stored_path(name) for name in names}
         gone = [name for name in backend.list_target_files(action_name) if name not in kept]
         if gone:
             recorded = recorded_batch_file_names(backend, action_name)
-            kept |= {batch_output_name(recorded[p]) for p in reached.paths if p in recorded}
+            kept |= {
+                backend.stored_path(batch_output_name(recorded[p]))
+                for p in reached.paths
+                if p in recorded
+            }
             gone = [name for name in gone if name not in kept]
         if gone:
             forget_files_of_inputs_gone(backend, action_name, gone, reached.paths)

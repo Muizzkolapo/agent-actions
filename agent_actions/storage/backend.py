@@ -684,6 +684,14 @@ class StorageBackend(ABC):
         """List all target file paths for a specific node."""
         ...
 
+    def stored_path(self, relative_path: str) -> str:
+        """The name a file written at *relative_path* is listed under.
+
+        A backend that rewrites a name when it writes it says how here, so a caller
+        comparing its own names with ``list_target_files`` compares like with like.
+        """
+        return relative_path
+
     def has_target_file(self, action_name: str, relative_path: str) -> bool:
         """Whether *action_name* stores a file under *relative_path*.
 

@@ -266,6 +266,13 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(f"Invalid characters in {field}: {invalid}")
         return name
 
+    def stored_path(self, relative_path: str) -> str:
+        try:
+            return self._validate_identifier(relative_path, "relative_path")
+        except ValueError:
+            # Refused on write too, so it is listed under no name at all.
+            return relative_path
+
     @property
     def backend_type(self) -> str:
         """Return the backend type identifier."""
