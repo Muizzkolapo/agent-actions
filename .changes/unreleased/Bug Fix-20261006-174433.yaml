@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  `on_empty` written on an action now decides what an empty answer does. The key never
+  reached the action, so `on_empty: error` and `on_empty: skip` both behaved as `warn`:
+  the empty record was marked failed and the run went on, with no halt and no tombstone.
+  It now does what it says online and in a batch, and it can also be set for every action
+  under the workflow's `defaults:`, which refused it as an unknown key. An `on_empty`
+  in the project's `default_agent_config:` was applied, but over the action's own; an
+  action's `on_empty` now wins over it, as it does over `defaults:`. If your workflows
+  set `on_empty: error`, an empty answer now fails the action where it was a failed
+  record before.
+time: 2026-10-06T17:44:33Z

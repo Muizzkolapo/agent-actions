@@ -672,6 +672,9 @@ class DefaultsConfig(_RetryValidators):
     base_url: str | None = Field(default=None, description="Default base URL")
     kind: ActionKind | None = Field(default=None, description="Default action kind")
     is_operational: bool | None = Field(default=None, description="Default operational flag")
+    on_empty: Literal["warn", "error", "skip"] | None = Field(
+        default=None, description="Default behavior when an action produces empty output"
+    )
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
     temperature: float | None = Field(

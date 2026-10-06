@@ -49,6 +49,7 @@ actions:
 | `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
 | `granularity` | string | `record` or `file` processing |
 | `run_mode` | string | `batch` or `online` execution |
+| `on_empty` | string | What an empty answer does: `warn` (default), `error` or `skip` — see [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed` |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |

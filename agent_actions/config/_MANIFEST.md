@@ -81,7 +81,7 @@ Key Functions
 | `VersionConfig` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` (applied by the render step) |
 | `WorkflowConfig` | `agent_config/{workflow}.yml` | Reads | `name`, `description`, `version`, `defaults`, `actions`, `tool_path`, `storage` (extras refused) |
 | `ActionConfig` | `agent_config/{workflow}.yml` | Validates | `name`, `intent`, `kind`, `impl`, `model_vendor`, `model_name`, `schema`, `guard`, `dependencies` |
-| `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `data_source` |
+| `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `on_empty`, `data_source` |
 | `EnvironmentConfig` | `.env` | Reads | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `AGENT_ACTIONS_ENV` |
 | `PathManager.get_project_root` | `agent_actions.yml` | Reads | — |
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |
