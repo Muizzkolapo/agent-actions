@@ -289,7 +289,8 @@ BATCH:
   They never appear in the JSONL file sent to the provider.
   Dispositions are written during finalization.
   A record the disposition gate carries as done is judged too, with no
-  prompt rendered, as online's guard above its gate judges it.
+  prompt rendered, as online's guard above its gate judges it; one the
+  action above blocked is not, as preparation judges none.
 
 ONLINE:
   Guards run per-record in task_preparer, BEFORE the LLM call.

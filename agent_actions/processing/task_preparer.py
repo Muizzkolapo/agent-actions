@@ -131,9 +131,10 @@ class TaskPreparer:
         return prepared
 
     def judge(self, item: Any, context: PreparationContext) -> GuardStatus:
-        """The status ``prepare`` would give *item*, stopping at the guard.
+        """The guard's verdict on *item* as ``prepare`` reaches it; no prompt is rendered.
 
-        No prompt is rendered and nothing is stored.
+        With no guard it is PASSED and the source is not resolved, so a pool row that
+        ``prepare`` would refuse fails nothing here. Nothing is stored.
         """
         if isinstance(item, dict) and item.get("_state") in CASCADE_BLOCKING_VALUES:
             return GuardStatus.UPSTREAM_UNPROCESSED
