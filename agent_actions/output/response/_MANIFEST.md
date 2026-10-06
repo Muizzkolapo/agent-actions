@@ -10,7 +10,7 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `config_fields.py` | Module | Field helpers used by schema configuration objects. `SIMPLE_CONFIG_FIELDS` includes runtime fields for standard 3-level inheritance, `on_empty` among them: a field the expansion does not copy never reaches the agent config its readers take it from. | `output.response.schema`, `validation` |
-| `config_schema.py` | Module | Schema definitions for response metadata configuration. | `validation` |
+| `config_schema.py` | Module | Schema definitions for response metadata configuration. `AgentConfig` refuses an `on_empty` other than `warn`, `error` or `skip`, whichever layer the agent inherited it from. | `validation` |
 | `consolidated_guard.py` | Shim | Re-export shim → `guards.consolidated_guard`. | `guards` |
 | `expander.py` | Module | Facade: `ActionExpander` class orchestrates action-to-agent expansion, delegates to submodules. Forwards `expect:` unchanged; a judged expectation's `params.context:` refs are unioned into the action's own `context_scope.observe` so the framework's existing dependency inference picks up the referenced action automatically — from the action's inline `expectations:` list and from its resolved schema's rules, but not from a named `suite:`, which isn't loadable at this layer. | `tooling.docs`, `schema` |
 | `expander_validation.py` | Module | Validation functions: vendor, action name, required fields, and a version-merge tool's declared output fields against the framework namespaces its flat spread would replace. | `validation` |

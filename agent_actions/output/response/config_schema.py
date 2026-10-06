@@ -222,6 +222,9 @@ class AgentConfig(BaseModel):
     max_execution_time: int | None = Field(
         default=300, description="Maximum execution time in seconds"
     )
+    on_empty: Literal["warn", "error", "skip"] = Field(
+        default="warn", description="What an empty answer does to its record or action"
+    )
     enable_caching: bool = Field(default=True, description="Enable caching for performance")
     context_scope: dict[str, Any] | None = Field(
         default=None,

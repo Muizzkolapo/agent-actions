@@ -189,6 +189,16 @@ class TestOnEmptyInheritedFromADefault:
         assert result.exit_code == 0, result.output
         assert _records(project, TOOL_WORKFLOW, "flatten") == ["passthrough", "success"]
 
+    def test_a_project_default_it_does_not_take_is_refused(self, project):
+        """`default_agent_config:` takes keys it does not declare, so a misspelling
+        reached the action, where it ran as `skip` online and `warn` in a batch."""
+        _on_empty(project, TOOL_WORKFLOW, project_default="eror")
+
+        result = _run(TOOL_WORKFLOW)
+
+        assert result.exit_code != 0, result.output
+        assert "on_empty" in result.output and "'eror'" in result.output
+
 
 class TestAnEmptyModelAnswer:
     """The model answering `{}` for the blank page, online and in a batch."""
