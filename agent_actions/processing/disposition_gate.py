@@ -14,12 +14,14 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable
 from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
+from agent_actions.errors import mark_action_fatal
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_SUCCESS
 
@@ -298,9 +300,15 @@ def stored_answers_stand(
     """
     try:
         stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+        answered = _answered_records(storage_backend, action_name)
     except FileNotFoundError:
         return True
-    return every_answer_vouched_for(stored, _answered_records(storage_backend, action_name))
+    except (OSError, sqlite3.Error) as e:
+        # The store failed, not this file: lost per file, it would stay unwritten over
+        # the answers a reset took back.
+        mark_action_fatal(e)
+        raise
+    return every_answer_vouched_for(stored, answered)
 
 
 def stored_rows_not_reproduced(

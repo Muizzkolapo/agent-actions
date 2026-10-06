@@ -515,7 +515,8 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   raises (`stored_answers_stand`), and the merge here applies the inputs rule in full, as
   for a run that answered something: an input the run wrote a row for keeps none of its
   stored rows, minted ones included, as online writes only that row. Only that case reads
-  the dispositions.
+  the dispositions. A store that cannot answer fails the action, as one that cannot write
+  does.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
