@@ -170,7 +170,7 @@ Layer 5: Runtime injection (by ConfigManager and ActionExpander)
 
 The merge in `merge_agent_configs()` is a flat dict merge (`{**defaults, **agent}`) with one exception: `chunk_config` gets a shallow deep-merge (`{**default_chunk, **agent_chunk}`).
 
-Layers 2 to 4 resolve in the expander, which copies onto the agent only what it is told to: the fields of `SIMPLE_CONFIG_FIELDS`, and the ones it handles by name. An action key it does not copy never reaches the agent config its readers take it from, and a project default for that key arrives through this merge, over the action's own. `on_empty` was such a key: the action's was read as `warn` and the project's overrode it.
+Layers 2 to 4 resolve in the expander, which copies onto the agent only what it is told to: the fields of `SIMPLE_CONFIG_FIELDS`, and the ones it handles by name. An action key it does not copy never reaches the agent config its readers take it from, and a project default for that key arrives through this merge, over the action's own.
 
 ---
 

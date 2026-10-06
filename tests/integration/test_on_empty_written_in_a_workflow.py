@@ -217,7 +217,8 @@ class TestOnEmptyInheritedFromADefault:
         assert _halted_on_empty(project, TOOL_WORKFLOW, "flatten")
 
     def test_the_action_s_own_overrides_the_project_s_default(self, project):
-        """The project's `default_agent_config:` sits under the action, as for any key."""
+        """The project's `default_agent_config:` sits under the action, as for every
+        key the expansion inherits."""
         _on_empty(project, TOOL_WORKFLOW, project_default="error", action="skip")
 
         result = _run(TOOL_WORKFLOW)
