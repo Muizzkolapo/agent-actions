@@ -3,8 +3,8 @@
 What the gate carries a record from the stored file by waits until the file is stored:
 written before it, a run stopped in between left records marked done while the stored file
 held an earlier run's rows. Everything else is written at once, since a file in which every
-record failed or was exhausted raises before it is stored, and `agac retry` reads the
-failures and a fan-in reads the filter.
+record failed or was exhausted is left unwritten while its stored answers stand, and `agac
+retry` reads the failures and a fan-in reads the filter.
 """
 
 import pytest

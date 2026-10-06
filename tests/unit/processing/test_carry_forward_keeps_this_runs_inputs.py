@@ -136,8 +136,8 @@ class TestARowWhoseInputTheGuardFilteredIsLeftOut:
 
     @pytest.mark.parametrize("state", ["processed", "exhausted", "failed"])
     def test_not_where_the_run_failed_and_answered_nothing(self, state):
-        """Online raises before it writes, so what it held for the input stays, answer
-        or not, until a run that writes."""
+        """Online leaves the file unwritten while its answers stand, so what it held for
+        the input stays, answer or not, until a run that writes."""
         stored = [_row("a1"), _row("a2", state=state)]
         produced = [_row("a1", state="failed")]
 

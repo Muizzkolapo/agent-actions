@@ -5,8 +5,8 @@ real store. Below it everything is the production object except the model: onlin
 the strategy, batch swaps the provider. So the guard, record limit, gate, preparator,
 submission, enrichment, collector and finalize all run as they do for a user.
 
-The two files are not always equal. Batch writes a failed row where online refuses to
-write at all, and keeps the rows of inputs a record limit holds back. What must never
+The two files are not always equal. Batch writes a failed row where online leaves the
+file unwritten, and keeps the rows of inputs a record limit holds back. What must never
 happen is the reverse, and ``shortfalls`` names each way it could.
 """
 
@@ -593,9 +593,9 @@ def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
         online_sent, batch_sent = set(run["online_sent"]), set(run["batch_sent"])
         held = _answered(run["batch"])
         for answer in sorted(_answered(run["online"]) - held):
-            # An online run that raised wrote nothing, so it still holds answers for
-            # records that are no input of this run. A batch run that answered
-            # something has written this run's file, without them.
+            # An online run that raised can have left its file unwritten, so it still
+            # holds answers for records that are no input of this run. A batch run that
+            # answered something has written this run's file, without them.
             if run["online_raised"] and _input_of(answer) not in run["inputs"]:
                 continue
             # An answer batch had, or one both modes were just given. One batch never
@@ -1265,7 +1265,8 @@ def test_inputs_minted_again_and_skipped_every_run_do_not_pile_up(tmp_path):
 
 
 def test_a_run_whose_every_answer_fails_keeps_the_stored_answers(tmp_path):
-    """Online raises before it writes; here the failures are written beside them."""
+    """Online leaves the file unwritten while its answers stand; here the failures are
+    written beside them."""
     batch = _Batch(tmp_path)
     batch.run(1, [rec("a1"), rec("a2")])
 

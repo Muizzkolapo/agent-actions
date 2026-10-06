@@ -2,12 +2,12 @@ kind: Bug Fix
 body: >-
   After an edit, a file in which every record fails no longer keeps the answers from before
   the edit. When the model's answers for every record of one input file failed to parse, or
-  a tool raised on each, the run left that file as stored, so it still held the rows
-  answered before the edit. The action was recorded partly complete with exit 0, an action
-  reading it was handed those rows and recorded complete, and no later run asked for them
-  until `agac retry`. The file is now stored with its failures, as one in which only some
-  records fail is, so the actions reading it pass those records over and `agac retry`
-  answers them again. The same holds in batch, and after any reset: a changed model or
-  limit, or an action above that ran again. Without a reset, a run that answers nothing in
-  a file and fails some of it still leaves what the file held.
+  a tool of record granularity raised on each, the run left that file as stored, so it still
+  held the rows answered before the edit. The action was recorded partly complete with
+  exit 0, an action reading it was handed those rows and recorded complete, and no later run
+  asked for them until `agac retry`. The file is now stored with its failures, as one in
+  which only some records fail is, so the actions reading it pass those records over and
+  `agac retry` answers them again. The same holds in batch, and after any reset: a changed
+  model or limit, or an action above that ran again. Without a reset, a run that answers
+  nothing in a file and fails some of it still leaves what the file held.
 time: 2026-10-05T03:00:00Z
