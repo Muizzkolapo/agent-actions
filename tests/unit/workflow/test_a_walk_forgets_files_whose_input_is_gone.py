@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import AgentActionsError, DependencyError, mark_action_fatal
 from agent_actions.storage.backend import batch_file_names_key
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow import runner_file_processing
@@ -86,6 +87,16 @@ def _held(backend, action=ACTION):
     return backend.list_target_files(action)
 
 
+def _two_upstreams(tmp_path, *names):
+    """Two upstream directories a merged walk reads, each holding *names*."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    for directory in (first, second):
+        directory.mkdir()
+        for name in names:
+            (directory / name).write_text("[]")
+    return first, second
+
+
 class TestAStagingWalk:
     def test_the_file_of_an_input_that_is_gone_goes(self, backend, tmp_path):
         _store(backend, "gone.json", "pages.json")
@@ -124,6 +135,17 @@ class TestAStagingWalk:
 
         assert _held(backend) == ["broken.json", "pages.json"]
 
+    def test_a_walk_where_every_file_failed_deletes_nothing(self, backend, tmp_path):
+        """It raises, and a walk that raised has said nothing about what is gone."""
+        _store(backend, "gone.json", "pages.json")
+
+        with pytest.raises(DependencyError):
+            process_files(
+                _runner(backend, fail={"pages.json"}), _params([_staged(tmp_path, "pages.json")])
+            )
+
+        assert _held(backend) == ["gone.json", "pages.json"]
+
     def test_a_walk_that_lost_an_entry_deletes_nothing(self, backend, tmp_path):
         """It cannot say which inputs are gone."""
         staging = _staged(tmp_path, "pages.json")
@@ -133,6 +155,24 @@ class TestAStagingWalk:
         process_files(_runner(backend), _params([staging]))
 
         assert _held(backend) == ["gone.json", "pages.json"]
+
+    def test_a_walk_that_could_not_list_a_directory_deletes_nothing(
+        self, backend, tmp_path, monkeypatch
+    ):
+        """What lay beneath it may still be there."""
+        staging = _staged(tmp_path, "pages.json")
+        _store(backend, "gone.json", "pages.json", "sub/kept.json")
+        walk_files = runner_file_processing.walk_files
+
+        def walk(root, on_error):
+            on_error(PermissionError(13, "Permission denied", str(root / "sub")))
+            return walk_files(root, on_error)
+
+        monkeypatch.setattr(runner_file_processing, "walk_files", walk)
+
+        process_files(_runner(backend), _params([staging]))
+
+        assert _held(backend) == ["gone.json", "pages.json", "sub/kept.json"]
 
     def test_a_file_limit_that_stops_the_walk_deletes_nothing(self, backend, tmp_path):
         """A file it never opened keeps what the last run put there, on purpose."""
@@ -220,6 +260,19 @@ class TestABatchInputFile:
 
         assert _held(backend) == ["pages.json"]
 
+    def test_the_name_recorded_for_a_nested_file_of_another_type_is_kept_as_json(
+        self, backend, tmp_path
+    ):
+        """`sub/notes.csv` recorded as `notes.csv` is stored as `notes.json`."""
+        backend.save_metadata(
+            batch_file_names_key(ACTION), json.dumps({"sub/notes.csv": "notes.csv"})
+        )
+        _store(backend, "gone.json", "notes.json")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "sub/notes.csv")]))
+
+        assert _held(backend) == ["notes.json"]
+
 
 class TestAStorageWalk:
     def test_a_reader_lets_go_of_a_file_its_upstream_no_longer_holds(self, backend, tmp_path):
@@ -229,6 +282,58 @@ class TestAStorageWalk:
         process_files(_runner(backend), _params([tmp_path / "target" / UPSTREAM]))
 
         assert _held(backend) == ["pages.json"]
+
+    def test_a_file_that_failed_keeps_its_rows(self, backend, tmp_path):
+        _store(backend, "a.json", "b.json", action=UPSTREAM)
+        _store(backend, "a.json", "b.json", "gone.json")
+
+        process_files(_runner(backend, fail={"b.json"}), _params([tmp_path / "target" / UPSTREAM]))
+
+        assert _held(backend) == ["a.json", "b.json"]
+
+    def test_a_file_limit_that_stops_the_walk_deletes_nothing(self, backend, tmp_path):
+        """`--file-limit` stops a reader as it stops a first stage."""
+        _store(backend, "a.json", "b.json", action=UPSTREAM)
+        _store(backend, "a.json", "b.json", "gone.json")
+
+        process_files(
+            _runner(backend),
+            _params([tmp_path / "target" / UPSTREAM], action_config={"file_limit": 1}),
+        )
+
+        assert _held(backend) == ["a.json", "b.json", "gone.json"]
+
+    def test_a_stored_file_it_could_not_read_keeps_everything(self, backend, tmp_path, monkeypatch):
+        _store(backend, "a.json", "b.json", action=UPSTREAM)
+        _store(backend, "a.json", "b.json", "gone.json")
+        read = backend.read_target
+
+        def read_target(action_name, relative_path):
+            if action_name == UPSTREAM and relative_path == "b.json":
+                raise sqlite3.OperationalError("disk I/O error")
+            return read(action_name, relative_path)
+
+        monkeypatch.setattr(backend, "read_target", read_target)
+
+        process_files(_runner(backend), _params([tmp_path / "target" / UPSTREAM]))
+
+        assert _held(backend) == ["a.json", "b.json", "gone.json"]
+
+    def test_a_walk_an_action_fatal_error_stopped_deletes_nothing(self, backend, tmp_path):
+        _store(backend, "a.json", "b.json", action=UPSTREAM)
+        _store(backend, "a.json", "b.json", "gone.json")
+        runner = _runner(backend)
+
+        def process(params):
+            if params.locations.item.name == "b.json":
+                raise mark_action_fatal(AgentActionsError("provider refused the key"))
+
+        runner._process_single_file = process  # type: ignore[method-assign]
+
+        with pytest.raises(DependencyError):
+            process_files(runner, _params([tmp_path / "target" / UPSTREAM]))
+
+        assert _held(backend) == ["a.json", "b.json", "gone.json"]
 
     def test_a_version_merge_walking_its_own_files_deletes_none(self, backend, tmp_path):
         """Its correlated input is stored under its own name, and that is what it walks."""
@@ -259,12 +364,37 @@ class TestAStorageWalk:
 
 class TestAMergedWalk:
     def test_the_file_of_an_input_no_upstream_holds_goes(self, backend, tmp_path):
-        first, second = tmp_path / "first", tmp_path / "second"
-        for directory in (first, second):
-            directory.mkdir()
-            (directory / "pages.json").write_text("[]")
         _store(backend, "gone.json", "pages.json")
+
+        process_files(_runner(backend), _params(_two_upstreams(tmp_path, "pages.json")))
+
+        assert _held(backend) == ["pages.json"]
+
+    def test_a_file_that_failed_keeps_its_rows(self, backend, tmp_path):
+        _store(backend, "a.json", "b.json", "gone.json")
+
+        process_files(
+            _runner(backend, fail={"b.json"}),
+            _params(_two_upstreams(tmp_path, "a.json", "b.json")),
+        )
+
+        assert _held(backend) == ["a.json", "b.json"]
+
+    def test_a_file_limit_that_stops_the_walk_deletes_nothing(self, backend, tmp_path):
+        _store(backend, "a.json", "b.json", "gone.json")
+
+        process_files(
+            _runner(backend),
+            _params(_two_upstreams(tmp_path, "a.json", "b.json"), action_config={"file_limit": 1}),
+        )
+
+        assert _held(backend) == ["a.json", "b.json", "gone.json"]
+
+    def test_a_walk_that_lost_an_entry_deletes_nothing(self, backend, tmp_path):
+        first, second = _two_upstreams(tmp_path, "a.json")
+        (first / "dangling.json").symlink_to(first / "nowhere.json")
+        _store(backend, "a.json", "gone.json")
 
         process_files(_runner(backend), _params([first, second]))
 
-        assert _held(backend) == ["pages.json"]
+        assert _held(backend) == ["a.json", "gone.json"]
