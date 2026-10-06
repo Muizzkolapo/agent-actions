@@ -10,6 +10,6 @@ body: >-
   delta storage rejoined a stored row with all of them too, so a row could read back with
   the namespace of a sibling branch it never carried; it now reads back with what is upstream
   of it. A filter upstream of a fan-in still keeps the record from coming back through the
-  branch that did not filter it. A store written before this keeps the records it lost until
-  the action that lost them runs again, for example under `--fresh`.
+  branch that did not filter it. An action that lost records in a store written before this
+  is still missing them until it runs again, for example under `--fresh`.
 time: 2026-10-06T17:39:07Z

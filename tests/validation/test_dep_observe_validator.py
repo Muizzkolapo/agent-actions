@@ -176,7 +176,7 @@ def test_a_name_downstream_of_the_readers_input_is_flagged():
 
 
 def test_a_name_on_another_branch_is_flagged():
-    """It is on the reader's records only while that branch ends at an earlier level."""
+    """A branch beside the reader is never on the records it reads."""
     actions = {
         **_with_late(dependencies=["side"], context_scope={"observe": ["side.x", "mid.x"]}),
         "side": {"dependencies": ["flatten"], "context_scope": {"observe": ["flatten.x"]}},

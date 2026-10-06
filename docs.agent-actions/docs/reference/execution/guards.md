@@ -264,7 +264,7 @@ When a guard is configured on a File-granularity action (tool or HITL), the guar
 
 | `on_false` | Passing records | Failing records |
 |------------|----------------|-----------------|
-| `filter` | Sent to action | Removed from pipeline |
+| `filter` | Sent to action | Removed from this action and every action below it |
 | `skip` | Sent to action | Preserved in output with original content |
 
 The action only sees records that pass the guard. This is useful for:

@@ -196,7 +196,7 @@ class TestARecordReadsBackWithWhatIsUpstreamOfIt:
             (page, ["final", "flatten", "mid", "source"]) for page in PAGES
         ]
 
-    def test_both_branches_of_a_fan_in_are(self, project):
+    def test_both_branches_of_a_fan_in_are_rejoined(self, project):
         _workflow(project, _fan_in(None))
 
         result = _run_online("--fresh")
