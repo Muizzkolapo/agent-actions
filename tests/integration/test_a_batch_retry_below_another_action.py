@@ -13,14 +13,13 @@ versioned action's prompt and guard also read its version, which the rebuild nee
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sqlite3
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -111,13 +110,15 @@ def project(tmp_path):
 
 
 def _run(project: Path, *args: str) -> tuple[int, str]:
-    result = subprocess.run(
-        [str(Path(sys.executable).parent / "agac"), "run", "-a", WORKFLOW, "-u", "tools", *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+    result = run_agac(
+        project,
+        "run",
+        "-a",
+        WORKFLOW,
+        "-u",
+        "tools",
+        *args,
+        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     return result.returncode, result.stdout + result.stderr
 
