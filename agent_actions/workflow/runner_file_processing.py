@@ -978,12 +978,16 @@ def forget_files_of_inputs_gone(
 
     storage_backend.delete_target_files(action_name, gone)
     forget_batch_file_names(storage_backend, action_name, inputs)
+    more = len(gone) - _ERROR_SAMPLE_SIZE
     logger.warning(
-        "'%s' has no input for %s any more, so what it stored for them is deleted. "
+        "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
         "Restore the input and run with --fresh to rebuild it.",
         action_name,
-        ", ".join(gone),
+        ", ".join(gone[:_ERROR_SAMPLE_SIZE]),
+        f" (and {more} more)" if more > 0 else "",
     )
+    if more > 0:
+        logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(gone))
 
 
 def _forget_files_no_input_maps_to(

@@ -205,6 +205,31 @@ class TestAStagingWalk:
 
         assert _held(backend) == ["gone.json", "pages.json"]
 
+    def test_a_warning_names_the_files_deleted(self, backend, tmp_path, caplog):
+        """A reset that a flag set off can delete stored output; the user hears which."""
+        _store(backend, "gone.json", "pages.json")
+
+        with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert "gone.json" in warning.getMessage()
+        assert "pages.json" not in warning.getMessage()
+
+    def test_a_warning_names_a_few_of_many_files_deleted_and_counts_the_rest(
+        self, backend, tmp_path, caplog
+    ):
+        """It is logged for every action that reads the input, so it stays one line."""
+        _store(backend, *(f"gone_{n}.json" for n in range(5)), "pages.json")
+
+        with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert "gone_0.json, gone_1.json, gone_2.json (and 2 more)" in warning.getMessage()
+        assert "gone_3.json" not in warning.getMessage()
+        assert _held(backend) == ["pages.json"]
+
     def test_a_delete_that_fails_only_warns(self, backend, tmp_path, monkeypatch, caplog):
         _store(backend, "gone.json", "pages.json")
 
