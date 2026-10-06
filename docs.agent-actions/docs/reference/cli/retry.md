@@ -238,8 +238,9 @@ instead of raising it.
 
 A halted action before the retry's starting point is not refused, and the retry
 leaves it halted. An action in the retry's range that reads it cannot run while
-it is halted: it is skipped, and the failures the retry cleared there are gone
-until a retry resumes the halt and runs it again. Resume the halt first.
+it is halted: it is skipped, the retry exits 1, and the failures the retry cleared
+there are put back unrepaired. A retry that resumes the halt and runs it again
+repairs them. Resume the halt first.
 
 ## When a retry is interrupted
 

@@ -369,8 +369,8 @@ Costs and limits:
   stored, and after an edit carries, for a record the halted run had answered, the row
   stored before the edit.
 - A retry starting past a halted action is not refused, though its range may read it. Such
-  a reader is skipped, since the halt refuses to run, and the failures the retry cleared
-  there are gone until the halt is resumed.
+  a reader is skipped, since the halt refuses to run, and the retry exits 1. The failures
+  it cleared there are put back unrepaired, and a retry that resumes the halt repairs them.
 
 
 ---
