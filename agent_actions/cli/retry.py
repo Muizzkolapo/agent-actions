@@ -688,11 +688,13 @@ class RetryCommand:
     def _holds_rows_its_failure_did_not_reach(backend, action: str) -> bool:
         """Whether a failed action holds a row of a record its failing run did not reach.
 
-        A run that fails every record writes no output, so every row is older. The row
-        of a record holding a disposition was answered since the action was last reset,
-        or failed and is reached by a later retry. Any other row predates that reset —
-        its record left the input, or is filtered or scoped out, keeping no row — and
-        narrowing would carry it.
+        A run that fails every record of a file writes it with those failures after a
+        reset, keeping none of its older rows, but writes nothing for a file it failed
+        before processing it, so every row there is older. The row of a record holding
+        a disposition was answered since the action was last reset, or failed and is
+        reached by a later retry. Any other row predates that reset — its record left
+        the input, or is filtered or scoped out, keeping no row — and narrowing would
+        carry it.
         """
         reached = {
             row["record_id"]

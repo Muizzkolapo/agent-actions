@@ -357,8 +357,10 @@ A failure that reached all of its input (`EVERY_INPUT_FAILED`, or a batch action
 batches hold an answer or a failure for every record they were sent with a
 `source_guid`) is what a repair is for, unless the action still holds a row for a record
 that run did not reach — a row with no disposition there, or a filtered or scoped-out
-one, which keeps no row. A reset deletes no row and a run that fails everything writes
-none, so such a row predates the reset and would be carried for good.
+one, which keeps no row. A reset deletes no row, and a run that fails everything writes
+none for a file it failed before processing it, so such a row predates the reset and
+would be carried for good. A file whose every record failed is written with those
+failures after a reset, and keeps no such row.
 
 Not refused either: what an interrupted retry put back to pending, which had finished
 before that retry and is resumed by retrying again — the retry stamps each such status
