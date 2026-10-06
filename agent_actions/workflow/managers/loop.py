@@ -199,7 +199,9 @@ class VersionOutputCorrelator:
         """Delete the merge's stored files that no version source lists: their input is gone.
 
         The merge walks its own stored files as input, expecting each to be one just
-        correlated, so such a file would be sent on as its own input. A failure only warns.
+        correlated, so such a file would be sent on as its own input. Under a file limit
+        and a repair too: every version file is listed, so a file none lists is gone, not
+        unopened. A failure only warns.
         """
         from agent_actions.workflow.runner_file_processing import forget_files_of_inputs_gone
 

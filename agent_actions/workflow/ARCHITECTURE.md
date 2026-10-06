@@ -284,7 +284,10 @@ could not list, a file it could not stat, an upstream listing or stored file it 
 read: it cannot say which inputs are gone), or under a repair. A version merge walks its
 own stored files, the correlated input among them, so its walk finds nothing to delete;
 the correlator deletes instead, before the walk, each stored file of the merge that no
-version source lists, which would otherwise be walked and sent on as its own input.
+version source lists, which would otherwise be walked and sent on as its own input. It
+does so under a file limit and a repair too: it lists every file its version sources hold,
+so it can tell an input that is gone from one it never opened, and it rewrites each file
+it correlates on every run, a repair's included.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to
@@ -380,12 +383,12 @@ Costs and limits:
 - A prompt change at the top of a long workflow re-answers everything below it.
 - A limit counts as a change. `--record-limit` on a run resets the actions whose records
   it can reach and their readers, giving up a batch still out below and clearing a halt.
-- A reset does not delete stored rows; the re-run replaces them as it writes each file.
-  A file whose input is gone is deleted when the walk ends, and a re-run that finds no
-  input file at all is skipped and its rows are deleted. Under a file limit that stops the
-  walk, a removed input's file is kept with the files the walk did not open. A file the
-  store fails to write fails the action, so the next run writes it instead of the action
-  completing over its old rows.
+- A reset does not delete stored rows; the re-run replaces them as it writes each file. A
+  file whose input is gone is deleted when the walk ends, and a re-run that finds no input
+  file at all is skipped and its rows are deleted. Under a file limit that stops the walk,
+  a removed input's file is kept with the files the walk did not open; a version merge
+  deletes it all the same, before its walk. A file the store fails to write fails the
+  action, so the next run writes it instead of the action completing over its old rows.
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a
