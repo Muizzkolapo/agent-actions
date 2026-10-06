@@ -9,6 +9,8 @@ body: >-
   that failed to parse was stored as processed and the action recorded complete, where a
   run not stopped marks it failed. And a resumed run whose one answered record failed
   failed the action, saying every record had, and skipped its readers; it now completes
-  with that failure, as a run not stopped does. Rows an earlier version stored this way
-  keep what they lack until the workflow is run with `--fresh`.
+  with that failure, as a run not stopped does. A record carried from its checkpoint is
+  still stored without `_recovery`, the retry details an answered record keeps, since the
+  checkpoint does not save them. Rows an earlier version stored this way keep what they
+  lack until the workflow is run with `--fresh`.
 time: 2026-10-05T01:40:09Z

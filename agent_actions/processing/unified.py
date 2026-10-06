@@ -203,9 +203,9 @@ class UnifiedProcessor:
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
                     # With nothing stored for the file the carry read its checkpoint rows:
-                    # what the strategy returned for records a stopped run answered, before
-                    # the enrichment and collection that run never reached. A FILE strategy
-                    # checkpoints nothing.
+                    # what the strategy returned, saved before enrichment and collection,
+                    # in a run that stopped or whose store failed to write the file. A FILE
+                    # strategy checkpoints nothing.
                     from_checkpoint = (
                         raw_records is None
                         and bool(carry_data)
@@ -273,8 +273,9 @@ class UnifiedProcessor:
     def _answered_from_checkpoint(row: dict[str, Any]) -> ProcessingResult:
         """A checkpoint row as the answer it was, for enrichment and collection to finish.
 
-        The checkpoint stamps the state collection gives, and a processed record cannot be
-        failed: left on, it would keep collection from failing an answer that failed to parse.
+        Collection stamps the state itself, and processed -> failed is illegal: left on, the
+        checkpoint's stamp makes collection raise on an answer that failed to parse, and
+        nothing of the file is stored.
         """
         return ProcessingResult.success(
             data=[{key: value for key, value in row.items() if key != "_state"}],

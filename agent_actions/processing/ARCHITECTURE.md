@@ -317,17 +317,20 @@ the answer their disposition describes, and the checkpoint row is the strategy's
 output before enrichment, without lineage or metadata. Carrying checkpoint rows is
 kept for a file with nothing stored.
 
-There a carried checkpoint row is still the strategy's output, short of the enrichment
-and collection the stopped run never reached, so `UnifiedProcessor` puts it through both
-with the run's own results (`_answered_from_checkpoint`): the answer it was, not asked
-for again. It gets its input's lineage, parent and root, metadata, and its action's
-transition in `_state_history`, and an answer that failed to parse is failed as
-collection fails any other. It is counted with the run's answers, so a run whose one
-answered record failed is not taken for a run where every record did. Appended to the
-output as it was, it was stored without all of these, and each reader built its rows on
-a lineage cut short. The `_state` the checkpoint stamps is dropped first, since a
-processed record cannot be failed. Rows carried from a stored file were enriched and
-collected when it was written, and are appended as they are.
+There a carried checkpoint row is still the strategy's output, saved before enrichment
+and collection, and what they made of it was never stored: the run stopped, or the store
+failed to write the file. So `UnifiedProcessor` puts it through both with the run's own
+results (`_answered_from_checkpoint`): the answer it was, not asked for again. It gets
+its input's lineage, parent and root, metadata, and its action's transition in
+`_state_history`, and an answer that failed to parse is failed as collection fails any
+other. It is counted with the run's answers, so a run whose one answered record failed
+is not taken for a run where every record did. Appended to the output as it was, it was
+stored without all of these, and each reader built its rows on a lineage cut short. The
+`_state` the checkpoint stamps is dropped first, since a processed record cannot be
+failed. The checkpoint keeps the row alone, without the response or its retry details,
+so the record gets no `_recovery` and takes its metadata from the action config. Rows
+carried from a stored file were enriched and collected when it was written, and are
+appended as they are.
 
 That makes the row the only sign a record was answered after its file was stored, so
 `_checkpoint_record` stores it before the disposition the gate carries, and writes no
