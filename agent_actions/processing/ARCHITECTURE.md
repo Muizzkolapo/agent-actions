@@ -767,7 +767,11 @@ RequiredFieldsEnricher still refuses whatever reaches it without one, which is
     would be one `agac retry` names and cannot repair.
     BatchResultReconciler.get_source_guid returns None for it, and for an id the
     context map does not hold, such as a parser placeholder; submission marks it
-    no `deferred`, and `--abandon-in-flight` marks it no `failed`.
+    no `deferred`, and `--abandon-in-flight` marks it no `failed`. Recovery
+    does not send it again, since preparation would refuse it: a retry leaves a
+    lost one unanswered (BatchResultReconciler.resendable_ids), and a repair
+    round leaves out one whose answer failed its expectations
+    (submit_repair_batch). Either way enrichment refuses it as it is collected.
 
 Refused, it leaves no disposition, and batch reads an action's outcome from
     dispositions alone. So where nothing in a file holding such a record

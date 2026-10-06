@@ -288,6 +288,44 @@ class TestHandleRetryRecovery:
         assert delete_args[2] == "test_file"  # (backend, action_name, file_name)
         manager.update_status.assert_called_once_with("batch-123", BatchStatus.COMPLETED)
 
+    @pytest.mark.parametrize(
+        "still_missing, sent_again",
+        [({"id-1", "id-2"}, [{"id-1"}]), ({"id-2"}, [])],
+        ids=["beside_another", "alone"],
+    )
+    def test_a_record_with_no_source_guid_is_not_sent_again(self, still_missing, sent_again):
+        """Preparation refuses it, so beside other records it would be counted lost again
+        every round, and alone it would be exhausted for a batch that could never go out.
+        Only a batch an earlier release sent can hold it."""
+        service = _mock_service()
+        state = _make_state(phase="retry", retry_attempt=1, retry_max_attempts=3)
+        service._retry_service.process_retry_results.return_value = (
+            [],
+            still_missing,
+            {rid: 2 for rid in still_missing},
+            [],
+        )
+        service._retry_service.submit_retry_batch.return_value = ("new-batch-id", 1)
+        context_map = {
+            "id-1": {"target_id": "id-1", "source_guid": "sg-1"},
+            "id-2": {"target_id": "id-2"},
+        }
+        ctx, ident = _make_context_and_identity(service=service)
+
+        with patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"):
+            handle_retry_recovery(
+                ctx,
+                ident,
+                state=state,
+                recovery_results=[],
+                accumulated=[],
+                context_map=context_map,
+            )
+
+        sent = service._retry_service.submit_retry_batch.call_args_list
+        assert [call.kwargs["missing_ids"] for call in sent] == sent_again
+        service._retry_service.build_exhausted_recovery.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # TestHandleRepromptRecovery

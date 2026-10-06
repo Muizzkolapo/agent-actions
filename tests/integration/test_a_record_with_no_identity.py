@@ -32,6 +32,7 @@ from agent_actions.cli.retry import RetryCommand
 from agent_actions.errors import raised_by_terminal_failure
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.services.processing import BatchProcessingService
+from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.invocation.result import InvocationResult
@@ -39,8 +40,10 @@ from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.executor import ActionExecutor
 from agent_actions.workflow.managers.state import ActionStatus
+from tests.integration.test_a_collect_pass_leaves_collected_files_alone import _Action
 from tests.integration.test_batch_rerun_matches_online import (
     ACTION,
+    FILE,
     FILTER,
     PREPARED,
     SKIP,
@@ -473,3 +476,36 @@ def test_a_record_with_no_source_guid_does_not_keep_a_retry_from_a_failed_batch_
 
     assert batch.failures() == ["a1"]
     assert RetryCommand._unfinished_as(batch.backend, ACTION, ActionStatus.FAILED) is None
+
+
+@pytest.mark.parametrize(
+    "lost, sent_again",
+    [({"n1"}, []), ({"a2", "n1"}, [{"t-a2"}])],
+    ids=["alone", "beside_another"],
+)
+def test_a_retry_does_not_send_again_a_record_with_no_source_guid_the_provider_lost(
+    tmp_path, lost, sent_again
+):
+    """Preparation refuses it, so a retry for it alone would admit nothing and fail the
+    collect pass on every run, and beside another record it would be counted lost again
+    every round. Left out, it is collected unanswered and refused at enrichment.
+
+    Only a batch an earlier release sent can hold such a record.
+    """
+    inputs = [*answered(), rec("a2", keep=True, topic="dbt")]
+    action = _Action(tmp_path, {**PREPARED, "retry": {"enabled": True, "max_attempts": 2}})
+    action.provider.withheld = lost
+    action.upstream_holds({FILE: inputs})
+    with _sent_as_an_earlier_release():
+        action.process(FILE, inputs)
+
+    with patch.object(
+        BatchRetryService,
+        "submit_retry_batch",
+        autospec=True,
+        side_effect=BatchRetryService.submit_retry_batch,
+    ) as retry:
+        action.collect()
+
+    assert [call.kwargs["missing_ids"] for call in retry.call_args_list] == sent_again
+    assert "failed:None" in action.held(FILE)

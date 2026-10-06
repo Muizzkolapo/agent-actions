@@ -192,6 +192,7 @@ def handle_retry_recovery(
         record_failure_counts=state.record_failure_counts,
         missing_ids=set(state.missing_ids),
     )
+    still_missing = BatchResultReconciler.resendable_ids(still_missing, context_map)
 
     submission_impossible = False
     if still_missing and state.retry_attempt < state.retry_max_attempts:

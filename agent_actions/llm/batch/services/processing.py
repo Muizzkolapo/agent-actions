@@ -664,7 +664,9 @@ class BatchProcessingService:
         retry_enabled = retry_config and retry_config.get("enabled", True)
 
         if retry_enabled:
-            missing_ids = BatchResultReconciler.find_missing_ids(context_map, batch_results)
+            missing_ids = BatchResultReconciler.resendable_ids(
+                BatchResultReconciler.find_missing_ids(context_map, batch_results), context_map
+            )
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
