@@ -144,10 +144,12 @@ some of its input files were removed deletes what it stored for those files, onc
 has read every file still there, and so do its readers; a batch action does this when
 it submits. A file that failed to process keeps its output. Nothing is deleted by a run
 that a file limit stopped before its last file, by one that could not list part of its
-input or read what its upstream stored, or by `agac retry`. A version merge sees every
-file its versions hold whatever its file limit, so before it runs it deletes what it
-stored for a file none of them holds, under `agac retry` too. Restore the files and run
-with `--fresh` to rebuild them.
+input or read what its upstream stored, or by an `agac retry` repairing the records it
+names. A retry that names none, as one resuming a halted action does, runs its actions
+in full and deletes as a run does. A version merge sees every file its versions hold
+whatever its file limit, so before it runs it deletes what it stored for a file none of
+them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
+them.
 
 | Status | Description |
 |--------|-------------|
