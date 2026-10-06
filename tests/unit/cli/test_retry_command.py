@@ -443,7 +443,8 @@ class TestARepairNarrowsOnlyWhatFinished:
         refused = self._refused(tmp_path, "interrupted", halted=["extract"])
 
         assert "extract (halted), classify (interrupted)" in refused
-        assert refused.index("agac run -a wf") < refused.index("agac retry -a wf --from extract")
+        assert "agac run -a wf — then resume extract" in refused
+        assert "agac retry -a wf --from extract" in refused
 
     def test_completed_skipped_and_submitted_actions_are_narrowed(self, tmp_path):
         """A skipped action owes nothing its source has not failed, and a batch still
