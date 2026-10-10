@@ -229,6 +229,31 @@ class TestVersionOutputCorrelator:
             assert data[0]["content"]["processor_1"]["loop1_data"] == f"data_from_{filename}"
             assert data[0]["content"]["processor_2"]["loop2_data"] == f"data_from_{filename}"
 
+    def test_a_file_every_version_holds_empty_is_handed_over_empty(
+        self, correlator, storage_backend
+    ):
+        """Left out, the merge's walk would not write the file empty and its old answers stay."""
+        lifecycle = {"_state": "processed", "_state_schema_version": 1}
+        for action_name in ("processor_1", "processor_2"):
+            storage_backend._write_target_raw(
+                action_name,
+                "kept.json",
+                [
+                    {
+                        "source_guid": "guid-1",
+                        "version_correlation_id": "corr-1",
+                        **lifecycle,
+                        "content": {action_name: {"value": action_name}},
+                    }
+                ],
+            )
+            storage_backend._write_target_raw(action_name, "filtered.json", [])
+        correlated = correlator.prepare_correlated_input(
+            "aggregator", ["processor_1", "processor_2"], 3
+        )
+        assert correlated["filtered.json"] == []
+        assert len(correlated["kept.json"]) == 1
+
     def test_correlate_by_source_record(self, correlator):
         """Test the correlation logic for merging records with prefixed field names."""
         version_outputs = {
