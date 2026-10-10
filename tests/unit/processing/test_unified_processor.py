@@ -192,13 +192,15 @@ class TestUnifiedProcessorGuardFilter:
         ):
             output, stats = processor.process([skipped_record], context, strategy)
 
-        assert stats.skipped == 1
+        # Unprocessed, as batch counts it: a skip answers nothing.
+        assert stats.unprocessed == 1
         assert stats.success == 0
+        assert [row["_state"] for row in output] == ["guard_skipped"]
 
     def test_first_stage_guard_skip_record_stamped_at_source(self):
         # A first-stage record without source_guid that the guard SKIPS must still
         # carry a content-hash guid — stamped at the source BEFORE the guard split,
-        # so it survives enrichment as SKIPPED instead of being downgraded to FAILED.
+        # so it survives enrichment as a skip instead of being downgraded to FAILED.
         processor = UnifiedProcessor()
         strategy = NoOpStrategy()
         context = _make_context(
@@ -212,8 +214,8 @@ class TestUnifiedProcessorGuardFilter:
         ):
             output, stats = processor.process([record], context, strategy)
 
-        assert stats.skipped == 1
-        assert stats.success == 0  # not downgraded to a failure by the enrichment raise
+        assert stats.unprocessed == 1
+        assert stats.failed == 0  # not downgraded to a failure by the enrichment raise
         assert output and output[0].get("source_guid")  # born at the source
 
     def test_filtered_records_excluded_from_output(self):
@@ -251,7 +253,7 @@ class TestUnifiedProcessorGuardFilter:
             output, stats = processor.process(all_records, context, strategy)
 
         assert stats.success == 1
-        assert stats.skipped == 1
+        assert stats.unprocessed == 1
         assert stats.filtered == 1
 
 

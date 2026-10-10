@@ -50,7 +50,8 @@ VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
 # Records eligible for retry: only primary failures the user can act on.
 # Excluded: success (done), unprocessed (cascade casualty — resolves when
-# upstream is retried), passthrough (guard-skipped), skipped (WHERE clause),
+# upstream is retried — or guard skip, which the next run judges again),
+# passthrough (empty answer kept by on_empty: skip), skipped (WHERE clause),
 # filtered (predicate), deferred (in-flight HITL/batch).
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 

@@ -670,16 +670,16 @@ one exception noted last:
 - The exception: an online run that raised wrote nothing, so its file still holds answers
   for records that are no input of that run. A batch run over the same inputs that writes
   a file, whether it answered something or wrote only what the guard left, writes this
-  run's file, without them. It also writes the tombstone of an answered input the guard
-  now skips, where online, which records the skip only with the file, keeps the answer and
-  calls it answered. Batch holds less there only because online's run aborted, and for an
-  input of the run only where its guard turned that input away.
+  run's file, without them. Batch holds less there only because online's run aborted.
 
-Dispositions differ where the rows do not:
-
-- A guard skip is `unprocessed` here and `passthrough` online. `unprocessed` sends the
-  record to the guard again on the next run and, once the guard passes it, to the model;
-  online carries the tombstone for good, as a terminal disposition would here.
+A guard skip is `unprocessed`, with reason `guard_skip`, on both paths and in FILE mode:
+it answers nothing, so the next run puts the record to the guard again and, once the guard
+passes it, to the model, where a terminal disposition would carry the tombstone for good
+(1348). Online writes it with the other dispositions collection does not hold back, so an
+answered input the guard now skips is no longer called answered, and a run that fails and
+answers nothing writes its file with the tombstone, as batch does. Earlier versions
+recorded the skip online as `passthrough`; `get_terminal_record_ids` leaves such a row out,
+so a store they wrote is put to the guard again too.
 
 A record with no `source_guid` is not among them: both paths refuse it before it is sent
 and record nothing for it, under its target id or any other (see the identity notes below).

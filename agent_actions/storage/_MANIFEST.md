@@ -73,6 +73,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `config` | outbound | Reads storage_backend type and defaults from project config |
 | `llm.batch` | outbound | `clear_batch_state()` names the registry key prefix it clears (`BatchRegistryManager.METADATA_KEY_PREFIX`) |
 | `logging` | outbound | Backends mark their bookkeeping notices as framework-internal |
+| `record` | outbound | Lifecycle checks on stored rows, and the reason strings dispositions are read by: `get_terminal_record_ids` leaves out a `passthrough` an earlier version wrote for a guard skip (`GUARD_SKIP`) |
 | `output` | inbound | FileWriter and UnifiedSourceDataSaver delegate writes to StorageBackend |
 | `input` | inbound | SourceDataLoader reads from StorageBackend |
 | `workflow` | inbound | Coordinator initializes backend; runner and executor query target/disposition state |

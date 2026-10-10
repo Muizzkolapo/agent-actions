@@ -1341,17 +1341,18 @@ def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
     assert findings[1]["batch"] == findings[1]["online"]
 
 
-def test_a_reset_that_answered_nothing_records_the_skip_it_held_back_for_the_write(tmp_path):
+def test_a_reset_that_answered_nothing_records_what_it_held_back_for_the_write(tmp_path):
     """The file is written with its failure, then what collection held back for the write
-    is recorded, as after any write; raised first, the guard's skip goes unrecorded."""
+    is recorded, as after any write; raised first, the empty answer it kept goes
+    unrecorded. A guard skip is not held back: it vouches for no row the gate carries."""
     online = _Online(tmp_path)
-    online.run(1, _PASSES, extra=SKIP)
+    online.run(1, _PASSES)
 
     online.run(
         2,
-        [rec("a1", keep=True), rec("a2", keep=False)],
-        Answerer({("a1", 2): "fail"}),
-        SKIP,
+        _PASSES,
+        Answerer({("a1", 2): "fail", ("a2", 2): "empty object"}),
+        {"on_empty": "skip"},
         reset=True,
     )
 

@@ -28,7 +28,7 @@ One row per action, with a count per disposition:
                               Dispositions: my_workflow
 ┃ Action  ┃ Success ┃ Failed ┃ Exhaust… ┃ Unproc… ┃ Passthr… ┃ Filter… ┃ Total ┃ Records ┃
 │ extract │      25 │      0 │        0 │       0 │        0 │       0 │    25 │      25 │
-│ rewrite │       4 │      0 │        0 │       0 │       21 │       0 │    25 │      25 │
+│ rewrite │       4 │      0 │        0 │      21 │        0 │       0 │    25 │      25 │
 │ split   │       1 │      0 │        0 │       0 │        0 │       0 │     1 │       5 │
 ```
 
@@ -37,14 +37,13 @@ One row per action, with a count per disposition:
 | **Success** | The record was processed by the action |
 | **Failed** | Processing failed for the record |
 | **Exhausted** | The record failed and its retries are used up |
-| **Unprocessed** | An upstream failure cascaded — the action never saw the record |
-| **Passthrough** | A guard condition skipped the record; it flows on unchanged |
+| **Unprocessed** | The action never answered the record: an upstream failure cascaded, or a guard condition skipped it and it flows on unchanged |
+| **Passthrough** | The model or tool answered nothing and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
 
-In a `run_mode: batch` action a guard skip counts as **Unprocessed** (reason
-`guard_skip`), not **Passthrough**: unprocessed keeps the record open, so once the guard
-passes it again it is sent to the model, where a terminal disposition would carry the
-tombstone for good.
+A guard skip counts as **Unprocessed** (reason `guard_skip`) in both run modes:
+unprocessed keeps the record open, so once the guard passes it again it is sent to the
+model, where a terminal disposition would carry the tombstone for good.
 
 ### Why Total and Records can differ
 
@@ -67,9 +66,10 @@ targets inputs: retrying a record means re-running the input that failed.
 the records it successfully produced. A record that was guard-skipped, cascade-
 skipped or failed is kept in the action's output as a placeholder so downstream
 actions can still see it, and those placeholders are counted here. The `rewrite`
-row above shows this: 4 successes and 21 passthroughs, `Records 25`. So a high
+row above shows this: 4 successes and 21 guard skips, `Records 25`. So a high
 `Records` is not on its own evidence that the action worked — read it against
-the `Failed` and `Passthrough` columns, or use `--quarantined` for the detail.
+the `Failed`, `Unprocessed` and `Passthrough` columns, or use `--quarantined` for
+the detail.
 
 `Records` also reads what is in the store *now*, not only this run's output.
 Re-running a workflow over differently named input files leaves the earlier

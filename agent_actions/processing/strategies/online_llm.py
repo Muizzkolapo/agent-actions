@@ -464,12 +464,13 @@ class OnlineLLMStrategy:
             tombstone = build_tombstone(
                 context.action_name,
                 input_record,
-                f"guard_{prepared.guard_behavior}",
+                GUARD_SKIP,
                 source_guid=source_guid,
             )
-            return ProcessingResult.skipped(
-                passthrough_data=tombstone,
-                reason=f"guard_{prepared.guard_behavior}",
+            # Unprocessed, as the prefilter records it: a skip answers nothing.
+            return ProcessingResult.unprocessed(
+                data=[tombstone],
+                reason=GUARD_SKIP,
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
@@ -574,8 +575,8 @@ class OnlineLLMStrategy:
                     GUARD_SKIP,
                     source_guid=source_guid,
                 )
-                return ProcessingResult.skipped(
-                    passthrough_data=tombstone,
+                return ProcessingResult.unprocessed(
+                    data=[tombstone],
                     reason=GUARD_SKIP,
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,

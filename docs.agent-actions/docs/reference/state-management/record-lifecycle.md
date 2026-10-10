@@ -67,10 +67,10 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | Disposition | Meaning |
 |-------------|---------|
 | `success` | Action completed successfully |
-| `passthrough` | Record passed through unprocessed (e.g. guard skip, still active) |
+| `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
 | `skipped` | WHERE clause excluded the record from this action |
 | `filtered` | Guard condition was false; record excluded from output |
-| `unprocessed` | A dependency didn't produce output (cascade casualty) |
+| `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
 | `deferred` | In-flight HITL/batch awaiting resolution |
 | `exhausted` | All repair iterations failed |
 | `failed` | Unrecoverable error |
@@ -86,8 +86,8 @@ A free-form canonical reason string giving the specific cause (see
 > **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
 > `disposition` values — the matching disposition for both is `unprocessed`. Query the
 > `disposition` column for the outcome category and the `reason` column for the specific
-> cause. A batch action records a guard skip as `unprocessed` too, with reason
-> `guard_skip`, so the guard judges the record again on the next run.
+> cause. A guard skip is `unprocessed` too, with reason `guard_skip`, in both run modes,
+> so the guard judges the record again on the next run.
 
 ## Version Correlation
 

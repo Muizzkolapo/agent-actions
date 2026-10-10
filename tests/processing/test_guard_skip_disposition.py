@@ -1,8 +1,11 @@
 """Regression tests for guard skip disposition.
 
-When a guard evaluates to false with on_false=skip, the record must
-get ProcessingStatus.SKIPPED (not UNPROCESSED) and storage must receive
-DISPOSITION_PASSTHROUGH (the data is forwarded unchanged).
+When a guard evaluates to false with on_false=skip, the record gets
+ProcessingStatus.UNPROCESSED with reason guard_skip, as batch records it, and
+storage receives DISPOSITION_UNPROCESSED: a skip answers nothing, so the next
+run puts the record to the guard again rather than carrying it as done (1348).
+Its row is still stamped guard_skipped, so an action below reads a skip, not
+an upstream failure.
 
 Bug: specs/new/037-guard-skip-disposition-fix.md
 """
@@ -14,7 +17,8 @@ import pytest
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_UNPROCESSED
 from tests.conftest import wire_batch_disposition_delegate
 
 
@@ -69,15 +73,15 @@ def guard_skip_result(online_strategy, guard_skip_prepared, processing_context):
         )
 
 
-class TestGuardSkipProducesSkippedStatus:
-    """Guard skip must produce ProcessingStatus.SKIPPED, not UNPROCESSED."""
+class TestGuardSkipProducesUnprocessedStatus:
+    """Guard skip produces ProcessingStatus.UNPROCESSED, as the prefilter and batch do."""
 
-    def test_guard_skip_result_is_skipped(self, guard_skip_result):
-        """ProcessingResult.status == SKIPPED when guard skips the record."""
-        assert guard_skip_result.status == ProcessingStatus.SKIPPED
+    def test_guard_skip_result_is_unprocessed(self, guard_skip_result):
+        """ProcessingResult.status == UNPROCESSED when guard skips the record."""
+        assert guard_skip_result.status == ProcessingStatus.UNPROCESSED
 
     def test_guard_skip_preserves_source_guid(self, guard_skip_result):
-        """source_guid flows through the SKIPPED result from process()."""
+        """source_guid flows through the UNPROCESSED result from process()."""
         assert guard_skip_result.source_guid == "guid-1"
 
     def test_guard_skip_reason_preserved(self, guard_skip_result):
@@ -86,19 +90,19 @@ class TestGuardSkipProducesSkippedStatus:
 
 
 class TestGuardSkipDisposition:
-    """Storage backend receives DISPOSITION_PASSTHROUGH for guard-skipped records."""
+    """Storage backend receives DISPOSITION_UNPROCESSED for guard-skipped records."""
 
-    def test_skipped_result_gets_disposition_passthrough(self):
-        """ResultCollector writes DISPOSITION_PASSTHROUGH for SKIPPED results."""
-        result = ProcessingResult.skipped(
-            passthrough_data={"content": {}, "source_guid": "guid-1", "_unprocessed": True},
+    def test_guard_skip_gets_disposition_unprocessed_and_a_guard_skipped_row(self):
+        """ResultCollector writes DISPOSITION_UNPROCESSED and stamps the row guard_skipped."""
+        result = ProcessingResult.unprocessed(
+            data=[{"content": {}, "source_guid": "guid-1", "_unprocessed": True}],
             reason="guard_skip",
             source_guid="guid-1",
         )
         backend = MagicMock()
         wire_batch_disposition_delegate(backend)
 
-        ResultCollector.collect_results(
+        output, _ = ResultCollector.collect_results(
             [result],
             {"kind": "llm"},
             "test_action",
@@ -109,9 +113,10 @@ class TestGuardSkipDisposition:
         backend.set_disposition.assert_called_once_with(
             "test_action",
             "guid-1",
-            DISPOSITION_PASSTHROUGH,
+            DISPOSITION_UNPROCESSED,
             reason="guard_skip",
         )
+        assert [row["_state"] for row in output] == [RecordState.GUARD_SKIPPED.value]
 
 
 class TestGuardSkipPreservesData:
@@ -125,8 +130,8 @@ class TestGuardSkipPreservesData:
             "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
             "_unprocessed": True,
         }
-        result = ProcessingResult.skipped(
-            passthrough_data=tombstone,
+        result = ProcessingResult.unprocessed(
+            data=[tombstone],
             reason="guard_skip",
             source_guid="guid-1",
         )
@@ -134,8 +139,8 @@ class TestGuardSkipPreservesData:
 
     def test_guard_skip_not_executed(self):
         """Guard-skipped results have executed=False."""
-        result = ProcessingResult.skipped(
-            passthrough_data={},
+        result = ProcessingResult.unprocessed(
+            data=[{}],
             reason="guard_skip",
         )
         assert result.executed is False
@@ -144,13 +149,13 @@ class TestGuardSkipPreservesData:
 class TestGuardSkipLineageEnrichment:
     """Guard-skipped records must pass through enrichment (not be filtered out)."""
 
-    def test_lineage_enricher_does_not_skip_skipped_status(self):
-        """LineageEnricher.enrich() only skips FILTERED — SKIPPED gets enriched."""
+    def test_lineage_enricher_does_not_skip_unprocessed_status(self):
+        """LineageEnricher.enrich() only skips FILTERED — UNPROCESSED gets enriched."""
         from agent_actions.processing.enrichment import LineageEnricher
 
         enricher = LineageEnricher()
-        result = ProcessingResult.skipped(
-            passthrough_data={"content": {}, "source_guid": "guid-1"},
+        result = ProcessingResult.unprocessed(
+            data=[{"content": {}, "source_guid": "guid-1"}],
             reason="guard_skip",
             source_guid="guid-1",
         )
@@ -162,6 +167,6 @@ class TestGuardSkipLineageEnrichment:
 
         enriched = enricher.enrich(result, context)
 
-        assert enriched.status == ProcessingStatus.SKIPPED
+        assert enriched.status == ProcessingStatus.UNPROCESSED
         assert enriched.data
         assert "lineage" in enriched.data[0]

@@ -114,9 +114,9 @@ class UnifiedProcessor:
                 if isinstance(record, dict) and not record.get("source_guid"):
                     record["source_guid"] = IDGenerator.derive_source_guid(record)
 
-        # Above the guard, not below it: the guard writes passthrough and skipped,
-        # both terminal, so a record still in the input when the guard runs is a
-        # record a repair has already decided the fate of.
+        # Above the guard, not below it: the guard writes a disposition for every
+        # record it turns away, so a record still in the input when the guard runs
+        # is a record a repair has already decided the fate of.
         repair_carry_ids: set[str] = set()
         if self._disposition_gate is not None and self._disposition_gate.repairing:
             from agent_actions.processing.disposition_gate import positions_named_by_repair
@@ -293,7 +293,9 @@ class UnifiedProcessor:
         """Apply guard filtering and return (passing_records, guard_results).
 
         Records that fail the guard become ProcessingResult objects immediately
-        (SKIPPED or FILTERED). Records that pass are forwarded to the strategy.
+        (UNPROCESSED or FILTERED). Records that pass are forwarded to the strategy.
+        A skip is UNPROCESSED, as batch and FILE mode record it: it answers nothing,
+        so the next run puts the record to the guard again rather than carrying it.
         """
         config = cast(dict[str, Any], context.agent_config)
         passing, skipped, _original_passing, filtered = prefilter_by_guard(
@@ -319,8 +321,8 @@ class UnifiedProcessor:
                 source_guid=source_guid,
             )
             guard_results.append(
-                ProcessingResult.skipped(
-                    passthrough_data=tombstone,
+                ProcessingResult.unprocessed(
+                    data=[tombstone],
                     reason=GUARD_SKIP,
                     source_guid=source_guid,
                 )
