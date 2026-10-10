@@ -127,7 +127,10 @@ config is given up. Only those four count as edits: a change to a tool's code, t
 data or to the context scope is not seen, so run `agac run --fresh` to answer everything
 again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now
-passes is answered. A record finished in a file the stopped run had not written yet is
+passes is answered. The exception is a record of a batch action whose batch was out, or
+finished and not yet collected, when the run stopped: it keeps the answer that batch
+brings, since the guard judged it when the batch was sent and collecting it judges
+nothing. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
 its answer. A file the store fails to write, on a full disk or a database error, stops
 the action this way: the run ends `failed`, and the next one writes that file. Online,
