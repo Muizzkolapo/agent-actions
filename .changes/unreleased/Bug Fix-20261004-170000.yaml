@@ -1,25 +1,21 @@
 kind: Bug Fix
 body: >-
-  `agac retry` no longer completes an action that holds no answer for some of its records
-  on the records it names alone. A retry answers the records it names at every action it
-  runs and carries what each already holds for the rest, so an action put back to pending
-  by an edit to what it reads and then stopped while running again, stopped partway by an
-  error, added since the last run, or completed with its stored output gone ended up
-  complete holding old rows, or none, for every record that run had not reached, and the
-  next `agac run` found nothing to do. That held for any such action the retry's run
-  reached, including one that runs before the action the retry starts from. A retry that
-  names records now refuses, before it changes anything, while any action in the workflow
-  is pending, running, interrupted, stopped while collecting a batch, completed without
-  its output, or failed by anything but reaching every record it was given, and says to
-  run the workflow first; `--dry-run` reports the refusal instead. A failure that reached
-  every record is still retried, unless the action holds a row for a record that run did
-  not reach, as one reset by an edit keeps for a record its input no longer has. An action
-  left unfinished by a retry that was itself interrupted is resumed by running `retry`
-  again, as before, unless a run has reset it since. An action holding a batch that has
-  not been collected, and one reading it, are left to the batch's own refusal, so
-  `--abandon-in-flight` still gets past a batch the provider has forgotten. An action
-  halted by `on_exhausted: raise` is not refused. A failure recorded before this release
-  cannot say whether every record failed, and a retry interrupted before it left nothing
-  to say which actions it put back, so a retry over either is refused until the workflow
-  has run.
+  A guard written as a Python function (`guard: "udf:name"`) is now applied to every
+  record. The function is handed a read-only view of the record, and building that view
+  failed for a record nested a few hundred levels deep, which JSON allows, and for one that
+  refers back to itself. The failure was taken for the function's own error, and a guard
+  whose function raises passes its record, so such a record went to the action with the
+  guard never run. The view is now built without recursion: depth, cycles and a value held
+  in two places no longer matter, and an ordinary record's view costs about half what it
+  did. If a view cannot be built at all, the record is never passed unjudged, as it was
+  before: an online action fails with an error naming the guard and the record, and a batch
+  marks that one record failed, or fails the action if the record is among the rows it
+  checks before submitting. Four things a guard function can
+  observe have changed. A copy taken with `.copy()` has the record's shape, so a value the
+  record holds in two places is one value in the copy, as `copy.deepcopy` gives. A dict or
+  list subclass inside a record is read from what it stores and in the order it stores it,
+  not through methods it overrides. A named tuple that holds no dict, list or set keeps its
+  type, where it used to become a plain tuple. And a value that only claims to be a dict or
+  a list (a weak-reference proxy, a test mock) cannot be viewed, so its guard stops with an
+  error where it used to run.
 time: 2026-10-04T17:00:00Z
