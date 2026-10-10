@@ -22,7 +22,7 @@ from agent_actions.prompt.deferred_tags import (
     is_marked,
     render_marked,
     strip_marks,
-    template_folder_names,
+    template_folder_exports,
 )
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
@@ -416,6 +416,25 @@ def _render_marked_values(
     return value
 
 
+def _left_tags_note(undefined: set[str], per_record: set[str]) -> str:
+    """Why tags of the file were left in place, for a YAML error they may have caused."""
+    reasons = []
+    if undefined:
+        reasons.append(f"{_quoted(undefined)}, which nothing in it defines")
+    if per_record:
+        reasons.append(f"{_quoted(per_record)}, which a prompt sets or tests per record")
+    if not reasons:
+        return ""
+    return (
+        f" (the file names {'; and '.join(reasons)}; those tags were left in place, as only "
+        "an action's prompt renders per record)"
+    )
+
+
+def _quoted(names: set[str]) -> str:
+    return ", ".join(repr(name) for name in sorted(names))
+
+
 def _strip_prompt_marks(data: Any) -> None:
     """An action's prompt keeps the tags the load left: the per-record render reads them."""
     if not isinstance(data, dict) or not isinstance(data.get("actions"), list):
@@ -614,27 +633,34 @@ def render_pipeline_with_templates(
         ConfigurationError: If YAML parsing or configuration fails, or if strict=True
                            and any schema fails to load
     """
-    folder_names: set[str] = set()
-    env = Environment(
-        loader=DeferringFileSystemLoader(str(templates_folder), folder_names),
-        undefined=StrictUndefined,
-    )
+    loader = DeferringFileSystemLoader(str(templates_folder))
+    env = Environment(loader=loader, undefined=StrictUndefined)
     env.globals["load_prompt"] = functools.partial(
         PromptLoader.load_prompt, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
-    folder_names |= template_folder_names(env, Path(templates_folder))
+    exports = template_folder_exports(env, Path(templates_folder))
+    loader.exports = exports
     _load_template_globals(env, str(templates_folder))
 
     yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
     # Step 1: Jinja2 template rendering. A tag naming what only a record or a version
     # supplies is left in place, marked, for the stage that has the name.
-    yaml_content, unresolved = defer_unresolved_tags(
-        yaml_content, env, folder_names | set(env.globals)
+    deferral = defer_unresolved_tags(
+        yaml_content, env, exports.names | set(env.globals), exports.carrying
     )
+    tested = exports.tested | deferral.tested
+    if tested:
+        names = ", ".join(repr(n) for n in sorted(tested))
+        raise TemplateRenderingError(
+            f"{names} from templates/ renders a tag only a record supplies, and a tag tests or "
+            "filters it at load, where it is still that tag's text. Capture it in the prompt "
+            "that tests it, as {% set value %}{{ ... }}{% endset %}, and test the capture",
+            context={"yaml_path": str(yaml_path), "templates_folder": str(templates_folder)},
+        )
     try:
-        rendered_yaml_content = env.from_string(yaml_content).render()
+        rendered_yaml_content = env.from_string(deferral.source).render()
     except jinja2.TemplateError as e:
         raise TemplateRenderingError(
             f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",
@@ -660,11 +686,7 @@ def render_pipeline_with_templates(
         problem = getattr(e, "problem", "") or ""
         left = ""
         if is_marked(rendered_yaml_content):
-            names = ", ".join(repr(n) for n in sorted(unresolved))
-            left = (
-                f" (the file names {names}, which nothing in it defines; those tags were "
-                "left in place, as only an action's prompt renders per record)"
-            )
+            left = _left_tags_note(deferral.unresolved, deferral.per_record)
         raise ConfigurationError(
             f"Error parsing YAML after template rendering{left}{saved_file_msg}",
             context={
