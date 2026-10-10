@@ -469,8 +469,8 @@ class TestEveryRouteOutOfTheViewHandsOverReadOnlyNamespaces:
 
     @_CONTEXTS
     def test_a_lists_own_storage_holds_wrappers_too(self, context):
-        """Every other deep probe reads a list through `__getitem__`, which wraps on access;
-        `items + []`, unbound `list.__getitem__` and `reversed` read its storage instead."""
+        """Every other deep probe reads a list by index; `items + []`, unbound
+        `list.__getitem__` and `reversed` read its storage by other routes."""
         item = _deep_item()
 
         _evaluate(guard_probe_writes_through_a_lists_own_storage, item, context)
