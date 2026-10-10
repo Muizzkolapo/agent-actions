@@ -1,7 +1,8 @@
 kind: Bug Fix
 body: >-
-  A tool of file granularity (`kind: tool`, `granularity: File`) that raises on one file now
-  fails that file's records: each is marked `failed` with the error, the action's other files
+  A tool of file granularity (`kind: tool`, `granularity: File`) that raises on one file, or
+  answers it with a row whose parent `source_index` names no input, now fails that file's
+  records: each is marked `failed` with the error, the action's other files
   are stored, the action ends `completed_with_failures` (`failed` when no record succeeds),
   and `agac retry` hands the records to the tool again. When its output fails the action's
   schema, only the record the refused row names by `source_index` fails, with its other rows,
