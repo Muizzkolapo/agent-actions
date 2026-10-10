@@ -314,7 +314,8 @@ comparison and resets no reader. It answers only the records it named, so a rese
 every other record's disposition with nothing run to replace them. It warns when it
 meets an edited action, one it is about to re-run included, and it keeps the completion stamp it found on each action it
 completes, so the next plain run still finds the edit and applies it. A retry with no
-record to re-run (only a node-level failure) is a plain run for this purpose.
+record to re-run (only a node-level failure, or one resuming a halt) is a plain run for
+this purpose.
 
 A repair narrows only what holds an answer for every record. It carries what an action
 holds for the records it does not name, and an action never run since it was put back to
@@ -338,7 +339,18 @@ before that retry and is resumed by retrying again — the retry stamps each suc
 (`REPAIRED_BY`, its manifest's `created_at`) and `reopen` removes the stamp, so one a run
 has reset since is refused like any other; an action holding a batch nobody has
 collected, and what reads it, which the batch's own refusal decides (`--abandon-in-flight`
-gets past it); and a halt, which a plain run will not resume.
+gets past it); and a halt the repair does not clear, before its starting point, which
+stays halted and refuses to run.
+
+A halt the repair would clear is refused even with an interrupted retry's stamp or a batch
+nobody has collected, since a halted action has answered nothing past the halt, and with
+its own remedy, since a plain run will not resume it: a retry from the halted action. That
+retry names no record unless given `--record` (`_records_this_repair_may_process`), so it
+runs the action, and every one after it, in full: the disposition gate carries what each
+holds a stored answer for and the rest is asked again, what the halted action answered in
+the file it halted in among them. Which actions are halted is read from the failures the
+retry plans over, which a dry run reads with an interrupted retry's snapshot put back
+(`_halted_among`).
 
 Costs and limits:
 
@@ -352,10 +364,13 @@ Costs and limits:
   action, so the next run writes it instead of the action completing over its old rows.
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
-- A retry with a record to re-run still narrows a halted action, and completes it
-  without the records past the halt (#1267). And a retry clears the checkpoint records of
-  every action it re-runs, so one that resumes a halt after an edit carries, for a record
-  the halted run had answered, the row stored before the edit.
+- A retry clears the checkpoint records of every action it re-runs, so one that resumes a
+  halt asks again what the halted action answered in the file it halted in, which was never
+  stored, and after an edit carries, for a record the halted run had answered, the row
+  stored before the edit.
+- A retry starting past a halted action is not refused, though its range may read it. Such
+  a reader is skipped, since the halt refuses to run, and the retry exits 1. The failures
+  it cleared there are put back unrepaired, and a retry that resumes the halt repairs them.
 
 
 ---
@@ -576,8 +591,10 @@ Two mechanisms keep it halted, because either alone is insufficient:
   (The parallel loop selects on `get_pending_actions`, which already excludes
   every terminal status, so there the exclusion alone would do.)
 
-`agac retry` clears the node-level disposition, and `--fresh` clears everything,
-so both remain working resume paths.
+`agac retry` from the halted action clears the node-level disposition and runs it in
+full, and `--fresh` clears everything, so both remain working resume paths. A retry that
+would clear the halt while narrowed to the records it names is refused: it would complete
+the action without the records past the halt.
 
 The same `detail` marks a failure that reached all of the action's input with
 `EVERY_INPUT_FAILED`: every record it holds failed and its file walk lost no file

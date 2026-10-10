@@ -58,7 +58,8 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 `retry` selects records by id — the ones that failed, or the single one given to
 `--record`. Those are the records it processes at every action it re-runs, and
-they are the only ones.
+they are the only ones. The exception is a retry that
+[resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
 
 Nothing else in the input joins them. A record limit —
 [`record_limit`](../configuration/defaults) or
@@ -164,7 +165,7 @@ That covers every action the retry runs, not only those from its starting point:
 the run behind it executes whatever is not complete, wherever it sits, so an
 action added beside the one that failed, which may run before it, counts too.
 
-So a retry that names records refuses, before it changes anything, when such an
+So a retry that names records refuses, before it clears anything, when such an
 action is in the workflow:
 
 ```
@@ -192,17 +193,62 @@ Not refused either: an action left unfinished by a retry that was itself
 interrupted had finished before that retry, so running `retry` again resumes it,
 as long as no run has reset it since. An action holding a batch nobody has
 collected, and one that reads it, are left to the batch's own refusal below,
-which `--abandon-in-flight` gets past. And an action halted by `on_exhausted:
-raise` is not refused, because `agac run` does not resume a halt; a retry with a
-record to re-run still completes a halted action without the records past the
-halt (#1267).
+which `--abandon-in-flight` gets past. An action halted by `on_exhausted: raise`
+has its own way on, below.
+
+## A retry resumes a halted action in full
+
+An action halted by
+[`on_exhausted: raise`](../validation/expectations.md#repairing-instead-of-observing)
+stopped partway through its records, and `agac run` leaves it halted. `retry` is
+the way on. The halted action holds no answer, and no failure, for the records
+past the halt, so a retry narrowed to the records it names would complete it
+without them.
+
+A retry that starts at the halted action and is not given `--record` names no
+record: it runs that action, and every action after it, on each record they hold
+no stored answer for — the ones past the halt and the ones that failed — and says
+so in its plan. That includes what the halted action answered in the file it
+halted in: the file was never stored, so those records are asked, and paid for,
+again. A plain `retry` does this when the halt is the earliest failure.
+
+```bash
+agac retry -a my_workflow --from extract_facts
+```
+
+Naming no record, it is held to limits as `agac run` is: each action keeps to
+[`record_limit`](../configuration/defaults) and `file_limit` and whatever
+overrides them, and one whose stored limit differs from the one that applies
+re-executes under it.
+
+A retry that names records and would clear a halt — one starting before the
+halted action, or given `--record` — is refused before it clears anything, and
+names the retry that resumes it:
+
+```
+1 action(s) hold no current answer for some of their records (extract_facts
+(halted)). A retry answers only the records it names and carries what each
+action holds for the rest, so it would complete them without those answers.
+First resume extract_facts with a retry from it, which names no record and runs
+it in full — agac retry -a my_workflow --from extract_facts — then retry.
+```
+
+Run that retry, then the one you wanted. `--dry-run` reports the refusal
+instead of raising it.
+
+A halted action before the retry's starting point is not refused, and the retry
+leaves it halted. An action in the retry's range that reads it cannot run while
+it is halted: it is skipped, the retry exits 1, and the failures the retry cleared
+there are put back unrepaired. A retry that resumes the halt and runs it again
+repairs them. Resume the halt first.
 
 ## When a retry is interrupted
 
 A retry writes down the failures it is about to clear before it clears them. If it
 is stopped before its run reaches the end, the next `retry` puts them back and
 starts where the stopped one did, so the records it named are answered again from
-there.
+there. It puts them back before anything else, so even a retry that is then refused
+has put them back.
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
