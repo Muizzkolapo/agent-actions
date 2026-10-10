@@ -41,9 +41,10 @@ One row per action, with a count per disposition:
 | **Passthrough** | The model or tool answered nothing and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
 
-A guard skip counts as **Unprocessed** (reason `guard_skip`) in both run modes:
-unprocessed keeps the record open, so once the guard passes it again it is sent to the
-model, where a terminal disposition would carry the tombstone for good.
+A guard skip counts as **Unprocessed** in both run modes, with reason `guard_skip`, or
+`guard_prefilter_skip` for an action of `granularity: file`: unprocessed keeps the record
+open, so once the guard passes it again it is sent to the model, where a terminal
+disposition would carry the tombstone for good.
 
 ### Why Total and Records can differ
 

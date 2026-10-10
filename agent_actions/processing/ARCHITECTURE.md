@@ -672,14 +672,15 @@ one exception noted last:
   a file, whether it answered something or wrote only what the guard left, writes this
   run's file, without them. Batch holds less there only because online's run aborted.
 
-A guard skip is `unprocessed`, with reason `guard_skip`, on both paths and in FILE mode:
-it answers nothing, so the next run puts the record to the guard again and, once the guard
-passes it, to the model, where a terminal disposition would carry the tombstone for good
-(1348). Online writes it with the other dispositions collection does not hold back, so an
-answered input the guard now skips is no longer called answered, and a run that fails and
-answers nothing writes its file with the tombstone, as batch does. Earlier versions
-recorded the skip online as `passthrough`; `get_terminal_record_ids` leaves such a row out,
-so a store they wrote is put to the guard again too.
+A guard skip is `unprocessed` on both paths and in FILE mode. Record granularity records
+it with reason `guard_skip` in both run modes; FILE mode records it with reason
+`guard_prefilter_skip`. It answers nothing, so the next run puts the record to the guard
+again and, once the guard passes it, to the model, where a terminal disposition would carry
+the tombstone for good (1348). Online writes it with the other dispositions collection does
+not hold back, so an answered input the guard now skips is no longer called answered, and
+a run that fails and answers nothing writes its file with the tombstone, as batch does.
+Earlier versions recorded the skip online as `passthrough`; `get_terminal_record_ids`
+leaves such a row out, so a store they wrote is put to the guard again too.
 
 A record with no `source_guid` is not among them: both paths refuse it before it is sent
 and record nothing for it, under its target id or any other (see the identity notes below).

@@ -7,7 +7,8 @@ body: >-
   `agac run` or `agac retry` carried the record's `guard_skipped` row forward without asking
   the guard, even after a change to the guard's code passed it, and the action read
   `completed` with exit 0. A guard skip is now `unprocessed` with reason `guard_skip` in
-  both run modes, and `agac dispositions` counts it under Unprocessed instead of
+  both run modes, as one in an action of `granularity: file` already was (with reason
+  `guard_prefilter_skip`), and `agac dispositions` counts it under Unprocessed instead of
   Passthrough. A store an earlier version wrote still holds such skips as `passthrough`;
   they are put to the guard again too. Because the skip is recorded at once rather than
   with the file, an online run in which nothing is answered and something fails, and whose

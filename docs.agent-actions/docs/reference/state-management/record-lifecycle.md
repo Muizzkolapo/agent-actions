@@ -86,8 +86,9 @@ A free-form canonical reason string giving the specific cause (see
 > **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
 > `disposition` values — the matching disposition for both is `unprocessed`. Query the
 > `disposition` column for the outcome category and the `reason` column for the specific
-> cause. A guard skip is `unprocessed` too, with reason `guard_skip`, in both run modes,
-> so the guard judges the record again on the next run.
+> cause. A guard skip is `unprocessed` too in both run modes, with reason `guard_skip`, or
+> `guard_prefilter_skip` for an action of `granularity: file`, so the guard judges the
+> record again on the next run.
 
 ## Version Correlation
 
