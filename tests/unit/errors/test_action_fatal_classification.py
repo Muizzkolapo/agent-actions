@@ -218,6 +218,32 @@ class TestTheStrategyAndTheCollectorAgree:
 
         assert is_action_fatal(exc_info.value) is False
 
+    def test_a_record_whose_output_fails_its_schema_fails_alone(self, monkeypatch):
+        """A record tool's output is validated one record at a time, so a failure
+        indicts that record's output: the loop fails it and goes on to the next."""
+        from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+
+        strategy = self._strategy()
+        per_record = SchemaValidationError(
+            "Output schema validation failed for UDF 'label' (item 0) at count: "
+            "'not-an-int' is not of type 'integer'",
+            context={"item_index": 0, "failed_value": "not-an-int"},
+        )
+
+        def process(item, _context, **_kw):
+            if item["source_guid"] == "g1":
+                raise per_record
+            return ProcessingResult.success(data=[dict(item)], source_guid=item["source_guid"])
+
+        monkeypatch.setattr(strategy, "process_record", process)
+
+        results = strategy.invoke([{"source_guid": "g1"}, {"source_guid": "g2"}], self._context())
+
+        assert [r.status for r in results] == [ProcessingStatus.FAILED, ProcessingStatus.SUCCESS]
+        assert results[0].source_guid == "g1"
+        assert "'not-an-int' is not of type 'integer'" in (results[0].error or "")
+        assert is_action_fatal(per_record) is False
+
     def test_what_the_record_loop_tombstones_is_not_fatal(self, monkeypatch):
         strategy = self._strategy()
         recoverable = RecordContextError("record context incomplete")
