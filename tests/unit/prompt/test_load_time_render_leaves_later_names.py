@@ -10,8 +10,14 @@ from pathlib import Path
 
 import pytest
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
+from agent_actions.prompt.deferred_tags import (
+    DeferringFileSystemLoader,
+    is_marked,
+    template_folder_exports,
+)
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
 
@@ -411,22 +417,24 @@ actions:
     )
 
 
-def test_a_templates_file_uses_another_files_macro_beside_a_per_record_tag(tmp_path):
-    """templates/ files read each other's exports whichever of them loads first."""
-    data = _load(
-        tmp_path,
-        """\
-actions:
-  - name: a
-    prompt: "{{ wrap('x') }} {{ source.text }}"
-""",
-        templates={
-            "a_wrap.j2": "{% macro wrap(v) %}[{{ helper(v) }}]{% endmacro %}",
-            "b_helper.j2": "{% macro helper(v) %}<{{ v }}>{% endmacro %}",
-        },
+def test_a_templates_macro_counts_on_every_files_exports_and_a_top_level_on_loaded_ones(
+    tmp_path,
+):
+    """A macro runs once the folder is loaded; a file's top level runs as the file loads."""
+    folder = tmp_path / "templates"
+    folder.mkdir()
+    (folder / "a.j2").write_text(
+        "{% macro wrap(v) %}[{{ helper(v) }}]{% endmacro %}{{ helper('top') }}"
     )
+    (folder / "b.j2").write_text("{% macro helper(v) %}<{{ v }}>{% endmacro %}")
+    loader = DeferringFileSystemLoader(str(folder))
+    env = Environment(loader=loader, undefined=StrictUndefined)
+    loader.exports = template_folder_exports(env, folder)
 
-    assert _actions(data)["a"]["prompt"] == "[<x>] {{ source.text }}"
+    macro, top_level = loader.get_source(env, "a.j2")[0].split("{% endmacro %}")
+
+    assert macro == "{% macro wrap(v) %}[{{ helper(v) }}]"
+    assert is_marked(top_level)
 
 
 # ── an included template reads what its includer binds ───────────────────
