@@ -261,3 +261,23 @@ def test_a_missing_attribute_of_a_load_time_name_fails_the_load(tmp_path):
             tmp_path,
             "{% set cfg = {'a': 1} %}\ndefaults:\n  model_name: \"{{ cfg.b }}\"\nactions: []\n",
         )
+
+
+def test_a_variable_a_prompt_assigns_per_record_is_left_with_every_read(tmp_path):
+    """Set at load and reassigned per record, a value the load read would be frozen."""
+    prompt = (
+        "{% set ns = namespace(n=0) %}"
+        "{% for f in extract.facts %}{% set ns.n = ns.n + 1 %}{% endfor %}"
+        "Count: {{ ns.n }}\n"
+        '{% set tone = "plain" %}'
+        '{% if version.first %}{% set tone = "careful" %}{% endif %}'
+        "Be {{ tone }}.\n"
+    )
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: count\n    prompt: |\n"
+        + "".join(f"      {line}\n" for line in prompt.splitlines())
+        + '    intent: "Count"\n',
+    )
+
+    assert _actions(data)["count"]["prompt"] == prompt
