@@ -281,3 +281,149 @@ def test_a_variable_a_prompt_assigns_per_record_is_left_with_every_read(tmp_path
     )
 
     assert _actions(data)["count"]["prompt"] == prompt
+
+
+# ── a value the load captures around a per-record tag ─────────────────────
+
+
+def _block(prompt: str) -> str:
+    return "".join(f"      {line}\n" for line in prompt.splitlines())
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param(
+            "{% set kind %}{{ source.page_content }}{% endset %}\n"
+            '{% if kind == "urgent" %}ESCALATE NOW.{% else %}Handle normally.{% endif %}'
+            " Kind={{ kind }} len={{ kind | length }}",
+            id="set-block",
+        ),
+        pytest.param(
+            "{% macro kind() %}{{ source.page_content }}{% endmacro %}"
+            '{% if kind() == "urgent" %}ESCALATE{% else %}normal{% endif %}'
+            " {{ kind() }} {{ kind() | length }}",
+            id="macro",
+        ),
+        pytest.param(
+            "{% filter upper %}{{ source.page_content }}{% endfilter %}",
+            id="filter-block",
+        ),
+        pytest.param(
+            "{% set facts %}{% for f in extract.facts %}{{ f }}{% endfor %}{% endset %}"
+            "{% set n = facts | length %}{% if n > 3 %}long{% endif %} {{ facts }}",
+            id="set-block-over-a-loop-and-a-variable-it-feeds",
+        ),
+    ],
+)
+def test_a_prompt_that_tests_a_value_it_captures_per_record_keeps_it_whole(tmp_path, prompt):
+    """Decided at load, the test reads the tag's text and every record gets one branch."""
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: a\n    prompt: |\n" + _block(prompt) + '    intent: "Triage"\n',
+    )
+
+    assert _actions(data)["a"]["prompt"] == prompt + "\n"
+
+
+def test_a_value_captured_per_record_and_only_output_carries_its_tag_into_the_prompt(tmp_path):
+    """Output whole, a set block or macro of the file hands its per-record tag on."""
+    data = _load(
+        tmp_path,
+        """\
+{% set header %}Title: {{ source.title }}{% endset %}
+{% macro stage(n) %}
+  - name: stage_{{ n }}
+    prompt: "Stage {{ n }} of {{ source.text }}"
+{% endmacro %}
+actions:
+  - name: write
+    prompt: "{{ header }}. Body."
+{{ stage(1) }}
+""",
+    )
+
+    actions = _actions(data)
+    assert actions["write"]["prompt"] == "Title: {{ source.title }}. Body."
+    assert actions["stage_1"]["prompt"] == "Stage 1 of {{ source.text }}"
+
+
+def test_a_prompt_testing_a_value_the_file_captures_outside_it_fails_the_load(tmp_path):
+    with pytest.raises(ConfigurationError) as raised:
+        _load(
+            tmp_path,
+            """\
+{% macro kind() %}{{ source.page_content }}{% endmacro %}
+actions:
+  - name: a
+    prompt: |
+      {% if kind() == "urgent" %}ESCALATE{% else %}normal{% endif %}
+""",
+        )
+
+    assert "'kind'" in str(raised.value)
+
+
+def test_a_prompt_testing_a_templates_macro_that_renders_a_record_tag_fails_the_load(tmp_path):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(
+            tmp_path,
+            'actions:\n  - name: a\n    prompt: |\n      {% if kind() == "urgent" %}E{% endif %}\n',
+            templates={"kinds.j2": "{% macro kind() %}{{ source.page_content }}{% endmacro %}"},
+        )
+
+    assert "'kind'" in str(raised.value)
+
+
+def test_a_templates_macro_captured_in_the_prompt_can_be_tested_per_record(tmp_path):
+    """What the load error suggests: the capture waits for the record with its test."""
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: a\n    prompt: |\n"
+        + _block('{% set k %}{{ kind() }}{% endset %}{% if k == "urgent" %}E{% endif %}')
+        + '    intent: "Triage"\n',
+        templates={"kinds.j2": "{% macro kind() %}{{ source.page_content }}{% endmacro %}"},
+    )
+
+    assert _actions(data)["a"]["prompt"] == (
+        '{% set k %}{{ source.page_content }}{% endset %}{% if k == "urgent" %}E{% endif %}\n'
+    )
+
+
+def test_a_variable_a_prompt_loop_sets_is_not_the_one_a_load_time_loop_sets(tmp_path):
+    """A set inside a loop binds only in that loop, so the two never meet."""
+    data = _load(
+        tmp_path,
+        """\
+actions:
+{% for stage in [1, 2] %}{% set label = "Stage " ~ stage %}
+  - name: s{{ stage }}
+    intent: "{{ label }}"
+    prompt: "{% for item in source.items %}{% set label = item.name %}- {{ label }}{% endfor %}"
+{% endfor %}
+""",
+    )
+
+    actions = _actions(data)
+    assert actions["s2"]["intent"] == "Stage 2"
+    assert actions["s2"]["prompt"] == (
+        "{% for item in source.items %}{% set label = item.name %}- {{ label }}{% endfor %}"
+    )
+
+
+def test_a_templates_file_uses_another_files_macro_beside_a_per_record_tag(tmp_path):
+    """templates/ files read each other's exports whichever of them loads first."""
+    data = _load(
+        tmp_path,
+        """\
+actions:
+  - name: a
+    prompt: "{{ wrap('x') }} {{ source.text }}"
+""",
+        templates={
+            "a_wrap.j2": "{% macro wrap(v) %}[{{ helper(v) }}]{% endmacro %}",
+            "b_helper.j2": "{% macro helper(v) %}<{{ v }}>{% endmacro %}",
+        },
+    )
+
+    assert _actions(data)["a"]["prompt"] == "[<x>] {{ source.text }}"
