@@ -4,6 +4,8 @@ Uses a real SQLite backend to verify that checkpointed dispositions and
 output records actually persist in the database after each LLM call.
 """
 
+import sqlite3
+
 import pytest
 
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -139,3 +141,16 @@ class TestCheckpointRecord:
 
         # Nothing written (no backend)
         assert backend.read_checkpoint_records("action_a", "output.json") == []
+
+    def test_a_record_whose_row_is_not_stored_is_not_marked_answered(self, backend, monkeypatch):
+        """The gate carries a record marked answered, and only its checkpoint row tells
+        the carry that the stored file is older than its answer."""
+
+        def disk_error(*args, **kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        monkeypatch.setattr(backend, "save_checkpoint_records", disk_error)
+
+        OnlineLLMStrategy._checkpoint_record(_make_success_result("r0"), _make_context(backend))
+
+        assert backend.get_terminal_record_ids("action_a") == set()

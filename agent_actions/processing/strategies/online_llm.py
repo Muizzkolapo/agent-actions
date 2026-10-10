@@ -336,12 +336,17 @@ class OnlineLLMStrategy:
 
     @staticmethod
     def _checkpoint_record(result: ProcessingResult, context: ProcessingContext) -> None:
-        """Write a single record's disposition and output to SQLite immediately.
+        """Write a single record's output, then its disposition, to SQLite immediately.
 
         Called after each record's LLM call completes so that interrupted
-        runs can resume via the DispositionGate carry-forward path.
+        runs can resume via the DispositionGate carry-forward path. The row goes
+        first because the disposition is what the gate carries, and the row is what
+        tells the carry that a file stored earlier is older than this answer. A schema
+        echo is failed here as well, since the failure the store records as it saves
+        the row would be replaced by the disposition written after it.
         """
         backend = context.storage_backend
+        result = _reject_schema_echo_result(result, context.action_name)
         if not backend or not result.source_guid:
             return
 
@@ -351,12 +356,6 @@ class OnlineLLMStrategy:
         reason = result.error if result.status == ProcessingStatus.FAILED else None
 
         try:
-            backend.set_disposition(
-                context.action_name,
-                result.source_guid,
-                disposition,
-                reason=reason,
-            )
             if result.data:
                 relative_path = derive_relative_path(context.file_path, context.output_directory)
                 if relative_path:
@@ -372,6 +371,12 @@ class OnlineLLMStrategy:
                     backend.save_checkpoint_records(
                         context.action_name, relative_path, checkpoint_records
                     )
+            backend.set_disposition(
+                context.action_name,
+                result.source_guid,
+                disposition,
+                reason=reason,
+            )
             logger.info(
                 "[%s] Checkpointed record %s (%s)",
                 context.action_name,

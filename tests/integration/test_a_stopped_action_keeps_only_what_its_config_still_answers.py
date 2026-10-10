@@ -8,11 +8,13 @@ complete under the new config. One stopped by an error kept nothing even when no
 changed, so every finished record was asked again, and paid for again.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-fault that stops a run is stood in for, raised where the provider is called.
+fault that stops a run is stood in for, raised where the provider is called or, for a
+record's checkpoint row (1226), where the store saves it.
 """
 
 import json
 import shutil
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.providers.agac.client import AgacClient
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "batch_field_rules"
@@ -346,6 +349,111 @@ def test_an_action_stopped_partway_through_a_file_after_an_edit_keeps_no_answer_
     assert sorted(after) == sorted(before_the_edit)
     assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
     assert all(row.get("lineage") for row in _stored_rows(online))
+
+
+@contextmanager
+def _storing_the_first_checkpoint_row_fails(raising):
+    store = SQLiteBackend.save_checkpoint_records
+    failed = []
+
+    def failing(self, action_name, relative_path, records):
+        if action_name == ACTION and not failed:
+            failed.append(action_name)
+            raise raising
+        return store(self, action_name, relative_path, records)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "save_checkpoint_records", failing)
+        yield
+
+
+@pytest.mark.parametrize(
+    ("fault", "then_stopped_at_call"),
+    [
+        pytest.param(KeyboardInterrupt(), None, id="interrupted-as-it-is-stored"),
+        pytest.param(sqlite3.OperationalError("disk I/O error"), 2, id="not-stored"),
+    ],
+)
+def test_an_answer_whose_checkpoint_row_was_not_stored_after_an_edit_is_asked_for_again(
+    online, provider, fault, then_stopped_at_call
+):
+    """The run after the edit answers the first page, and its checkpoint row never lands:
+    the run is stopped while storing it, or the write fails and the run is stopped on the
+    next page. That row is all that says the file, stored before the edit, is older than
+    the answer, so the record must not be marked answered without it."""
+    provider.answers()
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    if then_stopped_at_call:
+        provider.stops(at_call=then_stopped_at_call, raising=KeyboardInterrupt())
+    with _storing_the_first_checkpoint_row_fails(fault):
+        _run()
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    after = _stored(online)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    rows = _stored_rows(online)
+    assert len(rows) == len(EVERY_PAGE), "a record's row is stored twice"
+    assert all(row.get("lineage") for row in rows)
+    assert provider.pages() == EVERY_PAGE
+
+
+@contextmanager
+def _stopped_once_a_checkpoint_row_is_stored():
+    """Stop the run as it marks answered a record whose checkpoint row it has stored."""
+    store = SQLiteBackend.save_checkpoint_records
+    mark = SQLiteBackend.set_disposition
+    stored: list[str] = []
+
+    def storing(self, action_name, relative_path, records):
+        store(self, action_name, relative_path, records)
+        if action_name == ACTION:
+            stored.extend(row["source_guid"] for row in records)
+
+    def marking(self, action_name, record_id, disposition, *args, **kwargs):
+        if action_name == ACTION and record_id in stored and disposition == "success":
+            raise KeyboardInterrupt()
+        return mark(self, action_name, record_id, disposition, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "save_checkpoint_records", storing)
+        patched.setattr(SQLiteBackend, "set_disposition", marking)
+        yield stored
+
+
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+def test_a_record_stopped_between_storing_its_row_and_marking_it_answered_is_asked_again(
+    online, provider, edited
+):
+    """Nothing carries a row whose record is not marked answered, so the record is asked
+    again and its new answer replaces the row. After an edit, the file stored before it
+    still holds the record's answer from before the edit."""
+    provider.answers()
+    before_the_edit = {}
+    if edited:
+        assert _run("--fresh").exit_code == 0
+        before_the_edit = _stored(online)
+        _edit_prompt(online)
+    with _stopped_once_a_checkpoint_row_is_stored() as stored:
+        _run()
+    assert stored and _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == EVERY_PAGE
+    after = _stored(online)
+    assert len(after) == len(EVERY_PAGE)
+    assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"
+    rows = _stored_rows(online)
+    assert len(rows) == len(EVERY_PAGE), "a record's row is stored twice"
+    assert all(row.get("lineage") for row in rows)
 
 
 def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_made_before_it(
