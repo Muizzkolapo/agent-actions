@@ -623,18 +623,35 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert state_mgr.get_status("define") == ActionStatus.COMPLETED
         assert len(backend.get_disposition("define")) == 1
 
-    def test_an_action_run_again_because_its_output_could_not_be_read_keeps_what_its_readers_hold(
-        self, tmp_path
+    def test_an_action_whose_output_could_not_be_read_stays_completed_and_so_do_its_readers(
+        self, tmp_path, caplog
     ):
-        """One read that fails is no evidence the output changed."""
+        """One read that fails is no evidence the output changed, nor that the action has
+        anything to run again for."""
         executor, state_mgr, backend = self._workflow(tmp_path)
+        backend.list_target_files = MagicMock(side_effect=RuntimeError("unreadable"))
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions"):
+            assert executor.verify_completion_status("split") is True
+
+        assert state_mgr.get_status("split") == ActionStatus.COMPLETED
+        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
+        assert len(backend.get_disposition("define")) == 1
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("split" in m and "unreadable" in m for m in warnings), warnings
+
+    def test_a_node_level_failure_read_before_the_output_fails_still_runs_it_again(self, tmp_path):
+        """The failure was read, so the action has something to run again for whatever its
+        output says, and a read of that output that fails cannot excuse it."""
+        from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
+
+        executor, state_mgr, backend = self._workflow(tmp_path)
+        backend.set_disposition("split", NODE_LEVEL_RECORD_ID, DISPOSITION_FAILED)
         backend.list_target_files = MagicMock(side_effect=RuntimeError("unreadable"))
 
         assert executor.verify_completion_status("split") is False
 
         assert state_mgr.get_status("split") == ActionStatus.PENDING
-        assert state_mgr.get_status("define") == ActionStatus.COMPLETED
-        assert len(backend.get_disposition("define")) == 1
 
     def test_a_reset_that_fails_part_way_is_not_read_as_a_failure_to_verify(self, tmp_path):
         """Swallowed, the run goes on with some readers reset and the rest left stale."""

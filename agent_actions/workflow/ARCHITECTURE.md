@@ -215,6 +215,7 @@ Already COMPLETED?
     YES → verify output exists
           output missing → reset to PENDING, and what reads it likewise
           output present → skip, return success
+          store cannot be read → skip, return success (warns)
     │
     ▼
 BATCH_SUBMITTED?
@@ -269,11 +270,20 @@ An action stopped partway is reset the same way when its config differs from the
 run recorded as it started, at the start of the next run (`_reset_retryable_actions`); see
 "A stopped action keeps what it finished while its config is unchanged".
 
-Two routes run a completed action again and leave its readers alone: a node-level
-failure it recorded, and output that could not be read. There the action still holds its
-rows and its records' dispositions, so it answers only what failed and carries the rest,
-and what its readers computed from those rows stands. A row it adds on that run does not
-reach a reader that has completed (#1229).
+A completed action that carries a node-level failure runs again and leaves its readers
+alone. It still holds its rows and its records' dispositions, so it answers only what
+failed and carries the rest, and what its readers computed from those rows stands; a row
+it adds on that run does not reach a reader that has completed. No run leaves that state
+behind, since every node-level failure is written with a failed or skipped status and
+starting work clears node-level rows, but `agac retry` restoring an interrupted retry's
+snapshot puts failures back on the actions that retry completed, and leaves them there
+when it then stops before running (`--dry-run`, a `--from` with nothing failed).
+
+A store that cannot be read while a completed action is verified leaves it completed, with
+a warning. One failed read is no evidence its output changed. Run again, the action would
+answer the records it had failed, which no plain run of a completed action does, and a
+record that then succeeded would reach nothing reading it: each reader would hold it as
+one its upstream never answered, which `agac retry` does not look for.
 
 A run that is repairing records (`agac retry` with records to re-run) acts on no
 comparison and resets no reader. It answers only the records it named, so a reset under it clears
