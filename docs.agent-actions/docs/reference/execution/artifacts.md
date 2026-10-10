@@ -138,7 +138,9 @@ never completed — so a retry, stopped or finished, leaves an edit to the next 
 
 A reset leaves what the action stored in place, and the re-run replaces it file by file.
 A file in which every record of the re-run fails — the model's answers do not parse, or
-a tool of record granularity raises on each — is stored with those failures, as a file
+a tool of record granularity raises on each or answers each with output its schema
+refuses, or a tool of file granularity raises on the file — is stored with those
+failures, as a file
 in which only some fail is, so neither the action nor what reads it keeps a row answered
 before the edit, and `agac retry` asks for them again. Outside a reset, a run that
 answers nothing in a file and fails some of it leaves what that file held.
@@ -156,7 +158,9 @@ names. A retry that names none, as one resuming a halted action does, runs its a
 in full and deletes as a run does. A version merge sees every file its versions hold
 whatever its file limit, so before it runs it deletes what it stored for a file none of
 them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
-them.
+them. A file every version holds empty leaves the merge, and what reads it, holding
+nothing for that file. What a merge stores is only its answers: `agac retry`, or a run
+resumed after it stopped, keeps them for each record it does not ask again.
 
 | Status | Description |
 |--------|-------------|

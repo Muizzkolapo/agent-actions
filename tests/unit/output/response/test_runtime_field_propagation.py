@@ -41,6 +41,7 @@ class TestRuntimeFieldPropagation:
             ("max_execution_time", 600),
             ("where_clause", {"clause": "status = 'active'"}),
             ("enable_caching", True),
+            ("on_empty", "error"),
         ],
     )
     def test_action_field_propagates_to_agent(self, field, value):

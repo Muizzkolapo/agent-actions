@@ -19,8 +19,11 @@ flowchart LR
 - name: extract_raw
   versions: { param: iteration, range: [1, 2, 3]}
   schema: { items: array }
+  context_scope:
+    observe: [source.*]
 
 - name: canonicalize
+  dependencies: [extract_raw]     # a version merge depends on the base name
   version_consumption: { source: extract_raw, pattern: merge }
   intent: "Deduplicate and canonicalize across extraction versions"
   context_scope:
@@ -42,11 +45,17 @@ flowchart LR
 
 ```yaml
 - name: extract_items      # LLM returns: { items: [...] }
+  schema: { items: array }
+  context_scope:
+    observe: [source.*]
 
 - name: flatten_items
   kind: tool
   impl: flatten_items
   granularity: File         # receives all records; returns one record per item
+  dependencies: [extract_items]
+  context_scope:
+    observe: [extract_items.items]
 ```
 
 ## Semantic Dedup
@@ -70,10 +79,15 @@ flowchart LR
 ```yaml
 - name: tag_concept         # LLM: assigns a coarse concept_label
   schema: { concept_label: string }
+  context_scope:
+    observe: [source.*]
 
 - name: dedup_by_concept    # File tool: FileUDFResult, keeps best-scoring per concept
   kind: tool
   granularity: File
+  dependencies: [tag_concept]
+  context_scope:
+    observe: [tag_concept.concept_label]
 ```
 
 The `dedup_by_concept` tool must return `FileUDFResult` (not `list[dict]`) so its output namespace carries the fields downstream actions need to observe.
@@ -97,17 +111,23 @@ flowchart LR
 - name: vote
   versions: { param: voter_id, range: [1, 2, 3]}
   schema: { vote: string, reasoning: string }
+  context_scope:
+    observe: [source.*]
 
 - name: aggregate_votes
   kind: tool
+  dependencies: [vote]
   version_consumption: { source: vote, pattern: merge }
   schema: { decision: string, vote_summary: string }
+  context_scope:
+    observe: [vote.*]
 
 - name: next_phase
+  dependencies: [aggregate_votes]
   guard: { condition: 'aggregate_votes.decision == "keep"', on_false: "filter" }
   context_scope:
     observe:
-      - aggregate_votes.decision   # dependency anchor
+      - aggregate_votes.decision
 ```
 
 ## Parallel Generate → Consolidate
@@ -125,8 +145,11 @@ flowchart LR
 ```yaml
 - name: generate_output
   versions: { param: variant_id, range: [1, 2]}
+  context_scope:
+    observe: [source.*]
 
 - name: consolidate_outputs
+  dependencies: [generate_output]
   version_consumption: { source: generate_output, pattern: merge }
   intent: "Select and ground the best result across independent generations"
   context_scope:
@@ -148,13 +171,22 @@ flowchart LR
 ```
 
 ```yaml
+- name: upstream_result
+  schema: { source_ref: string, output_text: string }
+  context_scope:
+    observe: [source.*]
+
 - name: extract_context     # tool: extracts the relevant passage from the source
+  kind: tool
+  dependencies: [upstream_result]
+  schema: { context_passage: string }
   context_scope:
     observe:
       - upstream_result.source_ref
       - source.raw_content
 
 - name: generate_output
+  dependencies: [extract_context]
   context_scope:
     observe:
       - extract_context.context_passage   # distilled passage, not source.raw_content
@@ -178,16 +210,28 @@ flowchart LR
 ```
 
 ```yaml
+- name: original_output
+  schema: { output: string }
+  context_scope:
+    observe: [source.*]
+
 - name: verify
+  dependencies: [original_output]
   versions: { param: verifier_id, range: [1, 2, 3]}
   schema: { passed: boolean, failure_reasons: string }
+  context_scope:
+    observe: [original_output.output]
 
 - name: aggregate_verification
   kind: tool
+  dependencies: [verify]
   version_consumption: { source: verify, pattern: merge }
   schema: { has_failures: boolean, combined_issues: string }
+  context_scope:
+    observe: [verify.*]
 
 - name: rewrite
+  dependencies: [aggregate_verification]
   guard: { condition: 'aggregate_verification.has_failures == true', on_false: "skip" }
   context_scope:
     observe:
@@ -213,13 +257,27 @@ flowchart LR
 ```yaml
 - name: quality_screen
   schema: { passed: boolean, needs_review: boolean, reason: string }
+  context_scope:
+    observe: [source.*]
 
 - name: human_review
   kind: hitl
   granularity: file
+  dependencies: [quality_screen]
   guard: { condition: 'quality_screen.needs_review == true', on_false: "skip" }
+  context_scope:
+    observe: [quality_screen.needs_review, quality_screen.reason]
 
 - name: merge_decisions      # tool: merges auto-pass + human-approve → approved: boolean
+  kind: tool
   dependencies: [human_review, quality_screen]
+  schema: { approved: boolean }
+  context_scope:
+    observe: [human_review.*, quality_screen.passed]
+
+- name: next_action
+  dependencies: [merge_decisions]
   guard: { condition: 'merge_decisions.approved == true', on_false: "filter" }
+  context_scope:
+    observe: [merge_decisions.approved]
 ```

@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A record tool (`kind: tool` at record granularity) whose output fails its schema for one
+  record now fails that record alone, as a tool that raises does: the record is marked
+  `failed` with the validation message, the other records of its file are stored, the action
+  ends `completed_with_failures` (`failed` when no record succeeds), and `agac retry` runs the
+  tool on that record again. The failure used to end the whole file instead. The file's valid
+  records were lost with it, no disposition named any of them, and the action read `completed`
+  with exit 0, so `agac retry` found nothing to retry and the next run found the action
+  complete; after an edit, the file kept its rows from before the edit. This held for a tool
+  at the first action and for one reading another action, online or in batch.
+time: 2026-10-10T12:25:36Z

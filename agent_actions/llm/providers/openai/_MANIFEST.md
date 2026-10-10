@@ -9,5 +9,5 @@ project.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `batch_client.py` | Module | Batch client for uploading and monitoring OpenAI jobs. | `llm.batch`, `llm.providers` |
+| `batch_client.py` | Module | Batch client for uploading and monitoring OpenAI jobs. `STATUS_MAPPING` maps every status of the SDK's `Batch` into `BatchStatus`: `cancelling` is in flight, `expired` is failed. | `llm.batch`, `llm.providers` |
 | `client.py` | Module | Online OpenAI client supporting tool calls and streaming. | `llm.realtime`, `llm.providers` |

@@ -75,13 +75,13 @@ actions:
     dependencies: []
 
   - name: generate_seo
-    dependencies: validate
+    dependencies: [validate]
 
   - name: generate_recommendations
-    dependencies: validate
+    dependencies: [validate]
 
   - name: assess_reading_level
-    dependencies: validate
+    dependencies: [validate]
 
   - name: score_quality
     dependencies: [generate_seo, generate_recommendations, assess_reading_level]
@@ -115,10 +115,10 @@ actions:
     impl: chunk_document
 
   - name: process_chunk
-    dependencies: chunk_document
+    dependencies: [chunk_document]
 
   - name: aggregate_results
-    dependencies: process_chunk
+    dependencies: [process_chunk]
     kind: tool
     impl: aggregate_results
 ```
@@ -134,15 +134,15 @@ actions:
   - name: prepare
 
   - name: gpt4_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: openai
 
   - name: claude_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: anthropic
 
   - name: gemini_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: google
 
   - name: best_answer
@@ -160,12 +160,12 @@ actions:
   - name: classify
 
   - name: fast_path
-    dependencies: classify
+    dependencies: [classify]
     guard:
       condition: "classify.complexity == 'low'"
 
   - name: slow_path
-    dependencies: classify
+    dependencies: [classify]
     guard:
       condition: "classify.complexity == 'high'"
 

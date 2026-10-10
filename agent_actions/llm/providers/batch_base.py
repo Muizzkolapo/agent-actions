@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
 from agent_actions.output.response.config_fields import get_default
 
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 # identity: two of them are two records, so nothing may deduplicate on it.
 # Namespaced so a real target_id cannot collide with it and inherit that rule.
 UNIDENTIFIED_RECORD = "__agac_unidentified__"
+
+_KNOWN_STATUSES = frozenset(status.value for status in BatchStatus)
 
 
 def retry(
@@ -144,18 +147,18 @@ class BaseBatchClient(ABC):
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
         logger.info("Submitting batch with %s tasks to %s...", len(tasks), self.__class__.__name__)
-        result = self._submit_to_provider_api(input_file, batch_name)
+        batch_id, raw_status = self._submit_to_provider_api(input_file, batch_name)
         try:
             input_file.unlink(missing_ok=True)
         except OSError:
             logger.debug("Could not delete batch input file: %s", input_file)
-        return result
+        return batch_id, self._known_status(batch_id, raw_status)
 
     def check_status(self, batch_id: str) -> str:
         """Check the status of a batch job (Template Method)."""
         try:
             raw_status = self._fetch_status(batch_id)
-            return self._normalize_status(raw_status)
+            return self._known_status(batch_id, raw_status)
         except self._transient_errors as e:
             raise ConnectionError(
                 f"The provider could not be asked about batch {batch_id}: {e}"
@@ -171,6 +174,25 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize provider-specific status to standard format."""
+
+    def _known_status(self, batch_id: str, raw_status: str) -> str:
+        """The provider's status for the batch as a `BatchStatus` value, which is all the
+        batch registry stores and acts on.
+
+        One no mapping knows, as an SDK can add, is taken as still running, so the next
+        run asks about it again: taken for an end, it would fail records the provider
+        may still answer.
+        """
+        status = self._normalize_status(raw_status)
+        if status in _KNOWN_STATUSES:
+            return status
+        logger.warning(
+            "Batch %s: the provider reports status '%s', which agac does not know. It is "
+            "taken as still running, and the provider is asked about it again on the next run",
+            batch_id,
+            raw_status,
+        )
+        return BatchStatus.IN_PROGRESS.value
 
     def retrieve_results(
         self, batch_id: str, output_directory: str | None = None

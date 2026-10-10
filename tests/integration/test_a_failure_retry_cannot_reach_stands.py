@@ -7,8 +7,9 @@ record's target_id, one set by hand, a record whose input is gone, one in a file
 failed, or any of them when the action did not finish. Nothing repaired it, and the
 action read complete over it.
 
-Driven through the `agac` CLI against the real store: in process for a tool action,
-and in its own process with the provider mock for a batch one.
+Driven through the `agac` CLI against the real store: in process for a tool action or
+an LLM action on the provider mock, and in its own process with the provider mock for a
+batch one.
 """
 
 import copy
@@ -198,16 +199,6 @@ BREAKABLE_TOOLS = f'''import os
 from typing import Any
 
 from agent_actions import udf_tool
-from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
-
-
-@udf_tool(granularity=Granularity.FILE)
-def roll_up_or_break(data: Any, *args) -> Any:
-    if os.environ.get("{BREAK}") and "apage" in repr(data):
-        raise RuntimeError("the roll-up of file a broke")
-    return FileUDFResult(
-        [{{"source_index": None, "data": {{"summary": "rollup", "exam_density": "high"}}}}]
-    )
 
 
 @udf_tool
@@ -216,17 +207,6 @@ def tag_or_break(data: Any, *args) -> list[dict]:
         raise RuntimeError("the tag broke")
     return [{{"summary": str((data or {{}}).get("summary", "")), "exam_density": "high"}}]
 '''
-
-ROLL_UP = """  - name: roll_up
-    kind: tool
-    granularity: File
-    dependencies: [flatten]
-    intent: "Roll each file up into one row"
-    schema: tool_action_output
-    impl: roll_up_or_break
-    context_scope: { observe: [flatten.summary, source.page_content] }
-    expect: { repair: none }
-"""
 
 TAG = """  - name: tag
     kind: tool
@@ -247,16 +227,47 @@ def _add_breakable(root, action):
     assert result.exit_code == 0, result.output
 
 
+# Reads the first word of the rating the tool above gave the page. A page rated with
+# nothing has no first word, and the render fails on it with no variable to blame.
+RATE_PROMPT = """
+{prompt Rate}
+The page was first rated {{ flatten.exam_density.split()[0] }}.
+Rate how densely it carries exam-worthy material.
+## PAGE
+{{ source.page_content }}
+```json
+{"summary": "...", "exam_density": "high|medium|low"}
+```
+{end_prompt}
+"""
+
+RATE = """  - name: rate
+    dependencies: [flatten]
+    intent: "Rate each page"
+    model_vendor: agac-provider
+    schema: tool_action_output
+    prompt: $p.Rate
+    context_scope: { observe: [flatten.exam_density, source.page_content] }
+    expect: { repair: none }
+"""
+
+
 @pytest.fixture
-def two_files_rolled_up(project):  # noqa: F811
-    """Two staged files flattened, then each rolled up by a FILE tool."""
+def two_files_rated(project):  # noqa: F811
+    """Two staged files flattened, then each page rated by an LLM action on the provider
+    mock."""
     staging = _input(project).parent
     _input(project).unlink()
     for name in ("a", "b"):
         staging.joinpath(f"{name}.json").write_text(
             json.dumps([{"page_content": f"{name}page {i}"} for i in range(2)])
         )
-    _add_breakable(project, ROLL_UP)
+    prompts = project / "prompt_store" / "p.md"
+    prompts.write_text(prompts.read_text().rstrip("\n") + "\n" + RATE_PROMPT)
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + RATE)
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
     return project
 
 
@@ -274,33 +285,50 @@ def _flattened(root, page_content):
         backend.close()
 
 
-def _fail_in_both_files_then_break_file_a(root, monkeypatch):
+def _rated_with_nothing(root, guid):
+    """What the tool above would have stored had it rated the page with nothing."""
+    backend = _backend(root)
+    try:
+        for path in backend.list_target_files(ACTION):
+            rows = backend._read_target_raw(ACTION, path)
+            if any(row["source_guid"] == guid for row in rows):
+                for row in rows:
+                    if row["source_guid"] == guid:
+                        row["content"][ACTION]["exam_density"] = ""
+                backend._write_target_raw(ACTION, path, rows)
+    finally:
+        backend.close()
+
+
+def _fail_in_both_files_then_stop_file_a(root):
+    """The failed record of file a is left rated with nothing, so its prompt's render
+    fails on its data: the record loop re-raises that, as no variable is to blame, and
+    no one declares it fatal, so it stops the file partway. A tool's error cannot: a
+    record tool's fails its record, and a FILE tool's the records it was handed."""
     in_a, in_b = _flattened(root, "apage 0"), _flattened(root, "bpage 0")
-    _fail(root, in_a, "roll_up")
-    _fail(root, in_b, "roll_up")
-    monkeypatch.setenv(BREAK, "1")
+    _fail(root, in_a, "rate")
+    _fail(root, in_b, "rate")
+    _rated_with_nothing(root, in_a)
     return in_a, in_b
 
 
-def test_a_record_whose_file_failed_in_the_retry_keeps_its_failure(
-    two_files_rolled_up, monkeypatch
-):
+def test_a_record_whose_file_failed_in_the_retry_keeps_its_failure(two_files_rated):
     """The retry found it, but the file holding it failed and the walk carried on to the
     next one, so nothing re-decided it."""
-    root = two_files_rolled_up
-    in_a, in_b = _fail_in_both_files_then_break_file_a(root, monkeypatch)
+    root = two_files_rated
+    in_a, in_b = _fail_in_both_files_then_stop_file_a(root)
 
     _retry()
 
-    assert (_disposition(root, in_a, "roll_up"), _disposition(root, in_b, "roll_up")) == (
+    assert (_disposition(root, in_a, "rate"), _disposition(root, in_b, "rate")) == (
         "failed",
-        None,
+        "success",
     )
 
 
-def test_the_next_retry_names_a_record_whose_file_failed(two_files_rolled_up, monkeypatch):
-    root = two_files_rolled_up
-    _fail_in_both_files_then_break_file_a(root, monkeypatch)
+def test_the_next_retry_names_a_record_whose_file_failed(two_files_rated):
+    root = two_files_rated
+    _fail_in_both_files_then_stop_file_a(root)
     _retry()
 
     result = _retry("--dry-run")
@@ -308,13 +336,13 @@ def test_the_next_retry_names_a_record_whose_file_failed(two_files_rolled_up, mo
     assert "Records to retry: 1" in result.output, result.output
 
 
-def test_the_retry_says_the_file_holding_it_failed(two_files_rolled_up, monkeypatch):
-    root = two_files_rolled_up
-    in_a, _ = _fail_in_both_files_then_break_file_a(root, monkeypatch)
+def test_the_retry_says_the_file_holding_it_failed(two_files_rated):
+    root = two_files_rated
+    in_a, _ = _fail_in_both_files_then_stop_file_a(root)
 
     said = under_batch._unwrapped(_retry().output)
 
-    assert "were in a file 'roll_up' failed to process, so nothing repaired them" in said, said
+    assert "were in a file 'rate' failed to process, so nothing repaired them" in said, said
     assert in_a in said, said
     assert "agac run --fresh" not in said, said
 

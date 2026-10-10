@@ -359,6 +359,7 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
         runner.storage_backend = backend
         params = MagicMock()
         params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.correlated_input = None
         params.output_directory = str(tmp_path / "out")
         params.action_config = {"file_limit": limit}
         params.action_name = "act"
@@ -507,6 +508,7 @@ class TestFileLimitBackendEntries:
         runner.storage_backend = backend
         params = MagicMock()
         params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.correlated_input = None
         params.output_directory = str(tmp_path / "out")
         params.action_config = {"file_limit": 1}
         params.action_name = "act"

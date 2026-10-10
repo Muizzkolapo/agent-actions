@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Every `dependencies` the docs show is now a list. Thirty-six of them, in the code blocks
+  of thirteen pages and the defaults guide's Conditional Override among them, were a single
+  name, `dependencies: per_item_process`, and the loader refuses that with "Input should be
+  a valid list", so a reader who copied one got no workflow. The concepts tutorial and the editor
+  setup guide named the same form in prose. The Conditional Override also set file
+  granularity on an LLM action, which only tool and HITL actions take; its aggregating action
+  is now a tool. A test reads every code block of the docs and the bundled skill and fails on
+  a `dependencies` that is not a list.
+time: 2026-10-10T14:15:00Z

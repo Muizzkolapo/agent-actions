@@ -9,7 +9,7 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `batch_base.py` | Module | Base helpers shared by batch clients (request shaping, telemetry). `check_status` raises each client's `_transient_errors` (its SDK's connection, timeout and server errors) as `ConnectionError`, which every status poll and the collect pass take as "ask again on the next run". | `llm.batch` |
+| `batch_base.py` | Module | Base helpers shared by batch clients (request shaping, telemetry). `check_status` raises each client's `_transient_errors` (its SDK's connection, timeout and server errors) as `ConnectionError`, which every status poll and the collect pass take as "ask again on the next run". `submit_batch` and `check_status` both return a `BatchStatus` value, the only kind the batch registry acts on: each client's `_normalize_status` maps its SDK's whole status type (in flight while queued, paused or being cancelled; `failed` once expired), and `_known_status` takes one no mapping knows as `in_progress`, warning with the batch and the status, so the provider is asked about it again. | `llm.batch` |
 | `batch_client_factory.py` | Module | Factory that returns a provider-specific batch client implementation. | `llm.batch`, `llm.providers` |
 | `client_base.py` | Module | Abstract base client that defines the interface for streaming/call semantics. | `llm.providers`, `llm.realtime` |
 | `error_wrapper.py` | Module | Unified vendor error wrapping: maps SDK exceptions to RateLimitError/NetworkError/VendorAPIError. | `errors`, `llm.providers` |

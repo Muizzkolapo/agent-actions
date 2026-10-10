@@ -533,6 +533,22 @@ input the guard filtered is not looked up, since it holds no row by design. It i
 to the guard again instead: online's guard runs above its gate and judges every input
 afresh, where the gate here would call a filtered one done for good.
 
+Every other input the gate carries is put to the guard too, since its verdict can change
+while the disposition stands: a stopped action resumed after its guard's code changed keeps
+what it had finished. Each is judged as preparation judges it, stopping at the guard
+(`BatchTaskPreparator.turned_away`, through `TaskPreparer.judge`), so no prompt is rendered
+or traced and nothing is sent. One the guard now filters or skips is prepared again, which
+marks it so on the context map and evaluates its guard a second time; the write then leaves
+its stored row out or replaces it with the tombstone, the row online's guard leaves, and
+where the guard filters every input the action holds nothing and reads skipped. One the
+guard still passes stays carried. An error while judging propagates, as one in online's
+guard does: judging has no handler that fails one record alone, so a guard UDF's write to
+any carried input stops the action, not only one in the rows rehearsed before submitting.
+An input the action above blocked is not judged, as preparation judges none. Nor is an
+input of a file whose batch is out, or finished and not collected: the file is not sent
+again, so the gate carries nothing of it, and its collect writes what the batch brings.
+Where these and the skip's disposition still differ from online is listed below.
+
 When preparation leaves nothing to send -- the guard skipped or filtered every input, the
 action above blocked it, or its prompt could not be prepared -- submission collects and
 writes the file itself, by the two functions finalize uses (`llm/batch/services/collect.py`).
@@ -637,22 +653,31 @@ one exception noted last:
   drops them and answers them again when the limit admits them.
 - A run in which something fails and nothing succeeds writes its failed rows. Online writes
   nothing.
-- The gate runs above the guard here, so an answered input that now fails the guard keeps
-  its answer. Online replaces it with a tombstone, or with nothing.
+- An answered input the action above has since blocked is not put to the guard, so it
+  keeps its answer when the guard now turns it away. Online's guard runs before its
+  cascade split and replaces it with a tombstone, or with nothing.
+- An input whose batch is out, or finished and not collected, when the guard's verdict on
+  it changes keeps the answer that batch brings: the guard judged it when the batch was
+  sent, and collecting it judges nothing. Online, which has nothing out between runs, puts
+  it to the guard in the run that resumes the action and replaces it with a tombstone, or
+  with nothing. Batch keeps the answer while the action stands completed; a later run that
+  runs the action again carries the input and judges it then.
 - An expanding input sent again that fails, while something else succeeds, keeps the rows
   it minted before beside its failure row. Online holds the failure row alone.
 - A row naming several inputs is always carried.
 - The exception: an online run that raised wrote nothing, so its file still holds answers
   for records that are no input of that run. A batch run over the same inputs that writes
   a file, whether it answered something or wrote only what the guard left, writes this
-  run's file, without them. Batch holds less there only because online's run aborted, and
-  never for a record that is an input of the run.
+  run's file, without them. It also writes the tombstone of an answered input the guard
+  now skips, where online, which records the skip only with the file, keeps the answer and
+  calls it answered. Batch holds less there only because online's run aborted, and for an
+  input of the run only where its guard turned that input away.
 
 Dispositions differ where the rows do not:
 
-- A guard skip is `unprocessed` here and `passthrough` online. The gate runs above the
-  guard here, so a terminal disposition would carry the skip for good; `unprocessed` sends
-  the record to the guard again on the next run.
+- A guard skip is `unprocessed` here and `passthrough` online. `unprocessed` sends the
+  record to the guard again on the next run and, once the guard passes it, to the model;
+  online carries the tombstone for good, as a terminal disposition would here.
 
 A record with no `source_guid` is not among them: both paths refuse it before it is sent
 and record nothing for it, under its target id or any other (see the identity notes below).

@@ -541,11 +541,11 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
 
         assert _run(_service(manager)) == ["batch_parent"]
 
-    def test_an_unrecognised_status_leaves_the_parent_processable(self):
-        """``BatchJobEntry`` warns on an unknown status but keeps it.
-
-        Nothing would process such an entry, so letting it supersede wedges
-        the pass with no in-flight job to wait on; the parent runs instead.
+    def test_an_unrecognised_status_holds_the_parent_until_the_provider_is_asked(self):
+        """A status outside BatchStatus, as a registry an earlier version wrote can
+        hold, is in flight: the registry reads ``in_progress``, so the run polls it
+        and stores one the client maps. Read from scratch instead, the parent would
+        restart recovery at attempt 1.
         """
         manager = _registry(
             {
@@ -554,7 +554,8 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
             }
         )
 
-        assert _run(_service(manager)) == ["batch_parent"]
+        assert _run(_service(manager)) == []
+        assert manager.get_overall_status() == "in_progress"
 
     def test_a_usable_sibling_still_supersedes_the_parent(self):
         """One dead attempt does not un-supersede a parent that has a live one."""

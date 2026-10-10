@@ -281,13 +281,14 @@ anything is collected. A file that failed to process was reached and keeps its r
 walk deletes nothing when a file limit stopped it with files left (a file it never opened
 keeps what the last run put there, on purpose), when it lost an entry (a directory it
 could not list, a file it could not stat, an upstream listing or stored file it could not
-read: it cannot say which inputs are gone), or under a repair. A version merge walks its
-own stored files, the correlated input among them, so its walk finds nothing to delete;
-the correlator deletes instead, before the walk, each stored file of the merge that no
-version source lists, which would otherwise be walked and sent on as its own input. It
-does so under a file limit and a repair too: it lists every file its version sources hold,
-so it can tell an input that is gone from one it never opened, and it rewrites each file
-it correlates on every run, a repair's included.
+read: it cannot say which inputs are gone), or under a repair. A version merge's walk is
+the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
+per file a version source lists, a file every version holds empty among them as an empty
+one, so the merge writes that file empty as any reader would. Its input is never stored:
+its own target holds its answers, which a re-run carries records from. The correlator
+also deletes, before the walk, each stored file of the merge that no version source
+lists, under a file limit and a repair too: it lists every file its version sources hold,
+so it can tell an input that is gone from one it never opened.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to
@@ -534,16 +535,26 @@ Run 2: Poll
         │       asked about; the action then returns "in_progress",
         │       and the next run reads it. One the provider reports
         │       ended or does not know has its records marked failed
+        │     → mark failed the records of an entry the poll found failed
+        │       or cancelled before it finished, and stamp it collected:
+        │       owed nothing, it rolls up with collected entries. One whose
+        │       records cannot be reached is left unread, as is a finished
+        │       one, and the next run marks them
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)
         │     → write output + dispositions
         │
-        ├── "in_progress" → poll provider APIs
-        │     all done? → process
+        ├── "in_progress" / "partial_failed" → poll provider APIs
+        │     all done? → process, as above
         │     not done? → return "in_progress" → BATCH_SUBMITTED again
+        │     A failed entry reads "partial_failed" until a pass marks
+        │     its records failed. An entry not ended reads "in_progress",
+        │     one holding a status outside BatchStatus included: every
+        │     client maps its provider's statuses into BatchStatus, and
+        │     takes one it does not know as in_progress
         │
-        └── "failed"/"cancelled" → return error
+        └── "cancelled" (every entry, none collected) → return error
 
 Run N: Resume (if recovery submitted)
   Same poll path — recovery batches are registered in .batch_registry.json
@@ -637,7 +648,11 @@ partway (`_finalize_total_failure`, reading `ActionRunner.input_left_unreached`)
 every input file failed on all of its records (`mark_every_record_failed`, on the error
 `CollectionStats.terminal_failure` returns), none to an error fatal to the action
 (`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
-such as a UDF output that fails validation — or never read leaves records unreached.
+such as a render failure one record's data provoked — or never read leaves records
+unreached. A record tool's output that fails its schema is not one: the loop fails that
+record and goes on. Nor is a FILE tool that raises, or whose output fails its schema:
+`FileToolStrategy.invoke` fails the records it was handed, or only the record a refused
+output names, and returns rather than raising.
 Any other failure may have stopped the action partway, and a failure recorded before
 the marker existed reads as one.
 

@@ -68,7 +68,7 @@ actions:
     schema: facts_schema
 
   - name: summarize
-    dependencies: extract
+    dependencies: [extract]
     prompt: "Summarize: {{ extract.facts }}"
 ```
 

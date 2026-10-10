@@ -155,10 +155,30 @@ class TestWhatTheFrameworkReadsFromADefaultsBlock:
             ("tokenizer_model", "gpt2"),
             ("split_method", "sentence"),
             ("where_clause", {"field": "x"}),
+            ("on_empty", "skip"),
         ],
     )
     def test_it_reaches_the_agent(self, key, value):
         assert agent_for(**{key: value})[key] == value
+
+
+class TestAnOnEmptyDefault:
+    @pytest.mark.parametrize("value", ["Error", None])
+    def test_a_value_it_does_not_take_is_refused_at_that_key(self, value):
+        """Each reader tests for `error` or `skip` and takes anything else as one
+        of the others, not the same one online as in a batch. A blank `on_empty:`
+        loads as None, which the siblings of this key would accept as unset."""
+        with pytest.raises(ValidationError) as excinfo:
+            WorkflowConfig.model_validate(
+                {
+                    "name": "w",
+                    "description": "d",
+                    "defaults": {**BASE, "on_empty": value},
+                    "actions": [{"name": "act", "intent": "i", "kind": "llm"}],
+                }
+            )
+
+        assert [error["loc"] for error in excinfo.value.errors()] == [("defaults", "on_empty")]
 
 
 class TestTheParamsTheProvidersActuallySend:

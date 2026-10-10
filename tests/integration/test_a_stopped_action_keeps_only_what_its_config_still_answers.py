@@ -5,17 +5,19 @@ The next run resets the action, and what that reset kept depended on the status 
 was left in alone. One interrupted, killed or stopped while collecting kept its finished
 records even when its prompt or model had been edited since, and was then recorded as
 complete under the new config. One stopped by an error kept nothing even when nothing had
-changed, so every finished record was asked again, and paid for again.
+changed, so every finished record was asked again, and paid for again. What is kept still
+meets the guard: its code can turn a record away with no edit to the config.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 fault that stops a run is stood in for, raised where the provider is called or, for a
 record's checkpoint row (1226), where the store saves it, or where the store writes a
-target file (1262).
+target file (1262). And a guard's code is forgotten between runs, as a new process would.
 """
 
 import json
 import shutil
 import sqlite3
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -28,6 +30,7 @@ from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "batch_field_rules"
@@ -858,6 +861,91 @@ def test_a_resumed_collect_that_fails_while_running_does_not_send_what_it_collec
     assert result.exit_code == 0, result.output
     assert _sent_since(project, before) == []
     assert _status(project) == "completed"
+
+
+GUARD = '    guard: { condition: "udf:keep_page", on_false: skip }\n'
+KEEP_PAGE = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def keep_page(data: Any) -> bool:
+    return data["source"]["page_content"] not in {turned_away!r}
+"""
+
+
+def _forget_the_guard_code():
+    """What a new process starts without: discovery imports a tool module once a process."""
+    UDF_REGISTRY.pop("keep_page", None)
+    sys.modules.pop(f"agent_actions._udfs.{WORKFLOW}.keep_page", None)
+
+
+@pytest.fixture
+def guarded():
+    """Give the action a guard whose code, not its config, decides what it turns away."""
+
+    def guard(root, turned_away=()):
+        config = _config(root)
+        if GUARD not in config.read_text():
+            config.write_text(config.read_text().rstrip("\n") + "\n" + GUARD)
+        (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+        code = KEEP_PAGE.format(turned_away=sorted(turned_away))
+        (root / "tools" / WORKFLOW / "keep_page.py").write_text(code)
+        _forget_the_guard_code()
+
+    yield guard
+    _forget_the_guard_code()
+
+
+def _states(root):
+    return {row["content"]["source"]["page_content"]: row["_state"] for row in _stored_rows(root)}
+
+
+ALPHA_TURNED_AWAY = {
+    "Page alpha.": "guard_skipped",
+    "Page beta.": "processed",
+    "Page gamma.": "processed",
+    "Page delta.": "processed",
+}
+
+
+def test_a_collect_pass_stopped_by_an_error_puts_what_it_collected_to_its_guard_again(
+    project, guarded
+):
+    """Its config is unchanged, so what it collected is kept, but its guard's code now
+    turns away a collected record. Online's guard judges every record above its gate,
+    and so must batch's: that record's answer is replaced by its tombstone, at no cost."""
+    guarded(project)
+    _stop_collecting_after_the_first_file()
+
+    guarded(project, turned_away={"Page alpha."})
+    before = _sent(project)
+    _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _states(project) == ALPHA_TURNED_AWAY
+    assert _sent_since(project, before) == []
+    assert _status(project) == "completed"
+
+
+def test_an_action_stopped_by_an_error_puts_what_it_finished_to_its_guard_again(
+    online, provider, guarded
+):
+    """The online run of the one above."""
+    guarded(online)
+    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
+    _run("--fresh")
+    assert _status(online) == "failed"
+
+    guarded(online, turned_away={"Page alpha."})
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _states(online) == ALPHA_TURNED_AWAY
+    assert provider.pages() == ["Page delta.", "Page gamma."]
 
 
 def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_readers_to_the_next_run(

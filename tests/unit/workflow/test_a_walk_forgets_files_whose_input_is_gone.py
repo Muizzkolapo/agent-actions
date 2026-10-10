@@ -360,13 +360,19 @@ class TestAStorageWalk:
 
         assert _held(backend) == ["a.json", "b.json", "gone.json"]
 
-    def test_a_version_merge_walking_its_own_files_deletes_none(self, backend, tmp_path):
-        """Its correlated input is stored under its own name, and that is what it walks."""
-        _store(backend, "a.json", "b.json")
+    def test_a_version_merge_is_walked_through_the_input_it_is_handed(self, backend, tmp_path):
+        """Not through its own stored files, which hold its answers (1318)."""
+        _store(backend, "a.json", "gone.json")
+        walked = []
+        runner = _runner(backend)
+        runner._process_single_file = lambda p: walked.append((p.locations.item.name, p.data))  # type: ignore[method-assign]
+        params = _params([tmp_path / "target" / ACTION])
+        params.correlated_input = {"a.json": [{"source_guid": "merged"}], "empty.json": []}
 
-        process_files(_runner(backend), _params([tmp_path / "target" / ACTION]))
+        process_files(runner, params)
 
-        assert _held(backend) == ["a.json", "b.json"]
+        assert walked == [("a.json", [{"source_guid": "merged"}]), ("empty.json", [])]
+        assert _held(backend) == ["a.json"]
 
     def test_an_upstream_it_could_not_list_keeps_everything(self, backend, tmp_path, monkeypatch):
         other = "lister"

@@ -193,30 +193,70 @@ class TestTheStrategyAndTheCollectorAgree:
 
         assert is_action_fatal(exc_info.value) is True
 
-    def test_a_per_item_schema_failure_is_not_declared(self, monkeypatch):
+    def test_a_per_item_schema_failure_fails_the_record_it_answers(self, monkeypatch):
         """UDF output validation runs per item, ungated by any policy.
 
         Declaring it would fail the whole action for one malformed value and
-        cost every sibling file a reprocess on the next run.
+        cost every sibling file a reprocess on the next run. Raised, the walk
+        lost the file with nothing naming its records. The strategy checks each
+        row, so the record a refused row answers fails and the rest are stored.
         """
         from agent_actions.processing.strategies import file_tool
+        from agent_actions.processing.types import ProcessingStatus
+        from agent_actions.record.tracking import TrackedItem
 
         strategy = file_tool.FileToolStrategy.__new__(file_tool.FileToolStrategy)
-        per_item = SchemaValidationError(
+        handed: list[dict] = []
+
+        def answer(agent_config, **_kw):
+            handed.append(agent_config)
+            return [TrackedItem({"count": "not-an-int"}, 0), TrackedItem({"count": 2}, 1)], True
+
+        monkeypatch.setattr(file_tool, "run_dynamic_agent", answer)
+        context = self._context()
+        context.agent_config["json_output_schema"] = {
+            "type": "object",
+            "properties": {"count": {"type": "integer"}},
+        }
+
+        records = [{"source_guid": "g1"}, {"source_guid": "g2"}]
+        context.source_data = records
+
+        results = strategy.invoke(records, context)
+
+        failed = [r for r in results if r.status == ProcessingStatus.FAILED]
+        assert [r.source_guid for r in failed] == ["g1"]
+        assert "'not-an-int' is not of type 'integer'" in (failed[0].error or "")
+        assert [row["source_guid"] for row in results[0].data] == ["g2"]
+        assert handed[0].get("json_output_schema") is None, (
+            "checked inside the call, the first refused row raises for the whole file"
+        )
+
+    def test_a_record_whose_output_fails_its_schema_fails_alone(self, monkeypatch):
+        """A record tool's output is validated one record at a time, so a failure
+        indicts that record's output: the loop fails it and goes on to the next."""
+        from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+
+        strategy = self._strategy()
+        per_record = SchemaValidationError(
             "Output schema validation failed for UDF 'label' (item 0) at count: "
             "'not-an-int' is not of type 'integer'",
             context={"item_index": 0, "failed_value": "not-an-int"},
         )
 
-        def reject(*_a, **_kw):
-            raise per_item
+        def process(item, _context, **_kw):
+            if item["source_guid"] == "g1":
+                raise per_record
+            return ProcessingResult.success(data=[dict(item)], source_guid=item["source_guid"])
 
-        monkeypatch.setattr(file_tool, "run_dynamic_agent", reject)
+        monkeypatch.setattr(strategy, "process_record", process)
 
-        with pytest.raises(SchemaValidationError) as exc_info:
-            strategy.invoke([{"source_guid": "g1"}], self._context())
+        results = strategy.invoke([{"source_guid": "g1"}, {"source_guid": "g2"}], self._context())
 
-        assert is_action_fatal(exc_info.value) is False
+        assert [r.status for r in results] == [ProcessingStatus.FAILED, ProcessingStatus.SUCCESS]
+        assert results[0].source_guid == "g1"
+        assert "'not-an-int' is not of type 'integer'" in (results[0].error or "")
+        assert is_action_fatal(per_record) is False
 
     def test_what_the_record_loop_tombstones_is_not_fatal(self, monkeypatch):
         strategy = self._strategy()

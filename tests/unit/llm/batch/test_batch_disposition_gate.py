@@ -28,6 +28,8 @@ def _make_service(
 ) -> BatchSubmissionService:
     """Create a BatchSubmissionService with mocked dependencies."""
     preparator = MagicMock()
+    # An action with no guard, which turns nothing carried away.
+    preparator.turned_away.return_value = set()
     client_resolver = MagicMock()
     context_manager = MagicMock()
     registry_manager_factory = MagicMock()

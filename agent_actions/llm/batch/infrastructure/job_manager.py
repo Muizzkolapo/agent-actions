@@ -99,7 +99,7 @@ class BatchJobManager:
 
         Returns:
             Status string: 'completed', 'in_progress', 'partial_failed',
-                          'no_batches', 'error', or 'unknown'
+                          'cancelled' or 'no_batches'
         """
         manager = self._get_registry_manager(action_name)
         if manager is None:

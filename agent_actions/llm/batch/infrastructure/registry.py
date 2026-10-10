@@ -214,12 +214,14 @@ class BatchRegistryManager:
             for entry in cache.values():
                 if entry.status == BatchStatus.COMPLETED:
                     stats.completed += 1
+                elif entry.is_settled:
+                    stats.settled += 1
                 elif entry.status == BatchStatus.FAILED:
                     stats.failed += 1
-                elif entry.status in BatchStatus.in_flight_states():
-                    stats.in_progress += 1
                 elif entry.status == BatchStatus.CANCELLED:
                     stats.cancelled += 1
+                elif entry.is_in_flight:
+                    stats.in_progress += 1
             return stats
 
     def get_overall_status(self) -> str:

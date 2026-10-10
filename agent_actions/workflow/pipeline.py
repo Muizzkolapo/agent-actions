@@ -366,6 +366,7 @@ class ProcessingPipeline:
             action_name=params.action_name,
             idx=params.idx,
             action_configs=params.action_configs,
+            workflow_metadata=params.workflow_metadata,
             storage_backend=params.storage_backend,
             retried_records=params.retried_records,
         )
@@ -601,6 +602,7 @@ class ProcessingPipeline:
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             version_context=version_context,
+            workflow_metadata=self.config.workflow_metadata,
             storage_backend=self.config.storage_backend,
             defer_kept_dispositions=True,
         )

@@ -490,9 +490,9 @@ class TestExecuteAgentRun:
         assert result.status == ActionStatus.FAILED
 
     def test_correlated_input_passed_to_run_action(self, executor, mock_deps):
-        """Correlated input directories should be passed to run_action, not monkey-patched."""
-        correlated_dirs = ["/correlated/dir"]
-        mock_deps.output_manager.resolve_correlated_input.return_value = correlated_dirs
+        """A merge's input should be passed to run_action, not monkey-patched."""
+        correlated = {"data.json": [{"source_guid": "g1"}]}
+        mock_deps.output_manager.resolve_correlated_input.return_value = correlated
         mock_deps.action_runner.run_action.return_value = "/output"
         mock_deps.batch_manager.check_batch_submission.return_value = None
         params = ActionRunParams(
@@ -512,7 +512,7 @@ class TestExecuteAgentRun:
             params.action_name,
             None,
             params.action_idx,
-            input_directories_override=correlated_dirs,
+            correlated_input=correlated,
         )
 
 

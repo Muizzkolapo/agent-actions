@@ -60,34 +60,35 @@ class TestAMergeLeavesNoJsonArtefact:
         assert [str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*.json")] == []
 
 
-class TestTheNoBackendBranchWritesOnlyItsTarget:
-    def test_the_correlated_file_lands_and_no_source_directory_appears(self, tmp_path):
-        """The disk branch is the one a backend-less correlator takes."""
-        agent_folder = tmp_path / "wf" / "agent_io"
-        out_dir = agent_folder / "target" / "consumer"
-        out_dir.mkdir(parents=True)
-        correlator = VersionOutputCorrelator(agent_folder)
+class TestTheConsumersOwnTargetIsLeftAlone:
+    def test_what_it_stored_before_is_still_what_it_holds(self, correlator, backend):
+        """Its target holds its answers, which a run carries records from (1318)."""
+        _write_versions(backend, _versions())
+        answer = {
+            "source_guid": "sg-001",
+            "target_id": "tid-consumer",
+            "node_id": "consumer_n",
+            "lineage": ["root_000", "consumer_n"],
+            "content": {"consumer": {"verdict": "keep"}},
+            **LIFECYCLE,
+        }
+        backend._write_target_raw("consumer", "data.json", [answer])
 
-        correlator._write_correlated_data(
-            out_dir, [{"source_guid": "sg-001", "target_id": "t1", "node_id": "n1"}], "data.json"
-        )
+        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
 
-        assert (out_dir / "data.json").exists()
-        assert not (agent_folder / "source").exists()
+        assert backend._read_target_raw("consumer", "data.json") == [answer]
 
 
 class TestTwoMergesSharingATargetBasename:
-    def test_each_consumer_keeps_its_own_output(self, correlator, backend, agent_folder):
-        """The basename collision the old artefact had cannot recur in the store."""
+    def test_each_consumer_gets_its_own_input(self, correlator, backend, agent_folder):
+        """The basename collision the old artefact had cannot recur."""
         _write_versions(backend, _versions())
 
-        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
-        correlator.prepare_correlated_input("other_consumer", ["scorer_1", "scorer_2"], 4)
+        first = correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
+        second = correlator.prepare_correlated_input("other_consumer", ["scorer_1", "scorer_2"], 4)
 
-        first = backend.read_target("consumer", "data.json")
-        second = backend.read_target("other_consumer", "data.json")
-        assert [r["source_guid"] for r in first] == ["sg-001"]
-        assert [r["source_guid"] for r in second] == ["sg-001"]
+        assert [r["source_guid"] for r in first["data.json"]] == ["sg-001"]
+        assert [r["source_guid"] for r in second["data.json"]] == ["sg-001"]
 
 
 class TestTheMergedRecordCanParentTheConsumer:
@@ -97,10 +98,9 @@ class TestTheMergedRecordCanParentTheConsumer:
         """`parent_records` is built by this predicate; a merged record must satisfy it."""
         _write_versions(backend, _versions())
 
-        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
+        merged = correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
 
-        merged = backend.read_target("consumer", "data.json")
-        assert [LineageBuilder.is_lineage_bearing(r) for r in merged] == [True]
+        assert [LineageBuilder.is_lineage_bearing(r) for r in merged["data.json"]] == [True]
 
     def test_a_record_stripped_of_lineage_would_not(self, correlator, backend, agent_folder):
         """The predicate is doing work — it rejects what the old stub rows looked like."""

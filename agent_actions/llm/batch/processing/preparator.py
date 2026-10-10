@@ -174,6 +174,31 @@ class BatchTaskPreparator:
             config=agent_config,
         )
 
+    def turned_away(
+        self,
+        agent_config: dict[str, Any],
+        data: list[dict[str, Any]],
+        source_data: list[Any] | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
+    ) -> set[str]:
+        """The ``source_guid`` of each record of *data* the guard filters or skips.
+
+        Judged as ``prepare_tasks`` judges a record, stopping at the guard: no prompt is
+        rendered and nothing is stored or marked.
+        """
+        prep_context = self._build_preparation_context(
+            agent_config=agent_config,
+            source_data=source_data,
+            workflow_metadata=workflow_metadata,
+            tools_path=None,
+        )
+        task_preparer = get_task_preparer()
+        return {
+            row["source_guid"]
+            for row in data
+            if task_preparer.judge(row, prep_context) in (GuardStatus.FILTERED, GuardStatus.SKIPPED)
+        }
+
     def _process_single_item(
         self,
         row: dict[str, Any],

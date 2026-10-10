@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsError, ConfigurationError, DataValidationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
-from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.limits import forget_slice_observation
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
@@ -19,6 +18,8 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+_CORRELATION_KEYS = frozenset({"_correlation_sources", "_missing_iterations"})
 
 
 class VersionOutputCorrelator:
@@ -139,36 +140,33 @@ class VersionOutputCorrelator:
         self,
         version_outputs: dict[str, list[dict[str, Any]]],
         version_filenames: set,
-        correlation_dir: Path,
-        action_name: str,
-    ):
-        """Process and correlate outputs by file."""
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Correlate outputs by file; a file every version holds empty correlates to []."""
+        correlated: dict[str, list[dict[str, Any]]] = {}
         for filename in version_filenames:
             file_version_outputs = {}
             for version_agent, outputs in version_outputs.items():
                 file_outputs = [o for o in outputs if o.get("_source_file") == filename]
                 if file_outputs:
                     file_version_outputs[version_agent] = file_outputs
-            if file_version_outputs:
-                correlated_data = self._correlate_by_source_record(file_version_outputs)
-                self._write_correlated_data(
-                    correlation_dir, correlated_data, filename, action_name=action_name
-                )
+            correlated[filename] = [
+                {k: v for k, v in record.items() if k not in _CORRELATION_KEYS}
+                for record in self._correlate_by_source_record(file_version_outputs)
+            ]
+        return correlated
 
     def prepare_correlated_input(
         self, agent_name: str, version_sources: list[str], _current_idx: int
-    ) -> str:
-        """Return the correlated input directory.
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return the merged input of each file a version source lists, by its path.
 
-        Raises AllVersionsFilteredError when every version source produced zero
-        records (nothing to merge — the caller cascade-skips), or
-        ConfigurationError on a correlation or storage fault.
+        Handed to the consumer's walk rather than stored: the consumer's own target
+        holds its answers, which a run carries records from. Raises
+        AllVersionsFilteredError when every version source produced zero records
+        (nothing to merge — the caller cascade-skips), ConfigurationError on a
+        storage fault, or DataValidationError when a version record cannot be aligned.
         """
         try:
-            correlation_dir = self.agent_folder / "target" / agent_name
-            if self.storage_backend is None:
-                correlation_dir.mkdir(parents=True, exist_ok=True)
-
             lost: list[str] = []
             version_outputs, version_filenames = self._load_version_outputs(version_sources, lost)
             if lost:
@@ -179,11 +177,9 @@ class VersionOutputCorrelator:
             if not version_outputs:
                 raise AllVersionsFilteredError(agent_name, version_sources)
 
-            self._process_version_files(
-                version_outputs, version_filenames, correlation_dir, action_name=agent_name
-            )
+            correlated = self._process_version_files(version_outputs, version_filenames)
             self._forget_files_no_version_holds(agent_name, version_sources)
-            return str(correlation_dir)
+            return correlated
         except (AllVersionsFilteredError, AgentActionsError):
             raise
         except Exception as e:
@@ -198,10 +194,9 @@ class VersionOutputCorrelator:
     def _forget_files_no_version_holds(self, agent_name: str, version_sources: list[str]) -> None:
         """Delete the merge's stored files that no version source lists: their input is gone.
 
-        The merge walks its own stored files as input, expecting each to be one just
-        correlated, so such a file would be sent on as its own input. Under a file limit
-        and a repair too: every version file is listed, so a file none lists is gone, not
-        unopened. A failure only warns.
+        Under a file limit and a repair too, where the walk does not delete what its
+        input no longer holds: every version file is listed, so a file none lists is
+        gone, not unopened. A failure only warns.
         """
         from agent_actions.workflow.runner_file_processing import forget_files_of_inputs_gone
 
@@ -291,47 +286,6 @@ class VersionOutputCorrelator:
                 merged_record = self._create_merged_record(agent_records, version_outputs)
                 correlated_records.append(merged_record)
         return correlated_records
-
-    def _write_correlated_data(
-        self,
-        output_dir: Path,
-        correlated_data: list[dict[str, Any]],
-        filename: str = "correlated_data.json",
-        action_name: str | None = None,
-    ):
-        """Write correlated data to storage backend or filesystem."""
-        if not correlated_data:
-            return
-        keys_to_remove = {"_correlation_sources", "_missing_iterations"}
-        cleaned_data = [
-            {k: v for k, v in record.items() if k not in keys_to_remove}
-            for record in correlated_data
-        ]
-
-        if self.storage_backend is not None and action_name:
-            try:
-                tagged_data = [{**r, "_delta_mode": "full"} for r in cleaned_data]
-                self.storage_backend.write_target(action_name, filename, tagged_data)
-                logger.debug(
-                    "Wrote %d correlated records to storage backend for %s/%s",
-                    len(cleaned_data),
-                    action_name,
-                    filename,
-                )
-            except Exception as e:
-                # The correlated target lands only in the store on this branch,
-                # so a swallowed write leaves the file simply absent. The
-                # consumer's listing reads that as nothing to do rather than as
-                # an error, and slices a short input with nothing raised.
-                forget_slice_observation(self.storage_backend, action_name)
-                logger.warning(
-                    "Failed to write correlated data to storage backend for %s: %s",
-                    action_name,
-                    e,
-                )
-        else:
-            output_file = output_dir / filename
-            atomic_json_write(output_file, cleaned_data, indent=2)
 
 
 __all__ = ["VersionOutputCorrelator"]

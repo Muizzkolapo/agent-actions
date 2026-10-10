@@ -145,7 +145,7 @@ actions:
 
   - name: aggregate_results
     granularity: file    # Combine all chunks
-    dependencies: process_chunks
+    dependencies: [process_chunks]
 ```
 
 ## Best Practices
