@@ -407,15 +407,26 @@ batch path the same pre-narrowing input it already hands the online path
 the merge reads it back. Reading anything narrower deletes the rows of every record the run
 left out, which on an ordinary incremental run is everything already done.
 
+An input the guard filtered holds no row, whether or not the run recorded its inputs:
+online's guard runs above its gate and writes nothing for it. Its stored rows answer for a
+record the guard now excludes, and carried they reach every action below; where the guard
+filters every input they also keep the action reading complete over them, so its readers
+are never skipped. The batch's context map says which inputs the guard filtered
+(`filtered_inputs`), and both writes hand them to the merge, which carries no stored row
+that answers for one. A run online would refuse to write, below, is the exception: online
+writes nothing then, so a filtered input keeps what it held, answer or not, until a run
+that writes.
+
 Two kinds of run carry more than their inputs' rows, each because online does:
 
 - **A repair records no inputs.** `agac retry` answers the records it named and nothing
   else, and online hands back every stored row it did not name (`carried_past_repair`). A
   stored row can sit under an identity the repair's input does not derive -- its record
   absent that run, or stored under another file's identity -- and read against the inputs it
-  would be left out. With nothing recorded every unanswered row is carried, which is also
-  what a batch submitted before inputs were recorded gets. The repair's submission removes
-  any recording an earlier run left, so that does not rest on who cleared batch state first.
+  would be left out. With nothing recorded every unanswered row but a filtered input's is
+  carried, which is also what a batch submitted before inputs were recorded gets. The
+  repair's submission removes any recording an earlier run left, so that does not rest on
+  who cleared batch state first.
 - **A run in which something failed and nothing was answered replaces no answer.** Online
   raises before it writes when nothing succeeded (`raise_if_terminal_failure`), so its
   stored answers stand. Here
@@ -428,8 +439,9 @@ Two kinds of run carry more than their inputs' rows, each because online does:
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
-logged once per write at INFO with the counts, since a healthy re-run below an expansion
-leaves rows out every time.
+logged once per write at INFO with the counts, one line for rows whose input is not the
+run's and one for rows whose input the guard filtered, since a healthy re-run below an
+expansion leaves rows out every time.
 
 Leaving a row out is safe only because an input that returns is answered again. The gate
 carries any input with a terminal disposition, and one whose row was left out has the

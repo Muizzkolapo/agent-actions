@@ -27,7 +27,7 @@ from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.batch.services.collect import halt_survives_failure
+from agent_actions.llm.batch.services.collect import filtered_inputs, halt_survives_failure
 from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
@@ -333,6 +333,7 @@ def finalize_batch_output(
         context.output_directory,
         context.action_name,
         batch_inputs=batch_inputs or (),
+        filtered=filtered_inputs(context_map),
     )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.

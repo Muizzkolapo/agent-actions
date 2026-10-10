@@ -22,7 +22,11 @@ from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.services.collect import collect_batch_rows, write_batch_file
+from agent_actions.llm.batch.services.collect import (
+    collect_batch_rows,
+    filtered_inputs,
+    write_batch_file,
+)
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
@@ -379,6 +383,7 @@ class BatchSubmissionService:
             output_root=output_directory,
             stored_name=batch_output_name(batch_name),
             batch_inputs=run_input_guids or (),
+            filtered=filtered_inputs(context_map),
         )
         write_node_level_disposition(
             self._storage_backend, action_name, DISPOSITION_PASSTHROUGH, "All records tombstoned"

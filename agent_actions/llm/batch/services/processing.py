@@ -462,6 +462,7 @@ class BatchProcessingService:
         action_name: str | None = None,
         *,
         batch_inputs: Collection[str] = (),
+        filtered: Collection[str] = (),
     ) -> None:
         """Write the batch output file through ``write_batch_file``."""
         write_batch_file(
@@ -471,6 +472,7 @@ class BatchProcessingService:
             output_root=output_directory,
             stored_name=target_relative_path(output_file, output_directory),
             batch_inputs=batch_inputs,
+            filtered=filtered,
         )
 
     def _merge_carry_forward(

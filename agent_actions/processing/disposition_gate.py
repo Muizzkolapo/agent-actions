@@ -194,16 +194,19 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
 ) -> set[str]:
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A stored row is carried where the input it answered for is one of *batch_inputs* and
     this run did not answer it; otherwise it is no part of this run's output, as online
-    leaves it. Matching is by input, since a minting action's runs share no identity: a
-    processed row answers for the producer it names, else for the identity it carries.
-    With no inputs recorded every unanswered row is carried. Where something failed and
-    nothing was answered online raises before it writes, so every stored answer stands,
-    over a row produced under its identity too.
+    leaves it. An input in *filtered*, which this run's guard filtered, holds no row, as
+    online writes none for it. Matching is by input, since a minting action's runs share
+    no identity: a processed row answers for the producer it names, else for the identity
+    it carries. With no inputs recorded every other unanswered row is carried. Where
+    something failed and nothing was answered online raises before it writes, so every
+    stored answer stands, over a row produced under its identity too, and a filtered
+    input keeps what it held.
     """
     answered: set[str] = set()
     rewritten: set[str] = set()
@@ -225,8 +228,10 @@ def stored_rows_not_reproduced(
 
     refused = failed and not answered
     inputs = frozenset(batch_inputs)
+    excluded = frozenset(filtered)
     carry: set[str] = set()
     left: set[str] = set()
+    filtered_out: set[str] = set()
     for row in stored:
         guid = row.get("source_guid")
         if not guid:
@@ -245,12 +250,15 @@ def stored_rows_not_reproduced(
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
             continue
-        if inputs and answers_for not in inputs and not stands:
+        if answers_for in excluded and not refused:
+            filtered_out.add(guid)
+        elif inputs and answers_for not in inputs and not stands:
             left.add(guid)
         else:
             carry.add(guid)
     # An identity still carried through another of its rows has lost nothing.
     left -= carry
+    filtered_out -= carry
 
     if left:
         logger.info(
@@ -259,6 +267,13 @@ def stored_rows_not_reproduced(
             "input that returns is answered again.",
             len(left),
             len(inputs),
+        )
+    if filtered_out:
+        logger.info(
+            "%d stored row(s) not carried forward: the inputs they answered for are among "
+            "the %d this run's guard filtered, and a filtered input holds no row.",
+            len(filtered_out),
+            len(excluded),
         )
     return carry
 
@@ -270,6 +285,7 @@ def with_stored_rows_not_reproduced(
     storage_backend: StorageBackend,
     *,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
 ) -> list[dict[str, Any]]:
     """*produced* followed by every stored row it does not replace: the file to write.
 
@@ -284,7 +300,9 @@ def with_stored_rows_not_reproduced(
         # Nothing stored for this file yet, so nothing to carry.
         return produced
 
-    carry_guids = stored_rows_not_reproduced(stored, produced, batch_inputs=batch_inputs)
+    carry_guids = stored_rows_not_reproduced(
+        stored, produced, batch_inputs=batch_inputs, filtered=filtered
+    )
     if not carry_guids:
         return produced
 
