@@ -64,6 +64,8 @@ _NAMED = re.compile(
     r"^[ \t]*(?:-[ \t]+)*(name|param)[ \t]*:[ \t]*[\"']?([A-Za-z_][\w-]*)[\"']?[ \t]*(?:#.*)?$",
     re.M,
 )
+# An action named by a tag, `name: stage_{{ n }}`: the text before the tag.
+_NAMED_BY_TAG = re.compile(r"^[ \t]*(?:-[ \t]+)*name[ \t]*:[ \t]*[\"']?([A-Za-z_]\w*)\{\{", re.M)
 _STATEMENT = re.compile(r"\{%[-+]?\s*(\w+)")
 _INLINE_SET = re.compile(r"\{%[-+]?\s*set\s+[\w.,\s()]+?=(?!=)")
 _OPENS_BLOCK = frozenset(
@@ -146,9 +148,11 @@ class LoadRender:
         self._importing = 0
         self._actions: set[str] = set()
         self._params: set[str] = set()
+        self._action_prefixes: set[str] = set()
         for text in [workflow, *_template_texts(templates_folder)]:
             for kind, name in _NAMED.findall(text):
                 (self._actions if kind == "name" else self._params).add(name)
+            self._action_prefixes.update(_NAMED_BY_TAG.findall(text))
         self._version_names = _VERSION_NAMES | self._params
 
         # Jinja leaves an environment's globals out of a template's undeclared names, so
@@ -327,7 +331,9 @@ class LoadRender:
     def _per_record(self, name: str) -> bool:
         if name in _RECORD_NAMES or name in self._params or name in self._actions:
             return True
-        return any(name.startswith(f"{action}_") for action in self._actions)
+        if any(name.startswith(f"{action}_") for action in self._actions):
+            return True
+        return any(name.startswith(prefix) for prefix in self._action_prefixes)
 
     def _missed_name(self, name: str) -> None:
         # A file's top level runs on import only for what it exports, and as on main

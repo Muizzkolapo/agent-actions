@@ -647,3 +647,21 @@ def test_load_time_data_reaches_the_record_unchanged(tmp_path):
         None,
         {"a": [1, [2, 3]], "b": {"c": "x"}},
     ]
+
+
+def test_a_prompt_reading_an_action_a_loop_names_renders_per_record(tmp_path):
+    data = _load(
+        tmp_path,
+        """\
+actions:
+{% for n in [1, 2] %}
+  - name: stage_{{ n }}
+    prompt: "Stage {{ n }}: {{ source.text }}"
+{% endfor %}
+  - name: last
+    dependencies: [stage_2]
+    prompt: "After {{ stage_2.answer }}"
+""",
+    )
+
+    assert _actions(data)["last"]["prompt"] == "After {{ stage_2.answer }}"
