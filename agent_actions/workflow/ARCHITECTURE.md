@@ -813,6 +813,20 @@ If you change this to SKIPPED:
     via the circuit breaker, even though there's nothing wrong.
 ```
 
+### The stored dependency graph names only what is upstream
+
+Each run stores every action's ancestors through `dependencies` as `dependency_graph`
+(`ActionLevelOrchestrator.upstream_actions`, a version base meaning every version), and
+two readers take it as exactly that. The storage walk drops a record a guard filtered at
+any of them, so a record filtered on one branch does not come back at a fan-in through
+the other; and delta storage rejoins a stored row with their namespaces, so it reads
+back as the record the action wrote. A guard filter removes a record from its action and
+from what is below it, and from nothing else: an action at a later level is not below
+every action of an earlier one, and one on another branch, or under another start node,
+keeps the record (#1292). Store more than the ancestors and both readers go wrong
+silently: the run exits 0 having dropped records, and rows read back with namespaces
+they never carried.
+
 ---
 
 ## File Map

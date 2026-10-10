@@ -127,10 +127,9 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
     A name in the context scope or prompt is what the run order counts
     (``infer_dependencies``); a guard reads its names off the same record. A
     record carries the namespaces of the actions upstream of it through
-    ``dependencies``, so any other name is there at best while a parallel branch
-    happens to finish first, and the reader is not reset when that action fails
-    and runs again. A version merge whose every branch is missing is reported by
-    its base, the name ``dependencies`` takes.
+    ``dependencies`` and no other, and the reader is not reset when another action
+    it names fails and runs again. A version merge whose every branch is missing is
+    reported by its base, the name ``dependencies`` takes.
     """
     findings: list[str] = []
     workflow_actions = list(action_configs)

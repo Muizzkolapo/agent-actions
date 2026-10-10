@@ -348,7 +348,7 @@ The SQLite database stores structured workflow data:
 |-------------|---------|
 | `passthrough` | Record processed successfully |
 | `skipped` | Intentionally skipped (guard with `on_false: skip`) |
-| `filtered` | Removed from pipeline (guard with `on_false: filter`) |
+| `filtered` | Removed from this action and every action below it (guard with `on_false: filter`) |
 | `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
 | `failed` | Processing failed |
 | `unprocessed` | Not yet processed |
