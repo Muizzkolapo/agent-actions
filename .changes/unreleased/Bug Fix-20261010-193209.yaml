@@ -9,7 +9,8 @@ body: >-
   `{{ version.length }}` stopped the load with "'extract_facts' is undefined". The load now
   renders only the tags whose names the file defines (`{% set %}`, loops, imports, macro
   parameters, the macros and variables of `templates/`, `load_prompt`) and leaves every other
-  tag in place: an action's prompt keeps it for the per-record render, and a versioned
+  tag in place, together with any `{% set %}` block or macro the prompt defines around such a
+  tag and then tests: an action's prompt keeps it for the per-record render, and a versioned
   action's other values render once per version, so the documented "Parallel Model
   Comparison" that switches `model_vendor` on `i` takes each version's branch instead of the
   `else` branch for all of them. Below that, `context_scope` withheld the names a version
