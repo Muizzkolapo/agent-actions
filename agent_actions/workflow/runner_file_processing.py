@@ -824,7 +824,16 @@ def process_from_storage_backend(
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
 
-    for input_directory in params.upstream_data_dirs:
+    upstream_to_read = params.upstream_data_dirs
+    if params.correlated_input is not None:
+        # A version merge's input is handed over, not read: its own target holds its
+        # answers, which a run carries records from.
+        data_by_path = {
+            path: [(params.action_name, rows)] for path, rows in params.correlated_input.items()
+        }
+        upstream_to_read = []
+
+    for input_directory in upstream_to_read:
         input_path = Path(input_directory)
         action_name = input_path.name
 
@@ -998,9 +1007,8 @@ def _forget_files_no_input_maps_to(
     A reset relies on the re-run writing each file again, and a file whose input is
     gone is never written. A file is stored under its path, a first stage's with a
     `.json` suffix, or the name recorded for a batch input file, each as the store
-    lists it. A version merge walks its own stored files, so it finds none here. Not
-    under a repair, which touches only the records it named. A failure only warns:
-    the rows stay.
+    lists it. Not under a repair, which touches only the records it named. A failure
+    only warns: the rows stay.
     """
     from agent_actions.llm.batch.infrastructure.context import (
         batch_output_name,

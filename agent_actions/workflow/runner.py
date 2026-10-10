@@ -40,6 +40,8 @@ class FileProcessParams:
     output_directory: str
     idx: int
     file_type_filter: set[str] | None = None
+    # A version merge's input by file path, walked in place of a stored upstream.
+    correlated_input: dict[str, list[dict[str, Any]]] | None = None
 
 
 @dataclass
@@ -75,7 +77,7 @@ class ProcessGenerateParams:
     strategy: ActionStrategy
     previous_action_type: str | None
     idx: int
-    input_directories_override: list[str] | None = None
+    correlated_input: dict[str, list[dict[str, Any]]] | None = None
 
 
 class ActionRunner:
@@ -294,10 +296,10 @@ class ActionRunner:
         """Process and generate data for an action using the provided strategy."""
         agent_folder: str = self.get_action_folder(params.action_name)
 
-        if params.input_directories_override is not None:
-            input_directories = params.input_directories_override
+        if params.correlated_input is not None:
             agent_type = params.action_config["agent_type"]
             output_directory = str(Path(agent_folder) / "target" / agent_type)
+            input_directories = [output_directory]
         else:
             input_directories, output_directory = self.setup_directories(
                 agent_folder, params.action_config, params.previous_action_type
@@ -322,6 +324,7 @@ class ActionRunner:
                 output_directory=output_directory,
                 idx=params.idx,
                 file_type_filter=file_type_filter,
+                correlated_input=params.correlated_input,
             ),
         )
         return output_directory
@@ -333,7 +336,7 @@ class ActionRunner:
         previous_action_type: str | None,
         idx: int,
         *,
-        input_directories_override: list[str] | None = None,
+        correlated_input: dict[str, list[dict[str, Any]]] | None = None,
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])
@@ -350,7 +353,7 @@ class ActionRunner:
                 strategy=strategy,
                 previous_action_type=previous_action_type,
                 idx=idx,
-                input_directories_override=input_directories_override,
+                correlated_input=correlated_input,
             )
         )
         return output_folder

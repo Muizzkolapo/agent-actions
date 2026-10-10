@@ -24,6 +24,7 @@ def _params(upstream_dirs, output_dir, action_name="dedup_by_concept"):
     params.action_name = action_name
     params.strategy = MagicMock()
     params.idx = 0
+    params.correlated_input = None
     return params
 
 

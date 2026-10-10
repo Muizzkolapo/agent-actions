@@ -4,7 +4,6 @@ Verifies that version outputs from iteration N correctly feed iteration N+1
 via prepare_correlated_input → _load_version_outputs → _process_version_files.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -63,16 +62,14 @@ class TestLoopIterationHandoff:
         storage_backend.list_target_files.side_effect = mock_list_target_files
         storage_backend.read_target.side_effect = mock_read_target
 
-        correlator.prepare_correlated_input(
+        correlated = correlator.prepare_correlated_input(
             agent_name="downstream_action",
             version_sources=["v1", "v2"],
             _current_idx=0,
         )
 
-        storage_backend.write_target.assert_called_once()
-        written_data = storage_backend.write_target.call_args[0][2]
-        assert len(written_data) == 1
-        assert written_data[0]["source_guid"] == "guid_1"
+        assert [r["source_guid"] for r in correlated["data.json"]] == ["guid_1"]
+        storage_backend.write_target.assert_not_called()
 
     def test_no_version_outputs_raises_all_versions_filtered(self, correlator, storage_backend):
         """When no version agents have outputs, the cascade-skip signal is raised."""
@@ -104,12 +101,9 @@ class TestLoopIterationHandoff:
                 _current_idx=0,
             )
 
-    def test_oserror_during_mkdir_raises_configuration_error(self):
-        """OSError creating correlation_dir surfaces as a clean ConfigurationError."""
-        correlator = VersionOutputCorrelator(
-            agent_folder=Path("/nonexistent/impossible/path"),
-            storage_backend=None,
-        )
+    def test_oserror_from_the_store_raises_configuration_error(self, correlator, storage_backend):
+        """A raw store fault surfaces as a clean ConfigurationError."""
+        storage_backend.list_target_files.side_effect = OSError("disk I/O error")
 
         with pytest.raises(ConfigurationError):
             correlator.prepare_correlated_input(
@@ -118,8 +112,8 @@ class TestLoopIterationHandoff:
                 _current_idx=0,
             )
 
-    def test_no_storage_backend_creates_dir_then_cascade_skips(self, tmp_path):
-        """Without a storage backend no records load: the dir is created, then cascade-skip is raised."""
+    def test_no_storage_backend_cascade_skips_and_creates_nothing(self, tmp_path):
+        """Without a storage backend no records load, so cascade-skip is raised."""
         correlator = VersionOutputCorrelator(
             agent_folder=tmp_path,
             storage_backend=None,
@@ -131,7 +125,7 @@ class TestLoopIterationHandoff:
                 version_sources=["v1"],
                 _current_idx=0,
             )
-        assert (tmp_path / "target" / "downstream").exists()
+        assert not (tmp_path / "target").exists()
 
     def test_file_not_found_in_storage_skips_and_continues(self, correlator, storage_backend):
         """FileNotFoundError on read_target for one file skips it, continues others."""
@@ -157,4 +151,4 @@ class TestLoopIterationHandoff:
             _current_idx=0,
         )
 
-        assert result is not None
+        assert [r["source_guid"] for r in result["good.json"]] == ["guid_1"]

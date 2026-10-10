@@ -115,14 +115,12 @@ class TestVersionOutputCorrelator:
                 }
             ]
             storage_backend._write_target_raw(action_name, test_filename, test_data)
-        result_dir = correlator.prepare_correlated_input(
+        correlated = correlator.prepare_correlated_input(
             "reconstruct_options",
             ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"],
             4,
         )
-        assert result_dir is not None, "prepare_correlated_input returned None"
-        target_files = storage_backend.list_target_files("reconstruct_options")
-        assert test_filename in target_files, f"Expected {test_filename} in backend target files"
+        assert list(correlated) == [test_filename]
 
     def test_partial_record_handling(self, correlator, storage_backend, temp_agent_folder):
         """Test that records missing from some loops are still included."""
@@ -172,11 +170,9 @@ class TestVersionOutputCorrelator:
         storage_backend._write_target_raw("distractor_1", "data.json", data_loop1)
         storage_backend._write_target_raw("distractor_2", "data.json", data_loop2)
         storage_backend._write_target_raw("distractor_3", "data.json", data_loop3)
-        result_dir = correlator.prepare_correlated_input(
+        correlated_data = correlator.prepare_correlated_input(
             "consumer", ["distractor_1", "distractor_2", "distractor_3"], 4
-        )
-        assert result_dir is not None
-        correlated_data = storage_backend.read_target("consumer", "data.json")
+        )["data.json"]
         assert len(correlated_data) == 3
         record1 = next(r for r in correlated_data if r["source_guid"] == "guid-1")
         # Version namespaces are now nested, not prefixed
@@ -221,12 +217,12 @@ class TestVersionOutputCorrelator:
             ]
             storage_backend._write_target_raw("processor_1", filename, data1)
             storage_backend._write_target_raw("processor_2", filename, data2)
-        result_dir = correlator.prepare_correlated_input(
+        correlated = correlator.prepare_correlated_input(
             "aggregator", ["processor_1", "processor_2"], 3
         )
-        assert result_dir is not None
+        assert sorted(correlated) == sorted(files)
         for filename in files:
-            data = storage_backend.read_target("aggregator", filename)
+            data = correlated[filename]
             assert len(data) == 1
             assert "processor_1" in data[0]["content"]
             assert "processor_2" in data[0]["content"]
@@ -336,8 +332,7 @@ class TestVersionOutputCorrelatorIntegration:
             ]
             backend._write_target_raw(action_name, "output.json", data)
         result = correlator.prepare_correlated_input("consumer", ["loop_1", "loop_2", "loop_3"], 4)
-        assert result is not None
-        data = backend.read_target("consumer", "output.json")
+        data = result["output.json"]
         assert len(data) == 1
         assert data[0]["content"]["loop_1"]["field_1"] == "value_1"
         assert data[0]["content"]["loop_2"]["field_2"] == "value_2"
@@ -384,11 +379,9 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             storage_backend._write_target_raw(action_name, "output.json", test_data)
-        result_dir = correlator.prepare_correlated_input(
+        data = correlator.prepare_correlated_input(
             "aggregate", ["refine_1", "refine_2", "refine_3"], 4
-        )
-        assert result_dir is not None
-        data = storage_backend.read_target("aggregate", "output.json")
+        )["output.json"]
         assert len(data) == 3
         iterations = set()
         for item in data:
@@ -413,11 +406,9 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             storage_backend._write_target_raw(action_name, "result.json", test_data)
-        result_dir = correlator.prepare_correlated_input(
+        data = correlator.prepare_correlated_input(
             "consumer", ["process_1", "process_2", "process_3"], 4
-        )
-        assert result_dir is not None
-        data = storage_backend.read_target("consumer", "result.json")
+        )["result.json"]
         assert len(data) <= 2
         if len(data) > 0:
             content = data[0]["content"]
@@ -440,9 +431,9 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             storage_backend._write_target_raw(action_name, "data.json", test_data)
-        result_dir = correlator.prepare_correlated_input("final", ["step_1", "step_2", "step_3"], 4)
-        assert result_dir is not None
-        data = storage_backend.read_target("final", "data.json")
+        data = correlator.prepare_correlated_input("final", ["step_1", "step_2", "step_3"], 4)[
+            "data.json"
+        ]
         assert len(data) == 1
         content = data[0]["content"]
         step_values = []
@@ -480,12 +471,12 @@ class TestLoopCorrelatorWithSequentialMode:
                 }
             ]
             storage_backend._write_target_raw(action_name, "output.json", test_data)
-        seq_result = correlator.prepare_correlated_input("seq_consumer", ["seq_1", "seq_2"], 5)
-        par_result = correlator.prepare_correlated_input("par_consumer", ["par_1", "par_2"], 6)
-        assert seq_result is not None
-        assert par_result is not None
-        seq_data = storage_backend.read_target("seq_consumer", "output.json")
-        par_data = storage_backend.read_target("par_consumer", "output.json")
+        seq_data = correlator.prepare_correlated_input("seq_consumer", ["seq_1", "seq_2"], 5)[
+            "output.json"
+        ]
+        par_data = correlator.prepare_correlated_input("par_consumer", ["par_1", "par_2"], 6)[
+            "output.json"
+        ]
         assert len(seq_data) == 1
         assert len(par_data) == 1
         assert "seq_1" in seq_data[0]["content"]

@@ -2031,9 +2031,6 @@ class ActionExecutor:
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
         # except clause below: only failures from the user-supplied action
         # runner should be funneled through _handle_run_failure.
-        # It is taken before input resolution because a version merge writes the
-        # correlated input to this action's own target; counting after that
-        # would net the action's own output to zero.
         pre_run_count = self._count_records_for_action(params.action_name)
 
         try:
@@ -2047,7 +2044,7 @@ class ActionExecutor:
                 params.action_name,
                 None,
                 params.action_idx,
-                input_directories_override=correlated_input,
+                correlated_input=correlated_input,
             )
         except NoInputFilesError as nothing:
             return self._handle_no_input(params, nothing)
@@ -2083,7 +2080,7 @@ class ActionExecutor:
                 params.action_name,
                 None,
                 params.action_idx,
-                input_directories_override=correlated_input,
+                correlated_input=correlated_input,
             )
         except NoInputFilesError as nothing:
             return self._handle_no_input(params, nothing)
