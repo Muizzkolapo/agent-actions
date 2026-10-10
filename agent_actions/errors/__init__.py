@@ -16,9 +16,11 @@ from agent_actions.errors.classification import (
     every_file_failed,
     every_record_failed,
     is_action_fatal,
+    is_submission_refused,
     mark_action_fatal,
     mark_every_file_failed,
     mark_every_record_failed,
+    mark_submission_refused,
 )
 
 # Common errors
@@ -109,9 +111,11 @@ __all__ = [
     "every_file_failed",
     "every_record_failed",
     "is_action_fatal",
+    "is_submission_refused",
     "mark_action_fatal",
     "mark_every_file_failed",
     "mark_every_record_failed",
+    "mark_submission_refused",
     # Common
     "InvalidParameterError",
     # Configuration

@@ -435,10 +435,17 @@ run_mode == BATCH and not tool/HITL?
 Run 1: Submit
   _handle_batch_generation()
     → submit_batch_job() → provider API (OpenAI/Anthropic batch)
+    → store the context map and recorded inputs (only once the provider
+      has taken the batch)
     → write .batch_registry.json
     → DISPOSITION_DEFERRED for all records
     → action status → BATCH_SUBMITTED
     → workflow pauses
+    A batch the provider refuses fails the action once every file has
+    been walked, whatever the other files sent: completed on their
+    batches, it would never send this one again. The reset after it
+    keeps the records the action had answered while its config is
+    unchanged, as after any failure.
 
 Run 2: Poll
   _handle_batch_check()
@@ -590,7 +597,9 @@ Stopped partway is one of:
     CHECKING_BATCH — the process died while collecting a batch. The
                      files it reached are written and their records done.
     FAILED         — an error stopped it, running or collecting; one that
-                     raised may hold successes. Not one halted by
+                     raised may hold successes. One a refused batch
+                     failed holds what it had answered before: the
+                     refusal sent and stored nothing. Not one halted by
                      `on_exhausted: raise`, which is not reset at all.
 
     unchanged → clear only RUNNING_CLEAR_DISPOSITIONS

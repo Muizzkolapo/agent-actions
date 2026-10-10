@@ -7,7 +7,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
+from agent_actions.errors import (
+    ConfigurationError,
+    ConfigValidationError,
+    ExternalServiceError,
+    mark_action_fatal,
+    mark_submission_refused,
+)
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
@@ -241,7 +247,9 @@ class BatchSubmissionService:
         that no longer exists. None records nothing, and neither does a repair.
         When preparation leaves nothing to send, the file is collected and written
         here, as finalize would; the caller has nothing left to write. When no record
-        is left to send at all, the file is written here for this run's inputs.
+        is left to send at all, the file is written here for this run's inputs. A batch
+        the provider refuses raises an error fatal to the action, and leaves the record
+        of what the file's last batch was sent as it stood.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -328,29 +336,45 @@ class BatchSubmissionService:
                 run_input_guids,
             )
 
-        if output_directory and self._storage_backend:
-            self._context_manager.save_batch_context_map(
-                self._storage_backend, action_name, context_map, batch_name
-            )
-            if repairing:
-                # Not left to whoever started the repair: finalize would read an earlier
-                # run's inputs as this one's.
-                self._context_manager.clear_batch_inputs(
-                    self._storage_backend, action_name, batch_name
-                )
-            elif run_input_guids is not None:
-                self._context_manager.save_batch_inputs(
-                    self._storage_backend, action_name, run_input_guids, batch_name
-                )
-
         result = self._submit_to_provider(
-            agent_config, batch_name, tasks, output_directory, action_name=action_name
+            agent_config,
+            batch_name,
+            tasks,
+            output_directory,
+            action_name=action_name,
+            record_sent=lambda: self._record_sent(
+                action_name, batch_name, context_map, output_directory, run_input_guids, repairing
+            ),
         )
 
         if self._storage_backend and result.is_submitted:
             self._stamp_deferred(context_map, action_name, result.batch_id)
 
         return result
+
+    def _record_sent(
+        self,
+        action_name: str,
+        batch_name: str,
+        context_map: dict[str, Any],
+        output_directory: str | None,
+        run_input_guids: list[str] | None,
+        repairing: bool,
+    ) -> None:
+        """Store what the batch for *batch_name* was sent, which is what collecting it reads."""
+        if not (output_directory and self._storage_backend):
+            return
+        self._context_manager.save_batch_context_map(
+            self._storage_backend, action_name, context_map, batch_name
+        )
+        if repairing:
+            # Not left to whoever started the repair: finalize would read an earlier
+            # run's inputs as this one's.
+            self._context_manager.clear_batch_inputs(self._storage_backend, action_name, batch_name)
+        elif run_input_guids is not None:
+            self._context_manager.save_batch_inputs(
+                self._storage_backend, action_name, run_input_guids, batch_name
+            )
 
     def _collect_without_sending(
         self,
@@ -487,6 +511,7 @@ class BatchSubmissionService:
         tasks: list[dict[str, Any]],
         output_directory: str | None,
         action_name: str,
+        record_sent: Callable[[], None] | None = None,
     ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 
@@ -496,13 +521,17 @@ class BatchSubmissionService:
             tasks: Prepared tasks
             output_directory: Output directory path
             action_name: Action name for registry writes
+            record_sent: Stores what the batch was sent, once the provider has taken it
 
         Returns:
             SubmissionResult with batch_id
 
         Raises:
             ConfigValidationError: If model_vendor missing
-            ExternalServiceError: If submission fails
+            ExternalServiceError: If submission fails, declared fatal to the action, and
+                refused (``mark_submission_refused``) when the provider did not take the
+                batch. A batch the provider took but that could not be recorded is named
+                only here; the next run sends its records again.
         """
         provider_type = agent_config.get("model_vendor")
         if not provider_type:
@@ -512,10 +541,12 @@ class BatchSubmissionService:
             )
         provider_type = provider_type.lower()
         batch_id = "unknown"  # Initialize for error handling
+        taken = False
 
         try:
             provider = self._client_resolver.get_for_config(agent_config)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+            taken = True
 
             get_manager().set_context(batch_id=batch_id)
 
@@ -527,6 +558,12 @@ class BatchSubmissionService:
                     provider=provider_type,
                 )
             )
+
+            # Only once the provider holds the batch: refused, the store would describe a
+            # batch that does not exist. And before the registry names it, never after: a
+            # collect pass reads this record for the batch the registry names.
+            if record_sent is not None:
+                record_sent()
 
             if output_directory:
                 registry_name = action_name
@@ -566,6 +603,24 @@ class BatchSubmissionService:
                     error=str(e),
                 )
             )
-            raise ExternalServiceError(
-                f"Failed to submit batch job: {e}", context={"vendor": provider_type}, cause=e
+            if taken:
+                raise mark_action_fatal(
+                    ExternalServiceError(
+                        f"Batch {batch_id} was submitted but could not be recorded, so its "
+                        f"records will be sent again: {e}",
+                        context={"vendor": provider_type, "batch_id": batch_id},
+                        cause=e,
+                    )
+                ) from e
+            # Fatal to the action, not only to this file: otherwise the action completes on
+            # its other files' batches, and nothing sends this one again. Declared refused
+            # too, so the executor names the other files' batches the failure leaves waiting.
+            raise mark_submission_refused(
+                mark_action_fatal(
+                    ExternalServiceError(
+                        f"Failed to submit batch job: {e}",
+                        context={"vendor": provider_type},
+                        cause=e,
+                    )
+                )
             ) from e

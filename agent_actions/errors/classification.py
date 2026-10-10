@@ -5,6 +5,7 @@ from agent_actions.errors.base import enrich_exception_context, raised_by_exhaus
 _ACTION_FATAL_KEY = "action_fatal"
 _EVERY_FILE_FAILED_KEY = "every_file_failed"
 _EVERY_RECORD_FAILED_KEY = "every_record_failed"
+_SUBMISSION_REFUSED_KEY = "submission_refused"
 
 
 def mark_action_fatal(error: Exception) -> Exception:
@@ -26,17 +27,23 @@ def is_action_fatal(error: BaseException) -> bool:
     ``raised_by_exhaustion_policy`` searches it. A path that declares nothing
     keeps its failures per-item.
     """
-    from agent_actions.utils.safe_format import get_error_chain
-
     if raised_by_exhaustion_policy(error):
         return True
-    if not isinstance(error, Exception):
-        return False
-    for link in get_error_chain(error):
-        context = getattr(link, "context", None)
-        if isinstance(context, dict) and context.get(_ACTION_FATAL_KEY) is True:
-            return True
-    return False
+    return _declared(error, _ACTION_FATAL_KEY)
+
+
+def mark_submission_refused(error: Exception) -> Exception:
+    """Declare *error* a batch the provider did not take, so nothing was sent or stored.
+
+    Tags in place and returns the same error, as ``mark_action_fatal`` does.
+    """
+    enrich_exception_context(error, **{_SUBMISSION_REFUSED_KEY: True})
+    return error
+
+
+def is_submission_refused(error: BaseException) -> bool:
+    """True if *error*, or anything it chains to, is a batch the provider did not take."""
+    return _declared(error, _SUBMISSION_REFUSED_KEY)
 
 
 def mark_every_file_failed(error: Exception) -> Exception:
