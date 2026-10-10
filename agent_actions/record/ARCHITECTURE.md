@@ -275,12 +275,15 @@ The source_guid is a record's stable identity across pipeline stages. Checkpoint
 RecordState          →  Disposition
 ─────────────────────────────────────
 PROCESSED            →  SUCCESS
-GUARD_SKIPPED        →  PASSTHROUGH
+GUARD_SKIPPED        →  UNPROCESSED
 CASCADE_SKIPPED      →  UNPROCESSED
 FAILED               →  FAILED
 EXHAUSTED            →  EXHAUSTED
 ACTIVE               →  PASSTHROUGH
 ```
+
+A guard skip answers nothing, so it is `UNPROCESSED`: the disposition gate never carries
+it, and the next run puts the record to the guard again.
 
 `derive_disposition()` reads `_state` from a record and returns the disposition string value. Raises `RecordEnvelopeError` if `_state` is missing or unrecognized.
 

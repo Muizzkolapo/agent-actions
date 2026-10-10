@@ -337,9 +337,9 @@ class TestOnlyASettledAnswerCounts:
     def test_a_guard_skipped_row_does_not_delete_what_it_skipped_past(self, tmp_path):
         """A record the guard skipped comes back keyed on its input, holding no answer.
 
-        Its state is terminal and its disposition a passthrough, so widening the test
-        to "has settled" reads it as an answer and drops the stored rows — which is
-        why the test is for `processed` and not for settledness.
+        Its state is terminal, so widening the test to "has settled" reads it as an
+        answer and drops the stored rows — which is why the test is for `processed`
+        and not for settledness.
         """
         stored = [_row("m1", producers=["i1"]), _row("m2", producers=["i1"])]
         produced = [{"source_guid": "i1", "_state": "guard_skipped", "content": {}}]
