@@ -563,7 +563,7 @@ What happens when schema validation fails? Agent Actions provides several fallba
 
 This means a single validation failure does not necessarily crash your entire agentic workflow. Downstream actions that depend on the failed output will be skipped, but independent branches continue.
 
-A `kind: tool` action at record granularity checks each record's output against its schema. An output that fails it fails that record, as a tool that raises does: the record is marked `failed` with the validation message, the other records of its file are stored, the action ends `completed_with_failures`, and `agac retry` runs the tool on that record again.
+A `kind: tool` action at record granularity checks each record's output against its schema. An output that fails it fails that record, as a tool that raises does: the record is marked `failed` with the validation message, the other records of its file are stored, the action ends `completed_with_failures` (`failed` when no record succeeds, as for a tool that raises), and `agac retry` runs the tool on that record again.
 
 ### Common Errors
 

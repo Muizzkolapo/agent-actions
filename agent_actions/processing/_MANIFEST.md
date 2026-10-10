@@ -64,9 +64,11 @@ even when inner retry metadata is also present), then retry. The expectations ar
 writes reason `expectations_exhausted` plus `expectations_failed`/`expectations_iterations` in the
 tombstone metadata. `ExpectationsExhaustedError` joins `ConfigurationError`/`EmptyOutputError`
 in the action-fatal re-raise list — `on_exhausted: raise` halts the run rather than degrading
-into a per-record failure. A `SchemaValidationError` is not on it: a record tool's output is
-checked against its schema one record at a time, so `OnlineLLMStrategy.invoke` fails that
-record, as it does a tool that raises, and the rest of its file is stored.
+into a per-record failure. A `SchemaValidationError` is not on it: one raised while processing
+a record fails that record, as a tool that raises does, and the rest of its file is stored. A
+record tool's output is checked against its schema one record at a time; an LLM action's schema
+that only fails to load at record time also fails each record this way, and the action ends
+`failed`.
 
 ## Dependencies
 
