@@ -169,7 +169,8 @@ process_initial_stage(InitialStageContext)
   |
   1. FileReader.read() -- raw content + file_type
   2. validate_staging_field_names() -- reject reserved names
-  3. _validate_staged_data() -- prompt template compatibility
+  3. _validate_staged_data() -- prompt template compatibility, rendered with the
+     version and workflow metadata the records are prepared with
   4. Branch on run_mode:
   |
   +-- BATCH: _prepare_batch_data()

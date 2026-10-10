@@ -105,6 +105,13 @@ def _save_source_items_helper(
     saver.save_source_items(items=source_items, relative_path=str(relative_path.with_suffix("")))
 
 
+def _first_stage_workflow_metadata(
+    workflow_metadata: dict[str, Any] | None, file_path: str
+) -> dict[str, Any]:
+    """The run's `workflow` namespace as a first action's prompts and guards read it."""
+    return {**(workflow_metadata or {}), "source_file": str(file_path)}
+
+
 def _validate_staged_data(
     raw_content: Any,
     file_type: str,
@@ -112,11 +119,19 @@ def _validate_staged_data(
     agent_name: str,
     mode: str,
     file_path: str,
+    *,
+    action_configs: dict[str, Any] | None = None,
+    workflow_metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Validate input context against prompt template requirements before LLM execution."""
+    """Validate input context against prompt template requirements before LLM execution.
+
+    Renders with the version and workflow metadata the records are prepared with, so a
+    prompt that reads `version.*` or `workflow.*` is not refused here.
+    """
     from agent_actions.prompt.service import (
         PromptPreparationService,
     )
+    from agent_actions.workflow.pipeline import ProcessingPipeline
 
     if not raw_content:
         return
@@ -138,12 +153,19 @@ def _validate_staged_data(
         source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
 
+    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
+        cast("ActionConfigDict", agent_config), action_configs
+    )
     PromptPreparationService.prepare_prompt_with_context(
         agent_config=agent_config,
         agent_name=agent_name,
         contents=source_content if isinstance(source_content, dict) else {},
         mode=RunMode.BATCH if mode == RunMode.BATCH else RunMode.ONLINE,
+        agent_indices=agent_indices,
+        dependency_configs=dependency_configs,
         source_content=source_content,
+        version_context=version_context,
+        workflow_metadata=_first_stage_workflow_metadata(workflow_metadata, file_path),
         current_item=first_item,
         file_path=file_path,
     )
@@ -190,6 +212,8 @@ def process_initial_stage(ctx: InitialStageContext):
         agent_name=ctx.agent_name,
         mode=run_mode or RunMode.ONLINE,
         file_path=ctx.file_path,
+        action_configs=ctx.action_configs,
+        workflow_metadata=ctx.workflow_metadata,
     )
 
     # Same formula _save_source_items_helper uses, so the identity claim below
@@ -761,7 +785,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         ctx.data_chunk,
         ctx.output_directory,
         source_data=ctx.data_chunk,
-        workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
+        workflow_metadata=_first_stage_workflow_metadata(ctx.workflow_metadata, ctx.file_path),
         run_inputs=ctx.run_inputs,
     )
 
@@ -787,7 +811,12 @@ def _process_online_mode_with_record_processor(
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
     from agent_actions.processing.disposition_gate import DispositionGate
+    from agent_actions.workflow.pipeline import ProcessingPipeline
 
+    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
+        cast("ActionConfigDict", ctx.agent_config),
+        ctx.action_configs,
+    )
     strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
     disposition_gate = DispositionGate(
         storage_backend=ctx.storage_backend, repairing=ctx.retried_records
@@ -802,7 +831,10 @@ def _process_online_mode_with_record_processor(
         file_path=str(file_path),
         output_directory=str(output_directory),
         target_relative_path=target_relative_path(output_file_path, str(output_directory)),
-        workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": str(file_path)},
+        agent_indices=agent_indices,
+        dependency_configs=dependency_configs,
+        version_context=version_context,
+        workflow_metadata=_first_stage_workflow_metadata(ctx.workflow_metadata, file_path),
         storage_backend=ctx.storage_backend,
         defer_kept_dispositions=True,
     )
