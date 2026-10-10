@@ -120,6 +120,22 @@ CAPTURE = "{% set kind %}{{ source.page_content }}{% endset %}"
             [{"source": {"page_content": " urgent "}}],
             id="trim-of-a-capture",
         ),
+        pytest.param(
+            "{% if source.note is defined %}\n  Note: {{ source.note }}\n{% endif %}\n"
+            "Summarize {{ source.page_content }}",
+            [URGENT, ROUTINE],
+            id="if-body-indented-deeper-than-its-tags",
+        ),
+        pytest.param(
+            "{% for f in source.refs %}\n  - {{ f }}\n{% endfor %}\nEnd {{ source.page_id }}",
+            [{"source": {"page_id": "p0", "refs": ["a", "b"]}}],
+            id="for-body-indented-deeper-than-its-tags",
+        ),
+        pytest.param(
+            "{%- if source.note is defined %}\n  Note: {{ source.note }}\n{% endif %}\nDone",
+            [URGENT, ROUTINE],
+            id="trimmed-leading-if-with-an-indented-body",
+        ),
     ],
 )
 def test_the_inline_prompt_sends_what_the_store_prompt_sends(tmp_path, prompt, records):
