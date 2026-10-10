@@ -108,9 +108,36 @@ file beside the new ones. The run reports how many rows it could not place. It
 carries them rather than guessing, because guessing wrong here deletes a row
 that nothing will write again.
 
-Dispositions are cleared by the ids the retry was given, so an id that names no
-input of an action is simply not found there — nothing at that action is
-re-run, and nothing it holds is removed.
+Dispositions are cleared by the ids the retry was given, at every action it
+re-runs, and the re-run decides them again wherever it reaches the record. An id
+that names no input of an action is simply not found there — nothing at that
+action is re-run.
+
+A record the re-run never repairs at the action it starts from is reached
+nowhere: a failure an earlier release recorded under a batch record's target id,
+one written by hand, a record whose input file is gone, one in a file the action
+failed to process, or any of them when the action fails before it finishes.
+Cleared and never decided again, it would lose its failures without being
+repaired. So the retry puts back what it cleared for such a record at every
+action that did not decide the record again itself, reads an action it had left
+complete again as a run reads it, and names the records (the first ten, and how
+many more):
+
+```
+1 record(s) named at 'summarize' were not in its input, so nothing repaired them
+and their failures stand: t-3f9a1c2e. Retry selects a record by the source_guid
+it arrives with. Where a record's input is gone, restore it as it was; an id no
+input carries, such as a target id an earlier release recorded or one set by
+hand, is cleared only by starting over with `agac run --fresh`.
+```
+
+Where the record was in a file the action failed to process, or the action did
+not finish, the retry says so instead, and the remedy is to fix that error and
+run the retry again.
+
+A record the re-run found, in a file it processed to the end, is not put back,
+even where the action wrote nothing under its id: a file tool that rolls its
+input into rows no single record produced answers it that way.
 
 A record that reaches an action without a `source_guid` — from an upstream file
 edited by hand, say — has no id to name. In either run mode it is refused: it
@@ -179,9 +206,11 @@ there.
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
-reset since. And an action the stopped retry completed never gets back a failure
-recorded against the action as a whole, which would make the next `agac run` run
-it again.
+reset since. The exception is a retry stopped while putting back the failures it
+could not repair: those go back though every action has completed, since nothing
+decided them again. And an action the stopped retry completed never gets back a
+failure recorded against the action as a whole, which would make the next
+`agac run` run it again.
 
 `--dry-run` puts nothing back and leaves the record of the stopped retry where it
 is. The plan it shows counts what a retry would put back.

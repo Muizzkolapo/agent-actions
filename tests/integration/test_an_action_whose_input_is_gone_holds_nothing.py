@@ -108,7 +108,8 @@ def test_the_input_coming_back_brings_the_rows_back(chained):  # noqa: F811
 
 def test_a_retry_of_a_record_whose_input_is_gone_keeps_the_rows(chained):  # noqa: F811
     """A repair touches only the records it names, so finding none of their files is
-    no reason to delete the rest of the action's rows."""
+    no reason to delete the rest of the action's rows. Nor is it a repair of the record
+    named, whose failure stands."""
     named = _record_ids(chained)[-1]
     _fail(chained, named)
     _remove_the_input(chained)
@@ -116,6 +117,6 @@ def test_a_retry_of_a_record_whose_input_is_gone_keeps_the_rows(chained):  # noq
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named])
 
     assert result.exit_code == 0, result.output
-    assert _status(chained, ACTION) == "completed"
+    assert _status(chained, ACTION) == "completed_with_failures"
     assert _rows(chained, ACTION) == RECORDS
     assert _rows(chained, SECOND) == RECORDS

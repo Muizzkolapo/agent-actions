@@ -1295,7 +1295,8 @@ class ActionExecutor:
     def _log_failure_details(self, item_failures: list[dict]) -> None:
         for failure in item_failures[:3]:
             record_id = failure.get("record_id", "unknown")[:8]
-            reason = failure.get("reason", "unknown")[:100]
+            reason = failure.get("reason")
+            reason = "unknown" if reason is None else reason[:100]
             logger.warning("  record_id: %s  reason: %s", record_id, reason)
         if len(item_failures) > 3:
             logger.warning("  ... and %d more failure(s)", len(item_failures) - 3)

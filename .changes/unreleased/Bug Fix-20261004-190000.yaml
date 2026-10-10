@@ -21,6 +21,6 @@ body: >-
   nothing at all refuses such a record the same way, and since nothing in such a run
   succeeds, the action fails. To process the record, give it back its `source_guid`
   upstream. A failure an earlier release recorded under a target id stays in the
-  store, and `agac retry` still clears it without repairing it; a `deferred` mark it left
-  for a batch still out is cleared when that batch is collected.
+  store; a `deferred` mark it left for a batch still out is cleared when that batch is
+  collected.
 time: 2026-10-04T19:00:00Z

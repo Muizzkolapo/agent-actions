@@ -19,7 +19,10 @@ from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import target_relative_path
-from agent_actions.processing.disposition_gate import positions_named_by_repair
+from agent_actions.processing.disposition_gate import (
+    note_answered_by_repair,
+    positions_named_by_repair,
+)
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -397,6 +400,12 @@ class ProcessingPipeline:
                     file_path,
                 )
             self._process_by_strategy(data, file_path, base_directory, output_directory)
+            note_answered_by_repair(
+                data,
+                self.config.retried_records,
+                storage_backend=self.config.storage_backend,
+                action_name=self.config.action_name,
+            )
             relative_path = Path(file_path).relative_to(base_directory)
             return str(Path(output_directory) / relative_path)
         except (AgentActionsError, ValueError) as e:
@@ -544,7 +553,12 @@ class ProcessingPipeline:
 
         # Above the context scope, which writes `skipped` for every record it drops:
         # a repair must not disposition a record it never named.
-        repair_kept = positions_named_by_repair(data, self.config.retried_records)
+        repair_kept = positions_named_by_repair(
+            data,
+            self.config.retried_records,
+            storage_backend=self.config.storage_backend,
+            action_name=self.config.action_name,
+        )
         if repair_kept is not None:
             data = [data[i] for i in repair_kept]
 

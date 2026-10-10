@@ -22,6 +22,7 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.processing.disposition_gate import answered_by_repair, found_by_repair
 from agent_actions.record.reasons import BATCH_ABANDONED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -51,16 +52,24 @@ def _write_manifest(
     record_ids: list[str],
     downstream_actions: list[str],
     dispositions: list[dict],
+    *,
+    put_back_from: str | None = None,
 ) -> str:
-    """Write a retry manifest before clearing dispositions, returning its ``created_at``."""
-    created_at = datetime.datetime.now(datetime.UTC).isoformat()
-    manifest = {
+    """Write a retry manifest before clearing dispositions, returning its ``created_at``.
+
+    ``put_back_from`` is the ``created_at`` of the manifest a finished re-run narrows to
+    what it puts back. It is kept, since the actions that retry left are stamped with it.
+    """
+    created_at = put_back_from or datetime.datetime.now(datetime.UTC).isoformat()
+    manifest: dict[str, Any] = {
         "from_action": from_action,
         "record_ids": sorted(record_ids),
         "downstream_actions": downstream_actions,
         "dispositions": dispositions,
         "created_at": created_at,
     }
+    if put_back_from:
+        manifest["put_back"] = True
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_json_write(path, manifest, indent=2)
     return created_at
@@ -149,6 +158,7 @@ class RetryCommand:
                     row["record_id"],
                     row["disposition"],
                     reason=row.get("reason"),
+                    relative_path=row.get("relative_path"),
                     detail=row.get("detail"),
                     input_snapshot=row.get("input_snapshot"),
                 )
@@ -305,6 +315,16 @@ class RetryCommand:
         error_message = None
         try:
             workflow.run()
+            self._put_back_what_the_repair_never_answered(
+                backend,
+                workflow,
+                manifest_file,
+                created_at,
+                from_action,
+                downstream_actions,
+                record_ids,
+                snapshot_dispositions,
+            )
             status = _classify_outcome(state_mgr)
         except Exception:
             error_message = traceback.format_exc()
@@ -336,6 +356,130 @@ class RetryCommand:
             raise SystemExit(1)
 
         self.console.print("\n[green]Retry complete.[/green]")
+
+    def _put_back_what_the_repair_never_answered(
+        self,
+        backend,
+        workflow,
+        manifest_file: Path,
+        created_at: str,
+        from_action: str,
+        downstream_actions: list[str],
+        cleared_ids: set[str],
+        cleared_rows: list[dict],
+    ) -> None:
+        """Put back what was cleared for a record the re-run never answered at *from_action*.
+
+        A repair selects records by the source_guid they arrive with, so a failure under
+        an id no input carries — an earlier release's batch target_id, one set by hand, a
+        record whose input is gone — is cleared and never re-decided, as is one in a file
+        that failed or at an action that did not finish. Left cleared, it is forgotten and
+        the action reads complete over the row it still holds. Each action gets its rows
+        for such a record back unless it answered or decided the record itself: a file
+        that fails after writing its records' dispositions has decided them.
+        """
+        runner_backend = workflow.services.core.action_runner.storage_backend
+
+        def settled(action: str) -> set[str]:
+            decided = {row["record_id"] for row in backend.get_disposition(action)}
+            return decided | answered_by_repair(runner_backend, action)
+
+        never_answered = cleared_ids - settled(from_action) - {NODE_LEVEL_RECORD_ID}
+        if not never_answered:
+            return
+        put_back: list[dict] = []
+        for action in downstream_actions:
+            unsettled = never_answered - settled(action)
+            put_back.extend(
+                row
+                for row in cleared_rows
+                if row["action_name"] == action and row["record_id"] in unsettled
+            )
+        # From here an interruption restores these rows, and nothing the re-run decided.
+        _write_manifest(
+            manifest_file,
+            from_action,
+            list(never_answered),
+            downstream_actions,
+            put_back,
+            put_back_from=created_at,
+        )
+        backend.set_dispositions_batch(
+            [
+                (
+                    row["action_name"],
+                    row["record_id"],
+                    row["disposition"],
+                    row.get("reason"),
+                    row.get("relative_path"),
+                    row.get("input_snapshot"),
+                    row.get("detail"),
+                )
+                for row in put_back
+            ]
+        )
+
+        # Deferred import: avoid circular import at module load time.
+        from agent_actions.workflow.managers.state import ActionStatus
+
+        state_mgr = workflow.services.core.state_manager
+        ran_to_the_end = state_mgr.get_status(from_action) in {
+            ActionStatus.COMPLETED,
+            ActionStatus.COMPLETED_WITH_FAILURES,
+            ActionStatus.SKIPPED,
+            ActionStatus.BATCH_SUBMITTED,
+        }
+        for action in dict.fromkeys(row["action_name"] for row in put_back):
+            # The run read the action complete without these; read it again as the
+            # executor does, so it does not stay complete over the failures it holds.
+            if state_mgr.get_status(action) == ActionStatus.COMPLETED and backend.get_failed_items(
+                action
+            ):
+                state_mgr.update_status(
+                    action,
+                    ActionStatus.COMPLETED_WITH_FAILURES
+                    if backend.has_successful_items(action)
+                    else ActionStatus.FAILED,
+                )
+
+        if not ran_to_the_end:
+            self._say_unrepaired(
+                from_action,
+                never_answered,
+                f"were not repaired, because '{from_action}' did not finish, and their "
+                f"failures stand",
+                "Fix what stopped it and run retry again.",
+            )
+            return
+        found = found_by_repair(runner_backend, from_action)
+        self._say_unrepaired(
+            from_action,
+            never_answered & found,
+            f"were in a file '{from_action}' failed to process, so nothing repaired them "
+            f"and their failures stand",
+            "The run log names the error: fix it and run retry again.",
+        )
+        self._say_unrepaired(
+            from_action,
+            never_answered - found,
+            "were not in its input, so nothing repaired them and their failures stand",
+            "Retry selects a record by the source_guid it arrives with. Where a record's "
+            "input is gone, restore it as it was; an id no input carries, such as a target "
+            "id an earlier release recorded or one set by hand, is cleared only by starting "
+            "over with `agac run --fresh`.",
+        )
+
+    def _say_unrepaired(self, action: str, record_ids: set[str], what: str, remedy: str) -> None:
+        if not record_ids:
+            return
+        named = sorted(record_ids)
+        listing = ", ".join(named[:10]) + (
+            f" and {len(named) - 10} more" if len(named) > 10 else ""
+        )
+        self.console.print(
+            f"\n[yellow]{len(named)} record(s) named at '{action}' {what}: {listing}. "
+            f"{remedy}[/yellow]"
+        )
 
     def _report_failures(self, state_mgr, execution_order: list[str]) -> None:
         failed = state_mgr.get_failed_actions(execution_order)
@@ -375,14 +519,16 @@ class RetryCommand:
         the readers hold what they had not answered as ``unprocessed``, which no retry
         starts from. An action a reset has touched since holds newer rows and gets none.
         Nor does a completed action get a node-level failure back, which a plain run
-        would take as a reason to run it again over what its readers hold.
+        would take as a reason to run it again over what its readers hold. A manifest the
+        finished re-run narrowed to what it puts back (``put_back``) goes back even where
+        every action completed: it holds only records that re-run did not decide again.
         """
         from agent_actions.workflow.managers.state import COMPLETED_STATUSES
 
         completed = {
             action for action in resumed if state_mgr.get_status(action) in COMPLETED_STATUSES
         }
-        if not manifest or completed == resumed:
+        if not manifest or (completed == resumed and not manifest.get("put_back")):
             return []
         return [
             row

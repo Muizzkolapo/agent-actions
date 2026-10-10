@@ -718,8 +718,8 @@ A record that arrives without one has no identity, in either mode, and is
     of their own, and a guard filter, which leaves nothing. Batch knows a sent
     record by its custom_id, which is its target_id, but never records it under
     that: a run whose input has none mints a new one, and nothing that selects a
-    record reads it, so a failure there would be one `agac retry` names, clears,
-    and cannot repair. BatchResultReconciler.get_source_guid returns None for it,
+    record reads it, so a failure there would be one `agac retry` names and
+    cannot repair. BatchResultReconciler.get_source_guid returns None for it,
     and for an id the context map does not hold, such as a parser placeholder;
     submission marks it no `deferred`, and `--abandon-in-flight` marks it no
     `failed`. It is still sent to the model before it is refused, in both modes.

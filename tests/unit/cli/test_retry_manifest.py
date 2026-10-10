@@ -400,6 +400,47 @@ class TestManifestRestoreOnNextInvocation:
         # Manifest deleted after restore
         assert not manifest_file.exists()
 
+    def test_a_restored_row_keeps_its_relative_path(self, tmp_path: Path):
+        """The put-back writes each row's relative_path; restoring it must not drop it."""
+        manifest_file = _manifest_path(tmp_path / "agent_io" / "store" / "test_wf")
+        created_at = _write_manifest(
+            manifest_file,
+            from_action="classify",
+            record_ids=["r1"],
+            downstream_actions=["classify"],
+            dispositions=[
+                {
+                    "action_name": "classify",
+                    "record_id": "r1",
+                    "disposition": "failed",
+                    "reason": "API error",
+                    "relative_path": "pages/batch_1.json",
+                },
+            ],
+        )
+        backend = make_mock_backend()
+
+        with (
+            patch("agent_actions.cli.retry.get_storage_backend", return_value=backend),
+            patch("agent_actions.cli.retry.ProjectPathsFactory") as mock_paths_factory,
+            patch("agent_actions.cli.retry.load_workflow") as mock_load_wf,
+        ):
+            mock_paths_factory.create_project_paths.return_value.io_dir = tmp_path / "agent_io"
+            mock_wf = MagicMock()
+            mock_wf.execution_order = ["classify"]
+            mock_wf.services.core.state_manager = _left_by(
+                created_at, classify=ActionStatus.INTERRUPTED
+            )
+            mock_load_wf.return_value = mock_wf
+
+            cmd = RetryCommand(RetryCommandArgs(agent="test_wf"))
+            cmd.console = MagicMock()
+            cmd.execute()
+
+        (restore,) = backend.set_disposition.call_args_list
+        assert restore.args[:3] == ("classify", "r1", "failed")
+        assert restore.kwargs.get("relative_path") == "pages/batch_1.json"
+
     def test_puts_nothing_back_on_an_action_reset_since(self, tmp_path: Path):
         """A reset clears what the action holds and runs it again, so the snapshot taken
         before it is older than anything the action has said since."""

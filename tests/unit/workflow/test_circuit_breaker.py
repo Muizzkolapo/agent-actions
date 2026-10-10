@@ -598,6 +598,19 @@ class TestResolveCompletionStatus:
         )
 
     @patch("agent_actions.workflow.executor.fire_event")
+    def test_a_failure_with_no_reason_is_still_read(self, mock_fire, executor, mock_deps):
+        """A failure set by hand, or put back by `agac retry`, may carry no reason."""
+        backend = mock_deps.action_runner.storage_backend
+        backend.has_disposition.return_value = False
+        backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": None}
+        ]
+        backend.has_successful_items.return_value = True
+        assert (
+            executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
+        )
+
+    @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_when_no_storage_backend(self, mock_fire, executor, mock_deps):
         mock_deps.action_runner.storage_backend = None
         assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
