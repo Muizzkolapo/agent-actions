@@ -28,7 +28,7 @@ from agent_actions.workflow.execution_events import (
     fire_step_complete,
     fire_step_start,
 )
-from agent_actions.workflow.executor import action_is_halted
+from agent_actions.workflow.executor import action_is_halted, edited_since_its_work_began
 from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
@@ -216,25 +216,15 @@ class AgentWorkflow:
         )
 
     def _reset_retryable_actions(self) -> None:
-        """Reset failed/skipped/running actions to pending so re-runs retry them.
+        """Put failed, skipped and stopped actions back to pending so this run retries them.
 
-        For most statuses, clears ALL dispositions — disposition is derived
-        state that must follow action status.  For actions that died
-        mid-processing (RUNNING after an ungraceful kill, INTERRUPTED after a
-        handled one), only failure dispositions are cleared so that
-        checkpointed SUCCESS rows survive and the DispositionGate can carry
-        them forward on resume.
+        An action whose run stopped partway (killed, interrupted, or stopped by an error)
+        keeps the records it finished, and their prompt traces, while its config is the one
+        they were answered under: only failure dispositions are cleared, and the
+        DispositionGate carries the rest. Edited since, it and everything reading it are
+        forgotten and answer everything again. Any other action is cleared in bulk.
         """
         state_mgr = self.services.core.state_manager
-        # Captured before reset_retryable() moves them to PENDING: these hold finished
-        # work to preserve. A collect pass that ended in an error reads failed, and
-        # holds what it collected all the same.
-        running_actions = {
-            name
-            for name in state_mgr.execution_order
-            if state_mgr.get_status(name) in MID_PROCESSING_STATUSES
-            or state_mgr.stopped_collecting(name)
-        }
         halted = {
             name
             for name in state_mgr.execution_order
@@ -249,23 +239,50 @@ class AgentWorkflow:
                 len(halted),
                 sorted(halted),
             )
+        stopped_partway = MID_PROCESSING_STATUSES | {ActionStatus.FAILED}
+        keeps = set()
+        for name in state_mgr.execution_order:
+            status = state_mgr.get_status(name)
+            if status not in stopped_partway or name in halted:
+                continue
+            edited = edited_since_its_work_began(
+                state_mgr.get_status_details(name), self.action_configs.get(name)
+            )
+            if edited:
+                # Before any status below is written, so a process that dies in between
+                # finds the edit again and repeats this.
+                logger.info(
+                    "%s was edited since its last run started: it and what reads it "
+                    "answer everything again",
+                    name,
+                )
+                for reopened in self.services.core.action_executor.reopen_with_readers(name):
+                    self._clear_prompt_traces(reopened)
+            elif edited is False or status in MID_PROCESSING_STATUSES:
+                # Written before the config was recorded as work began, the state is reset
+                # as it was then: by its status alone.
+                keeps.add(name)
         reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:
             return
         for action_name in reset_actions:
             try:
-                if action_name in running_actions:
+                if action_name in keeps:
                     for disp in RUNNING_CLEAR_DISPOSITIONS:
                         self.storage_backend.clear_disposition(action_name, disp)
                 else:
                     self.storage_backend.clear_disposition(action_name)
             except Exception as e:
                 logger.warning("Failed to clear dispositions for %s: %s", action_name, e)
-            try:
-                self.storage_backend.clear_prompt_traces(action_name)
-            except Exception as e:
-                logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
+            if action_name not in keeps:
+                self._clear_prompt_traces(action_name)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
+
+    def _clear_prompt_traces(self, action_name: str) -> None:
+        try:
+            self.storage_backend.clear_prompt_traces(action_name)
+        except Exception as e:
+            logger.warning("Failed to clear prompt traces for %s: %s", action_name, e)
 
     # ── Properties ──────────────────────────────────────────────────────
 

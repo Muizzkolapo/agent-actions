@@ -7,7 +7,7 @@ are carried forward by the DispositionGate when target_data is missing
 
 from unittest.mock import MagicMock
 
-from agent_actions.processing.disposition_gate import build_carry_forward
+from agent_actions.processing.disposition_gate import answered_since_stored, build_carry_forward
 
 
 def _make_record(guid: str) -> dict:
@@ -56,3 +56,22 @@ class TestCheckpointResume:
         assert len(found) == 2
         assert missing == set()
         backend.read_checkpoint_records.assert_not_called()
+
+
+class TestAnsweredSinceStored:
+    """A file's checkpoint rows are cleared when it is written, so the ones left are
+    answers its stored rows do not hold."""
+
+    def test_a_record_checkpointed_beside_its_stored_file_is_answered_again(self):
+        backend = MagicMock()
+        backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
+        backend.read_checkpoint_records.return_value = [_make_record("r1")]
+
+        assert answered_since_stored(backend, "action_a", "output.json") == {"r1"}
+
+    def test_a_checkpoint_with_nothing_stored_is_left_to_be_carried(self):
+        backend = MagicMock()
+        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
+        backend.read_checkpoint_records.return_value = [_make_record("r0")]
+
+        assert answered_since_stored(backend, "action_a", "output.json") == set()

@@ -290,7 +290,7 @@ First run (interrupted at record 150 of 200):
 Re-run:
 
   _reset_retryable_actions():
-      action was RUNNING → selective clear (failures only)
+      action stopped partway, config unchanged → selective clear (failures only)
       150 SUCCESS dispositions preserved
 
   UnifiedProcessor.process():
@@ -302,8 +302,16 @@ Re-run:
       strategy.invoke(50 remaining records)
       → enrich + collect (all 200)
       → write final output
-      → clear_checkpoint_records()
+      → clear_checkpoint_records(action, that file)
 ```
+
+A checkpoint row left beside a stored file is therefore a later answer than the row
+stored for that record: the run that gave it stopped before writing the file again,
+after an edit or an upstream change had reset the action. `answered_since_stored`
+names those records and the online path answers them again. The stored row is not
+the answer their disposition describes, and the checkpoint row is the strategy's
+output before enrichment, without lineage or metadata. Carrying checkpoint rows is
+kept for a file with nothing stored.
 
 ### Checkpoint storage
 
@@ -326,7 +334,8 @@ Every path that resets action state also clears checkpoint records:
 
 | Path | When | Code |
 |------|------|------|
-| Normal completion | After `save_main_output` | `pipeline.py:618` |
+| A file written | After its write, that file's rows only | `pipeline.py`, `initial_pipeline.py` |
+| An action reset to run again | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
 
@@ -350,6 +359,8 @@ NOT terminal (reprocessed on re-run):
 On resume, `build_carry_forward()` reads prior output for carried records:
 
 ```
+answered_since_stored(action_name, path)        ← checkpointed after the file
+    → not carried: answered again                  was stored (online path)
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
@@ -709,11 +720,15 @@ If you add a new RecordState value that should block downstream:
 ### Every reset path must clear checkpoint records
 
 ```
-Three places clear action state. ALL THREE must clear checkpoint_output:
+These places clear action state. ALL must clear checkpoint_output:
 
-1. pipeline.py:618      — after save_main_output (normal completion)
-2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
-3. cli/retry.py:201     — RetryCommand.execute (retry command)
+1. pipeline.py, initial_pipeline.py — after a file's write, that file's rows
+2. coordinator.py       — _clear_for_fresh_run (--fresh flag)
+3. cli/retry.py         — RetryCommand.execute (retry command)
+4. executor.py          — _forget_what_it_did (an action reset to run again)
+
+Clearing every file's rows after one file's write loses the answers of a
+file the run has not written yet: its stored rows are then carried instead.
 
 If you add a new reset path (e.g., a new CLI command that resets actions):
     You MUST also call storage_backend.clear_checkpoint_records(action_name).
@@ -728,35 +743,37 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED, CHECKING_BATCH)
+  Stopped partway (RUNNING, INTERRUPTED, CHECKING_BATCH, FAILED), with the
+  config its run recorded as it started (`answered_under`) still in force
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
-                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
+                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED,
+                    and the prompt traces of what it keeps
 
-  All other retryable statuses (FAILED, SKIPPED)
-                 → bulk clear ALL dispositions
+  Stopped partway, edited since (prompt, schema, guard, model)
+                 → it and every action reading it are forgotten, prompt
+                   traces too, and answer everything again
+                   (ActionExecutor.reopen_with_readers)
 
-Why the asymmetry:
-  RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
-  dispositions that should survive for carry-forward on resume.
+  Stopped partway, nothing recorded (state from before the stamp)
+                 → by status: selective for RUNNING, INTERRUPTED,
+                   CHECKING_BATCH; bulk for FAILED
 
-  CHECKING_BATCH = died while collecting a batch. The files it reached are
-  written and their records done. A finished batch job stops its file being
-  submitted again only until it is collected, so with those dispositions
-  wiped each collected file is submitted, and paid for, a second time.
+  SKIPPED        → bulk clear ALL dispositions
 
-  A collect pass that ends in an error, not a kill, is marked FAILED by the
-  error handler. It holds what it collected all the same, so the state
-  manager records that it was stopped while collecting (`stopped_collecting`)
-  and the reset clears it selectively too. The mark goes with the next status
-  change, so the protection covers one reset: if the resumed run then fails
-  while running, before it is back to collecting, the reset after that wipes.
+Why:
+  A stopped action may hold checkpointed SUCCESS dispositions, however it
+  stopped: killed (RUNNING), interrupted, killed while collecting a batch
+  (CHECKING_BATCH: the files it reached are written and their records done),
+  or stopped by an error (FAILED: an action that raised may hold successes).
+  Wiped, they are answered again; a finished batch job stops its file being
+  submitted again only until it is collected, so each collected file is
+  submitted, and paid for, a second time.
 
-  FAILED = zero successes whenever _resolve_completion_status classified it
-  (it returns FAILED only when has_successful_items() is False). An action
-  that raised instead of returning is also FAILED and may hold successes:
-  their output survives the clear, their dispositions do not, so those
-  records are processed again on the next run.
+  Kept after an edit, they are answers to another prompt or from another
+  model, carried as current, and the action is stamped complete under the
+  new config. Which config they were answered under is known only from
+  the stamp the executor writes when it starts the action's work.
 
   SKIPPED = no records processed. Nothing to preserve.
 

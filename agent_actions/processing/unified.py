@@ -175,17 +175,22 @@ class UnifiedProcessor:
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
                         CARRY_FORWARD_REASON,
+                        answered_since_stored,
                         build_carry_forward,
                     )
 
+                    answer_again = gate_carry_ids & answered_since_stored(
+                        context.storage_backend, context.action_name, relative_path
+                    )
                     carry_data, missing_ids = build_carry_forward(
-                        carry_ids,
+                        carry_ids - answer_again,
                         context.action_name,
                         relative_path,
                         context.storage_backend,
                         # Only the gate's ids name inputs; a repair's name stored rows.
-                        produced_by=gate_carry_ids,
+                        produced_by=gate_carry_ids - answer_again,
                         rewriting=written_by_guard
+                        | answer_again
                         | {rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
@@ -193,6 +198,7 @@ class UnifiedProcessor:
                     # a gate id — a repaired guid keys no carried row, and on a repair run
                     # only a repaired record reaches the guard.
                     missing_ids -= repair_carry_ids
+                    missing_ids |= answer_again
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
                     for record in carry_data:

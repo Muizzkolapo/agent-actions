@@ -251,12 +251,13 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   These records are "done" from the disposition gate's perspective.
   The gate carries them forward without reprocessing.
 
-RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an interrupted action):
+RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED
 
-  When a RUNNING action resumes, these dispositions are deleted so the
-  records flow through again. SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
-  are preserved so checkpointed progress survives.
+  When an action stopped partway resumes under the config its run started
+  with, these dispositions are deleted so the records flow through again.
+  SUCCESS, PASSTHROUGH, FILTERED, SKIPPED are preserved so checkpointed
+  progress survives.
 
 FAILURE_DISPOSITIONS (eligible for retry):
   FAILED, EXHAUSTED
@@ -315,7 +316,7 @@ The flow:
 
 1. **During processing**: `save_checkpoint_records()` upserts each batch of processed records using `INSERT OR REPLACE` keyed on `(action_name, relative_path, source_guid)`.
 2. **On resume**: `read_checkpoint_records()` retrieves all checkpointed records for the action/path, ordered by insertion ID.
-3. **After completion**: `clear_checkpoint_records()` deletes all checkpoint rows for the action. Checkpoint data is transient — it exists only between start and successful finish.
+3. **After a file is written**: `clear_checkpoint_records(action, path)` deletes that file's checkpoint rows. Checkpoint data is transient — it exists only between a record's answer and its file's write. A row left beside a stored file is therefore newer than the stored one, and the online path answers that record again (`answered_since_stored`) rather than carry either: the checkpoint row is not enriched.
 
 Unlike target_data (which stores all records as one JSON blob), checkpoint_output stores **one row per record** with `source_guid` as the dedup key. This allows incremental appending without rewriting the entire blob on each checkpoint.
 

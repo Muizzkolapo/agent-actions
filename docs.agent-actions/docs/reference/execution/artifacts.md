@@ -117,6 +117,20 @@ coarse throughout: any change to it re-runs the action, including a change to a
 value larger than the number of files. If anything else in the stamp differs on a
 later run, the action is reset to `pending` and re-executed rather than skipped.
 
+An action also records, when it starts work, what that work is answered under:
+`answered_under`, holding the same `config_hash`, `model_name` and `model_vendor`. A run
+that stops partway through an action — killed, interrupted, or stopped by an error —
+leaves the records it finished, and the next run keeps them only while these still match
+the config. If the prompt, schema, guard or model was edited in between, the action and
+every action that reads it answer everything again, and a batch still out under the old
+config is given up. Only those four count as edits: a change to a tool's code, to seed
+data or to the context scope is not seen, so run `agac run --fresh` to answer everything
+again after one. A record finished in a file the stopped run had not written yet is
+answered again when an earlier run had stored that file, since the stored row predates
+its answer. An `agac retry` records what the records it does not name were answered
+under instead — the stamp of the action's last completion, or what its last run recorded
+if it never completed — so a retry, stopped or finished, leaves an edit to the next run.
+
 Staged input is the source of truth for what an action holds. An action reset after
 its input was removed — by an edit, or by a limit or model given on the command
 line — finds no input file, is skipped, and its stored output is deleted along with
@@ -132,7 +146,7 @@ its readers'. Restore the input and run again to rebuild them.
 | `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
-Re-running a workflow skips completed actions and resumes from the failure point.
+Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished unless it was edited since.
 
 ### Run Results (`run_results.json`)
 
