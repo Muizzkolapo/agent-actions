@@ -76,6 +76,7 @@ from agent_actions.errors.preflight import (
 from agent_actions.errors.processing import (
     EmptyOutputError,
     GenerationError,
+    GuardNotAppliedError,
     ProcessingError,
     SerializationError,
     TransformationError,
@@ -136,6 +137,7 @@ __all__ = [
     "ProcessingError",
     "TransformationError",
     "GenerationError",
+    "GuardNotAppliedError",
     "WorkflowError",
     "SerializationError",
     "EmptyOutputError",
