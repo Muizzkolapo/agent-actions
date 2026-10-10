@@ -206,7 +206,7 @@ Guards evaluate against namespaced fields — use the HITL action name as the na
     on_false: skip  # Skip processing if HITL rejected
   prompt: |
     Process the approved data:
-    {{ review_data | tojson }}
+    {{ review_data.* }}
 
     Reviewer comment: {{ review_data.user_comment }}
 ```

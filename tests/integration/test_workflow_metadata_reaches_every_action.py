@@ -91,8 +91,8 @@ def summarize_unless_marked(data: Any, *args) -> list[dict]:
 
 _WORKFLOW_GUARD = '    guard: { condition: "workflow.name == \\"wfmeta\\"", on_false: filter }\n'
 
-# In the prompt store; an inline prompt keeps `workflow.*` and `version.*` for the
-# prompt's own rendering as well (test_an_inline_prompt_renders_per_record.py).
+# The workflow config is rendered before it is read, so `workflow.*` and `version.*`
+# have to sit in the prompt store, where they are left for the prompt's own rendering.
 _PROMPTS = """\
 {prompt Plain}
 Summarise this page: {{ source.page_content }}

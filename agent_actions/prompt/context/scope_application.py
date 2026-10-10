@@ -14,7 +14,6 @@ from agent_actions.logging.events.io_events import (
     ContextScopeAppliedEvent,
 )
 from agent_actions.prompt.context.null_namespace import is_null_namespace
-from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_fields,
@@ -369,15 +368,9 @@ def apply_context_scope(
             if isinstance(current, set):
                 current.add(field_name)
 
-    # `{{ i }}`, `{{ idx }}` and a custom version param are the version namespace too,
-    # promoted to the top level; gating them like user data left them undefined.
-    version = prompt_context.get("version")
-    version_names = (
-        VersionNamespaceBuilder.promoted_names(version) if isinstance(version, dict) else set()
-    )
     filtered: dict = {}
     for ns, data in prompt_context.items():
-        if ns in FRAMEWORK_NAMESPACES or ns in version_names:
+        if ns in FRAMEWORK_NAMESPACES:
             filtered[ns] = data
         elif ns in allowed:
             if allowed[ns] == "*" or not isinstance(data, dict):

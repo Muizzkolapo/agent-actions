@@ -22,20 +22,6 @@ Let's explore what templates provide:
 Templates are rendered before your agentic workflow runs. This means template errors are caught early, during configuration loading rather than at runtime.
 :::
 
-## What Renders When
-
-Loading a workflow renders every tag whose names the load knows: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`. Any other tag is left in place for the stage that has its names:
-
-- An action's `prompt:` renders per record, so `{{ source.field }}`, `{{ upstream_action.field }}`, `{{ seed.name }}` and the [version variables](../execution/versions#template-variables) work in an inline prompt as they do in the prompt store. A name nothing supplies fails each record at run time (`Template for 'write' references undefined variables: topic`) instead of rendering as nothing.
-- A versioned action's other values render once per version, with the version variables.
-- Anywhere else, a name nothing supplies fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, and so does a field a loaded name lacks.
-
-Each tag renders whole, at one stage. `{{ tone }} {{ source.topic }}` is two tags and works with `tone` set in the file; `{{ source[field] }}`, with `field` a load-time loop variable, is one tag left for the record, where `field` is undefined.
-
-A `{% set %}` block or macro whose body holds a per-record tag is output whole at load: with `{% set header %}Title: {{ source.title }}{% endset %}`, a prompt's `{{ header }}` becomes `Title: {{ source.title }}`, and a macro that writes actions can give them per-record prompts. A tag that tests or filters such a value, such as `{% if header == "x" %}` or `{{ header | length }}`, waits for the record together with the value's definition, so define the value inside the prompt that tests it; defined anywhere else in the file, it fails the load. One from `templates/` fails the load when tested, but capturing it in the prompt, as `{% set h %}{{ make_header() }}{% endset %}`, and testing `h` works.
-
-An included template (`{% include 'partial.j2' %}`) renders at load the names bound where the include stands, loop variables included, and leaves its other tags for later as the workflow file does.
-
 ## Template Location
 
 Templates are stored in the `templates/` directory:
@@ -143,7 +129,11 @@ diff agent_workflow/my_workflow/agent_config/my_workflow.yml \
 
 ### Built-in Variables
 
-The load supplies no variables of its own: only `load_prompt`, the macros and variables of `templates/`, and Jinja's globals (`range`, `dict`, `namespace`, …). Anything else a tag names comes from the file itself.
+| Variable | Description |
+|----------|-------------|
+| `workflow_name` | Current workflow name |
+| `env` | Environment variables dict |
+| `now` | Current timestamp |
 
 ### Custom Variables
 
@@ -160,11 +150,9 @@ defaults:
 
 ## Conditional Actions
 
-Include actions conditionally on a variable the file sets:
+Include actions conditionally:
 
 ```jinja2
-\{% set enable_validation = true \%\}
-
 \{% if enable_validation \%\}
   - name: validate_output
     kind: llm
@@ -293,6 +281,20 @@ name: my_workflow
 actions:
   - name: my_action
     # Uses base defaults
+```
+
+### Environment-Specific Configuration
+
+Consider what happens when you need different settings for development vs production. Templates let you branch based on environment variables:
+
+```jinja2
+\{% if env.AGENT_ACTIONS_ENV == 'production' \%\}
+  model_name: gpt-4o
+  run_mode: batch
+\{% else \%\}
+  model_name: gpt-4o-mini
+  run_mode: online
+\{% endif \%\}
 ```
 
 ### Feature Flags
