@@ -50,7 +50,8 @@ VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
 # Records eligible for retry: only primary failures the user can act on.
 # Excluded: success (done), unprocessed (cascade casualty — resolves when
-# upstream is retried), passthrough (guard-skipped), skipped (WHERE clause),
+# upstream is retried — or guard skip, which the next run judges again),
+# passthrough (empty answer kept by on_empty: skip), skipped (WHERE clause),
 # filtered (predicate), deferred (in-flight HITL/batch).
 FAILURE_DISPOSITIONS = frozenset({DISPOSITION_FAILED, DISPOSITION_EXHAUSTED})
 
@@ -809,6 +810,17 @@ class StorageBackend(ABC):
     ) -> int:
         """Delete matching disposition records. Returns count deleted."""
         return 0
+
+    def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
+        """Delete every disposition *action_name* holds under any of *record_ids*.
+
+        Returns count deleted. Default implementation loops over clear_disposition.
+        Backends may override for a single transaction.
+        """
+        return sum(
+            self.clear_disposition(action_name, record_id=record_id)
+            for record_id in dict.fromkeys(record_ids)
+        )
 
     def save_checkpoint_records(
         self,

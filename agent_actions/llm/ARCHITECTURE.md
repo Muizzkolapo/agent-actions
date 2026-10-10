@@ -220,6 +220,8 @@ Reconciliation (reconciler.py):
     └── Unanswered  → trigger retry (Phase 5); when the attempts run out,
                       an error record if a row came back at all, a tombstone
                       if the provider returned no row for it
+                      Retry off (no retry: block), or its batch not sent:
+                      a row-less record is failed, batch_not_returned
 ```
 
 ### Phase 5-6: Recovery State Machine

@@ -114,7 +114,10 @@ class CollectionStats:
 
     @property
     def only_guard_outcomes(self) -> bool:
-        """True when every collected record was guard-skipped or guard-filtered.
+        """True when every collected record was guard-filtered or skipped.
+
+        A guard skip is collected UNPROCESSED, so it is not among them; a SKIPPED
+        result is an empty answer ``on_empty: skip`` kept.
 
         Uses ``dataclasses.fields()`` so that adding a new status count
         automatically makes this return False until the new field is
@@ -141,16 +144,15 @@ class CollectionStats:
 
         1. **only_guard_outcomes** with no output — write a node-level
            SKIPPED disposition so the executor can cascade-skip downstream.
-           Guard-skipped records with passthrough data ARE in ``output``,
-           so ``not output`` prevents cascade-blocking when passthrough
-           data exists. This runs per input file, so the executor takes
-           the row as the action's skip only while the action holds no
-           record.
+           Skipped records keep a tombstone in ``output``, so ``not output``
+           prevents cascade-blocking when one exists. This runs per input
+           file, so the executor takes the row as the action's skip only
+           while the action holds no record.
         2. **zero successes** among active (non-unprocessed) input records
            with at least one failure — return ``RuntimeError`` for the
-           circuit breaker.  Unprocessed (cascade-quarantined) records are
-           excluded from the denominator so pass-through-only actions
-           don't erroneously trip the breaker.
+           circuit breaker.  Unprocessed records (cascade-quarantined or
+           guard-skipped) are excluded from the denominator so
+           pass-through-only actions don't erroneously trip the breaker.
 
         Returned rather than raised so a caller can write the file first where
         leaving it unwritten would leave rows a reset took back

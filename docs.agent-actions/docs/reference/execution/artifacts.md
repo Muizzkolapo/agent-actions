@@ -125,7 +125,12 @@ the config. If the prompt, schema, guard or model was edited in between, the act
 every action that reads it answer everything again, and a batch still out under the old
 config is given up. Only those four count as edits: a change to a tool's code, to seed
 data or to the context scope is not seen, so run `agac run --fresh` to answer everything
-again after one. A record finished in a file the stopped run had not written yet is
+again after one. A guard's verdict is not kept: the run that resumes the action puts each
+record to the guard again, so a record its code now skips is skipped, and one it now
+passes is answered. The exception is a record of a batch action whose batch was out, or
+finished and not yet collected, when the run stopped: it keeps the answer that batch
+brings, since the guard judged it when the batch was sent and collecting it judges
+nothing. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
 its answer. A file the store fails to write, on a full disk or a database error, stops
 the action this way: the run ends `failed`, and the next one writes that file. Online,
@@ -350,12 +355,13 @@ The SQLite database stores structured workflow data:
 
 | Disposition | Meaning |
 |-------------|---------|
-| `passthrough` | Record processed successfully |
-| `skipped` | Intentionally skipped (guard with `on_false: skip`) |
+| `success` | Record processed successfully |
+| `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
+| `skipped` | Left out of this action before its guard ran, or the whole action was skipped |
 | `filtered` | Removed from this action and every action below it (guard with `on_false: filter`) |
 | `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
 | `failed` | Processing failed |
-| `unprocessed` | Not yet processed |
+| `unprocessed` | Not answered: an upstream failure cascaded, or a guard with `on_false: skip` skipped it. The next run puts it to the guard again |
 
 The `failed` and `exhausted` dispositions also store an `input_snapshot` column containing the JSON-serialized input record at the time of failure (truncated to 10KB). This enables post-mortem debugging even after batch recovery files have been cleaned up. Other disposition types do not populate this column.
 

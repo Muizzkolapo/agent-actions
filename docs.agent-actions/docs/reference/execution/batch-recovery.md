@@ -35,7 +35,7 @@ flowchart TD
 
 ## Phase 1: Retry Missing Records
 
-After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. Any gap triggers the retry loop.
+After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. When the action has retry on, any gap triggers the retry loop. Retry is off until a `retry:` block turns it on (see [Configuration](#configuration)); without it, a record the provider did not return is failed at once (see [A record nothing sends again](#a-record-nothing-sends-again)).
 
 ### How It Works
 
@@ -53,12 +53,23 @@ After retrieving batch results, the system compares the expected record IDs agai
 A retry is prepared again from each record's stored context, with the action's dependencies
 and version, so its prompt reads the same upstream answers and its guard decides as it did for
 the first request. The run's `workflow.*` values are not handed to it yet. A record whose
-prompt reads them is not retried: nothing is sent for it, and it is stored `cascade_skipped`.
+prompt reads them is not retried: nothing is sent for it, and it is failed as below.
 A guard that reads them cannot be evaluated on a retry, and the collect run fails.
+
+### A record nothing sends again
+
+A record the provider left out of its results that no retry will send again is failed, with
+the reason `batch_not_returned`. That is a record of an action with retry off, or one whose
+retry batch did not go out, because its prompt could not be rendered (as for a prompt that
+reads `workflow.*`) or the provider refused it.
+The action completes with failures (`completed_with_failures`), the actions that read it
+skip the record, and [`agac retry`](../cli/retry) sends it again. Once its answer is
+collected, the actions that read it answer it too.
 
 ### Configuration
 
-Retry is configured at the action or defaults level:
+Retry is configured at the action or defaults level. It is off for an action when neither
+the action nor `defaults:` gives a `retry:` block:
 
 ```yaml
 defaults:

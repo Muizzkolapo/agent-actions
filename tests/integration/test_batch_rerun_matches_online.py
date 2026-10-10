@@ -1192,17 +1192,8 @@ CARRIED_AS_DONE_AND_TURNED_AWAY = {
     "every_input_skipped": ([_PASSES, _EVERY_ONE_REFUSED], SKIP),
     "one_input_skipped": ([_PASSES, _NOW_FILTERED], SKIP),
     "one_skipped_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], SKIP),
-    "one_skipped_that_then_passes_again": pytest.param(
-        ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
-        marks=pytest.mark.xfail(
-            strict=True,
-            reason=(
-                "Batch records a guard skip as unprocessed, online as passthrough, so once "
-                "the guard passes again batch answers the record and online keeps its "
-                "tombstone. A new record the guard skips and then passes splits the same way."
-            ),
-        ),
-    ),
+    "one_skipped_that_then_passes_again": ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
+    "a_new_input_skipped_that_then_passes": ([_NOW_FILTERED, _PASSES], SKIP),
 }
 
 
@@ -1218,6 +1209,39 @@ def test_an_input_carried_as_done_meets_the_guard_as_online(tmp_path, case):
     for run in compare(tmp_path, runs, guard):
         assert run["batch"] == run["online"], f"run {run['run']}"
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+def test_a_guard_skip_is_recorded_alike_in_both_modes(tmp_path):
+    """As unprocessed, which keeps the record open: the next run puts it to the guard
+    again, and once the guard passes it, to the model. A terminal disposition would carry
+    its tombstone as done whatever the guard said next."""
+    modes = (_Online(tmp_path), _Batch(tmp_path))
+    for mode in modes:
+        mode.run(1, _NOW_FILTERED, extra=SKIP)
+
+    recorded = [
+        [
+            (row["disposition"], row["reason"])
+            for row in mode.backend.get_disposition(ACTION, record_id="a2")
+        ]
+        for mode in modes
+    ]
+
+    assert recorded == [[("unprocessed", "guard_skip")]] * 2
+
+
+def test_a_run_that_answers_nothing_writes_the_skip_of_an_answered_input_as_batch_does(
+    tmp_path,
+):
+    """The skip is recorded at once, so the action no longer calls that input answered, and
+    a run that fails and answers nothing writes its file rather than leaving the answer."""
+    runs = [_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]]
+
+    findings = compare(tmp_path, runs, SKIP, {("a3", 2): "fail"})
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    assert findings[1]["online"] == ["failed:a3", "guard_skipped:a2", "processed:a1:0@run1"]
+    assert findings[1]["batch"] == findings[1]["online"]
 
 
 def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_again(tmp_path):
@@ -1240,6 +1264,33 @@ def test_a_carried_input_the_action_above_blocked_keeps_its_answer_as_online(tmp
     blocked = {**rec("a1", keep=True), "_state": "failed"}
 
     for run in compare(tmp_path, [_PASSES, [blocked, rec("a2", keep=False)]], FILTER):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+BLOCKED_AND_TURNED_AWAY = {"filter": FILTER, "skip": SKIP}
+
+
+@pytest.mark.parametrize("guard", BLOCKED_AND_TURNED_AWAY.values(), ids=BLOCKED_AND_TURNED_AWAY)
+def test_a_record_the_action_above_blocked_is_never_put_to_the_guard(tmp_path, guard):
+    """The guard would turn it away, reading the blocked action's fields; online's ran
+    first and stored a live skip, or nothing, where batch stores a cascade tombstone."""
+    blocked = {**rec("u1", keep=False), "_state": "failed"}
+
+    (run,) = compare(tmp_path, [[rec("s1", keep=True), blocked]], guard)
+
+    assert run["online"] == run["batch"]
+    assert "cascade_skipped:u1" in run["online"]
+    assert run["online_sent"] == run["batch_sent"] == ["s1"]
+
+
+@pytest.mark.parametrize("guard", BLOCKED_AND_TURNED_AWAY.values(), ids=BLOCKED_AND_TURNED_AWAY)
+def test_an_answered_input_the_action_above_blocked_keeps_its_answer_as_batch(tmp_path, guard):
+    """Batch's gate carries it before preparation would quarantine it, and online's gate,
+    which the guard does not stand in front of for it, does the same."""
+    blocked = {**rec("a1", keep=False), "_state": "failed"}
+
+    for run in compare(tmp_path, [_PASSES, [blocked, rec("a2", keep=True)]], guard):
         assert run["batch"] == run["online"], f"run {run['run']}"
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
@@ -1304,17 +1355,18 @@ def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
     assert findings[1]["batch"] == findings[1]["online"]
 
 
-def test_a_reset_that_answered_nothing_records_the_skip_it_held_back_for_the_write(tmp_path):
+def test_a_reset_that_answered_nothing_records_what_it_held_back_for_the_write(tmp_path):
     """The file is written with its failure, then what collection held back for the write
-    is recorded, as after any write; raised first, the guard's skip goes unrecorded."""
+    is recorded, as after any write; raised first, the empty answer it kept goes
+    unrecorded. A guard skip is not held back: it vouches for no row the gate carries."""
     online = _Online(tmp_path)
-    online.run(1, _PASSES, extra=SKIP)
+    online.run(1, _PASSES)
 
     online.run(
         2,
-        [rec("a1", keep=True), rec("a2", keep=False)],
-        Answerer({("a1", 2): "fail"}),
-        SKIP,
+        _PASSES,
+        Answerer({("a1", 2): "fail", ("a2", 2): "empty object"}),
+        {"on_empty": "skip"},
         reset=True,
     )
 

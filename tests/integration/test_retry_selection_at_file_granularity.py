@@ -4,8 +4,11 @@
 ``apply_context_scope_for_records``, which writes a ``skipped`` disposition for
 every record it drops. That is one of the pre-gate writers spec 603 enumerates,
 and the only one with no test behind it. Reaching it takes a FILE-granularity
-``kind: tool`` action — or a HITL one; the pipeline gates on either — whose
-``context_scope`` can no longer read an observed field.
+HITL action whose ``context_scope`` can no longer read an observed field.
+
+A FILE-granularity ``kind: tool`` action takes the same branch but is the
+exception: its rows may each stand on every record of the file, so a repair
+reaching the file decides every record of it again, as a run would.
 """
 
 from click.testing import CliRunner
@@ -64,6 +67,26 @@ def _at_file_granularity(project):  # noqa: F811
     return project
 
 
+HITL_ACTION = """  - name: enrich
+    kind: hitl
+    granularity: File
+    dependencies: [flatten]
+    intent: "Review"
+    hitl: { port: 3999, instructions: "Review the summary", timeout: 5 }
+    context_scope: { observe: [flatten.summary] }
+"""
+
+
+def _under_review(project, monkeypatch):  # noqa: F811
+    """Add a HITL action reading the first action's output, approved unattended."""
+    monkeypatch.setenv("AGAC_HITL_AUTO_APPROVE", "true")
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + HITL_ACTION)
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    return project
+
+
 def _unobservable(project, record_id):  # noqa: F811
     """Leave *record_id*'s upstream row without the field the scope observes.
 
@@ -88,10 +111,10 @@ def _unobservable(project, record_id):  # noqa: F811
 
 
 class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
-    def test_an_unnamed_record_keeps_its_disposition(self, project):  # noqa: F811
+    def test_an_unnamed_record_keeps_its_disposition(self, project, monkeypatch):  # noqa: F811
         """The scope's `skipped` is terminal and is written above the gate, so a
         record it drops loses the result it already had."""
-        project = _at_file_granularity(project)
+        project = _under_review(project, monkeypatch)
         ids = _record_ids(project, ACTION)
         selected, unnamed = ids[0], ids[-1]
         _unobservable(project, unnamed)
@@ -102,8 +125,24 @@ class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
         assert retry.exit_code == 0, retry.output
         assert _disposition(project, unnamed, SECOND) == "success"
 
-    def test_the_named_record_is_still_repaired(self, project):  # noqa: F811
+    def test_the_named_record_is_still_repaired(self, project, monkeypatch):  # noqa: F811
         """The control: keeping the others must not come from the repair doing nothing."""
+        project = _under_review(project, monkeypatch)
+        ids = _record_ids(project, ACTION)
+        selected, unnamed = ids[0], ids[-1]
+        _unobservable(project, unnamed)
+        _fail(project, selected, SECOND)
+
+        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+        assert retry.exit_code == 0, retry.output
+        assert _disposition(project, selected, SECOND) == "success"
+
+
+class TestAFileToolDecidesEveryRecordOfTheFileAgain:
+    def test_an_unnamed_record_is_decided_as_a_run_decides_it(self, project):  # noqa: F811
+        """Its upstream row no longer holds the observed field, so the scope drops it,
+        as it would in a run: the file is the tool's unit of work."""
         project = _at_file_granularity(project)
         ids = _record_ids(project, ACTION)
         selected, unnamed = ids[0], ids[-1]
@@ -113,4 +152,5 @@ class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
         assert retry.exit_code == 0, retry.output
+        assert _disposition(project, unnamed, SECOND) == "skipped"
         assert _disposition(project, selected, SECOND) == "success"

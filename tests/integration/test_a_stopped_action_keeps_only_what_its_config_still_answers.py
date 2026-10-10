@@ -948,6 +948,68 @@ def test_an_action_stopped_by_an_error_puts_what_it_finished_to_its_guard_again(
     assert provider.pages() == ["Page delta.", "Page gamma."]
 
 
+EVERY_PAGE_ANSWERED = dict.fromkeys(EVERY_PAGE, "processed")
+
+
+def test_a_collect_pass_stopped_by_an_error_answers_what_its_guard_skipped_once_it_passes_it(
+    project, guarded
+):
+    """The guard skipped a record before the run stopped, and its code now passes it. The
+    skip is no answer: the resumed run puts the record to the guard again and sends it."""
+    guarded(project, turned_away={"Page alpha."})
+    _stop_collecting_after_the_first_file()
+    assert _states(project)["Page alpha."] == "guard_skipped"
+
+    guarded(project)
+    before = _sent(project)
+    _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _states(project) == EVERY_PAGE_ANSWERED
+    assert _sent_since(project, before) == [("Page alpha.", MODEL)]
+    assert _status(project) == "completed"
+
+
+def test_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_passes_it(
+    online, provider, guarded
+):
+    """The online run of the one above: the skip it recorded must not read as done."""
+    guarded(online, turned_away={"Page alpha."})
+    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
+    _run("--fresh")
+    assert _status(online) == "failed"
+    assert _states(online)["Page alpha."] == "guard_skipped"
+
+    guarded(online)
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _states(online) == EVERY_PAGE_ANSWERED
+    assert "Page alpha." in provider.pages()
+    assert _status(online) == "completed"
+
+
+def test_a_retry_of_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_passes_it(
+    online, provider, guarded
+):
+    """`agac retry` resumes the halted action in full, through the same gate."""
+    guarded(online, turned_away={"Page alpha."})
+    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
+    _run("--fresh")
+    assert _status(online) == "failed"
+
+    guarded(online)
+    provider.answers()
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+
+    assert result.exit_code == 0, result.output
+    assert _states(online) == EVERY_PAGE_ANSWERED
+    assert "Page alpha." in provider.pages()
+    assert _status(online) == "completed"
+
+
 def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_readers_to_the_next_run(
     online, provider
 ):

@@ -183,8 +183,8 @@ class TestProcessRecordGuardStatuses:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_skipped_guard_returns_skipped(self, mock_fire, mock_get_preparer):
-        """When skip_guard=False and guard skips, returns SKIPPED."""
+    def test_skipped_guard_returns_unprocessed(self, mock_fire, mock_get_preparer):
+        """When skip_guard=False and guard skips, returns UNPROCESSED: a skip answers nothing."""
         prepared = _make_prepared(
             guard_status=GuardStatus.SKIPPED,
             guard_behavior="skip",
@@ -200,7 +200,7 @@ class TestProcessRecordGuardStatuses:
         context = _make_context()
         result = strategy.process_record({"field": "value"}, context, skip_guard=False)
 
-        assert result.status == ProcessingStatus.SKIPPED
+        assert result.status == ProcessingStatus.UNPROCESSED
         assert result.skip_reason == "guard_skip"
 
 
@@ -344,8 +344,8 @@ class TestProcessRecordResponseHandling:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_not_executed_with_response_returns_skipped(self, mock_fire, mock_get_preparer):
-        """executed=False with non-None response → guard_skip → SKIPPED."""
+    def test_not_executed_with_response_returns_unprocessed(self, mock_fire, mock_get_preparer):
+        """executed=False with non-None response → guard_skip → UNPROCESSED."""
         prepared = _make_prepared()
         mock_get_preparer.return_value.prepare.return_value = prepared
 
@@ -363,7 +363,7 @@ class TestProcessRecordResponseHandling:
         context = _make_context()
         result = strategy.process_record({"field": "value"}, context)
 
-        assert result.status == ProcessingStatus.SKIPPED
+        assert result.status == ProcessingStatus.UNPROCESSED
         assert result.skip_reason == "guard_skip"
 
 

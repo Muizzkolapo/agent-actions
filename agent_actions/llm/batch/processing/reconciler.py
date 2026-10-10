@@ -166,13 +166,23 @@ class BatchResultReconciler:
         }
 
     @staticmethod
+    def was_sent(original_row: dict[str, Any]) -> bool:
+        """True for a context-map entry preparation handed to the provider.
+
+        An entry with no status is one a map saved without them holds, which was sent.
+        """
+        return (
+            BatchContextMetadata.is_included(original_row)
+            or BatchContextMetadata.get_filter_status(original_row) is None
+        )
+
+    @staticmethod
     def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:
         """Collect custom_ids of records submitted to batch API (status='included' only)."""
         return {
             str(custom_id)
             for custom_id, original_row in (context_map or {}).items()
-            if BatchContextMetadata.is_included(original_row)
-            or BatchContextMetadata.get_filter_status(original_row) is None
+            if BatchResultReconciler.was_sent(original_row)
         }
 
     @staticmethod

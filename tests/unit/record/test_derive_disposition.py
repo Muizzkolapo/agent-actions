@@ -14,8 +14,9 @@ class TestDeriveDisposition:
     def test_processed_maps_to_success(self):
         assert derive_disposition({"_state": "processed"}) == Disposition.SUCCESS.value
 
-    def test_guard_skipped_maps_to_passthrough(self):
-        assert derive_disposition({"_state": "guard_skipped"}) == Disposition.PASSTHROUGH.value
+    def test_guard_skipped_maps_to_unprocessed(self):
+        # A guard skip answers nothing, so the next run puts the record to the guard again.
+        assert derive_disposition({"_state": "guard_skipped"}) == Disposition.UNPROCESSED.value
 
     def test_cascade_skipped_maps_to_unprocessed(self):
         assert derive_disposition({"_state": "cascade_skipped"}) == Disposition.UNPROCESSED.value

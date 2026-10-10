@@ -348,6 +348,10 @@ class ProcessingContext:
     defer_kept_dispositions: bool = False
     kept_dispositions: list["DispositionRow"] = field(default_factory=list)
 
+    # Set by a FILE tool's run that carried nothing stored, so what it returns is the
+    # file's whole answer and every row the actions below hold for the file is stale.
+    replaces_file_whole: bool = False
+
     @property
     def action_name(self) -> str:
         """Get action name from config or agent_name."""

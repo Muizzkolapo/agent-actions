@@ -1,7 +1,8 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
+import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -21,7 +22,9 @@ from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.disposition_gate import (
     note_answered_by_repair,
+    note_replaced_above,
     positions_named_by_repair,
+    replaced_above,
     stored_answers_stand,
 )
 from agent_actions.processing.result_collector import write_dispositions
@@ -84,6 +87,93 @@ def scope_skip_disposition_rows(
         for skip in scope_skipped
         if skip.get("source_guid")
     ]
+
+
+def _stored_rows(
+    storage_backend: Optional["StorageBackend"], action_name: str, relative_path: str
+) -> list[dict[str, Any]]:
+    """The rows *action_name* holds in *relative_path*, or none."""
+    if storage_backend is None:
+        return []
+    try:
+        return storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        return []
+
+
+def _records_named_by(stored: list[dict[str, Any]], records: Any) -> frozenset[str]:
+    """The records of *records* a FILE tool's *stored* rows of their file name.
+
+    A row names the input it carries the identity of and those it names as parent or
+    producer. One naming none, as a roll-up's does, says nothing of which records the
+    limit admitted when it was written, so it adds none to what the limit admits.
+    """
+    inputs = {
+        guid
+        for record in (records if isinstance(records, list) else [])
+        if isinstance(record, dict) and (guid := record.get("source_guid"))
+    }
+    return frozenset(_identities_named(stored) & inputs)
+
+
+def _identities_named(rows: Any) -> set[str]:
+    """Every identity *rows* carry or name as parent or producer."""
+    named: set[str] = set()
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict):
+            named.update(
+                guid
+                for guid in (
+                    row.get("source_guid"),
+                    row.get("parent_source_guid"),
+                    *(row.get("producer_source_guids") or ()),
+                )
+                if guid
+            )
+    return named
+
+
+def _actions_below(storage_backend: "StorageBackend", action_name: str) -> list[str]:
+    """Every action whose input derives from *action_name*'s output, per the stored graph."""
+    raw = storage_backend.load_metadata("dependency_graph")
+    try:
+        graph = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        graph = None
+    if not isinstance(graph, dict):
+        logger.warning(
+            "Action '%s': no dependency graph is stored, so the actions reading it keep "
+            "what they hold for a file it replaced whole",
+            action_name,
+        )
+        return []
+    return [
+        name
+        for name, upstream in graph.items()
+        if isinstance(upstream, list) and action_name in upstream
+    ]
+
+
+def _forget_answers_below(
+    storage_backend: "StorageBackend",
+    below: list[str],
+    relative_path: str,
+    replaced_rows: list[dict[str, Any]],
+    inputs: Any,
+) -> None:
+    """Clear what each action in *below* holds a disposition for in *relative_path*.
+
+    Each of their rows there was computed from the rows being replaced, so none may be
+    carried by the gate. Cleared before the replacement is written: a run stopped in
+    between finds them unanswered rather than answered over rows that are gone.
+    """
+    stale = _identities_named(replaced_rows) | _identities_named(inputs)
+    for action in below:
+        stale |= _identities_named(_stored_rows(storage_backend, action, relative_path))
+    if not stale:
+        return
+    for action in below:
+        storage_backend.clear_dispositions_batch(action, sorted(stale))
 
 
 @dataclass
@@ -188,20 +278,24 @@ class ProcessingPipeline:
             agent_name=config.action_name,
         )
 
-        from agent_actions.processing.disposition_gate import DispositionGate
-
-        self._disposition_gate = DispositionGate(
-            storage_backend=config.storage_backend,
-            repairing=config.retried_records,
-        )
-        self._unified_processor = UnifiedProcessor(
-            disposition_gate=self._disposition_gate,
-        )
+        self._build_gate()
 
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
             storage_backend=config.storage_backend,
             action_name=config.action_name,
+        )
+
+    def _build_gate(self) -> None:
+        """The disposition gate, and the processor it sits in, for what `config` repairs."""
+        from agent_actions.processing.disposition_gate import DispositionGate
+
+        self._disposition_gate = DispositionGate(
+            storage_backend=self.config.storage_backend,
+            repairing=self.config.retried_records,
+        )
+        self._unified_processor = UnifiedProcessor(
+            disposition_gate=self._disposition_gate,
         )
 
     @staticmethod
@@ -401,6 +495,7 @@ class ProcessingPipeline:
                     "Using pre-loaded data for %s (skipping file read)",
                     file_path,
                 )
+            self._answer_as_a_run_if_replaced_above(file_path, base_directory, output_directory)
             self._process_by_strategy(data, file_path, base_directory, output_directory)
             note_answered_by_repair(
                 data,
@@ -432,6 +527,32 @@ class ProcessingPipeline:
                 },
                 cause=e,
             ) from e
+
+    def _answer_as_a_run_if_replaced_above(
+        self, file_path: str, base_directory: str, output_directory: str
+    ) -> None:
+        """Answer this file as a plain run would if an action above replaced it whole.
+
+        Every row this action holds for it was computed from rows that are gone, and a
+        row minted above is one no named record leads to. Its dispositions there were
+        cleared when the file above was replaced, so the gate carries none of them.
+        """
+        if not self.config.retried_records:
+            return
+        relative_path = target_relative_path(
+            OutputHandler.output_path(file_path, base_directory, output_directory),
+            output_directory,
+        )
+        if not replaced_above(self.config.storage_backend, self.config.action_name, relative_path):
+            return
+        logger.info(
+            "Action '%s': %s was replaced whole above, so every record of it is answered "
+            "again, not only those the repair names",
+            self.config.action_name,
+            relative_path,
+        )
+        self.config = replace(self.config, retried_records=frozenset())
+        self._build_gate()
 
     def _read_input_data(self, file_path):
         """Read data from input file."""
@@ -542,26 +663,47 @@ class ProcessingPipeline:
         # record's and are deleted by a rewrite that never makes them again.
         offered_to_repair = data
 
+        # A FILE tool's rows may each depend on every record of the file, so a file a
+        # run reaches goes to it whole, and what the file held is replaced whole.
+        whole_file = self.granularity == "file" and self.is_tool_action
+        output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
+        stored_here = (
+            _stored_rows(
+                self.config.storage_backend,
+                self.config.action_name,
+                target_relative_path(output_file_path, output_directory),
+            )
+            if whole_file
+            else []
+        )
+
         # ── per-action record_limit ──────────────────────────────────────
+        # A limit keeps what a repair rewrites the rows of, and a FILE tool's rows can
+        # name their inputs as parent or producer. A roll-up names none, so the limit
+        # admits for it what a run of the same config admits, and the named records.
+        held = self.config.retried_records
+        if whole_file and held:
+            held = held | _records_named_by(stored_here, data)
         kept = record_indices_to_process(
             data,
             self.config.action_config,
             self.config.action_name,
-            retried=self.config.retried_records,
+            retried=held,
             storage_backend=self.config.storage_backend,
         )
         if kept is not None:
             data = [data[i] for i in kept]
 
         # Above the context scope, which writes `skipped` for every record it drops:
-        # a repair must not disposition a record it never named.
+        # a repair must not disposition a record it never named. A FILE tool's file
+        # a repair reaches is the exception: every record of it is decided again.
         repair_kept = positions_named_by_repair(
             data,
             self.config.retried_records,
             storage_backend=self.config.storage_backend,
             action_name=self.config.action_name,
         )
-        if repair_kept is not None:
+        if repair_kept is not None and not (whole_file and repair_kept):
             data = [data[i] for i in repair_kept]
 
         # Build shared pipeline context BEFORE the batch/online fork.
@@ -588,7 +730,6 @@ class ProcessingPipeline:
             )
             return
 
-        output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
@@ -610,6 +751,7 @@ class ProcessingPipeline:
         # Select processing strategy based on granularity and action kind.
         strategy = self._select_strategy()
 
+        replaced: set[str] = set()
         if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
             # raw_records is what the guard is evaluated against, paired to the scoped
             # list by position; UnifiedProcessor then sets context.source_data from it.
@@ -636,13 +778,24 @@ class ProcessingPipeline:
             # position, so the pre-drop list failed the whole file over one drop.
             dropped = {skip["position"] for skip in scope_skipped}
             pre_observe = [record for at, record in enumerate(data) if at not in dropped]
+            replaced = {guid for row in stored_here if (guid := row.get("source_guid"))}
             output, stats = self._unified_processor.process(
                 filtered,
                 context,
                 strategy,
                 raw_records=pre_observe,
                 repair_inputs=offered_to_repair,
+                whole_file=whole_file,
             )
+            # A row the tool did not write again is gone with the file it was replaced
+            # in, and so is what vouched for it. Not an input's own disposition, which
+            # this run decides wherever it reaches the input.
+            replaced -= {row.get("source_guid") for row in output}
+            replaced -= {
+                record.get("source_guid")
+                for record in (offered_to_repair if isinstance(offered_to_repair, list) else [])
+                if isinstance(record, dict)
+            }
         else:
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
             output, stats = self._unified_processor.process(
@@ -662,11 +815,45 @@ class ProcessingPipeline:
         ):
             raise failure
 
+        # What the actions below hold for a file replaced whole was computed from the rows
+        # it held, so each of them answers it again, whatever records a repair names.
+        below: list[str] = []
+        if (
+            context.replaces_file_whole
+            and context.target_relative_path
+            and self.config.storage_backend is not None
+        ):
+            below = _actions_below(self.config.storage_backend, self.config.action_name)
+            if below:
+                _forget_answers_below(
+                    self.config.storage_backend,
+                    below,
+                    context.target_relative_path,
+                    stored_here,
+                    offered_to_repair,
+                )
+
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
         # Only now that the file holds the rows they vouch for.
         write_dispositions(
             self.config.storage_backend, context.kept_dispositions, self.config.action_name
         )
+        if replaced and self.config.storage_backend:
+            try:
+                self.config.storage_backend.clear_dispositions_batch(
+                    self.config.action_name, sorted(replaced)
+                )
+            except Exception:
+                logger.warning(
+                    "Action '%s': could not clear the dispositions of %d row(s) %s no "
+                    "longer holds; they vouch for rows that are gone",
+                    self.config.action_name,
+                    len(replaced),
+                    context.target_relative_path,
+                    exc_info=True,
+                )
+
+        note_replaced_above(self.config.storage_backend, below, context.target_relative_path)
 
         # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:

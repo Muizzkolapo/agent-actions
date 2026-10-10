@@ -169,17 +169,22 @@ def test_an_invented_row_is_given_no_producer_of_its_own(inventing):
     assert parents == {None}
 
 
-def test_a_retry_below_it_still_says_it_cannot_attribute_these_rows(inventing):
-    """The diagnostic that survives because the row claims nothing. The rerun
-    regenerates rows the gate also hands back, and this warning is the only
-    thing that tells a user so — see #1022 for the duplication itself."""
+def test_a_retry_below_it_rolls_the_file_up_again(inventing):
+    """The rows claim no record, and none needs to: a retry reaching the file hands
+    the tool all of it and replaces both rows, so nothing is left to attribute."""
+    before = {r["source_guid"] for r in _raw(inventing, "roll_up")}
     selected = _record_ids(inventing, ACTION)[1]
     _fail(inventing, selected, ACTION)
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
     assert result.exit_code == 0, result.output
-    assert "cannot be attributed" in result.output
+    assert "cannot be attributed" not in result.output
+    after = _read_back(inventing, "roll_up")
+    assert [r["content"]["roll_up"]["summary"] for r in after] == [
+        f"rollup {half} over {RECORDS}" for half in (1, 2)
+    ]
+    assert before.isdisjoint(r["source_guid"] for r in after)
 
 
 def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
@@ -190,13 +195,11 @@ def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
 
 
 def test_what_a_retry_does_to_a_row_no_single_record_produced(inventing):
-    """Pinned as numbers so the growth cannot worsen unnoticed.
+    """Pinned as numbers so the growth cannot return unnoticed.
 
-    Every retry carries the stored rows back beside the ones the rerun makes
-    again, because an aggregating action recomputes over whatever input the
-    repair narrowed it to and the gate cannot match the results up. This branch
-    does not change that — it keeps the rows attributable-to-nothing, so the
-    warning above still fires. Closing it needs the field in #1022.
+    Every retry used to carry the stored rows back beside the ones the rerun made
+    again over the repaired record alone, and the file grew by two each time. It
+    now replaces the file's rows with a roll-up of the whole file.
     """
     ids = _record_ids(inventing, ACTION)
     counts = [len(_raw(inventing, "roll_up"))]
@@ -207,17 +210,14 @@ def test_what_a_retry_does_to_a_row_no_single_record_produced(inventing):
         assert result.exit_code == 0, result.output
         counts.append(len(_raw(inventing, "roll_up")))
 
-    assert counts == [2, 4, 6], f"the retry behaviour changed: {counts}"
+    assert counts == [2, 2, 2], f"the retry behaviour changed: {counts}"
 
 
-def test_a_row_carried_past_a_retry_keeps_what_came_before_it(inventing):
+def test_a_row_rewritten_by_a_retry_keeps_what_came_before_it(inventing):
     """Counting the rows is not enough — they can survive and be gutted.
 
-    A carried row is read back reconstructed, and the mode it was stored under
-    does not survive that read, so it would be re-stored as a delta against an
-    identity nothing upstream holds and come back with only this action's
-    namespace. That is the loss this ticket exists to stop, returning on the
-    first repair.
+    A row with an identity nothing upstream holds is stored whole; written as a
+    delta against it, it comes back with only this action's namespace.
     """
     selected = _record_ids(inventing, ACTION)[1]
     _fail(inventing, selected, ACTION)
@@ -227,7 +227,7 @@ def test_a_row_carried_past_a_retry_keeps_what_came_before_it(inventing):
 
     namespaces = [sorted(r.get("content", {})) for r in _read_back(inventing, "roll_up")]
     assert namespaces == [["flatten", "roll_up", "source"]] * len(namespaces)
-    assert len(namespaces) == 4
+    assert len(namespaces) == 2
 
 
 EMPTY_CONTRIBUTORS_TOOL = '''from typing import Any

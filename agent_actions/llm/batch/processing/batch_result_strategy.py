@@ -617,7 +617,8 @@ class BatchResultStrategy:
         """Reconcile missing/skipped records into ProcessingResult objects.
 
         Routes exhausted-retry and passthrough records through enrichment
-        for consistent lineage, metadata, and version_correlation_id.
+        for consistent lineage, metadata, and version_correlation_id. A record
+        sent and not answered is reached here only once no retry will send it.
         """
         reconciliation = ctx.reconciler.reconcile()
         results: list[ProcessingResult] = []
@@ -647,6 +648,14 @@ class BatchResultStrategy:
                 )
             elif is_failed:
                 result = self._build_failed_passthrough(
+                    ctx,
+                    original_row,
+                    action_name,
+                    source_guid,
+                    record_index,
+                )
+            elif BatchResultReconciler.was_sent(original_row):
+                result = self._build_not_returned(
                     ctx,
                     original_row,
                     action_name,
@@ -725,7 +734,7 @@ class BatchResultStrategy:
         source_guid: str | None,
         record_index: int,
     ) -> ProcessingResult:
-        """Build an UNPROCESSED result for a passthrough record."""
+        """Build an UNPROCESSED result for a record preparation did not send."""
         # Single authority: skip_reason set during preparation is canonical.
         skip_reason = BatchContextMetadata.get_skip_reason(original_row)
         if skip_reason:
@@ -765,23 +774,67 @@ class BatchResultStrategy:
         They must still appear in output so downstream consumers see all records.
         The result's error, which its disposition records, is the one preparation
         recorded, as online's is; the row says only that preparation failed.
+        """
+        reason = BatchContextMetadata.get_skip_reason(original_row) or PREP_FAILED
+        return self._failed_with_tombstone(
+            ctx,
+            original_row,
+            action_name,
+            source_guid,
+            record_index,
+            error=BatchContextMetadata.get_prep_error(original_row) or reason,
+            reason=reason,
+        )
+
+    def _build_not_returned(
+        self,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        action_name: str,
+        source_guid: str | None,
+        record_index: int,
+    ) -> ProcessingResult:
+        """Build a FAILED result for a record the provider did not answer.
+
+        A failure, not a cascade casualty: its readers skip it as they skip any failed
+        record, the action completes with failures, and `agac retry` sends it again.
+        """
+        return self._failed_with_tombstone(
+            ctx,
+            original_row,
+            action_name,
+            source_guid,
+            record_index,
+            error=BATCH_NOT_RETURNED,
+            reason=BATCH_NOT_RETURNED,
+        )
+
+    def _failed_with_tombstone(
+        self,
+        ctx: BatchProcessingContext,
+        original_row: dict[str, Any],
+        action_name: str,
+        source_guid: str | None,
+        record_index: int,
+        *,
+        error: str,
+        reason: str,
+    ) -> ProcessingResult:
+        """A FAILED result for a record no answer came back for, its row a tombstone.
 
         A record with no source_guid gets no row here: a tombstone without the identity
         would be refused again at enrichment, under that refusal's error. The collector
-        builds its row from the record, as it builds online's, with preparation's error.
+        builds its row from the record, as it builds online's, with *error*.
         """
         if source_guid is None:
             processing_result = ProcessingResult.failed(
-                error=BatchContextMetadata.get_prep_error(original_row) or PREP_FAILED,
+                error=error,
                 source_guid=None,
                 source_snapshot=copy.deepcopy(original_row),
                 input_record=copy.deepcopy(original_row),
             )
             self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
             return processing_result
-
-        skip_reason = BatchContextMetadata.get_skip_reason(original_row)
-        reason = skip_reason or PREP_FAILED
 
         passthrough_item = build_tombstone(
             action_name,
@@ -791,7 +844,7 @@ class BatchResultStrategy:
         )
 
         processing_result = ProcessingResult.failed(
-            error=BatchContextMetadata.get_prep_error(original_row) or reason,
+            error=error,
             source_guid=source_guid,
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
         )

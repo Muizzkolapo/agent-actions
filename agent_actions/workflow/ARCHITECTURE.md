@@ -344,6 +344,24 @@ completes, so the next plain run still finds the edit and applies it. A retry wi
 record to re-run (only a node-level failure, or one resuming a halt) is a plain run for
 this purpose.
 
+A repair narrows by record everywhere but at a FILE tool, whose rows may each stand on
+every record of its file. A repair naming any record of a file hands that tool the whole
+file (every record the guard passes and nothing upstream left failed), and the file's
+stored rows are replaced whole, with the dispositions of the rows not written again. The
+record limit admits what a run of the same config admits, the named records, and every
+record a stored row of the file names by identity, parent or producer; a roll-up's row names
+none, so under a limit a repair rolls up what a run would. The gate does the same in a plain
+run once it leaves a record of the file to answer that is not quarantined, as in the run
+that finishes an interrupted retry. A HITL review is not one: it shows only the records
+the repair names, and the rest keep their decisions.
+
+What every action below the tool holds for that file was computed from the rows replaced,
+and a roll-up's new row is one no named record leads to. So before the file is written the
+actions below it in the stored dependency graph forget every disposition they hold under an
+identity of the file, and once it is written a repair reaching the file below answers it as
+a plain run does: every record of it, nothing carried. A plain run finishing a stopped
+retry finds those dispositions gone and answers the file again the same way.
+
 A repair narrows only what holds an answer for every record. It carries what an action
 holds for the records it does not name, and an action never run since it was put back to
 pending, stopped partway through its records, or completed with its output gone holds no

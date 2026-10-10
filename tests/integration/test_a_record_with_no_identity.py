@@ -231,7 +231,9 @@ def test_every_failure_agac_retry_names_is_one_its_repair_can_select(tmp_path, u
     """A repair selects records by source_guid. A failure it cannot select is one the
     retry clears and never repairs, and the action then reads complete.
 
-    a1 fails as well, so there is a failure to name; a2 is answered.
+    a1 fails as well, so there is a failure to name; a2 is answered. a3, whose result
+    line the parser could not read, was not answered: it is failed under its own
+    source_guid, which the repair selects, and the placeholder is named nowhere.
     """
     batch = _Batch(tmp_path)
     if unnamed == "no_source_guid":
@@ -245,7 +247,7 @@ def test_every_failure_agac_retry_names_is_one_its_repair_can_select(tmp_path, u
     named = batch.failures()
 
     assert [name for name in named if not positions_named_by_repair(inputs, {name})] == []
-    assert named == ["a1"]
+    assert sorted(named) == (["a1"] if unnamed == "no_source_guid" else ["a1", "a3"])
 
 
 @pytest.mark.parametrize("inputs", [answered(), unpreparable()], ids=["answered", "not_preparable"])

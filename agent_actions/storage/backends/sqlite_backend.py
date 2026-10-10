@@ -13,9 +13,11 @@ from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
+    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
@@ -1016,7 +1018,11 @@ class SQLiteBackend(StorageBackend):
             return cursor.fetchone() is not None
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
-        """Return record_ids with any gate-terminal disposition for an action."""
+        """Return record_ids with any gate-terminal disposition for an action.
+
+        A guard skip is no answer. Earlier versions recorded one online as
+        ``passthrough``, and a store they wrote still holds those rows.
+        """
         from agent_actions.storage.backend import TERMINAL_DISPOSITIONS
 
         action_name = self._validate_identifier(action_name, "action_name")
@@ -1025,11 +1031,21 @@ class SQLiteBackend(StorageBackend):
         sql = (
             f"SELECT DISTINCT record_id FROM record_disposition "
             f"WHERE action_name = ? AND disposition IN ({placeholders}) "
-            f"AND record_id != ?"
+            f"AND record_id != ? "
+            f"AND NOT (disposition = ? AND COALESCE(reason, '') = ?)"
         )
         with self._lock:
             cursor = self.connection.cursor()
-            cursor.execute(sql, (action_name, *terminal, NODE_LEVEL_RECORD_ID))
+            cursor.execute(
+                sql,
+                (
+                    action_name,
+                    *terminal,
+                    NODE_LEVEL_RECORD_ID,
+                    DISPOSITION_PASSTHROUGH,
+                    GUARD_SKIP,
+                ),
+            )
             return {row["record_id"] for row in cursor.fetchall()}
 
     def source_files_for_records(self, record_ids: Iterable[str]) -> set[str]:
@@ -1075,6 +1091,49 @@ class SQLiteBackend(StorageBackend):
                 if cursor.fetchone() is not None:
                     return True
         return False
+
+    def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
+        """Delete every disposition *action_name* holds under any of *record_ids*, at once.
+
+        Returns count deleted. One transaction: no partial clear on failure.
+        """
+        action_name = self._validate_identifier(action_name, "action_name")
+        ids = [
+            self._validate_identifier(record_id, "record_id")
+            for record_id in dict.fromkeys(record_ids)
+        ]
+        if not ids:
+            return 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                deleted = 0
+                for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                    chunk = ids[start : start + _SQL_MAX_PARAMS]
+                    placeholders = ",".join("?" * len(chunk))
+                    cursor.execute(
+                        f"DELETE FROM record_disposition WHERE action_name = ? "
+                        f"AND record_id IN ({placeholders})",
+                        (action_name, *chunk),
+                    )
+                    deleted += cursor.rowcount
+                self.connection.commit()
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch clear dispositions: %s (count=%d)",
+                    e,
+                    len(ids),
+                    extra={"action_name": action_name, "workflow_name": self.workflow_name},
+                )
+                raise
+        logger.debug(
+            "Batch cleared %d dispositions: action=%s",
+            deleted,
+            action_name,
+            extra={"workflow_name": self.workflow_name},
+        )
+        return deleted
 
     def clear_disposition(
         self,

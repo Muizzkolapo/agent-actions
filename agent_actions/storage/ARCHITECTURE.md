@@ -234,8 +234,8 @@ EXHAUSTED          Retried max times, provider never returned valid output
 FILTERED           Guard evaluation said "don't process this record"
 SKIPPED            Upstream action didn't produce output for this record
 DEFERRED           Batch submitted but not yet completed (temporary)
-PASSTHROUGH        Record passed through without LLM processing
-UNPROCESSED        Cascade casualty — upstream failure prevented processing
+PASSTHROUGH        Answered with nothing, kept as a tombstone (on_empty: skip)
+UNPROCESSED        Not answered — upstream failure prevented processing, or a guard skip
 ```
 
 ### Disposition sets (behavioral groupings)
@@ -248,6 +248,9 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
 
   These records are "done" from the disposition gate's perspective.
   The gate carries them forward without reprocessing.
+  get_terminal_record_ids() leaves out a PASSTHROUGH whose reason is
+  guard_skip: earlier versions recorded an online guard skip that way, and
+  a skip answers nothing (1348).
 
 RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED

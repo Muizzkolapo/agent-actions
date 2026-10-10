@@ -39,6 +39,8 @@ _FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.val
 # each slice admitted: `agac retry` runs a workflow in the process that just finished one.
 _FOUND_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 _ANSWERED_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
+# Per action, the files an action above it replaced whole in this run, keyed the same way.
+_REPLACED_ABOVE: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 
 
 class DispositionGate:
@@ -241,6 +243,28 @@ def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]
     A record a repair names and does not answer is one it cleared and did not re-decide.
     """
     return _noted(_ANSWERED_BY_REPAIR, storage_backend, action_name)
+
+
+def note_replaced_above(
+    storage_backend: Any, actions: Iterable[str], relative_path: str | None
+) -> None:
+    """Note that *relative_path* was replaced whole above each of *actions* in this run."""
+    if storage_backend is None or not relative_path:
+        return
+    held = _REPLACED_ABOVE.setdefault(storage_backend, {})
+    for action in actions:
+        held.setdefault(action, set()).add(relative_path)
+
+
+def replaced_above(storage_backend: Any, action_name: str, relative_path: str | None) -> bool:
+    """Whether an action above *action_name* replaced *relative_path* whole in this run.
+
+    A repair runs such a file as a plain run would: every row the action holds for it was
+    computed from rows that are gone, whichever records the repair names.
+    """
+    if storage_backend is None or not relative_path:
+        return False
+    return relative_path in _REPLACED_ABOVE.get(storage_backend, {}).get(action_name, ())
 
 
 def _note(
