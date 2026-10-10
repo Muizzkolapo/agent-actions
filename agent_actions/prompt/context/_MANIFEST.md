@@ -13,7 +13,7 @@ loaders for cataloging prompts at documentation time.
 | `builder.py` | Module | `ContextBuilder` helpers that resolve field references into prompt context data. | `preprocessing`, `validation` |
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. `parse_field_reference()` delegates to `ReferenceParser` from `field_resolution` package. | `preprocessing` |
-| `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion, input/context source resolution. | `preprocessing` |
+| `scope_inference.py` | Module | Dependency inference: fan-in detection, version branch expansion (`expand_version_base_names`, also used by preflight to expand `dependencies`), input/context source resolution. | `preprocessing` |
 | `null_namespace.py` | Module | `NullNamespace` sentinel and `is_null_namespace()` helper for skipped/filtered upstream namespaces. Used by `scope_application`, `scope_builder`, and guard evaluator `ast_nodes`. | `preprocessing` |
 | `scope_application.py` | Module | Context scope application: observe/passthrough/drop filtering for RECORD mode (`apply_context_scope`) and FILE mode (`apply_context_scope_for_records`), LLM context formatting. | `preprocessing` |
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. `_extract_content_data` subtracts `_RECORD_METADATA_KEYS` from a record with no `content` envelope; that guess is why a pool row is required to carry one before it reaches here. The branch remains for the record being processed, whose namespaces are the framework's either way. | `preprocessing` |

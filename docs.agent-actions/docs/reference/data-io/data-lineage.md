@@ -215,13 +215,9 @@ Input records:                        Tool output:                     After enr
 
 Downstream actions can use `context_scope.observe` to load data from any ancestor in the lineage chain — because each record traces back to the correct parent, not a shared fallback.
 
-## Matching Priority
+## What a Record Carries
 
-When loading historical data, Agent Actions uses this priority:
-
-1. **Lineage match** — Dependency's node_id is in current record's lineage (sequential chain)
-2. **Parent match** — Records share the same `parent_target_id` (parallel siblings)
-3. **Root match** — Records share the same `root_target_id` (Map-Reduce descendants)
+A record carries the namespace of every action upstream of it through `dependencies`, so an action names, in its `context_scope`, prompt or guard, only those. Preflight refuses any other name: an action that runs beside or after it, or one on a parallel branch, is not sure to be on the records it reads. To read one, add it to `dependencies` (the fan-in pattern) or depend on an action downstream of it.
 
 ## Debugging Lineage
 

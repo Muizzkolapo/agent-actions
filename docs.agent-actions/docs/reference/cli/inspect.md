@@ -40,8 +40,9 @@ review_analyzer  ● validated                              5 actions
 
 Preflight covers action definitions, dependency cycles, `context_scope`
 references — including that every declared dependency is referenced by
-at least one `observe` or `passthrough` field — template variables,
-schema structure, and guard syntax. If any static check fails you get
+at least one `observe` or `passthrough` field, and that every action a
+`context_scope`, prompt or guard names is upstream of it through
+`dependencies` — template variables, schema structure, and guard syntax. If any static check fails you get
 a `PreFlightValidationError` naming the exact YAML field instead of
 the list.
 

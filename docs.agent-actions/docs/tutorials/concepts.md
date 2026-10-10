@@ -179,7 +179,7 @@ flowchart TB
     context --> |"Agent Actions infers"| E[Data Flow]
 ```
 
-You only need to declare execution dependencies explicitly. Context dependencies are handled automatically based on your prompt template or context_scope references.
+You only need to declare execution dependencies explicitly. Context dependencies are handled automatically based on your prompt template or context_scope references, as long as the action named is upstream through `dependencies`: only the actions a record passed through are sure to be on it, and preflight refuses any other name.
 
 ## Field References
 

@@ -130,7 +130,9 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ## Context Access
 
 A guard gates the action before it receives anything, so it reads the record **as stored** —
-every namespace the record carries, addressed as `action_name.field`.
+every namespace the record carries, addressed as `action_name.field`. A record carries the
+actions upstream of it through `dependencies`, so a clause names only those: preflight refuses
+a guard that names an action running beside or after its own, or one on a parallel branch.
 
 | Source | Syntax |
 |--------|--------|
@@ -143,6 +145,7 @@ guard field does not have to appear in `observe`.
 
 ```yaml
 - name: validate
+  dependencies: [group_by_similarity]
   context_scope:
     observe:
       - group_by_similarity.num_similar_facts

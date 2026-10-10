@@ -259,6 +259,14 @@ named in a warning, since it was sent the old output. A reader is an action that
 on it, merges its versions, or only names it in its context scope or prompt, and the
 reader of a reader.
 
+An action names, in its context scope, prompt or guard, only what is upstream of it
+through `dependencies`: preflight refuses any other name (`find_reads_not_upstream`),
+because only those are sure to be on the records the action reads (#1228). So the level
+loop, which orders by `dependencies`, the run order, which counts every name in the
+context scope or prompt, and this reset agree on what reads what. A reader always sits
+in a later level than every action it names, and a failed action skips every action
+that names it, which the startup reset puts back to pending with it.
+
 The stores are cleared first, readers and then the action (its own are left where only
 its output is gone), and the statuses are written last, all in one write (`ActionStateManager.reopen`). A process that dies before that
 write leaves every status as it was and the reason for the reset still readable, so the
@@ -332,9 +340,6 @@ Costs and limits:
   without the records past the halt (#1267). And a retry clears the checkpoint records of
   every action it re-runs, so one that resumes a halt after an edit carries, for a record
   the halted run had answered, the row stored before the edit.
-- The level loop orders by `dependencies` alone. A reader that names an action only in
-  its context scope and sits in an earlier level is reset after its level has passed, and
-  runs on the next run (#1228).
 
 
 ---

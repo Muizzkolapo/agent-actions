@@ -1,11 +1,16 @@
-"""Preflight check: every declared dependency needs an observe/passthrough field."""
+"""Preflight checks that what an action depends on and what it reads agree."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from agent_actions.prompt.context.scope_inference import infer_dependencies
+from agent_actions.expectations.expression import referenced_field_paths
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+from agent_actions.prompt.context.scope_inference import (
+    expand_version_base_names,
+    infer_dependencies,
+)
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
 logger = logging.getLogger(__name__)
@@ -75,4 +80,96 @@ def find_missing_observe_deps(action_configs: dict[str, dict[str, Any]]) -> list
                     f"context_scope. Add '{dep}.*' or '{dep}.<field>' to observe "
                     f"or passthrough, or drop '{dep}' from dependencies."
                 )
+    return findings
+
+
+def _upstream_through_dependencies(
+    action_configs: dict[str, dict[str, Any]],
+) -> dict[str, set[str]]:
+    """Each action's ancestors through ``dependencies``, a version base meaning every branch."""
+    workflow_actions = list(action_configs)
+    direct: dict[str, list[str]] = {}
+    for name, cfg in action_configs.items():
+        declared = cfg.get("dependencies") or []
+        if isinstance(declared, str):
+            declared = [declared]
+        named = [dep for dep in declared if isinstance(dep, str)]
+        direct[name] = expand_version_base_names(named, workflow_actions)
+    upstream: dict[str, set[str]] = {}
+    for name in action_configs:
+        reached: set[str] = set()
+        pending = list(direct[name])
+        while pending:
+            dep = pending.pop()
+            if dep not in reached:
+                reached.add(dep)
+                pending.extend(direct.get(dep, ()))
+        upstream[name] = reached
+    return upstream
+
+
+def _guard_namespaces(cfg: dict[str, Any], parser: WhereClauseParser) -> list[str]:
+    """Namespaces a guard clause names; a clause that does not parse is left to the guard check."""
+    guard = cfg.get("guard")
+    clause = guard.get("clause") if isinstance(guard, dict) else None
+    if not isinstance(clause, str) or not clause:
+        return []
+    parsed = parser.parse_cached(clause)
+    if not parsed.success or parsed.ast is None:
+        return []
+    paths = referenced_field_paths(parsed.ast.root)
+    return list(dict.fromkeys(path.split(".", 1)[0] for path in paths if "." in path))
+
+
+def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[str]:
+    """Return one finding per action an action names that is not upstream of it.
+
+    A name in the context scope or prompt is what the run order counts
+    (``infer_dependencies``); a guard reads its names off the same record. A
+    record carries the namespaces of the actions upstream of it through
+    ``dependencies``, so any other name is there at best while a parallel branch
+    happens to finish first, and the reader is not reset when that action fails
+    and runs again. A version merge whose every branch is missing is reported by
+    its base, the name ``dependencies`` takes.
+    """
+    findings: list[str] = []
+    workflow_actions = list(action_configs)
+    operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
+    upstream = _upstream_through_dependencies(action_configs)
+    parser = WhereClauseParser()
+    branches: dict[str, set[str]] = {}
+    for name in workflow_actions:
+        base = action_configs[name].get("version_base_name")
+        if name in operational and isinstance(base, str) and base not in action_configs:
+            branches.setdefault(base, set()).add(name)
+    for name in workflow_actions:
+        if name not in operational:
+            continue
+        input_sources, context_sources = infer_dependencies(
+            action_configs[name], workflow_actions, name, validate=False
+        )
+        where: dict[str, str] = {}
+        for read in input_sources + context_sources:
+            where.setdefault(read, "context_scope or prompt")
+        for read in _guard_namespaces(action_configs[name], parser):
+            where.setdefault(read, "guard")
+        missing = {
+            read: place
+            for read, place in where.items()
+            if read != name and read in operational and read not in upstream[name]
+        }
+        for base, members in branches.items():
+            if members <= missing.keys():
+                place = missing[min(members)]
+                for member in members:
+                    del missing[member]
+                missing[base] = place
+        for read, place in missing.items():
+            findings.append(
+                f"{name}: names '{read}' in its {place}, but '{read}' is "
+                f"not upstream of it through its dependencies, so '{read}' is not sure to "
+                f"be on the records it reads, and '{name}' is not run again when '{read}' "
+                f"fails and runs again. Add '{read}' to its dependencies, or depend on an "
+                f"action downstream of '{read}'."
+            )
     return findings

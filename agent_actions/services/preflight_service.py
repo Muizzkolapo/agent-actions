@@ -22,7 +22,10 @@ from agent_actions.validation.dag_schema_fit_validator import (
     DAG_FIT_REMEDY,
     find_dag_schema_compatibility_gaps,
 )
-from agent_actions.validation.dep_observe_validator import find_missing_observe_deps
+from agent_actions.validation.dep_observe_validator import (
+    find_missing_observe_deps,
+    find_reads_not_upstream,
+)
 from agent_actions.validation.expectations_validator import (
     EXPECTATIONS_REMEDY,
     find_expectation_defects,
@@ -108,6 +111,15 @@ class PreflightService:
                 "\n".join(observe_errors),
                 hint="Add an observe or passthrough field for each dependency, "
                 "or drop the unused dependency.",
+            )
+        # A name not upstream of its reader is not sure to be on the records it reads.
+        unreachable = find_reads_not_upstream(self.action_configs)
+        if unreachable:
+            raise PreFlightValidationError(
+                "\n".join(unreachable),
+                hint="An action reads only the actions upstream of it through its dependencies: "
+                "add each one it names to its dependencies, or depend on an action downstream "
+                "of it.",
             )
 
         # 5. Resolution checks (API keys, seed files, vendor batch)
