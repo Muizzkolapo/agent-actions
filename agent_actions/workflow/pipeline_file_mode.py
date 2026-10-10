@@ -379,6 +379,7 @@ def prefilter_by_guard(
     if not guard_config and not conditional_clause:
         return data, [], originals, []
 
+    from agent_actions.errors import GuardNotAppliedError, mark_action_fatal
     from agent_actions.guards import GuardBehavior
     from agent_actions.input.preprocessing.filtering.evaluator import (
         get_guard_evaluator,
@@ -418,12 +419,24 @@ def prefilter_by_guard(
             dependency_configs=dependency_configs,
         )
 
-        result = evaluator.evaluate(
-            item=eval_item,
-            guard_config=guard_config,
-            context=context,
-            conditional_clause=conditional_clause,
-        )
+        try:
+            result = evaluator.evaluate(
+                item=eval_item,
+                guard_config=guard_config,
+                context=context,
+                conditional_clause=conditional_clause,
+            )
+        except GuardNotAppliedError as e:
+            # The evaluator is handed the record's content; the envelope naming it is here.
+            # Still fatal to the action: this pass has no way to fail one record.
+            source_guid = stored_record.get("source_guid")
+            raise mark_action_fatal(
+                GuardNotAppliedError(
+                    f"{e} Record {idx + 1} of {len(data)}, source_guid {source_guid}.",
+                    context={**e.context, "source_guid": source_guid, "record_index": idx},
+                    cause=e,
+                )
+            ) from e
 
         if result.should_execute:
             passing.append(item)

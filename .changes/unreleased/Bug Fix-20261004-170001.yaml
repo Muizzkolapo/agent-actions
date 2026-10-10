@@ -1,0 +1,25 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer completes an action that holds no answer for some of its records
+  on the records it names alone. A retry answers the records it names at every action it
+  runs and carries what each already holds for the rest, so an action put back to pending
+  by an edit to what it reads and then stopped while running again, stopped partway by an
+  error, added since the last run, or completed with its stored output gone ended up
+  complete holding old rows, or none, for every record that run had not reached, and the
+  next `agac run` found nothing to do. That held for any such action the retry's run
+  reached, including one that runs before the action the retry starts from. A retry that
+  names records now refuses, before it changes anything, while any action in the workflow
+  is pending, running, interrupted, stopped while collecting a batch, completed without
+  its output, or failed by anything but reaching every record it was given, and says to
+  run the workflow first; `--dry-run` reports the refusal instead. A failure that reached
+  every record is still retried, unless the action holds a row for a record that run did
+  not reach, as one reset by an edit keeps for a record its input no longer has. An action
+  left unfinished by a retry that was itself interrupted is resumed by running `retry`
+  again, as before, unless a run has reset it since. An action holding a batch that has
+  not been collected, and one reading it, are left to the batch's own refusal, so
+  `--abandon-in-flight` still gets past a batch the provider has forgotten. An action
+  halted by `on_exhausted: raise` is not refused. A failure recorded before this release
+  cannot say whether every record failed, and a retry interrupted before it left nothing
+  to say which actions it put back, so a retry over either is refused until the workflow
+  has run.
+time: 2026-10-04T17:00:00Z
