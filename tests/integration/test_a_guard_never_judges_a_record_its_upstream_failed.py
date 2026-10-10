@@ -129,7 +129,7 @@ Archive this page.
 {end_prompt}
 """
 
-ROLL_UP_TOOL = """from typing import Any
+TOOLS = """from typing import Any
 
 from agent_actions import udf_tool
 from agent_actions.utils.udf_management.registry import Granularity
@@ -141,6 +141,12 @@ def roll_up_pages(data: Any, *args):
         record["summary"] = "rolled " + str(record.get("summary"))
         record["exam_density"] = "low"
     return data
+
+
+@udf_tool
+def restate_summary(data: Any, *args):
+    summary = data["summarize"]["summary"]
+    return {"summary": "restated " + summary, "exam_density": "low"}
 """
 
 LLM_PUBLISH = """\
@@ -152,6 +158,12 @@ FILE_TOOL_PUBLISH = """\
     granularity: File
     run_mode: online
     impl: roll_up_pages
+    context_scope: { observe: [summarize.summary, source.page_content] }
+"""
+RECORD_TOOL_PUBLISH = """\
+    kind: tool
+    granularity: Record
+    impl: restate_summary
     context_scope: { observe: [summarize.summary, source.page_content] }
 """
 
@@ -210,7 +222,7 @@ class Project:
         (self.root / "schema" / WORKFLOW / "upstream_failed_page.yml").write_text(_SCHEMA)
         (self.root / "prompt_store" / f"{WORKFLOW}.md").write_text(_PROMPTS)
         (self.root / "tools" / WORKFLOW).mkdir()
-        (self.root / "tools" / WORKFLOW / "roll_up.py").write_text(ROLL_UP_TOOL)
+        (self.root / "tools" / WORKFLOW / "page_tools.py").write_text(TOOLS)
         (self.root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
         self.stand_in = base / "stand_in"
         self.stand_in.mkdir()
@@ -393,6 +405,32 @@ def test_a_file_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_pat
     upstream = project.summaries("summarize")
     assert project.summaries("publish") == {
         guid: f"rolled {summary}" for guid, summary in upstream.items()
+    }
+    assert len(upstream) == 3
+
+    project.alpha_fails(on=False)
+    project.retry_to_the_end()
+
+    for action in ("summarize", *BELOW):
+        assert project.dispositions(action)[alpha] == ("success", None), action
+
+
+@pytest.mark.parametrize("run_mode", MODES)
+def test_a_record_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_path, run_mode):
+    """A tool action runs online under either run_mode, so its guard judged the record
+    before the quarantine under batch too."""
+    project = _after_alpha_failed(tmp_path, run_mode, RECORD_TOOL_PUBLISH, "skip")
+    alpha = project.alpha()
+
+    for action in BELOW:
+        assert project.states(action)[alpha] == "cascade_skipped", action
+        assert project.dispositions(action)[alpha] == ("unprocessed", "upstream_unprocessed"), (
+            action
+        )
+    assert "archive" not in project.sent_for_alpha()
+    upstream = project.summaries("summarize")
+    assert project.summaries("publish") == {
+        guid: f"restated {summary}" for guid, summary in upstream.items()
     }
     assert len(upstream) == 3
 
