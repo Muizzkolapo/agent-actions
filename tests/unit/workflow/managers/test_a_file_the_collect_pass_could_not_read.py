@@ -278,6 +278,7 @@ def test_a_file_whose_reading_failed_does_not_hold_the_action(tmp_path):
 def test_a_batch_that_ended_without_results_is_not_left_unread(tmp_path, ended):
     """There are no results to wait for: waiting on it would hold the action for good."""
     action = _Action(tmp_path, statuses={"page3.json": ended})
+    action.send("page3.json", "page3-a")
 
     collected = action.lifecycle.processing_service.process_all_batch_results(
         action.out, {}, action_name=ACTION

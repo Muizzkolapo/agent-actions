@@ -101,8 +101,10 @@ A batch the provider fails or cancels before it finishes returns nothing, and no
 can read it. Nor can one the provider answers about but no longer reports finished, such as
 one it now reports failed or expired. The run reads the other files, names the file and its
 batch, marks the records of that file failed, and completes the action with those failures,
-for `agac retry` to send again. When the provider ended every file's batch this way, the run
-fails the action instead, and the next run sends every file again.
+for `agac retry` to send again. A run that cannot mark those records, because the store
+could not be read, pauses as for a batch still out, and the next run marks them. When the
+provider ended every file's batch this way, the run fails the action instead, and the next
+run sends every file again.
 
 ### Batch Commands
 

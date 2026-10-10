@@ -536,7 +536,9 @@ Run 2: Poll
         │       ended or does not know has its records marked failed
         │     → mark failed the records of an entry the poll found failed
         │       or cancelled before it finished, and stamp it collected:
-        │       owed nothing, it rolls up with collected entries
+        │       owed nothing, it rolls up with collected entries. One whose
+        │       records cannot be reached is left unread, as is a finished
+        │       one, and the next run marks them
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)

@@ -138,8 +138,9 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
 class CollectPass:
     """The files a collect pass wrote, and the finished ones it could not read.
 
-    A file left unread still owes its results, so the action waits for it as for a batch
-    still out: completed, the action is not run again and nothing reads that batch.
+    A file left unread still owes its results, or the failures of its records, so the
+    action waits for it as for a batch still out: completed, the action is not run again
+    and nothing reads that batch.
     """
 
     written: list[str] = field(default_factory=list)
@@ -300,9 +301,9 @@ class BatchProcessingService:
         is left unread, as is the parent a recovery dropped in the pass hands back; one
         it reports ended any other way, or does not know, has its records marked failed.
         So has a batch the provider failed or cancelled before it finished, which is then
-        stamped collected: nothing is owed for it. Tolerates writing nothing when
-        recovery batches are pending (in_progress), a collected entry was skipped, or an
-        entry was left unread.
+        stamped collected: nothing is owed for it. Either is left unread if its records
+        could not be reached. Tolerates writing nothing when recovery batches are pending
+        (in_progress), a collected entry was skipped, or an entry was left unread.
 
         Args:
             output_directory: Output directory path
@@ -363,17 +364,20 @@ class BatchProcessingService:
 
             # Ended before it finished, as the poll before this pass recorded: nothing
             # will come back, and no later pass can read it. Stamped once its records
-            # are failed, it holds the action no longer. A recovery round is left to
-            # the paths below: a retry's failure path continues it, and the pass over
-            # a repair's file puts its records back in play.
+            # are failed, it holds the action no longer; until then it is owed, so a
+            # pass that could not reach them leaves it for the next. A recovery round
+            # is left to the paths below: a retry's failure path continues it, and the
+            # pass over a repair's file puts its records back in play.
             if entry.recovery_type is None and entry.status in (
                 BatchStatus.FAILED,
                 BatchStatus.CANCELLED,
             ):
-                self._fail_unreadable_batch(
+                if self._fail_unreadable_batch(
                     file_name, entry, entry.status, output_directory, effective_action_name
-                )
-                manager.mark_collected(file_name)
+                ):
+                    manager.mark_collected(file_name)
+                else:
+                    unread.append(file_name)
                 continue
 
             # A dead retry recovery is processed without a readiness poll: its
@@ -400,9 +404,10 @@ class BatchProcessingService:
                         continue
                     # Ended without results, or unknown to the provider: no later pass
                     # can read it, so waiting would hold the action for good.
-                    self._fail_unreadable_batch(
+                    if not self._fail_unreadable_batch(
                         file_name, entry, status, output_directory, effective_action_name
-                    )
+                    ):
+                        unread.append(file_name)
                     continue
 
             try:
@@ -828,16 +833,12 @@ class BatchProcessingService:
         status: str,
         output_directory: str,
         action_name: str,
-    ) -> None:
-        """Fail the records of a batch no pass can read, which the provider reports *status*."""
-        logger.warning(
-            "Could not read %s (batch %s): the provider reports it %s, not completed. "
-            "Its records are marked failed for `agac retry`",
-            file_name,
-            entry.batch_id,
-            status,
-        )
-        self._fail_abandoned_records(
+    ) -> bool:
+        """Fail the records of a batch no pass can read, which the provider reports *status*.
+
+        Returns whether they were reached; a pass that could not reach them owes them still.
+        """
+        marked = self._fail_abandoned_records(
             # A recovery round is sent from its parent's context map.
             file_name=entry.parent_file_name or file_name,
             output_directory=output_directory,
@@ -846,6 +847,16 @@ class BatchProcessingService:
                 f"batch {entry.batch_id} is {status} at the provider, not completed"
             ),
         )
+        logger.warning(
+            "Could not read %s (batch %s): the provider reports it %s, not completed. %s",
+            file_name,
+            entry.batch_id,
+            status,
+            "Its records are marked failed for `agac retry`"
+            if marked
+            else "Its records could not be marked failed in this pass. The action waits for it",
+        )
+        return marked
 
     def _fail_abandoned_records(
         self,
@@ -853,14 +864,15 @@ class BatchProcessingService:
         output_directory: str,
         action_name: str | None,
         error: Exception,
-    ) -> None:
+    ) -> bool:
         """Write FAILED dispositions for INCLUDED records in a batch file that threw an exception.
 
         Without this, records remain stuck with stale DEFERRED dispositions —
         the retry command won't find them and subsequent reruns won't know they failed.
+        Returns whether the file's context map was read, which is where its records are found.
         """
         if not self._storage_backend or not action_name:
-            return
+            return False
 
         try:
             context_map = self._context_manager.load_batch_context_map(
@@ -876,7 +888,7 @@ class BatchProcessingService:
                 action_name,
                 exc_info=True,
             )
-            return
+            return False
 
         reason = f"batch_processing_exception: {str(error)[:500]}"
         failed_count = 0
@@ -917,6 +929,7 @@ class BatchProcessingService:
                 action_name,
                 str(error)[:200],
             )
+        return True
 
     @staticmethod
     def _cleanup_recovery_entries(manager: BatchRegistryManager, parent_file_name: str) -> None:
