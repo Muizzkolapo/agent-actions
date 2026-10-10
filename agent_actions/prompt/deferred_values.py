@@ -59,6 +59,11 @@ _RAW_CLOSE = re.compile(r"\{%[-+]?\s*endraw\s*[-+]?%\}")
 _KEY = re.compile(
     r"( *)((?:-[ ]+)*)([A-Za-z_][A-Za-z0-9_.-]*|\"[^\"\n]*\"|'[^'\n]*')[ ]*:(?=[ \t]|$)"
 )
+# What may stand before a flow collection that is a node of its own: `- {name: a}`.
+_ITEM = re.compile(r"[ ]*(?:-[ ]+)*")
+_FLOW_KEY = re.compile(
+    r"([A-Za-z_][A-Za-z0-9_.-]*|\"[^\"\n]*\"|'[^'\n]*')[ \t]*:(?=[ \t\n,\[\]{}]|$)"
+)
 _BLOCK_HEADER = re.compile(r"[ \t]+[|>][-+1-9]*[ \t]*(#.*)?\Z")
 _NAMED = re.compile(
     r"^[ \t]*(?:-[ \t]+)*(name|param)[ \t]*:[ \t]*[\"']?([A-Za-z_][\w-]*)[\"']?[ \t]*(?:#.*)?$",
@@ -111,6 +116,7 @@ class _Region:
     key: str
     where: str
     keycol: int
+    flow: bool  # inside a flow mapping, where YAML reads it without indentation
     text: str  # the YAML text after `key:`, tags and all
     free: frozenset[str]
     assigned: frozenset[str]
@@ -121,6 +127,25 @@ class _Region:
     @property
     def is_prompt(self) -> bool:
         return self.key == "prompt"
+
+    def document(self, value: str) -> str:
+        """*value* as the only value of a YAML document, read as the file reads it."""
+        if self.flow:
+            return "{k:" + value + "}"
+        return " " * self.keycol + "k:" + value
+
+
+@dataclass(frozen=True)
+class _Value:
+    """A `key: value` of the file's text, and where it may end (most likely first)."""
+
+    key: str
+    keycol: int
+    start: int
+    ends: list[int]
+    flow: bool = False
+    # A flow collection's own keys, tried when the value as a whole is not wrapped.
+    inner: tuple[_Value, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -180,15 +205,22 @@ class LoadRender:
         """*source* with each value that may render later wrapped in a leave tag."""
         source = source.replace("\r\n", "\n").replace("\r", "\n")
         tags = _scan(source)
-        pieces = []
+        pieces: list[str] = []
         pos = 0
-        for key, keycol, start, ends in _values(source, tags):
-            region = self._region(source, tags, key, keycol, start, ends, origin)
+
+        def place(value: _Value) -> None:
+            nonlocal pos
+            region = self._region(source, tags, value, origin)
             if region is None:
-                continue
-            pieces += [source[pos:start], f"{{% agac_leave {region.site} %}}", region.text]
-            pieces.append("{% agac_endleave %}")
-            pos = start + len(region.text)
+                for inner in value.inner:
+                    place(inner)
+                return
+            pieces.extend([source[pos : value.start], f"{{% agac_leave {region.site} %}}"])
+            pieces.extend([region.text, "{% agac_endleave %}"])
+            pos = value.start + len(region.text)
+
+        for value in _values(source, tags):
+            place(value)
         pieces.append(source[pos:])
         return "".join(pieces)
 
@@ -365,17 +397,9 @@ class LoadRender:
             )
         return left
 
-    def _region(
-        self,
-        source: str,
-        tags: list[_Tag],
-        key: str,
-        keycol: int,
-        start: int,
-        ends: list[int],
-        origin: str,
-    ) -> _Region | None:
-        for end in ends:
+    def _region(self, source: str, tags: list[_Tag], value: _Value, origin: str) -> _Region | None:
+        key, start = value.key, value.start
+        for end in value.ends:
             text = source[start:end]
             try:
                 ast, free = self._read(text)
@@ -391,7 +415,8 @@ class LoadRender:
                 site=len(self._regions),
                 key=key,
                 where=f"line {line} of {origin}",
-                keycol=keycol,
+                keycol=value.keycol,
+                flow=value.flow,
                 text=text,
                 free=free,
                 assigned=_assigned(ast),
@@ -459,11 +484,7 @@ class LoadRender:
             names = region.top.get(index)
             # A tag that reads no name renders alike for every record, and rendered here
             # its output, `{{ '{{' }}` say, would be read as template text again.
-            if (
-                names
-                and not names & region.assigned
-                and all(_bound(context, n) for n in names)
-            ):
+            if names and not names & region.assigned and all(_bound(context, n) for n in names):
                 if part.text.startswith("{{-") and pieces and pieces[-1][0] == "data":
                     pieces[-1] = ("data", pieces[-1][1].rstrip())
                 rendered = self.env.from_string(_bare(part.text)).render(context.get_all())
@@ -477,9 +498,8 @@ class LoadRender:
         reads = ", ".join(repr(n) for n in later)
         where = f"The prompt at {region.where} reads {reads}, so it renders for each record"
         body = _indent_tag_lines("".join(text for _, text in pieces))
-        document = " " * region.keycol + "k:" + body
         try:
-            parsed = yaml.safe_load(document)
+            parsed = yaml.safe_load(region.document(body))
         except yaml.YAMLError as e:
             how = (
                 "once its load-time tags render it is no longer valid YAML"
@@ -538,9 +558,8 @@ class LoadRender:
             raise TemplateRenderingError(
                 f"{path}: {e}{hint}", context={"value": text.strip()}
             ) from None
-        document = " " * left.region.keycol + "k:" + rendered
         try:
-            parsed = yaml.safe_load(document)
+            parsed = yaml.safe_load(left.region.document(rendered))
         except yaml.YAMLError as e:
             raise TemplateRenderingError(
                 f"{path}: once rendered, the value is not valid YAML: "
@@ -706,9 +725,8 @@ def _tag_end(source: str, pos: int, closer: str) -> int:
     return len(source)
 
 
-def _values(source: str, tags: list[_Tag]) -> Iterable[tuple[str, int, int, list[int]]]:
-    """Each `key: value` of *source*: key, its column, where the value starts, and where it
-    may end (most likely first)."""
+def _values(source: str, tags: list[_Tag]) -> Iterable[_Value]:
+    """Each `key: value` of *source*, in block or flow style."""
     starts = [tag.start for tag in tags]
 
     def inside(pos: int) -> _Tag | None:
@@ -719,16 +737,30 @@ def _values(source: str, tags: list[_Tag]) -> Iterable[tuple[str, int, int, list
     pos = 0
     while pos < len(source):
         line_end = _line_end(source, pos)
-        key = None if inside(pos) else _KEY.match(source, pos, line_end)
-        ends = None
-        if key is not None:
-            keycol = len(key.group(1)) + len(key.group(2))
-            ends = _value_ends(source, key.end(), line_end, keycol, tags, inside, by_start)
-        if key is not None and ends:
-            yield key.group(3).strip("\"'"), keycol, key.end(), ends
-            pos = ends[0]
-        else:
+        if inside(pos) is not None:
             pos = line_end + 1
+            continue
+        key = _KEY.match(source, pos, line_end)
+        if key is None:
+            # A flow collection standing for a node, `- {name: a, prompt: ...}`.
+            item = _ITEM.match(source, pos, line_end)
+            flow = _flow(source, item.end(), by_start) if item else None
+            if flow is not None:
+                yield from flow[0]
+                pos = _past_line(source, flow[1])
+            else:
+                pos = line_end + 1
+            continue
+        keycol = len(key.group(1)) + len(key.group(2))
+        ends = _value_ends(source, key.end(), line_end, keycol, tags, inside, by_start)
+        if not ends:
+            pos = line_end + 1
+            continue
+        value = _flow_skip(source, key.end(), by_start)
+        flow = _flow(source, value, by_start)
+        inner = tuple(flow[0]) if flow is not None else ()
+        yield _Value(key.group(3).strip("\"'"), keycol, key.end(), ends, inner=inner)
+        pos = ends[0]
 
 
 def _value_ends(
@@ -742,10 +774,17 @@ def _value_ends(
 ) -> list[int]:
     rest = source[start:line_end]
     first = rest.lstrip(" \t")
-    if not first or first.startswith("#"):
-        return []
+    below = not first or first.startswith("#")
+    if below:
+        # Nothing after the key: a scalar may start on a line below it, more indented.
+        line = _first_value_line(source, _past_line(source, line_end), keycol, tags, inside)
+        if line is None:
+            return []
+        line_end = _line_end(source, line)
+        rest = source[line:line_end]
+        first = rest.lstrip(" \t")
     if first[0] in "\"'":
-        close = _closing_quote(source, start + len(rest) - len(first), first[0], by_start)
+        close = _closing_quote(source, line_end - len(first), first[0], by_start)
         return [] if close is None else _own_newline(source, [_past_line(source, close)])
     if first[0] in "|>" and not _BLOCK_HEADER.match(rest):
         return []
@@ -759,6 +798,9 @@ def _value_ends(
     while pos < len(source):
         end = _line_end(source, pos)
         kind, indent = _line_kind(source, pos, end, keycol, tags, inside)
+        if below and kind == "content" and first[0] not in "|>" and _KEY.match(source, pos, end):
+            # A key among the lines below: they are a mapping, not a scalar.
+            return []
         if kind == "content" or (kind == "tags" and indent > keycol):
             ends.append(_past_line(source, end))
             after = []
@@ -775,6 +817,96 @@ def _value_ends(
         ends[-1] = blank_after
     # Longest first, then a block left open closed by the tag lines after it, then shorter.
     return _own_newline(source, [ends[-1], *after, *reversed(ends[:-1])])
+
+
+def _first_value_line(
+    source: str,
+    pos: int,
+    keycol: int,
+    tags: list[_Tag],
+    inside: Callable[[int], _Tag | None],
+) -> int | None:
+    """The line the scalar written below a key starts on, if what is below it is one."""
+    while pos < len(source):
+        end = _line_end(source, pos)
+        kind, _ = _line_kind(source, pos, end, keycol, tags, inside)
+        text = source[pos:end].lstrip(" ")
+        if kind in ("blank", "tags") or (kind == "content" and text.startswith("#")):
+            pos = _past_line(source, end)
+            continue
+        if kind != "content" or inside(pos) is not None or _KEY.match(source, pos, end):
+            return None
+        if _OPENER.match(text) or text[0] not in "-?:,[]{}&*!%@`":
+            return pos
+        # `-5` is a scalar, `- a` a sequence.
+        return pos if text[0] == "-" and text[1:2] not in ("", " ", "\t") else None
+    return None
+
+
+def _flow(source: str, pos: int, by_start: Mapping[int, _Tag]) -> tuple[list[_Value], int] | None:
+    """The `key: scalar` pairs of the flow collection opening at *pos*, and where it ends;
+    None when no flow collection opens there."""
+    if pos >= len(source) or source[pos] not in "{[" or pos in by_start:
+        return None
+    closer = "}" if source[pos] == "{" else "]"
+    values: list[_Value] = []
+    pos += 1
+    while True:
+        pos = _flow_skip(source, pos, by_start)
+        if pos >= len(source) or source[pos] in "]}".replace(closer, ""):
+            return None
+        if source[pos] == closer:
+            return values, pos + 1
+        if source[pos] == ",":
+            pos += 1
+            continue
+        key = None if pos in by_start else _FLOW_KEY.match(source, pos)
+        start = key.end() if key else pos
+        nested = _flow(source, _flow_skip(source, start, by_start), by_start)
+        if nested is not None:
+            values += nested[0]
+            pos = nested[1]
+            continue
+        end, pos = _flow_scalar_end(source, _flow_skip(source, start, by_start), by_start)
+        if key is not None:
+            values.append(_Value(key.group(1).strip("\"'"), 0, start, [end], flow=True))
+        if source[pos : pos + 1] not in (",", closer):
+            return None
+
+
+def _flow_skip(source: str, pos: int, by_start: Mapping[int, _Tag]) -> int:
+    """*pos* past the spaces, line breaks and comments before a flow node."""
+    while pos < len(source) and pos not in by_start:
+        if source[pos] in " \t\n":
+            pos += 1
+        elif source[pos] == "#" and source[pos - 1] in " \t\n":
+            pos = _line_end(source, pos)
+        else:
+            break
+    return pos
+
+
+def _flow_scalar_end(source: str, pos: int, by_start: Mapping[int, _Tag]) -> tuple[int, int]:
+    """Where the flow scalar at *pos* ends, and where the `,` or bracket after it is."""
+    end = pos
+    if pos < len(source) and source[pos] in "\"'" and pos not in by_start:
+        close = _closing_quote(source, pos, source[pos], by_start)
+        if close is None:
+            return len(source), len(source)
+        pos = end = close + 1
+    while pos < len(source):
+        tag = by_start.get(pos)
+        if tag is not None:
+            pos = end = tag.end
+        elif source[pos] in ",[]{}":
+            break
+        elif source[pos] == "#" and source[pos - 1] in " \t\n":
+            pos = _line_end(source, pos)
+        else:
+            pos += 1
+            if not source[pos - 1].isspace():
+                end = pos
+    return end, pos
 
 
 def _indent_tag_lines(body: str) -> str:
