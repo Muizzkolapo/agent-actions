@@ -192,7 +192,7 @@ does not come back through the branch that kept it.
 
 ### Upstream failures are short-circuited
 
-When an upstream action fails for some records (e.g., batch API errors), those records are marked with `_unprocessed: true` and automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. These records are preserved in the output for lineage traceability.
+When an upstream action fails for some records (e.g., batch API errors), those records are automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. Each action below stores them as `cascade_skipped` with an `unprocessed` disposition, in either run mode. Its guard does not judge them: a guard reading the failed action's fields finds them null, and would otherwise skip or filter the record as if nothing had failed. These records are preserved in the output for lineage traceability, and `agac retry` sends them on through the actions below once the failed action answers them.
 
 ## Error Handling
 

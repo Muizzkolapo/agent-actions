@@ -33,7 +33,7 @@ The module has **five concerns**:
 
 | Concern | Where | What it does |
 |---------|-------|-------------|
-| Pipeline skeleton | `unified.py` | Guard → cascade → invoke → enrich → collect |
+| Pipeline skeleton | `unified.py` | Guard (records an action above blocked pass unjudged) → gate → cascade → invoke → enrich → collect |
 | Strategies | `strategies/` | Per-record LLM, file-level tool, file-level HITL |
 | Invocation | `invocation/` | Online (sync + retry + expectations) vs batch (deferred queue) |
 | Recovery | `recovery/` | `RetryService` (transport errors); validation-layer recovery lives in `expectations/` |
@@ -55,6 +55,9 @@ Input records (from staging or upstream action)
 │                                                      │
 │  Evaluates guard clause from YAML config:            │
 │    guard: { condition: '...', on_false: "filter" }   │
+│                                                      │
+│  A record whose _state is cascade-blocking is not    │
+│  judged: it passes on, for the gate and then step 4. │
 │                                                      │
 │  Results:                                            │
 │    passing    → continue to step 2                   │
@@ -98,7 +101,8 @@ Input records (from staging or upstream action)
 │  (cascade_skipped, failed, exhausted)                │
 │                                                      │
 │  Blocked records → ProcessingResult.unprocessed()    │
-│  (downstream can't process what upstream failed on)  │
+│  (downstream can't process what upstream failed on), │
+│  stored cascade_skipped with disposition unprocessed │
 │  Processable records → continue to step 5            │
 └──────────┬───────────────────────────────────────────┘
            │
@@ -544,10 +548,11 @@ where the guard filters every input the action holds nothing and reads skipped. 
 guard still passes stays carried. An error while judging propagates, as one in online's
 guard does: judging has no handler that fails one record alone, so a guard UDF's write to
 any carried input stops the action, not only one in the rows rehearsed before submitting.
-An input the action above blocked is not judged, as preparation judges none. Nor is an
-input of a file whose batch is out, or finished and not collected: the file is not sent
-again, so the gate carries nothing of it, and its collect writes what the batch brings.
-Where these and the skip's disposition still differ from online is listed below.
+An input the action above blocked is not judged, as neither preparation nor online's guard
+judges one. Nor is an input of a file whose batch is out, or finished and not collected:
+the file is not sent again, so the gate carries nothing of it, and its collect writes what
+the batch brings. Where these and the skip's disposition still differ from online is listed
+below.
 
 When preparation leaves nothing to send -- the guard skipped or filtered every input, the
 action above blocked it, or its prompt could not be prepared -- submission collects and
@@ -653,9 +658,6 @@ one exception noted last:
   drops them and answers them again when the limit admits them.
 - A run in which something fails and nothing succeeds writes its failed rows. Online writes
   nothing.
-- An answered input the action above has since blocked is not put to the guard, so it
-  keeps its answer when the guard now turns it away. Online's guard runs before its
-  cascade split and replaces it with a tombstone, or with nothing.
 - An input whose batch is out, or finished and not collected, when the guard's verdict on
   it changes keeps the answer that batch brings: the guard judged it when the batch was
   sent, and collecting it judges nothing. Online, which has nothing out between runs, puts
@@ -738,6 +740,18 @@ source_guid assignment (step 2) MUST happen BEFORE DispositionGate (step 3)
     have one from staging files. If you move guid assignment after the gate,
     checkpoint resume stops working — the gate can't match anything.
     Bug found: 2026-05-31 during checkpoint testing.
+
+A cascade-blocked record MUST pass the guard (step 1) unjudged, and reach
+the gate (step 3) before the cascade filter (step 4) quarantines it
+    Why: a guard reads the fields of the action that failed the record, null
+    on it, and turned it away as if it were live. Skipped, it was stored
+    guard_skipped with a passthrough disposition, which blocks nothing: every
+    action below sent it to the model. Filtered, it left every action below
+    with nothing saying it failed. Batch's gate carries an answered input
+    first, and preparation then returns UPSTREAM_UNPROCESSED before its
+    guard; quarantined above the gate, an answered input the action above
+    has since blocked would lose the answer batch keeps.
+    Bug found: 2026-10-10, #1347.
 
 Guard filter (step 1) MUST happen BEFORE source_guid assignment (step 2)
     Why: generate_content_hash(record) hashes ALL keys in the dict. If the

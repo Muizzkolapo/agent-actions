@@ -291,13 +291,17 @@ BATCH:
   Dispositions are written during finalization.
   A record the disposition gate carries as done is judged too, with no
   prompt rendered, as online's guard above its gate judges it; one the
-  action above blocked is not, as preparation judges none.
+  action above blocked is not, as neither preparation nor online's
+  guard judges one.
   A file whose batch is out, or finished and not collected, is not sent
   again, so nothing of it is judged: its collect writes the answers to
   what the guard passed when the batch was sent.
 
 ONLINE:
-  Guards run per-record in task_preparer, BEFORE the LLM call.
+  Guards run per-record in prefilter_by_guard, from UnifiedProcessor,
+  above the disposition gate and BEFORE the LLM call. A record the action
+  above blocked is not judged: it goes on to the gate and then the cascade
+  filter, which quarantines it, as batch's gate and preparation decide it.
   Filtered/skipped records get immediate disposition writes.
   No context_map involved — state is in-memory only.
 ```
