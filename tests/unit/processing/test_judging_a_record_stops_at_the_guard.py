@@ -7,9 +7,12 @@ batch is sent with.
 
 import pytest
 
+from agent_actions.errors import ConfigurationError, is_action_fatal
 from agent_actions.errors.validation import DataValidationError
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.task_preparer import TaskPreparer
+from agent_actions.utils.udf_management.registry import udf_tool
 
 
 def _context(guard=None, source_data=None):
@@ -99,3 +102,32 @@ def test_judging_a_record_the_guard_passes_renders_no_prompt(monkeypatch):
     assert TaskPreparer().judge(_record(), _context(_guard("a1.n == 1", "filter"))) == (
         GuardStatus.PASSED
     )
+
+
+def guard_probe_marks_the_seventh_record_seen(data):
+    namespace = data["a1"] if "a1" in data else data["content"]["a1"]
+    if namespace["n"] == 7:
+        namespace["seen"] = True
+    return True
+
+
+def test_a_guard_udf_that_writes_to_any_carried_record_stops_the_action():
+    """Judging has no handler that fails one row alone, as preparing the rows sent has, so
+    a write on a carried record past the rows batch rehearses before submitting stops the
+    action, as online's pre-filter stops it."""
+    udf_tool(guard_probe_marks_the_seventh_record_seen)
+    config = {
+        **_context().agent_config,
+        "name": "a2",
+        "dependencies": ["a1"],
+        "conditional_clause": "guard_probe_marks_the_seventh_record_seen",
+    }
+    carried = [
+        {"source_guid": f"G{n}", "content": {"a1": {"n": n}}, "target_id": f"T{n}"}
+        for n in range(1, 8)
+    ]
+
+    with pytest.raises(ConfigurationError, match="wrote to its input") as raised:
+        BatchTaskPreparator(action_indices={"a1": 0, "a2": 1}).turned_away(config, carried)
+
+    assert is_action_fatal(raised.value)

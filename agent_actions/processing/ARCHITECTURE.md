@@ -541,9 +541,11 @@ or traced and nothing is sent. One the guard now filters or skips is prepared ag
 marks it so on the context map and evaluates its guard a second time; the write then leaves
 its stored row out or replaces it with the tombstone, the row online's guard leaves, and
 where the guard filters every input the action holds nothing and reads skipped. One the
-guard still passes stays carried. An input the action above blocked is not judged, as
-preparation judges none; where this and the skip's disposition still differ from online
-is listed below.
+guard still passes stays carried. An error while judging propagates, as one in online's
+guard does: judging has no handler that fails one record alone, so a guard UDF's write to
+any carried input stops the action, not only one in the rows rehearsed before submitting.
+An input the action above blocked is not judged, as preparation judges none; where this
+and the skip's disposition still differ from online is listed below.
 
 When preparation leaves nothing to send -- the guard skipped or filtered every input, the
 action above blocked it, or its prompt could not be prepared -- submission collects and

@@ -9,5 +9,7 @@ body: >-
   The output now holds the rows online's does: a record the guard now filters is left out,
   and one it now skips is replaced by its tombstone; where it filters every record, the
   action holds nothing and is skipped. Nothing is sent to the model for either, and a
-  record the guard still passes is carried as before, with no prompt prepared for it.
+  record the guard still passes is carried as before, with no prompt prepared for it. A
+  guard UDF that writes to a carried record stops the action, as it does online, wherever
+  the record sits in its file.
 time: 2026-10-05T03:13:18Z
