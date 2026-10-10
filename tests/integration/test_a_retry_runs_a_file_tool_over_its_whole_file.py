@@ -84,7 +84,7 @@ def _handed(data):
     pages = [item.get("page_content") for item in data]
     with open(root / "handed.jsonl", "a") as log:
         log.write(json.dumps(pages) + "\\n")
-    if (root / "die").exists():
+    if (root / "die").exists() or ((root / "die_on_gamma").exists() and "Page gamma." in pages):
         os._exit(9)
     return pages
 """
@@ -260,12 +260,14 @@ def _backend(project: Path):
     return backend
 
 
-def _rows(project: Path, action: str = "roll_up") -> dict[str, list[dict]]:
+def _rows(
+    project: Path, action: str = "roll_up", *, as_stored: bool = False
+) -> dict[str, list[dict]]:
+    """Each file's rows, read back as the action below reads them unless *as_stored*."""
     backend = _backend(project)
+    read = backend.read_target_for_rewrite if as_stored else backend.read_target
     try:
-        return {
-            path: backend.read_target(action, path) for path in backend.list_target_files(action)
-        }
+        return {path: read(action, path) for path in backend.list_target_files(action)}
     finally:
         backend.close()
 
@@ -425,12 +427,33 @@ class TestACountAcrossTheFile:
             "Page beta. (2 of 2)",
         ]
 
+    def test_a_resumed_run_hands_the_tool_no_file_it_answered(self, project):
+        """Killed inside the tool on the second file, after the first was stored with
+        alpha quarantined. Alpha is still failed above, so nothing of the first file
+        can reach the tool: the resumed run carries it and runs the second."""
+        (project / "fail_alpha").touch()
+        (project / "die_on_gamma").touch()
+        killed = run_agac(
+            project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh", env=_env(project)
+        )
+        assert killed.returncode != 0, killed.stdout + killed.stderr
+        (project / "die_on_gamma").unlink()
+        (project / "handed.jsonl").unlink()
 
-def test_a_batch_action_above_changes_nothing(tmp_path):
+        _run(project)
+
+        assert _handed(project) == [["Page gamma.", "Page delta."]]
+        rows = _rows(project)
+        assert _summaries(rows["pages1.json"]) == [None, "Page beta. (1 of 1)"]
+        assert _summaries(rows["pages2.json"]) == ["Page gamma. (1 of 2)", "Page delta. (2 of 2)"]
+
+
+@pytest.mark.parametrize("one_record", [False, True], ids=["retry", "retry --record"])
+def test_a_batch_action_above_changes_nothing(tmp_path, one_record):
     project = _project(tmp_path, BATCH_ABOVE, _ROLL_UP)
     _failed_then_fixed(project)
 
-    _retry(project)
+    _retry(project, *(["--record", _alpha(project)] if one_record else []))
 
     rows = _rows(project)
     assert _summaries(rows["pages1.json"]) == ["Page alpha. + Page beta."]
@@ -439,12 +462,57 @@ def test_a_batch_action_above_changes_nothing(tmp_path):
 
 
 def test_a_file_tool_reading_a_fan_in_rolls_up_the_whole_file(tmp_path):
+    """The merged walk visits the other file too, holding no named record, so its
+    roll-up is carried and has to come back with everything it had."""
     project = _project(tmp_path, FAN_IN, _ROLL_UP)
-    _failed_then_fixed(project)
+    before = _failed_then_fixed(project)["pages2.json"]
 
     _retry(project)
 
     rows = _rows(project)
     assert _summaries(rows["pages1.json"]) == ["Page alpha. + Page beta."]
-    assert _summaries(rows["pages2.json"]) == ["Page delta. + Page gamma."]
     assert _handed(project) == [["Page alpha.", "Page beta."]]
+    after = rows["pages2.json"]
+    assert _summaries(after) == ["Page delta. + Page gamma."]
+    assert [r["source_guid"] for r in after] == [r["source_guid"] for r in before]
+    assert [sorted(r["content"]) for r in after] == [sorted(r["content"]) for r in before]
+
+
+_REVIEW_ACTION = """\
+  - name: roll_up
+    kind: hitl
+    granularity: File
+    dependencies: [flatten]
+    intent: "Review the file"
+    hitl: { port: 3999, instructions: "Review the summaries", timeout: 5 }
+    context_scope: { observe: [flatten.summary, source.page_content] }
+"""
+
+
+def test_a_review_a_retry_reaches_shows_only_the_records_it_names(tmp_path):
+    """A review's row belongs to the record reviewed, and the other records of the
+    file already hold a reviewer's decision, so only the repaired one is asked."""
+    project = _project(
+        tmp_path, _DEFAULTS.format(run_mode="online") + _FLATTEN_ACTION + _REVIEW_ACTION, _ROLL_UP
+    )
+    approve = {**_env(project), "AGAC_HITL_AUTO_APPROVE": "true"}
+    (project / "fail_alpha").touch()
+    result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh", env=approve)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (project / "fail_alpha").unlink()
+    reviewed = {
+        r["source_guid"]
+        for r in _rows(project, as_stored=True)["pages1.json"]
+        if r["_state"] == "processed"
+    }
+    assert len(reviewed) == 1
+
+    retry = run_agac(project, "retry", "-a", WORKFLOW, env=approve)
+
+    output = retry.stdout + retry.stderr
+    assert retry.returncode == 0, output
+    assert "auto-approving all 1 records" in output
+    assert "auto-approving all 2 records" not in output
+    after = _rows(project, as_stored=True)["pages1.json"]
+    assert [r["_state"] for r in after] == ["processed", "processed"]
+    assert reviewed <= {r["source_guid"] for r in after}

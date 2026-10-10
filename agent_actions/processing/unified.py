@@ -24,6 +24,7 @@ from agent_actions.processing.types import (
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.workflow.pipeline_file_mode import prefilter_by_guard
 
@@ -84,6 +85,7 @@ class UnifiedProcessor:
         *,
         raw_records: list[dict[str, Any]] | None = None,
         repair_inputs: list[dict[str, Any]] | None = None,
+        whole_file: bool = False,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Guard-filter, gate, quarantine, invoke, enrich and collect, in that order.
 
@@ -95,6 +97,12 @@ class UnifiedProcessor:
         rather than only what a survivor carries. RECORD mode omits it. *repair_inputs* is
         the action's input for this file from before a repair narrowed it, required while
         one is in flight because *records* is already narrowed by every caller.
+
+        *whole_file* when every row the strategy writes may depend on every record of the
+        file, as a FILE tool's do. A run that reaches any record of the file, by a repair
+        naming one or by the gate leaving one to answer that is not quarantined upstream,
+        then hands the strategy all of them and carries nothing stored, and the caller
+        passes *records* un-narrowed for a file a repair reaches.
         """
         # Refused here rather than at the guard: a repair narrows both lists by one
         # position list, so an already-mispaired caller arrives at the guard the same
@@ -118,6 +126,7 @@ class UnifiedProcessor:
         # record it turns away, so a record still in the input when the guard runs
         # is a record a repair has already decided the fate of.
         repair_carry_ids: set[str] = set()
+        repair_reaches_file = False
         if self._disposition_gate is not None and self._disposition_gate.repairing:
             from agent_actions.processing.disposition_gate import positions_named_by_repair
 
@@ -129,16 +138,22 @@ class UnifiedProcessor:
                     "action's own making from one minted upstream, and carries every "
                     "stored row — the duplication that rule exists to prevent."
                 )
-            # One position list for both: the caller matches raw_records to records,
-            # so narrowing them apart is what would pull them out of step.
-            kept = positions_named_by_repair(records, repairing)
-            if kept is not None:
-                records = [records[i] for i in kept]
-                if raw_records is not None:
-                    raw_records = [raw_records[i] for i in kept]
-            repair_carry_ids = self._disposition_gate.carried_past_repair(
-                context.action_name, context.target_relative_path, repair_inputs
+            # Read off the input above every narrowing: the context scope may have
+            # dropped the named record, and the file is still one the repair reached.
+            repair_reaches_file = whole_file and bool(
+                positions_named_by_repair(repair_inputs, repairing)
             )
+            if not repair_reaches_file:
+                # One position list for both: the caller matches raw_records to records,
+                # so narrowing them apart is what would pull them out of step.
+                kept = positions_named_by_repair(records, repairing)
+                if kept is not None:
+                    records = [records[i] for i in kept]
+                    if raw_records is not None:
+                        raw_records = [raw_records[i] for i in kept]
+                repair_carry_ids = self._disposition_gate.carried_past_repair(
+                    context.action_name, context.target_relative_path, repair_inputs
+                )
 
         if raw_records is not None:
             # FILE mode: the guard reads these, and they pair to `records` by position
@@ -169,10 +184,27 @@ class UnifiedProcessor:
         carry_ids: set[str] = set(repair_carry_ids)
         gate_carry_ids: set[str] = set()
         if self._disposition_gate is not None:
-            if passing:
+            if passing and not repair_reaches_file:
                 to_process, gate_carry_ids = self._disposition_gate.filter(
                     passing, context.action_name
                 )
+                # Only quarantined records left to answer reach no tool, so the stored
+                # file still answers for what it held.
+                if (
+                    whole_file
+                    and gate_carry_ids
+                    and any(
+                        record.get("_state") not in CASCADE_BLOCKING_VALUES for record in to_process
+                    )
+                ):
+                    logger.info(
+                        "Action '%s': a record of %s is to be answered, so all %d of its "
+                        "records go to the tool again and nothing stored is carried",
+                        context.action_name,
+                        context.target_relative_path,
+                        len(passing),
+                    )
+                    to_process, gate_carry_ids = list(passing), set()
                 carry_ids |= gate_carry_ids
             if carry_ids:
                 relative_path = context.target_relative_path

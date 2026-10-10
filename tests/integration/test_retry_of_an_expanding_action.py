@@ -10,6 +10,8 @@ caller narrows the input before the processor sees it — a harness that hands t
 processor the whole list exercises a shape production never produces.
 """
 
+from collections import Counter
+
 import pytest
 from click.testing import CliRunner
 
@@ -339,42 +341,34 @@ class TestAtFileGranularity:
             set(_record_ids(file_granularity, ACTION))
         )
 
-    def test_a_retry_deletes_no_row_and_does_not_grow_the_output(self, file_granularity):
-        selected = _record_ids(file_granularity, ACTION)[0]
-        before = _rows(file_granularity, "fsplit")
-        untouched = {r["source_guid"] for r in before if r.get("parent_source_guid") != selected}
-        assert len(untouched) == (RECORDS - 1) * 2
+    def test_a_retry_replaces_the_whole_file_and_does_not_grow_it(self, file_granularity):
+        """A FILE tool's rows may each stand on every record of the file, so a retry
+        reaching the file runs the tool over all of it and replaces every row."""
+        ids = _record_ids(file_granularity, ACTION)
+        selected = ids[0]
+        before = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
         _fail(file_granularity, selected, ACTION)
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
         assert result.exit_code == 0, result.output
-        after = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
-        assert untouched <= after, f"rows deleted at FILE granularity: {sorted(untouched - after)}"
-        assert len(_rows(file_granularity, "fsplit")) == RECORDS * 2
-        # The FILE branch hands the gate its own list, and giving it the narrowed
-        # one resolves nothing: every untouched row reads as unattributable. The
-        # rows survive either way here, so the diagnostic is what tells the two
-        # apart — and on a shape that can hold a diamond it is a deletion.
+        after = _rows(file_granularity, "fsplit")
+        assert Counter(r.get("parent_source_guid") for r in after) == dict.fromkeys(ids, 2)
+        assert before.isdisjoint(r["source_guid"] for r in after)
         assert "cannot be attributed" not in result.output
 
-    def test_the_named_rows_are_replaced_while_a_limit_drops_other_records(
-        self, file_granularity, monkeypatch
-    ):
-        """The positive half, at FILE granularity and under a limit.
+    def test_a_limit_drops_no_record_the_file_held_rows_for(self, file_granularity, monkeypatch):
+        """Under a limit, at FILE granularity.
 
-        Everything else here asserts that nothing vanished, which a repair doing
-        nothing at all satisfies. This one asserts the work happened: the named
-        record's rows are gone and replaced by new ones. Under a limit at the
-        same time, because the two arms of the granularity fork capture the
-        input separately and only one of them was ever pinned above the limit.
+        The rows carry identities of their own, so the limit reads them through the
+        record each names as its parent: a record past the limit holding rows here is
+        one the rewrite would otherwise delete. The two arms of the granularity fork
+        capture the input separately and only one of them was ever pinned above the
+        limit.
         """
-        selected = _record_ids(file_granularity, ACTION)[0]
-        before = _rows(file_granularity, "fsplit")
-        stale = {r["source_guid"] for r in before if r.get("parent_source_guid") == selected}
-        untouched = {r["source_guid"] for r in before if r.get("parent_source_guid") != selected}
-        assert len(stale) == 2
-        assert len(untouched) == (RECORDS - 1) * 2
+        ids = _record_ids(file_granularity, ACTION)
+        selected = ids[0]
+        before = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
         _fail(file_granularity, selected, ACTION)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
 
@@ -382,11 +376,8 @@ class TestAtFileGranularity:
 
         assert result.exit_code == 0, result.output
         after = _rows(file_granularity, "fsplit")
-        guids = {r["source_guid"] for r in after}
-        fresh = {r["source_guid"] for r in after if r.get("parent_source_guid") == selected}
-        assert stale.isdisjoint(guids), "the named record's rows were not replaced"
-        assert len(fresh) == 2, "the named record was not re-run"
-        assert untouched <= guids, (
-            f"rows of a record the limit dropped were deleted: {sorted(untouched - guids)}"
+        assert Counter(r.get("parent_source_guid") for r in after) == dict.fromkeys(ids, 2), (
+            "a record the limit dropped lost its rows"
         )
+        assert before.isdisjoint(r["source_guid"] for r in after)
         assert "cannot be attributed" not in result.output

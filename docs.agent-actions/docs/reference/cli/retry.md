@@ -58,7 +58,9 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 
 `retry` selects records by id — the ones that failed, or the single one given to
 `--record`. Those are the records it processes at every action it re-runs, and
-they are the only ones. The exception is a retry that
+they are the only ones. The exceptions are a
+[file-granularity tool](#a-file-tool-runs-over-the-whole-file), which is handed
+the whole of a file the retry reaches, and a retry that
 [resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
 
 Nothing else in the input joins them. A record limit —
@@ -96,7 +98,9 @@ of that action names the same record as its own parent. Every other row is
 carried. So repairing a record whose row was split in two replaces both halves
 rather than adding two more beside them.
 
-Two shapes fall outside that, and both are carried rather than rewritten. A row
+Two shapes fall outside that, and both are carried rather than rewritten (a
+file-granularity tool is not one of them: a retry rewrites a file it reaches
+whole, [below](#a-file-tool-runs-over-the-whole-file)). A row
 names the *original* staged record it descends from, not the record that
 produced it directly, so where one such action feeds another the rows of the
 second name a record that is no longer its input. And where an action reads
@@ -151,6 +155,31 @@ nothing succeeded, the action fails. The remedy is upstream: give the record its
 `source_guid` back where it is produced. A batch run that sends nothing at all
 refuses it the same way, and since nothing in such a run succeeds, the action
 fails.
+
+### A FILE tool runs over the whole file
+
+A tool with `granularity: File` is handed every record of a file at once, so
+each row it writes can stand on all of them: a roll-up of the file, a count or a
+rank across it, a dedupe. Its unit of work is the file, not the record. So when a
+retry reaches any record of a file at such a tool — one that failed there, or
+one repaired above it — the tool is handed that whole file again: every record
+of it that the guard passes and that is not still failed upstream. What the
+action held for that file is replaced whole, roll-up rows included, and the
+dispositions of the rows it does not write again go with them. Each record of
+the file is decided again at that action, as a run decides it.
+
+A file the retry names no record of keeps what it holds, untouched. Records of
+a reached file that the retry did not name keep what every other action holds
+for them, and one still failed upstream stays quarantined, as in a run. A
+record limit admits every record the file's stored rows stand on, so a retry
+under a smaller limit than the run it repairs drops none of them. The plain
+`agac run` that finishes an interrupted retry hands the tool the whole file the
+same way.
+
+A HITL review takes a whole file too, but a retry shows the reviewer only the
+records it names. A review's row belongs to the record reviewed, and the other
+records of the file already hold a reviewer's decision, so they keep it rather
+than being asked again.
 
 ## A retry needs every action it runs to hold an answer for every record
 
