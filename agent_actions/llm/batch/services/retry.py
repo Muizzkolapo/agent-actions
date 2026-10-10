@@ -152,6 +152,8 @@ class BatchRetryService:
             output_directory=output_directory,
             file_name=file_name,
             agent_config=agent_config,
+            action_indices=self._action_indices,
+            dependency_configs=self._dependency_configs,
         )
 
     def submit_retry_batch(
@@ -172,6 +174,8 @@ class BatchRetryService:
             output_directory=output_directory,
             file_name=file_name,
             agent_config=agent_config,
+            action_indices=self._action_indices,
+            dependency_configs=self._dependency_configs,
         )
 
     def process_retry_results(
