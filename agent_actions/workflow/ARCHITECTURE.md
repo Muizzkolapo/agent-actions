@@ -347,8 +347,10 @@ this purpose.
 A repair narrows by record everywhere but at a FILE tool, whose rows may each stand on
 every record of its file. A repair naming any record of a file hands that tool the whole
 file (every record the guard passes and nothing upstream left failed), and the file's
-stored rows are replaced whole, with the dispositions of the rows not written again; the
-record limit admits every record those rows stand on. The gate does the same in a plain
+stored rows are replaced whole, with the dispositions of the rows not written again. The
+record limit admits what a run of the same config admits, the named records, and every
+record a stored row of the file names by identity, parent or producer; a roll-up's row names
+none, so under a limit a repair rolls up what a run would. The gate does the same in a plain
 run once it leaves a record of the file to answer that is not quarantined, as in the run
 that finishes an interrupted retry. A HITL review is not one: it shows only the records
 the repair names, and the rest keep their decisions.

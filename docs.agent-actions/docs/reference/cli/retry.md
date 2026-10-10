@@ -171,10 +171,13 @@ the file is decided again at that action, as a run decides it.
 A file the retry names no record of keeps what it holds, untouched. Records of
 a reached file that the retry did not name keep what every other action holds
 for them, and one still failed upstream stays quarantined, as in a run. A
-record limit admits every record the file's stored rows stand on, so a retry
-under a smaller limit than the run it repairs drops none of them. The plain
-`agac run` that finishes an interrupted retry hands the tool the whole file the
-same way.
+record limit admits what a run of the same config admits and the records the
+retry names, and with them every record a stored row of the file names, by its
+identity or as its parent, so a retry under a smaller limit than the run it
+repairs drops no record holding a row of its own there. A roll-up's row names
+no record, so under a limit the roll-up a retry writes is the one a run of the
+same config writes. The plain `agac run` that finishes an interrupted retry
+hands the tool the whole file the same way.
 
 A HITL review takes a whole file too, but a retry shows the reviewer only the
 records it names. A review's row belongs to the record reviewed, and the other

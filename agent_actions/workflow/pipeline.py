@@ -98,12 +98,12 @@ def _stored_rows(
         return []
 
 
-def _records_stood_on(stored: list[dict[str, Any]], records: Any) -> frozenset[str]:
-    """The records of *records* a FILE tool's *stored* rows of their file stand on.
+def _records_named_by(stored: list[dict[str, Any]], records: Any) -> frozenset[str]:
+    """The records of *records* a FILE tool's *stored* rows of their file name.
 
-    A row stands on the input it carries the identity of and on those it names as
-    parent or producer. One naming no input, as a roll-up's does, stands on every
-    record its file held, and no row says which those were, so it stands on all.
+    A row names the input it carries the identity of and those it names as parent or
+    producer. One naming none, as a roll-up's does, says nothing of which records the
+    limit admitted when it was written, so it adds none to what the limit admits.
     """
     inputs = {
         guid
@@ -112,14 +112,11 @@ def _records_stood_on(stored: list[dict[str, Any]], records: Any) -> frozenset[s
     }
     stood_on: set[str] = set()
     for row in stored:
-        named = {
+        stood_on |= {
             row.get("source_guid"),
             row.get("parent_source_guid"),
             *(row.get("producer_source_guids") or ()),
         } & inputs
-        if not named:
-            return frozenset(inputs)
-        stood_on |= named
     return frozenset(stood_on)
 
 
@@ -594,11 +591,12 @@ class ProcessingPipeline:
         )
 
         # ── per-action record_limit ──────────────────────────────────────
-        # A limit keeps what a repair rewrites the rows of, and a FILE tool's rows
-        # stand on more records than their own identities name.
+        # A limit keeps what a repair rewrites the rows of, and a FILE tool's rows can
+        # name their inputs as parent or producer. A roll-up names none, so the limit
+        # admits for it what a run of the same config admits, and the named records.
         held = self.config.retried_records
         if whole_file and held:
-            held = held | _records_stood_on(stored_here, data)
+            held = held | _records_named_by(stored_here, data)
         kept = record_indices_to_process(
             data,
             self.config.action_config,

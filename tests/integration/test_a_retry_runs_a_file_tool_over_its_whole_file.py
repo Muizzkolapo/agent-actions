@@ -205,7 +205,9 @@ FAN_IN = (
 )
 
 
-def _project(tmp_path: Path, config: str, file_tool: str) -> Path:
+def _project(
+    tmp_path: Path, config: str, file_tool: str, staged: dict[str, list[str]] = STAGED
+) -> Path:
     root = tmp_path / "project"
     shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("logs"))
     workflow = root / "agent_workflow" / WORKFLOW
@@ -213,7 +215,7 @@ def _project(tmp_path: Path, config: str, file_tool: str) -> Path:
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(config)
     staging = workflow / "agent_io" / "staging"
     staging.mkdir(parents=True)
-    for name, pages in STAGED.items():
+    for name, pages in staged.items():
         (staging / name).write_text(json.dumps([{"page_content": page} for page in pages]))
     tools = root / "tools" / WORKFLOW
     tools.mkdir(parents=True)
@@ -516,3 +518,25 @@ def test_a_review_a_retry_reaches_shows_only_the_records_it_names(tmp_path):
     after = _rows(project, as_stored=True)["pages1.json"]
     assert [r["_state"] for r in after] == ["processed", "processed"]
     assert reviewed <= {r["source_guid"] for r in after}
+
+
+def test_a_record_limit_on_the_roll_up_admits_what_a_run_admits(tmp_path):
+    """A roll-up's row names no record, so it says nothing of which records the limit
+    admitted when it was written: the retry admits what a run of the same config does,
+    and the records it names."""
+    config = ONLINE.replace(
+        "    granularity: File\n", "    granularity: File\n    record_limit: 2\n"
+    )
+    staged = {
+        "pages1.json": ["Page alpha.", "Page beta.", "Page epsilon.", "Page zeta."],
+        "pages2.json": ["Page gamma.", "Page delta."],
+    }
+    project = _project(tmp_path, config, _ROLL_UP, staged)
+    _run(project, "--fresh")
+    assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
+    _failed_then_fixed(project)
+
+    _retry(project)
+
+    assert _handed(project) == [["Page alpha.", "Page beta."]]
+    assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
