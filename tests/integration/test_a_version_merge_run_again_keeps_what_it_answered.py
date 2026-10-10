@@ -249,6 +249,19 @@ def _configure(root, mode):
     _config(root).write_text(CONFIG % {"merge": merge})
 
 
+def _empty_and_run_from_the_first_stage(root, name):
+    """Empty a staged file, and edit the first stage so it and everything below run again."""
+    (_staging(root) / f"{name}.json").write_text("[]")
+    _config(root).write_text(
+        _config(root)
+        .read_text()
+        .replace(
+            "    impl: stage_items\n",
+            "    impl: stage_items\n    guard: { condition: 'true', on_false: \"skip\" }\n",
+        )
+    )
+
+
 @MODES
 def test_a_retry_of_one_merge_record_leaves_the_others_answers_as_they_were(project, mode):
     """The retry carried alpha and beta from the merge's own slot, which then held the
@@ -323,16 +336,7 @@ def test_a_file_every_version_holds_empty_leaves_the_merge_and_its_reader_holdin
     assert result.returncode == 0, _output(result)
     assert _answered_by_the_merge(_rows(project, MERGE)["filtered.json"]) == ["beta", "gamma"]
 
-    (_staging(project) / "filtered.json").write_text("[]")
-    # Edited so the first stage, and everything below it, runs again.
-    _config(project).write_text(
-        _config(project)
-        .read_text()
-        .replace(
-            "    impl: stage_items\n",
-            "    impl: stage_items\n    guard: { condition: 'true', on_false: \"skip\" }\n",
-        )
-    )
+    _empty_and_run_from_the_first_stage(project, "filtered")
     result = _agac(project, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
@@ -344,3 +348,36 @@ def test_a_file_every_version_holds_empty_leaves_the_merge_and_its_reader_holdin
     read = _rows(project, READER)
     assert read.get("filtered.json", []) == [], read
     assert _seen_by_the_reader(read["kept.json"]) == ["alpha"], read
+
+
+@MODES
+def test_a_retry_after_a_file_every_version_holds_empty_brings_none_of_it_back(project, mode):
+    """The run that emptied the file walked the merge's answers for it as input, and so
+    did the retry of a record of another file."""
+    _configure(project, mode)
+    _stage(project, kept=["alpha", "delta"], filtered=["beta", "gamma"])
+
+    result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
+
+    assert result.returncode == 0, _output(result)
+
+    _empty_and_run_from_the_first_stage(project, "filtered")
+    if mode == "online":
+        _fail(project, "alpha")
+        result = _agac(project, "run", "-a", WORKFLOW)
+        _stop_failing(project)
+    else:
+        result = _agac(project, "run", "-a", WORKFLOW, before_collect=_provider_fails("alpha"))
+
+    assert result.returncode == 0, _output(result)
+    assert _status(project, MERGE) == "completed_with_failures", _output(result)
+
+    result = _agac(project, "retry", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    merged = _rows(project, MERGE)
+    assert merged.get("filtered.json", []) == [], merged
+    assert _answered_by_the_merge(merged["kept.json"]) == ["alpha", "delta"], merged
+    read = _rows(project, READER)
+    assert read.get("filtered.json", []) == [], read
+    assert _seen_by_the_reader(read["kept.json"]) == ["alpha", "delta"], read
