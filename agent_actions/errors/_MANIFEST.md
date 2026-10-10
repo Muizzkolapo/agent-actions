@@ -70,6 +70,7 @@
 | `ValidationError` | Class | Base exception for validation failures. | - |
 | `PromptValidationError` | Class | Raised when prompt validation fails. | - |
 | `DataValidationError` | Class | Raised when data validation fails. | - |
+| `MissingSourceGuidError` | Class | `DataValidationError` raised by `TaskPreparer.prepare` for a record below the first stage that arrived without a source_guid, once the guard has passed it and before anything is rendered, traced or sent. Per record: online fails that record, batch marks it a preparation failure, and the batch preflight passes over it. | - |
 | `SchemaValidationError` | Class | Raised when schema validation fails. | - |
 
 ## Project Surface

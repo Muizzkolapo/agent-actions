@@ -153,6 +153,19 @@ class BatchResultReconciler:
         return expected - received
 
     @staticmethod
+    def resendable_ids(custom_ids: set[str], context_map: dict[str, Any]) -> set[str]:
+        """*custom_ids* less those whose context-map row has no source_guid.
+
+        Preparation refuses such a row, so a recovery batch would admit nothing for it.
+        Left out, it is collected as it stands and refused at enrichment.
+        """
+        return {
+            custom_id
+            for custom_id in custom_ids
+            if custom_id not in context_map or context_map[custom_id].get("source_guid")
+        }
+
+    @staticmethod
     def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:
         """Collect custom_ids of records submitted to batch API (status='included' only)."""
         return {
