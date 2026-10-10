@@ -141,11 +141,9 @@ action produced on this run. Known divergences, not an exhaustive list:
 - **Carried-forward records.** Cascade- and guard-skipped records are kept in
   an action's output for lineage, so they are counted even though the action
   did not produce them.
-- **Version fan-in.** The merged input is written under the *consumer's* name
-  before it runs (`VersionOutputCorrelator.prepare_correlated_input`), so a
-  consumer that then failed or was skipped shows that input. Its own write
-  replaces the row when it lands under the same `relative_path`, the normal
-  case.
+- **Version fan-in.** The merged input is handed to the consumer's walk
+  (`VersionOutputCorrelator.prepare_correlated_input`), never stored, so the
+  consumer's rows are only its own answers, which a re-run carries records from.
 
 ### 4. prompt_trace — LLM call telemetry
 

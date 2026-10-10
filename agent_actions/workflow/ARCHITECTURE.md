@@ -281,13 +281,14 @@ anything is collected. A file that failed to process was reached and keeps its r
 walk deletes nothing when a file limit stopped it with files left (a file it never opened
 keeps what the last run put there, on purpose), when it lost an entry (a directory it
 could not list, a file it could not stat, an upstream listing or stored file it could not
-read: it cannot say which inputs are gone), or under a repair. A version merge walks its
-own stored files, the correlated input among them, so its walk finds nothing to delete;
-the correlator deletes instead, before the walk, each stored file of the merge that no
-version source lists, which would otherwise be walked and sent on as its own input. It
-does so under a file limit and a repair too: it lists every file its version sources hold,
-so it can tell an input that is gone from one it never opened, and it rewrites each file
-it correlates on every run, a repair's included.
+read: it cannot say which inputs are gone), or under a repair. A version merge's walk is
+the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
+per file a version source lists, a file every version holds empty among them as an empty
+one, so the merge writes that file empty as any reader would. Its input is never stored:
+its own target holds its answers, which a re-run carries records from. The correlator
+also deletes, before the walk, each stored file of the merge that no version source
+lists, under a file limit and a repair too: it lists every file its version sources hold,
+so it can tell an input that is gone from one it never opened.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to

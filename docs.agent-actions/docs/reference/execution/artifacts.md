@@ -156,7 +156,9 @@ names. A retry that names none, as one resuming a halted action does, runs its a
 in full and deletes as a run does. A version merge sees every file its versions hold
 whatever its file limit, so before it runs it deletes what it stored for a file none of
 them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
-them.
+them. A file every version holds empty leaves the merge, and what reads it, holding
+nothing for that file. What a merge stores is only its answers: `agac retry`, or a run
+resumed after it stopped, keeps them for each record it does not ask again.
 
 | Status | Description |
 |--------|-------------|
