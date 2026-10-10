@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A tool of file granularity (`kind: tool`, `granularity: File`) that raises on one file now
+  fails that file's records: each is marked `failed` with the error, the action's other files
+  are stored, the action ends `completed_with_failures` (`failed` when no record succeeds),
+  and `agac retry` hands the records to the tool again. When its output fails the action's
+  schema, only the record the refused row names by `source_index` fails, with its other rows,
+  and the rest of the file is stored; a refused row naming several records or none fails every
+  record of the file. Either failure used to end the whole file with nothing recording it: the
+  walk logged the file and went on, no disposition named its records, and the action read
+  `completed` with exit 0, so `agac retry` found nothing to retry and the next run found the
+  action complete. After an edit the file kept its rows from before the edit, and under a
+  retry the record repaired above the tool was left with no disposition at all. This held
+  below a record tool and below an LLM action, online or in batch.
+time: 2026-10-10T15:54:07Z

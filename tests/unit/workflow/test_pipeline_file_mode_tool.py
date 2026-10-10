@@ -327,8 +327,14 @@ def test_file_udf_result_accepts_none_source_index():
 # --- Plain dict rejection ---
 
 
+def _only_failure(results) -> str:
+    """The error of the one input record, which the tool's output failed."""
+    assert [(r.status, r.source_guid) for r in results] == [(ProcessingStatus.FAILED, "sg-1")]
+    return results[0].error
+
+
 def test_file_tool_plain_dict_rejected():
-    """FILE tool returning plain dicts (not TrackedItem) raises ValueError."""
+    """FILE tool returning plain dicts (not TrackedItem) fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -339,12 +345,13 @@ def test_file_tool_plain_dict_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
-        with pytest.raises(AgentActionsError, match="plain dict"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "plain dict" in _only_failure(results)
 
 
 def test_file_tool_non_dict_rejected():
-    """FILE tool returning non-dict items raises ValueError."""
+    """FILE tool returning non-dict items fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -355,12 +362,13 @@ def test_file_tool_non_dict_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(["just a string"], True),
     ):
-        with pytest.raises(AgentActionsError, match="expected TrackedItem"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "expected TrackedItem" in _only_failure(results)
 
 
 def test_file_tool_non_list_non_fileudfresult_rejected():
-    """FILE tool returning non-list, non-FileUDFResult raises ValueError."""
+    """FILE tool returning non-list, non-FileUDFResult fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -371,8 +379,9 @@ def test_file_tool_non_list_non_fileudfresult_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=({"single": "dict"}, True),
     ):
-        with pytest.raises(AgentActionsError, match="must return list or FileUDFResult"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "must return list or FileUDFResult" in _only_failure(results)
 
 
 # --- Empty tool output detection ---
@@ -554,7 +563,7 @@ def test_file_tool_empty_response_snapshot_per_record():
 
 
 def test_file_mode_error_surfaces():
-    """FILE tool raising exception should propagate, not produce empty output."""
+    """FILE tool raising exception fails its records, not produce empty output."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -565,17 +574,18 @@ def test_file_mode_error_surfaces():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
-        with pytest.raises(AgentActionsError, match="connection refused"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "connection refused" in _only_failure(results)
 
 
-def test_file_mode_error_includes_context():
-    """The surfaced error should include agent_name and record_count."""
+def test_file_mode_error_names_the_tool():
+    """An error raised outside the UDF, which names nothing, is put to the tool."""
     context = _make_context()
 
     input_data = [
-        {"content": {"prev": {"a": 1}}},
-        {"content": {"prev": {"b": 2}}},
+        {"source_guid": "sg-1", "content": {"prev": {"a": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"b": 2}}},
     ]
 
     context.source_data = input_data
@@ -584,11 +594,9 @@ def test_file_mode_error_includes_context():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
-        with pytest.raises(AgentActionsError) as exc_info:
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
 
-    assert exc_info.value.context["agent_name"] == "my_file_tool"
-    assert exc_info.value.context["record_count"] == 2
+    assert [r.error for r in results] == ["FILE mode tool 'my_file_tool' failed: bad data"] * 2
 
 
 def test_a_tool_that_raises_fails_every_record_it_was_handed():

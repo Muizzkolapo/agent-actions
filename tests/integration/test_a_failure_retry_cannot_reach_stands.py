@@ -19,6 +19,8 @@ from click.testing import CliRunner
 
 from agent_actions.cli import retry as retry_module
 from agent_actions.cli.main import cli
+from agent_actions.errors.operations import TemplateVariableError
+from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration import test_retry_selection_under_batch as under_batch
 from tests.integration.test_a_file_tool_that_invents_rows import inventing  # noqa: F401
@@ -198,16 +200,6 @@ BREAKABLE_TOOLS = f'''import os
 from typing import Any
 
 from agent_actions import udf_tool
-from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
-
-
-@udf_tool(granularity=Granularity.FILE)
-def roll_up_or_break(data: Any, *args) -> Any:
-    if os.environ.get("{BREAK}") and "apage" in repr(data):
-        raise RuntimeError("the roll-up of file a broke")
-    return FileUDFResult(
-        [{{"source_index": None, "data": {{"summary": "rollup", "exam_density": "high"}}}}]
-    )
 
 
 @udf_tool
@@ -216,17 +208,6 @@ def tag_or_break(data: Any, *args) -> list[dict]:
         raise RuntimeError("the tag broke")
     return [{{"summary": str((data or {{}}).get("summary", "")), "exam_density": "high"}}]
 '''
-
-ROLL_UP = """  - name: roll_up
-    kind: tool
-    granularity: File
-    dependencies: [flatten]
-    intent: "Roll each file up into one row"
-    schema: tool_action_output
-    impl: roll_up_or_break
-    context_scope: { observe: [flatten.summary, source.page_content] }
-    expect: { repair: none }
-"""
 
 TAG = """  - name: tag
     kind: tool
@@ -248,15 +229,18 @@ def _add_breakable(root, action):
 
 
 @pytest.fixture
-def two_files_rolled_up(project):  # noqa: F811
-    """Two staged files flattened, then each rolled up by a FILE tool."""
+def two_files_tagged(project):  # noqa: F811
+    """Two staged files flattened, then each record tagged by a record tool that is also
+    handed its page, so a fault can tell the files apart."""
     staging = _input(project).parent
     _input(project).unlink()
     for name in ("a", "b"):
         staging.joinpath(f"{name}.json").write_text(
             json.dumps([{"page_content": f"{name}page {i}"} for i in range(2)])
         )
-    _add_breakable(project, ROLL_UP)
+    _add_breakable(
+        project, TAG.replace("[flatten.summary]", "[flatten.summary, source.page_content]")
+    )
     return project
 
 
@@ -274,33 +258,47 @@ def _flattened(root, page_content):
         backend.close()
 
 
-def _fail_in_both_files_then_break_file_a(root, monkeypatch):
+def _fail_in_both_files_then_stop_file_a(root, monkeypatch):
+    """Stands in for a render failure file a's data provokes, which the record loop
+    re-raises and no one declares fatal: it stops the file partway. A FILE tool's error
+    cannot: it fails the records the tool was handed."""
     in_a, in_b = _flattened(root, "apage 0"), _flattened(root, "bpage 0")
-    _fail(root, in_a, "roll_up")
-    _fail(root, in_b, "roll_up")
-    monkeypatch.setenv(BREAK, "1")
+    _fail(root, in_a, "tag")
+    _fail(root, in_b, "tag")
+    run_tool = tool_client.execute_user_defined_function
+
+    def stopping(udf_name, input_data, *args, **kwargs):
+        if udf_name == "tag_or_break" and "apage" in repr(input_data):
+            raise TemplateVariableError(
+                missing_variables=[],
+                available_variables=["flatten"],
+                agent_name="tag",
+                mode="online",
+                cause=TypeError("unsupported operand type(s) for +: 'int' and 'dict'"),
+            )
+        return run_tool(udf_name, input_data, *args, **kwargs)
+
+    monkeypatch.setattr(tool_client, "execute_user_defined_function", stopping)
     return in_a, in_b
 
 
-def test_a_record_whose_file_failed_in_the_retry_keeps_its_failure(
-    two_files_rolled_up, monkeypatch
-):
+def test_a_record_whose_file_failed_in_the_retry_keeps_its_failure(two_files_tagged, monkeypatch):
     """The retry found it, but the file holding it failed and the walk carried on to the
     next one, so nothing re-decided it."""
-    root = two_files_rolled_up
-    in_a, in_b = _fail_in_both_files_then_break_file_a(root, monkeypatch)
+    root = two_files_tagged
+    in_a, in_b = _fail_in_both_files_then_stop_file_a(root, monkeypatch)
 
     _retry()
 
-    assert (_disposition(root, in_a, "roll_up"), _disposition(root, in_b, "roll_up")) == (
+    assert (_disposition(root, in_a, "tag"), _disposition(root, in_b, "tag")) == (
         "failed",
-        None,
+        "success",
     )
 
 
-def test_the_next_retry_names_a_record_whose_file_failed(two_files_rolled_up, monkeypatch):
-    root = two_files_rolled_up
-    _fail_in_both_files_then_break_file_a(root, monkeypatch)
+def test_the_next_retry_names_a_record_whose_file_failed(two_files_tagged, monkeypatch):
+    root = two_files_tagged
+    _fail_in_both_files_then_stop_file_a(root, monkeypatch)
     _retry()
 
     result = _retry("--dry-run")
@@ -308,13 +306,13 @@ def test_the_next_retry_names_a_record_whose_file_failed(two_files_rolled_up, mo
     assert "Records to retry: 1" in result.output, result.output
 
 
-def test_the_retry_says_the_file_holding_it_failed(two_files_rolled_up, monkeypatch):
-    root = two_files_rolled_up
-    in_a, _ = _fail_in_both_files_then_break_file_a(root, monkeypatch)
+def test_the_retry_says_the_file_holding_it_failed(two_files_tagged, monkeypatch):
+    root = two_files_tagged
+    in_a, _ = _fail_in_both_files_then_stop_file_a(root, monkeypatch)
 
     said = under_batch._unwrapped(_retry().output)
 
-    assert "were in a file 'roll_up' failed to process, so nothing repaired them" in said, said
+    assert "were in a file 'tag' failed to process, so nothing repaired them" in said, said
     assert in_a in said, said
     assert "agac run --fresh" not in said, said
 

@@ -14,5 +14,6 @@
 | `tooling.py` | Module | Utilities for loading/executing user-defined functions with schema validation support. | `errors`, `logging` |
 | `load_user_defined_function` | Function | Dynamically imports a module and returns the requested callable, searching sys.path if needed. | `errors` |
 | `execute_user_defined_function` | Function | Runs a UDF (RECORD-mode dict input wrapped in a `Bus`; optionally validates output against compiled schemas) and surfaces validation errors. | `errors` |
+| `output_schema_errors` | Function | Each item of a UDF's output (a list, a `FileUDFResult`'s `data`, or one non-list result at position `None`) its per-item schema refuses, as `(position, SchemaValidationError)`. `execute_user_defined_function` raises the first; `FileToolStrategy` uses all of them to fail only the records the refused rows name. | `errors` |
 | `bus.py` | Module | The action-name-keyed namespace dict handed to RECORD-mode UDFs, with a strict accessor. `ReadOnlyBus` is that Bus as a read-only view, a `ReadOnlyDict` by inheritance, for the guard path; a write to it raises `ReadOnlyError`. | `utils` |
 | `Bus` | Class | `dict` subclass: `get`/`[]`/iteration stay tolerant; `require(namespace)` raises naming the unknown key and the available namespaces. | — |

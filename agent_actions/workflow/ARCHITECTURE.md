@@ -647,7 +647,9 @@ every input file failed on all of its records (`mark_every_record_failed`, on th
 (`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
 such as a render failure one record's data provoked — or never read leaves records
 unreached. A record tool's output that fails its schema is not one: the loop fails that
-record and goes on.
+record and goes on. Nor is a FILE tool that raises, or whose output fails its schema:
+`FileToolStrategy.invoke` fails the records it was handed, or only the record a refused
+output names, and returns rather than raising.
 Any other failure may have stopped the action partway, and a failure recorded before
 the marker existed reads as one.
 
