@@ -457,8 +457,10 @@ class LoadRender:
                 strip_next = False
                 continue
             names = region.top.get(index)
+            # A tag that reads no name renders alike for every record, and rendered here
+            # its output, `{{ '{{' }}` say, would be read as template text again.
             if (
-                names is not None
+                names
                 and not names & region.assigned
                 and all(_bound(context, n) for n in names)
             ):
