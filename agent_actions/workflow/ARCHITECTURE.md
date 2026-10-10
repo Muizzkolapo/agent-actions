@@ -396,6 +396,9 @@ Run 2: Poll
         │     reads .batch_registry.json
         │
         ├── "completed" → process_all_batch_results()
+        │     → skip each entry already collected (collected_at): its
+        │       results are written, and a later run may have written
+        │       the file again since
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)

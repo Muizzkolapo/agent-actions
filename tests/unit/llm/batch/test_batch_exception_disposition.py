@@ -78,6 +78,7 @@ def _setup_single_file_failure(
     entry = _make_entry(batch_id=batch_id, file_name=file_name)
     manager = MagicMock()
     manager.get_all_jobs.return_value = {file_name: entry}
+    manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
     manager.get_registry_stats.return_value = _EMPTY_STATS
     svc._registry_manager_factory.return_value = manager
     return manager
@@ -164,6 +165,7 @@ class TestBatchExceptionDisposition:
         entry_b = _make_entry(batch_id="batch-b", file_name="file_b")
         manager = MagicMock()
         manager.get_all_jobs.return_value = {"file_a": entry_a, "file_b": entry_b}
+        manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
         svc._registry_manager_factory.return_value = manager
 
         def process_side_effect(**kwargs):

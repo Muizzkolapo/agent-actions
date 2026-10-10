@@ -40,6 +40,7 @@ def _service_over(files: dict[str, Exception | str]) -> BatchProcessingService:
         name: BatchJobEntry(batch_id=f"b_{name}", status="completed", timestamp="t", provider="p")
         for name in files
     }
+    manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
     service = BatchProcessingService(
         client_resolver=MagicMock(),
         context_manager=MagicMock(),

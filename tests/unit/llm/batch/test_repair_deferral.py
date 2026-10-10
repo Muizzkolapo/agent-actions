@@ -1022,6 +1022,7 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
         }
         manager = MagicMock()
         manager.get_all_jobs.return_value = jobs
+        manager.get_batch_job.side_effect = manager.get_all_jobs.return_value.get
         manager.get_registry_stats.return_value = BatchRegistryStats(
             total_jobs=2, completed=2, failed=0, in_progress=0, cancelled=0
         )
