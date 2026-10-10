@@ -269,24 +269,37 @@ class TestAnEmptyModelAnswer:
         assert _halted_on_empty(project, LLM_WORKFLOW, "summarize")
 
     def test_error_fails_a_batch_action_once_it_is_collected(self, project, monkeypatch):
-        answer = FakeDataGenerator.generate_openai_response.__func__
-
-        def empty_for_the_blank_page(cls, custom_id, schema, prompt=None, attempt=1):
-            response = answer(cls, custom_id, schema, prompt, attempt)
-            if BLANK in (prompt or ""):
-                response["choices"][0]["message"]["content"] = "{}"
-            return response
-
-        monkeypatch.setattr(
-            FakeDataGenerator, "generate_openai_response", classmethod(empty_for_the_blank_page)
-        )
         _on_empty(project, LLM_WORKFLOW, action="error")
 
-        submitted = _run(LLM_WORKFLOW)
-        assert submitted.exit_code == 0, submitted.output
-        assert "run again" in submitted.output, "the fixture did not pause on submission"
-
-        collected = CliRunner().invoke(cli, ["run", "-a", LLM_WORKFLOW])
+        collected = _submit_and_collect(monkeypatch)
 
         assert collected.exit_code != 0, collected.output
         assert _halted_on_empty(project, LLM_WORKFLOW, "summarize")
+
+    def test_skip_passes_a_batch_record_through_once_it_is_collected(self, project, monkeypatch):
+        _on_empty(project, LLM_WORKFLOW, action="skip")
+
+        collected = _submit_and_collect(monkeypatch)
+
+        assert collected.exit_code == 0, collected.output
+        assert _records(project, LLM_WORKFLOW, "summarize") == ["passthrough", "success"]
+
+
+def _submit_and_collect(monkeypatch):
+    """Submit the batch, with `{}` as the answer for the blank page, then collect it."""
+    answer = FakeDataGenerator.generate_openai_response.__func__
+
+    def empty_for_the_blank_page(cls, custom_id, schema, prompt=None, attempt=1):
+        response = answer(cls, custom_id, schema, prompt, attempt)
+        if BLANK in (prompt or ""):
+            response["choices"][0]["message"]["content"] = "{}"
+        return response
+
+    monkeypatch.setattr(
+        FakeDataGenerator, "generate_openai_response", classmethod(empty_for_the_blank_page)
+    )
+    submitted = _run(LLM_WORKFLOW)
+    assert submitted.exit_code == 0, submitted.output
+    assert "run again" in submitted.output, "the fixture did not pause on submission"
+
+    return CliRunner().invoke(cli, ["run", "-a", LLM_WORKFLOW])
