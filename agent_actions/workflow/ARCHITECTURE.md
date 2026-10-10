@@ -324,8 +324,10 @@ Costs and limits:
 - A reset does not delete stored rows; the re-run replaces them as it writes each file.
   The exception is a re-run that finds no input file at all: it is skipped and its rows
   are deleted. One whose input lost some files but not all keeps the rows of the files
-  that are gone, and its readers run on them. A re-run that is interrupted and resumed can
-  serve the old row for a record it had already answered again (#1226).
+  that are gone, and its readers run on them. A file the store fails to write fails the
+  action, so the next run writes it instead of the action completing over its old rows.
+  A re-run that is interrupted and resumed can serve the old row for a record it had
+  already answered again (#1226).
 - A retry with a record to re-run still narrows a halted action, and completes it
   without the records past the halt (#1267). And a retry clears the checkpoint records of
   every action it re-runs, so one that resumes a halt after an edit carries, for a record

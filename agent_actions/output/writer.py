@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, mark_action_fatal
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     FileWriteCompleteEvent,
@@ -153,7 +154,13 @@ class FileWriter(ProcessorErrorHandlerMixin):
             if self.output_directory:
                 assert_path_contained(file_path, Path(self.output_directory))
 
-            self.storage_backend.write_target(self.action_name, relative_path, data)
+            try:
+                self.storage_backend.write_target(self.action_name, relative_path, data)
+            except (OSError, sqlite3.Error) as e:
+                # The store failed, not this file: going on would record the action
+                # complete without the file, or over what an earlier run stored for it.
+                mark_action_fatal(e)
+                raise
 
             # Approximate payload size as JSON byte length so FileWriteCompleteEvent
             # carries a meaningful metric. The backend may store data in a different

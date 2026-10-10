@@ -61,6 +61,7 @@ FileWriter handles all disk I/O with atomic writes and optional database persist
 │     ├── Computes relative path from output_directory     │
 │     ├── assert_path_contained (path traversal guard)     │
 │     ├── storage_backend.write_target()  ← authoritative  │
+│     │     a store failure is marked action-fatal         │
 │     └── atomic_json_write()  ← disk materialization      │
 └─────────────────────────────────────────────────────────┘
 
@@ -426,3 +427,5 @@ ResponseBuilder (static methods):
 12. **Array-type schemas produce separate output_schema and json_output_schema.** When the schema is `type: array`, the full unified schema goes to `output_schema` (for LLM providers) while `json_output_schema` gets just the `items` definition (for validation). This is because validation operates on individual items, not the outer array wrapper.
 
 13. **context_scope merges, not replaces.** Unlike all other config fields that follow "action overrides defaults", `context_scope` uses `deep_merge_context_scope()` which merges action-level directives into defaults. Dicts are shallow-merged; lists are concatenated and deduplicated. This lets an action add `drop` fields while inheriting `seed` from defaults.
+
+14. **A target the store fails to write fails the action.** `write_target()` marks an `OSError` or `sqlite3.Error` from the backend action-fatal, so the file walk writes the other files and then fails the action instead of completing it without that one. A batch collect pass (`process_all_batch_results`) re-raises it at once, and a later pass collects that file and the ones after it without sending them again. The store still holds whatever an earlier run wrote for the file (after a reset, the rows from before an edit), and a completed action is not run again; failed, the next run resumes it and stores that file. Online after an edit, its records are asked again on each such run, since the stored rows predate their answers. Anything else the backend raises, such as a file name it rejects or rows it cannot serialise, stays that file's own failure.

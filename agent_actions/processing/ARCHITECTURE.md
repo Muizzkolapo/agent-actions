@@ -748,8 +748,9 @@ writes it after the file:
     records it FAILED as it writes the file, and a SUCCESS written after the
     file would replace that.
 
-    A write that fails for one file of several does not stop the run, which
-    records the action complete over that file's earlier rows (#1265).
+    A write the store fails for one file of several fails the action once the
+    walk has written the others (output/ARCHITECTURE.md), so the next run
+    answers that file rather than the action completing over its earlier rows.
 
 Both write to the SAME disposition table with UNIQUE(action_name, record_id, disposition).
 The collection write overwrites the checkpoint write. This is intentional and idempotent:

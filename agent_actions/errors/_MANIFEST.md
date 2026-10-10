@@ -14,7 +14,7 @@
 | `terminal_failure` | Function | Build the `RuntimeError` raised when none of an action's records succeeded, tagged so a batch check records the action failed instead of re-raising it for the next run to re-poll. | - |
 | `raised_by_terminal_failure` | Function | True if any error in the chain was built by `terminal_failure`. | - |
 | `classification.py` | Module | Declares and detects errors fatal to a whole action, as opposed to one input, the error a file raises when every one of its records was reached and failed (`mark_every_record_failed`, `every_record_failed`), and the error a pass raises when every input file failed that way, none to an error fatal to the action (`mark_every_file_failed`, `every_file_failed`). | `errors` |
-| `mark_action_fatal` | Function | Tag an error as indicting the action's contract. Called where the failure is understood: the record and file processing loops that re-raise instead of tombstoning, and the template renderer. A loop that declares nothing keeps its failures per-item. | - |
+| `mark_action_fatal` | Function | Tag an error as fatal to the whole action rather than one input. Called where the failure is understood: the record and file processing loops that re-raise instead of tombstoning, the template renderer, and the target writer when the store fails to write a file. A loop that declares nothing keeps its failures per-item. | - |
 | `is_action_fatal` | Function | True if any error in the chain was marked, or came from an `on_exhausted: raise` policy. Searches the chain because each layer wraps on the way up. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
 | `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |
