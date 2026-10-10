@@ -420,3 +420,30 @@ class TestBatchPathReasonDetection:
         assert results[0].status == ProcessingStatus.FAILED
         assert results[0].error == BATCH_NOT_RETURNED
         assert results[0].processing_context is not None
+
+    def test_batch_not_returned_without_source_guid_is_failed_with_no_row(self):
+        """A sent, unanswered record with no source_guid is failed and given no row.
+
+        Only a batch an earlier release sent can hold one. A tombstone without the identity
+        would be refused at enrichment, so the collector builds its row from the record.
+        """
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.llm.batch.processing.batch_result_strategy import (
+            BatchResultStrategy,
+        )
+        from agent_actions.record.reasons import BATCH_NOT_RETURNED
+
+        row = {"content": {"prev": {"x": 1}}}
+        BatchContextMetadata.set_filter_status(row, FilterStatus.INCLUDED)
+        ctx = self._make_ctx(passthrough_records=[("cid_6", row)])
+        ctx.reconciler.get_source_guid.return_value = None
+        processor = BatchResultStrategy()
+
+        results = processor._reconcile_passthroughs(ctx)
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[0].error == BATCH_NOT_RETURNED
+        assert results[0].source_guid is None
+        assert results[0].data == []
