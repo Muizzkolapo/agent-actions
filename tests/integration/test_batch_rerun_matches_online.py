@@ -16,6 +16,7 @@ import json
 import logging
 import random
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -50,6 +51,8 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.storage.backend import FAILURE_DISPOSITIONS
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.executor import ActionExecutor
+from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
 
 ACTION = "write_question"
@@ -896,6 +899,94 @@ def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp
     assert first == ["processed:a1:0@run1", "processed:a2:0@run1"]
     assert again == first
     assert batch.sent == [["a1", "a2"], []]
+
+
+EMPTIED = {
+    "on_a_plain_run": [["a1", "a2"], []],
+    "after_a_reset": [["a1", "a2"], {"inputs": [], "reset": True}],
+    "and_then_filled_again": [["a1", "a2"], [], ["a1", "a2"]],
+}
+
+
+@pytest.mark.parametrize("runs", EMPTIED.values(), ids=EMPTIED.keys())
+def test_a_file_whose_input_is_now_empty_holds_nothing_as_online(tmp_path, runs):
+    """The action above holds nothing for the file, or the runner dropped every record
+    of it a guard filtered upstream. Online stores the file empty. A row kept is built
+    from a record that is gone, and every action below reads it."""
+    for run in compare(tmp_path, runs):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+@pytest.mark.parametrize("file", ["sub/page.json", "page.txt"])
+def test_a_file_whose_input_is_now_empty_is_stored_empty_under_its_one_name(tmp_path, file):
+    """Finalize stores the file under this name; written under another, the old rows
+    stay beside an empty file."""
+    batch = _Batch(tmp_path, file)
+    batch.run(1, [rec("a1"), rec("a2")])
+
+    held = batch.run(2, [])
+
+    assert held == []
+    assert batch.backend.list_target_files(ACTION) == [batch.stored_as]
+
+
+def test_a_file_whose_every_input_is_done_keeps_its_rows(tmp_path):
+    """Nothing is sent here either, but each row answers for an input still there."""
+    first, again = compare(tmp_path, [["a1", "a2"], ["a1", "a2"]])
+
+    assert again["batch_sent"] == again["online_sent"] == []
+    assert again["batch"] == again["online"] == first["batch"]
+
+
+def _status(mode: _Mode) -> ActionStatus:
+    """What the executor makes of the action once its run returns."""
+    executor = ActionExecutor(
+        SimpleNamespace(action_runner=SimpleNamespace(storage_backend=mode.backend))
+    )
+    return executor._resolve_completion_status(ACTION)
+
+
+def test_an_action_whose_only_file_is_now_empty_completes_as_online(tmp_path):
+    """Over an action holding no row, a node-level passthrough reads as a skip, and its
+    readers are skipped under it. Online records none for an empty file."""
+    online, batch = _Online(tmp_path), _Batch(tmp_path)
+    for mode in (online, batch):
+        mode.run(1, [rec("a1"), rec("a2")])
+        mode.run(2, [])
+
+    assert batch.held() == online.held() == []
+    assert _status(batch) == _status(online) == ActionStatus.COMPLETED
+
+
+def test_a_repair_that_finds_its_file_empty_keeps_its_rows(tmp_path):
+    """A repair answers what it named, and online carries every row it did not name."""
+    first, repaired = compare(tmp_path, [["a1", "a2"], {"inputs": [], "retry": ["a1"]}])
+
+    assert repaired["online"] == first["online"]
+    assert repaired["batch"] == first["batch"]
+
+
+def test_a_first_stage_file_emptied_in_staging_holds_nothing(tmp_path):
+    """Online stores it empty: nothing staged is left for a row to answer for."""
+    batch = _FirstStageBatch(tmp_path)
+    batch.run(1, [{"item": "a1"}, {"item": "a2"}], {})
+
+    held = batch.run(2, [], {})
+
+    assert held == []
+    assert batch.sent[1] == []
+
+
+def test_a_first_stage_file_staged_empty_on_a_first_run_is_stored_empty(tmp_path):
+    """As online stores it. With nothing stored, an action whose every staged file is
+    empty left its readers no input file, and they were skipped where online runs them."""
+    batch = _FirstStageBatch(tmp_path)
+
+    held = batch.run(1, [], {})
+
+    assert held == []
+    assert batch.backend.list_target_files(ACTION) == [batch_output_name(FILE)]
 
 
 PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}

@@ -7,6 +7,9 @@ other file had just written rows, and its readers were skipped over those rows.
 Batch writes a node-level `passthrough` instead and reads skipped only while the
 action holds no row, so the same project completed there.
 
+A reader's input for the wholly filtered file is then empty. Online stores that
+file empty; batch sent nothing for it and kept what it had stored there before.
+
 Editing the action is what resets it; its readers are reset by that.
 """
 
@@ -37,6 +40,7 @@ from tests.integration.test_retry_ignores_record_cap import (
     chained,  # noqa: F401
     project,  # noqa: F401
 )
+from tests.integration.test_retry_selection_under_batch import _backend as _model_backend
 from tests.integration.test_retry_selection_under_batch import _project
 from tests.integration.test_skipped_reader_drops_stale_rows import (
     FILTER_ALL,
@@ -54,8 +58,8 @@ def _staging(root, workflow=WORKFLOW):
     return root / "agent_workflow" / workflow / "agent_io" / "staging"
 
 
-def _rows_by_file(root, action):
-    backend = _backend(root)
+def _rows_by_file(root, action, open_store=_backend):
+    backend = open_store(root)
     try:
         return {
             path: len(backend._read_target_raw(action, path))
@@ -132,12 +136,9 @@ def test_an_action_whose_guard_filters_every_file_is_still_skipped(two_files):
     assert sum(_rows_by_file(two_files, SECOND).values()) == 0
 
 
-@pytest.mark.parametrize("run_mode", ["online", "batch"])
-def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_run_mode(
-    tmp_path, run_mode
-):
-    """The measured case: an LLM action against the provider mock, where batch
-    already completed and online did not."""
+def _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode):
+    """`summarize` read by `publish`, run to the end over two files, then given a guard
+    that filters every record of `pages.json`."""
     root = _project(tmp_path)
     staging = _staging(root, "batch_field_rules")
     staging.joinpath("pages.json").write_text(
@@ -151,8 +152,20 @@ def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_r
     config.write_text(text.rstrip("\n") + "\n" + READER_ACTION)
     _run_in_its_own_process(root, "--fresh")
     _run_to_the_end(root)
+    assert _rows_by_file(root, READER, _model_backend) == {"other.json": 2, "pages.json": 3}
 
     config.write_text(config.read_text().replace(ANCHOR, f"{ANCHOR}    guard: {KEEP_OTHER}\n", 1))
+    return root
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_run_mode(
+    tmp_path, run_mode
+):
+    """The measured case: an LLM action against the provider mock, where batch
+    already completed and online did not."""
+    root = _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode)
+
     transcript = _run_to_the_end(root)
 
     assert _statuses(root) == {
@@ -163,3 +176,20 @@ def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_r
         # The file's warning must not say its readers get nothing: the other file feeds them.
         assert "None of them reaches downstream actions" in transcript
         assert "Downstream actions will receive no input" not in transcript
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_its_reader_holds_nothing_for_the_file_the_guard_filtered_in_either_run_mode(
+    tmp_path, run_mode
+):
+    """The reader's input for that file is empty. Batch sent nothing for it and kept
+    the rows it had built from the records the guard now filters."""
+    root = _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode)
+
+    transcript = _run_to_the_end(root)
+
+    assert _rows_by_file(root, READER, _model_backend) == {
+        "other.json": 2,
+        "pages.json": 0,
+    }, transcript
+    assert _statuses(root)[READER] == ActionStatus.COMPLETED.value

@@ -527,14 +527,19 @@ it every run. Submission merges the stored rows over no answers with this run's 
 merge finalize makes, and stores the file under `batch_output_name` (`store_batch_file`).
 So a row whose input has left goes, and a record moved to another file of the action is
 answered there and held there alone; rows of inputs a record limit holds back stay, since
-they are inputs. An empty input is written empty: handed to the merge, no inputs read as
-none recorded and keep every row. Nothing is collected, since no batch or context map
-exists for the run, and no node-level `passthrough` is recorded, so the action completes
-as it did. A repair, or a run that recorded no inputs, writes nothing, so every row it did
-not answer stands; and a file the merge would leave as it stands is not written again, as
-on a resume where nothing left. The merge keeps one row per identity, so a file holding two
-rows under one is written even then, with one of them, as online and finalize write it.
-Where nothing is stored, none is made: online writes an empty input's file empty.
+they are inputs. A file that took no input -- the action above holds nothing for it, the
+runner dropped every record of it a guard filtered upstream, or its staged file is empty
+-- is stored empty, as online stores it, on a first run too, where nothing is stored for it
+yet. The test is the input above every narrowing, not what is left to send: a file whose
+every input the gate carried also sends nothing, and keeps the rows that answer for its
+inputs. The merge is skipped for it: handed to the merge, no inputs read as none recorded
+and keep every row. Nothing is collected, since no batch or context map exists for the
+run, and no disposition or node-level `passthrough` is recorded, so the action is
+classified on its files and completes as it did. A repair, or a run that recorded no
+inputs, writes nothing, so every row it did not answer stands; and a file the merge would
+leave as it stands, or one stored empty already, is not written again, as on a resume
+where nothing left. The merge keeps one row per identity, so a file holding two rows under
+one is written even then, with one of them, as online and finalize write it.
 
 A batch input file has one name, its identity: its path under the action's input root
 (`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
