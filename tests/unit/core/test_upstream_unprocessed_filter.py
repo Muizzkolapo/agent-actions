@@ -375,9 +375,12 @@ class TestBatchPathReasonDetection:
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):
         """cascade-blocking records should use ProcessingResult.unprocessed(), not .skipped()."""
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
+        from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 
         row = {
             "content": {"upstream": {"data": "stale"}},
@@ -385,6 +388,8 @@ class TestBatchPathReasonDetection:
             "_state": "failed",
             "_state_schema_version": 1,
         }
+        BatchContextMetadata.set_filter_status(row, FilterStatus.SKIPPED)
+        BatchContextMetadata.set_skip_reason(row, UPSTREAM_UNPROCESSED)
         ctx = self._make_ctx(passthrough_records=[("cid_4", row)])
         processor = BatchResultStrategy()
 
@@ -394,11 +399,16 @@ class TestBatchPathReasonDetection:
         assert results[0].status == ProcessingStatus.UNPROCESSED
         assert results[0].processing_context is not None
 
-    def test_batch_not_returned_uses_unprocessed_status(self):
-        """batch_not_returned records should use ProcessingResult.unprocessed(), not .skipped()."""
+    def test_batch_not_returned_is_the_actions_failure(self):
+        """A record sent and not answered, which no retry will send, is failed, not a casualty.
+
+        Its readers skip it either way; only a failure brings `agac retry` back to it and
+        tells the action it completed with failures.
+        """
         from agent_actions.llm.batch.processing.batch_result_strategy import (
             BatchResultStrategy,
         )
+        from agent_actions.record.reasons import BATCH_NOT_RETURNED
 
         row = {"content": {"prev": {"x": 1}}, "source_guid": "sg_batch_5"}
         ctx = self._make_ctx(passthrough_records=[("cid_5", row)])
@@ -407,5 +417,6 @@ class TestBatchPathReasonDetection:
         results = processor._reconcile_passthroughs(ctx)
 
         assert len(results) == 1
-        assert results[0].status == ProcessingStatus.UNPROCESSED
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[0].error == BATCH_NOT_RETURNED
         assert results[0].processing_context is not None
