@@ -1,0 +1,20 @@
+kind: Bug Fix
+body: >-
+  A batch run with nothing left to send now records its records as a run that sends does.
+  When the guard, the action above or a prompt that could not be prepared left nothing to
+  send, the run built its rows by hand: each row lost the parent, version correlation and
+  history the action above gave it, a guard skip carried the old `skipped_by_where_clause`
+  flag in place of its reason, and no record got a disposition. So a record the guard
+  filtered was not recorded as filtered, an answer whose record came back skipped kept its
+  `success`, so the record was never sent again once the guard passed it, and a record
+  with no `source_guid` that could not be prepared left the action reading complete. Such
+  a run now collects its file as finalize does: a skip or an upstream block is
+  `unprocessed` (as in a batch run that sends; online records a guard skip as
+  `passthrough`), a filtered record is `filtered`, and a failure is `failed`, the record
+  with no `source_guid` under its target id, so the action reads failed. `agac retry`
+  names it there but selects records by `source_guid`, so a retry sends nothing and clears
+  the failure, and the action then reads complete over the failed row it still holds. A
+  record whose prompt could not be prepared is now recorded with the error itself on every
+  batch run, as online records it, where a run that sent something recorded only
+  `prep_failed`.
+time: 2026-10-04T12:00:00Z

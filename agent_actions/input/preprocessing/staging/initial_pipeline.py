@@ -14,12 +14,10 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
@@ -647,33 +645,6 @@ def _get_batch_id_from_chunk(data_chunk: list[dict[str, Any]]) -> str:
     return f"batch_{uuid.uuid4().hex}"
 
 
-def _write_passthrough_result(
-    output_file_path, result_data, storage_backend=None, action_name=None, output_directory=None
-):
-    """Write passthrough result and record disposition."""
-    if storage_backend is None or action_name is None:
-        raise AgentActionsError(
-            "Storage backend is required for passthrough writes.",
-            context={
-                "file_path": str(output_file_path),
-                "action_name": action_name,
-            },
-        )
-    file_writer = FileWriter(
-        str(output_file_path),
-        storage_backend=storage_backend,
-        action_name=action_name,
-        output_directory=output_directory,
-    )
-    file_writer.write_target(result_data)
-    write_node_level_disposition(
-        storage_backend,
-        action_name,
-        DISPOSITION_PASSTHROUGH,
-        "All records tombstoned (initial stage)",
-    )
-
-
 def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_name):
     """Write batch job placeholder file."""
     placeholder = {
@@ -723,7 +694,6 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.llm.batch.infrastructure.context import (
         BatchContextManager,
         batch_file_identity,
-        batch_output_name,
     )
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
@@ -780,16 +750,8 @@ def _process_batch_mode(ctx: BatchProcessingContext):
 
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    passthrough = result.passthrough
-    if passthrough is not None and passthrough.get("type") == "tombstone":
-        _write_passthrough_result(
-            Path(ctx.output_directory) / batch_output_name(batch_name),
-            passthrough["data"],
-            storage_backend=ctx.storage_backend,
-            action_name=ctx.agent_name,
-            output_directory=ctx.output_directory,
-        )
-    elif not result.is_passthrough:
+    # A run with nothing to send has written its file already.
+    if not result.is_passthrough:
         _write_batch_placeholder(output_file_path, local_batch_id, result.batch_id, ctx.agent_name)
 
     return str(output_file_path)

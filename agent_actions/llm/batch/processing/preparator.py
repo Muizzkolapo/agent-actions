@@ -275,6 +275,9 @@ class BatchTaskPreparator:
         entry = context_map_builder[custom_id]
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
         error_str = str(error)
+        # Collection reads it here, maybe in a later process. Not off the history,
+        # which holds 200 characters, and nothing where the transition is refused.
+        BatchContextMetadata.set_prep_error(entry, error_str[:500])
         if RecordEnvelope.can_transition(entry, RecordState.FAILED):
             RecordEnvelope.transition(entry, RecordState.FAILED, agent_name, error_str[:200])
         else:
