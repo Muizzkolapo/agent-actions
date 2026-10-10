@@ -116,3 +116,20 @@ def test_an_import_with_context_reads_the_files_names(tmp_path, importing, call)
 
     assert data["actions"][1]["intent"] == "formal"
     assert data["actions"][1]["prompt"] == "In a formal tone: {{ source.text }}"
+
+
+def test_an_include_partial_whose_loop_variable_is_named_i_loads(tmp_path):
+    """templates/ files are imported first, where `i` is undefined as it always was."""
+    data = _load(
+        tmp_path,
+        "actions:\n" + PROMPT + "{% for i in [1, 2] %}\n{% include 'step.j2' %}\n{% endfor %}\n",
+        templates={"step.j2": '  - name: s{{ i }}\n    intent: "{{ i }}"\n    prompt: "static"\n'},
+    )
+
+    assert _names(data) == ["a", "s1", "s2"]
+
+
+def test_a_version_variable_defaulted_where_no_action_is_versioned_loads(tmp_path):
+    data = _load(tmp_path, "defaults:\n  max_tokens: {{ i | default(100) }}\nactions:\n" + PROMPT)
+
+    assert data["defaults"]["max_tokens"] == 100

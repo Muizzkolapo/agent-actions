@@ -1,24 +1,21 @@
 """Loading a workflow renders only what the load can resolve.
 
 A name a workflow file defines (`{% set %}`, a macro, `load_prompt`, a loop variable) is
-rendered when the file loads. A name only a version or a record supplies is left for the
-stage that has it: a `prompt:` renders per record, a versioned action's other values per
-version. A name no stage supplies fails the load instead of rendering as nothing.
+rendered when the file loads. A prompt that reads a name only a record supplies is left
+whole for the per-record render, and a versioned action's value that reads a version
+variable renders per version. A name no stage supplies fails the load instead of
+rendering as nothing.
 """
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
-from jinja2 import Environment, StrictUndefined
 
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
-from agent_actions.prompt.deferred_tags import (
-    DeferringFileSystemLoader,
-    is_marked,
-    template_folder_exports,
-)
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.prompt.service import PromptPreparationService
 
 
 def _load(tmp_path: Path, workflow: str, templates: dict[str, str] | None = None) -> dict:
@@ -289,7 +286,7 @@ def test_a_variable_a_prompt_assigns_per_record_is_left_with_every_read(tmp_path
     assert _actions(data)["count"]["prompt"] == prompt
 
 
-# ── a value the load captures around a per-record tag ─────────────────────
+# ── a prompt that renders per record keeps every tag of its own ───────────
 
 
 def _block(prompt: str) -> str:
@@ -326,74 +323,140 @@ def test_a_prompt_that_tests_a_value_it_captures_per_record_keeps_it_whole(tmp_p
     """Decided at load, the test reads the tag's text and every record gets one branch."""
     data = _load(
         tmp_path,
-        "actions:\n  - name: a\n    prompt: |\n" + _block(prompt) + '    intent: "Triage"\n',
+        "actions:\n  - name: extract\n    kind: tool\n"
+        "  - name: a\n    prompt: |\n" + _block(prompt) + '    intent: "Triage"\n',
     )
 
     assert _actions(data)["a"]["prompt"] == prompt + "\n"
 
 
-def test_a_value_captured_per_record_and_only_output_carries_its_tag_into_the_prompt(tmp_path):
-    """Output whole, a set block or macro of the file hands its per-record tag on."""
+def test_a_load_time_variable_a_prompt_reassigns_per_record_starts_from_its_load_value(
+    tmp_path,
+):
+    data = _load(
+        tmp_path,
+        '{% set tone = "plain" %}\nactions:\n  - name: a\n    prompt: |\n'
+        '      {% if version.first %}{% set tone = "careful" %}{% endif %}Be {{ tone }}.\n'
+        '    intent: "x"\n',
+    )
+    prompt = _actions(data)["a"]["prompt"]
+
+    assert prompt.startswith('{% set tone = "plain" +%}')
+    render = PromptPreparationService._render_prompt_template
+    assert render(prompt, {"version": {"first": True}}) == "Be careful.\n"
+    assert render(prompt, {"version": {"first": False}}) == "Be plain.\n"
+
+
+def test_load_time_data_a_prompt_reads_inside_a_block_is_set_at_its_top(tmp_path):
+    data = _load(
+        tmp_path,
+        '{% set fields = ["title", "body"] %}\nactions:\n  - name: a\n    prompt: |\n'
+        "      {% for f in fields %}{{ f }}: {{ source[f] }}\n      {% endfor %}\n",
+    )
+    prompt = _actions(data)["a"]["prompt"]
+
+    assert prompt.startswith('{% set fields = ["title", "body"] +%}')
+    record = {"source": {"title": "T", "body": "B"}}
+    assert PromptPreparationService._render_prompt_template(prompt, record) == (
+        "title: T\nbody: B\n"
+    )
+
+
+def test_a_macro_writing_actions_gives_them_per_record_prompts(tmp_path):
     data = _load(
         tmp_path,
         """\
-{% set header %}Title: {{ source.title }}{% endset %}
 {% macro stage(n) %}
   - name: stage_{{ n }}
     prompt: "Stage {{ n }} of {{ source.text }}"
 {% endmacro %}
 actions:
-  - name: write
-    prompt: "{{ header }}. Body."
 {{ stage(1) }}
+{{ stage(2) }}
 """,
     )
 
-    actions = _actions(data)
-    assert actions["write"]["prompt"] == "Title: {{ source.title }}. Body."
-    assert actions["stage_1"]["prompt"] == "Stage 1 of {{ source.text }}"
+    assert _actions(data)["stage_2"]["prompt"] == "Stage 2 of {{ source.text }}"
 
 
-def test_a_prompt_testing_a_value_the_file_captures_outside_it_fails_the_load(tmp_path):
-    with pytest.raises(ConfigurationError) as raised:
-        _load(
-            tmp_path,
-            """\
-{% macro kind() %}{{ source.page_content }}{% endmacro %}
-actions:
-  - name: a
-    prompt: |
-      {% if kind() == "urgent" %}ESCALATE{% else %}normal{% endif %}
-""",
-        )
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            "{% set header %}Title: {{ source.title }}{% endset %}\nactions:\n  - name: a\n"
+            '    prompt: "{{ header }}. Body."\n',
+            id="set-block-outside-the-prompt",
+        ),
+        pytest.param(
+            "{% macro kind() %}{{ source.page_content }}{% endmacro %}\nactions:\n"
+            '  - name: a\n    prompt: |\n      {% if kind() == "urgent" %}E{% endif %}\n',
+            id="macro-outside-the-prompt",
+        ),
+        pytest.param(
+            '{% macro wrap(name) %}\n  - name: {{ name }}\n    prompt: "{{ caller() }}"\n'
+            "{%- endmacro %}\nactions:\n{% call wrap('a') %}Do {{ source.x }}{% endcall %}\n",
+            id="caller-of-a-macro-writing-actions",
+        ),
+    ],
+)
+def test_a_per_record_tag_the_file_renders_outside_a_prompt_fails_the_load(tmp_path, workflow):
+    """The load renders it, where `source` does not exist; the error says why."""
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(tmp_path, workflow)
 
-    assert "'kind'" in str(raised.value)
+    message = str(raised.value)
+    assert "'source' is undefined" in message
+    assert "only an action's prompt renders per record" in message
 
 
-def test_a_prompt_testing_a_templates_macro_that_renders_a_record_tag_fails_the_load(tmp_path):
+def test_a_raw_block_hands_a_macros_per_record_tag_to_the_prompt(tmp_path):
+    data = _load(
+        tmp_path,
+        "{% macro kind() %}{% raw %}{{ source.page_content }}{% endraw %}{% endmacro %}\n"
+        'actions:\n  - name: a\n    prompt: "Kind: {{ kind() }} of {{ source.page_id }}"\n',
+    )
+
+    assert (
+        _actions(data)["a"]["prompt"] == "Kind: {{ source.page_content }} of {{ source.page_id }}"
+    )
+
+
+@pytest.mark.parametrize(
+    "prompt, name",
+    [
+        pytest.param(
+            '{% if kind() == "urgent" %}E{% endif %} {{ source.page_id }}', "kind", id="macro"
+        ),
+        pytest.param(
+            "{% if source.x %}{{ load_prompt('p.P') }}{% endif %}", "load_prompt", id="load-prompt"
+        ),
+    ],
+)
+def test_a_per_record_prompt_using_a_load_time_function_in_a_block_fails_the_load(
+    tmp_path, prompt, name
+):
+    """Only data reaches the per-record render; the error names what does not."""
     with pytest.raises(TemplateRenderingError) as raised:
         _load(
             tmp_path,
-            'actions:\n  - name: a\n    prompt: |\n      {% if kind() == "urgent" %}E{% endif %}\n',
-            templates={"kinds.j2": "{% macro kind() %}{{ source.page_content }}{% endmacro %}"},
+            "actions:\n  - name: a\n    prompt: |\n" + _block(prompt),
+            templates={"kinds.j2": "{% macro kind() %}k{% endmacro %}"},
         )
 
-    assert "'kind'" in str(raised.value)
+    message = str(raised.value)
+    assert f"'{name}'" in message
+    assert "renders for each record" in message
 
 
-def test_a_templates_macro_captured_in_the_prompt_can_be_tested_per_record(tmp_path):
-    """What the load error suggests: the capture waits for the record with its test."""
-    data = _load(
-        tmp_path,
-        "actions:\n  - name: a\n    prompt: |\n"
-        + _block('{% set k %}{{ kind() }}{% endset %}{% if k == "urgent" %}E{% endif %}')
-        + '    intent: "Triage"\n',
-        templates={"kinds.j2": "{% macro kind() %}{{ source.page_content }}{% endmacro %}"},
-    )
-
-    assert _actions(data)["a"]["prompt"] == (
-        '{% set k %}{{ source.page_content }}{% endset %}{% if k == "urgent" %}E{% endif %}\n'
-    )
+def test_a_per_record_prompt_cannot_include_a_template(tmp_path):
+    (tmp_path / "templates" / "partials").mkdir(parents=True)
+    (tmp_path / "templates" / "partials" / "kind.j2").write_text("{{ source.page_content }}")
+    with pytest.raises(TemplateRenderingError, match="include"):
+        _load(
+            tmp_path,
+            "actions:\n  - name: a\n    prompt: |\n"
+            + _block("{% include 'partials/kind.j2' %} of {{ source.page_id }}"),
+        )
 
 
 def test_a_variable_a_prompt_loop_sets_is_not_the_one_a_load_time_loop_sets(tmp_path):
@@ -405,7 +468,7 @@ actions:
 {% for stage in [1, 2] %}{% set label = "Stage " ~ stage %}
   - name: s{{ stage }}
     intent: "{{ label }}"
-    prompt: "{% for item in source.items %}{% set label = item.name %}- {{ label }}{% endfor %}"
+    prompt: "{% for item in source.entries %}{% set label = item.name %}- {{ label }}{% endfor %}"
 {% endfor %}
 """,
     )
@@ -413,28 +476,44 @@ actions:
     actions = _actions(data)
     assert actions["s2"]["intent"] == "Stage 2"
     assert actions["s2"]["prompt"] == (
-        "{% for item in source.items %}{% set label = item.name %}- {{ label }}{% endfor %}"
+        "{% for item in source.entries %}{% set label = item.name %}- {{ label }}{% endfor %}"
     )
 
 
-def test_a_templates_macro_counts_on_every_files_exports_and_a_top_level_on_loaded_ones(
-    tmp_path,
-):
-    """A macro runs once the folder is loaded; a file's top level runs as the file loads."""
-    folder = tmp_path / "templates"
-    folder.mkdir()
-    (folder / "a.j2").write_text(
-        "{% macro wrap(v) %}[{{ helper(v) }}]{% endmacro %}{{ helper('top') }}"
+# ── a name looked up at load that a record supplies fails the load ────────
+
+
+@pytest.mark.parametrize(
+    "workflow, name",
+    [
+        pytest.param(
+            "actions:\n  - name: facts\n    kind: tool\n"
+            '{% if facts is defined %}\n  - name: b\n    prompt: "x"\n{% endif %}\n',
+            "facts",
+            id="action-tested-around-actions",
+        ),
+        pytest.param(
+            "{% macro note() %}{% if source is defined %}S{% endif %}{% endmacro %}\n"
+            'actions:\n  - name: a\n    prompt: "{{ note() }}"\n',
+            "source",
+            id="source-tested-in-a-macro-a-prompt-calls",
+        ),
+    ],
+)
+def test_a_record_name_tested_at_load_fails_the_load(tmp_path, workflow, name):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(tmp_path, workflow)
+
+    assert f"'{name}' is looked up while the workflow loads" in str(raised.value)
+
+
+def test_a_version_variable_tested_outside_a_versioned_action_answers_no(tmp_path):
+    data = _load(
+        tmp_path,
+        'actions:\n  - name: a\n    model_name: "{% if i is defined %}m{{ i }}{% else %}m{% endif %}"\n',
     )
-    (folder / "b.j2").write_text("{% macro helper(v) %}<{{ v }}>{% endmacro %}")
-    loader = DeferringFileSystemLoader(str(folder))
-    env = Environment(loader=loader, undefined=StrictUndefined)
-    loader.exports = template_folder_exports(env, folder)
 
-    macro, top_level = loader.get_source(env, "a.j2")[0].split("{% endmacro %}")
-
-    assert macro == "{% macro wrap(v) %}[{{ helper(v) }}]"
-    assert is_marked(top_level)
+    assert _actions(data)["a"]["model_name"] == "m"
 
 
 # ── an included template reads what its includer binds ───────────────────
@@ -473,69 +552,98 @@ actions:
     assert _actions(data)["act_b"]["prompt"] == "b: {{ source.text }}"
 
 
-def test_a_value_captured_around_an_include_of_a_record_tag_waits_for_the_record(tmp_path):
-    data = _load(
-        tmp_path,
-        "actions:\n  - name: a\n    prompt: |\n"
-        + _block("{% set k %}{% include 'kind.j2' %}{% endset %}{% if k == 'u' %}E{% endif %}")
-        + '    intent: "Triage"\n',
-        templates={"kind.j2": "{{ source.page_content }}"},
-    )
-
-    assert _actions(data)["a"]["prompt"] == (
-        "{% set k %}{{ source.page_content }}{% endset %}{% if k == 'u' %}E{% endif %}\n"
-    )
+# ── errors name the problem ────────────────────────────────────────────────
 
 
-# ── a YAML error names left tags only when they caused it ─────────────────
-
-
-def test_a_yaml_typo_beside_a_per_record_prompt_gets_no_template_note(tmp_path):
+def test_a_yaml_typo_beside_a_per_record_prompt_shows_the_prompt_as_written(tmp_path):
     with pytest.raises(ConfigurationError) as raised:
         _load(
             tmp_path,
             'actions:\n  - name: a\n    prompt: "Summarise {{ source.text }}"\n   intent: x\n',
         )
 
+    assert "'source'" not in str(raised.value)
+    rendered = raised.value.context["rendered_content"]
+    assert 'prompt: "Summarise {{ source.text }}"' in rendered
+
+
+def test_a_structural_condition_on_a_name_nothing_defines_names_only_it(tmp_path):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(
+            tmp_path,
+            'actions:\n  - name: write\n    prompt: "Summarise {{ source.text }}"\n'
+            "{% if enable_validation %}\n  - name: v\n    prompt: y\n{% endif %}\n",
+        )
+
     message = str(raised.value)
+    assert "'enable_validation' is undefined" in message
     assert "'source'" not in message
-    assert "left in place" not in message
+
+
+def test_an_alias_of_a_per_record_prompt_gets_the_same_prompt(tmp_path):
+    data = _load(
+        tmp_path,
+        'actions:\n  - name: a\n    prompt: &shared "Summarise {{ source.text }}"\n'
+        "  - name: b\n    prompt: *shared\n",
+    )
+
+    assert _actions(data)["b"]["prompt"] == "Summarise {{ source.text }}"
+
+
+# ── the per-record prompt is the YAML value the file wrote ────────────────
 
 
 @pytest.mark.parametrize(
-    "prompt",
+    "value, prompt",
     [
-        pytest.param('"Summarise {{ source.text }}"\n', id="quoted"),
         pytest.param(
-            "|\n      {% for f in source.facts %}\n      - {{ f }}\n      {% endfor %}\n",
-            id="block-with-a-tag-on-its-own-line",
+            '"Classify {{ source.text | default("none") }}"',
+            'Classify {{ source.text | default("none") }}',
+            id="double-quotes-inside-a-double-quoted-tag",
+        ),
+        pytest.param("'It''s {{ source.x }}'", "It's {{ source.x }}", id="single-quoted"),
+        pytest.param("{{ source.x }} rest", "{{ source.x }} rest", id="plain-opening-on-a-tag"),
+        pytest.param(
+            ">\n      Hello {{ source.x }}\n      and more",
+            "Hello {{ source.x }} and more\n",
+            id="folded",
+        ),
+        pytest.param("|+\n      Hello {{ source.x }}\n", "Hello {{ source.x }}\n\n\n", id="kept"),
+        pytest.param(
+            "|\n      Hello {{ source.x }}\n{% if source.y %}\n      Y\n{% endif %}\n      Bye",
+            "Hello {{ source.x }}\n{% if source.y %}\nY\n{% endif %}\nBye\n",
+            id="tag-lines-left-of-the-block",
         ),
     ],
 )
-def test_a_yaml_error_from_a_left_condition_names_only_that_condition(tmp_path, prompt):
-    with pytest.raises(ConfigurationError) as raised:
-        _load(
-            tmp_path,
-            "actions:\n  - name: write\n    prompt: "
-            + prompt
-            + "{% if enable_validation %}\n  - name: v\n    prompt: y\n{% endif %}\n",
-        )
+def test_a_per_record_prompt_is_the_value_yaml_reads(tmp_path, value, prompt):
+    data = _load(tmp_path, f"actions:\n  - name: a\n    prompt: {value}\n\n    intent: x\n")
 
-    message = str(raised.value)
-    assert "'enable_validation'" in message
-    assert "'source'" not in message
-    assert "'write'" not in message
+    assert _actions(data)["a"]["prompt"] == prompt
 
 
-def test_a_yaml_error_from_a_definition_a_prompt_tests_names_it(tmp_path):
-    with pytest.raises(ConfigurationError) as raised:
-        _load(
-            tmp_path,
-            '{% set tone = "plain" %}\nactions:\n  - name: a\n    prompt: |\n'
-            '      {% if version.first %}{% set tone = "careful" %}{% endif %}Be {{ tone }}.\n'
-            '    intent: "x"\n',
-        )
+def test_load_time_data_reaches_the_record_unchanged(tmp_path):
+    values = {
+        "text": 'café 😀 "quoted" \\ {{ not a tag }} %} ${i}',
+        "number": -1.5e-07,
+        "flag": False,
+        "nothing": None,
+        "nested": {"a": [1, (2, 3)], "b": {"c": "x"}},
+    }
+    sets = "".join(f"{{% set {k} = {v!r} %}}" for k, v in values.items()).replace("None", "none")
+    data = _load(
+        tmp_path,
+        sets + "\nactions:\n  - name: a\n    prompt: |\n"
+        "      {% if source %}{{ [text, number, flag, nothing, nested] | tojson }}{% endif %}\n",
+    )
 
-    message = str(raised.value)
-    assert "'tone'" in message
-    assert "'version'" not in message
+    sent = PromptPreparationService._render_prompt_template(
+        _actions(data)["a"]["prompt"], {"source": {"x": 1}}
+    )
+    assert json.loads(sent) == [
+        values["text"],
+        values["number"],
+        False,
+        None,
+        {"a": [1, [2, 3]], "b": {"c": "x"}},
+    ]
