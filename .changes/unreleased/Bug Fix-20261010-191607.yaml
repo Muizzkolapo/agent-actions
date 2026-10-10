@@ -3,7 +3,8 @@ body: >-
   A record a batch provider leaves out of a file's results, or answers on a line that
   cannot be read, is now that action's failure when nothing will send it again: with no
   `retry:` block, with `retry: false` or `enabled: false`, or when the retry batch that
-  would resend it could not be prepared or was refused by the provider. It was stored as a cascade casualty, `unprocessed` with the
+  would resend it was refused by the provider or could not be prepared because its prompt
+  could not be rendered. It was stored as a cascade casualty, `unprocessed` with the
   reason `batch_not_returned`, so the action read `completed` and the run reported success,
   `agac retry` found nothing to retry, and every later run skipped the action; only
   `agac run --fresh` brought the record back, by sending every record of the workflow

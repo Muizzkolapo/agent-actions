@@ -60,7 +60,8 @@ A guard that reads them cannot be evaluated on a retry, and the collect run fail
 
 A record the provider left out of its results that no retry will send again is failed, with
 the reason `batch_not_returned`. That is a record of an action with retry off, or one whose
-retry batch did not go out, because it could not be prepared or the provider refused it.
+retry batch did not go out, because its prompt could not be rendered (as for a prompt that
+reads `workflow.*`) or the provider refused it.
 The action completes with failures (`completed_with_failures`), the actions that read it
 skip the record, and [`agac retry`](../cli/retry) sends it again. Once its answer is
 collected, the actions that read it answer it too.

@@ -97,11 +97,11 @@ as long as the provider cannot be asked; to give up on those batches instead,
 
 ### When the provider leaves a record out
 
-A batch can come back finished with a record missing from its results. An action with a
-`retry:` block sends that record again in a retry batch ([Batch Recovery](./batch-recovery)).
-Without one, or once nothing will send it again, the record is failed with the reason
-`batch_not_returned`: the action completes with failures, the actions that read it skip the
-record, and `agac retry` sends it again.
+A batch can come back finished with a record missing from its results. An action whose
+retry is on (see [Retry](./retry)) sends that record again in a retry batch
+([Batch Recovery](./batch-recovery)). With retry off, or once nothing will send it again,
+the record is failed with the reason `batch_not_returned`: the action completes with
+failures, the actions that read it skip the record, and `agac retry` sends it again.
 
 ### When the provider ends a batch without results
 
