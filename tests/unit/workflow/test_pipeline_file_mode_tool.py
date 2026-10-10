@@ -753,6 +753,23 @@ def test_a_refusal_no_one_record_answers_for_fails_every_record_of_the_file(outp
     assert [r.input_record for r in results] == records
 
 
+def test_a_file_whose_every_record_is_refused_keeps_no_row_invented_beside_them():
+    """A row naming no input is not an answer to any record, so with every record
+    refused the file answered nothing and stores nothing."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            *({"source_index": i, "data": {"score": "high"}} for i in range(3)),
+            {"source_index": None, "data": {"score": 3}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-1", "sg-2", "sg-3"]
+    assert _stored(results) == []
+
+
 # --- _strip_internal_fields list handling ---
 
 
