@@ -18,10 +18,11 @@ and service wiring used by CLI commands and runtime agents.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `data_generator.py` | Module | `DataGenerator` that composes prompts with context for workflows. | `cli`, `workflow`, `llm` |
+| `deferred_tags.py` | Module | `defer_unresolved_tags` marks each Jinja tag of a workflow file whose names nothing at load binds (not a `set`, loop, import or macro name of the file, a `templates/` export, `load_prompt` or a Jinja global) so the load-time render passes it through verbatim; `render_marked` renders those tags once their names exist. `DeferringFileSystemLoader` does the same for `templates/` files, and `template_folder_names` reads what they export without running them. | `prompt_generation` |
 | `formatter.py` | Module | Template helpers for prompt formatting and escaping. | `prompt_generation` |
 | `handler.py` | Module | `PromptLoader` and prompt builder utilities. `PromptLoader.load_prompt` accepts `project_root: Path \| None`. | `logging`, `cli` |
 | `prompt_utils.py` | Module | Misc utilities (token counting, template expansion). | `prompt_generation`, `logging` |
-| `render_workflow.py` | Module | Renders workflows into final YAML via templates. `render_pipeline_with_templates` accepts `project_root: Path \| None`. | `cli`, `prompt_generation` |
+| `render_workflow.py` | Module | Renders workflows into final YAML via templates. `render_pipeline_with_templates` accepts `project_root: Path \| None`. The load renders only the tags it can resolve, with `StrictUndefined`: an action's `prompt` keeps the tags only a record or a version can resolve, a versioned action's other values render per version at expansion, and a tag nothing supplies fails the load. | `cli`, `prompt_generation` |
 | `renderer.py` | Module | `JinjaTemplateRenderer` for Jinja rendering, `ConfigRenderingService` for config loading. | `cli`, `validation` |
 | `message_builder.py` | Module | `MessageBuilder` — unified message assembly for all LLM providers. `LLMMessageEnvelope`, `ProviderMessageConfig`, `PROVIDER_MESSAGE_CONFIGS` registry. | `llm`, `prompt_generation` |
 | `service.py` | Module | `PromptService` used by CLI/tests for retrieving prompt definitions. | `logging`, `prompt_generation` |
@@ -39,6 +40,8 @@ and service wiring used by CLI commands and runtime agents.
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt`, `actions[].schema_name` |
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` via `validate_version_block` — the block is expanded away here, so nothing downstream sees it; `ActionExpander`'s own expansion calls the same validator |
 | `render_pipeline_with_templates()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema_name`, `actions[].schema` |
+| `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt` keeps its per-record and per-version tags; `actions[].versions` renders the action's other values per version |
+| `template_folder_names()`, `DeferringFileSystemLoader` | `templates/*.jinja2`, `templates/*.j2` | Reads | — |
 | `ConfigRenderingService.render_and_load_config()` | `agent_config/{workflow}.yml` | Validates | `actions[]` |
 | `MessageBuilder.build()` | `.env` | Reads | — |
 

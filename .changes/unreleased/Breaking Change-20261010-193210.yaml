@@ -1,0 +1,10 @@
+kind: Breaking Change
+body: >-
+  A workflow file that names something nothing defines now fails to load, naming it, instead
+  of rendering it as nothing. `{{ workflow_name }}`, `{% if enable_validation %}` with no
+  `{% set enable_validation %}`, or a bare `{{ topic }}` in a value other than a prompt used
+  to load as an empty string or a false condition, and a missing field of a variable the file
+  sets (`{{ cfg.missing }}`) did the same. The templates page listed `workflow_name`, `env`
+  and `now` as built-in variables of a workflow file; none existed, and the page now says
+  which names the load supplies.
+time: 2026-10-10T19:32:10Z
