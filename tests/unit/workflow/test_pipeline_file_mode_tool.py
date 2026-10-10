@@ -628,6 +628,38 @@ def test_a_tool_that_raises_fails_every_record_it_was_handed():
     assert [r.input_record for r in results] == originals
 
 
+def test_a_row_whose_parent_names_no_input_fails_every_record_of_its_file():
+    """Matching the row to a parent the tool never named would invent its lineage, so
+    the file's records fail with the error instead."""
+    context = _make_context()
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+    ]
+    context.source_data = input_data
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 2, "data": {"score": 1}},
+            {"source_index": 1, "data": {"score": 2}},
+        ]
+    )
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=(raw, True),
+    ):
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.FAILED, "sg-1"),
+        (ProcessingStatus.FAILED, "sg-2"),
+    ]
+    assert {r.error for r in results} == {
+        "FILE mode tool 'my_file_tool' failed: "
+        "source_index 2 does not name one of the 2 input records"
+    }
+
+
 # --- Output the action's schema refuses ---
 
 _SCORE_SCHEMA = {
