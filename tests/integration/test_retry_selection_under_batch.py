@@ -8,16 +8,14 @@ disposition those rows carry.
 """
 
 import json
-import os
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -53,14 +51,7 @@ def submitted_and_collected(tmp_path):
 
 
 def _agac(project, *args):
-    result = subprocess.run(
-        [str(Path(sys.executable).parent / "agac"), *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
-    )
+    result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
     return result.returncode, result.stdout + result.stderr
 
 
