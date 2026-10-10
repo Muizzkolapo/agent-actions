@@ -228,6 +228,13 @@ class TestCreateRetryServiceFromConfig:
         assert service is not None
         assert service.max_attempts == 3
 
+    def test_no_retry_block_means_no_retry(self):
+        """Retry is off until a retry: block turns it on, as the retry reference says."""
+        assert create_retry_service_from_config(None) is None
+
+    def test_a_block_that_turns_retry_off_means_no_retry(self):
+        assert create_retry_service_from_config({"enabled": False, "max_attempts": 3}) is None
+
     def test_creates_service_with_custom_config(self):
         """Creates service with custom configuration."""
         config = {

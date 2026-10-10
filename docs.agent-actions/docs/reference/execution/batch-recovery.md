@@ -35,7 +35,7 @@ flowchart TD
 
 ## Phase 1: Retry Missing Records
 
-After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. Any gap triggers the retry loop.
+After retrieving batch results, the system compares the expected record IDs against the ids the provider actually answered. A record returned with an error, or with null content, was not answered. When the action has retry on, any gap triggers the retry loop. Retry is off until a `retry:` block turns it on (see [Configuration](#configuration)); without it, a record the provider did not return is failed at once (see [A record nothing sends again](#a-record-nothing-sends-again)).
 
 ### How It Works
 
@@ -67,7 +67,8 @@ collected, the actions that read it answer it too.
 
 ### Configuration
 
-Retry is configured at the action or defaults level:
+Retry is configured at the action or defaults level. It is off for an action when neither
+the action nor `defaults:` gives a `retry:` block:
 
 ```yaml
 defaults:
