@@ -147,6 +147,37 @@ class TestFrameworkNamespaces:
         assert prompt_context["version"]["i"] == 1
         assert prompt_context["version"]["length"] == 3
 
+    def test_the_names_a_version_promotes_are_always_available(self):
+        """`{{ i }}`, `{{ idx }}` and a custom param are documented beside `version.*`."""
+        version = {"i": 2, "idx": 1, "length": 3, "first": False, "last": False}
+        version["classifier_id"] = 2
+        field_context = {
+            "source": {"text": "hello"},
+            "version": version,
+            "i": 2,
+            "idx": 1,
+            "classifier_id": 2,
+        }
+        context_scope = {"observe": ["source.text"]}
+
+        prompt_context, llm_context, _ = apply_context_scope(field_context, context_scope)
+
+        assert (prompt_context["i"], prompt_context["idx"]) == (2, 1)
+        assert prompt_context["classifier_id"] == 2
+        assert llm_context == {"source": {"text": "hello"}}
+
+    def test_a_top_level_name_no_version_promotes_is_still_gated(self):
+        field_context = {
+            "source": {"text": "hello"},
+            "version": {"i": 1, "idx": 0, "length": 1, "first": True, "last": True},
+            "unscoped": {"secret": "x"},
+        }
+        context_scope = {"observe": ["source.text"]}
+
+        prompt_context, _, _ = apply_context_scope(field_context, context_scope)
+
+        assert "unscoped" not in prompt_context
+
     def test_seed_namespace_always_available(self):
         """seed namespace should always be in prompt_context."""
         field_context = {"source": {"text": "hello"}}
