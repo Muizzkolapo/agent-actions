@@ -55,15 +55,16 @@ RETRYABLE_STATUSES: frozenset[ActionStatus] = frozenset(
     }
 )
 # Statuses whose action died mid-processing and may hold checkpointed SUCCESS
-# dispositions: cleared selectively, never in bulk, or resume redoes finished work
-# and a run that died collecting a batch pays again for every file it had written.
+# dispositions. Never cleared in bulk while the config they were answered under is in
+# force, or resume redoes finished work and a run that died collecting a batch pays
+# again for every file it had written.
 MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
     {ActionStatus.RUNNING, ActionStatus.INTERRUPTED, ActionStatus.CHECKING_BATCH}
 )
 
-
-# Recorded beside the status of an action whose run was stopped while it was collecting.
-_STOPPED_COLLECTING = "stopped_collecting"
+# Status detail naming the `agac retry` that put an action back to pending, by its
+# manifest's ``created_at``. Removed when a reset makes what the action holds stale.
+REPAIRED_BY = "repaired_by"
 
 
 def _as_count(value: Any) -> int | None:
@@ -121,8 +122,6 @@ class ActionStateManager:
                 self.action_status[action_name] = {}
 
             self.action_status[action_name]["status"] = status
-            # What the action was doing when it was stopped is true of that status only.
-            self.action_status[action_name].pop(_STOPPED_COLLECTING, None)
 
             for key, value in metadata.items():
                 self.action_status[action_name][key] = value
@@ -184,7 +183,7 @@ class ActionStateManager:
                 details = self.action_status.setdefault(name, {})
                 details["status"] = ActionStatus.PENDING
                 details.pop("max_records", None)
-                details.pop(_STOPPED_COLLECTING, None)
+                details.pop(REPAIRED_BY, None)
             self._save_status()
 
     def is_completed(self, action_name: str) -> bool:
@@ -237,16 +236,11 @@ class ActionStateManager:
         from_statuses: frozenset[ActionStatus] | set[ActionStatus],
         to_status: ActionStatus,
         exclude: Container[str] = (),
-        mark_collecting: bool = False,
     ) -> list[str]:
         """Transition all actions matching *from_statuses* to *to_status*.
 
         Holds the lock for the entire scan-mutate-save cycle and persists
         at most once.  Returns the names of affected actions.
-
-        *mark_collecting* records, in the same write, which of them were collecting a
-        batch: the status they are given no longer says so. Any other transition
-        drops that mark, so it never describes a status it was not set with.
         """
         with self._lock:
             affected = [
@@ -255,13 +249,7 @@ class ActionStateManager:
                 if details.get("status") in from_statuses and name not in exclude
             ]
             for name in affected:
-                details = self.action_status[name]
-                was_collecting = details.get("status") == ActionStatus.CHECKING_BATCH
-                details["status"] = to_status
-                if mark_collecting and was_collecting:
-                    details[_STOPPED_COLLECTING] = True
-                else:
-                    details.pop(_STOPPED_COLLECTING, None)
+                self.action_status[name]["status"] = to_status
             if affected:
                 self._save_status()
         return affected
@@ -272,15 +260,7 @@ class ActionStateManager:
         BATCH_SUBMITTED is deliberately excluded: that work continues in the
         provider's queue after this process exits, so it is not in flight here.
         """
-        # An action stopped while collecting has written the files it reached, and the
-        # status it is about to be given no longer says that is what it was doing.
-        return self._bulk_transition(
-            {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status, mark_collecting=True
-        )
-
-    def stopped_collecting(self, action_name: str) -> bool:
-        """Whether *action_name* was collecting a batch when its run was stopped."""
-        return bool(self.action_status.get(action_name, {}).get(_STOPPED_COLLECTING))
+        return self._bulk_transition({ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status)
 
     def mark_running_as_failed(self) -> list[str]:
         """Mark all actions in 'running' or 'checking_batch' status as failed."""

@@ -8,6 +8,8 @@ the outermost type instead would classify the wrapper.
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from agent_actions.errors import (
@@ -227,3 +229,42 @@ class TestTheStrategyAndTheCollectorAgree:
 
         assert len(results) == 1
         assert is_action_fatal(recoverable) is False
+
+
+class TestTheTargetWriterDeclaresWhatTheStoreFails:
+    """A store that cannot keep one file cannot keep the action's output either.
+
+    Taken as that file's accident, the run recorded the action complete over whatever
+    an earlier run had stored for the file.
+    """
+
+    def _write(self, tmp_path, error):
+        from unittest.mock import MagicMock
+
+        from agent_actions.output.writer import FileWriter
+
+        backend = MagicMock()
+        backend.write_target.side_effect = error
+        writer = FileWriter(
+            str(tmp_path / "pages1.json"),
+            storage_backend=backend,
+            action_name="summarize",
+            output_directory=str(tmp_path),
+        )
+        with pytest.raises(Exception) as exc_info:
+            writer.write_target([{"source_guid": "g1"}])
+        return exc_info.value
+
+    @pytest.mark.parametrize(
+        "error",
+        [sqlite3.OperationalError("disk I/O error"), OSError(28, "No space left on device")],
+        ids=["database", "disk-full"],
+    )
+    def test_a_write_the_store_fails_is_fatal(self, tmp_path, error):
+        assert is_action_fatal(self._write(tmp_path, error)) is True
+
+    def test_a_file_name_the_store_rejects_is_not(self, tmp_path):
+        """The name is that file's own; the store keeps every other file."""
+        rejected = ValueError("Invalid characters in relative_path: {'('}")
+
+        assert is_action_fatal(self._write(tmp_path, rejected)) is False

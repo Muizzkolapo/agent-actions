@@ -11,7 +11,7 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Module docstring describing the staging helpers. | `preprocessing` |
-| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, mode-specific preparation helpers, re-stamping a staged record whose content another row already claimed under a DIFFERENT relative_path this run — so it keeps its own identity rather than being dropped on write — while a claim under the SAME relative_path (two actions sharing one staged file) is left alone, and storage-backend requirements for first-stage target writes. | `processing`, `output`, `logging` |
+| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, mode-specific preparation helpers, re-stamping a staged record whose content another row already claimed under a DIFFERENT relative_path this run — so it keeps its own identity rather than being dropped on write — while a claim under the SAME relative_path (two actions sharing one staged file) is left alone, and storage-backend requirements for first-stage target writes. In batch mode a staged file is named by `batch_file_identity`; the input owning a nested file's basename is a file directly under the staging root that the walk processes (`_staged_at_the_top`, the runner's `should_skip_item` with the start node's `file_type_filter`, which `InitialStageContext` carries) and that stores under that name. An online first-stage write clears that file's checkpoint rows, under the `.json` name it stores the file under, and is followed by the SUCCESS and PASSTHROUGH dispositions collection held back, as `pipeline.py` does; like it, it writes a file in which nothing succeeded, then raises, only where `stored_answers_stand` says the answers stored for it no longer stand. | `processing`, `output`, `logging`, `llm.batch`, `workflow` |
 | `field_validation.py` | Module | `validate_staging_field_names` — rejects staging records whose field names collide with reserved prompt-context namespaces (`source`, `version`, `workflow`, etc.). Called at two points: staging file load (initial_pipeline) and prompt context build (scope_builder). | `utils.constants`, `errors` |
 
 ## Design Notes
@@ -43,6 +43,8 @@ The reserved names come from `SPECIAL_NAMESPACES` in `utils/constants.py`.
 
 ### Zero-success failure check (`initial_pipeline.py`)
 
-Delegates to `CollectionStats.raise_if_terminal_failure()` (in
-`processing/result_collector.py`). See `workflow/_MANIFEST.md` design note for
-full rationale on why `stats.success == 0` is used instead of `not output`.
+Delegates to `CollectionStats.terminal_failure()` (in
+`processing/result_collector.py`), and writes the file before raising only where
+`stored_answers_stand` says the answers stored for it no longer stand. See
+`workflow/_MANIFEST.md` design note for full rationale on why `stats.success == 0` is
+used instead of `not output`, and for that exception.

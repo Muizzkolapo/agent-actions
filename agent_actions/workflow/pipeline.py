@@ -9,21 +9,28 @@ from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+    batch_file_identity,
+    held_by_a_dependency,
+)
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.output.writer import FileWriter, target_relative_path
-from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.result_collector import write_node_level_disposition
+from agent_actions.output.writer import target_relative_path
+from agent_actions.processing.disposition_gate import (
+    note_answered_by_repair,
+    positions_named_by_repair,
+    stored_answers_stand,
+)
+from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     DispositionRow,
 )
@@ -274,47 +281,35 @@ class ProcessingPipeline:
         else:
             file_reader = FileReader(params.batch_file_path)
             data = file_reader.read()
-        file_name = Path(params.batch_file_path).name
         # A file read is the whole input by construction — no narrowing sits above it —
         # so it is its own recording. Only a caller that narrowed before this has to say
         # what it narrowed from, and "it did not say" must not be read as "nothing".
         run_inputs = params.run_inputs if params.data is not None else data
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
+        batch_name = batch_file_identity(
+            relative_path.as_posix(),
+            params.pipeline_action_name,
+            params.storage_backend,
+            base_owner=held_by_a_dependency(
+                params.storage_backend,
+                params.pipeline_action_config.get("dependencies") or [],
+                params.dependency_configs,
+            ),
+            registry=registry_manager_factory,
+        )
 
-        result = submission_service.submit_batch_job(
+        # A run with nothing to send writes its file there; one that sends is marked in
+        # flight by the batch_jobs table, so no placeholder is needed on disk.
+        submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
-            file_name,
+            batch_name,
             data,
             params.batch_output_directory,
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
             run_inputs=run_inputs,
-            tombstone_path=target_relative_path(output_file_path, params.batch_output_directory),
         )
-
-        if (
-            result.is_passthrough
-            and result.passthrough is not None
-            and result.passthrough.get("type") == "tombstone"
-        ):
-            file_writer = FileWriter(
-                str(output_file_path),
-                storage_backend=params.storage_backend,
-                action_name=params.pipeline_action_name,
-                output_directory=params.batch_output_directory,
-            )
-            file_writer.write_target(result.passthrough["data"])
-            write_node_level_disposition(
-                params.storage_backend,
-                params.pipeline_action_name,
-                DISPOSITION_PASSTHROUGH,
-                "All records tombstoned",
-            )
-            return str(output_file_path)
-
-        # The batch_jobs table in the storage backend signals "in-flight" —
-        # no placeholder file is needed on disk.
         return str(output_file_path)
 
     @staticmethod
@@ -406,6 +401,12 @@ class ProcessingPipeline:
                     file_path,
                 )
             self._process_by_strategy(data, file_path, base_directory, output_directory)
+            note_answered_by_repair(
+                data,
+                self.config.retried_records,
+                storage_backend=self.config.storage_backend,
+                action_name=self.config.action_name,
+            )
             relative_path = Path(file_path).relative_to(base_directory)
             return str(Path(output_directory) / relative_path)
         except (AgentActionsError, ValueError) as e:
@@ -553,7 +554,12 @@ class ProcessingPipeline:
 
         # Above the context scope, which writes `skipped` for every record it drops:
         # a repair must not disposition a record it never named.
-        repair_kept = positions_named_by_repair(data, self.config.retried_records)
+        repair_kept = positions_named_by_repair(
+            data,
+            self.config.retried_records,
+            storage_backend=self.config.storage_backend,
+            action_name=self.config.action_name,
+        )
         if repair_kept is not None:
             data = [data[i] for i in repair_kept]
 
@@ -581,7 +587,7 @@ class ProcessingPipeline:
             )
             return
 
-        # Create processing context
+        output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
@@ -591,10 +597,12 @@ class ProcessingPipeline:
             parent_records=parent_records,  # Previous-stage output (lineage source)
             file_path=file_path,
             output_directory=output_directory,
+            target_relative_path=target_relative_path(output_file_path, output_directory),
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             version_context=version_context,
             storage_backend=self.config.storage_backend,
+            defer_kept_dispositions=True,
         )
 
         # Select processing strategy based on granularity and action kind.
@@ -639,15 +647,32 @@ class ProcessingPipeline:
                 data, context, strategy, repair_inputs=offered_to_repair
             )
 
-        stats.raise_if_terminal_failure(
+        failure = stats.terminal_failure(
             self.config.action_name, data, output, self.config.storage_backend
         )
+        if failure is not None and (
+            self.config.storage_backend is None
+            or stored_answers_stand(
+                self.config.storage_backend,
+                self.config.action_name,
+                target_relative_path(output_file_path, output_directory),
+            )
+        ):
+            raise failure
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
+        # Only now that the file holds the rows they vouch for.
+        write_dispositions(
+            self.config.storage_backend, context.kept_dispositions, self.config.action_name
+        )
 
-        # Clean up checkpoint records after successful output write.
+        # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:
-            self.config.storage_backend.clear_checkpoint_records(self.config.action_name)
+            self.config.storage_backend.clear_checkpoint_records(
+                self.config.action_name, context.target_relative_path
+            )
+        if failure is not None:
+            raise failure
 
     def _select_strategy(self) -> ProcessingStrategy:
         """Select the processing strategy based on granularity and action kind."""

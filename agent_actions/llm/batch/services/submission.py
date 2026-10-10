@@ -7,7 +7,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
+from agent_actions.errors import (
+    ConfigurationError,
+    ConfigValidationError,
+    ExternalServiceError,
+    mark_action_fatal,
+    mark_submission_refused,
+)
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
@@ -21,10 +27,13 @@ from agent_actions.llm.batch.infrastructure.context import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.processing.batch_passthrough_builder import (
-    BatchPassthroughBuilder,
-)
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.services.collect import (
+    collect_batch_rows,
+    filtered_inputs,
+    store_batch_file,
+    write_batch_file,
+)
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
@@ -32,9 +41,15 @@ from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,
     BatchSubmissionFailedEvent,
 )
-from agent_actions.output.response.config_schema import WhereClauseBehavior
-from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+from agent_actions.processing.result_collector import (
+    _safe_set_disposition,
+    write_node_level_disposition,
+)
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
+)
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -222,15 +237,20 @@ class BatchSubmissionService:
         source_data: Any | None = None,
         workflow_metadata: dict[str, Any] | None = None,
         run_inputs: list[dict[str, Any]] | None = None,
-        tombstone_path: str | None = None,
     ) -> SubmissionResult:
         """Submit a batch job, or return a passthrough when nothing is left to send.
 
+        *batch_name* is the input file's identity (``batch_file_identity``): every key
+        the batch keeps, and the name its output is stored under, derive from it.
         *run_inputs* is this action's input above every narrowing, recorded for
         carry-forward, which cannot otherwise tell a record the run left out from one
         that no longer exists. None records nothing, and neither does a repair.
-        *tombstone_path* is the stored path the caller writes a tombstone passthrough
-        to; the rows that file holds are merged in, or the write replaces them.
+        When preparation leaves nothing to send, the file is collected and written
+        here, as finalize would; the caller has nothing left to write. When no record
+        is left to send at all, the file is written here for this run's inputs, and a
+        file that took no input is stored empty, as online stores it. A batch the
+        provider refuses raises an error fatal to the action, and leaves the record of
+        what the file's last batch was sent as it stood.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -290,9 +310,16 @@ class BatchSubmissionService:
             )
 
         if not data:
-            logger.info(
-                "All %d records have terminal dispositions — skipping batch submission",
-                len(carry_ids),
+            if carry_ids:
+                logger.info(
+                    "All %d record(s) of %s left to send are already done — nothing submitted",
+                    len(carry_ids),
+                    batch_name,
+                )
+            else:
+                logger.info("No record of %s is left to send — nothing submitted", batch_name)
+            self._write_for_inputs_carried(
+                action_name, batch_name, output_directory, run_inputs, run_input_guids
             )
             return SubmissionResult(batch_id=None, passthrough={"carry_forward_only": True})
 
@@ -301,32 +328,24 @@ class BatchSubmissionService:
         )
 
         if not tasks:
-            return self._with_stored_rows(
-                self._handle_empty_tasks(
-                    agent_config, context_map, data, output_directory, action_name=action_name
-                ),
+            return self._collect_without_sending(
+                agent_config,
                 action_name,
-                tombstone_path,
+                batch_name,
+                context_map,
+                output_directory,
                 run_input_guids,
             )
 
-        if output_directory and self._storage_backend:
-            self._context_manager.save_batch_context_map(
-                self._storage_backend, action_name, context_map, batch_name
-            )
-            if repairing:
-                # Not left to whoever started the repair: finalize would read an earlier
-                # run's inputs as this one's.
-                self._context_manager.clear_batch_inputs(
-                    self._storage_backend, action_name, batch_name
-                )
-            elif run_input_guids is not None:
-                self._context_manager.save_batch_inputs(
-                    self._storage_backend, action_name, run_input_guids, batch_name
-                )
-
         result = self._submit_to_provider(
-            agent_config, batch_name, tasks, output_directory, action_name=action_name
+            agent_config,
+            batch_name,
+            tasks,
+            output_directory,
+            action_name=action_name,
+            record_sent=lambda: self._record_sent(
+                action_name, batch_name, context_map, output_directory, run_input_guids, repairing
+            ),
         )
 
         if self._storage_backend and result.is_submitted:
@@ -334,93 +353,136 @@ class BatchSubmissionService:
 
         return result
 
-    def _with_stored_rows(
+    def _record_sent(
         self,
-        result: SubmissionResult,
         action_name: str,
-        tombstone_path: str | None,
+        batch_name: str,
+        context_map: dict[str, Any],
+        output_directory: str | None,
         run_input_guids: list[str] | None,
-    ) -> SubmissionResult:
-        """Add the stored rows a tombstone does not replace, as finalize would.
-
-        Nothing was left to send, so the passthrough is written as the whole of
-        *tombstone_path*. Alone it replaces every answer stored there with nothing, and
-        their dispositions still say done, so they are never answered again. The rows
-        are read from that file and no other: a file in a subdirectory keeps its batch
-        output under another name, and rows read from there would be stored twice.
-        """
-        passthrough = result.passthrough
-        if (
-            self._storage_backend is None
-            or tombstone_path is None
-            or not passthrough
-            or passthrough.get("type") != "tombstone"
-        ):
-            return result
-        from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
-
-        passthrough["data"] = with_stored_rows_not_reproduced(
-            passthrough["data"],
-            action_name,
-            tombstone_path,
-            self._storage_backend,
-            batch_inputs=run_input_guids or (),
+        repairing: bool,
+    ) -> None:
+        """Store what the batch for *batch_name* was sent, which is what collecting it reads."""
+        if not (output_directory and self._storage_backend):
+            return
+        self._context_manager.save_batch_context_map(
+            self._storage_backend, action_name, context_map, batch_name
         )
-        return result
+        if repairing:
+            # Not left to whoever started the repair: finalize would read an earlier
+            # run's inputs as this one's.
+            self._context_manager.clear_batch_inputs(self._storage_backend, action_name, batch_name)
+        elif run_input_guids is not None:
+            self._context_manager.save_batch_inputs(
+                self._storage_backend, action_name, run_input_guids, batch_name
+            )
 
-    def _handle_empty_tasks(
+    def _collect_without_sending(
         self,
         agent_config: dict[str, Any],
-        context_map: dict[str, Any],
-        data: list[dict[str, Any]],
-        output_directory: str | None,
         action_name: str,
+        batch_name: str,
+        context_map: dict[str, Any],
+        output_directory: str | None,
+        run_input_guids: list[str] | None,
     ) -> SubmissionResult:
-        """Handle case where no tasks remain after filtering.
+        """Collect and write the file as finalize does, from no results.
 
-        Args:
-            agent_config: Agent configuration
-            context_map: Context map from preparation
-            data: Original input data
-            output_directory: Output directory path
-            action_name: Action name for passthrough records
-
-        Returns:
-            SubmissionResult with passthrough dict
+        Every entry is one preparation held back: skipped or filtered by the guard,
+        blocked by the action above, or failed. No batch exists, so the registry, the
+        recovery state and the batch events are left alone.
         """
-        has_failed_prep = any(
-            BatchContextMetadata.get_filter_status(row) == FilterStatus.FAILED
-            for row in context_map.values()
+        if not output_directory:
+            raise ConfigurationError(
+                "output_directory is required to write a batch run with nothing to send",
+                context={"action_name": action_name, "batch_name": batch_name},
+            )
+        logger.info(
+            "Nothing left to send for %s: collecting its %d input(s) without a batch",
+            batch_name,
+            len(context_map),
         )
-        if has_failed_prep:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="guard_skip")
-            return SubmissionResult(passthrough=passthrough)
-
-        has_guard_skipped = any(
-            BatchContextMetadata.is_skipped(row) for row in context_map.values()
+        rows, _stats, halt = collect_batch_rows(
+            self._storage_backend,
+            action_name,
+            agent_config,
+            context_map,
+            [],
+            output_directory=output_directory,
         )
-        if has_guard_skipped:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="guard_skip")
-            return SubmissionResult(passthrough=passthrough)
+        write_batch_file(
+            self._storage_backend,
+            action_name,
+            rows,
+            output_root=output_directory,
+            stored_name=batch_output_name(batch_name),
+            batch_inputs=run_input_guids or (),
+            filtered=filtered_inputs(context_map),
+        )
+        write_node_level_disposition(
+            self._storage_backend, action_name, DISPOSITION_PASSTHROUGH, "All records tombstoned"
+        )
+        # After the write, as finalize raises it: raised first, it takes the file too.
+        if halt is not None:
+            raise halt
+        return SubmissionResult(passthrough={"type": "written"})
 
-        where_config = agent_config.get("where_clause") or {}
-        behavior = WhereClauseBehavior(where_config.get("behavior", "filter"))
+    def _write_for_inputs_carried(
+        self,
+        action_name: str,
+        batch_name: str,
+        output_directory: str | None,
+        run_inputs: list[dict[str, Any]] | None,
+        run_input_guids: list[str] | None,
+    ) -> None:
+        """Write the file for this run's inputs when nothing is left to send, as online does.
 
-        if behavior == WhereClauseBehavior.FILTER:
-            passthrough = {
-                "type": "tombstone",
-                "data": [],
-                "output_directory": output_directory,
-            }
+        Every input left is carried, so the merge keeps each stored row whose input is
+        one of the run's and drops the rest. A file that took no input is stored empty,
+        though nothing is stored for it yet. Nothing is collected and no node-level row
+        is written: no batch and no context map exist for this run. A repair, or a run
+        that recorded no inputs, writes nothing, so every stored row it did not answer
+        stands. Nor is a file written that would be stored as it stands.
+        """
+        if run_input_guids is None or self._storage_backend is None or not output_directory:
+            return
+        stored_name = batch_output_name(batch_name)
+        try:
+            stored: list[dict[str, Any]] | None = self._storage_backend.read_target_for_rewrite(
+                action_name, stored_name
+            )
+        except FileNotFoundError:
+            if run_inputs:
+                return
+            # Online stores a file that took no input empty, on a first run too.
+            stored = None
+        if run_inputs:
+            from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
+
+            rows = with_stored_rows_not_reproduced(
+                [], action_name, stored_name, self._storage_backend, batch_inputs=run_input_guids
+            )
         else:
-            passthrough = BatchPassthroughBuilder(
-                output_directory, action_name=action_name
-            ).from_context(context_map, reason="where_clause_not_matched")
-        return SubmissionResult(passthrough=passthrough)
+            # Handed to the merge, no inputs reads as none recorded and keeps every row.
+            # An empty input is a file online writes empty.
+            rows = []
+        # The merge keeps a subsequence of the stored rows, so an equal count is no change.
+        if stored is not None and len(rows) == len(stored):
+            return
+        logger.info(
+            "Writing %s for this run's %d input(s): %d of %d stored row(s) kept",
+            stored_name,
+            len(run_input_guids),
+            len(rows),
+            len(stored or ()),
+        )
+        store_batch_file(
+            self._storage_backend,
+            action_name,
+            rows,
+            output_root=output_directory,
+            stored_name=stored_name,
+        )
 
     def _stamp_deferred(
         self,
@@ -428,13 +490,19 @@ class BatchSubmissionService:
         action_name: str,
         batch_id: str | None,
     ) -> None:
-        """Stamp DISPOSITION_DEFERRED for all INCLUDED records after submission."""
+        """Stamp DISPOSITION_DEFERRED for every INCLUDED record that has a source_guid.
+
+        One without has no identity to mark. Under its custom_id the mark would stand for
+        good: collection refuses the record at enrichment and records nothing for it.
+        """
         if not self._storage_backend:
             return
-        for custom_id, entry in context_map.items():
+        for entry in context_map.values():
             if BatchContextMetadata.get_filter_status(entry) != FilterStatus.INCLUDED:
                 continue
-            record_id = entry.get("source_guid") or custom_id
+            record_id = entry.get("source_guid")
+            if not record_id:
+                continue
             _safe_set_disposition(
                 self._storage_backend,
                 action_name,
@@ -450,6 +518,7 @@ class BatchSubmissionService:
         tasks: list[dict[str, Any]],
         output_directory: str | None,
         action_name: str,
+        record_sent: Callable[[], None] | None = None,
     ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 
@@ -459,13 +528,17 @@ class BatchSubmissionService:
             tasks: Prepared tasks
             output_directory: Output directory path
             action_name: Action name for registry writes
+            record_sent: Stores what the batch was sent, once the provider has taken it
 
         Returns:
             SubmissionResult with batch_id
 
         Raises:
             ConfigValidationError: If model_vendor missing
-            ExternalServiceError: If submission fails
+            ExternalServiceError: If submission fails, declared fatal to the action, and
+                refused (``mark_submission_refused``) when the provider did not take the
+                batch. A batch the provider took but that could not be recorded is named
+                only here; the next run sends its records again.
         """
         provider_type = agent_config.get("model_vendor")
         if not provider_type:
@@ -475,10 +548,12 @@ class BatchSubmissionService:
             )
         provider_type = provider_type.lower()
         batch_id = "unknown"  # Initialize for error handling
+        taken = False
 
         try:
             provider = self._client_resolver.get_for_config(agent_config)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+            taken = True
 
             get_manager().set_context(batch_id=batch_id)
 
@@ -490,6 +565,12 @@ class BatchSubmissionService:
                     provider=provider_type,
                 )
             )
+
+            # Only once the provider holds the batch: refused, the store would describe a
+            # batch that does not exist. And before the registry names it, never after: a
+            # collect pass reads this record for the batch the registry names.
+            if record_sent is not None:
+                record_sent()
 
             if output_directory:
                 registry_name = action_name
@@ -529,6 +610,24 @@ class BatchSubmissionService:
                     error=str(e),
                 )
             )
-            raise ExternalServiceError(
-                f"Failed to submit batch job: {e}", context={"vendor": provider_type}, cause=e
+            if taken:
+                raise mark_action_fatal(
+                    ExternalServiceError(
+                        f"Batch {batch_id} was submitted but could not be recorded, so its "
+                        f"records will be sent again: {e}",
+                        context={"vendor": provider_type, "batch_id": batch_id},
+                        cause=e,
+                    )
+                ) from e
+            # Fatal to the action, not only to this file: otherwise the action completes on
+            # its other files' batches, and nothing sends this one again. Declared refused
+            # too, so the executor names the other files' batches the failure leaves waiting.
+            raise mark_submission_refused(
+                mark_action_fatal(
+                    ExternalServiceError(
+                        f"Failed to submit batch job: {e}",
+                        context={"vendor": provider_type},
+                        cause=e,
+                    )
+                )
             ) from e

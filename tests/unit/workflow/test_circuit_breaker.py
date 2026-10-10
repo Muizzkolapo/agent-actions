@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.record.reasons import EVERY_INPUT_FAILED
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_SKIPPED,
@@ -597,6 +598,19 @@ class TestResolveCompletionStatus:
         )
 
     @patch("agent_actions.workflow.executor.fire_event")
+    def test_a_failure_with_no_reason_is_still_read(self, mock_fire, executor, mock_deps):
+        """A failure set by hand, or put back by `agac retry`, may carry no reason."""
+        backend = mock_deps.action_runner.storage_backend
+        backend.has_disposition.return_value = False
+        backend.get_failed_items.return_value = [
+            {"record_id": "guid-1", "disposition": "failed", "reason": None}
+        ]
+        backend.has_successful_items.return_value = True
+        assert (
+            executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
+        )
+
+    @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_completed_when_no_storage_backend(self, mock_fire, executor, mock_deps):
         mock_deps.action_runner.storage_backend = None
         assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
@@ -615,22 +629,24 @@ class TestResolveCompletionStatus:
         self, mock_fire, executor, mock_deps
     ):
         """SKIPPED@NODE_LEVEL survives to completion resolution only if written
-        this round (clear-on-execute wipes prior-round rows), so the resolver
-        can trust it unconditionally without cross-checking target_data."""
+        this round (clear-on-execute wipes prior-round rows). It is written per
+        input file, so it is the action's skip while the action holds no record."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         assert executor._resolve_completion_status("agent_a") == ActionStatus.SKIPPED
         mock_deps.action_runner.storage_backend.has_disposition.assert_called_once_with(
             "agent_a", DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         )
         # Guardrail: the deleted heal used list_target_files to reconcile a
-        # "SKIPPED but has output" contradiction — the resolver must not
-        # regrow that dependency.
+        # "SKIPPED but has output" contradiction. A wholly filtered file is
+        # stored empty, so a file is no evidence of output; only a record is.
         mock_deps.action_runner.storage_backend.list_target_files.assert_not_called()
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_guard_skipped_checked_before_failed_items(self, mock_fire, executor, mock_deps):
         """Guard-skipped disposition is checked before item-level failures."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "timeout"}
         ]
@@ -707,7 +723,11 @@ class TestTotalFailureEscalation:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_total_failure_writes_failed_disposition(self, mock_fire, executor, mock_deps):
-        """Total failure must write DISPOSITION_FAILED node-level sentinel for re-run safety."""
+        """Total failure must write DISPOSITION_FAILED node-level sentinel for re-run safety.
+
+        Marked as reaching every record, so a retry tells it from a failure that
+        stopped the action partway and still owes records.
+        """
         mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
@@ -728,7 +748,7 @@ class TestTotalFailureEscalation:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_FAILED,
             reason="Action 'agent_a' failed: all records produced errors"[:500],
-            detail=None,
+            detail=EVERY_INPUT_FAILED,
         )
 
     @patch("agent_actions.workflow.executor.fire_event")

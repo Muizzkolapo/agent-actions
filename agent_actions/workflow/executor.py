@@ -14,8 +14,11 @@ from rich.console import Console
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import (
     AgentActionsError,
+    every_file_failed,
     get_error_detail,
+    is_submission_refused,
     raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
 )
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -29,8 +32,10 @@ from agent_actions.logging.events import (
 )
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
+    EVERY_INPUT_FAILED,
     GUARD_FILTERED_ALL,
     HALTED_ON_EXHAUSTED,
+    NO_INPUT_FILES,
 )
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
@@ -50,6 +55,7 @@ from agent_actions.utils.limits import (
 )
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+from agent_actions.workflow.runner_file_processing import NoInputFilesError
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +78,7 @@ def _compute_action_config_hash(
     NOT the model: the ``"model"`` key below is permanently ``""`` because
     configs declare ``model_vendor``/``model_name``.  It is kept so the digest
     does not rotate.  A model change is caught by comparing those two fields
-    against the completion stamp in ``_maybe_invalidate_completed_status`` —
-    do not delete that as redundant.
+    against the stamps in ``_edits_since`` — do not delete that as redundant.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
@@ -120,6 +125,44 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "max_records",
     }
 )
+
+# Recorded beside the status when an action starts work: the config the records it then
+# holds are answered under. The completion stamp says so only once it completes, and the
+# startup reset needs it for an action that stopped partway.
+ANSWERED_UNDER = "answered_under"
+
+
+def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> tuple[bool, bool]:
+    """Whether the semantic config, then the model, differ from what *stamp* recorded.
+
+    A key the stamp holds no value for never differs, so state written before a key
+    was recorded is left alone.
+    """
+    # The hash reads a "model" key and configs write model_name/model_vendor; adding
+    # them would change every stored digest and re-run every workflow.
+    model_changed = any(
+        stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
+        for key in ("model_name", "model_vendor")
+    )
+    stored_hash = stamp.get("config_hash")
+    config_changed = stored_hash is not None and stored_hash != _compute_action_config_hash(
+        action_config
+    )
+    return config_changed, model_changed
+
+
+def edited_since_its_work_began(
+    details: dict[str, Any], action_config: ActionConfigDict | None
+) -> bool | None:
+    """Whether *action_config* differs from the one the action's records were answered under.
+
+    None when that is unknown: nothing was recorded when its work began, or it has no
+    config now.
+    """
+    stamp = details.get(ANSWERED_UNDER)
+    if not isinstance(stamp, dict) or stamp.get("config_hash") is None or action_config is None:
+        return None
+    return any(_edits_since(stamp, action_config))
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -248,8 +291,19 @@ def _halt_marker(error: Exception) -> str | None:
     return HALTED_ON_EXHAUSTED if raised_by_exhaustion_policy(error) else None
 
 
-def action_is_halted(storage_backend: Any, action_name: str) -> bool:
-    """True if *action_name* failed because an ``on_exhausted: raise`` policy fired."""
+def _failure_marker(error: Exception) -> str | None:
+    """The node-level failure's detail: a halt, or a pass that failed every input file.
+
+    Nothing for any other error, which may have stopped the action partway.
+    """
+    halt = _halt_marker(error)
+    if halt is None and every_file_failed(error):
+        return EVERY_INPUT_FAILED
+    return halt
+
+
+def _failed_as(storage_backend: Any, action_name: str, marker: str) -> bool:
+    """True if *action_name*'s node-level failure carries *marker* as its detail."""
     if storage_backend is None:
         return False
     try:
@@ -257,9 +311,44 @@ def action_is_halted(storage_backend: Any, action_name: str) -> bool:
             action_name, record_id=NODE_LEVEL_RECORD_ID, disposition=DISPOSITION_FAILED
         )
     except Exception as read_err:
-        logger.warning("Could not read halt marker for %s: %s", action_name, read_err)
+        logger.warning("Could not read how %s failed: %s", action_name, read_err)
         return False
-    return any(row.get("detail") == HALTED_ON_EXHAUSTED for row in rows)
+    return any(row.get("detail") == marker for row in rows)
+
+
+def action_is_halted(storage_backend: Any, action_name: str) -> bool:
+    """True if *action_name* failed because an ``on_exhausted: raise`` policy fired."""
+    return _failed_as(storage_backend, action_name, HALTED_ON_EXHAUSTED)
+
+
+def action_failed_every_input(storage_backend: Any, action_name: str) -> bool:
+    """True if *action_name* failed after reaching all of its input.
+
+    Any other failure may have stopped it partway. One written before the marker
+    existed reads as that.
+    """
+    return _failed_as(storage_backend, action_name, EVERY_INPUT_FAILED)
+
+
+def completed_output_stands(storage_backend: Any, action_name: str) -> bool:
+    """Whether a completed action still holds its output, or made none on purpose.
+
+    No output and no node-level disposition saying why means its stored output is gone.
+    """
+    if storage_backend.list_target_files(action_name):
+        return True
+    # Guard-filtered every record, WHERE-skipped and the like; FAILED and SKIPPED
+    # are not a completion.
+    for disp in (
+        DISPOSITION_FILTERED,
+        DISPOSITION_PASSTHROUGH,
+        DISPOSITION_SUCCESS,
+        DISPOSITION_UNPROCESSED,
+    ):
+        if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
+            logger.info("Action %s has no output but node-level %s — made none", action_name, disp)
+            return True
+    return False
 
 
 def _raised_by_on_empty_error(error: Exception) -> bool:
@@ -304,13 +393,39 @@ class ActionExecutor:
         A retry says nothing about how much work the action represents, so the
         limit it happened to run under must not replace the stored one — the
         next ordinary run would read a change, clear the action's dispositions
-        and re-run it. Nor does it say the rest of the action was answered under
-        the config it ran with: stamped with that, an edit is never applied to
-        the records the retry did not name.
+        and re-run it.
         """
         if self._repair_is_keeping_an_earlier_stamp(action_name):
             return self.deps.state_manager.get_status_details(action_name).get(key)
         return in_force
+
+    def _held_to_earlier_answers(self, action_name: str, key: str, in_force: Any) -> Any:
+        """*in_force*, unless a repair answers beside records answered under another config.
+
+        Those were answered under the completion stamp the repair keeps or, for an action
+        that never completed, under what its last run recorded as it started. Held to that,
+        an edit is the next plain run's to apply, to every record.
+        """
+        if self._repair_is_keeping_an_earlier_stamp(action_name):
+            return self.deps.state_manager.get_status_details(action_name).get(key)
+        if getattr(self.deps.action_runner, "retried_records", ()):
+            earlier = self.deps.state_manager.get_status_details(action_name).get(ANSWERED_UNDER)
+            if isinstance(earlier, dict) and earlier.get("config_hash") is not None:
+                return earlier.get(key)
+        return in_force
+
+    def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
+        """The config the work this run starts is answered under, for a later reset to compare."""
+        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+        in_force = {
+            "config_hash": _compute_action_config_hash(action_config),
+            "model_name": cfg.get("model_name"),
+            "model_vendor": cfg.get("model_vendor"),
+        }
+        return {
+            key: self._held_to_earlier_answers(action_name, key, value)
+            for key, value in in_force.items()
+        }
 
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
         """What the slices admitted, unless this run is only repairing records.
@@ -358,9 +473,13 @@ class ActionExecutor:
             "file_limit": self._stamped(
                 action_name, "file_limit", resolve_file_limit(action_config)[0]
             ),
-            "model_name": self._stamped(action_name, "model_name", cfg.get("model_name")),
-            "model_vendor": self._stamped(action_name, "model_vendor", cfg.get("model_vendor")),
-            "config_hash": self._stamped(
+            "model_name": self._held_to_earlier_answers(
+                action_name, "model_name", cfg.get("model_name")
+            ),
+            "model_vendor": self._held_to_earlier_answers(
+                action_name, "model_vendor", cfg.get("model_vendor")
+            ),
+            "config_hash": self._held_to_earlier_answers(
                 action_name, "config_hash", _compute_action_config_hash(action_config)
             ),
             # What the run did, not what it was asked for: the limit alone
@@ -381,18 +500,7 @@ class ActionExecutor:
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-
-        # The hash reads a "model" key and configs write model_name/model_vendor; adding
-        # them would change every stored digest and re-run every workflow. Compared from
-        # the stamp instead, and only where one was written, so older state is left alone.
-        model_changed = any(
-            details.get(key) is not None and details.get(key) != action_config.get(key)
-            for key in ("model_name", "model_vendor")
-        )
-        stored_hash = details.get("config_hash")
-        config_changed = stored_hash is not None and stored_hash != _compute_action_config_hash(
-            action_config
-        )
+        config_changed, model_changed = _edits_since(details, action_config)
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
@@ -447,12 +555,18 @@ class ActionExecutor:
                     file_limit,
                     reason,
                 )
-            readers = self._stale_readers(action_name)
-            for name in (*readers, action_name):
-                self._forget_what_it_did(name)
-            self.deps.state_manager.reopen([*readers, action_name])
+            self.reopen_with_readers(action_name)
             return ActionStatus.PENDING
         return current_status
+
+    def reopen_with_readers(self, action_name: str) -> list[str]:
+        """Forget what *action_name* and everything reading it hold, and put them all back
+        to pending, about to answer everything again. Returns the names put back."""
+        reopened = [*self._stale_readers(action_name), action_name]
+        for name in reopened:
+            self._forget_what_it_did(name)
+        self.deps.state_manager.reopen(reopened)
+        return reopened
 
     def _forget_what_it_did(self, action_name: str) -> None:
         """Clear what an action about to run again called done. Its status is not touched."""
@@ -465,7 +579,7 @@ class ActionExecutor:
             given_up = BatchRegistryManager.uncollected_batch_ids(storage_backend, action_name)
             if given_up:
                 logger.warning(
-                    "%s is running again from new input: giving up %s, sent what it read before",
+                    "%s is running again from scratch: giving up %s, sent before it was reset",
                     action_name,
                     ", ".join(given_up),
                 )
@@ -494,7 +608,7 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             return []
-        readers = self._readers_of(action_name)
+        readers = self.readers_of(action_name)
         if readers:
             logger.info(
                 "%s is running again: resetting what reads it (%s)",
@@ -503,7 +617,7 @@ class ActionExecutor:
             )
         return readers
 
-    def _readers_of(self, action_name: str) -> list[str]:
+    def readers_of(self, action_name: str) -> list[str]:
         """Every action that reads, directly or through others, what *action_name* writes."""
         configs = {
             name: config
@@ -605,7 +719,7 @@ class ActionExecutor:
             should_skip, result = self._check_prior_output(storage_backend, action_name)
         except Exception as e:
             logger.warning(
-                "Failed to verify output for %s, resetting to pending: %s",
+                "Could not put %s back to pending over its node-level failure: %s",
                 action_name,
                 e,
                 exc_info=True,
@@ -628,15 +742,12 @@ class ActionExecutor:
     def _check_prior_output(
         self, storage_backend: Any, action_name: str
     ) -> tuple[bool, ActionExecutionResult | None]:
-        """Check if prior run left valid output or a blocking disposition."""
-        # Disposition is authoritative — a failed/skipped action must re-run
-        # even if partial output exists.
-        for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
-            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
-                logger.info("Action %s has %s from prior run — re-running", action_name, disp)
-                storage_backend.clear_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID)
-                self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
-                return (False, None)
+        """Check if prior run left valid output or a blocking disposition.
+
+        A store that cannot be read leaves the action completed. One failed read is no
+        evidence its output changed, and run again it would answer the records it failed,
+        which no plain run of a completed action does, adding rows nothing reading it sees.
+        """
 
         # The cached-completion path discovered an action that already
         # finished in a prior run.  This execution did NOT run the action,
@@ -655,26 +766,33 @@ class ActionExecutor:
                 ),
             )
 
-        if storage_backend.list_target_files(action_name):
+        try:
+            # Disposition is authoritative — a failed/skipped action must re-run
+            # even if partial output exists.
+            blocking: str | None = None
+            for disp in (DISPOSITION_FAILED, DISPOSITION_SKIPPED):
+                if storage_backend.has_disposition(
+                    action_name, disp, record_id=NODE_LEVEL_RECORD_ID
+                ):
+                    blocking = disp
+                    break
+            stands = blocking is None and completed_output_stands(storage_backend, action_name)
+        except Exception as e:
+            logger.warning(
+                "Could not read whether %s still holds its output, so it stays completed: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
             return _completed_result()
 
-        # No target files. Check if the action intentionally produced no
-        # output (guard-filtered all records, WHERE-skipped, etc.) by
-        # looking for a node-level terminal disposition that is NOT
-        # FAILED/SKIPPED (those were already handled above).
-        for disp in (
-            DISPOSITION_FILTERED,
-            DISPOSITION_PASSTHROUGH,
-            DISPOSITION_SUCCESS,
-            DISPOSITION_UNPROCESSED,
-        ):
-            if storage_backend.has_disposition(action_name, disp, record_id=NODE_LEVEL_RECORD_ID):
-                logger.info(
-                    "Action %s has no output but node-level %s — intentional, skipping re-run",
-                    action_name,
-                    disp,
-                )
-                return _completed_result()
+        if blocking is not None:
+            logger.info("Action %s has %s from prior run — re-running", action_name, blocking)
+            storage_backend.clear_disposition(action_name, blocking, record_id=NODE_LEVEL_RECORD_ID)
+            self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
+            return (False, None)
+        if stands:
+            return _completed_result()
 
         logger.info("Action %s completed but no output in storage — re-running", action_name)
         return (False, None)
@@ -796,7 +914,12 @@ class ActionExecutor:
 
         if final_status == ActionStatus.FAILED:
             return self._finalize_total_failure(
-                params.action_name, duration, output_folder, execution_mode=execution_mode
+                params.action_name,
+                duration,
+                output_folder,
+                execution_mode=execution_mode,
+                reached_every_input=params.action_name
+                not in self.deps.action_runner.input_left_unreached,
             )
 
         if batch_status == "passthrough":
@@ -942,22 +1065,48 @@ class ActionExecutor:
         Resolve the action as SKIPPED with reason=all_versions_filtered and let
         the pipeline continue instead of crashing.
         """
+        # The raise is the proof: no version source holds a row.
+        result = self._skip_holding_nothing(
+            params,
+            ALL_VERSIONS_FILTERED,
+            because=f"no version source holds a row ({avf.version_sources})",
+            detail=f"All version sources filtered: {avf.version_sources}",
+        )
+        logger.warning(
+            "All version sources filtered for '%s' (%s) — cascade-skipping; no output produced.",
+            params.action_name,
+            avf.version_sources,
+        )
+        return result
+
+    def _handle_no_input(
+        self, params: ActionRunParams, nothing: NoInputFilesError
+    ) -> ActionExecutionResult:
+        """Skip an action whose walk found no input file, so its readers skip under it."""
+        logger.warning(
+            "'%s' found no input file in %s, so it is skipped and any output it stored "
+            "before is deleted, with its readers'. Restore the input and run again to "
+            "rebuild them.",
+            params.action_name,
+            nothing.upstream_data_dirs,
+        )
+        return self._skip_holding_nothing(
+            params, NO_INPUT_FILES, because="its input holds no file", detail=str(nothing)
+        )
+
+    def _skip_holding_nothing(
+        self, params: ActionRunParams, skip_reason: str, *, because: str, detail: str
+    ) -> ActionExecutionResult:
+        """Skip an action that had nothing to read, deleting the rows it stored before."""
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.SKIPPED,
             execution_time=duration,
-            skip_reason=ALL_VERSIONS_FILTERED,
+            skip_reason=skip_reason,
         )
-        # The raise is the proof: no version source holds a row.
-        self._forget_stored_rows(
-            params.action_name, f"no version source holds a row ({avf.version_sources})"
-        )
-        self._write_skipped_disposition(
-            params.action_name,
-            ALL_VERSIONS_FILTERED,
-            detail=f"All version sources filtered: {avf.version_sources}",
-        )
+        self._forget_stored_rows(params.action_name, because)
+        self._write_skipped_disposition(params.action_name, skip_reason, detail=detail)
         total_actions = (
             len(self.deps.action_runner.execution_order)
             if hasattr(self.deps.action_runner, "execution_order")
@@ -968,17 +1117,12 @@ class ActionExecutor:
                 action_name=params.action_name,
                 action_index=params.action_idx,
                 total_actions=total_actions,
-                skip_reason=ALL_VERSIONS_FILTERED,
+                skip_reason=skip_reason,
                 mode=params.action_config.get("run_mode", ""),
             )
         )
         self._track_action_complete(
-            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=ALL_VERSIONS_FILTERED
-        )
-        logger.warning(
-            "All version sources filtered for '%s' (%s) — cascade-skipping; no output produced.",
-            params.action_name,
-            avf.version_sources,
+            params.action_name, duration, ActionStatus.SKIPPED, skip_reason=skip_reason
         )
         return ActionExecutionResult(
             success=True,
@@ -1024,8 +1168,13 @@ class ActionExecutor:
         output_folder: str | None = None,
         *,
         execution_mode: str | None = None,
+        reached_every_input: bool = True,
     ) -> ActionExecutionResult:
-        """Handle total item-level failure: update state, write disposition, track, return result."""
+        """Handle total item-level failure: update state, write disposition, track, return result.
+
+        Every record it holds failed, which says it failed all of its input only if the
+        walk lost no file partway.
+        """
         reason = f"Action '{action_name}' failed: all records produced errors"
         status_kwargs: dict[str, Any] = {
             "execution_time": duration,
@@ -1034,7 +1183,9 @@ class ActionExecutor:
         if execution_mode is not None:
             status_kwargs["execution_mode"] = execution_mode
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED, **status_kwargs)
-        self._write_failed_disposition(action_name, reason)
+        self._write_failed_disposition(
+            action_name, reason, detail=EVERY_INPUT_FAILED if reached_every_input else None
+        )
         self._track_action_complete(action_name, duration, ActionStatus.FAILED)
         return ActionExecutionResult(
             success=False,
@@ -1087,7 +1238,7 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Classify action outcome: FAILED (all items failed), SKIPPED (all guard-filtered), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
+        """Classify action outcome: FAILED (all items failed), SKIPPED (guard-filtered, holding no record), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -1095,22 +1246,33 @@ class ActionExecutor:
             action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ):
             # Clear-on-execute guarantees this row is current-round. The writer
-            # whose row survives here is result_collector.write_node_level_disposition
-            # firing during run_action when every input record was filtered.
-            # (_handle_dependency_skip and _handle_all_versions_filtered also
-            # write SKIPPED@NODE_LEVEL but both return before this resolver runs.)
+            # whose row survives here is result_collector.write_node_level_disposition,
+            # which fires for each input file whose every record was filtered, so
+            # the row is the action's skip only while the action holds no record.
+            # (_handle_dependency_skip and _skip_holding_nothing, which skips an
+            # action with no version source or no input file, also write
+            # SKIPPED@NODE_LEVEL but return before this resolver runs.)
+            if not storage_backend.has_target_rows(action_name):
+                logger.info(
+                    "Action '%s' had all records guard-filtered — marking as skipped",
+                    action_name,
+                    extra=DIAGNOSTIC,
+                )
+                return ActionStatus.SKIPPED
+            # Left in place, the row reads as a skip to `agac dispositions`, to the
+            # action's readers and to the next run, which would run it again.
+            storage_backend.clear_disposition(
+                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+            )
             logger.info(
-                "Action '%s' had all records guard-filtered — marking as skipped",
+                "Action '%s' had every record of an input file guard-filtered but holds "
+                "rows from another — not marking it skipped",
                 action_name,
                 extra=DIAGNOSTIC,
             )
-            return ActionStatus.SKIPPED
-        if (
-            storage_backend.has_disposition(
-                action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
-            )
-            and self._count_records_for_action(action_name) == 0
-        ):
+        if storage_backend.has_disposition(
+            action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+        ) and not storage_backend.has_target_rows(action_name):
             # Batch's spelling of the row above: it returns at the fork in
             # workflow/pipeline.py before the SKIPPED@NODE_LEVEL writer. The row
             # is read, never rewritten — it is the resume path's only marker.
@@ -1143,7 +1305,8 @@ class ActionExecutor:
     def _log_failure_details(self, item_failures: list[dict]) -> None:
         for failure in item_failures[:3]:
             record_id = failure.get("record_id", "unknown")[:8]
-            reason = failure.get("reason", "unknown")[:100]
+            reason = failure.get("reason")
+            reason = "unknown" if reason is None else reason[:100]
             logger.warning("  record_id: %s  reason: %s", record_id, reason)
         if len(item_failures) > 3:
             logger.warning("  ... and %d more failure(s)", len(item_failures) - 3)
@@ -1187,7 +1350,11 @@ class ActionExecutor:
             execution_time=duration,
             error_message=str(error),
         )
-        self._write_failed_disposition(params.action_name, str(error), detail=_halt_marker(error))
+        if is_submission_refused(error):
+            self._warn_of_held_batches(params.action_name)
+        self._write_failed_disposition(
+            params.action_name, str(error), detail=_failure_marker(error)
+        )
 
         if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
@@ -1205,6 +1372,38 @@ class ActionExecutor:
             error=error,
             metrics=ExecutionMetrics(duration=duration),
         )
+
+    def _warn_of_held_batches(self, action_name: str) -> None:
+        """Name the files whose batches a refusal leaves out.
+
+        Only a run that reaches batch_submitted collects, and an action a refusal
+        fails never does: while the provider keeps refusing one file, the batches
+        of the others wait, and the error names only the refused file.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            return
+        try:
+            jobs = BatchRegistryManager(storage_backend, action_name).get_all_jobs()
+        except Exception as read_err:
+            logger.debug("Could not read batch registry for %s: %s", action_name, read_err)
+            return
+        held = sorted(
+            {
+                entry.parent_file_name or name
+                for name, entry in jobs.items()
+                if entry.is_in_flight or entry.awaits_collection
+            }
+        )
+        if held:
+            logger.warning(
+                "Action '%s': the batches already out for %s wait, uncollected, while the "
+                "provider refuses a file of the action; they are collected once a run gets "
+                "every file sent. If the refusal persists, fix the file it names or take "
+                "it out of the input.",
+                action_name,
+                ", ".join(held),
+            )
 
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
@@ -1327,7 +1526,7 @@ class ActionExecutor:
         if deleted:
             logger.info(
                 "Deleted %d stored file(s) of skipped '%s': %s, so they were made from "
-                "output that no longer exists",
+                "input that no longer exists",
                 deleted,
                 action_name,
                 because,
@@ -1551,14 +1750,19 @@ class ActionExecutor:
         start_time: datetime,
         error: Exception,
     ) -> ActionExecutionResult:
-        """Record a policy halt raised while checking a batch; re-raise anything else.
+        """Record a halt raised while checking a batch; re-raise anything else.
 
-        Only a halt is converted: `on_exhausted: raise`, or `on_empty: error`, both
-        raised once the file is written. An ordinary polling failure must keep
-        CHECKING_BATCH so the next run re-polls the existing job — turning it
-        into FAILED would reset it to PENDING and submit a duplicate batch.
+        Only a halt is converted: `on_exhausted: raise`, `on_empty: error`, or a
+        `terminal_failure`, each raised once the file is written. An ordinary
+        polling failure must keep CHECKING_BATCH so the next run re-polls the
+        existing job — turning it into FAILED would reset it to PENDING and submit
+        a duplicate batch.
         """
-        if not (raised_by_exhaustion_policy(error) or _raised_by_on_empty_error(error)):
+        if not (
+            raised_by_exhaustion_policy(error)
+            or _raised_by_on_empty_error(error)
+            or raised_by_terminal_failure(error)
+        ):
             raise error
         return self._handle_run_failure(
             ActionRunParams(
@@ -1809,11 +2013,19 @@ class ActionExecutor:
             record_id=NODE_LEVEL_RECORD_ID,
         )
 
+    def _start_work(self, params: ActionRunParams) -> None:
+        """Set the action running, recording what the work it starts is answered under."""
+        self._clear_stale_node_disposition(params.action_name)
+        self.deps.state_manager.update_status(
+            params.action_name,
+            ActionStatus.RUNNING,
+            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
+        )
+        self._track_action_start(params)
+
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
-        self._clear_stale_node_disposition(params.action_name)
-        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
-        self._track_action_start(params)
+        self._start_work(params)
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
@@ -1837,6 +2049,8 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
+        except NoInputFilesError as nothing:
+            return self._handle_no_input(params, nothing)
         except Exception as e:
             return self._handle_run_failure(params, e)
 
@@ -1852,9 +2066,7 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
-        self._clear_stale_node_disposition(params.action_name)
-        self.deps.state_manager.update_status(params.action_name, ActionStatus.RUNNING)
-        self._track_action_start(params)
+        self._start_work(params)
 
         # See sync counterpart for the rationale on snapshot placement.
         pre_run_count = self._count_records_for_action(params.action_name)
@@ -1873,6 +2085,8 @@ class ActionExecutor:
                 params.action_idx,
                 input_directories_override=correlated_input,
             )
+        except NoInputFilesError as nothing:
+            return self._handle_no_input(params, nothing)
         except Exception as e:
             return self._handle_run_failure(params, e)
 

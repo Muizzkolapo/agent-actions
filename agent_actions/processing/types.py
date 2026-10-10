@@ -8,7 +8,7 @@ from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.record import reasons
 
 if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
+    from agent_actions.storage.backend import DispositionRow, StorageBackend
 
 
 class ProcessingStatus(Enum):
@@ -319,6 +319,10 @@ class ProcessingContext:
     source_data: list[dict[str, Any]] = field(default_factory=list)
     file_path: str | None = None
     output_directory: str | None = None
+    # The name the caller stores this file's output under; the action's own reads of it
+    # use the same. Not derivable from the two above, which give the bare name for a file
+    # in a subdirectory and keep a staged file's own suffix.
+    target_relative_path: str | None = None
     version_context: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     record_index: int = 0
@@ -336,6 +340,13 @@ class ProcessingContext:
     # persists per record, so there is nothing to defer for.
     defer_exhaustion: bool = False
     pending_exhaustion: Exception | None = None
+
+    # Online stores a file after collecting it. When set, the dispositions the gate carries
+    # a record from the stored file by (SUCCESS, PASSTHROUGH) wait here, and the caller
+    # writes them once the file is stored. Written before it, a run stopped in between
+    # left them vouching for the rows an earlier run had stored.
+    defer_kept_dispositions: bool = False
+    kept_dispositions: list["DispositionRow"] = field(default_factory=list)
 
     @property
     def action_name(self) -> str:

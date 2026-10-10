@@ -33,6 +33,8 @@ class StrategyExecutionParams:
     workflow_metadata: dict[str, Any] | None = None
     # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
+    # A start node's file types: the staged files the walk processes.
+    file_type_filter: set[str] | None = None
 
 
 class ActionStrategy(ABC):
@@ -91,6 +93,7 @@ class InitialStrategy(ActionStrategy):
                     action_configs=params.action_configs,
                     workflow_metadata=params.workflow_metadata,
                     retried_records=params.retried_records,
+                    file_type_filter=params.file_type_filter,
                 )
             ),
         )

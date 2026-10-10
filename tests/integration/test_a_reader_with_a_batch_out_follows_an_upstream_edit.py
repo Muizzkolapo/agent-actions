@@ -77,11 +77,11 @@ def _run(project, *extra):
     return output
 
 
-def _run_to_the_end(project):
-    transcript = [_run(project)]
+def _run_to_the_end(project, *extra):
+    transcript = [_run(project, *extra)]
     while "run again" in transcript[-1]:
         assert len(transcript) <= 6, "the workflow never stopped asking to be run again"
-        transcript.append(_run(project))
+        transcript.append(_run(project, *extra))
     return "\n".join(transcript)
 
 

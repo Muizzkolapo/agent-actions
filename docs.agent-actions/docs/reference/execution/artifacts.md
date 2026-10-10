@@ -117,6 +117,47 @@ coarse throughout: any change to it re-runs the action, including a change to a
 value larger than the number of files. If anything else in the stamp differs on a
 later run, the action is reset to `pending` and re-executed rather than skipped.
 
+An action also records, when it starts work, what that work is answered under:
+`answered_under`, holding the same `config_hash`, `model_name` and `model_vendor`. A run
+that stops partway through an action — killed, interrupted, or stopped by an error —
+leaves the records it finished, and the next run keeps them only while these still match
+the config. If the prompt, schema, guard or model was edited in between, the action and
+every action that reads it answer everything again, and a batch still out under the old
+config is given up. Only those four count as edits: a change to a tool's code, to seed
+data or to the context scope is not seen, so run `agac run --fresh` to answer everything
+again after one. A record finished in a file the stopped run had not written yet is
+answered again when an earlier run had stored that file, since the stored row predates
+its answer. A file the store fails to write, on a full disk or a database error, stops
+the action this way: the run ends `failed`, and the next one writes that file. Online,
+the run writes the action's other files first, and after an edit each run that fails to
+store the file asks for its records again, as above. A batch collect pass stops at the
+file, and a later run collects it and the files after it without sending any of them
+again. An `agac retry` records what the records it does not name were answered under
+instead — the stamp of the action's last completion, or what its last run recorded if it
+never completed — so a retry, stopped or finished, leaves an edit to the next run.
+
+A reset leaves what the action stored in place, and the re-run replaces it file by file.
+A file in which every record of the re-run fails — the model's answers do not parse, or
+a tool of record granularity raises on each — is stored with those failures, as a file
+in which only some fail is, so neither the action nor what reads it keeps a row answered
+before the edit, and `agac retry` asks for them again. Outside a reset, a run that
+answers nothing in a file and fails some of it leaves what that file held.
+
+Staged input is the source of truth for what an action holds. An action reset after
+its input was removed — by an edit, or by a limit or model given on the command
+line — finds no input file, is skipped, and its stored output is deleted along with
+its readers'. Restore the input and run again to rebuild them. A reset after only
+some of its input files were removed deletes what it stored for those files, once it
+has read every file still there, and so do its readers; a batch action does this when
+it submits. A file that failed to process keeps its output. Nothing is deleted by a run
+that a file limit stopped before its last file, by one that could not list part of its
+input or read what its upstream stored, or by an `agac retry` repairing the records it
+names. A retry that names none, as one resuming a halted action does, runs its actions
+in full and deletes as a run does. A version merge sees every file its versions hold
+whatever its file limit, so before it runs it deletes what it stored for a file none of
+them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
+them.
+
 | Status | Description |
 |--------|-------------|
 | `pending` | Not yet executed |
@@ -124,10 +165,10 @@ later run, the action is reset to `pending` and re-executed rather than skipped.
 | `completed` | Successfully finished |
 | `failed` | Terminated with error |
 | `interrupted` | The run was killed while this action was executing, or the process that owned it no longer exists |
-| `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; or because every version source came back empty. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
+| `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
-Re-running a workflow skips completed actions and resumes from the failure point.
+Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished unless it was edited since.
 
 ### Run Results (`run_results.json`)
 
@@ -253,7 +294,7 @@ same string as `category`.
 | G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
 | R | `recovery` | `RetryExhaustedEvent` (R001) |
 | SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
-| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006) |
+| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007) |
 | C | `cache` | `CacheHitEvent` (C001), `CacheMissEvent` (C002), `CacheInvalidationEvent` (C003) |
 | F | `configuration` | `ConfigLoadStartEvent` (F001), `ConfigLoadEvent` (F002) |
 | I | `initialization` | `CLIInitStartEvent` (I001), `WorkflowInitializationStartEvent` (I008), `ProjectInitializedEvent` (I013) |
@@ -307,7 +348,7 @@ The SQLite database stores structured workflow data:
 |-------------|---------|
 | `passthrough` | Record processed successfully |
 | `skipped` | Intentionally skipped (guard with `on_false: skip`) |
-| `filtered` | Removed from pipeline (guard with `on_false: filter`) |
+| `filtered` | Removed from this action and every action below it (guard with `on_false: filter`) |
 | `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
 | `failed` | Processing failed |
 | `unprocessed` | Not yet processed |

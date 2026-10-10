@@ -13,12 +13,12 @@ import logging
 import sqlite3
 import stat as stat_module
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
+from agent_actions.errors import every_record_failed, is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -36,6 +36,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class NoInputFilesError(RuntimeError):
+    """A full walk found no input file, so the action has nothing to answer from.
+
+    Raised rather than returned so the executor skips the action and deletes what
+    it stored before: a run that walks no file rewrites none of it.
+    """
+
+    def __init__(self, action_name: str, upstream_data_dirs: list[str]) -> None:
+        self.action_name = action_name
+        self.upstream_data_dirs = upstream_data_dirs
+        super().__init__(f"'{action_name}' found no input file in {upstream_data_dirs}")
+
+
 @dataclass
 class CollectedErrors:
     """Per-file failures for one collector pass."""
@@ -45,10 +58,14 @@ class CollectedErrors:
     halt_message: str | None = None
     fatal: Exception | None = None
     fatal_message: str | None = None
+    # Outside the cap too: one file lost partway among many failed whole decides it.
+    left_input_unreached: bool = False
 
     def record(self, relative_path: object, exc: Exception) -> None:
         if len(self.messages) < _MAX_TRACKED_ERRORS:
             self.messages.append(f"{relative_path}: {exc}")
+        if not every_record_failed(exc):
+            self.left_input_unreached = True
         # Deliberately outside the cap: the halt may be the fiftieth failure,
         # and it is the one signal the next run cannot reconstruct.
         if raised_by_exhaustion_policy(exc):
@@ -61,6 +78,7 @@ class CollectedErrors:
 
     def merge(self, other: CollectedErrors) -> None:
         self.messages.extend(other.messages)
+        self.left_input_unreached = self.left_input_unreached or other.left_input_unreached
         if self.halt is None:
             self.halt, self.halt_message = other.halt, other.halt_message
         if self.fatal is None:
@@ -76,14 +94,31 @@ class CollectedErrors:
         return self.halt_message if self.halt is not None else self.fatal_message
 
 
+@dataclass
+class Reached:
+    """The input files a walk reached, by their path below its root.
+
+    A file whose processing failed was reached. ``complete`` is False once the walk
+    cannot say which inputs it missed: it lost an entry, or a file limit stopped it
+    with files left.
+    """
+
+    paths: set[str] = field(default_factory=set)
+    complete: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers (no runner param)
 # ---------------------------------------------------------------------------
 
 
 def is_target_directory(path: str) -> bool:
-    """Return True if path is a target directory (not staging)."""
-    return "target" in path and "staging" not in path
+    """Whether *path* is an action's output, ``.../target/<action>``.
+
+    Judged by its own components: a substring test on the whole path let the
+    directories a project sits under, such as ``staging-env/``, decide it.
+    """
+    return Path(path).parent.name == "target"
 
 
 _MAX_TRACKED_ERRORS = 10  # Cap to avoid unbounded memory on mass failure
@@ -141,12 +176,13 @@ def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]]) -> list[Path
     Not ``rglob``: it drops such a directory's whole subtree and raises nothing,
     handing back the directory entry alone — which the question above answers
     correctly as "not a regular file", so no loss is ever declared. A ``batch``
-    directory is left out, its files being skipped whether or not it opens.
+    directory below *root* is left out, its files being skipped whether or not it
+    opens.
     """
 
     def _note(exc: OSError) -> None:
         failed = Path(exc.filename) if exc.filename else root
-        if "batch" not in failed.parts:
+        if "batch" not in failed.relative_to(root).parts:
             unreadable.append((failed, exc))
 
     return walk_files(root, _note)
@@ -203,17 +239,18 @@ def _raise_all_files_failed(
     cause where there is one, and otherwise the first action-fatal cause:
     chaining the first failure of any kind loses the halt whenever another
     file failed before it.
+
+    Marked as failing all of its input only when each file failed on every one
+    of its records: a file stopped partway leaves records nothing reached.
     """
-    from agent_actions.errors import DependencyError
+    from agent_actions.errors import DependencyError, mark_every_file_failed
 
     # The action-fatal cause leads when there is one: the sample is capped, so
     # a halt that failed after the cap would otherwise appear only on the chain.
-    detail = (
-        errors.action_fatal_message
-        or _format_error_sample(errors.messages)
-        or "Check logs for details."
-    )
-    raise DependencyError(
+    fatal = errors.action_fatal_message
+    causes = [fatal, *(m for m in errors.messages if m != fatal)] if fatal else errors.messages
+    detail = _format_error_sample(causes) or "Check logs for details."
+    error = DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
             "action": action_name,
@@ -223,6 +260,9 @@ def _raise_all_files_failed(
         },
         cause=errors.action_fatal,
     )
+    if errors.action_fatal is None and not errors.left_input_unreached:
+        mark_every_file_failed(error)
+    raise error
 
 
 def _raise_action_fatal(
@@ -236,16 +276,16 @@ def _raise_action_fatal(
 
     The layer below re-raised it deliberately; tolerating it because another
     file processed erases the policy it carries. The processed files keep the
-    output they wrote, but only a halt keeps its dispositions — the reset an
-    unmarked failure gets on the next run clears them, so those records are
-    processed again.
+    output they wrote. A halt keeps its dispositions and is not re-run; any other
+    failure, a refused batch among them, is resumed by the next run, which keeps
+    the records the action had answered while its config is unchanged.
     """
     from agent_actions.errors import DependencyError
 
     raise DependencyError(
         f"Action '{action_name}': {errors.action_fatal_message} "
-        f"(Processed {files_processed} of {files_found} files, then stopped "
-        f"on the action-fatal error.)",
+        f"(Processed {files_processed} of {files_found} files; the action fails "
+        f"on this error.)",
         context={
             "action": action_name,
             "files_found": files_found,
@@ -262,6 +302,7 @@ def _file_limit_reached(
     params: FileProcessParams,
     count: int,
     more_remain: Callable[[], bool],
+    reached: Reached | None = None,
 ) -> bool:
     """Whether the walk has taken as many files as the limit in force allows.
 
@@ -278,6 +319,8 @@ def _file_limit_reached(
     if limit is None or count < limit:
         return False
     if more_remain():
+        if reached is not None:
+            reached.complete = False
         logger.log(
             logging.INFO if source == "file_limit" else logging.WARNING,
             "%s=%d: %s stopped after %d file(s)",
@@ -303,12 +346,15 @@ def should_skip_item(
     an entry that survives all of them is asked whether it is a regular file, and
     that question can fail — the caller has to treat the failure as a loss rather
     than as a skip.
+
+    A ``batch`` directory counts only below *input_path*: one the project sits
+    under would leave out every file it stages.
     """
-    if "batch" in item.parts:
+    relative_path = item.relative_to(input_path)
+    if "batch" in relative_path.parts:
         return True
     if item.name.startswith("."):
         return True
-    relative_path = item.relative_to(input_path)
     if relative_path in processed_paths:
         return True
     if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
@@ -340,6 +386,7 @@ def _build_file_params(
         "action_name": params.action_name,
         "strategy": params.strategy,
         "idx": params.idx,
+        "file_type_filter": params.file_type_filter,
     }
     if source_relative_path is not None:
         kwargs["source_relative_path"] = source_relative_path
@@ -387,7 +434,8 @@ def collect_files_from_upstream(
             continue
 
         for item in _walk_files(input_path, lost):
-            if "batch" in item.parts:
+            relative_path = item.relative_to(input_path)
+            if "batch" in relative_path.parts:
                 continue
             if item.name.startswith("."):
                 continue
@@ -399,13 +447,26 @@ def collect_files_from_upstream(
                 lost.append((item, e))
                 continue
 
-            relative_path = item.relative_to(input_path)
             if relative_path not in files_by_relative_path:
                 files_by_relative_path[relative_path] = []
             files_by_relative_path[relative_path].append(item)
 
     grouped = {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
     return grouped, sorted(lost, key=lambda pair: pair[0])
+
+
+def _found_no_input(runner: ActionRunner, params: FileProcessParams) -> None:
+    """End a walk that found no file: a repair carries on, anything else raises.
+
+    A repair touches only the records it named, so finding nothing is no reason
+    to delete the rest; the single-directory walk narrows to their files, which
+    may all be gone. A file limit needs no exemption: it stops a walk only after
+    it has taken a file.
+    """
+    if runner.retried_records:
+        warn_no_files_found(params)
+        return
+    raise NoInputFilesError(params.action_name, params.upstream_data_dirs)
 
 
 def warn_no_files_found(params: FileProcessParams) -> None:
@@ -437,8 +498,10 @@ def process_directory_files(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
+    reached: Reached | None = None,
 ) -> tuple[int, int, CollectedErrors]:
     """Process a directory → (files_found, files_processed, per_file_errors)."""
+    reached = reached if reached is not None else Reached()
     count = 0
     errors = CollectedErrors()
     files_seen = 0
@@ -457,6 +520,7 @@ def process_directory_files(
         files_seen += 1
         errors.record(where, error)
         _lose_file(runner, params.action_name)
+        reached.complete = False
         logger.warning(
             "Could not list the staging directory %s, so every file beneath it "
             "went unprocessed: %s",
@@ -468,12 +532,13 @@ def process_directory_files(
             if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
                 continue
         except OSError as e:
-            # Counted as found because `files_found == 0` is the one path where
-            # process_files neither raises nor warns: a walk that lost every entry
-            # would otherwise complete green and empty.
+            # Counted as found because a walk that found nothing is skipped as
+            # having no input and its stored rows deleted; a walk that lost every
+            # entry has to fail instead.
             files_seen += 1
             errors.record(item.relative_to(input_path), e)
             _lose_file(runner, params.action_name)
+            reached.complete = False
             logger.warning(
                 "Could not read the staged file %s, so it went unprocessed: %s",
                 item.relative_to(input_path),
@@ -483,6 +548,7 @@ def process_directory_files(
 
         relative_path = item.relative_to(input_path)
         processed_paths.add(relative_path)
+        reached.paths.add(relative_path.as_posix())
         files_seen += 1
 
         try:
@@ -517,7 +583,7 @@ def process_directory_files(
 
             return any(_would_process(later) for later in items[position + 1 :])
 
-        if _file_limit_reached(runner, params, count, _unread):
+        if _file_limit_reached(runner, params, count, _unread, reached):
             break
 
     _log_processing_errors(
@@ -566,9 +632,10 @@ def _files_holding_retried_records(
 
 
 def process_merged_files(
-    runner: ActionRunner, params: FileProcessParams
+    runner: ActionRunner, params: FileProcessParams, reached: Reached | None = None
 ) -> tuple[int, int, CollectedErrors]:
     """Merge and process files from several upstreams → (found, processed, per_file_errors)."""
+    reached = reached if reached is not None else Reached()
     output_path = Path(params.output_directory)
     files_by_path, lost = collect_files_from_upstream(params.upstream_data_dirs)
     files_processed_count = 0
@@ -585,11 +652,13 @@ def process_merged_files(
         files_seen += 1
         errors.record(_upstream_relative(item, params.upstream_data_dirs), error)
         _lose_file(runner, params.action_name)
+        reached.complete = False
         logger.warning("Could not read the upstream path %s, so it went unmerged: %s", item, error)
 
     for relative_path, file_paths in files_by_path.items():
         files_seen += 1
         groups_seen += 1
+        reached.paths.add(relative_path.as_posix())
         try:
             if len(file_paths) == 1:
                 file_path = file_paths[0]
@@ -645,7 +714,7 @@ def process_merged_files(
             """Whether any group past this one is still to be merged."""
             return seen < total
 
-        if _file_limit_reached(runner, params, files_processed_count, _unread):
+        if _file_limit_reached(runner, params, files_processed_count, _unread, reached):
             break
 
     _log_processing_errors(
@@ -736,21 +805,22 @@ def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, in
 
 
 def process_from_storage_backend(
-    runner: ActionRunner, params: FileProcessParams
+    runner: ActionRunner, params: FileProcessParams, reached: Reached | None = None
 ) -> tuple[int, int, CollectedErrors]:
     """Process backend data instead of filesystem → (found, processed, per_file_errors)."""
 
     if runner.storage_backend is None:
         return (0, 0, CollectedErrors())
+    reached = reached if reached is not None else Reached()
 
     output_path = Path(params.output_directory)
     errors = CollectedErrors()
 
     data_by_path: dict[str, list[tuple[str, Any]]] = {}
     # Entries that never reached data_by_path. files_found is computed from what was READ,
-    # so without this a walk that loses everything returns (0, 0) and process_files'
-    # `files_found > 0` gate never fires: the action completes as though its input had
-    # never existed. #1026 fixed the same shape for the two filesystem walks by widening
+    # so without this a walk that loses everything returns (0, 0) and falls through to a
+    # walk that finds nothing: the action is skipped and its rows deleted as though its
+    # input were gone. #1026 fixed the same shape for the two filesystem walks by widening
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
 
@@ -758,7 +828,7 @@ def process_from_storage_backend(
         input_path = Path(input_directory)
         action_name = input_path.name
 
-        if "staging" in str(input_path):
+        if input_path.name == "staging":
             continue
 
         try:
@@ -771,6 +841,7 @@ def process_from_storage_backend(
             lost += 1
             errors.record(f"{action_name}/*", e)
             _lose_file(runner, params.action_name)
+            reached.complete = False
             logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
@@ -792,6 +863,7 @@ def process_from_storage_backend(
                 lost += 1
                 errors.record(f"{action_name}/{relative_path}", e)
                 _lose_file(runner, params.action_name)
+                reached.complete = False
                 logger.warning(
                     "Failed to read backend entry %s/%s: %s",
                     action_name,
@@ -816,6 +888,7 @@ def process_from_storage_backend(
     )
 
     for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
+        reached.paths.add(relative_path)
         try:
             if len(data_sources) == 1:
                 _, data = data_sources[0]
@@ -880,7 +953,7 @@ def process_from_storage_backend(
             """Whether any stored entry past this one is still to be read."""
             return taken < total
 
-        if _file_limit_reached(runner, params, files_processed, _unread):
+        if _file_limit_reached(runner, params, files_processed, _unread, reached):
             break
 
     _log_processing_errors(
@@ -893,12 +966,93 @@ def process_from_storage_backend(
     return (files_found, files_processed, errors)
 
 
+def forget_files_of_inputs_gone(
+    storage_backend: Any, action_name: str, gone: list[str], inputs: Collection[str]
+) -> None:
+    """Delete *gone*, files an action stores from input that is gone.
+
+    The names recorded for batch input files not among *inputs* go too. Raises what
+    the store raises.
+    """
+    from agent_actions.llm.batch.infrastructure.context import forget_batch_file_names
+
+    storage_backend.delete_target_files(action_name, gone)
+    forget_batch_file_names(storage_backend, action_name, inputs)
+    more = len(gone) - _ERROR_SAMPLE_SIZE
+    logger.warning(
+        "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
+        "Restore the input and run with --fresh to rebuild it.",
+        action_name,
+        ", ".join(gone[:_ERROR_SAMPLE_SIZE]),
+        f" (and {more} more)" if more > 0 else "",
+    )
+    if more > 0:
+        logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(gone))
+
+
+def _forget_files_no_input_maps_to(
+    runner: ActionRunner, params: FileProcessParams, reached: Reached
+) -> None:
+    """Delete what the action stores for an input no file of a complete walk maps to.
+
+    A reset relies on the re-run writing each file again, and a file whose input is
+    gone is never written. A file is stored under its path, a first stage's with a
+    `.json` suffix, or the name recorded for a batch input file, each as the store
+    lists it. A version merge walks its own stored files, so it finds none here. Not
+    under a repair, which touches only the records it named. A failure only warns:
+    the rows stay.
+    """
+    from agent_actions.llm.batch.infrastructure.context import (
+        batch_output_name,
+        recorded_batch_file_names,
+    )
+
+    backend = runner.storage_backend
+    if backend is None or runner.retried_records or not reached.complete:
+        return
+    action_name = params.action_name
+    try:
+        names = reached.paths | {batch_output_name(path) for path in reached.paths}
+        kept = {backend.stored_path(name) for name in names}
+        gone = [name for name in backend.list_target_files(action_name) if name not in kept]
+        if gone:
+            recorded = recorded_batch_file_names(backend, action_name)
+            kept |= {
+                backend.stored_path(batch_output_name(recorded[p]))
+                for p in reached.paths
+                if p in recorded
+            }
+            gone = [name for name in gone if name not in kept]
+        if gone:
+            forget_files_of_inputs_gone(backend, action_name, gone, reached.paths)
+    except Exception as e:
+        logger.warning(
+            "Could not delete what '%s' stores for input that is gone: %s", action_name, e
+        )
+
+
 def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
-    """Walk upstream data directories and process each file with the given strategy."""
+    """Walk upstream data directories and process each file with the given strategy.
+
+    A pass that ends without raising may still have lost files to per-file failures.
+    The runner is told whether any of them left records unreached, for the executor
+    to read should every record it did reach have failed.
+    """
+    unreached = runner.input_left_unreached
+    unreached.discard(params.action_name)
+    if _walk_and_process(runner, params).left_input_unreached:
+        unreached.add(params.action_name)
+
+
+def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> CollectedErrors:
+    """The walk behind ``process_files``, returning the per-file errors it tolerated."""
+    reached = Reached()
     if runner.storage_backend is not None:
         all_targets = all(is_target_directory(d) for d in params.upstream_data_dirs)
         if all_targets:
-            files_found, files_processed, errors = process_from_storage_backend(runner, params)
+            files_found, files_processed, errors = process_from_storage_backend(
+                runner, params, reached
+            )
             if files_processed > 0:
                 if errors.action_fatal is not None:
                     _raise_action_fatal(
@@ -908,7 +1062,8 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                         params.upstream_data_dirs,
                         errors,
                     )
-                return
+                _forget_files_no_input_maps_to(runner, params, reached)
+                return errors
             if files_found > 0:
                 # Data was found in DB but processing failed
                 # Don't fall through to filesystem (virtual paths don't exist)
@@ -931,18 +1086,19 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
         else:
             logger.info("Multiple dependencies detected: %s. Merging all inputs.", dep_names)
 
-        files_found, files_processed, errors = process_merged_files(runner, params)
+        files_found, files_processed, errors = process_merged_files(runner, params, reached)
         if files_processed == 0:
             if files_found > 0:
                 _raise_all_files_failed(
                     params.action_name, files_found, params.upstream_data_dirs, errors
                 )
-            warn_no_files_found(params)
+            _found_no_input(runner, params)
         elif errors.action_fatal is not None:
             _raise_action_fatal(
                 params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
             )
-        return
+        _forget_files_no_input_maps_to(runner, params, reached)
+        return errors
 
     total_found = 0
     total_processed = 0
@@ -957,7 +1113,13 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             continue
 
         found, processed, errors = process_directory_files(
-            runner, input_path, output_path, input_directory, params, processed_relative_paths
+            runner,
+            input_path,
+            output_path,
+            input_directory,
+            params,
+            processed_relative_paths,
+            reached,
         )
         total_found += found
         total_processed += processed
@@ -968,8 +1130,10 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             _raise_all_files_failed(
                 params.action_name, total_found, params.upstream_data_dirs, all_errors
             )
-        warn_no_files_found(params)
+        _found_no_input(runner, params)
     elif all_errors.action_fatal is not None:
         _raise_action_fatal(
             params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors
         )
+    _forget_files_no_input_maps_to(runner, params, reached)
+    return all_errors

@@ -61,8 +61,9 @@ class RepairSubmission:
     """What a repair round actually put in flight.
 
     `sent_ids` is what the preparator accepted, not what the caller asked for: a
-    record with no context_map row is skipped, and recording it as submitted
-    makes the next round reconstruct it as a provider drop over real content.
+    record with no context_map row or no source_guid is skipped, and recording it
+    as submitted makes the next round reconstruct it as a provider drop over real
+    content.
     """
 
     batch_id: str
@@ -215,6 +216,10 @@ def submit_repair_batch(
         custom_id = failed.custom_id
         if custom_id not in context_map:
             logger.warning("Cannot repair %s: not found in context_map", custom_id)
+            continue
+        if not context_map[custom_id].get("source_guid"):
+            # Preparation would refuse it; left out, enrichment refuses what it answered.
+            logger.warning("Cannot repair %s: it has no source_guid", custom_id)
             continue
         record = context_map[custom_id].copy()
         record.setdefault("target_id", custom_id)

@@ -6,8 +6,6 @@ U-2.F: build_tombstone() and build_exhausted_tombstone() must both produce
 instead of guessing from ``_state`` values.
 """
 
-from unittest.mock import patch
-
 import pytest
 
 from agent_actions.processing.record_helpers import (
@@ -165,20 +163,3 @@ class TestSiblingBuilderParity:
         )
         assert item["_tombstone"] is True
         assert item["_tombstone_reason"] == "retry_exhausted"
-
-    def test_passthrough_item_builder_has_markers(self):
-        """PassthroughItemBuilder.build_item must set _tombstone markers."""
-        from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
-
-        with patch.multiple(
-            "agent_actions.utils.passthrough_builder.IDGenerator",
-            generate_target_id=staticmethod(lambda: "fixed-tid"),
-            generate_node_id=staticmethod(lambda action_name: f"{action_name}_fixed-nid"),
-        ):
-            item = PassthroughItemBuilder.build_item(
-                row=_make_input_record(),
-                reason="where_clause_not_matched",
-                action_name="test_action",
-            )
-        assert item["_tombstone"] is True
-        assert item["_tombstone_reason"] == "where_clause_not_matched"

@@ -134,7 +134,7 @@ class UnifiedProcessor:
                 if raw_records is not None:
                     raw_records = [raw_records[i] for i in kept]
             repair_carry_ids = self._disposition_gate.carried_past_repair(
-                context.action_name, self._get_carry_forward_path(context), repair_inputs
+                context.action_name, context.target_relative_path, repair_inputs
             )
 
         if raw_records is not None:
@@ -161,6 +161,7 @@ class UnifiedProcessor:
         }
 
         carry_results: list[ProcessingResult] = []
+        checkpointed_results: list[ProcessingResult] = []
         to_process = passing
         carry_ids: set[str] = set(repair_carry_ids)
         gate_carry_ids: set[str] = set()
@@ -171,21 +172,26 @@ class UnifiedProcessor:
                 )
                 carry_ids |= gate_carry_ids
             if carry_ids:
-                relative_path = self._get_carry_forward_path(context)
+                relative_path = context.target_relative_path
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
                         CARRY_FORWARD_REASON,
+                        answered_since_stored,
                         build_carry_forward,
                     )
 
+                    answer_again = gate_carry_ids & answered_since_stored(
+                        context.storage_backend, context.action_name, relative_path
+                    )
                     carry_data, missing_ids = build_carry_forward(
-                        carry_ids,
+                        carry_ids - answer_again,
                         context.action_name,
                         relative_path,
                         context.storage_backend,
                         # Only the gate's ids name inputs; a repair's name stored rows.
-                        produced_by=gate_carry_ids,
+                        produced_by=gate_carry_ids - answer_again,
                         rewriting=written_by_guard
+                        | answer_again
                         | {rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
@@ -193,8 +199,20 @@ class UnifiedProcessor:
                     # a gate id — a repaired guid keys no carried row, and on a repair run
                     # only a repaired record reaches the guard.
                     missing_ids -= repair_carry_ids
+                    missing_ids |= answer_again
                     if missing_ids:
                         to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
+                    # With nothing stored for the file the carry read its checkpoint rows:
+                    # what the strategy returned, saved before enrichment and collection,
+                    # in a run that stopped or whose store failed to write the file. A FILE
+                    # strategy checkpoints nothing.
+                    from_checkpoint = (
+                        raw_records is None
+                        and bool(carry_data)
+                        and not context.storage_backend.has_target_file(
+                            context.action_name, relative_path
+                        )
+                    )
                     for record in carry_data:
                         if raw_records is not None:
                             carry_results.append(
@@ -204,6 +222,8 @@ class UnifiedProcessor:
                                     source_guid=record.get("source_guid"),
                                 )
                             )
+                        elif from_checkpoint:
+                            checkpointed_results.append(self._answered_from_checkpoint(record))
                         else:
                             carry_results.append(
                                 ProcessingResult(
@@ -237,24 +257,29 @@ class UnifiedProcessor:
         if raw_records is not None:
             all_results = quarantined_results + invocation_results + guard_results
         else:
-            all_results = guard_results + quarantined_results + invocation_results
+            all_results = (
+                guard_results + quarantined_results + invocation_results + checkpointed_results
+            )
 
         enriched = self._enrich(all_results, context)
 
-        # Carry-forward bypasses enrichment (already has correct lineage)
+        # Rows carried from the stored file were enriched when it was written.
         if carry_results:
             enriched.extend(carry_results)
 
         return self._collect(enriched, context)
 
     @staticmethod
-    def _get_carry_forward_path(context: ProcessingContext) -> str | None:
-        """Derive relative_path for read_target from ProcessingContext."""
-        from agent_actions.processing.record_helpers import derive_relative_path
+    def _answered_from_checkpoint(row: dict[str, Any]) -> ProcessingResult:
+        """A checkpoint row as the answer it was, for enrichment and collection to finish.
 
-        return derive_relative_path(
-            getattr(context, "file_path", None),
-            getattr(context, "output_directory", None),
+        Collection stamps the state itself, and processed -> failed is illegal: left on, the
+        checkpoint's stamp makes collection raise on an answer that failed to parse, and
+        nothing of the file is stored.
+        """
+        return ProcessingResult.success(
+            data=[{key: value for key, value in row.items() if key != "_state"}],
+            source_guid=row.get("source_guid"),
         )
 
     def _guard_filter(
@@ -409,11 +434,14 @@ class UnifiedProcessor:
                 enriched.append(self._enrichment_pipeline.enrich(r, enrich_ctx))
             except Exception as e:
                 logger.warning("Enrichment failed for record %d: %s", i, e)
+                # Both carried, each standing in for the other: batch results bring
+                # only a snapshot, and the failed row is built from the input record.
                 enriched.append(
                     ProcessingResult.failed(
                         error=f"Enrichment failed: {e}",
                         source_guid=r.source_guid,
-                        source_snapshot=r.input_record,
+                        source_snapshot=r.source_snapshot or r.input_record,
+                        input_record=r.input_record or r.source_snapshot,
                     )
                 )
         return enriched

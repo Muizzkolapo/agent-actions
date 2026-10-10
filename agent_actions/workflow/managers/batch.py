@@ -39,6 +39,7 @@ _TERMINAL_DISPOSITIONS = frozenset(
 )
 
 if TYPE_CHECKING:
+    from agent_actions.llm.batch.services.processing import CollectPass
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -89,10 +90,10 @@ class BatchLifecycleManager:
 
         if registry_status == "completed":
             fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
-            self._process_batch_results(output_directory, agent_config, agent_name)
+            collected = self._process_batch_results(output_directory, agent_config, agent_name)
             # Re-check — processing may have submitted recovery batches
             new_status = self.job_manager.get_registry_status(agent_name)
-            if new_status != "completed":
+            if new_status != "completed" or collected.unread:
                 return (None, "in_progress")
             fire_event(BatchResultsProcessedEvent(action_name=agent_name))
             return (output_directory, "completed")
@@ -100,10 +101,10 @@ class BatchLifecycleManager:
         if registry_status in ["in_progress", "partial_failed"]:
             if self.job_manager.are_all_jobs_completed(agent_name, output_directory, agent_config):
                 fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
-                self._process_batch_results(output_directory, agent_config, agent_name)
+                collected = self._process_batch_results(output_directory, agent_config, agent_name)
                 # Re-check — processing may have submitted recovery batches
                 new_status = self.job_manager.get_registry_status(agent_name)
-                if new_status != "completed":
+                if new_status != "completed" or collected.unread:
                     return (None, "in_progress")
                 fire_event(BatchResultsProcessedEvent(action_name=agent_name))
                 return (output_directory, "completed")
@@ -139,20 +140,21 @@ class BatchLifecycleManager:
 
     def _process_batch_results(
         self, output_directory: str, agent_config: dict[str, Any] | None, agent_name: str
-    ):
+    ) -> "CollectPass":
         """Process all completed batch job results.
 
         Raises:
             ProcessingError: If result processing fails.
         """
         try:
-            processed_files = self.processing_service.process_all_batch_results(
+            collected: CollectPass = self.processing_service.process_all_batch_results(
                 output_directory, agent_config=agent_config, action_name=agent_name
             )
-            if not processed_files:
+            if not collected.written:
                 logger.info(
                     "Nothing collected for %s in this pass — recovery batches may be "
-                    "pending, or every file was collected before",
+                    "pending, a finished file could not be read, or every file was "
+                    "collected before",
                     agent_name,
                 )
 
@@ -175,7 +177,10 @@ class BatchLifecycleManager:
             )
             raise
 
-        self._warn_orphaned_deferred(agent_name)
+        # The records of a file left unread are waited for, not orphaned.
+        if not collected.unread:
+            self._warn_orphaned_deferred(agent_name)
+        return collected
 
     def _warn_orphaned_deferred(self, agent_name: str) -> None:
         """Log a warning if genuinely orphaned DEFERRED records remain.

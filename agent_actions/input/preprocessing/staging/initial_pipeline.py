@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -12,13 +13,16 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter, target_relative_path
-from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.result_collector import write_node_level_disposition
+from agent_actions.processing.disposition_gate import (
+    note_answered_by_repair,
+    positions_named_by_repair,
+    stored_answers_stand,
+)
+from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
@@ -45,6 +49,8 @@ class InitialStageContext:
     workflow_metadata: dict[str, Any] | None = None
     # Records this run is repairing; a repair processes these and no others.
     retried_records: frozenset[str] = frozenset()
+    # The start node's file types: the staged files the walk processes.
+    file_type_filter: set[str] | None = None
 
 
 @dataclass
@@ -82,6 +88,7 @@ class BatchProcessingContext:
     # of a record this run left out is not read as one that is gone. None means
     # unrecorded, and nothing is inferred from it.
     run_inputs: list[dict[str, Any]] | None = None
+    file_type_filter: set[str] | None = None
 
 
 def _save_source_items_helper(
@@ -213,7 +220,12 @@ def process_initial_stage(ctx: InitialStageContext):
     # above the source save: anything still in the chunk becomes a stored input
     # row, and a file edited since the run being repaired would otherwise enter
     # the store as new input on the strength of a repair that never named it.
-    admitted = positions_named_by_repair(data_chunk, ctx.retried_records)
+    admitted = positions_named_by_repair(
+        data_chunk,
+        ctx.retried_records,
+        storage_backend=ctx.storage_backend,
+        action_name=ctx.agent_name,
+    )
     if admitted is not None:
         data_chunk = [data_chunk[i] for i in admitted]
         if isinstance(src_text, list):
@@ -254,17 +266,25 @@ def process_initial_stage(ctx: InitialStageContext):
             workflow_metadata=ctx.workflow_metadata,
             retried_records=ctx.retried_records,
             run_inputs=offered_to_repair,
+            file_type_filter=ctx.file_type_filter,
         )
-        return _process_batch_mode(batch_ctx)
-
-    return _process_online_mode_with_record_processor(
-        data_chunk,
-        ctx,
-        ctx.file_path,
-        ctx.base_directory,
-        ctx.output_directory,
+        written = _process_batch_mode(batch_ctx)
+    else:
+        written = _process_online_mode_with_record_processor(
+            data_chunk,
+            ctx,
+            ctx.file_path,
+            ctx.base_directory,
+            ctx.output_directory,
+            offered_to_repair,
+        )
+    note_answered_by_repair(
         offered_to_repair,
+        ctx.retried_records,
+        storage_backend=ctx.storage_backend,
+        action_name=ctx.agent_name,
     )
+    return written
 
 
 def _save_source_data(
@@ -642,33 +662,6 @@ def _get_batch_id_from_chunk(data_chunk: list[dict[str, Any]]) -> str:
     return f"batch_{uuid.uuid4().hex}"
 
 
-def _write_passthrough_result(
-    output_file_path, result_data, storage_backend=None, action_name=None, output_directory=None
-):
-    """Write passthrough result and record disposition."""
-    if storage_backend is None or action_name is None:
-        raise AgentActionsError(
-            "Storage backend is required for passthrough writes.",
-            context={
-                "file_path": str(output_file_path),
-                "action_name": action_name,
-            },
-        )
-    file_writer = FileWriter(
-        str(output_file_path),
-        storage_backend=storage_backend,
-        action_name=action_name,
-        output_directory=output_directory,
-    )
-    file_writer.write_target(result_data)
-    write_node_level_disposition(
-        storage_backend,
-        action_name,
-        DISPOSITION_PASSTHROUGH,
-        "All records tombstoned (initial stage)",
-    )
-
-
 def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_name):
     """Write batch job placeholder file."""
     placeholder = {
@@ -680,10 +673,45 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
     atomic_json_write(output_file_path, placeholder)
 
 
+def _staged_at_the_top(
+    base_directory: str, file_type_filter: set[str] | None
+) -> Callable[[str], bool]:
+    """Whether a file the walk processes directly under *base_directory* stores as *legacy*.
+
+    The walk's own skip rule decides, so a file it leaves out, or one it cannot read this
+    run, owns no name.
+    """
+    from agent_actions.llm.batch.infrastructure.context import batch_output_name
+    from agent_actions.workflow.runner_file_processing import should_skip_item
+
+    root = Path(base_directory)
+
+    def walked(entry: Path) -> bool:
+        try:
+            return not should_skip_item(entry, root, set(), file_type_filter)
+        except OSError as e:
+            logger.debug("Could not read %s while naming a batch file: %s", entry, e)
+            return False
+
+    def owns(legacy: str) -> bool:
+        stored = batch_output_name(legacy)
+        try:
+            entries = list(root.iterdir())
+        except OSError as e:
+            logger.debug("Could not list %s for top-level inputs: %s", base_directory, e)
+            return False
+        return any(batch_output_name(entry.name) == stored and walked(entry) for entry in entries)
+
+    return owns
+
+
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
     from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
-    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+    from agent_actions.llm.batch.infrastructure.context import (
+        BatchContextManager,
+        batch_file_identity,
+    )
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
@@ -718,32 +746,29 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         storage_backend=ctx.storage_backend,
         disposition_gate=disposition_gate,
     )
-    file_name = Path(ctx.file_path).name
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
     output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
+    batch_name = batch_file_identity(
+        relative_path.as_posix(),
+        ctx.agent_name,
+        ctx.storage_backend,
+        base_owner=_staged_at_the_top(ctx.base_directory, ctx.file_type_filter),
+        registry=registry_manager_factory,
+    )
     result = submission_service.submit_batch_job(
         ctx.agent_config,
-        file_name,
+        batch_name,
         ctx.data_chunk,
         ctx.output_directory,
         source_data=ctx.data_chunk,
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": ctx.file_path},
         run_inputs=ctx.run_inputs,
-        tombstone_path=target_relative_path(output_file_path, ctx.output_directory),
     )
 
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    passthrough = result.passthrough
-    if passthrough is not None and passthrough.get("type") == "tombstone":
-        _write_passthrough_result(
-            output_file_path,
-            passthrough["data"],
-            storage_backend=ctx.storage_backend,
-            action_name=ctx.agent_name,
-            output_directory=ctx.output_directory,
-        )
-    elif not result.is_passthrough:
+    # A run with nothing to send has written its file already.
+    if not result.is_passthrough:
         _write_batch_placeholder(output_file_path, local_batch_id, result.batch_id, ctx.agent_name)
 
     return str(output_file_path)
@@ -776,17 +801,28 @@ def _process_online_mode_with_record_processor(
         is_first_stage=True,
         file_path=str(file_path),
         output_directory=str(output_directory),
+        target_relative_path=target_relative_path(output_file_path, str(output_directory)),
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": str(file_path)},
         storage_backend=ctx.storage_backend,
+        defer_kept_dispositions=True,
     )
 
     processed_items, stats = processor.process(
         data_chunk, processing_context, strategy, repair_inputs=offered_to_repair
     )
 
-    stats.raise_if_terminal_failure(
+    failure = stats.terminal_failure(
         ctx.agent_name, data_chunk, processed_items, ctx.storage_backend
     )
+    if failure is not None and (
+        ctx.storage_backend is None
+        or stored_answers_stand(
+            ctx.storage_backend,
+            ctx.agent_name,
+            target_relative_path(output_file_path, str(output_directory)),
+        )
+    ):
+        raise failure
 
     # Tool actions that return empty output should be treated as failures
     # rather than silently succeeding (mirrors pipeline.py check).
@@ -815,5 +851,13 @@ def _process_online_mode_with_record_processor(
         output_directory=str(output_directory),
     )
     file_writer.write_target(processed_items)
+    # Only now that the file holds the rows they vouch for.
+    write_dispositions(ctx.storage_backend, processing_context.kept_dispositions, ctx.agent_name)
+    # Kept past the write, they would read as answers given after it.
+    ctx.storage_backend.clear_checkpoint_records(
+        ctx.agent_name, processing_context.target_relative_path
+    )
+    if failure is not None:
+        raise failure
 
     return str(output_file_path)

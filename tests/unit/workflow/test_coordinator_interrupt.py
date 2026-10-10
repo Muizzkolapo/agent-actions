@@ -53,6 +53,7 @@ def _build_workflow(state_manager):
     core.action_executor = MagicMock()
     core.action_level_orchestrator = MagicMock()
     core.action_level_orchestrator.compute_execution_levels.return_value = [["agent_a"]]
+    core.action_level_orchestrator.upstream_actions.return_value = {"agent_a": []}
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     wf.services = WorkflowServices(core=core, support=support)
@@ -310,50 +311,16 @@ class TestARunThatDiedCollectingABatchKeepsWhatItCollected:
         assert _persisted_status(status_file, "agent_a") == ActionStatus.PENDING
 
 
-class TestACollectPassThatErroredKeepsWhatItCollected:
-    """An error while collecting ends the action failed, and a failed action is reset by
-    wiping every disposition. The files it had collected are then sent a second time."""
-
-    def _errored_while(self, tmp_path, status):
-        status_file = tmp_path / ".agent_status.json"
-        state_manager = ActionStateManager(status_file, EXECUTION_ORDER)
-        state_manager.update_status("agent_a", status)
-        state_manager.mark_running_as_failed()
-        wf = _build_workflow(state_manager)
-        wf.storage_backend = MagicMock()
-        return wf, state_manager, status_file
+class TestACollectPassThatErrored:
+    """An error while collecting ends the action failed; what the reset then keeps is
+    decided by the config it started under (test_a_reset_reads_the_config_a_run_started_under).
+    """
 
     def test_it_is_reported_failed(self, tmp_path):
-        _, _, status_file = self._errored_while(tmp_path, ActionStatus.CHECKING_BATCH)
+        status_file = tmp_path / ".agent_status.json"
+        state_manager = ActionStateManager(status_file, EXECUTION_ORDER)
+        state_manager.update_status("agent_a", ActionStatus.CHECKING_BATCH)
+
+        state_manager.mark_running_as_failed()
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.FAILED
-
-    def test_only_what_is_still_owed_is_cleared(self, tmp_path):
-        wf, _, _ = self._errored_while(tmp_path, ActionStatus.CHECKING_BATCH)
-
-        wf._reset_retryable_actions()
-
-        cleared = wf.storage_backend.clear_disposition.call_args_list
-        assert {call.args for call in cleared} == {
-            ("agent_a", disposition) for disposition in RUNNING_CLEAR_DISPOSITIONS
-        }
-
-    def test_an_action_that_errored_while_running_is_still_wiped(self, tmp_path):
-        """Nothing says its config is the one its finished records were answered under."""
-        wf, _, _ = self._errored_while(tmp_path, ActionStatus.RUNNING)
-
-        wf._reset_retryable_actions()
-
-        wf.storage_backend.clear_disposition.assert_called_once_with("agent_a")
-
-    def test_what_it_was_doing_is_forgotten_once_it_is_reset(self, tmp_path):
-        """Else a later failure of the same action, while running, would be kept too."""
-        wf, state_manager, _ = self._errored_while(tmp_path, ActionStatus.CHECKING_BATCH)
-        wf._reset_retryable_actions()
-        state_manager.update_status("agent_a", ActionStatus.RUNNING)
-        state_manager.mark_running_as_failed()
-        wf.storage_backend = MagicMock()
-
-        wf._reset_retryable_actions()
-
-        wf.storage_backend.clear_disposition.assert_called_once_with("agent_a")

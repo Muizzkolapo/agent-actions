@@ -1,5 +1,7 @@
 """Tests for SQLite storage backend."""
 
+import json
+
 import pytest
 
 from agent_actions.errors.configuration import ConfigurationError
@@ -394,6 +396,18 @@ class TestValidation:
         backend.write_target("node_1", " file.json ", [{"_state": "active", "id": 1}])
         assert backend.read_target("node_1", " file.json ") == [{"_state": "active", "id": 1}]
 
+    def test_a_file_is_listed_under_the_name_stored_path_gives(self, backend):
+        """A caller comparing its own names with the listing goes through it."""
+        names = [" file.json ", "export\\part.json"]
+        for name in names:
+            backend.write_target("node_1", name, [{"_state": "active", "id": 1}])
+
+        assert backend.list_target_files("node_1") == ["export/part.json", "file.json"]
+        assert {backend.stored_path(name) for name in names} == {"export/part.json", "file.json"}
+
+    def test_a_name_the_store_refuses_is_given_back_unchanged(self, backend):
+        assert backend.stored_path("../x.json") == "../x.json"
+
     def test_space_in_action_name_allowed(self, backend):
         """Test that spaces in action_name are accepted."""
         backend.write_target("node 1", "file.json", [{"_state": "active", "id": 1}])
@@ -510,6 +524,70 @@ class TestSaveCheckpointRecordsDropGuard:
         backend.save_checkpoint_records("action_a", "output.json", records)
         stored = backend.read_checkpoint_records("action_a", "output.json")
         assert {r["source_guid"] for r in stored} == {"g1", "g2"}
+
+
+class TestCheckpointKeepsEveryRowOfARecord:
+    """A record answered with several rows checkpoints all of them under its one identity:
+    an expansion's rows share their input's until enrichment mints one for each."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_every_row_a_record_was_answered_with_is_read_back_in_order(self, backend):
+        expanded = [
+            {"source_guid": "g1", "content": "first"},
+            {"source_guid": "g1", "content": "second"},
+        ]
+        single = [{"source_guid": "g2", "content": "only"}]
+
+        backend.save_checkpoint_records("action_a", "output.json", expanded)
+        backend.save_checkpoint_records("action_a", "output.json", single)
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == expanded + single
+
+    def test_a_record_answered_again_keeps_only_its_new_rows(self, backend):
+        """Rows kept a position apiece would leave the first answer's extra rows behind."""
+        backend.save_checkpoint_records(
+            "action_a",
+            "output.json",
+            [{"source_guid": "g1", "content": "first"}, {"source_guid": "g1", "content": "second"}],
+        )
+        again = [{"source_guid": "g1", "content": "again"}]
+
+        backend.save_checkpoint_records("action_a", "output.json", again)
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == again
+
+    def test_a_row_stored_as_one_record_is_read_as_that_record(self, backend):
+        """A run checkpointed before rows were kept as a list leaves a record, not a list."""
+        row = {"source_guid": "g1", "content": "older"}
+        backend.connection.execute(
+            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+            "VALUES (?, ?, ?, ?)",
+            ("action_a", "output.json", "g1", json.dumps(row)),
+        )
+        backend.connection.commit()
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == [row]
+
+    def test_a_row_stored_as_one_record_is_named_as_holding_an_unknown_number(self, backend):
+        """That version kept the last row of each record it saved, so its row cannot say
+        whether the record was answered with others."""
+        backend.connection.execute(
+            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
+            "VALUES (?, ?, ?, ?)",
+            ("action_a", "output.json", "g1", json.dumps({"source_guid": "g1"})),
+        )
+        backend.connection.commit()
+        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g2"}])
+        backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g3"}])
+
+        assert backend.checkpointed_without_row_count("action_a", "output.json") == {"g1"}
 
 
 class TestPreviewTargetNullRecordCount:

@@ -30,7 +30,7 @@ from agent_actions.processing.unified import UnifiedProcessor
 def _make_context(
     agent_name: str = "test_action",
     *,
-    file_path: str | None = "data.json",
+    target_relative_path: str | None = "data.json",
     storage_backend: Any = None,
     raw_records: bool = False,
 ) -> ProcessingContext:
@@ -41,7 +41,7 @@ def _make_context(
     return ProcessingContext(
         agent_config=config,
         agent_name=agent_name,
-        file_path=file_path,
+        target_relative_path=target_relative_path,
         storage_backend=storage_backend,
     )
 
@@ -269,12 +269,12 @@ class TestCarryForwardStats:
         assert len(strategy.received) == 1
 
 
-# ── Test: Missing file_path degrades gracefully ──────────────────────
+# ── Test: No stored name degrades gracefully ─────────────────────────
 
 
-class TestMissingFilePath:
-    def test_no_file_path_processes_all(self):
-        """No file_path → can't derive relative_path → gate skips carry-forward."""
+class TestNoStoredName:
+    def test_no_stored_name_processes_all(self):
+        """No name to read the stored file under → gate skips carry-forward."""
         terminal = {"r0"}
         backend = _mock_backend(terminal_ids=terminal)
         gate = DispositionGate(storage_backend=backend)
@@ -282,12 +282,12 @@ class TestMissingFilePath:
         processor = UnifiedProcessor(disposition_gate=gate)
         strategy = _TrackingStrategy()
         records = [_make_record("r0"), _make_record("r1")]
-        context = _make_context(file_path=None, storage_backend=backend)
+        context = _make_context(target_relative_path=None, storage_backend=backend)
 
         with patch.object(processor, "_guard_filter", return_value=(records, [])):
             output, stats = processor.process(records, context, strategy)
 
-        # With no file_path, can't carry forward, so all records go to strategy
+        # With no stored name, can't carry forward, so all records go to strategy
         assert len(strategy.received) == 2
 
 

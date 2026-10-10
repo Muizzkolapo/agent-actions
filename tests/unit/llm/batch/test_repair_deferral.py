@@ -1034,14 +1034,14 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
 
         with (
             patch.object(service, "_registry_manager_factory", return_value=manager),
-            patch.object(service, "_is_batch_ready_for_processing", return_value=True),
+            patch.object(service, "_provider_status", return_value=BatchStatus.COMPLETED),
             patch.object(service, "_process_single_batch_file", side_effect=per_file),
             patch.object(service, "_fail_abandoned_records") as tombstone,
         ):
             try:
                 written = service.process_all_batch_results(
                     output_directory="/out", agent_config=_agent_config(), action_name=ACTION
-                )
+                ).written
             except BaseException as exc:  # noqa: BLE001 - the test is about which one
                 return exc, None, tombstone
         return None, written, tombstone

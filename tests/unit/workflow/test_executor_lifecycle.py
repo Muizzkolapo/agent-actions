@@ -106,12 +106,12 @@ class TestExecuteAgentSync:
         assert result.success is True
         mock_deps.state_manager.reopen.assert_called_once_with(["agent_a"])
 
-    def test_storage_error_during_verify_reruns_agent(self, executor, mock_deps):
-        """Storage error during verification should reset to pending and re-run the agent.
+    def test_storage_error_during_verify_skips_agent(self, executor, mock_deps):
+        """A store that cannot be read during verification leaves the agent completed.
 
         Flow: get_status returns "completed" → _verify_completion_status hits OSError
-        → resets to "pending" and returns (False, None) → execution falls through to
-        skip evaluation → _execute_action_run.
+        → the status stands and the agent is skipped, as it is with output present.
+        Everything a run needs is set up, so one would reach ``run_action``.
         """
         mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
         storage = MagicMock()
@@ -131,9 +131,9 @@ class TestExecuteAgentSync:
             )
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.PENDING)
-        mock_deps.skip_evaluator.should_skip_action.assert_called_once()
-        mock_deps.action_runner.run_action.assert_called_once()
+        assert result.status == ActionStatus.COMPLETED
+        mock_deps.action_runner.run_action.assert_not_called()
+        mock_deps.state_manager.update_status.assert_not_called()
 
     def test_batch_submitted_dispatches(self, executor, mock_deps):
         """Batch_submitted status should dispatch to batch check handler."""
@@ -360,6 +360,7 @@ class TestHandleRunSuccess:
         """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent fired."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         mock_deps.action_runner.storage_backend.list_target_files.return_value = []
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         params = self._make_params()
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
@@ -386,6 +387,7 @@ class TestHandleRunSuccess:
         """Guard-all-skipped should record in run_tracker with skip_reason."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         mock_deps.action_runner.storage_backend.list_target_files.return_value = []
+        mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
         executor.run_tracker = MagicMock()
         executor.run_id = "run-123"
         params = self._make_params()
@@ -467,7 +469,8 @@ class TestExecuteAgentRun:
             result = executor._execute_action_run(params)
 
         assert result.success is True
-        mock_deps.state_manager.update_status.assert_any_call("agent_a", ActionStatus.RUNNING)
+        statuses = [call.args for call in mock_deps.state_manager.update_status.call_args_list]
+        assert ("agent_a", ActionStatus.RUNNING) in statuses
 
     def test_failure_calls_handle_run_failure(self, executor, mock_deps):
         """Exception should result in _handle_run_failure path."""
@@ -554,8 +557,8 @@ class TestVerifyCompletionStatus:
         ],
         ids=["OSError", "ValueError", "RuntimeError"],
     )
-    def test_storage_error_resets_to_pending(self, executor, mock_deps, exc):
-        """Any exception during verification should reset to pending and re-run."""
+    def test_storage_error_leaves_it_completed(self, executor, mock_deps, exc):
+        """A read that fails during verification is no reason to run the agent again."""
         storage = MagicMock()
         storage.list_target_files.side_effect = exc
         storage.has_disposition.return_value = False
@@ -563,8 +566,36 @@ class TestVerifyCompletionStatus:
 
         should_skip, result = executor._verify_completion_status("agent_a")
 
+        assert should_skip is True
+        assert result.success is True
+        mock_deps.state_manager.update_status.assert_not_called()
+
+    def test_a_node_level_failure_that_cannot_be_read_leaves_it_completed(
+        self, executor, mock_deps
+    ):
+        storage = MagicMock()
+        storage.has_disposition.side_effect = OSError("storage down")
+        mock_deps.action_runner.storage_backend = storage
+
+        should_skip, _ = executor._verify_completion_status("agent_a")
+
+        assert should_skip is True
+        storage.clear_disposition.assert_not_called()
+        mock_deps.state_manager.update_status.assert_not_called()
+
+    def test_a_node_level_failure_that_cannot_be_cleared_still_runs_it_again(
+        self, executor, mock_deps
+    ):
+        """Only a failed read leaves it completed. The failure was read, and reading a
+        failed clear as the output standing would serve it as finished."""
+        storage = MagicMock()
+        storage.has_disposition.side_effect = lambda action, disp, **kw: disp == "failed"
+        storage.clear_disposition.side_effect = OSError("storage down")
+        mock_deps.action_runner.storage_backend = storage
+
+        should_skip, _ = executor._verify_completion_status("agent_a")
+
         assert should_skip is False
-        assert result is None
         mock_deps.state_manager.update_status.assert_called_with("agent_a", ActionStatus.PENDING)
 
     def test_no_backend_returns_skip(self, executor, mock_deps):

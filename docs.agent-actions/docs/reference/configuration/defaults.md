@@ -144,6 +144,7 @@ actions:
       Extract facts from: {{ source.content }}
 
   - name: score_quality
+    dependencies: [extract_facts]
     # Also has access to same seed data
     context_scope:
       observe:

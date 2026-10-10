@@ -55,6 +55,7 @@ class AnthropicBatchClient(BaseBatchClient):
             import anthropic
 
             self.anthropic = anthropic
+            self._transient_errors = (anthropic.APIConnectionError, anthropic.InternalServerError)
             if api_key:
                 self.client = anthropic.Anthropic(api_key=api_key)
             else:

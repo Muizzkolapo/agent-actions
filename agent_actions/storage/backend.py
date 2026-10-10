@@ -76,6 +76,14 @@ DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | 
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
 
+def batch_file_names_key(action_name: str) -> str:
+    """The metadata key recording the name each nested batch input file is stored under.
+
+    It names stored rows, so it lives exactly as long as the action's target data.
+    """
+    return f"batch_file_names:{action_name}"
+
+
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.).
 
@@ -320,22 +328,31 @@ class StorageBackend(ABC):
         that a plain read would only have complained about later.
         """
         counts: dict[str, int] = {}
+        for guid, _parent in self.target_row_identities(action_name):
+            counts[guid] = counts.get(guid, 0) + 1
+        return counts
+
+    def target_row_identities(self, action_name: str) -> list[tuple[str, str | None]]:
+        """``(source_guid, parent_source_guid)`` of every stored row that has an identity.
+
+        Read as stored, for the reasons :meth:`target_rows_per_source_guid` gives: the
+        envelope is kept whole in a delta row, so nothing here needs reconstructing.
+        """
+        identities: list[tuple[str, str | None]] = []
         for relative_path in self.list_target_files(action_name):
             try:
                 rows = self._read_target_raw(action_name, relative_path)
             except FileNotFoundError:
                 logger.debug(
-                    "Target file listed but unreadable while counting rows: %s/%s",
+                    "Target file listed but unreadable while reading row identities: %s/%s",
                     action_name,
                     relative_path,
                 )
                 continue
             for row in rows:
-                if isinstance(row, dict):
-                    guid = row.get("source_guid")
-                    if guid:
-                        counts[guid] = counts.get(guid, 0) + 1
-        return counts
+                if isinstance(row, dict) and row.get("source_guid"):
+                    identities.append((row["source_guid"], row.get("parent_source_guid")))
+        return identities
 
     def has_target_rows(self, action_name: str) -> bool:
         """Whether any stored file of this action holds at least one row.
@@ -580,10 +597,9 @@ class StorageBackend(ABC):
     def _get_upstream_actions(self, action_name: str) -> list[str]:
         """Get the transitive upstream actions for a given action.
 
-        Uses the dependency graph if available, falling back to
-        execution_order[:idx]. Either way the answer is a superset of the action's
-        true ancestors: the stored graph records every action of every earlier
-        execution level, so it includes actions this one never reads.
+        Uses the dependency graph if available: the action's ancestors through
+        ``dependencies``, in the order they run. The fallback, execution_order[:idx],
+        is a superset that includes actions this one never reads.
         """
         # Try dependency graph first (correct for parallel pipelines)
         if self._dependency_graph_cache is None:
@@ -666,6 +682,21 @@ class StorageBackend(ABC):
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         ...
+
+    def stored_path(self, relative_path: str) -> str:
+        """The name a file written at *relative_path* is listed under.
+
+        A backend that rewrites a name when it writes it says how here, so a caller
+        comparing its own names with ``list_target_files`` compares like with like.
+        """
+        return relative_path
+
+    def has_target_file(self, action_name: str, relative_path: str) -> bool:
+        """Whether *action_name* stores a file under *relative_path*.
+
+        Asked per input file, so a backend answers it with a point read.
+        """
+        return relative_path in self.list_target_files(action_name)
 
     @abstractmethod
     def list_source_files(self) -> list[str]:
@@ -785,10 +816,11 @@ class StorageBackend(ABC):
         relative_path: str,
         records: list[dict[str, Any]],
     ) -> None:
-        """Upsert records into the checkpoint output table.
+        """Store each record's rows as its answer, replacing any answer it held.
 
-        Used for incremental checkpointing during online processing.
-        Uses INSERT OR REPLACE keyed on (action_name, relative_path, source_guid).
+        Used for incremental checkpointing during online processing. Keyed on
+        (action_name, relative_path, source_guid), and every row given under one
+        source_guid is kept: an expansion's rows share their input's until enrichment.
         """
         raise NotImplementedError
 
@@ -797,8 +829,16 @@ class StorageBackend(ABC):
         action_name: str,
         relative_path: str,
     ) -> list[dict[str, Any]]:
-        """Read all checkpointed records for an action/path."""
+        """Every row checkpointed for an action/path, in the order their records were saved."""
         return []
+
+    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
+        """Records of an action/path whose checkpoint cannot say how many rows answered them.
+
+        An earlier version kept one row per record, the last given under its identity, so
+        such a row may be one of several.
+        """
+        return set()
 
     def clear_checkpoint_records(  # noqa: B027
         self,
@@ -925,9 +965,21 @@ class StorageBackend(ABC):
 
         Subclasses **must** override — the default raises so that backend
         authors are forced to implement it and ``--fresh`` cannot silently
-        leave stale data behind.
+        leave stale data behind. An override must also delete the metadata at
+        ``batch_file_names_key(action_name)``: it names the files those rows were
+        stored under, and left behind, a run after ``--fresh`` would store a
+        file under a name nothing holds any more. ``clear_batch_state`` keeps it.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
+
+    def delete_target_files(self, action_name: str, relative_paths: Iterable[str]) -> int:
+        """Delete the files at *relative_paths* an action stores, keeping the rest.
+
+        Returns how many were deleted. Raises unless overridden, as ``delete_target``
+        does. The names recorded for batch input files are the caller's to forget:
+        which of them name these files is a batch rule.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_target_files()")
 
     def perform_maintenance(  # noqa: B027
         self,

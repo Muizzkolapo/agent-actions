@@ -238,19 +238,20 @@ class TestBatchDispositionGate:
 
         assert "not found in prior output" not in caplog.text
 
-    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_caller_names(self):
-        """And no other: a file in a subdirectory keeps its batch output under another name."""
-        result = self._nothing_left_to_send(tombstone_path="sub/data.json")
+    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_batch_is_named_for(self):
+        """And no other: the top-level file of the same name holds another file's rows."""
+        written = self._nothing_left_to_send(batch_name="sub/data.json")
 
-        assert [row["source_guid"] for row in result.passthrough["data"]] == ["x1"]
+        assert written == ("sub/data.json", ["x1"])
 
-    def test_a_caller_naming_no_file_is_handed_the_tombstone_alone(self):
-        result = self._nothing_left_to_send(tombstone_path=None)
+    def test_a_top_level_file_carries_its_own_rows_when_nothing_is_sent(self):
+        written = self._nothing_left_to_send(batch_name="data.json")
 
-        assert result.passthrough["data"] == []
+        assert written == ("data.json", ["r0"])
 
     @staticmethod
-    def _nothing_left_to_send(*, tombstone_path: str | None):
+    def _nothing_left_to_send(*, batch_name: str) -> tuple[str, list[str]]:
+        """Where the run with nothing to send stored its file, and whose rows it holds."""
         backend = _mock_backend(terminal_ids={"r0"})
         files = {
             "data.json": [{"source_guid": "r0", "content": {}}],
@@ -263,13 +264,14 @@ class TestBatchDispositionGate:
             tasks=[],
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            return service.submit_batch_job(
+            service.submit_batch_job(
                 agent_config={"agent_type": "test_action", "action_name": "test_action"},
-                batch_name="data.json",
+                batch_name=batch_name,
                 data=[_make_record("r0"), _make_record("r1")],
                 output_directory=tmpdir,
-                tombstone_path=tombstone_path,
             )
+        _action, stored_name, rows = backend.write_target.call_args.args
+        return stored_name, [row["source_guid"] for row in rows]
 
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""
@@ -355,6 +357,41 @@ class TestBatchAllCarryForward:
 
             assert result.batch_id is None
             assert result.passthrough == {"carry_forward_only": True}
+
+    def test_a_run_with_no_store_has_no_file_to_write_when_nothing_is_left_to_send(self):
+        """A first stage may run without a store, and the write reads the stored file."""
+        service = _make_service()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="test.json",
+                data=[],
+                output_directory=tmpdir,
+                run_inputs=[],
+            )
+
+        assert result.passthrough == {"carry_forward_only": True}
+
+    def test_a_run_given_no_output_folder_writes_nothing_when_nothing_is_left_to_send(self):
+        """The file's path is built from the folder, so without one there is nowhere to
+        store it, even with a row of a record that left to drop."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend), storage_backend=backend
+        )
+
+        result = service.submit_batch_job(
+            agent_config={"agent_type": "test_action", "action_name": "test_action"},
+            batch_name="test.json",
+            data=[_make_record("r0")],
+            output_directory=None,
+            run_inputs=[_make_record("r0")],
+        )
+
+        assert result.passthrough == {"carry_forward_only": True}
+        backend.write_target.assert_not_called()
 
 
 class TestCarryForwardDispositionDerived:

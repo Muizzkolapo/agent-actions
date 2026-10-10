@@ -126,7 +126,7 @@ def _guarded_calls(func) -> set[str]:
 
 def test_every_entry_point_runs_its_real_work_inside_the_wrapper():
     """Not that the name appears — that the work happens inside the block."""
-    from agent_actions.llm.batch.services import processing, processing_recovery
+    from agent_actions.llm.batch.services import collect, processing, processing_recovery
 
     expected = {
         processing_recovery.process_recovery_batch: {"handler"},
@@ -134,9 +134,7 @@ def test_every_entry_point_runs_its_real_work_inside_the_wrapper():
             "_check_and_submit_repair_impl",
             "_finalize_batch_output",
         },
-        processing.BatchProcessingService._convert_batch_results_to_workflow_format: {
-            "enrich_and_collect"
-        },
+        collect.collect_batch_rows: {"enrich_and_collect"},
     }
     for func, must_be_guarded in expected.items():
         guarded = _guarded_calls(func)

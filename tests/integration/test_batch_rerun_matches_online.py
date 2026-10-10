@@ -5,8 +5,8 @@ real store. Below it everything is the production object except the model: onlin
 the strategy, batch swaps the provider. So the guard, record limit, gate, preparator,
 submission, enrichment, collector and finalize all run as they do for a user.
 
-The two files are not always equal. Batch writes a failed row where online refuses to
-write at all, and keeps the rows of inputs a record limit holds back. What must never
+The two files are not always equal. Batch writes a failed row where online leaves the
+file unwritten, and keeps the rows of inputs a record limit holds back. What must never
 happen is the reverse, and ``shortfalls`` names each way it could.
 """
 
@@ -16,6 +16,7 @@ import json
 import logging
 import random
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -29,7 +30,10 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+    batch_output_name,
+)
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -47,6 +51,8 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import EMPTY_OUTPUT
 from agent_actions.storage.backend import FAILURE_DISPOSITIONS
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.executor import ActionExecutor
+from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
 
 ACTION = "write_question"
@@ -329,7 +335,7 @@ class _Batch(_Mode):
         self, tmp_path: Path, file: str = FILE, *, clears_batch_state: bool = True
     ) -> None:
         super().__init__(tmp_path, file)
-        self.stored_as = f"{Path(file).stem}.json"
+        self.stored_as = batch_output_name(file)
         self.provider = _Provider()
         self.sent_in_order: list[list[str]] = []
         self.clears_batch_state = clears_batch_state
@@ -366,9 +372,7 @@ class _Batch(_Mode):
             return answers(self.held())
 
         self.sent_in_order.append(
-            _collect(
-                self.backend, self.provider, config, self.out, Path(self.file).name, run, answer
-            )
+            _collect(self.backend, self.provider, config, self.out, self.file, run, answer)
         )
         self.sent.append(sorted(self.sent_in_order[-1]))
         return answers(self.held())
@@ -382,9 +386,12 @@ def _collect(
     name: str,
     run: int,
     answer: Answerer,
-    label: Any = lambda row: row["source_guid"],
+    label: Any = lambda row: row.get("source_guid") or row["target_id"],
 ) -> list[str]:
-    """Answer the batch just submitted and finalize it. Returns what was sent, in order."""
+    """Answer the batch just submitted and finalize it. Returns what was sent, in order.
+
+    A record is answered by its source_guid, or by its target_id where it has none.
+    """
     context_map = BatchContextManager.load_batch_context_map(backend, ACTION, name)
     included = {
         custom_id: row
@@ -445,19 +452,34 @@ def _collect(
 class _FirstStageBatch:
     """A batch action with no action above it, driven through ``process_initial_stage``."""
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, file: str = FILE) -> None:
         self.backend = SQLiteBackend(str(tmp_path / "first.db"), workflow_name="w")
         self.backend.initialize()
         self.staging = tmp_path / "staging"
         self.target = tmp_path / "target" / ACTION
         self.staging.mkdir(parents=True)
         self.target.mkdir(parents=True)
+        self.file = file
+        self.file_type_filter: set[str] | None = None
         self.provider = _Provider()
         self.sent: list[list[str]] = []
 
-    def run(self, run: int, staged: list[dict[str, Any]], extra: dict[str, Any]) -> list[str]:
+    def run(
+        self,
+        run: int,
+        staged: list[dict[str, Any]],
+        extra: dict[str, Any],
+        retried: frozenset[str] = frozenset(),
+    ) -> list[str]:
         self.backend.clear_batch_state(ACTION)
-        (self.staging / FILE).write_text(json.dumps(staged))
+        staged_file = self.staging / self.file
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        if staged_file.suffix == ".csv":
+            header = list(staged[0])
+            lines = [",".join(header)] + [",".join(str(row[k]) for k in header) for row in staged]
+            staged_file.write_text("\n".join(lines) + "\n")
+        else:
+            staged_file.write_text(json.dumps(staged))
         config = _config(
             RunMode.BATCH,
             {"dependencies": [], "context_scope": {"observe": ["source.*"]}, "idx": 0, **extra},
@@ -472,13 +494,16 @@ class _FirstStageBatch:
                 InitialStageContext(
                     agent_config=config,
                     agent_name=ACTION,
-                    file_path=str(self.staging / FILE),
+                    file_path=str(staged_file),
                     base_directory=str(self.staging),
-                    output_directory=str(self.target),
+                    # As the runner hands it: the folder this file's output goes in.
+                    output_directory=str((self.target / self.file).parent),
                     idx=0,
                     storage_backend=self.backend,
                     action_configs={ACTION: config},
                     workflow_metadata={},
+                    retried_records=retried,
+                    file_type_filter=self.file_type_filter,
                 )
             )
         self.sent.append(
@@ -487,7 +512,7 @@ class _FirstStageBatch:
                 self.provider,
                 config,
                 self.target,
-                FILE,
+                self.file,
                 run,
                 Answerer(),
                 label=lambda row: row["content"]["source"]["item"],
@@ -496,7 +521,12 @@ class _FirstStageBatch:
             else []
         )
         self.backend._reconstruction_cache.clear()
-        return answers(self.backend.read_target_for_rewrite(ACTION, FILE))
+        try:
+            return answers(
+                self.backend.read_target_for_rewrite(ACTION, batch_output_name(self.file))
+            )
+        except FileNotFoundError:
+            return []
 
 
 def compare(
@@ -506,6 +536,7 @@ def compare(
     shape: dict[Any, Any] | None = None,
     *,
     clears_batch_state: bool = True,
+    file: str = FILE,
 ) -> list[dict[str, Any]]:
     """Run every step through both modes and report what each held and sent.
 
@@ -514,8 +545,8 @@ def compare(
     ``retry``: the records a repair names, or ``"failures"`` for whichever online's store
     says failed. Both modes are given the same names, so both run the same repair.
     """
-    online = _Online(tmp_path)
-    batch = _Batch(tmp_path, clears_batch_state=clears_batch_state)
+    online = _Online(tmp_path, file)
+    batch = _Batch(tmp_path, file, clears_batch_state=clears_batch_state)
     answer = Answerer(shape)
     findings = []
     for number, step in enumerate(runs, start=1):
@@ -562,9 +593,9 @@ def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
         online_sent, batch_sent = set(run["online_sent"]), set(run["batch_sent"])
         held = _answered(run["batch"])
         for answer in sorted(_answered(run["online"]) - held):
-            # An online run that raised wrote nothing, so it still holds answers for
-            # records that are no input of this run. A batch run that answered
-            # something has written this run's file, without them.
+            # An online run that raised can have left its file unwritten, so it still
+            # holds answers for records that are no input of this run. A batch run that
+            # answered something has written this run's file, without them.
             if run["online_raised"] and _input_of(answer) not in run["inputs"]:
                 continue
             # An answer batch had, or one both modes were just given. One batch never
@@ -597,6 +628,9 @@ MINTED_AGAIN = {
     ],
     "a_completely_new_batch_of_records": [["r1", "r2"], ["r3"]],
     "half_the_children_are_minted_again": [["a1", "a2", "b1"], ["a3", "a4", "b1"]],
+    "an_input_leaves_and_nothing_is_left_to_send": [["a1", "a2"], ["a1"]],
+    "an_input_leaves_with_nothing_to_send_then_returns": [["a1", "a2"], ["a1"], ["a1", "a2"]],
+    "every_input_leaves": [["a1", "a2"], []],
 }
 
 
@@ -839,7 +873,7 @@ def test_inputs_answered_again_are_sent_in_the_order_the_input_holds_them(tmp_pa
 
 @pytest.mark.parametrize("config", [FILTER, SKIP], ids=["filtered", "skipped"])
 def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
-    """Its output and the write made when nothing is sent are stored under two names."""
+    """Its output and the write made when nothing is sent were stored under two names."""
     batch = _Batch(tmp_path, "sub/page.json")
     batch.run(1, _UNCHANGED_WITH_ONE_REFUSED, extra=config)
 
@@ -847,6 +881,7 @@ def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
 
     answered = [row for row in batch.everything_held() if row.startswith("processed:")]
     assert answered == ["processed:a1:0@run1", "processed:a2:0@run1"]
+    assert batch.backend.list_target_files(ACTION) == ["sub/page.json"]
 
 
 def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp_path):
@@ -867,13 +902,103 @@ def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp
     assert batch.sent == [["a1", "a2"], []]
 
 
+EMPTIED = {
+    "on_a_plain_run": [["a1", "a2"], []],
+    "after_a_reset": [["a1", "a2"], {"inputs": [], "reset": True}],
+    "and_then_filled_again": [["a1", "a2"], [], ["a1", "a2"]],
+}
+
+
+@pytest.mark.parametrize("runs", EMPTIED.values(), ids=EMPTIED.keys())
+def test_a_file_whose_input_is_now_empty_holds_nothing_as_online(tmp_path, runs):
+    """The action above holds nothing for the file, or the runner dropped every record
+    of it a guard filtered upstream. Online stores the file empty. A row kept is built
+    from a record that is gone, and every action below reads it."""
+    for run in compare(tmp_path, runs):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+@pytest.mark.parametrize("file", ["sub/page.json", "page.txt"])
+def test_a_file_whose_input_is_now_empty_is_stored_empty_under_its_one_name(tmp_path, file):
+    """Finalize stores the file under this name; written under another, the old rows
+    stay beside an empty file."""
+    batch = _Batch(tmp_path, file)
+    batch.run(1, [rec("a1"), rec("a2")])
+
+    held = batch.run(2, [])
+
+    assert held == []
+    assert batch.backend.list_target_files(ACTION) == [batch.stored_as]
+
+
+def test_a_file_whose_every_input_is_done_keeps_its_rows(tmp_path):
+    """Nothing is sent here either, but each row answers for an input still there."""
+    first, again = compare(tmp_path, [["a1", "a2"], ["a1", "a2"]])
+
+    assert again["batch_sent"] == again["online_sent"] == []
+    assert again["batch"] == again["online"] == first["batch"]
+
+
+def _status(mode: _Mode) -> ActionStatus:
+    """What the executor makes of the action once its run returns."""
+    executor = ActionExecutor(
+        SimpleNamespace(action_runner=SimpleNamespace(storage_backend=mode.backend))
+    )
+    return executor._resolve_completion_status(ACTION)
+
+
+def test_an_action_whose_only_file_is_now_empty_completes_as_online(tmp_path):
+    """Over an action holding no row, a node-level passthrough reads as a skip, and its
+    readers are skipped under it. Online records none for an empty file."""
+    online, batch = _Online(tmp_path), _Batch(tmp_path)
+    for mode in (online, batch):
+        mode.run(1, [rec("a1"), rec("a2")])
+        mode.run(2, [])
+
+    assert batch.held() == online.held() == []
+    assert _status(batch) == _status(online) == ActionStatus.COMPLETED
+
+
+def test_a_repair_that_finds_its_file_empty_keeps_its_rows(tmp_path):
+    """A repair answers what it named, and online carries every row it did not name."""
+    first, repaired = compare(tmp_path, [["a1", "a2"], {"inputs": [], "retry": ["a1"]}])
+
+    assert repaired["online"] == first["online"]
+    assert repaired["batch"] == first["batch"]
+
+
+def test_a_first_stage_file_emptied_in_staging_holds_nothing(tmp_path):
+    """Online stores it empty: nothing staged is left for a row to answer for."""
+    batch = _FirstStageBatch(tmp_path)
+    batch.run(1, [{"item": "a1"}, {"item": "a2"}], {})
+
+    held = batch.run(2, [], {})
+
+    assert held == []
+    assert batch.sent[1] == []
+
+
+def test_a_first_stage_file_staged_empty_on_a_first_run_is_stored_empty(tmp_path):
+    """As online stores it. With nothing stored, an action whose every staged file is
+    empty left its readers no input file, and they were skipped where online runs them."""
+    batch = _FirstStageBatch(tmp_path)
+
+    held = batch.run(1, [], {})
+
+    assert held == []
+    assert batch.backend.list_target_files(ACTION) == [batch_output_name(FILE)]
+
+
 PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
 
 
 @pytest.mark.parametrize("guard", [SKIP, FILTER], ids=["skipping", "filtering"])
-def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer(tmp_path, guard):
-    """Nothing is sent and a record failed, so online raises before it writes, and the
-    answers stored under the tombstones and the failure row stand."""
+def test_a_reset_where_the_one_record_left_cannot_be_prepared_keeps_no_answer_from_before_it(
+    tmp_path, guard
+):
+    """Nothing is sent and a record failed, so nothing was answered. The reset took back
+    every answer stored, which answered the config it replaced: none of them stands."""
     names = ["s1", "s2", "s3", "s4", "s5", "p6"]
     batch = _Batch(tmp_path)
     first = batch.run(
@@ -884,7 +1009,8 @@ def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer
     held = batch.run(2, refused, extra={**guard, **PREPARED}, reset=True)
 
     assert first == [f"processed:{name}:0@run1" for name in sorted(names)]
-    assert [row for row in held if row.startswith("processed:")] == first
+    assert [row for row in held if row.startswith("processed:")] == []
+    assert "failed:p6" in held
     assert batch.sent[1] == []
 
 
@@ -1002,6 +1128,115 @@ def test_a_filtered_input_costs_no_submission_and_no_stored_answer(tmp_path):
     assert len(batch.provider.submitted) == 1
 
 
+_NOW_FILTERED = [rec("a1", keep=True), rec("a2", keep=False)]
+
+GUARD_NOW_FILTERS = {
+    "one_answered_input": ([_PASSES, {"inputs": _NOW_FILTERED, "reset": True}], None),
+    "every_answered_input": (
+        [_PASSES, {"inputs": [rec("a1", keep=False), rec("a2", keep=False)], "reset": True}],
+        None,
+    ),
+    "an_input_that_gave_several_rows": (
+        [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}],
+        {"a2": 2},
+    ),
+    "the_input_a_repair_names": (
+        [_PASSES, {"inputs": _NOW_FILTERED, "retry": "failures"}],
+        {("a2", 1): "exhaust"},
+    ),
+    "a_repair_that_also_sends_another_named_input": (
+        [
+            [rec("a1", keep=True), rec("a2", keep=True), rec("a3", keep=True)],
+            {
+                "inputs": [rec("a1", keep=True), rec("a2", keep=False), rec("a3", keep=True)],
+                "retry": "failures",
+            },
+        ],
+        {("a2", 1): "exhaust", ("a3", 1): "exhaust"},
+    ),
+}
+
+
+@pytest.mark.parametrize("case", GUARD_NOW_FILTERS.values(), ids=GUARD_NOW_FILTERS.keys())
+def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
+    """Editing the guard resets the action, so every input reaches it again. A row
+    carried for one it filters is an answer to a record the guard now excludes, and
+    every action below reads it."""
+    runs, shape = case
+
+    for run in compare(tmp_path, runs, FILTER, shape):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+def test_a_reset_that_failed_and_answered_nothing_keeps_no_row_for_a_filtered_input(tmp_path):
+    """The reset took back the answer stored for the input that failed, so the run writes
+    its file as one that answered something would, and a filtered input holds no row."""
+    runs = [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}, _NOW_FILTERED]
+    shape = {("a2", 1): "exhaust", ("a1", 2): "fail"}
+
+    findings = compare(tmp_path, runs, FILTER, shape)
+
+    assert findings[1]["online"] == ["failed:a1"]
+    for run in findings:
+        assert run["batch"] == run["online"], f"run {run['run']}"
+
+
+EVERY_INPUT_FAILS_AFTER_A_RESET = {
+    "the_same_inputs": (["a1", "a2"], {("a1", 2): "fail", ("a2", 2): "fail"}),
+    "the_same_inputs_exhausted": (["a1", "a2"], {("a1", 2): "exhaust", ("a2", 2): "exhaust"}),
+    "inputs_minted_again": (["a3", "a4"], {("a3", 2): "fail", ("a4", 2): "fail"}),
+    "inputs_this_action_gave_several_rows": (
+        ["a1", "a2"],
+        {"a1": 2, "a2": 2, ("a1", 2): "fail", ("a2", 2): "fail"},
+    ),
+}
+
+
+@pytest.mark.parametrize("file", [FILE, "sub/page.json"], ids=["a_top_level_file", "a_nested_one"])
+@pytest.mark.parametrize(
+    ("inputs", "shape"),
+    EVERY_INPUT_FAILS_AFTER_A_RESET.values(),
+    ids=EVERY_INPUT_FAILS_AFTER_A_RESET.keys(),
+)
+def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
+    tmp_path, inputs, shape, file
+):
+    """Nothing is answered, and every stored answer is one the reset took back: it
+    answered the config the reset replaced, or an input the action above minted anew.
+    A nested file is looked up by its path below the action's folder, not its name."""
+    runs = [["a1", "a2"], {"inputs": inputs, "reset": True}]
+
+    findings = compare(tmp_path, runs, None, shape, file=file)
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert not _answered(findings[1][mode]), mode
+    assert findings[1]["batch"] == findings[1]["online"]
+
+
+def test_a_reset_that_answered_nothing_records_the_skip_it_held_back_for_the_write(tmp_path):
+    """The file is written with its failure, then what collection held back for the write
+    is recorded, as after any write; raised first, the guard's skip goes unrecorded."""
+    online = _Online(tmp_path)
+    online.run(1, _PASSES, extra=SKIP)
+
+    online.run(
+        2,
+        [rec("a1", keep=True), rec("a2", keep=False)],
+        Answerer({("a1", 2): "fail"}),
+        SKIP,
+        reset=True,
+    )
+
+    assert online.raised[-1], "the file answered nothing"
+    recorded = online.backend.get_disposition(ACTION)
+    assert sorted((row["record_id"], row["disposition"]) for row in recorded) == [
+        ("a1", "failed"),
+        ("a2", "passthrough"),
+    ]
+
+
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
     """Nothing is left to send, and what is written in its place must not be nothing."""
     batch = _Batch(tmp_path)
@@ -1030,13 +1265,27 @@ def test_inputs_minted_again_and_skipped_every_run_do_not_pile_up(tmp_path):
 
 
 def test_a_run_whose_every_answer_fails_keeps_the_stored_answers(tmp_path):
-    """Online raises before it writes; here the failures are written beside them."""
+    """Online leaves the file unwritten while its answers stand; here the failures are
+    written beside them."""
     batch = _Batch(tmp_path)
     batch.run(1, [rec("a1"), rec("a2")])
 
     held = batch.run(2, [rec("a3"), rec("a4")], Answerer({"a3": "fail", "a4": "fail"}))
 
     assert held == ["failed:a3", "failed:a4", "processed:a1:0@run1", "processed:a2:0@run1"]
+
+
+def test_a_run_whose_every_answer_fails_keeps_what_it_still_calls_answered_in_either_mode(
+    tmp_path,
+):
+    """No reset took the stored answers back: each record still holds success."""
+    runs = [["a1", "a2"], ["a3", "a4"]]
+
+    findings = compare(tmp_path, runs, None, {("a3", 2): "fail", ("a4", 2): "fail"})
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert _answered(findings[1][mode]) == {"processed:a1:0", "processed:a2:0"}, mode
 
 
 def test_a_run_that_answers_something_leaves_out_what_is_not_its_input(tmp_path):

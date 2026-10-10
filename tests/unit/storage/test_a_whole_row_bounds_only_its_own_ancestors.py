@@ -3,8 +3,8 @@
 Reconstruction stops above an upstream row stored whole, because such a row
 carries the content of everything above it. That holds for an ancestor and not
 for a peer, which carries namespaces the boundary never held. The dependency
-graph records every earlier level as upstream of every later action, so a fan-in
-over parallel start nodes is the ordinary shape here.
+graph lists every branch above a fan-in, and the branches are peers of one
+another, so a fan-in over parallel start nodes is the ordinary shape here.
 """
 
 from __future__ import annotations

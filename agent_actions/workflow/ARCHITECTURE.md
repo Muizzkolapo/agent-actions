@@ -104,8 +104,9 @@ One transition sits outside the diagram because it is driven by the process
 dying rather than by the workflow: on Ctrl-C, SIGTERM or cancellation the
 coordinator sweeps `RUNNING`/`CHECKING_BATCH` to `INTERRUPTED` on its way out.
 It is terminal and retryable, so the next run resets it to `PENDING` like any
-other retryable status — but it is deliberately not `FAILED`, because
-`_reset_retryable_actions` preserves checkpointed dispositions for it.
+other retryable status — but it is deliberately not `FAILED`: in a status file written
+before an action's start recorded its config, the status is all the reset can go by, and
+it keeps the checkpointed dispositions of an interrupted action but not of a failed one.
 
 ### Status Sets
 
@@ -125,7 +126,8 @@ RETRYABLE_STATUSES = {FAILED, SKIPPED, RUNNING, CHECKING_BATCH, INTERRUPTED}
 
 MID_PROCESSING_STATUSES = {RUNNING, INTERRUPTED, CHECKING_BATCH}
   → "Died mid-processing; may hold checkpointed SUCCESS dispositions"
-  → Used by: _reset_retryable_actions selective-vs-bulk disposition clearing
+  → Used by: _reset_retryable_actions, which with FAILED takes them as stopped
+    partway, and keeps what one finished while its config is unchanged
 ```
 
 ### Completion Classification
@@ -135,6 +137,13 @@ that returned. An action whose run raised is FAILED without reaching this
 classifier, so FAILED there does not imply zero successes:
 
 ```
+node-level skipped row?  (online: an input file's every record was guard-filtered)
+    │
+    YES → action holds no record? → SKIPPED
+          otherwise clear the row and go on below
+    │
+node-level passthrough row and no record held?  (batch's spelling) → SKIPPED
+    │
 get_failed_items() returns failures?
     │
     NO → COMPLETED
@@ -144,6 +153,15 @@ get_failed_items() returns failures?
            YES → COMPLETED_WITH_FAILURES
            NO  → FAILED (zero successes = hard failure)
 ```
+
+The collector writes the skipped row for each input file whose every record the
+guard filtered, but the row names the action, so it holds only while the action
+holds no record: an action that filters every record of one file and keeps rows
+from another completes, and its readers run on those rows. The classifier clears
+the row then. Left in place, it would show in `agac dispositions`, and the next run
+would read it as a skip from before and run the action again. A reader's input for
+the filtered file is then empty, and it stores that file empty in either run mode
+(`processing/ARCHITECTURE.md`, the batch write for a file that took no input).
 
 ---
 
@@ -213,6 +231,7 @@ Already COMPLETED?
     YES → verify output exists
           output missing → reset to PENDING, and what reads it likewise
           output present → skip, return success
+          store cannot be read → skip, return success (warns)
     │
     ▼
 BATCH_SUBMITTED?
@@ -236,8 +255,39 @@ WHERE clause says skip?
 _execute_action_run()
     → set RUNNING
     → ActionRunner.run_action()
+        walk found no input file (not under a repair)?
+        YES → NoInputFilesError → _handle_no_input()
+              set SKIPPED, forget and delete its stored rows,
+              write node-level DISPOSITION_SKIPPED
+              (its readers skip under it, holding nothing)
+        walk reached every input file (no file limit stopped it,
+        no entry lost, not under a repair)?
+        YES → delete the stored files no input maps to
+              (a batch action: as it submits)
     → _resolve_completion_status()
 ```
+
+**A file whose input is gone goes with it.** A reset relies on the re-run writing each
+file again, and a file whose input was removed is never written again. So once a walk has
+reached every input there is, `process_files` deletes what the action stores under any
+name no input it reached maps to: a file's path, a first stage's with a `.json` suffix
+(`batch_output_name`), or the name recorded for a nested batch input file
+(`batch_file_names:{action}`, whose entries for inputs that are gone go too), each as the
+store lists it (`stored_path`: SQLite strips the whitespace around a name and turns a
+backslash into a slash, so a name matched as staged would lose the file just written). A
+reader's inputs are its upstreams' stored files, so it lets go of what its upstream no
+longer holds; the run that walks is the run that submits, so a batch action does it before
+anything is collected. A file that failed to process was reached and keeps its rows. A
+walk deletes nothing when a file limit stopped it with files left (a file it never opened
+keeps what the last run put there, on purpose), when it lost an entry (a directory it
+could not list, a file it could not stat, an upstream listing or stored file it could not
+read: it cannot say which inputs are gone), or under a repair. A version merge walks its
+own stored files, the correlated input among them, so its walk finds nothing to delete;
+the correlator deletes instead, before the walk, each stored file of the merge that no
+version source lists, which would otherwise be walked and sent on as its own input. It
+does so under a file limit and a repair too: it lists every file its version sources hold,
+so it can tell an input that is gone from one it never opened, and it rewrites each file
+it correlates on every run, a repair's included.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to
@@ -251,6 +301,14 @@ named in a warning, since it was sent the old output. A reader is an action that
 on it, merges its versions, or only names it in its context scope or prompt, and the
 reader of a reader.
 
+An action names, in its context scope, prompt or guard, only what is upstream of it
+through `dependencies`: preflight refuses any other name (`find_reads_not_upstream`),
+because only those are sure to be on the records the action reads (#1228). So the level
+loop, which orders by `dependencies`, the run order, which counts every name in the
+context scope or prompt, and this reset agree on what reads what. A reader always sits
+in a later level than every action it names, and a failed action skips every action
+that names it, which the startup reset puts back to pending with it.
+
 The stores are cleared first, readers and then the action (its own are left where only
 its output is gone), and the statuses are written last, all in one write (`ActionStateManager.reopen`). A process that dies before that
 write leaves every status as it was and the reason for the reset still readable, so the
@@ -258,32 +316,93 @@ next run does all of it again; one that dies after it leaves all of them pending
 done when the action is reset and not as each reader is reached, because a batch action
 pauses the run and the next process no longer knows which action was reset.
 
-Two routes run a completed action again and leave its readers alone: a node-level
-failure it recorded, and output that could not be read. There the action still holds its
-rows and its records' dispositions, so it answers only what failed and carries the rest,
-and what its readers computed from those rows stands. A row it adds on that run does not
-reach a reader that has completed (#1229).
+An action stopped partway is reset the same way when its config differs from the one its
+run recorded as it started, at the start of the next run (`_reset_retryable_actions`); see
+"A stopped action keeps what it finished while its config is unchanged".
+
+A completed action that carries a node-level failure runs again and leaves its readers
+alone. It still holds its rows and its records' dispositions, so it would answer what
+failed and carry the rest, and a row it added on that run would not reach a reader that
+has completed. Nothing leaves that state behind: every node-level failure is written with
+a failed or skipped status, starting work clears node-level rows, and `agac retry` puts an
+interrupted retry's snapshot back without the node-level failure of an action that has
+completed (#1268). Anything that comes to write one beside a completed status has to
+clear it, or reset the readers too.
+
+A store that cannot be read while a completed action is verified leaves it completed, with
+a warning. One failed read is no evidence its output changed. Run again, the action would
+answer the records it had failed, which no plain run of a completed action does, and a
+record that then succeeded would reach nothing reading it: each reader would hold it as
+one its upstream never answered, which `agac retry` does not look for.
 
 A run that is repairing records (`agac retry` with records to re-run) acts on no
 comparison and resets no reader. It answers only the records it named, so a reset under it clears
 every other record's disposition with nothing run to replace them. It warns when it
 meets an edited action, one it is about to re-run included, and it keeps the completion stamp it found on each action it
 completes, so the next plain run still finds the edit and applies it. A retry with no
-record to re-run (only a node-level failure) is a plain run for this purpose.
+record to re-run (only a node-level failure, or one resuming a halt) is a plain run for
+this purpose.
+
+A repair narrows only what holds an answer for every record. It carries what an action
+holds for the records it does not name, and an action never run since it was put back to
+pending, stopped partway through its records, or completed with its output gone holds no
+answer for the ones that run had not reached: narrowed, it completes without them and
+nothing runs it again. The run behind a repair executes every action that is not
+complete, wherever it sits in the order, so `agac retry` checks every action, not only
+those from its starting point. It refuses, before it clears anything, when one is
+pending, running, interrupted, stopped while collecting, completed without its output, or
+failed by anything but reaching all of its input, and says to run the workflow first.
+
+A failure that reached all of its input (`EVERY_INPUT_FAILED`, or a batch action whose
+batches hold an answer or a failure for every record they were sent with a
+`source_guid`) is what a repair is for, unless the action still holds a row for a record
+that run did not reach — a row with no disposition there, or a filtered or scoped-out
+one, which keeps no row. A reset deletes no row, and a run that fails everything writes
+none for a file it failed before processing it, so such a row predates the reset and
+would be carried for good. A file whose every record failed is written with those
+failures after a reset, and keeps no such row.
+
+Not refused either: what an interrupted retry put back to pending, which had finished
+before that retry and is resumed by retrying again — the retry stamps each such status
+(`REPAIRED_BY`, its manifest's `created_at`) and `reopen` removes the stamp, so one a run
+has reset since is refused like any other; an action holding a batch nobody has
+collected, and what reads it, which the batch's own refusal decides (`--abandon-in-flight`
+gets past it); and a halt the repair does not clear, before its starting point, which
+stays halted and refuses to run.
+
+A halt the repair would clear is refused even with an interrupted retry's stamp or a batch
+nobody has collected, since a halted action has answered nothing past the halt, and with
+its own remedy, since a plain run will not resume it: a retry from the halted action. That
+retry names no record unless given `--record` (`_records_this_repair_may_process`), so it
+runs the action, and every one after it, in full: the disposition gate carries what each
+holds a stored answer for and the rest is asked again, what the halted action answered in
+the file it halted in among them. Which actions are halted is read from the failures the
+retry plans over, which a dry run reads with an interrupted retry's snapshot put back
+(`_halted_among`).
 
 Costs and limits:
 
 - A prompt change at the top of a long workflow re-answers everything below it.
 - A limit counts as a change. `--record-limit` on a run resets the actions whose records
   it can reach and their readers, giving up a batch still out below and clearing a halt.
-- Stored rows are not deleted, only replaced as the re-run writes each file. A re-run that
-  is interrupted and resumed can serve the old row for a record it had already answered
-  again (#1226).
-- A retry over an action that a reset left unfinished completes it on the records it
-  named and keeps old rows for the rest (#1227). Run the workflow before retrying.
-- The level loop orders by `dependencies` alone. A reader that names an action only in
-  its context scope and sits in an earlier level is reset after its level has passed, and
-  runs on the next run (#1228).
+- A reset does not delete stored rows; the re-run replaces them as it writes each file. A
+  file whose input is gone is deleted when the walk ends, and a re-run that finds no input
+  file at all is skipped and its rows are deleted. Under a file limit that stops the walk,
+  a removed input's file is kept with the files the walk did not open; a version merge
+  deletes it all the same, before its walk. A file the store fails to write fails the
+  action, so the next run writes it instead of the action completing over its old rows.
+  A file in which the re-run answered nothing and something failed is still written, with
+  its failures, where the action no longer calls what it stored answered, as after any
+  reset; elsewhere such a file is left as stored (processing/ARCHITECTURE.md).
+  A re-run that is interrupted and resumed can serve the old row for a record it had
+  already answered again (#1226).
+- A retry clears the checkpoint records of every action it re-runs, so one that resumes a
+  halt asks again what the halted action answered in the file it halted in, which was never
+  stored, and after an edit carries, for a record the halted run had answered, the row
+  stored before the edit.
+- A retry starting past a halted action is not refused, though its range may read it. Such
+  a reader is skipped, since the halt refuses to run, and the retry exits 1. The failures
+  it cleared there are put back unrepaired, and a retry that resumes the halt repairs them.
 
 
 ---
@@ -353,6 +472,7 @@ run_mode == BATCH and not tool/HITL?
     │       └── Write placeholder JSON + registry
     │
     NO → Build ProcessingContext
+         ├── target_relative_path = the name save_main_output stores the file under
          ├── _select_strategy()
          │     ├── FILE + tool → FileToolStrategy
          │     ├── FILE + HITL → HITLStrategy
@@ -369,9 +489,13 @@ run_mode == BATCH and not tool/HITL?
                UnifiedProcessor.process(data)
          │
          ▼
-    stats.raise_if_terminal_failure()
+    stats.terminal_failure()         ← nothing succeeded: raise without writing,
+                                       unless a reset took back the answers
+                                       stored for the file (stored_answers_stand)
     output_handler.save_main_output()
-    clear_checkpoint_records()
+    write_dispositions(context.kept_dispositions)   ← only after the file
+    clear_checkpoint_records(action, target_relative_path)
+    raise the terminal failure held back for the write, if any
 ```
 
 ---
@@ -382,10 +506,17 @@ run_mode == BATCH and not tool/HITL?
 Run 1: Submit
   _handle_batch_generation()
     → submit_batch_job() → provider API (OpenAI/Anthropic batch)
+    → store the context map and recorded inputs (only once the provider
+      has taken the batch)
     → write .batch_registry.json
     → DISPOSITION_DEFERRED for all records
     → action status → BATCH_SUBMITTED
     → workflow pauses
+    A batch the provider refuses fails the action once every file has
+    been walked, whatever the other files sent: completed on their
+    batches, it would never send this one again. The reset after it
+    keeps the records the action had answered while its config is
+    unchanged, as after any failure.
 
 Run 2: Poll
   _handle_batch_check()
@@ -399,6 +530,10 @@ Run 2: Poll
         │     → skip each entry already collected (collected_at): its
         │       results are written, and a later run may have written
         │       the file again since
+        │     → leave unread a finished entry the provider cannot be
+        │       asked about; the action then returns "in_progress",
+        │       and the next run reads it. One the provider reports
+        │       ended or does not know has its records marked failed
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)
@@ -444,7 +579,7 @@ Run N: Resume (if recovery submitted)
 | What | Where | Format | Written when |
 |------|-------|--------|-------------|
 | Action status | `agent_io/.agent_status.json` | JSON dict | Every `update_status()` call |
-| Record dispositions | `agent_io/store/{name}.db` | SQLite table | After collection or checkpoint |
+| Record dispositions | `agent_io/store/{name}.db` | SQLite table | At checkpoint and collection; online, SUCCESS and PASSTHROUGH after the file |
 | Checkpoint records | `agent_io/store/{name}.db` | SQLite table | Per-record during invocation |
 | Target output | `agent_io/store/{name}.db` + `agent_io/target/` | SQLite + JSON file | After `save_main_output` |
 | Batch registry | `agent_io/target/{action}/batch/.batch_registry.json` | JSON | After batch submit |
@@ -491,8 +626,20 @@ Two mechanisms keep it halted, because either alone is insufficient:
   (The parallel loop selects on `get_pending_actions`, which already excludes
   every terminal status, so there the exclusion alone would do.)
 
-`agac retry` clears the node-level disposition, and `--fresh` clears everything,
-so both remain working resume paths.
+`agac retry` from the halted action clears the node-level disposition and runs it in
+full, and `--fresh` clears everything, so both remain working resume paths. A retry that
+would clear the halt while narrowed to the records it names is refused: it would complete
+the action without the records past the halt.
+
+The same `detail` marks a failure that reached all of the action's input with
+`EVERY_INPUT_FAILED`: every record it holds failed and its file walk lost no file
+partway (`_finalize_total_failure`, reading `ActionRunner.input_left_unreached`), or
+every input file failed on all of its records (`mark_every_record_failed`, on the error
+`CollectionStats.terminal_failure` returns), none to an error fatal to the action
+(`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
+such as a UDF output that fails validation — or never read leaves records unreached.
+Any other failure may have stopped the action partway, and a failure recorded before
+the marker existed reads as one.
 
 ### COMPLETED_WITH_FAILURES is NOT retryable
 
@@ -509,57 +656,75 @@ The retry command is the dedicated path for fixing partial failures.
 It clears only the failed records' dispositions, preserving successes.
 ```
 
-### Mid-processing actions get selective disposition clearing
+### A stopped action keeps what it finished while its config is unchanged
 
 ```
-_reset_retryable_actions clears RUNNING_CLEAR_DISPOSITIONS
-(FAILED, EXHAUSTED, DEFERRED) for actions that died mid-processing.
+When the executor starts an action's work it records, in the write that
+sets RUNNING, what that work is answered under: `answered_under`, holding
+the config hash, model_name and model_vendor. The status changes after it
+(FAILED, INTERRUPTED, BATCH_SUBMITTED, CHECKING_BATCH, a sweep) leave it.
 
-It does NOT clear SUCCESS, PASSTHROUGH, FILTERED, SKIPPED.
-
-Why: such actions may have checkpointed SUCCESS dispositions.
-Bulk-wiping them destroys resume progress.
-
-Which statuses count is MID_PROCESSING_STATUSES:
+_reset_retryable_actions takes an action stopped partway and compares
+that with the config in force, as the executor compares a completed one.
+Stopped partway is one of:
     RUNNING        — the process died without unwinding (SIGKILL, OOM,
                      power loss), so nothing rewrote the status.
     INTERRUPTED    — the coordinator caught Ctrl-C/SIGTERM/cancellation
                      and recorded a terminal status on the way out.
     CHECKING_BATCH — the process died while collecting a batch. The
                      files it reached are written and their records done.
+    FAILED         — an error stopped it, running or collecting; one that
+                     raised may hold successes. One a refused batch
+                     failed holds what it had answered before: the
+                     refusal sent and stored nothing. Not one halted by
+                     `on_exhausted: raise`, which is not reset at all.
 
-One FAILED action counts too: one the error handler swept from
-CHECKING_BATCH. The state manager marks it (`stopped_collecting`) in
-the write that gives it the new status, because FAILED alone no longer
-says it was collecting. Any later status change drops the mark.
+    unchanged → clear only RUNNING_CLEAR_DISPOSITIONS
+                (FAILED, EXHAUSTED, DEFERRED); SUCCESS, PASSTHROUGH,
+                FILTERED, SKIPPED and the prompt traces stay, and the
+                DispositionGate carries them. Online writes SUCCESS
+                and PASSTHROUGH after the file holding the record's
+                row is stored; one answered since holds a checkpoint
+                row instead (processing/ARCHITECTURE.md, "Checkpoint
+                and Resume")
+    edited    → ActionExecutor.reopen_with_readers: it and every action
+                reading it are forgotten (dispositions, checkpoints, batch
+                state, a batch still out given up) and put back to pending;
+                the reset then clears the prompt traces of each
+    unknown   → state written before the stamp existed: reset by status,
+                selective for MID_PROCESSING_STATUSES, bulk for FAILED
 
-If you change this to bulk-clear for any of them:
-    Checkpoint resume breaks — the DispositionGate finds no terminal
-    IDs and reprocesses everything from scratch. For a batch that means
+A repair (`agac retry`) records what the records it does not name were
+answered under, not the config it runs under: the completion stamp it
+keeps, or, for an action that never completed, the `answered_under` its
+last run recorded (_held_to_earlier_answers). It stamps the same when it
+completes the action. A retry of an edited action, stopped or finished,
+leaves the edit to the next run, which applies it to every record.
+
+If you clear a stopped action in bulk while its config is unchanged:
+    Checkpoint resume breaks — the DispositionGate finds no terminal IDs
+    and reprocesses everything from scratch. For a batch that means
     submitting, and paying for, every collected file again.
 
-The same trap applies to routing an interrupt through FAILED: every
-other FAILED action the reset takes is bulk-wiped by design, so
-collapsing INTERRUPTED into it silently destroys the checkpoint it
-exists to protect. (A FAILED action halted by `on_exhausted: raise` is
-not reset at all.)
+If you keep what it finished after an edit:
+    The gate carries answers given under the old prompt or model, the
+    batch jobs still out are collected as they are, and the action is then
+    stamped complete under the new config, so nothing re-runs it.
 ```
 
-### The snapshot ordering in _reset_retryable_actions matters
+### The reset decides before it writes a status
 
 ```
-running_actions = {... status in MID_PROCESSING_STATUSES
-                       or stopped_collecting(name) ...}   ← snapshot BEFORE
+for each stopped action:  edited → reopen_with_readers (one status write)
+                          else   → keeps.add(name)
 reset_actions = state_mgr.reset_retryable(exclude=halted)  ← mutates to PENDING
 
-The snapshot MUST be captured before reset_retryable() because
-reset_retryable() transitions all matching statuses to PENDING and
-drops the stopped_collecting mark with them. After the call, you
-can't tell which actions were mid-processing.
-
-If you swap the order:
-    running_actions is always empty → all actions get bulk-cleared
-    → checkpoint resume breaks.
+Both MUST happen before reset_retryable(). It moves every retryable
+status to PENDING, after which nothing says which actions were stopped
+partway. And an edited action reset after it would sit PENDING, which
+is not retryable: a process that died in between would leave it to run
+on with what it holds. Before it, the stamp still differs and the next
+run repeats the reset.
 ```
 
 ### Config hash invalidation scope
@@ -574,7 +739,9 @@ If you change one of these fields and re-run WITHOUT --fresh:
     and clears its dispositions, and does the same to every action that
     reads it. They re-run with new config. Not while `agac retry` is
     re-running records: it acts on no mismatch and keeps the stamps it
-    found, so the next plain run still sees the mismatch.
+    found, so the next plain run still sees the mismatch. An action stopped
+    partway is compared at the start of the next run, against the
+    `answered_under` its run recorded (_edits_since serves both).
 
 If you add a new config field that affects output but don't add it
 to the hash computation:
@@ -645,6 +812,20 @@ If you change this to SKIPPED:
     All downstream actions that depend on this action will cascade-skip
     via the circuit breaker, even though there's nothing wrong.
 ```
+
+### The stored dependency graph names only what is upstream
+
+Each run stores every action's ancestors through `dependencies` as `dependency_graph`
+(`ActionLevelOrchestrator.upstream_actions`, a version base meaning every version), and
+two readers take it as exactly that. The storage walk drops a record a guard filtered at
+any of them, so a record filtered on one branch does not come back at a fan-in through
+the other; and delta storage rejoins a stored row with their namespaces, so it reads
+back as the record the action wrote. A guard filter removes a record from its action and
+from what is below it, and from nothing else: an action at a later level is not below
+every action of an earlier one, and one on another branch, or under another start node,
+keeps the record (#1292). Store more than the ancestors and both readers go wrong
+silently: the run exits 0 having dropped records, and rows read back with namespaces
+they never carried.
 
 ---
 

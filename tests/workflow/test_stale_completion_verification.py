@@ -78,17 +78,20 @@ class TestVerifyCompletionStatus:
         assert result is False
         executor.deps.state_manager.reopen.assert_called_once_with(["write_description"])
 
-    def test_returns_false_when_storage_backend_raises(self):
-        """Any error during verification → conservative reset to pending."""
+    def test_returns_true_when_storage_backend_raises(self):
+        """A failed read is no evidence the output changed, so the status file stands.
+
+        Run again, the action answers the records it failed, which no plain run of a
+        completed action does, and what reads it never sees the rows that adds.
+        """
         executor = _make_executor(storage_has_data=True)
         executor.deps.action_runner.storage_backend.list_target_files.side_effect = RuntimeError(
             "connection error"
         )
         result = executor.verify_completion_status("write_description")
-        assert result is False
-        executor.deps.state_manager.update_status.assert_called_once_with(
-            "write_description", ActionStatus.PENDING
-        )
+        assert result is True
+        executor.deps.state_manager.update_status.assert_not_called()
+        executor.deps.state_manager.reopen.assert_not_called()
 
     def test_returns_true_when_no_storage_backend(self):
         """No backend configured → trust the status file."""

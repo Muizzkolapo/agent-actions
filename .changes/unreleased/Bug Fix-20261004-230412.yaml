@@ -1,0 +1,17 @@
+kind: Bug Fix
+body: >-
+  A batch action below another one now sends the retry its `retry:` block asks for, and so
+  does a versioned action whose prompt or guard reads `version.*`. When a collect pass found
+  records the provider had not returned, preparing their retry batch for an action with
+  `dependencies` failed with "has dependencies [...] but agent_indices was not provided",
+  logged as a failed retry submission. Nothing was sent, the lost records were stored
+  `cascade_skipped` with the disposition `unprocessed` (`batch_not_returned`), and the
+  action reported itself complete, so only actions with no dependencies were ever retried.
+  A versioned action whose prompt read `version.*` lost its records the same way; one with
+  no dependencies whose guard read `version.*` failed its collect run instead. A retry is
+  now prepared with the workflow's action positions and configs and with the action's
+  version: it reads the same upstream answers, a guard on an upstream's `output_field` or
+  on `version.*` lets it through as it let the first submission through, and a retry of a
+  retry goes out the same way. A retry still cannot be prepared for an action whose prompt
+  or guard reads `workflow.*`.
+time: 2026-10-04T23:04:12Z

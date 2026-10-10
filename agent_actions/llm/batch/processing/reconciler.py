@@ -92,10 +92,16 @@ class BatchResultReconciler:
         """Get original record data by custom_id, or empty dict if not found."""
         return self.context_map.get(str(custom_id), {})  # type: ignore[no-any-return]
 
-    def get_source_guid(self, custom_id: str, fallback: str | None = None) -> str:
-        """Get source_guid for a custom_id, falling back to custom_id itself."""
-        original_row = self.get_record_by_id(custom_id)
-        return original_row.get("source_guid", fallback or custom_id)  # type: ignore[no-any-return]
+    def get_source_guid(self, custom_id: str) -> str | None:
+        """The source_guid of the record sent as *custom_id*, or None where it has none.
+
+        Never the custom_id itself. For a record the map holds that is its target_id,
+        minted afresh by a run whose input has none; an id it does not hold, such as a
+        parser placeholder, names no record at all. Nothing that selects a record reads
+        either, so a disposition under one is a failure ``agac retry`` clears and cannot
+        repair.
+        """
+        return self.get_record_by_id(custom_id).get("source_guid") or None
 
     def get_record_index(self, custom_id: str) -> int:
         """Get the index of a custom_id in context_map order, or -1 if not found."""
@@ -145,6 +151,19 @@ class BatchResultReconciler:
         ]
         received = BatchResultReconciler.collect_result_custom_ids(answered)
         return expected - received
+
+    @staticmethod
+    def resendable_ids(custom_ids: set[str], context_map: dict[str, Any]) -> set[str]:
+        """*custom_ids* less those whose context-map row has no source_guid.
+
+        Preparation refuses such a row, so a recovery batch would admit nothing for it.
+        Left out, it is collected as it stands and refused at enrichment.
+        """
+        return {
+            custom_id
+            for custom_id in custom_ids
+            if custom_id not in context_map or context_map[custom_id].get("source_guid")
+        }
 
     @staticmethod
     def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:

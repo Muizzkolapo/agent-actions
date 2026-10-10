@@ -2,10 +2,11 @@
 
 The rule is the online path's: an action's output holds rows for this run's inputs. A
 stored row is carried where the input it answered for is one of the run's and the run did
-not answer it again; a row whose input is not among them is left out. Where no input was
-recorded every unanswered row is carried, since nothing is known about the run, and a run
-in which something failed and nothing was answered replaces no stored answer, as online
-raises before it writes.
+not answer it again; a row whose input is not among them, or whose input the guard
+filtered, is left out. Where no input was recorded every other unanswered row is carried,
+since nothing is known about the run, and a run in which something failed and nothing was
+answered replaces no stored answer and drops nothing of a filtered input's, as online
+leaves the file unwritten -- while the action still calls each stored answer answered.
 """
 
 from __future__ import annotations
@@ -15,7 +16,10 @@ from typing import Any
 
 import pytest
 
-from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
+from agent_actions.processing.disposition_gate import (
+    every_answer_vouched_for,
+    stored_rows_not_reproduced,
+)
 
 GATE_LOGGER = "agent_actions.processing.disposition_gate"
 
@@ -104,8 +108,48 @@ class TestARowWhoseInputIsNotInTheRunIsLeftOut:
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3", "a4"}) == set()
 
 
+class TestARowWhoseInputTheGuardFilteredIsLeftOut:
+    """A filtered record holds no row, as online writes none for it."""
+
+    def test_though_the_input_is_one_of_the_runs(self):
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, filtered={"a2"}
+        )
+
+        assert carry == set()
+
+    def test_a_minted_row_goes_with_the_filtered_input_it_named(self):
+        stored = [_row("m1", ["a1"]), _row("m2", ["a2"]), _row("m3", ["a2"])]
+
+        carry = stored_rows_not_reproduced(stored, [], batch_inputs={"a1", "a2"}, filtered={"a2"})
+
+        assert carry == {"m1"}
+
+    def test_where_no_input_was_recorded(self):
+        """A repair records none; online writes no row for a named record its guard filters."""
+        stored = [_row("a1"), _row("a2")]
+
+        assert stored_rows_not_reproduced(stored, [], filtered={"a2"}) == {"a1"}
+
+    @pytest.mark.parametrize("state", ["processed", "exhausted", "failed"])
+    def test_not_where_the_run_failed_and_answered_nothing(self, state):
+        """Online leaves the file unwritten while its answers stand, so what it held for
+        the input stays, answer or not, until a run that writes."""
+        stored = [_row("a1"), _row("a2", state=state)]
+        produced = [_row("a1", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, filtered={"a2"}
+        )
+
+        assert carry == {"a1", "a2"}
+
+
 class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
-    """Online raises before it writes when everything it sent failed, so its answers stand."""
+    """Online leaves the file unwritten when everything it sent failed, so its answers stand."""
 
     @pytest.mark.parametrize(
         "produced",
@@ -170,6 +214,89 @@ class TestARunThatFailedAndAnsweredNothingReplacesNoAnswer:
         produced = [_row("a3", state="failed")]
 
         assert stored_rows_not_reproduced(stored, produced, batch_inputs={"a3"}) == {"a1"}
+
+
+class TestOnlyAnAnswerTheActionStillCallsAnsweredStands:
+    """A reset clears every disposition and leaves the stored rows for the re-run to
+    replace, so an answer it took back would be served as one to the config it replaced."""
+
+    def test_every_stored_answer_still_answered_stands(self):
+        stored = [_row("a1"), _row("m1", ["a2"])]
+        produced = [_row("a1", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1"}, still_answered=lambda: {"a1", "a2"}
+        )
+
+        assert carry == {"a1", "m1"}
+
+    @pytest.mark.parametrize(
+        ("inputs", "produced"),
+        [
+            ({"a1", "a2"}, [_row("a1", state="failed"), _row("a2", state="exhausted")]),
+            ({"a3"}, [_row("a3", state="failed")]),
+        ],
+        ids=["the_same_inputs", "inputs_minted_again"],
+    )
+    def test_after_a_reset_the_file_follows_its_inputs_as_one_that_answered_would(
+        self, inputs, produced
+    ):
+        stored = [_row("a1"), _row("a2")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs=inputs, still_answered=lambda: set()
+        )
+
+        assert carry == set()
+
+    def test_a_failed_input_keeps_none_of_the_rows_it_minted_once_they_are_taken_back(self):
+        """Online writes only the failure for it, and carries what the gate still calls
+        answered: here the input the run did not send."""
+        stored = [_row("m1", ["a1"]), _row("m2", ["a2"]), _row("m3", ["a3"])]
+        produced = [_row("a1", state="failed"), _row("a2", state="exhausted")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2", "a3"}, still_answered=lambda: {"a3"}
+        )
+
+        assert carry == {"m3"}
+
+    def test_one_answer_taken_back_is_enough_to_write_the_file(self):
+        """Online's choice is the file's, not the row's: it writes the file or leaves it."""
+        stored = [_row("a1"), _row("a2")]
+        produced = [_row("a1", state="failed"), _row("a2", state="failed")]
+
+        carry = stored_rows_not_reproduced(
+            stored, produced, batch_inputs={"a1", "a2"}, still_answered=lambda: {"a2"}
+        )
+
+        assert carry == set()
+
+    def test_the_dispositions_are_not_read_for_a_run_that_answered_something(self):
+        def unread() -> set[str]:
+            raise AssertionError("read the dispositions")
+
+        stored_rows_not_reproduced(
+            [_row("a1")], [_row("a1"), _row("a2", state="failed")], still_answered=unread
+        )
+
+
+class TestEveryAnswerVouchedFor:
+    def test_by_the_identity_it_carries(self):
+        assert every_answer_vouched_for([_row("a1")], {"a1"})
+
+    def test_by_an_input_it_names_as_producer(self):
+        assert every_answer_vouched_for([_row("m1", ["a1", "a2"])], {"a2"})
+
+    def test_not_an_answer_whose_record_holds_no_success(self):
+        assert not every_answer_vouched_for([_row("a1"), _row("a2")], {"a1"})
+
+    @pytest.mark.parametrize("state", ["failed", "exhausted", "guard_skipped", "cascade_skipped"])
+    def test_a_row_that_is_no_answer_needs_nothing_to_vouch_for_it(self, state):
+        assert every_answer_vouched_for([_row("a1", state=state)], set())
+
+    def test_nothing_stored_needs_nothing(self):
+        assert every_answer_vouched_for([], set())
 
 
 class TestARowAnsweredAgainIsReplaced:
@@ -255,6 +382,37 @@ class TestWhatIsLeftOutIsReported:
             )
 
         assert carry == {"g"}
+        assert _gate_records(caplog) == []
+
+    def test_rows_of_an_input_the_guard_filtered_are_counted_on_a_line_of_their_own(self, caplog):
+        """Its input is still one of the run's, so the line for inputs that left does not
+        count it."""
+        stored = [_row("a1"), _row("a2"), _row("m2", ["a2"]), _row("m1", ["c1"])]
+        produced = [_row("a1")]
+
+        with caplog.at_level(logging.DEBUG, logger=GATE_LOGGER):
+            carry = stored_rows_not_reproduced(
+                stored, produced, batch_inputs={"a1", "a2"}, filtered={"a2", "a9"}
+            )
+
+        assert carry == set()
+        records = _gate_records(caplog)
+        assert [r.levelno for r in records] == [logging.INFO, logging.INFO]
+        messages = [r.getMessage() for r in records]
+        (filtered,) = [m for m in messages if "guard filtered" in m]
+        assert filtered.startswith("2 stored row(s) not carried forward"), filtered
+        assert "the 2 this run's guard filtered" in filtered, filtered
+        (left,) = [m for m in messages if "guard filtered" not in m]
+        assert left.startswith("1 stored row(s) not carried forward"), left
+
+    def test_nothing_is_logged_for_a_filtered_input_in_a_run_that_keeps_its_rows(self, caplog):
+        stored = [_row("a1"), _row("a2")]
+
+        with caplog.at_level(logging.DEBUG, logger=GATE_LOGGER):
+            stored_rows_not_reproduced(
+                stored, [_row("a1", state="failed")], batch_inputs={"a1", "a2"}, filtered={"a2"}
+            )
+
         assert _gate_records(caplog) == []
 
     @pytest.mark.parametrize(

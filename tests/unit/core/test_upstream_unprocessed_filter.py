@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.config.types import RunMode
+from agent_actions.errors import MissingSourceGuidError
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.result_collector import ResultCollector
@@ -96,9 +97,11 @@ class TestCascadeBlockingDetection:
         assert result.guard_status != GuardStatus.UPSTREAM_UNPROCESSED
 
     def test_non_dict_does_not_cascade(self):
+        """It has no _state to block on. Below the first stage it has no source_guid
+        either, and is refused for that instead."""
         preparer = TaskPreparer()
-        result = preparer.prepare("plain string", self._make_context())
-        assert result.guard_status != GuardStatus.UPSTREAM_UNPROCESSED
+        with pytest.raises(MissingSourceGuidError):
+            preparer.prepare("plain string", self._make_context())
 
     def test_missing_state_does_not_cascade(self):
         """Records without _state pass through (first-stage or source records)."""

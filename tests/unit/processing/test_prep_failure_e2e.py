@@ -7,8 +7,6 @@ downstream UPSTREAM_UNPROCESSED, across both online and batch paths.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agent_actions.errors import RecordContextError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
@@ -217,5 +215,6 @@ class TestResultCollectorPrepFailureCountedAsFailed:
         # terminal-failure guard sees a non-zero active denominator and fires.
         assert stats.failed == 3
         assert stats.unprocessed == 0
-        with pytest.raises(RuntimeError, match="0 successful records"):
-            stats.raise_if_terminal_failure("vote_quality", data=records, output=output)
+        assert "0 successful records" in str(
+            stats.terminal_failure("vote_quality", data=records, output=output)
+        )

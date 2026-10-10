@@ -94,8 +94,8 @@ def _service(manager: BatchRegistryManager) -> BatchProcessingService:
     def resolve(batch_id, registry_manager, *_a, **_kw):
         """The real resolver's contract: an unregistered id has no client.
 
-        The provider reports the entry's own status, so a FAILED job is skipped
-        by ``_is_batch_ready_for_processing`` here exactly as it is in production.
+        The provider reports the entry's own status, so the collect pass skips a
+        FAILED job here exactly as it does in production.
         """
         entry = registry_manager.get_batch_job_by_id(batch_id)
         if entry is None:

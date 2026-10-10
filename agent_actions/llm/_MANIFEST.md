@@ -29,7 +29,11 @@ Cohere, etc.).
 | `create_dynamic_agent()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema` |
 | `OutputHandler.save_main_output()` | `agent_io/target/{action}/` | Writes | — |
 | `BatchSubmissionService.submit_batch_job()` | `agent_io/staging/` | Reads | — |
+| `BatchSubmissionService.submit_batch_job()` | `agent_io/target/{action}/` | Writes | — |
+| `BatchSubmissionService.submit_batch_job()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `BatchRetrievalService.retrieve_results()` | `agent_io/target/{action}/` | Writes | — |
+| `batch_file_identity()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `batch_file_identity()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `batch_cli` | `agent_actions.yml` | Reads | — |
 
 **Internal only**: `VendorType`, `ResponseFormat`, `VendorConfig`, `BatchJobEntry`, `SubmissionResult`, `BatchContextManager`, `BatchRegistryManager`, `BatchContextMetadata`, `BatchTaskPreparator`, `BatchClientResolver`, `ContextService`, `PromptService`, `CLIENT_REGISTRY` -- no direct project surface.

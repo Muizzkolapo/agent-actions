@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A record a guard filters (`on_false: filter`) is now removed only from its action and from
+  what is downstream of it through `dependencies`. Every action at a later level dropped it
+  instead: an action on another branch, or under another start node, completed without the
+  record and with no disposition for it, the run exited 0, and the log said only that it was
+  "filtered by an upstream guard". Under `run_mode: batch`, a reader that lost every record
+  held no row, so each later run found it completed with no output, ran it again and lost
+  them again. The run stored every action of an earlier level as upstream of each action, and
+  delta storage rejoined a stored row with all of them too, so a row could read back with
+  the namespace of a sibling branch it never carried; it now reads back with what is upstream
+  of it. A filter upstream of a fan-in still keeps the record from coming back through the
+  branch that did not filter it. An action that lost records in a store written before this
+  is still missing them until it runs again, for example under `--fresh`.
+time: 2026-10-06T17:39:07Z

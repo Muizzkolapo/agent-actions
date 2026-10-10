@@ -120,7 +120,7 @@ Input records (from staging or upstream action)
 │  │         retry, then the expectations loop       │ │
 │  │       → BatchStrategy: queue for deferred API   │ │
 │  │    3. _checkpoint_record()                      │ │
-│  │       → write disposition + output to SQLite    │ │
+│  │       → write output then disposition to SQLite │ │
 │  │         immediately (resume on interrupt)       │ │
 │  │    4. Transform response → output records       │ │
 │  └─────────────────────────────────────────────────┘ │
@@ -164,8 +164,10 @@ Input records (from staging or upstream action)
 │  6. RecoveryEnricher    → _recovery metadata         │
 │                           (retry details)            │
 │                                                      │
-│  Carry-forward records bypass enrichment (already    │
-│  have correct lineage from prior run).               │
+│  Rows carried from the stored file bypass it: they   │
+│  were enriched when it was written. Rows carried     │
+│  from a checkpoint go through it, and collection,    │
+│  with this run's own.                                │
 └──────────┬───────────────────────────────────────────┘
            │
            ▼
@@ -179,7 +181,8 @@ Input records (from staging or upstream action)
 │    - Build tombstones for FAILED (online)            │
 │    - Fire telemetry events                           │
 │                                                      │
-│  Flush all dispositions in single SQLite transaction │
+│  Flush dispositions in single SQLite transaction;    │
+│  online, SUCCESS/PASSTHROUGH wait for the file write │
 │                                                      │
 │  Status → Disposition mapping:                       │
 │    SUCCESS    → DISPOSITION_SUCCESS                  │
@@ -207,6 +210,7 @@ OnlineLLMStrategy.process_record()
     │     ├── _normalize_input() → source_guid, snapshot
     │     ├── _load_full_context() → context data for LLM
     │     ├── _evaluate_guard() → per-record guard check
+    │     ├── _require_identity() → refuse a later-stage record with no source_guid
     │     └── _render_prompt() → formatted prompt string
     │
     └── InvocationStrategy.invoke(prepared_task)
@@ -282,15 +286,15 @@ First run (interrupted at record 150 of 200):
   for each record:
       result = process_record(item)           ← LLM call (slow)
       _checkpoint_record(result, context)     ← SQLite write (instant)
-          ├── set_disposition(source_guid, SUCCESS)
-          └── save_checkpoint_records(output data)
+          ├── save_checkpoint_records(output data)
+          └── set_disposition(source_guid, SUCCESS)   ← only once the row is stored
       # record 150 → Ctrl+C here
       # SQLite has 150 SUCCESS dispositions + 150 output records
 
 Re-run:
 
   _reset_retryable_actions():
-      action was RUNNING → selective clear (failures only)
+      action stopped partway, config unchanged → selective clear (failures only)
       150 SUCCESS dispositions preserved
 
   UnifiedProcessor.process():
@@ -302,8 +306,51 @@ Re-run:
       strategy.invoke(50 remaining records)
       → enrich + collect (all 200)
       → write final output
-      → clear_checkpoint_records()
+      → write_dispositions(SUCCESS, PASSTHROUGH)
+      → clear_checkpoint_records(action, that file)
 ```
+
+A checkpoint row left beside a stored file is therefore a later answer than the row
+stored for that record: the run that gave it stopped before writing the file again,
+after an edit or an upstream change had reset the action. `answered_since_stored`
+names those records and the online path answers them again. The stored row is not
+the answer their disposition describes, and the checkpoint row is the strategy's
+output before enrichment, without lineage or metadata. Carrying checkpoint rows is
+kept for a file with nothing stored.
+
+There a carried checkpoint row is still the strategy's output, saved before enrichment
+and collection, and what they made of it was never stored: the run stopped, or the store
+failed to write the file. So `UnifiedProcessor` puts it through both with the run's own
+results (`_answered_from_checkpoint`): the answer it was, not asked for again. It gets
+its input's lineage, parent and root, metadata, and its action's transition in
+`_state_history`, and an answer that failed to parse is failed as collection fails any
+other. It is counted with the run's answers, so a run whose one answered record failed
+is not taken for a run where every record did. Appended to the output as it was, it was
+stored without all of these, and each reader built its rows on a lineage cut short. The
+`_state` the checkpoint stamps is dropped first, since a processed record cannot be
+failed. The checkpoint keeps the row alone, without the response or its retry details,
+so the record gets no `_recovery` and takes its metadata from the action config. Rows
+carried from a stored file were enriched and collected when it was written, and are
+appended as they are.
+
+That makes the row the only sign a record was answered after its file was stored, so
+`_checkpoint_record` stores it before the disposition the gate carries, and writes no
+disposition when the row's write fails. Committed the other way round, a run stopped
+between the two, or a failed row write, left a record marked answered with no row, and
+the next run carried the stored row from before the reset.
+
+Collection marks a record answered only once its file is stored (see "Disposition write
+ordering" below), so a record whose row write failed is asked again however the run stops
+before that write.
+
+A record answered with several rows is checkpointed with all of them, under the one
+`source_guid` they share: enrichment mints each row of an expansion an identity of its own,
+and the checkpoint is saved before it. With nothing stored, `build_carry_forward` reports
+that record missing rather than carry its rows, and the run answers it again. Carried,
+they would keep that one identity, of which the carry keeps a single row. A record
+answered with one row is carried as before. A record an earlier version checkpointed is
+answered again as well: that version kept one row per `source_guid`, the last, and the
+row cannot say whether the record had others (`checkpointed_without_row_count`).
 
 ### Checkpoint storage
 
@@ -315,10 +362,26 @@ checkpoint_output table:
     ┌──────────────┬──────────────┬──────────────┬────────────┐
     │ action_name  │relative_path │ source_guid  │record_data │
     ├──────────────┼──────────────┼──────────────┼────────────┤
-    │ summarize... │ combined.json│ 44462716-... │ {JSON...}  │
-    │ summarize... │ combined.json│ 973062f1-... │ {JSON...}  │
+    │ summarize... │ combined.json│ 44462716-... │ [{JSON...}]│
+    │ summarize... │ combined.json│ 973062f1-... │ [{..},{..}]│
     └──────────────┴──────────────┴──────────────┴────────────┘
+
+    record_data lists every row the record was answered with; an expansion's
+    rows share its source_guid until enrichment.
 ```
+
+`relative_path` is the name the file's output is stored under:
+`ProcessingContext.target_relative_path`, set by the caller that writes the file
+(`pipeline.py` from what `save_main_output` writes, `initial_pipeline.py` from its
+`.json` output path). That is the file's path below the input root, so a file in a
+subdirectory is `sub/page.json` and a staged `page.csv` is `page.json`. Carry-forward,
+the carry of a repair, the checkpoint, `answered_since_stored` and the clear after a
+write all use it. A resume reads the stored file, answers again a record checkpointed
+beside it, and falls back to the checkpoint by that one name only where nothing is
+stored; a repair that cannot find the stored file has nothing to carry and rewrites it
+with only the records it named. Writing a file clears that name's checkpoint rows and no
+other's, so a resume that saves one file still carries the checkpoint of a file it
+reaches after it.
 
 ### Cleanup paths
 
@@ -326,7 +389,8 @@ Every path that resets action state also clears checkpoint records:
 
 | Path | When | Code |
 |------|------|------|
-| Normal completion | After `save_main_output` | `pipeline.py:618` |
+| A file written | After its write, that file's rows only | `pipeline.py`, `initial_pipeline.py` |
+| An action reset to run again | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
 
@@ -350,10 +414,15 @@ NOT terminal (reprocessed on re-run):
 On resume, `build_carry_forward()` reads prior output for carried records:
 
 ```
+answered_since_stored(action_name, path)        ← checkpointed after the file
+    → not carried: answered again                  was stored (online path)
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
-    if found → use as carry-forward data
+    if found → use as carry-forward data, which the online path
+               enriches and collects with the run's own; but a record
+               checkpointed with several rows, or by an earlier
+               version, is answered again
     else → reprocess all
 ```
 
@@ -388,9 +457,9 @@ and holds no answer; and because producers are named during enrichment, before
 collection settles the state, a row can name an input it holds nothing for. Either
 credited as an answer deletes what the last run produced. Such a row does still replace
 a stored row of its own identity, which is decided first — carried rows are appended to
-the run's own output, so an identity in both lists would be written twice. The one
-exception is a run online would refuse to write, below: there the stored answer is the one
-row kept under that identity.
+the run's own output, so an identity in both lists would be written twice. A run online
+would leave unwritten, below, keeps the stored answer instead only while it is still
+vouched for, and by then a failure has replaced its own record's `success`.
 
 Which unanswered rows come back is the online path's rule. Online writes rows for this
 run's inputs and nothing else: what it processed, and what the gate carried. So a stored
@@ -407,29 +476,53 @@ batch path the same pre-narrowing input it already hands the online path
 the merge reads it back. Reading anything narrower deletes the rows of every record the run
 left out, which on an ordinary incremental run is everything already done.
 
+An input the guard filtered holds no row, whether or not the run recorded its inputs:
+online's guard runs above its gate and writes nothing for it. Its stored rows answer for a
+record the guard now excludes, and carried they reach every action below; where the guard
+filters every input they also keep the action reading complete over them, so its readers
+are never skipped. The batch's context map says which inputs the guard filtered
+(`filtered_inputs`), and both writes hand them to the merge, which carries no stored row
+that answers for one. A run online would leave unwritten, below, is the exception: a
+filtered input keeps what it held then, answer or not, until a run that writes.
+
 Two kinds of run carry more than their inputs' rows, each because online does:
 
 - **A repair records no inputs.** `agac retry` answers the records it named and nothing
   else, and online hands back every stored row it did not name (`carried_past_repair`). A
   stored row can sit under an identity the repair's input does not derive -- its record
   absent that run, or stored under another file's identity -- and read against the inputs it
-  would be left out. With nothing recorded every unanswered row is carried, which is also
-  what a batch submitted before inputs were recorded gets. The repair's submission removes
-  any recording an earlier run left, so that does not rest on who cleared batch state first.
-- **A run in which something failed and nothing was answered replaces no answer.** Online
-  raises before it writes when nothing succeeded (`raise_if_terminal_failure`), so its
-  stored answers stand. Here
-  the failures are written, beside every stored answer whichever input it was for; a
-  failure row under a stored answer's own identity gives way to it, so the identity is
-  still stored once. Stored rows that are not answers follow the inputs as usual. Without
-  a failure the run did produce this run's file, however little is in it, and the inputs
-  rule applies in full, as online writes it. A record that fails prompt preparation when
-  nothing else is sent is such a failure: it reaches the write as a failed row.
+  would be left out. With nothing recorded every unanswered row but a filtered input's is
+  carried, which is also what a batch submitted before inputs were recorded gets. The
+  repair's submission removes any recording an earlier run left, so that does not rest on
+  who cleared batch state first.
+- **A run in which something failed and nothing was answered replaces no answer the
+  action still calls answered.** Online leaves the file unwritten when nothing succeeded
+  (`terminal_failure`) while the answers stored for it stand. Here the failures are
+  written beside every stored answer, whichever input it was for. Stored rows that are not
+  answers follow the inputs as usual. Without a failure the run did produce this run's
+  file, however little is in it, and the inputs rule applies in full, as online writes it.
+  A record that fails prompt preparation when nothing else is sent is such a failure: it
+  reaches the write as a failed row.
+
+  An answer stands only while the action still calls it answered: its identity, or the
+  input it names as producer, holds `success` (`every_answer_vouched_for`). The gate sends
+  only records that hold none, and a failure is recorded before the write, so the answer
+  stored for a record the run sent is not vouched for by it. A reset clears every
+  disposition and leaves the stored rows for the re-run to replace, so after one no stored
+  answer is vouched for; kept, they would be served as answers to the config the reset
+  replaced, or to inputs the action above has since minted anew. Where any stored answer
+  of the file is not vouched for, online writes the file with its failures before it
+  raises (`stored_answers_stand`), and the merge here applies the inputs rule in full, as
+  for a run that answered something: an input the run wrote a row for keeps none of its
+  stored rows, minted ones included, as online writes only that row. Only that case reads
+  the dispositions. A store that cannot answer fails the action, as one that cannot write
+  does.
 
 A row naming several inputs is always carried: it holds what each gave it, so no one input
 accounts for it, and a duplicate is visible where a dropped row is not. What is left out is
-logged once per write at INFO with the counts, since a healthy re-run below an expansion
-leaves rows out every time.
+logged once per write at INFO with the counts, one line for rows whose input is not the
+run's and one for rows whose input the guard filtered, since a healthy re-run below an
+expansion leaves rows out every time.
 
 Leaving a row out is safe only because an input that returns is answered again. The gate
 carries any input with a terminal disposition, and one whose row was left out has the
@@ -440,24 +533,106 @@ input the guard filtered is not looked up, since it holds no row by design. It i
 to the guard again instead: online's guard runs above its gate and judges every input
 afresh, where the gate here would call a filtered one done for good.
 
-When the guard leaves nothing to send, submission returns a tombstone that the caller
-writes as a whole file. It goes through the same merge (`with_stored_rows_not_reproduced`),
-so that write carries what a finalize would. Alone it replaced every stored answer with
-nothing while their dispositions still said done. The rows are read from the file the
-tombstone is written to, which the caller names (`tombstone_path`), and from no other. For
-a file in a subdirectory that is not the batch's output file: the runner hands the file's
-own folder as the output directory, so the tombstone lands under `sub/page.json` while the
-batch output is stored as `page.json`. Reading the one and writing the other stores each
-row twice.
+When preparation leaves nothing to send -- the guard skipped or filtered every input, the
+action above blocked it, or its prompt could not be prepared -- submission collects and
+writes the file itself, by the two functions finalize uses (`llm/batch/services/collect.py`).
+`collect_batch_rows` runs the context map through `BatchResultStrategy` and the shared
+collector with no results, so each row keeps the parent, version correlation and history
+the action above gave it, and each record gets the disposition a run that sends gives it:
+`unprocessed` for a guard skip or an upstream block, `filtered`, or `failed` with the
+error. `write_batch_file` merges the stored rows the run does not replace
+(`with_stored_rows_not_reproduced`) -- alone, the write replaced every stored answer with
+nothing while their dispositions still said done -- and stores the file under
+`batch_output_name` of the batch's name, the one file finalize writes, building the path
+from that name so the two cannot drift. Submission then records the node-level
+`passthrough` (with no rows stored, the action reads skipped) and raises any halt the
+collect step returned, after the write as finalize does. Nothing touches the registry,
+recovery state or batch events: no batch was sent. A record whose prompt cannot be
+prepared is recorded failed with the error preparation raised, on both paths: it is kept on
+the record's context-map entry (`_batch_prep_error`), since a collect pass may run in a
+later process. A map saved before the key existed records `prep_failed`.
+
+When no record is left to send at all -- the gate carries every input, or the input holds
+none -- nothing is sent or collected, but the file is still this run's, as online writes
+it every run. Submission merges the stored rows over no answers with this run's inputs, the
+merge finalize makes, and stores the file under `batch_output_name` (`store_batch_file`).
+So a row whose input has left goes, and a record moved to another file of the action is
+answered there and held there alone; rows of inputs a record limit holds back stay, since
+they are inputs. A file that took no input -- the action above holds nothing for it, the
+runner dropped every record of it a guard filtered upstream, or its staged file is empty
+-- is stored empty, as online stores it, on a first run too, where nothing is stored for it
+yet. The test is the input above every narrowing, not what is left to send: a file whose
+every input the gate carried also sends nothing, and keeps the rows that answer for its
+inputs. The merge is skipped for it: handed to the merge, no inputs read as none recorded
+and keep every row. Nothing is collected, since no batch or context map exists for the
+run, and no disposition or node-level `passthrough` is recorded, so the action is
+classified on its files and completes as it did. A repair, or a run that recorded no
+inputs, writes nothing, so every row it did not answer stands; and a file the merge would
+leave as it stands, or one stored empty already, is not written again, as on a resume
+where nothing left. The merge keeps one row per identity, so a file holding two rows under
+one is written even then, with one of them, as online and finalize write it.
+
+A file whose input is gone is never submitted, so nothing is collected for it either. The
+walk that submits deletes what the action stored for it once it has reached every input,
+as it does online (`workflow/ARCHITECTURE.md`, a file whose input is gone goes with it),
+so its rows are gone before the next run collects.
+
+A batch input file has one name, its identity: its path under the action's input root
+(`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
+recorded inputs, recovery state and recovery entries are keyed by it, and its output is
+stored under `batch_output_name` of it, `sub/page.json`, the name every action below then
+reads it under. Online stores a first-stage input and a `.json` input under that name too;
+a later-stage input of another suffix (`page.txt`) online keeps as it is, where batch stores
+`page.json` (an action stores its files under `.json` keys, so a later stage reading the
+store does not meet one). Keyed by the basename, two files of one name in two directories
+shared one batch and the second was never sent, and a nested file's answers and its
+nothing-to-send write were two files.
+
+A store written by an older version holds a nested file, its batch state and every
+downstream join under the basename, and moving them would break the joins. So
+`batch_file_identity` keeps the basename for a file the store already holds under it (its
+output, or a registry entry), unless a top-level input of the action stores under that
+name or another nested file stored under it claimed it first. In the first stage a
+top-level input is a file directly under the staging root that the walk processes (its own
+skip rule and the start node's `file_type` decide); in a later stage it is a dependency
+storing that name, a version base counting as each of its versions. A file given its own
+name over a basename the store holds is logged once, since any of its records held there
+are sent again. The choice is recorded per action (`batch_file_names:{action}`) and follows
+the stored rows, not the inputs of the day: a reset keeps it, `--fresh` removes it, and a
+repair records its choice as any run does, so two files cannot claim one name within it.
+What this leaves:
+
+- A store the older version already split across two names (answers under `page.json`, a
+  nothing-to-send write under `sub/page.json`) stays split. The file keeps `page.json`, and
+  nothing writes `sub/page.json` again, but the actions below read both: they answer that
+  file's records twice, and a record limit counts them twice, until `--fresh`.
+- Two files of one basename that collided in such a store: the first walked keeps the flat
+  name, and the other is sent again under its own. Where the flat file held only the
+  other's rows, the first is sent again too. Where it held both files' rows, the flat file
+  is written for the first file's inputs alone, which leaves the other's out: in that same
+  run when every record of the first file is already answered, otherwise once its batch is
+  collected, and until then the other's rows are read twice below.
+- A nested file from the older version whose batch is still out when a top-level file of
+  its basename appears moves to its own name in that run. Its records are sent a second
+  time, and held under both names until the top-level file, which finds that batch under
+  its own name and so waits a run, is sent and writes the flat file over.
+- A store this version wrote can keep a nested file under the flat name too: a file moved
+  into a subdirectory, or a nested file first seen after a top-level file of its basename
+  has left, takes the name the departed file was stored under.
+- Two inputs in one directory that differ only by suffix (`sub/page.csv`, `sub/page.json`)
+  still share one stored name, as they do online.
+- An older version runs a store this one wrote without error, but reads every key by the
+  basename. It sends every record of a nested file again and stores a second copy under the
+  basename, beside the one this version wrote, and it cannot load the context map of a batch
+  this version left out, so that batch's answers are never stored. Run it with `--fresh`.
+  Its `--fresh` leaves `batch_file_names` behind, so run `--fresh` again on coming back.
 
 The two paths do not always leave the same file. Where batch differs it holds more, with
 one exception noted last:
 
-- A run whose every input the gate carries submits nothing and finalizes nothing, so the
-  file is left as it stands. It can still hold rows of inputs that have left; online writes
-  the file again without them and answers them again when they return. A record that moves
-  from one input file to another is answered in its new file while the old one, if nothing
-  is submitted for it, still holds its row.
+- A record that leaves a file while the file's batch is out, or finished and not yet
+  collected, keeps its row: that run sends nothing for the file, and the collect merges over
+  the inputs recorded when the batch was sent. Online writes the file again without it.
 - Rows of inputs a record limit holds back are carried, since they are still inputs. Online
   drops them and answers them again when the limit admits them.
 - A run in which something fails and nothing succeeds writes its failed rows. Online writes
@@ -472,6 +647,15 @@ one exception noted last:
   a file, whether it answered something or wrote only what the guard left, writes this
   run's file, without them. Batch holds less there only because online's run aborted, and
   never for a record that is an input of the run.
+
+Dispositions differ where the rows do not:
+
+- A guard skip is `unprocessed` here and `passthrough` online. The gate runs above the
+  guard here, so a terminal disposition would carry the skip for good; `unprocessed` sends
+  the record to the guard again on the next run.
+
+A record with no `source_guid` is not among them: both paths refuse it before it is sent
+and record nothing for it, under its target id or any other (see the identity notes below).
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. Under `error` online raises at the record and
@@ -541,9 +725,14 @@ Enrichment (step 6) MUST happen BEFORE collection (step 7)
     _state exists. If you collect before enriching, the lineage fields
     are missing and downstream breaks.
 
-Carry-forward records MUST bypass enrichment (step 8, after step 6)
+Rows carried from the stored file MUST bypass enrichment (step 8, after step 6)
     Why: they already have correct lineage from the prior run. Re-enriching
     would overwrite their node_id, target_id, and lineage with duplicates.
+
+Rows carried from a checkpoint MUST NOT bypass it, or collection
+    Why: a checkpoint row is the strategy's output, saved before either ran.
+    Appended as it is, it is stored with no lineage, metadata, parent, root
+    or state transition of its action's, and a parse error as processed.
 ```
 
 ### source_guid identity contract
@@ -566,16 +755,102 @@ For first-stage records: source_guid = UUID5 content hash (deterministic).
 
 For non-first-stage records: source_guid comes from upstream action output.
     Already set on the record dict when it enters the pipeline.
+
+A record that arrives without one has no identity, in either mode, and is
+    given none: no disposition is written for it under any other id.
+    TaskPreparer.prepare refuses it (MissingSourceGuidError) once the guard has
+    decided it and before its prompt is rendered, traced or sent: an LLM action
+    in either mode, and a record-level tool, never sees it. It is stored as a
+    failed row with no source_guid, keeping the target_id and content it arrived
+    with, which the collector builds from the record in both modes; the row's
+    reason and the run log name it by its target_id. Batch's row also carries
+    preparation's own transition to failed in its history, as the row of every
+    record batch fails to prepare does. The guard comes first because online's
+    runs above the strategy and batch's inside preparation: a record it filters
+    leaves nothing, and one it skips gets a tombstone RequiredFieldsEnricher
+    refuses, in both modes. That refusal names the record by its position, and
+    online's row for it keeps neither its target_id nor its content, since the
+    guard's skip result carries no input record; batch's keeps both. Batch's
+    preflight sample passes over a refused record as over a guard skip.
+    Refused when its answer came back, it was paid for, and an answer of several
+    rows was kept under identities minted for each row while the record itself
+    still had none, so every run sent it again.
+
+RequiredFieldsEnricher still refuses whatever reaches it without one, which is
+    how a batch an earlier release sent, and which can hold such a record, is
+    collected. Batch knows a sent record by its custom_id, which is its
+    target_id, but never records it under that: a run whose input has none mints
+    a new one, and nothing that selects a record reads it, so a failure there
+    would be one `agac retry` names and cannot repair.
+    BatchResultReconciler.get_source_guid returns None for it, and for an id the
+    context map does not hold, such as a parser placeholder; submission marks it
+    no `deferred`, and `--abandon-in-flight` marks it no `failed`. Recovery
+    does not send it again, since preparation would refuse it: a retry leaves a
+    lost one unanswered (BatchResultReconciler.resendable_ids), and a repair
+    round leaves out one whose answer failed its expectations
+    (submit_repair_batch). Either way enrichment refuses it as it is collected.
+
+Refused, it leaves no disposition, and batch reads an action's outcome from
+    dispositions alone. So where nothing in a file holding such a record
+    succeeded, batch raises online's breaker (`terminal_failure`) once the file
+    is written, and the executor records the action failed, as online. Where
+    something succeeded, both read complete, and that is deliberate. No
+    per-record failure can be written without an identity, and the node-level
+    one is what the executor writes for an action that failed: the next run
+    runs such an action again, and `agac retry` names it, though running the
+    action again only refuses the record again. The remedy is upstream, so
+    the failed row and the run log are what say it was refused.
+
+A batch run with nothing to send collects through the same step
+    (`collect_batch_rows`), so there too such a record is recorded nowhere and
+    stored as the same failed row. Nothing in such a run succeeds, so the same
+    breaker is raised once the file is written.
 ```
 
 ### Disposition write ordering (checkpoint vs collection)
 
 ```
 Per-record checkpoint writes happen DURING invocation (step 5):
-    _checkpoint_record() → set_disposition(SUCCESS) + save_checkpoint_records()
+    _checkpoint_record() → save_checkpoint_records(), then set_disposition(SUCCESS)
+    A schema echo is failed before either write: the store's echo gate records FAILED
+    as it saves the row, and the SUCCESS written after it would replace that.
 
 Batch collection writes happen AFTER enrichment (step 7):
     collect_results_from_processing_results() → set_dispositions_batch()
+
+Online, what the gate carries a record from the stored file by (SUCCESS,
+PASSTHROUGH) waits in ProcessingContext.kept_dispositions, and the caller
+writes it after the file:
+    pipeline.py          save_main_output() → write_dispositions()
+    initial_pipeline.py  write_target()     → write_dispositions()
+
+    Written before the file, a run stopped between the two (a full disk, a
+    Ctrl-C at the write) left records marked done while the stored file held
+    an earlier run's rows. After an edit upstream, the reset kept them and the
+    gate carried those rows. A FILE tool leaves no checkpoint row to say the
+    file is older, and a record whose checkpoint row failed has none either.
+
+    The rest (FAILED, EXHAUSTED, DEFERRED, UNPROCESSED, FILTERED) is written
+    at once, because a file whose records all failed or were exhausted raises
+    without being stored, unless a reset took back the answers stored for it
+    (`stored_answers_stand`). A failure replaces the checkpoint's SUCCESS for a
+    parse error, and a reset clears it; `agac retry` reads FAILED and
+    EXHAUSTED. FILTERED is what a fan-in drops a record by (filter is
+    authoritative), and a filtered record has no row to carry: the guard
+    filters it again above the gate.
+
+    Still written before the file: SKIPPED for a record the context scope drops
+    (pipeline.py), which the scope pass drops again before the gate; and, at
+    record granularity, the checkpoint's SUCCESS, whose checkpoint row tells
+    answered_since_stored that the stored file is older.
+
+    A row the store refuses as a schema echo is given no SUCCESS: the store
+    records it FAILED as it writes the file, and a SUCCESS written after the
+    file would replace that.
+
+    A write the store fails for one file of several fails the action once the
+    walk has written the others (output/ARCHITECTURE.md), so the next run
+    answers that file rather than the action completing over its earlier rows.
 
 Both write to the SAME disposition table with UNIQUE(action_name, record_id, disposition).
 The collection write overwrites the checkpoint write. This is intentional and idempotent:
@@ -593,14 +868,17 @@ If you remove the collection write thinking "checkpoint already wrote it":
 
 ```
 _state is stamped by result_collector.py during collection (step 7).
-Checkpoint records need _state=PROCESSED stamped BEFORE saving to the
-checkpoint table, because build_carry_forward returns them directly to
-the output list without going through collection again.
-
-If you remove the _state stamping in _checkpoint_record():
-    Downstream actions reject carried-forward records with:
+_checkpoint_record() also stamps _state=PROCESSED, on copies of the rows
+it saves: while carried checkpoint rows went to the output uncollected,
+it was all they had, and without it downstream actions rejected them with
     "Record is missing '_state'. Delete agent_io/target/ and re-run."
     Bug found: 2026-05-31 during real workflow testing.
+
+The online carry now collects them (see "Checkpoint and Resume"), and
+_answered_from_checkpoint() drops the stamp first: collection stamps the
+record again with the action's transition, and cannot fail a record
+already marked processed, as an answer that failed to parse must be.
+Rows an earlier version saved carry the stamp as well.
 
 Checkpoint stamps _state on COPIES of result.data, not in-place:
     checkpoint_records = [{**item, "_state": PROCESSED} ...]
@@ -627,11 +905,15 @@ If you add a new RecordState value that should block downstream:
 ### Every reset path must clear checkpoint records
 
 ```
-Three places clear action state. ALL THREE must clear checkpoint_output:
+These places clear action state. ALL must clear checkpoint_output:
 
-1. pipeline.py:618      — after save_main_output (normal completion)
-2. coordinator.py:285   — _clear_for_fresh_run (--fresh flag)
-3. cli/retry.py:201     — RetryCommand.execute (retry command)
+1. pipeline.py, initial_pipeline.py — after a file's write, that file's rows
+2. coordinator.py       — _clear_for_fresh_run (--fresh flag)
+3. cli/retry.py         — RetryCommand.execute (retry command)
+4. executor.py          — _forget_what_it_did (an action reset to run again)
+
+Clearing every file's rows after one file's write loses the answers of a
+file the run has not written yet: its stored rows are then carried instead.
 
 If you add a new reset path (e.g., a new CLI command that resets actions):
     You MUST also call storage_backend.clear_checkpoint_records(action_name).
@@ -646,35 +928,43 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 ```
 When _reset_retryable_actions resets action statuses to PENDING:
 
-  MID_PROCESSING_STATUSES (RUNNING, INTERRUPTED, CHECKING_BATCH)
+  Stopped partway (RUNNING, INTERRUPTED, CHECKING_BATCH, FAILED), with the
+  config its run recorded as it started (`answered_under`) still in force
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
-                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
+                    Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED,
+                    and the prompt traces of what it keeps
 
-  All other retryable statuses (FAILED, SKIPPED)
-                 → bulk clear ALL dispositions
+  Stopped partway, edited since (prompt, schema, guard, model)
+                 → it and every action reading it are forgotten, prompt
+                   traces too, and answer everything again
+                   (ActionExecutor.reopen_with_readers)
 
-Why the asymmetry:
-  RUNNING = interrupted mid-processing. May have checkpointed SUCCESS
-  dispositions that should survive for carry-forward on resume.
+  Stopped partway, nothing recorded (state from before the stamp)
+                 → by status: selective for RUNNING, INTERRUPTED,
+                   CHECKING_BATCH; bulk for FAILED
 
-  CHECKING_BATCH = died while collecting a batch. The files it reached are
-  written and their records done. A finished batch job stops its file being
-  submitted again only until it is collected, so with those dispositions
-  wiped each collected file is submitted, and paid for, a second time.
+  SKIPPED        → bulk clear ALL dispositions
 
-  A collect pass that ends in an error, not a kill, is marked FAILED by the
-  error handler. It holds what it collected all the same, so the state
-  manager records that it was stopped while collecting (`stopped_collecting`)
-  and the reset clears it selectively too. The mark goes with the next status
-  change, so the protection covers one reset: if the resumed run then fails
-  while running, before it is back to collecting, the reset after that wipes.
+Why:
+  A stopped action may hold checkpointed SUCCESS dispositions, however it
+  stopped: killed (RUNNING), interrupted, killed while collecting a batch
+  (CHECKING_BATCH: the files it reached are written and their records done),
+  or stopped by an error (FAILED: an action that raised may hold successes).
+  Wiped, they are answered again; a finished batch job stops its file being
+  submitted again only until it is collected, so each collected file is
+  submitted, and paid for, a second time.
 
-  FAILED = zero successes whenever _resolve_completion_status classified it
-  (it returns FAILED only when has_successful_items() is False). An action
-  that raised instead of returning is also FAILED and may hold successes:
-  their output survives the clear, their dispositions do not, so those
-  records are processed again on the next run.
+  Kept after an edit, they are answers to another prompt or from another
+  model, carried as current, and the action is stamped complete under the
+  new config. Which config they were answered under is known only from
+  the stamp the executor writes when it starts the action's work.
+
+  A batch the provider refuses fails the action, and the walk raises it once
+  every file is walked. The refusal sent and stored nothing, so what the action
+  had answered before still stands, and the reset keeps it as it keeps any
+  failed action's while the config is unchanged. Bulk-wiped, one refused file
+  would send, and pay for, every answered record of every file again.
 
   SKIPPED = no records processed. Nothing to preserve.
 
@@ -728,7 +1018,7 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `guard_context.py` | Build field context for guard evaluation |
 | `task_preparer.py` | `TaskPreparer.prepare()` — normalize, guard, prompt |
 | `prepared_task.py` | `PreparedTask`, `GuardStatus`, `PreparationContext` |
-| `record_helpers.py` | Tombstone builders, `derive_relative_path` |
+| `record_helpers.py` | Tombstone builders |
 | `exhausted_builder.py` | Build exhausted retry tombstones |
 | `source_resolution.py` | Identity resolution for non-first-stage content — own guid, then parent_source_guid, then the `source` namespace the record carries (which must be a dict), then None |
 | `batch_context_adapter.py` | Bridge batch state into `ProcessingContext` |

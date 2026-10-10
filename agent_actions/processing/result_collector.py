@@ -6,7 +6,8 @@ import logging
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, mark_every_record_failed
+from agent_actions.errors import terminal_failure as build_terminal_failure
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -40,11 +41,17 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
     DispositionRow,
 )
+from agent_actions.utils.schema_echo import is_schema_echo
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+# What a reset keeps and the gate carries a record from the stored file by. A reset keeps
+# FILTERED too, but a filtered record has no row to carry, and the guard filters it again
+# above the gate.
+_CARRIED_FROM_THE_STORED_FILE = frozenset({DISPOSITION_SUCCESS, DISPOSITION_PASSTHROUGH})
 
 
 def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
@@ -121,14 +128,14 @@ class CollectionStats:
         )
         return bool((self.skipped + self.filtered) == total)
 
-    def raise_if_terminal_failure(
+    def terminal_failure(
         self,
         action_name: str,
         data: list,
         output: list,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> None:
-        """Raise RuntimeError if all active records failed.
+    ) -> RuntimeError | None:
+        """The RuntimeError to raise if all active records failed, else None.
 
         Handles two cases:
 
@@ -136,12 +143,18 @@ class CollectionStats:
            SKIPPED disposition so the executor can cascade-skip downstream.
            Guard-skipped records with passthrough data ARE in ``output``,
            so ``not output`` prevents cascade-blocking when passthrough
-           data exists.
+           data exists. This runs per input file, so the executor takes
+           the row as the action's skip only while the action holds no
+           record.
         2. **zero successes** among active (non-unprocessed) input records
-           with at least one failure — raise ``RuntimeError`` for the
+           with at least one failure — return ``RuntimeError`` for the
            circuit breaker.  Unprocessed (cascade-quarantined) records are
            excluded from the denominator so pass-through-only actions
            don't erroneously trip the breaker.
+
+        Returned rather than raised so a caller can write the file first where
+        leaving it unwritten would leave rows a reset took back
+        (``stored_answers_stand``).
         """
         if data and self.only_guard_outcomes and not output:
             write_node_level_disposition(
@@ -150,7 +163,7 @@ class CollectionStats:
                 DISPOSITION_SKIPPED,
                 "All records filtered — no output produced",
             )
-            return
+            return None
 
         active_input_count = len(data) - self.unprocessed
         if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
@@ -169,7 +182,11 @@ class CollectionStats:
             # name.
             cause = self.dominant_cause
             named = f"Action '{action_name}' {tally}"
-            raise RuntimeError(f"{cause} — {named}" if cause else named)
+            # Every record was reached: the loop re-raises anything that stops it partway.
+            failure = build_terminal_failure(f"{cause} — {named}" if cause else named)
+            mark_every_record_failed(failure)
+            return failure
+        return None
 
     @property
     def dominant_cause(self) -> str:
@@ -221,6 +238,18 @@ def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
         if "_parse_error" in item:
             return True
     return False
+
+
+def _schema_echoes(data: list[dict[str, Any]], action_name: str) -> set[str]:
+    """Records whose row the store refuses as a schema echo, recording them failed."""
+    return {
+        guid
+        for row in data
+        if isinstance(row, dict)
+        and isinstance(content := row.get("content"), dict)
+        and is_schema_echo(content.get(action_name))
+        and (guid := row.get("source_guid"))
+    }
 
 
 def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
@@ -291,6 +320,24 @@ def _safe_set_disposition(
             action_name,
             record_id,
             disposition,
+        )
+
+
+def write_dispositions(
+    storage_backend: Optional["StorageBackend"],
+    rows: list[DispositionRow],
+    action_name: str,
+) -> None:
+    """Write *rows* in one transaction — log on failure, do not crash pipeline."""
+    if not storage_backend or not rows:
+        return
+    try:
+        storage_backend.set_dispositions_batch(rows)
+    except Exception:
+        logger.exception(
+            "Failed to batch-write %d dispositions for %s",
+            len(rows),
+            action_name,
         )
 
 
@@ -455,6 +502,7 @@ def collect_results_from_processing_results(
     stats: collections.Counter[str] = collections.Counter()
     causes: list[str] = []
     pending_dispositions: list[DispositionRow] = []
+    echoed: set[str] = set()
 
     for idx, result in enumerate(results):
         status = result.status
@@ -522,6 +570,7 @@ def collect_results_from_processing_results(
                 for d in data:
                     _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
                 output.extend(data)
+                echoed |= _schema_echoes(data, action_name)
             logger.debug(
                 "Collected SUCCESS result source_guid=%s count=%d",
                 result.source_guid,
@@ -864,16 +913,20 @@ def collect_results_from_processing_results(
         else:
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
-    # Flush all accumulated dispositions in a single transaction.
-    if storage_backend and pending_dispositions:
-        try:
-            storage_backend.set_dispositions_batch(pending_dispositions)
-        except Exception:
-            logger.exception(
-                "Failed to batch-write %d dispositions for %s",
-                len(pending_dispositions),
-                action_name,
-            )
+    if context is not None and context.defer_kept_dispositions:
+        # They vouch for rows of a file not stored yet; the caller writes them once it is.
+        context.kept_dispositions.extend(
+            row
+            for row in pending_dispositions
+            if row[2] in _CARRIED_FROM_THE_STORED_FILE
+            # The store records a schema echo failed as it writes the row, and a SUCCESS
+            # written after would replace that.
+            and row[1] not in echoed
+        )
+        pending_dispositions = [
+            row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
+        ]
+    write_dispositions(storage_backend, pending_dispositions, action_name)
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
@@ -897,7 +950,7 @@ def collect_results_from_processing_results(
     total_input = len(results)
     if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
         logger.warning(
-            "[%s] All %d records filtered by guard (%s). Downstream actions will receive no input.",
+            "[%s] All %d records filtered by guard (%s). None of them reaches downstream actions.",
             action_name,
             total_input,
             guard_condition or "unknown condition",

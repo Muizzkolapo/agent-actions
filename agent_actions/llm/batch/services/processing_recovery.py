@@ -12,13 +12,10 @@ Entry points:
 import json
 import logging
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -30,6 +27,7 @@ from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.batch.services.collect import filtered_inputs, halt_survives_failure
 from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
@@ -194,6 +192,7 @@ def handle_retry_recovery(
         record_failure_counts=state.record_failure_counts,
         missing_ids=set(state.missing_ids),
     )
+    still_missing = BatchResultReconciler.resendable_ids(still_missing, context_map)
 
     submission_impossible = False
     if still_missing and state.retry_attempt < state.retry_max_attempts:
@@ -302,14 +301,16 @@ def finalize_batch_output(
     context_map: dict[str, Any],
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
 ) -> str:
-    """Finalize batch processing: convert, write output, fire events."""
+    """Finalize batch processing: collect, write output, fire events."""
     service = context.service
+    effective_action_name = service._resolve_action_name(context.action_name)
     processed_data, _stats, converted_halt = service._convert_batch_results_to_workflow_format(
         batch_results,
         context_map=context_map,
         output_directory=context.output_directory,
         agent_config=context.agent_config,
         exhausted_recovery=exhausted_recovery,
+        action_name=effective_action_name,
     )
 
     # The conversion hands back a retry-exhaustion halt rather than throwing it,
@@ -317,25 +318,13 @@ def finalize_batch_output(
     # decided first, so it keeps precedence.
     park_halt(context, converted_halt)
 
-    effective_action_name = service._resolve_action_name(context.action_name)
-
-    # SUCCESS/FAILED/EXHAUSTED dispositions and state stamping are handled by the
-    # shared collector inside _convert_batch_results_to_workflow_format. FILTERED
-    # records are stripped by the reconciler before collection, so they require
-    # an explicit write here to match online ResultCollector parity (Phase 7b /
-    # U-3.2a). DEFERRED clearing and prompt trace updates also remain batch-specific.
-    if service._storage_backend and effective_action_name:
-        service._clear_deferred_dispositions(processed_data, effective_action_name)
-        service._write_filtered_dispositions(context_map, effective_action_name)
-        service._update_prompt_trace_responses(processed_data, effective_action_name)
-
     output_file = service._determine_output_path(
         context.output_directory, identity.file_name, identity.batch_id
     )
     # Not the context map: the gate narrows before the map is built, so the map holds
     # only what was submitted and reading it deletes the rows of everything it carried.
     batch_inputs: set[str] | None = None
-    if service._storage_backend and effective_action_name and identity.file_name:
+    if service._storage_backend and identity.file_name:
         batch_inputs = BatchContextManager.load_batch_inputs(
             service._storage_backend, effective_action_name, identity.file_name
         )
@@ -345,6 +334,7 @@ def finalize_batch_output(
         context.output_directory,
         context.action_name,
         batch_inputs=batch_inputs or (),
+        filtered=filtered_inputs(context_map),
     )
 
     # Remove batch placeholder file if storage backend wrote to SQLite instead.
@@ -765,45 +755,6 @@ def handle_repair_recovery(
         context_map=context_map,
         exhausted_recovery=exhausted_recovery,
     )
-
-
-@contextmanager
-def halt_survives_failure(context: Any) -> Iterator[None]:
-    """Keep a parked halt from being lost when something else fails first.
-
-    Every early return past a park is guarded, but the exception exit is not a
-    return: anything raised between the park and the finaliser unwinds past all
-    of them. The outer loop answers a non-RuntimeError by logging it, failing
-    that file's records and moving to the next file, so `on_exhausted: raise`
-    would finish the run reporting success.
-
-    The deliberate halt wins over the incidental failure, which is chained onto
-    it rather than dropped. A clean pass leaves the halt parked for the finaliser.
-
-    Typed loosely on purpose: two different objects carry a parked halt — the
-    RecoveryContext the handlers pass around, and the ProcessingContext that
-    collection parks on — and both need the same protection.
-    """
-    try:
-        yield
-    except ExpectationConfigurationError:
-        # The one error kind that is already run-fatal: process_all_batch_results
-        # re-raises it, because every remaining file carries the same broken
-        # action config. Substituting the halt would only change its
-        # classification — raised_by_exhaustion_policy would answer True, and the
-        # workflow layer would then refuse to re-run the action and keep it out
-        # of reset_retryable, so the operator fixes the YAML and stays stuck.
-        #
-        # Deliberately not the whole ConfigurationError family. The others are
-        # per-record and the outer loop logs them and moves on, so passing one
-        # through would take the parked halt with it and finish reporting success.
-        raise
-    except Exception as exc:
-        pending = context.pending_exhaustion
-        if pending is None:
-            raise
-        context.pending_exhaustion = None
-        raise pending from exc
 
 
 def raise_pending_exhaustion(context: RecoveryContext) -> None:

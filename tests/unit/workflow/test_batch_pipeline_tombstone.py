@@ -13,85 +13,52 @@ from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 from agent_actions.workflow.pipeline import BatchPipelineParams, ProcessingPipeline
 
 # ---------------------------------------------------------------------------
-# C-1  ·  _handle_batch_generation — tombstone passthrough path exercises
-#          the `result.passthrough is not None` guard on pipeline.py:197
+# C-1  ·  _handle_batch_generation — a run with nothing to send is written by
+#          submission, so the caller writes nothing and returns its path
 # ---------------------------------------------------------------------------
 
 
-class TestHandleBatchGenerationTombstone:
-    """C-1 — tombstone passthrough is written and the output path is returned."""
+class TestHandleBatchGenerationNothingToSend:
+    """C-1 — the caller leaves the write to submission, and returns the output path."""
 
-    def test_tombstone_passthrough_writes_data_and_returns_path(self, tmp_path):
-        """_handle_batch_generation must not crash on a tombstone SubmissionResult
-        and must write the passthrough data via FileWriter."""
-        tombstone_data = [{"id": "rec-1", "status": "tombstoned"}]
-        submission_result = SubmissionResult(
-            passthrough={"type": "tombstone", "data": tombstone_data}
-        )
-
+    @staticmethod
+    def _params(tmp_path):
         base_dir = tmp_path / "base"
         base_dir.mkdir()
         batch_file = base_dir / "batch_0.json"
         batch_file.write_text("[]")
         out_dir = tmp_path / "out"
         out_dir.mkdir()
-
+        backend = MagicMock()
         params = BatchPipelineParams(
             pipeline_action_config={"kind": "llm"},
             pipeline_action_name="extract",
             batch_file_path=str(batch_file),
             batch_base_directory=str(base_dir),
             batch_output_directory=str(out_dir),
+            storage_backend=backend,
             data=[],  # skip file read
         )
+        return params, backend, out_dir
 
-        mock_writer = MagicMock()
+    @pytest.mark.parametrize(
+        "submitted",
+        [SubmissionResult(passthrough={"type": "written"}), SubmissionResult(batch_id="b-1")],
+        ids=["nothing_to_send", "sent"],
+    )
+    def test_the_caller_writes_nothing_and_returns_the_path(self, tmp_path, submitted):
+        """Written here as well, the file would replace the one submission merged."""
+        params, backend, out_dir = self._params(tmp_path)
 
-        with (
-            patch(
-                "agent_actions.workflow.pipeline.BatchSubmissionService.submit_batch_job",
-                return_value=submission_result,
-            ),
-            patch(
-                "agent_actions.workflow.pipeline.FileWriter",
-                return_value=mock_writer,
-            ),
+        with patch(
+            "agent_actions.workflow.pipeline.BatchSubmissionService.submit_batch_job",
+            return_value=submitted,
         ):
             result_path = ProcessingPipeline._handle_batch_generation(params)
 
-        mock_writer.write_target.assert_called_once_with(tombstone_data)
+        backend.write_target.assert_not_called()
+        backend.set_disposition.assert_not_called()
         assert result_path == str(out_dir / "batch_0.json")
-
-    def test_non_tombstone_passthrough_does_not_write(self, tmp_path):
-        """A non-tombstone passthrough must not invoke the FileWriter."""
-        submission_result = SubmissionResult(batch_id="batch-xyz")
-
-        base_dir = tmp_path / "base"
-        base_dir.mkdir()
-        batch_file = base_dir / "batch_0.json"
-        batch_file.write_text("[]")
-        out_dir = tmp_path / "out"
-        out_dir.mkdir()
-
-        params = BatchPipelineParams(
-            pipeline_action_config={"kind": "llm"},
-            pipeline_action_name="extract",
-            batch_file_path=str(batch_file),
-            batch_base_directory=str(base_dir),
-            batch_output_directory=str(out_dir),
-            data=[],
-        )
-
-        with (
-            patch(
-                "agent_actions.workflow.pipeline.BatchSubmissionService.submit_batch_job",
-                return_value=submission_result,
-            ),
-            patch("agent_actions.workflow.pipeline.FileWriter") as mock_writer_cls,
-        ):
-            ProcessingPipeline._handle_batch_generation(params)
-
-        mock_writer_cls.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

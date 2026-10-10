@@ -33,30 +33,6 @@ class FieldManager:
 
         return obj
 
-    def create_processed_item(
-        self,
-        source_guid: str,
-        content: Any,
-        target_id: str | None = None,
-        node_id: str | None = None,
-        lineage: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        action_name: str = "unknown_action",
-    ) -> dict:
-        """Create a standard processed item with all required fields."""
-        item: dict[str, Any] = {
-            "source_guid": source_guid,
-            "content": content,
-            "target_id": target_id or self.id_generator.generate_target_id(),
-            "node_id": node_id or self.id_generator.generate_node_id(action_name),
-            "lineage": lineage or [],
-        }
-
-        if metadata is not None:
-            item["metadata"] = metadata
-
-        return item
-
     @staticmethod
     def add_metadata(
         obj: dict[str, Any],

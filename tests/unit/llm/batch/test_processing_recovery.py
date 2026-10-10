@@ -98,7 +98,6 @@ def _mock_service():
     service._determine_output_path = MagicMock(return_value=Path("/tmp/output.json"))
     service._write_batch_output = MagicMock()
     service._cleanup_recovery_entries = MagicMock()
-    service._update_prompt_trace_responses = MagicMock()
     return service
 
 
@@ -289,6 +288,44 @@ class TestHandleRetryRecovery:
         assert delete_args[2] == "test_file"  # (backend, action_name, file_name)
         manager.update_status.assert_called_once_with("batch-123", BatchStatus.COMPLETED)
 
+    @pytest.mark.parametrize(
+        "still_missing, sent_again",
+        [({"id-1", "id-2"}, [{"id-1"}]), ({"id-2"}, [])],
+        ids=["beside_another", "alone"],
+    )
+    def test_a_record_with_no_source_guid_is_not_sent_again(self, still_missing, sent_again):
+        """Preparation refuses it, so beside other records it would be counted lost again
+        every round, and alone it would be exhausted for a batch that could never go out.
+        Only a batch an earlier release sent can hold it."""
+        service = _mock_service()
+        state = _make_state(phase="retry", retry_attempt=1, retry_max_attempts=3)
+        service._retry_service.process_retry_results.return_value = (
+            [],
+            still_missing,
+            {rid: 2 for rid in still_missing},
+            [],
+        )
+        service._retry_service.submit_retry_batch.return_value = ("new-batch-id", 1)
+        context_map = {
+            "id-1": {"target_id": "id-1", "source_guid": "sg-1"},
+            "id-2": {"target_id": "id-2"},
+        }
+        ctx, ident = _make_context_and_identity(service=service)
+
+        with patch("agent_actions.llm.batch.services.processing_recovery.RecoveryStateManager"):
+            handle_retry_recovery(
+                ctx,
+                ident,
+                state=state,
+                recovery_results=[],
+                accumulated=[],
+                context_map=context_map,
+            )
+
+        sent = service._retry_service.submit_retry_batch.call_args_list
+        assert [call.kwargs["missing_ids"] for call in sent] == sent_again
+        service._retry_service.build_exhausted_recovery.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # TestHandleRepromptRecovery
@@ -351,18 +388,9 @@ class TestFinalizeBatchOutput:
         service, _, _, _ = self._run_finalize()
         service._cleanup_recovery_entries.assert_not_called()
 
-    def test_finalize_writes_filtered_dispositions(self):
-        """Phase 7b parity: FILTERED records in context_map must reach DISPOSITION_FILTERED.
-
-        finalize_batch_output is the production retrieve entry point (called via
-        process_all_batch_results → _process_single_batch_file → _process_original_batch
-        → _finalize_batch_output). The reconciler strips FILTERED rows from
-        processed_data before this function runs, so the collector path never sees
-        them. Without an explicit _write_filtered_dispositions call here, FILTERED
-        records stay stuck at DISPOSITION_DEFERRED (stamped at submit by Phase 7a)
-        and never transition to DISPOSITION_FILTERED — silently breaking the
-        Phase 7b parity contract for every real batch run.
-        """
+    def test_finalize_hands_the_context_map_to_the_collect_step(self):
+        """The reconciler strips FILTERED rows before the collector sees them, so the
+        collect step writes them from the context map; not handed it, they stay DEFERRED."""
         service = _mock_service()
         manager = MagicMock()
         context_map = {"custom-filtered-1": {"source_guid": "sg-001"}}
@@ -379,15 +407,12 @@ class TestFinalizeBatchOutput:
                 context_map=context_map,
             )
 
-        service._write_filtered_dispositions.assert_called_once_with(context_map, "test_action")
+        collected = service._convert_batch_results_to_workflow_format.call_args.kwargs
+        assert (collected["context_map"], collected["action_name"]) == (context_map, "test_action")
 
-    def test_finalize_uses_service_action_name_when_action_name_none(self):
-        """When action_name=None, _write_filtered_dispositions still uses service._workflow_name.
-
-        Mirrors how _clear_deferred_dispositions and _update_prompt_trace_responses
-        fall back to effective_action_name. A None action_name must not silently
-        skip filtered-disposition writes — the service knows its own name.
-        """
+    def test_finalize_collects_under_the_service_name_when_action_name_none(self):
+        """A None action_name must not leave the collect step without a name: the
+        service knows its own."""
         service = _mock_service()
         service._workflow_name = "fallback_action"
         manager = MagicMock()
@@ -405,7 +430,8 @@ class TestFinalizeBatchOutput:
                 context_map=context_map,
             )
 
-        service._write_filtered_dispositions.assert_called_once_with(context_map, "fallback_action")
+        collected = service._convert_batch_results_to_workflow_format.call_args.kwargs
+        assert collected["action_name"] == "fallback_action"
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +600,7 @@ class TestRecoveryLoopRootCauses:
         svc = BatchProcessingService.__new__(BatchProcessingService)
         svc._registry_manager_factory = MagicMock(return_value=manager)
         svc._workflow_name = "test_action"
-        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+        svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
 
         calls_received = []
         svc._process_single_batch_file = MagicMock(
@@ -610,7 +636,7 @@ class TestDownstreamBugs:
 
         svc._registry_manager_factory = MagicMock(return_value=manager)
         svc._workflow_name = "test_action"
-        svc._is_batch_ready_for_processing = MagicMock(return_value=True)
+        svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
         svc._process_single_batch_file = MagicMock(
             side_effect=RuntimeError("Reprompt validation exhausted")
         )

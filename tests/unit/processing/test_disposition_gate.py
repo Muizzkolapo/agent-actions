@@ -344,8 +344,7 @@ class TestBuildCarryForward:
     def test_two_rows_sharing_an_identity_still_collapse_to_the_last(self):
         """The rule the direct match states and the producer match must not break: two
         stored rows can share a source_guid, and handing back both writes a duplicate
-        identity the checkpoint table cannot even hold. The repair path documents
-        producing exactly that state."""
+        identity. The repair path documents producing exactly that state."""
         prior = [
             {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "stale"},
             {"source_guid": "m0", "producer_source_guids": ["r1"], "row": "fresh"},

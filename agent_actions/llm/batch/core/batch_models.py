@@ -201,7 +201,13 @@ class BatchIdentity:
 
 @dataclass
 class SubmissionResult:
-    """Result of a batch submission."""
+    """Result of a batch submission.
+
+    ``passthrough`` is set when no batch was sent: ``{"type": "written"}`` when the
+    run had nothing to send and wrote the file itself, ``{"carry_forward_only": True}``
+    when no record was left to send, every one already done or none there; submission
+    then writes the file for this run's inputs if it holds a row of a record that left.
+    """
 
     batch_id: str | None = None
     passthrough: dict[str, Any] | None = None

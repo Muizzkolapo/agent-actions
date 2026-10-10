@@ -190,9 +190,10 @@ class TestTheRuleIsNotKeyedToOneActionName:
         b = _backend(
             tmp_path,
             ["stage_one", "stage_two", "stage_three"],
-            # Every earlier level is upstream of every later action, which is what
-            # the coordinator records. A direct-parent graph would leave this
-            # chain's delta rows unable to rejoin `source` at all.
+            # Each action's ancestors through dependencies, which is what the
+            # coordinator records (in a chain, every earlier action). A
+            # direct-parent graph would leave this chain's delta rows unable to
+            # rejoin `source` at all.
             {
                 "stage_one": [],
                 "stage_two": ["stage_one"],

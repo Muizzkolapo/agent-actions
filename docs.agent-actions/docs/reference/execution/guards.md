@@ -130,7 +130,9 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ## Context Access
 
 A guard gates the action before it receives anything, so it reads the record **as stored** —
-every namespace the record carries, addressed as `action_name.field`.
+every namespace the record carries, addressed as `action_name.field`. A record carries the
+actions upstream of it through `dependencies`, so a clause names only those: preflight refuses
+a guard that names an action running beside or after its own, or one on a parallel branch.
 
 | Source | Syntax |
 |--------|--------|
@@ -143,6 +145,7 @@ guard field does not have to appear in `observe`.
 
 ```yaml
 - name: validate
+  dependencies: [group_by_similarity]
   context_scope:
     observe:
       - group_by_similarity.num_similar_facts
@@ -158,7 +161,9 @@ How guard results affect downstream actions in a multi-action workflow:
 | on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
 | `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
-| `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
+| `filter` | Record excluded from output | **Never sees it** — record is removed from every action below the filter |
+
+An action left holding no record because its guard filtered them all is skipped, and so is every action that depends on it. With several input files, filtering all of one file's records is not enough: an action that keeps records from another file completes, and the actions that depend on it run on what it kept and hold nothing for the file it filtered, in either run mode. Records it keeps from a file the run did not read, such as one beyond `--file-limit`, count too.
 
 ### Skipped records flow downstream
 
@@ -176,6 +181,14 @@ actions:
     # Receives ALL records from extract_facts, including skipped ones
     # Can define its own guard or process everything
 ```
+
+### Filtered records leave only what is below the filter
+
+A record an action filters is gone from that action and from every action that depends on
+it, directly or through others. An action on another branch, one that does not depend on
+the filtering action, still receives the record, and so does one under another start node.
+Where the branches meet again, in an action that depends on both, the record stays out: it
+does not come back through the branch that kept it.
 
 ### Upstream failures are short-circuited
 
@@ -205,6 +218,10 @@ guard:
 :::tip
 When a guard silently lets records through unexpectedly, check `target/errors.json` for `G002` events — these indicate evaluation failures that were swallowed by `passthrough_on_error: true`.
 :::
+
+### UDF guards
+
+A UDF guard (`condition: "udf:name"`) passes its record when the function raises, with the one exception below; `passthrough_on_error` cannot be turned off on one. The function is handed a read-only view of the record, so the record cannot be changed from inside a guard. Assigning to it, or calling a method that writes to it, raises, and that one error is not passed through: the function gave no answer, so the action stops with an error naming the function, and no record reaches it unjudged. A function that catches the refusal and carries on still decides, but an error it raises while handling the refusal (inside the `except` that caught it) counts as the write, and the message names that error too. Under `run_mode: batch`, only the check run before submitting (the first rows, up to the first one the guard admits) stops the action this way; a write on a later row fails that record alone. To work on a value, copy it before writing to it (`data["ns"].copy()` is deep and writable) and return the answer.
 
 ## Common Mistakes
 
@@ -247,7 +264,7 @@ When a guard is configured on a File-granularity action (tool or HITL), the guar
 
 | `on_false` | Passing records | Failing records |
 |------------|----------------|-----------------|
-| `filter` | Sent to action | Removed from pipeline |
+| `filter` | Sent to action | Removed from this action and every action below it |
 | `skip` | Sent to action | Preserved in output with original content |
 
 The action only sees records that pass the guard. This is useful for:
