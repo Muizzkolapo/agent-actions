@@ -11,8 +11,11 @@ body: >-
   now map onto agac's own, when a batch is sent and when it is checked: a batch being
   cancelled, or queued, paused or updating at Gemini, is waited for; one that expired has
   failed, so the run collects the files beside it and marks its file's records failed for
-  `agac retry`, naming the file and its batch. A status no mapping knows is taken as still
-  running, named with its batch, and asked about again on the next run. An action an earlier
+  `agac retry`, naming the file and its batch; the answers an expired batch had finished
+  are not read, and `agac retry` sends them again. A batch the agac provider has no record
+  of is now taken as failed, so its file's records go to `agac retry` instead of failing the
+  action. A status no mapping knows is taken as still running, named with its batch, and
+  asked about again on the next run. An action an earlier
   version left waiting on such a batch, or failed over one, collects its batches within the
   next two runs without sending them again.
 time: 2026-10-10T15:38:42Z
