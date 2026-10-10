@@ -29,7 +29,7 @@ Values that are not integers become the suffixes directly — `range: ["literal"
 
 ## Template Variables
 
-Version variables are available in both inline prompts and prompt store references:
+Version variables are available in both inline prompts and prompt store references, where they render per record. In a versioned action's other values (`model_vendor`, `model_name`, `intent`, …) they render once per version, when the workflow loads:
 
 | Variable | Type | Description | Example |
 |----------|------|-------------|---------|
@@ -181,7 +181,7 @@ When observe uses wildcards (`score_quality.*`), fields are also expanded as qua
 
 ### Dollar-brace substitution
 
-Dependency strings support **dollar-brace substitution** (`${i}`, `${i-1}`, etc.). Inside the prompt body, Jinja2 is also evaluated as usual — but dependency strings themselves are dollar-brace only.
+Every value of a versioned action supports **dollar-brace substitution** (`${i}`, `${i-1}`, etc.), dependency strings included. Jinja2 version variables such as `{{ i }}` render in the prompt per record and in the action's other values per version.
 
 :::warning
 `${i-1}` cannot be used to chain one version to the previous one. On the first version
@@ -198,9 +198,10 @@ order; see Execution Order below.
 - name: model_comparison
   versions:
     range: [1, 3]
-  model_vendor: |
-    {% if i == 1 %}openai{% elif i == 2 %}anthropic{% else %}google{% endif %}
+  model_vendor: "{% if i == 1 %}openai{% elif i == 2 %}anthropic{% else %}gemini{% endif %}"
 ```
+
+Each version gets the branch for its own `i`; set `model_name` and `api_key` the same way. Keep such a value on one quoted line: a block scalar (`|`) adds a trailing newline to what it renders, and `model_vendor: "openai\n"` names no vendor.
 
 ## Execution Order
 
