@@ -477,3 +477,47 @@ def test_a_value_captured_around_an_include_of_a_record_tag_waits_for_the_record
     assert _actions(data)["a"]["prompt"] == (
         "{% set k %}{{ source.page_content }}{% endset %}{% if k == 'u' %}E{% endif %}\n"
     )
+
+
+# ── a YAML error names left tags only when they caused it ─────────────────
+
+
+def test_a_yaml_typo_beside_a_per_record_prompt_gets_no_template_note(tmp_path):
+    with pytest.raises(ConfigurationError) as raised:
+        _load(
+            tmp_path,
+            'actions:\n  - name: a\n    prompt: "Summarise {{ source.text }}"\n   intent: x\n',
+        )
+
+    message = str(raised.value)
+    assert "'source'" not in message
+    assert "left in place" not in message
+
+
+def test_a_yaml_error_from_a_left_condition_names_only_that_condition(tmp_path):
+    with pytest.raises(ConfigurationError) as raised:
+        _load(
+            tmp_path,
+            "actions:\n"
+            '  - name: write\n    prompt: "Summarise {{ source.text }}"\n'
+            "{% if enable_validation %}\n  - name: v\n    prompt: y\n{% endif %}\n",
+        )
+
+    message = str(raised.value)
+    assert "'enable_validation'" in message
+    assert "'source'" not in message
+    assert "'write'" not in message
+
+
+def test_a_yaml_error_from_a_definition_a_prompt_tests_names_it(tmp_path):
+    with pytest.raises(ConfigurationError) as raised:
+        _load(
+            tmp_path,
+            '{% set tone = "plain" %}\nactions:\n  - name: a\n    prompt: |\n'
+            '      {% if version.first %}{% set tone = "careful" %}{% endif %}Be {{ tone }}.\n'
+            '    intent: "x"\n',
+        )
+
+    message = str(raised.value)
+    assert "'tone'" in message
+    assert "'version'" not in message
