@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, mark_action_fatal
 from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.strategies.hitl import HITLStrategy
@@ -628,6 +628,23 @@ def test_a_tool_that_raises_fails_every_record_it_was_handed():
     assert [r.input_record for r in results] == originals
 
 
+def test_an_error_already_declared_fatal_to_the_action_is_raised():
+    """Some layer below knew it ends the action, so it is not one file's failure."""
+    context = _make_context()
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+    context.source_data = input_data
+    fatal = mark_action_fatal(AgentActionsError("the store is gone"))
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        side_effect=fatal,
+    ):
+        with pytest.raises(AgentActionsError) as raised:
+            FileToolStrategy().invoke(input_data, context)
+
+    assert raised.value is fatal
+
+
 def test_a_row_whose_parent_names_no_input_fails_every_record_of_its_file():
     """Matching the row to a parent the tool never named would invent its lineage, so
     the file's records fail with the error instead."""
@@ -800,6 +817,40 @@ def test_a_file_whose_every_record_is_refused_keeps_no_row_invented_beside_them(
 
     assert list(_failed(results)) == ["sg-1", "sg-2", "sg-3"]
     assert _stored(results) == []
+
+
+def test_a_refused_record_leaves_the_collapse_beside_it_crediting_its_contributors():
+    """The refused record is named by its failure, so it does not stop the collapse of
+    the two others from crediting the one whose guid the row does not carry."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 0, "data": {"score": "high"}},
+            {"source_index": [1, 2], "data": {"score": 2}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-1"]
+    assert _stored(results) == [("sg-2", 2)]
+    (answer,) = [r for r in results if r.status == ProcessingStatus.SUCCESS]
+    assert answer.collapse_contributor_guids == ["sg-3"]
+
+
+def test_a_refused_record_beside_dropped_ones_returns_no_empty_answer():
+    """With the refused record's row withheld the tool answered nothing, so the file
+    has no result to collect, only the failure and the records the tool dropped."""
+    context, records = _three_records()
+    raw = FileUDFResult(outputs=[{"source_index": 0, "data": {"score": "high"}}])
+
+    results = _answer(context, records, raw)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.UNPROCESSED, "sg-2"),
+        (ProcessingStatus.UNPROCESSED, "sg-3"),
+        (ProcessingStatus.FAILED, "sg-1"),
+    ]
 
 
 # --- _strip_internal_fields list handling ---
