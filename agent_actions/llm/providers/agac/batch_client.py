@@ -282,8 +282,12 @@ class AgacBatchClient(BaseBatchClient):
         return state.status
 
     def _normalize_status(self, raw_status: str) -> str:
-        """Status is already normalized."""
-        return raw_status
+        """A batch with no readable record has failed: nothing will come back for it.
+
+        Taken as still running, as a status no mapping knows is, it would hold the
+        action for good.
+        """
+        return "failed" if raw_status == "unknown" else raw_status
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Generate mock results as JSONL bytes using schema-based fake data."""

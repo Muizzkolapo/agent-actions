@@ -37,15 +37,18 @@ class BatchJobEntry:
     collected_at: str | None = None
 
     def __post_init__(self):
-        """Warn on unrecognized status to avoid breaking existing registries."""
+        """Warn on a status outside BatchStatus, which a registry an earlier version
+        wrote can hold; the entry is taken as in flight."""
         valid = {s.value for s in BatchStatus}
         if self.status not in valid:
             import logging as _logging
 
             _logging.getLogger(__name__).warning(
-                "Unrecognized batch status '%s'. Expected one of: %s",
+                "Batch %s for %s is recorded with status '%s', which agac does not know. "
+                "It is taken as still running, and the provider is asked about it again",
+                self.batch_id,
+                self.file_name,
                 self.status,
-                ", ".join(sorted(valid)),
             )
 
     @classmethod
@@ -70,8 +73,12 @@ class BatchJobEntry:
 
     @property
     def is_in_flight(self) -> bool:
-        """Check if batch is still in progress."""
-        return self.status in BatchStatus.in_flight_states()
+        """Not ended at the provider, as far as the registry knows.
+
+        A status outside BatchStatus counts: only asking the provider again can say
+        how such a batch ends.
+        """
+        return not self.is_terminal
 
     @property
     def awaits_collection(self) -> bool:
@@ -116,10 +123,9 @@ class BatchRegistryStats:
         if self.failed > 0:
             return "partial_failed"
 
-        if self.in_progress > 0:
-            return "in_progress"
-
-        return "error"
+        # Nothing has failed, and not every batch has ended: whatever is out is asked
+        # about, never taken for an error the action fails on unasked.
+        return "in_progress"
 
 
 # Phase 4 Models: Task Preparation

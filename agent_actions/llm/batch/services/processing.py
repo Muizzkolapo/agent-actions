@@ -94,12 +94,13 @@ def _is_dead_retry(entry: BatchJobEntry) -> bool:
 def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
-    COMPLETED (readable now) and in-flight (readable later) recoveries
-    supersede outright. A terminally failed retry recovery also supersedes —
-    its next step is counting the spent attempt, then resubmission or
-    exhaustion — but only when the parent has no readable recovery: a dead
-    attempt must not outrank a usable sibling's actual results. Anything else
-    (a dead recovery batch, an unrecognised status) supersedes nothing, because
+    COMPLETED (readable now) and in-flight (readable later, a status outside
+    BatchStatus included, since the provider is asked about it again)
+    recoveries supersede outright. A terminally failed retry recovery also
+    supersedes — its next step is counting the spent attempt, then
+    resubmission or exhaustion — but only when the parent has no readable
+    recovery: a dead attempt must not outrank a usable sibling's actual
+    results. Anything else (a dead repair batch) supersedes nothing, because
     nothing would process it and a parent skipped for a recovery that never
     produces wedges the action.
 

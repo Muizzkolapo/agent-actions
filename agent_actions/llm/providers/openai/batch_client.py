@@ -26,6 +26,20 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Output: OpenAI response → BatchResult
     """
 
+    # Every status of the SDK's Batch. One being cancelled has not ended yet. One that
+    # ran out of its completion window has: the answers it finished are not read, so
+    # its records are failed for `agac retry`.
+    STATUS_MAPPING = {
+        "validating": "validating",
+        "in_progress": "in_progress",
+        "finalizing": "finalizing",
+        "cancelling": "in_progress",
+        "completed": "completed",
+        "failed": "failed",
+        "expired": "failed",
+        "cancelled": "cancelled",
+    }
+
     def __init__(self, api_key: str | None = None):
         """Initialize OpenAI client."""
         self.client = OpenAI(api_key=api_key)
@@ -115,8 +129,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return str(batch_job.status)
 
     def _normalize_status(self, raw_status: str) -> str:
-        """OpenAI statuses are already in standard format."""
-        return raw_status
+        """Normalize OpenAI status to standard format."""
+        return self.STATUS_MAPPING.get(raw_status, raw_status)
 
     def _get_result_file_name(self, batch_id: str) -> str:
         """Get result filename for OpenAI."""

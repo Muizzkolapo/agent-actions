@@ -549,9 +549,12 @@ Run 2: Poll
         │     all done? → process, as above
         │     not done? → return "in_progress" → BATCH_SUBMITTED again
         │     A failed entry reads "partial_failed" until a pass marks
-        │     its records failed
+        │     its records failed. An entry not ended reads "in_progress",
+        │     one holding a status outside BatchStatus included: every
+        │     client maps its provider's statuses into BatchStatus, and
+        │     takes one it does not know as in_progress
         │
-        └── "failed"/"cancelled" → return error
+        └── "cancelled" (every entry, none collected) → return error
 
 Run N: Resume (if recovery submitted)
   Same poll path — recovery batches are registered in .batch_registry.json

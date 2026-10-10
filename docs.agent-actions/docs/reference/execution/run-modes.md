@@ -98,13 +98,25 @@ as long as the provider cannot be asked; to give up on those batches instead,
 ### When the provider ends a batch without results
 
 A batch the provider fails or cancels before it finishes returns nothing, and no later run
-can read it. Nor can one the provider answers about but no longer reports finished, such as
-one it now reports failed or expired. The run reads the other files, names the file and its
-batch, marks the records of that file failed, and completes the action with those failures,
-for `agac retry` to send again. A run that cannot mark those records, because the store
-could not be read, pauses as for a batch still out, and the next run marks them. When the
-provider ended every file's batch this way, the run fails the action instead, and the next
-run sends every file again.
+can read it. Nor can one that ran out of the provider's time window (OpenAI's and Groq's
+`expired`, Gemini's `JOB_STATE_EXPIRED`), or one the provider answers about but no longer
+reports finished, such as one it now reports failed or expired. The run reads the other
+files, names the file and its batch, marks the records of that file failed, and completes
+the action with those failures, for `agac retry` to send again. A run that cannot mark those
+records, because the store could not be read, pauses as for a batch still out, and the next
+run marks them. When the provider ended every file's batch this way, the run fails the
+action instead, and the next run sends every file again.
+
+A batch the provider is still cancelling has not ended: the run pauses as for a batch still
+out, and a later run, once the provider reports it cancelled, marks its records failed as
+above. An Anthropic batch canceled while it ran ends with a result for every request, and
+the run reads it like any other.
+
+### When the provider reports a status agac does not know
+
+agac maps each provider's batch statuses onto its own. A status no mapping knows, such as
+one a provider adds later, is taken as still running: the run pauses, naming the batch and
+the status, and each run after it asks the provider again until it reports one agac knows.
 
 ### Batch Commands
 
