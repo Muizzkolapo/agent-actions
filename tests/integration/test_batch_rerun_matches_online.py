@@ -1192,17 +1192,8 @@ CARRIED_AS_DONE_AND_TURNED_AWAY = {
     "every_input_skipped": ([_PASSES, _EVERY_ONE_REFUSED], SKIP),
     "one_input_skipped": ([_PASSES, _NOW_FILTERED], SKIP),
     "one_skipped_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], SKIP),
-    "one_skipped_that_then_passes_again": pytest.param(
-        ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
-        marks=pytest.mark.xfail(
-            strict=True,
-            reason=(
-                "Batch records a guard skip as unprocessed, online as passthrough, so once "
-                "the guard passes again batch answers the record and online keeps its "
-                "tombstone. A new record the guard skips and then passes splits the same way."
-            ),
-        ),
-    ),
+    "one_skipped_that_then_passes_again": ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
+    "a_new_input_skipped_that_then_passes": ([_NOW_FILTERED, _PASSES], SKIP),
 }
 
 
@@ -1218,6 +1209,25 @@ def test_an_input_carried_as_done_meets_the_guard_as_online(tmp_path, case):
     for run in compare(tmp_path, runs, guard):
         assert run["batch"] == run["online"], f"run {run['run']}"
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
+def test_a_guard_skip_is_recorded_alike_in_both_modes(tmp_path):
+    """As unprocessed, which keeps the record open: the next run puts it to the guard
+    again, and once the guard passes it, to the model. A terminal disposition would carry
+    its tombstone as done whatever the guard said next."""
+    modes = (_Online(tmp_path), _Batch(tmp_path))
+    for mode in modes:
+        mode.run(1, _NOW_FILTERED, extra=SKIP)
+
+    recorded = [
+        [
+            (row["disposition"], row["reason"])
+            for row in mode.backend.get_disposition(ACTION, record_id="a2")
+        ]
+        for mode in modes
+    ]
+
+    assert recorded == [[("unprocessed", "guard_skip")]] * 2
 
 
 def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_again(tmp_path):
