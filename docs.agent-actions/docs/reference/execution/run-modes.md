@@ -109,10 +109,18 @@ agac batch status --batch-id batch_abc123
 agac batch retrieve --batch-id batch_abc123
 
 # Retry failed records
-agac batch retry --batch-id batch_abc123
+agac retry -a my_workflow
 ```
 
 See [batch Commands](../cli/batch) for complete CLI reference.
+
+Failed records of a batch action are retried with the top-level
+[`retry`](../cli/retry) command, as they are for an online one. The retry
+submits a batch holding only the records it names, and the next run collects
+it. While a batch is still out at the provider the retry is refused: run the
+workflow again to collect it first, and pass `--abandon-in-flight` only when
+the provider no longer has it. See
+[Retrying an action that runs in batch mode](../cli/retry#retrying-an-action-that-runs-in-batch-mode).
 
 ## Mixing Modes
 
@@ -133,6 +141,7 @@ actions:
 ## See Also
 
 - [batch Commands](../cli/batch) - CLI reference for batch operations
+- [retry Command](../cli/retry) - Retry failed records, in either run mode
 - [Batch Recovery](./batch-recovery) - Two-phase retry and repair for batch processing
 - [Context Handling](./context-handling) - Batch vs online context differences
 - [Granularity](./granularity) - Record vs file processing
