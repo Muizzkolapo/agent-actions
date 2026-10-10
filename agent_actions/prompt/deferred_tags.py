@@ -66,7 +66,16 @@ def defer_unresolved_tags(
     tags = _scan(source)
     if tags is None or not _pair_blocks(tags):
         return source, set()
-    deferred, unresolved = _Resolver(env, set(known) | _ALWAYS_BOUND).walk(tags)
+    known = set(known) | _ALWAYS_BOUND
+    # A variable a deferred tag assigns is a per-record variable everywhere: its load-time
+    # assignment and every read are deferred with it, or the load would freeze its value.
+    forced: set[str] = set()
+    while True:
+        resolver = _Resolver(env, known, frozenset(forced))
+        deferred, unresolved = resolver.walk(tags)
+        if resolver.assigned <= forced:
+            break
+        forced |= resolver.assigned
     if not deferred:
         return source, unresolved
     pieces = []
@@ -259,15 +268,18 @@ def _top_level(text: str) -> str:
 
 
 class _Resolver:
-    def __init__(self, env: Environment, known: set[str]):
+    def __init__(self, env: Environment, known: set[str], forced: frozenset[str]):
         self.env = env
         self.known = known
+        self.forced = forced  # assigned by a deferred tag somewhere in the file
         self.scopes: list[dict[str, bool]] = [{}]  # name -> bound only later (per record)
         self.deferred: set[int] = set()
         self.unresolved: set[str] = set()
+        self.assigned: set[str] = set()  # names a deferred `set` assigns
+        self.within_deferred = 0  # enclosing blocks left for later
 
     def walk(self, tags: list[_Tag]) -> tuple[set[int], set[str]]:
-        frames: list[bool] = []  # per open block: did it push a scope
+        frames: list[tuple[bool, bool]] = []  # per open block: pushed a scope, deferred
         for index, tag in enumerate(tags):
             keyword = tag.keyword
             if keyword is None:
@@ -276,16 +288,20 @@ class _Resolver:
             elif keyword in ("elif", "else", "break", "continue"):
                 continue  # decided with the block they belong to
             elif keyword.startswith("end"):
-                if frames.pop():
+                pushed, deferred = frames.pop()
+                if pushed:
                     self.scopes.pop()
+                self.within_deferred -= deferred
             elif keyword in _CLOSERS or tag.members:
-                frames.append(self._open(index, tag, tags))
+                pushed, deferred = self._open(index, tag, tags)
+                frames.append((pushed, deferred))
+                self.within_deferred += deferred
             else:
                 self._statement(index, tag)
         return self.deferred, self.unresolved
 
-    def _open(self, index: int, tag: _Tag, tags: list[_Tag]) -> bool:
-        """Enter a block; True if it pushed a scope."""
+    def _open(self, index: int, tag: _Tag, tags: list[_Tag]) -> tuple[bool, bool]:
+        """Enter a block: did it push a scope, and is it left for later."""
         keyword = tag.keyword
         scope: dict[str, bool] = {}
         if keyword == "if":
@@ -293,9 +309,10 @@ class _Resolver:
             names: set[str] = set()
             for condition in conditions:
                 names |= self._names(f"{{% if {condition.rest} %}}{{% endif %}}")
-            if self._later(names):
+            later = self._later(names)
+            if later:
                 self.deferred.update([index, *tag.members])
-            return False
+            return False, later
         node = self._parse(f"{tag.text}{{% end{keyword} %}}")
         if keyword == "for" and isinstance(node, nodes.For):
             targets = {n.name for n in _name_nodes(node.target)}
@@ -303,8 +320,12 @@ class _Resolver:
             later = self._later(names)
             if later:
                 self.deferred.update([index, *tag.members])
-            scope = dict.fromkeys(targets | {"loop"}, later)
-        elif keyword == "macro" and isinstance(node, nodes.Macro):
+            self.scopes.append(dict.fromkeys(targets | {"loop"}, later))
+            return True, later
+        if keyword == "set" and isinstance(node, nodes.AssignBlock):
+            later = self._assign(_bound_by(node), set(), [index, *tag.members])
+            return False, later
+        if keyword == "macro" and isinstance(node, nodes.Macro):
             self.scopes[-1][node.name] = False
             params = {arg.name for arg in node.args} | {"varargs", "kwargs", "caller"}
             scope = dict.fromkeys(params, False)
@@ -312,25 +333,36 @@ class _Resolver:
             scope = dict.fromkeys({arg.name for arg in node.args}, False)
         elif keyword == "with" and isinstance(node, nodes.With):
             scope = dict.fromkeys({n.name for t in node.targets for n in _name_nodes(t)}, False)
-        elif keyword == "set" and isinstance(node, nodes.AssignBlock):
-            self.scopes[-1].update(dict.fromkeys(_bound_by(node), False))
-            return False
         self.scopes.append(scope)
-        return True
+        return True, False
 
     def _statement(self, index: int, tag: _Tag) -> None:
         node = self._parse(tag.text)
         if isinstance(node, nodes.Assign):
-            names = _free(node.node)
             if isinstance(node.target, nodes.NSRef):
-                names.add(node.target.name)
-            later = self._later(names)
-            if later:
-                self.deferred.add(index)
-            for target in _name_nodes(node.target):
-                self.scopes[-1][target.name] = later
+                namespace = node.target.name
+                self._assign({namespace}, _free(node.node) | {namespace}, [index])
+            else:
+                targets = {n.name for n in _name_nodes(node.target)}
+                self._assign(targets, _free(node.node), [index])
         elif isinstance(node, nodes.Import | nodes.FromImport):
             self.scopes[-1].update(dict.fromkeys(_bound_by(node), False))
+
+    def _assign(self, targets: set[str], reads: set[str], indices: list[int]) -> bool:
+        """Bind *targets*; an assignment inside a deferred block, of a value only a record
+        has, or to a name such an assignment also takes, is itself left for later."""
+        later = self._later(reads) or self.within_deferred > 0 or bool(targets & self.forced)
+        if later:
+            self.deferred.update(indices)
+            self.assigned |= targets
+        for name in targets:
+            for scope in reversed(self.scopes):
+                if name in scope:
+                    scope[name] = later
+                    break
+            else:
+                self.scopes[-1][name] = later
+        return later
 
     def _parse(self, text: str) -> nodes.Node | None:
         try:
