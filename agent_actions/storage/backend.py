@@ -684,6 +684,14 @@ class StorageBackend(ABC):
         """List all target file paths for a specific node."""
         ...
 
+    def stored_path(self, relative_path: str) -> str:
+        """The name a file written at *relative_path* is listed under.
+
+        A backend that rewrites a name when it writes it says how here, so a caller
+        comparing its own names with ``list_target_files`` compares like with like.
+        """
+        return relative_path
+
     def has_target_file(self, action_name: str, relative_path: str) -> bool:
         """Whether *action_name* stores a file under *relative_path*.
 
@@ -964,6 +972,15 @@ class StorageBackend(ABC):
         file under a name nothing holds any more. ``clear_batch_state`` keeps it.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
+
+    def delete_target_files(self, action_name: str, relative_paths: Iterable[str]) -> int:
+        """Delete the files at *relative_paths* an action stores, keeping the rest.
+
+        Returns how many were deleted. Raises unless overridden, as ``delete_target``
+        does. The names recorded for batch input files are the caller's to forget:
+        which of them name these files is a batch rule.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement delete_target_files()")
 
     def perform_maintenance(  # noqa: B027
         self,

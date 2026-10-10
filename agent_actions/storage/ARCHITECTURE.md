@@ -420,6 +420,8 @@ Blocked:
 
 This is defense-in-depth. All SQL uses parameterized queries, so injection is not possible through values. The validation catches malformed identifiers early with clear error messages rather than letting them propagate to confusing SQL errors.
 
+It also rewrites a path: surrounding whitespace is stripped and a backslash becomes `/`, so ` lead.json` is stored and listed as `lead.json`. A caller that compares its own names with `list_target_files()` passes them through `stored_path()` first, which applies the same rewrite.
+
 ---
 
 ## File Index
@@ -440,7 +442,7 @@ This is defense-in-depth. All SQL uses parameterized queries, so injection is no
 
 3. **DELETE-then-INSERT is not atomic at the SQL level.** If the process crashes between the DELETE and INSERT in `set_disposition()`, the disposition row is lost. This is acceptable because a missing disposition means the record will be reprocessed on the next run, which is the safe default.
 
-4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this.
+4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this. `delete_target_files()`, which deletes some of an action's files, is likewise independent: the walk that deletes the file of an input that is gone leaves its records' dispositions and checkpoint rows. They name records whose input is gone, so they are read again only if it comes back, and the reset it then takes to be answered again clears them.
 
 5. **Schema migration only adds columns.** If a column is renamed or removed in a future version, `_enforce_schema()` will not handle it. The table will have both old and new columns. There is no `DROP COLUMN` or `ALTER COLUMN` path.
 

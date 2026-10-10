@@ -266,6 +266,13 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(f"Invalid characters in {field}: {invalid}")
         return name
 
+    def stored_path(self, relative_path: str) -> str:
+        try:
+            return self._validate_identifier(relative_path, "relative_path")
+        except ValueError:
+            # Refused on write too, so it is listed under no name at all.
+            return relative_path
+
     @property
     def backend_type(self) -> str:
         """Return the backend type identifier."""
@@ -1626,6 +1633,28 @@ class SQLiteBackend(StorageBackend):
                     extra={"workflow_name": self.workflow_name},
                 )
                 raise
+
+    def delete_target_files(self, action_name: str, relative_paths: Iterable[str]) -> int:
+        """Delete the files at *relative_paths* an action stores, in one transaction."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        paths = [self._validate_identifier(path, "relative_path") for path in relative_paths]
+        if not paths:
+            return 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.executemany(
+                    "DELETE FROM target_data WHERE action_name = ? AND relative_path = ?",
+                    [(action_name, path) for path in paths],
+                )
+                deleted = cursor.rowcount
+                self.connection.commit()
+            except sqlite3.Error:
+                self.connection.rollback()
+                raise
+        # A read of a deleted file would otherwise be served from the cache.
+        self._reconstruction_cache.clear()
+        return deleted
 
     def clear_source_data(self) -> None:
         """Delete all rows from source_data table."""

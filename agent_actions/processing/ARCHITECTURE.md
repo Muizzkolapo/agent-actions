@@ -559,6 +559,11 @@ leave as it stands, or one stored empty already, is not written again, as on a r
 where nothing left. The merge keeps one row per identity, so a file holding two rows under
 one is written even then, with one of them, as online and finalize write it.
 
+A file whose input is gone is never submitted, so nothing is collected for it either. The
+walk that submits deletes what the action stored for it once it has reached every input,
+as it does online (`workflow/ARCHITECTURE.md`, a file whose input is gone goes with it),
+so its rows are gone before the next run collects.
+
 A batch input file has one name, its identity: its path under the action's input root
 (`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
 recorded inputs, recovery state and recovery entries are keyed by it, and its output is

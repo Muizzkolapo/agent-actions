@@ -139,7 +139,17 @@ never completed — so a retry, stopped or finished, leaves an edit to the next 
 Staged input is the source of truth for what an action holds. An action reset after
 its input was removed — by an edit, or by a limit or model given on the command
 line — finds no input file, is skipped, and its stored output is deleted along with
-its readers'. Restore the input and run again to rebuild them.
+its readers'. Restore the input and run again to rebuild them. A reset after only
+some of its input files were removed deletes what it stored for those files, once it
+has read every file still there, and so do its readers; a batch action does this when
+it submits. A file that failed to process keeps its output. Nothing is deleted by a run
+that a file limit stopped before its last file, by one that could not list part of its
+input or read what its upstream stored, or by an `agac retry` repairing the records it
+names. A retry that names none, as one resuming a halted action does, runs its actions
+in full and deletes as a run does. A version merge sees every file its versions hold
+whatever its file limit, so before it runs it deletes what it stored for a file none of
+them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
+them.
 
 | Status | Description |
 |--------|-------------|

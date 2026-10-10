@@ -107,6 +107,24 @@ def batch_file_identity(
     return decided
 
 
+def recorded_batch_file_names(
+    storage_backend: "StorageBackend", action_name: str
+) -> dict[str, str]:
+    """The name chosen for each nested input file of *action_name*, by its identity."""
+    return _recorded_names(storage_backend, batch_file_names_key(action_name))
+
+
+def forget_batch_file_names(
+    storage_backend: "StorageBackend", action_name: str, kept: Collection[str]
+) -> None:
+    """Forget the name chosen for each input file not in *kept*: its rows are gone."""
+    key = batch_file_names_key(action_name)
+    names = _recorded_names(storage_backend, key)
+    left = {identity: chosen for identity, chosen in names.items() if identity in kept}
+    if left != names:
+        storage_backend.save_metadata(key, json.dumps(left, sort_keys=True))
+
+
 def _recorded_names(storage_backend: "StorageBackend", key: str) -> dict[str, str]:
     raw = storage_backend.load_metadata(key)
     if raw is None:
