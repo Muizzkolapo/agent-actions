@@ -4,8 +4,8 @@ body: >-
   the guard again when a run resumes the action, and sends it to the model once the guard
   passes it, as a batch action does. Online recorded a guard skip as `passthrough`, which
   reads as done, so after a run that stopped partway (a provider error, a kill) the next
-  `agac run` or `agac retry` carried the record's `guard_skipped` row forward without asking
-  the guard, even after a change to the guard's code passed it, and the action read
+  `agac run` or `agac retry` carried the record's `guard_skipped` row forward even when a
+  change to the guard's code now passed it, and the action read
   `completed` with exit 0. A guard skip is now `unprocessed` with reason `guard_skip` in
   both run modes, as one in an action of `granularity: file` already was (with reason
   `guard_prefilter_skip`), and `agac dispositions` counts it under Unprocessed instead of
