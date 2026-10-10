@@ -189,6 +189,16 @@ class TestOnEmptyOnTheAction:
         assert result.exit_code != 0, result.output
         assert _halted_on_empty(project, TOOL_WORKFLOW, "gather")
 
+    def test_a_retry_takes_the_on_empty_written_since_the_run(self, project):
+        """`agac retry` loads the workflow afresh, so it reads the action's key too."""
+        assert _run(TOOL_WORKFLOW).exit_code == 0
+        _on_empty(project, TOOL_WORKFLOW, action="skip")
+
+        result = CliRunner().invoke(cli, ["retry", "-a", TOOL_WORKFLOW])
+
+        assert result.exit_code == 0, result.output
+        assert _records(project, TOOL_WORKFLOW, "flatten") == ["passthrough", "success"]
+
 
 class TestOnEmptyInheritedFromADefault:
     def test_the_workflow_s_defaults_reach_the_action(self, project):
