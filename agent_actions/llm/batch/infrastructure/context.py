@@ -1,13 +1,16 @@
-"""Persistence of batch context maps via StorageBackend metadata store."""
+"""The names a batch keys an input file by, and its context maps in StorageBackend metadata."""
 
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Iterable, Mapping
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
+from agent_actions.storage.backend import batch_file_names_key
 
 if TYPE_CHECKING:
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -16,12 +19,163 @@ logger = logging.getLogger(__name__)
 def batch_output_name(file_name: str) -> str:
     """The name a batch's output file is stored under, given the input file it answers.
 
-    Finalize writes under it and submission looks stored rows up under it; two copies of
-    this rule would let one drift and every carried input read as having no stored row.
+    Finalize writes under it, submission reads stored rows under it, and its callers write
+    there when nothing is sent; two copies of this rule would let one drift and every
+    carried input read as having no stored row.
     """
-    from pathlib import Path
+    return PurePosixPath(file_name).with_suffix(".json").as_posix()
 
-    return f"{Path(file_name).stem}.json"
+
+def checked_batch_file_name(name: str) -> str:
+    """*name*, refused if it would leave the action's input root.
+
+    A `..` inside a part is part of a name (`v1..2/page.json`), as the store reads it.
+    """
+    path = PurePosixPath(name)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"Invalid batch file name, outside the input root: {name}")
+    return name
+
+
+def batch_file_identity(
+    relative_path: str,
+    action_name: str,
+    storage_backend: "StorageBackend | None",
+    *,
+    base_owner: Callable[[str], bool],
+    registry: Callable[[str], "BatchRegistryManager"],
+) -> str:
+    """The name a batch keys an input file by: its path under the action's input root.
+
+    A store written by an older version keyed a file by its basename alone, and holds a
+    nested file's rows, batch state and every downstream join under that name. Such a
+    file keeps it, unless *base_owner* says a top-level input of the action stores under
+    that name, or another nested file stored under it claimed it first. The choice is
+    recorded, a repair's too, so two files cannot claim one name, and it outlives a
+    reset, since the stored rows do; ``delete_target`` forgets it. *registry* is the
+    submission's, so the registry is read once for both.
+    """
+    identity = PurePosixPath(relative_path).as_posix()
+    legacy = PurePosixPath(identity).name
+    if legacy == identity or storage_backend is None:
+        return identity
+
+    key = batch_file_names_key(action_name)
+    names = _recorded_names(storage_backend, key)
+    chosen = names.get(identity)
+    if chosen == identity:
+        return identity
+    if chosen == legacy:
+        if not base_owner(legacy):
+            return legacy
+        decided = identity
+        logger.info(
+            "%s: %s gives the name %s up to a top-level input and moves to %s",
+            action_name,
+            identity,
+            batch_output_name(legacy),
+            batch_output_name(identity),
+        )
+    else:
+        decided = identity
+        if _stored_under(storage_backend, registry(action_name), action_name, legacy):
+            holder = _claimant(names, identity, legacy) or (
+                "a top-level input" if base_owner(legacy) else None
+            )
+            if holder is None:
+                decided = legacy
+                logger.info(
+                    "%s: %s keeps the name %s, under which this store already holds it; "
+                    "--fresh moves it to %s",
+                    action_name,
+                    identity,
+                    batch_output_name(legacy),
+                    batch_output_name(identity),
+                )
+            else:
+                logger.info(
+                    "%s: %s is stored as %s, since %s, which this store already holds, "
+                    "belongs to %s; any of its records held there are sent again",
+                    action_name,
+                    identity,
+                    batch_output_name(identity),
+                    batch_output_name(legacy),
+                    holder,
+                )
+    names[identity] = decided
+    storage_backend.save_metadata(key, json.dumps(names, sort_keys=True))
+    return decided
+
+
+def _recorded_names(storage_backend: "StorageBackend", key: str) -> dict[str, str]:
+    raw = storage_backend.load_metadata(key)
+    if raw is None:
+        return {}
+    try:
+        names = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        names = None
+    if not isinstance(names, dict):
+        logger.warning("Unreadable %s — deciding each nested file's name again", key)
+        return {}
+    return {k: v for k, v in names.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def _claimant(names: dict[str, str], identity: str, legacy: str) -> str | None:
+    """Another file already recorded as stored under *legacy*'s name, if any."""
+    stored = batch_output_name(legacy)
+    return next(
+        (
+            other
+            for other, chosen in names.items()
+            if other != identity and batch_output_name(chosen) == stored
+        ),
+        None,
+    )
+
+
+def _stored_under(
+    storage_backend: "StorageBackend",
+    registry: "BatchRegistryManager",
+    action_name: str,
+    legacy: str,
+) -> bool:
+    """Whether the store keeps a file under *legacy*: its output, or a batch entry."""
+    if storage_backend.has_target_file(action_name, batch_output_name(legacy)):
+        return True
+    return registry.get_batch_job(legacy) is not None
+
+
+def held_by_a_dependency(
+    storage_backend: "StorageBackend | None",
+    dependencies: Iterable[Any],
+    action_configs: Mapping[str, Any] | None,
+) -> Callable[[str], bool]:
+    """Whether an action this one reads stores a file under *legacy*'s name.
+
+    A dependency naming a version base reads each of its versions, as the executor
+    expands it; the base itself stores nothing.
+    """
+    versions: dict[str, list[str]] = {}
+    for name, config in (action_configs or {}).items():
+        if isinstance(config, Mapping) and config.get("is_versioned_agent"):
+            base = config.get("version_base_name")
+            if base:
+                versions.setdefault(base, []).append(name)
+    upstream = [
+        name
+        for dependency in dependencies
+        if isinstance(dependency, str)
+        for name in versions.get(dependency, [dependency])
+    ]
+
+    def owns(legacy: str) -> bool:
+        if storage_backend is None:
+            return False
+        stored = batch_output_name(legacy)
+        return any(storage_backend.has_target_file(name, stored) for name in upstream)
+
+    return owns
 
 
 class BatchContextManager:
@@ -29,21 +183,11 @@ class BatchContextManager:
 
     @staticmethod
     def _metadata_key(action_name: str, batch_name: str) -> str:
-        if ".." in batch_name:
-            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
-        from pathlib import Path
-
-        safe_name = Path(batch_name).name
-        return f"batch_context:{action_name}:{safe_name}"
+        return f"batch_context:{action_name}:{checked_batch_file_name(batch_name)}"
 
     @staticmethod
     def _inputs_key(action_name: str, batch_name: str) -> str:
-        if ".." in batch_name:
-            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
-        from pathlib import Path
-
-        safe_name = Path(batch_name).name
-        return f"batch_inputs:{action_name}:{safe_name}"
+        return f"batch_inputs:{action_name}:{checked_batch_file_name(batch_name)}"
 
     @staticmethod
     def save_batch_inputs(

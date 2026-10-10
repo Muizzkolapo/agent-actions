@@ -63,6 +63,7 @@ class SingleFileProcessParams:
     idx: int
     source_relative_path: str | None = None  # For storage backend reads
     data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
+    file_type_filter: set[str] | None = None
 
 
 @dataclass
@@ -283,6 +284,7 @@ class ActionRunner:
                 data=params.data,
                 workflow_metadata=self.workflow_metadata,
                 retried_records=self.retried_records,
+                file_type_filter=params.file_type_filter,
             )
         )
 

@@ -10,6 +10,7 @@ from agent_actions.llm.batch.core.batch_constants import (
     RecoveryPhase,
     coerce_recovery_phase,
 )
+from agent_actions.llm.batch.infrastructure.context import checked_batch_file_name
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -77,12 +78,7 @@ class RecoveryStateManager:
 
     @staticmethod
     def _metadata_key(action_name: str, file_name: str) -> str:
-        if ".." in file_name:
-            raise ValueError(f"Invalid file name contains path traversal: {file_name}")
-        from pathlib import Path
-
-        safe_name = Path(file_name).name
-        return f"recovery_state:{action_name}:{safe_name}"
+        return f"recovery_state:{action_name}:{checked_batch_file_name(file_name)}"
 
     @staticmethod
     def save(

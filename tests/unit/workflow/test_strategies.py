@@ -130,6 +130,37 @@ class TestInitialStrategy:
         ctx = mock_process.call_args[0][0]
         assert ctx.agent_config == config
 
+    @patch("agent_actions.workflow.strategies.process_initial_stage")
+    def test_execute_hands_the_first_stage_the_file_types_the_walk_reads(self, mock_process):
+        """A batch file's name depends on which top-level files the walk processes."""
+        InitialStrategy().execute(_make_params(file_type_filter={"json"}))
+
+        assert mock_process.call_args[0][0].file_type_filter == {"json"}
+
+    def test_the_walk_hands_each_file_the_start_node_file_types(self, tmp_path):
+        from agent_actions.workflow.runner import ActionRunner, FileProcessParams
+        from agent_actions.workflow.runner_file_processing import process_directory_files
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        (staging / "page.json").write_text("[]")
+        strategy = MagicMock()
+        params = FileProcessParams(
+            action_config={},
+            action_name="act",
+            strategy=strategy,
+            upstream_data_dirs=[str(staging)],
+            output_directory=str(tmp_path / "out"),
+            idx=0,
+            file_type_filter={"json"},
+        )
+
+        process_directory_files(
+            ActionRunner(use_tools=False), staging, tmp_path / "out", str(staging), params, set()
+        )
+
+        assert strategy.execute.call_args[0][0].file_type_filter == {"json"}
+
     def test_equality_same_type(self):
         assert InitialStrategy() == InitialStrategy()
 

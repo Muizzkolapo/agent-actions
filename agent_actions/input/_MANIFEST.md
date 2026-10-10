@@ -27,7 +27,7 @@ and chunking/lineage support).
 | `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl`, `guard` (`udf:` conditions) |
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
-| `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
+| `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config`, `data_source` (`file_type`) |
 | `GuardFilter.filter_item()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 
@@ -43,4 +43,5 @@ and chunking/lineage support).
 | `processing` | outbound | Delegates record processing to UnifiedProcessor |
 | `prompt` | outbound | Validates staged data against prompt templates |
 | `workflow` | inbound | Workflow executor calls process_initial_stage and context normalization |
+| `workflow` | outbound | The first stage builds its batch context with `ProcessingPipeline`, and names a batch file by the top-level files the walk processes (`should_skip_item`) |
 | `validation` | inbound | Uses guard evaluation and field resolution for preflight checks |

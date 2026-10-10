@@ -29,7 +29,10 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, RecoveryContext
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+    batch_output_name,
+)
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -329,7 +332,7 @@ class _Batch(_Mode):
         self, tmp_path: Path, file: str = FILE, *, clears_batch_state: bool = True
     ) -> None:
         super().__init__(tmp_path, file)
-        self.stored_as = f"{Path(file).stem}.json"
+        self.stored_as = batch_output_name(file)
         self.provider = _Provider()
         self.sent_in_order: list[list[str]] = []
         self.clears_batch_state = clears_batch_state
@@ -366,9 +369,7 @@ class _Batch(_Mode):
             return answers(self.held())
 
         self.sent_in_order.append(
-            _collect(
-                self.backend, self.provider, config, self.out, Path(self.file).name, run, answer
-            )
+            _collect(self.backend, self.provider, config, self.out, self.file, run, answer)
         )
         self.sent.append(sorted(self.sent_in_order[-1]))
         return answers(self.held())
@@ -445,19 +446,34 @@ def _collect(
 class _FirstStageBatch:
     """A batch action with no action above it, driven through ``process_initial_stage``."""
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, file: str = FILE) -> None:
         self.backend = SQLiteBackend(str(tmp_path / "first.db"), workflow_name="w")
         self.backend.initialize()
         self.staging = tmp_path / "staging"
         self.target = tmp_path / "target" / ACTION
         self.staging.mkdir(parents=True)
         self.target.mkdir(parents=True)
+        self.file = file
+        self.file_type_filter: set[str] | None = None
         self.provider = _Provider()
         self.sent: list[list[str]] = []
 
-    def run(self, run: int, staged: list[dict[str, Any]], extra: dict[str, Any]) -> list[str]:
+    def run(
+        self,
+        run: int,
+        staged: list[dict[str, Any]],
+        extra: dict[str, Any],
+        retried: frozenset[str] = frozenset(),
+    ) -> list[str]:
         self.backend.clear_batch_state(ACTION)
-        (self.staging / FILE).write_text(json.dumps(staged))
+        staged_file = self.staging / self.file
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        if staged_file.suffix == ".csv":
+            header = list(staged[0])
+            lines = [",".join(header)] + [",".join(str(row[k]) for k in header) for row in staged]
+            staged_file.write_text("\n".join(lines) + "\n")
+        else:
+            staged_file.write_text(json.dumps(staged))
         config = _config(
             RunMode.BATCH,
             {"dependencies": [], "context_scope": {"observe": ["source.*"]}, "idx": 0, **extra},
@@ -472,13 +488,16 @@ class _FirstStageBatch:
                 InitialStageContext(
                     agent_config=config,
                     agent_name=ACTION,
-                    file_path=str(self.staging / FILE),
+                    file_path=str(staged_file),
                     base_directory=str(self.staging),
-                    output_directory=str(self.target),
+                    # As the runner hands it: the folder this file's output goes in.
+                    output_directory=str((self.target / self.file).parent),
                     idx=0,
                     storage_backend=self.backend,
                     action_configs={ACTION: config},
                     workflow_metadata={},
+                    retried_records=retried,
+                    file_type_filter=self.file_type_filter,
                 )
             )
         self.sent.append(
@@ -487,7 +506,7 @@ class _FirstStageBatch:
                 self.provider,
                 config,
                 self.target,
-                FILE,
+                self.file,
                 run,
                 Answerer(),
                 label=lambda row: row["content"]["source"]["item"],
@@ -496,7 +515,12 @@ class _FirstStageBatch:
             else []
         )
         self.backend._reconstruction_cache.clear()
-        return answers(self.backend.read_target_for_rewrite(ACTION, FILE))
+        try:
+            return answers(
+                self.backend.read_target_for_rewrite(ACTION, batch_output_name(self.file))
+            )
+        except FileNotFoundError:
+            return []
 
 
 def compare(
@@ -839,7 +863,7 @@ def test_inputs_answered_again_are_sent_in_the_order_the_input_holds_them(tmp_pa
 
 @pytest.mark.parametrize("config", [FILTER, SKIP], ids=["filtered", "skipped"])
 def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
-    """Its output and the write made when nothing is sent are stored under two names."""
+    """Its output and the write made when nothing is sent were stored under two names."""
     batch = _Batch(tmp_path, "sub/page.json")
     batch.run(1, _UNCHANGED_WITH_ONE_REFUSED, extra=config)
 
@@ -847,6 +871,7 @@ def test_a_file_in_a_subdirectory_holds_each_answer_once(tmp_path, config):
 
     answered = [row for row in batch.everything_held() if row.startswith("processed:")]
     assert answered == ["processed:a1:0@run1", "processed:a2:0@run1"]
+    assert batch.backend.list_target_files(ACTION) == ["sub/page.json"]
 
 
 def test_a_first_stage_action_keeps_its_answers_when_nothing_is_left_to_send(tmp_path):

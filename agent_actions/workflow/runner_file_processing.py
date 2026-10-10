@@ -340,6 +340,7 @@ def _build_file_params(
         "action_name": params.action_name,
         "strategy": params.strategy,
         "idx": params.idx,
+        "file_type_filter": params.file_type_filter,
     }
     if source_relative_path is not None:
         kwargs["source_relative_path"] = source_relative_path

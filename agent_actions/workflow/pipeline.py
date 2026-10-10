@@ -9,12 +9,17 @@ from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+    batch_file_identity,
+    batch_output_name,
+    held_by_a_dependency,
+)
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.output.writer import FileWriter, target_relative_path
+from agent_actions.output.writer import FileWriter
 from agent_actions.processing.disposition_gate import positions_named_by_repair
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
@@ -274,23 +279,32 @@ class ProcessingPipeline:
         else:
             file_reader = FileReader(params.batch_file_path)
             data = file_reader.read()
-        file_name = Path(params.batch_file_path).name
         # A file read is the whole input by construction — no narrowing sits above it —
         # so it is its own recording. Only a caller that narrowed before this has to say
         # what it narrowed from, and "it did not say" must not be read as "nothing".
         run_inputs = params.run_inputs if params.data is not None else data
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
+        batch_name = batch_file_identity(
+            relative_path.as_posix(),
+            params.pipeline_action_name,
+            params.storage_backend,
+            base_owner=held_by_a_dependency(
+                params.storage_backend,
+                params.pipeline_action_config.get("dependencies") or [],
+                params.dependency_configs,
+            ),
+            registry=registry_manager_factory,
+        )
 
         result = submission_service.submit_batch_job(
             cast(dict[str, Any], params.pipeline_action_config),
-            file_name,
+            batch_name,
             data,
             params.batch_output_directory,
             source_data=params.source_data,
             workflow_metadata=params.workflow_metadata,
             run_inputs=run_inputs,
-            tombstone_path=target_relative_path(output_file_path, params.batch_output_directory),
         )
 
         if (
@@ -299,7 +313,7 @@ class ProcessingPipeline:
             and result.passthrough.get("type") == "tombstone"
         ):
             file_writer = FileWriter(
-                str(output_file_path),
+                str(Path(params.batch_output_directory) / batch_output_name(batch_name)),
                 storage_backend=params.storage_backend,
                 action_name=params.pipeline_action_name,
                 output_directory=params.batch_output_directory,
