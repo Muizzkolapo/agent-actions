@@ -751,3 +751,50 @@ def test_a_mapping_below_a_key_is_not_read_as_its_value(tmp_path):
 
     assert data["defaults"] == {"model_name": "m"}
     assert _actions(data)["m_2"]["model_kwargs"] == {"temperature": "0.2"}
+
+
+@pytest.mark.parametrize(
+    "upstream",
+    [
+        pytest.param(
+            "{% macro tool(action_name) %}\n  - name: {{ action_name }}\n    kind: tool\n"
+            "{% endmacro %}\n{{ tool('extract_facts') }}\n",
+            id="named-by-a-macro-parameter",
+        ),
+        pytest.param(
+            "{% for n in ['extract_facts'] %}\n  - name: {{ n }}\n    kind: tool\n{% endfor %}\n",
+            id="named-by-a-loop-variable",
+        ),
+        pytest.param("  - {name: extract_facts, kind: tool}\n", id="named-in-a-flow-mapping"),
+    ],
+)
+def test_a_prompt_reading_an_action_the_file_names_by_a_tag_renders_per_record(tmp_path, upstream):
+    """The load knew only literal `name:` lines, so it rendered the prompt and failed."""
+    data = _load(
+        tmp_path,
+        "actions:\n" + upstream + "  - name: validate\n    dependencies: [extract_facts]\n"
+        '    prompt: "Validate these facts: {{ extract_facts.facts }}"\n',
+    )
+
+    assert _actions(data)["validate"]["prompt"] == "Validate these facts: {{ extract_facts.facts }}"
+
+
+def test_a_prompt_reading_a_name_that_is_no_action_still_fails_the_load(tmp_path):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(
+            tmp_path,
+            "actions:\n{% for n in ['facts'] %}\n  - name: {{ n }}\n{% endfor %}\n"
+            '  - name: write\n    prompt: "Write about {{ topic }}."\n',
+        )
+
+    assert "'topic' is undefined" in str(raised.value)
+
+
+def test_a_guarded_name_in_a_prompt_of_load_time_names_still_renders_at_load(tmp_path):
+    data = _load(
+        tmp_path,
+        "{% set tone = 'plain' %}\nactions:\n"
+        '  - name: a\n    prompt: "{% if debug is defined %}D{% endif %}Be {{ tone }}."\n',
+    )
+
+    assert _actions(data)["a"]["prompt"] == "Be plain."
