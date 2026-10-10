@@ -1238,7 +1238,7 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Classify action outcome: FAILED (all items failed), SKIPPED (all guard-filtered), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
+        """Classify action outcome: FAILED (all items failed), SKIPPED (guard-filtered, holding no record), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -1246,23 +1246,33 @@ class ActionExecutor:
             action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
         ):
             # Clear-on-execute guarantees this row is current-round. The writer
-            # whose row survives here is result_collector.write_node_level_disposition
-            # firing during run_action when every input record was filtered.
+            # whose row survives here is result_collector.write_node_level_disposition,
+            # which fires for each input file whose every record was filtered, so
+            # the row is the action's skip only while the action holds no record.
             # (_handle_dependency_skip and _skip_holding_nothing, which skips an
             # action with no version source or no input file, also write
             # SKIPPED@NODE_LEVEL but return before this resolver runs.)
+            if not storage_backend.has_target_rows(action_name):
+                logger.info(
+                    "Action '%s' had all records guard-filtered — marking as skipped",
+                    action_name,
+                    extra=DIAGNOSTIC,
+                )
+                return ActionStatus.SKIPPED
+            # Left in place, the row reads as a skip to `agac dispositions`, to the
+            # action's readers and to the next run, which would run it again.
+            storage_backend.clear_disposition(
+                action_name, DISPOSITION_SKIPPED, record_id=NODE_LEVEL_RECORD_ID
+            )
             logger.info(
-                "Action '%s' had all records guard-filtered — marking as skipped",
+                "Action '%s' had every record of an input file guard-filtered but holds "
+                "rows from another — not marking it skipped",
                 action_name,
                 extra=DIAGNOSTIC,
             )
-            return ActionStatus.SKIPPED
-        if (
-            storage_backend.has_disposition(
-                action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
-            )
-            and self._count_records_for_action(action_name) == 0
-        ):
+        if storage_backend.has_disposition(
+            action_name, DISPOSITION_PASSTHROUGH, record_id=NODE_LEVEL_RECORD_ID
+        ) and not storage_backend.has_target_rows(action_name):
             # Batch's spelling of the row above: it returns at the fork in
             # workflow/pipeline.py before the SKIPPED@NODE_LEVEL writer. The row
             # is read, never rewritten — it is the resume path's only marker.

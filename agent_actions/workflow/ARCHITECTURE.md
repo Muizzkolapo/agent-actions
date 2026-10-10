@@ -137,6 +137,13 @@ that returned. An action whose run raised is FAILED without reaching this
 classifier, so FAILED there does not imply zero successes:
 
 ```
+node-level skipped row?  (online: an input file's every record was guard-filtered)
+    │
+    YES → action holds no record? → SKIPPED
+          otherwise clear the row and go on below
+    │
+node-level passthrough row and no record held?  (batch's spelling) → SKIPPED
+    │
 get_failed_items() returns failures?
     │
     NO → COMPLETED
@@ -146,6 +153,13 @@ get_failed_items() returns failures?
            YES → COMPLETED_WITH_FAILURES
            NO  → FAILED (zero successes = hard failure)
 ```
+
+The collector writes the skipped row for each input file whose every record the
+guard filtered, but the row names the action, so it holds only while the action
+holds no record: an action that filters every record of one file and keeps rows
+from another completes, and its readers run on those rows. The classifier clears
+the row then. Left in place, it would show in `agac dispositions`, and the next run
+would read it as a skip from before and run the action again.
 
 ---
 
