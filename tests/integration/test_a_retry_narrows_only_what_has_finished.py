@@ -18,7 +18,8 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from agent_actions.errors import ConfigurationError, SchemaValidationError
+from agent_actions.errors import ConfigurationError
+from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.runner import ActionRunner
@@ -268,10 +269,17 @@ def _the_readers_tool_raises(error, from_call=1):
 
 
 def test_a_reader_an_error_stopped_partway_on_its_first_run_refuses(chained):  # noqa: F811
-    """A tool output that fails validation ends its file at that record: two answered,
-    three never reached. Taken as a failure on every record, the retry completed it on
-    the one it named."""
-    with _the_readers_tool_raises(SchemaValidationError("output did not validate"), from_call=3):
+    """A render failure one record's data provoked, which the record loop re-raises and no
+    one declares fatal, ends its file at that record: two answered, three never reached.
+    Taken as a failure on every record, the retry completed it on the one it named."""
+    stops = TemplateVariableError(
+        missing_variables=[],
+        available_variables=["flatten"],
+        agent_name=SECOND,
+        mode="online",
+        cause=TypeError("unsupported operand type(s) for +: 'int' and 'dict'"),
+    )
+    with _the_readers_tool_raises(stops, from_call=3):
         _run("--fresh")
     assert (_status(chained, ACTION), _status(chained)) == ("completed", "failed")
     named = _a_failure_at_the_first_action(chained)

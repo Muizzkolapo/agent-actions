@@ -848,11 +848,12 @@ def test_record_tool_list_return_produces_multiple_output_items():
     assert output[2]["content"]["flatten_tool"]["question"] == "Q3"
 
 
-# --- SchemaValidationError re-raise in invoke ---
+# --- A record tool's SchemaValidationError fails its record in invoke ---
 
 
-def test_invoke_reraises_schema_validation_error():
-    """SchemaValidationError from process_record() should propagate through invoke()."""
+def test_invoke_fails_the_record_whose_output_fails_its_schema():
+    """A record tool's output is checked one record at a time, so a SchemaValidationError
+    from process_record() fails that record and invoke() returns, as for a tool that raises."""
     from agent_actions.errors import SchemaValidationError
     from agent_actions.processing.invocation.result import InvocationResult
     from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -882,8 +883,11 @@ def test_invoke_reraises_schema_validation_error():
         "process_record",
         side_effect=SchemaValidationError("output doesn't match schema"),
     ):
-        with pytest.raises(SchemaValidationError, match="output doesn't match schema"):
-            strategy.invoke(items, context)
+        results = strategy.invoke(items, context)
+
+    assert [r.status for r in results] == [ProcessingStatus.FAILED]
+    assert results[0].source_guid == "sg-1"
+    assert "output doesn't match schema" in (results[0].error or "")
 
 
 # --- ResultCollector failure handling ---

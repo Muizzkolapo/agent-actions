@@ -62,9 +62,11 @@ caller stores the file under, and by which it clears the file's checkpoint rows 
 that order: expectations (they wrap the inner layers, so their exhaustion is the terminal cause
 even when inner retry metadata is also present), then retry. The expectations arm
 writes reason `expectations_exhausted` plus `expectations_failed`/`expectations_iterations` in the
-tombstone metadata. `ExpectationsExhaustedError` joins `ConfigurationError`/`EmptyOutputError`/
-`SchemaValidationError` in the action-fatal re-raise list — `on_exhausted: raise` halts the run
-rather than degrading into a per-record failure.
+tombstone metadata. `ExpectationsExhaustedError` joins `ConfigurationError`/`EmptyOutputError`
+in the action-fatal re-raise list — `on_exhausted: raise` halts the run rather than degrading
+into a per-record failure. A `SchemaValidationError` is not on it: a record tool's output is
+checked against its schema one record at a time, so `OnlineLLMStrategy.invoke` fails that
+record, as it does a tool that raises, and the rest of its file is stored.
 
 ## Dependencies
 

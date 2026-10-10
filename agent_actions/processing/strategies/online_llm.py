@@ -15,7 +15,6 @@ from agent_actions.config.types import RunMode
 from agent_actions.errors import (
     ConfigurationError,
     RecordContextError,
-    SchemaValidationError,
     mark_action_fatal,
     raised_by_exhaustion_policy,
 )
@@ -279,11 +278,6 @@ class OnlineLLMStrategy:
             except (ConfigurationError, EmptyOutputError) as e:
                 mark_action_fatal(e)
                 raise
-            except SchemaValidationError:
-                # UDF output validation runs per item and is ungated, so this
-                # can indict one value rather than the action. Re-raised, as
-                # the loop cannot tombstone it, but not declared fatal.
-                raise
             except ExpectationsExhaustedError:
                 # on_exhausted: raise means halt the run, not fail the record.
                 raise
@@ -293,6 +287,8 @@ class OnlineLLMStrategy:
                 # result discards the policy with the exception.
                 if raised_by_exhaustion_policy(e):
                     raise
+                # A tool's output that fails its schema is failed here too: it is
+                # checked one record at a time, so it indicts this record alone.
                 # The result collector reports this record to the user, for
                 # online and batch alike. This copy carries the traceback for
                 # the log file, and the item index the collector cannot know.

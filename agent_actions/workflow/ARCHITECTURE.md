@@ -645,7 +645,9 @@ partway (`_finalize_total_failure`, reading `ActionRunner.input_left_unreached`)
 every input file failed on all of its records (`mark_every_record_failed`, on the error
 `CollectionStats.terminal_failure` returns), none to an error fatal to the action
 (`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
-such as a UDF output that fails validation — or never read leaves records unreached.
+such as a render failure one record's data provoked — or never read leaves records
+unreached. A record tool's output that fails its schema is not one: the loop fails that
+record and goes on.
 Any other failure may have stopped the action partway, and a failure recorded before
 the marker existed reads as one.
 

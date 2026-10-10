@@ -13,7 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import SchemaValidationError, mark_action_fatal
+from agent_actions.errors import mark_action_fatal
+from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.processing.result_collector import CollectionStats
 from agent_actions.record.reasons import EVERY_INPUT_FAILED
 from agent_actions.workflow.executor import ActionRunParams, action_failed_every_input
@@ -59,8 +60,15 @@ def _every_record_failed() -> Exception:
 
 
 def _stopped_partway() -> Exception:
-    """A UDF output that fails validation is re-raised from the record loop, ending its file."""
-    return SchemaValidationError("output did not validate")
+    """A render failure one record's data provoked is re-raised from the record loop, ending
+    its file, and declared fatal by no one."""
+    return TemplateVariableError(
+        missing_variables=[],
+        available_variables=["source"],
+        agent_name=ACTION,
+        mode="online",
+        cause=TypeError("unsupported operand type(s) for +: 'int' and 'dict'"),
+    )
 
 
 def _walk(tmp_path, outcomes: list[Exception | None]) -> tuple[ActionRunner, Exception | None]:

@@ -138,7 +138,8 @@ never completed — so a retry, stopped or finished, leaves an edit to the next 
 
 A reset leaves what the action stored in place, and the re-run replaces it file by file.
 A file in which every record of the re-run fails — the model's answers do not parse, or
-a tool of record granularity raises on each — is stored with those failures, as a file
+a tool of record granularity raises on each or answers each with output its schema
+refuses — is stored with those failures, as a file
 in which only some fail is, so neither the action nor what reads it keeps a row answered
 before the edit, and `agac retry` asks for them again. Outside a reset, a run that
 answers nothing in a file and fails some of it leaves what that file held.
