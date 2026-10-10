@@ -185,8 +185,10 @@ when every record it was given failed, when every input file failed on all of it
 records, or, for a batch action, when every record its batches were sent with a
 `source_guid` holds an answer or a failure. It is refused even then if it still
 holds a row for a record that run did not reach: a reset keeps an action's rows
-until it writes again, and one that failed on everything wrote nothing, so a row
-for a record its input no longer has, or now filters, would be carried for good.
+until it writes again, and a file that failed before it was processed is not
+written, so a row there for a record its input no longer has, or now filters,
+would be carried for good. A file in which every record failed is written with
+those failures after a reset, and keeps no such row.
 A failure that stopped partway — an error that ends a file at one record, or one
 recorded before this release, which cannot say — is refused.
 

@@ -53,9 +53,9 @@ def _fail_with(executor, error):
 
 def _every_record_failed() -> Exception:
     """What a file raises when every one of its records failed: the collector's own error."""
-    with pytest.raises(RuntimeError) as raised:
-        CollectionStats(failed=2).raise_if_terminal_failure(ACTION, [{}, {}], [])
-    return raised.value
+    failure = CollectionStats(failed=2).terminal_failure(ACTION, [{}, {}], [])
+    assert failure is not None
+    return failure
 
 
 def _stopped_partway() -> Exception:

@@ -357,8 +357,10 @@ A failure that reached all of its input (`EVERY_INPUT_FAILED`, or a batch action
 batches hold an answer or a failure for every record they were sent with a
 `source_guid`) is what a repair is for, unless the action still holds a row for a record
 that run did not reach — a row with no disposition there, or a filtered or scoped-out
-one, which keeps no row. A reset deletes no row and a run that fails everything writes
-none, so such a row predates the reset and would be carried for good.
+one, which keeps no row. A reset deletes no row, and a run that fails everything writes
+none for a file it failed before processing it, so such a row predates the reset and
+would be carried for good. A file whose every record failed is written with those
+failures after a reset, and keeps no such row.
 
 Not refused either: what an interrupted retry put back to pending, which had finished
 before that retry and is resumed by retrying again — the retry stamps each such status
@@ -389,6 +391,9 @@ Costs and limits:
   a removed input's file is kept with the files the walk did not open; a version merge
   deletes it all the same, before its walk. A file the store fails to write fails the
   action, so the next run writes it instead of the action completing over its old rows.
+  A file in which the re-run answered nothing and something failed is still written, with
+  its failures, where the action no longer calls what it stored answered, as after any
+  reset; elsewhere such a file is left as stored (processing/ARCHITECTURE.md).
   A re-run that is interrupted and resumed can serve the old row for a record it had
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a
@@ -484,10 +489,13 @@ run_mode == BATCH and not tool/HITL?
                UnifiedProcessor.process(data)
          │
          ▼
-    stats.raise_if_terminal_failure()
+    stats.terminal_failure()         ← nothing succeeded: raise without writing,
+                                       unless a reset took back the answers
+                                       stored for the file (stored_answers_stand)
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records(action, target_relative_path)
+    raise the terminal failure held back for the write, if any
 ```
 
 ---
@@ -626,8 +634,8 @@ the action without the records past the halt.
 The same `detail` marks a failure that reached all of the action's input with
 `EVERY_INPUT_FAILED`: every record it holds failed and its file walk lost no file
 partway (`_finalize_total_failure`, reading `ActionRunner.input_left_unreached`), or
-every input file failed on all of its records (`mark_every_record_failed`, raised by
-`raise_if_terminal_failure`), none to an error fatal to the action
+every input file failed on all of its records (`mark_every_record_failed`, on the error
+`CollectionStats.terminal_failure` returns), none to an error fatal to the action
 (`mark_every_file_failed`). A file stopped partway — an error the record loop re-raises,
 such as a UDF output that fails validation — or never read leaves records unreached.
 Any other failure may have stopped the action partway, and a failure recorded before

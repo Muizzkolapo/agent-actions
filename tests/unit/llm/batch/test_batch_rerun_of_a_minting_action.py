@@ -17,6 +17,7 @@ import pytest
 from agent_actions.config.types import RunMode
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -48,12 +49,25 @@ def _failed(input_guid: str) -> dict[str, Any]:
     }
 
 
-def _rerun(tmp_path: Path, stored: list[dict], produced: list[dict]) -> list[dict]:
-    """Store *stored* as the previous run's output, then merge *produced* over it."""
+def _rerun(
+    tmp_path: Path, stored: list[dict], produced: list[dict], *, reset: bool = False
+) -> list[dict]:
+    """Store *stored* as the previous run's output, then merge *produced* over it.
+
+    The previous run marked each answer's input answered, as collection does, unless
+    *reset* cleared that since. This run's collection records what it produced before
+    the merge, so a failure has replaced its record's success by then.
+    """
     backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
     backend.initialize()
     backend._write_target_raw(ACTION, RELATIVE, stored)
     backend._reconstruction_cache.clear()
+    if not reset:
+        for row in stored:
+            if row["_state"] == "processed":
+                for guid in row.get("producer_source_guids") or [row["source_guid"]]:
+                    backend.set_disposition(ACTION, guid, "success")
+    write_record_dispositions(backend, list(produced), ACTION)
 
     service = BatchProcessingService(
         client_resolver=MagicMock(),
@@ -153,21 +167,48 @@ class TestAnInputWhoseRowCountChangesBetweenRuns:
         )
 
 
+def _exhausted(input_guid: str) -> dict[str, Any]:
+    """An exhausted record's tombstone: keyed on the input, flagged as collection reads it."""
+    return {
+        "source_guid": input_guid,
+        "metadata": {"retry_exhausted": True, "reason": "retry_exhausted"},
+        "_state": "exhausted",
+    }
+
+
 class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
     """A failed record's row is keyed on the input itself and minted from nothing.
 
-    It stands for no produced row, so a minting action's stored answers have to
-    outlive it — a run the provider refused must not empty the file.
+    It stands for no produced row, so the stored answers of the records it did not
+    fail have to outlive it — a run the provider refused must not empty the file.
     """
 
-    def test_a_provider_error_leaves_the_previous_answers_in_place(self, tmp_path):
+    def test_a_provider_error_leaves_the_answers_of_the_records_it_was_not_sent_for(self, tmp_path):
         stored = [_row("m1", producers=["i1"]), _row("m2", producers=["i1"])]
-        produced = [_failed("i1")]
+        produced = [_failed("i2")]
 
         result = _rerun(tmp_path, stored, produced)
 
-        assert [r["source_guid"] for r in result] == ["i1", "m1", "m2"]
+        assert [r["source_guid"] for r in result] == ["i2", "m1", "m2"]
         assert [r.get("answer") for r in result[1:]] == ["answer-for-m1", "answer-for-m2"]
+
+    @pytest.mark.parametrize("reset", [False, True], ids=["without_a_reset", "after_a_reset"])
+    @pytest.mark.parametrize("unanswered", [_failed, _exhausted], ids=["failed", "exhausted"])
+    def test_a_run_that_answered_nothing_takes_back_the_rows_its_failed_record_minted(
+        self, tmp_path, reset, unanswered
+    ):
+        """The record no longer holds success, whether its failure replaced it or a reset
+        cleared it first, so online writes its failure alone. Kept, the rows would be
+        served as answers for a record that failed."""
+        stored = [
+            _row("m1", producers=["i1"]),
+            _row("m2", producers=["i1"]),
+            _row("m3", producers=["i2"]),
+        ]
+
+        result = _rerun(tmp_path, stored, [unanswered("i1")], reset=reset)
+
+        assert [r["source_guid"] for r in result] == ["i1", "m3"]
 
     def test_a_run_answering_one_input_and_failing_another_keeps_both(self, tmp_path):
         stored = [
@@ -194,17 +235,20 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
         assert result[0].get("error"), "r1 is the stored answer, not the row that failed"
         assert "answer" not in result[0], "the stored answer was carried as well as replaced"
 
-    def test_a_run_in_which_everything_failed_leaves_the_answer_under_that_identity(self, tmp_path):
-        """Online raises before it writes, so there the answer is still what is stored.
-        Written once: the failure row gives way rather than standing beside it."""
+    @pytest.mark.parametrize("reset", [False, True], ids=["without_a_reset", "after_a_reset"])
+    def test_a_failure_replaces_the_answer_under_its_identity_though_nothing_was_answered(
+        self, tmp_path, reset
+    ):
+        """The answer is no longer one the action calls answered, so the run writes its
+        file as one that answered something does, as online writes it."""
         stored = [_row("r1"), _row("r2")]
         produced = [_failed("r1")]
 
-        result = _rerun(tmp_path, stored, produced)
+        result = _rerun(tmp_path, stored, produced, reset=reset)
 
         assert [r["source_guid"] for r in result] == ["r1", "r2"]
-        assert result[0]["answer"] == "answer-for-r1"
-        assert "error" not in result[0]
+        assert result[0].get("error")
+        assert "answer" not in result[0]
 
     @pytest.mark.parametrize("state", ["failed", "exhausted", "cascade_skipped"])
     def test_a_row_that_named_its_input_but_did_not_settle_answers_for_nothing(
@@ -226,13 +270,18 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
         )
 
     def test_an_exhausted_row_replaces_nothing_it_was_minted_beside(self, tmp_path):
-        """Exhaustion holds no answer either, on the same reading as a failure."""
-        stored = [_row("m1", producers=["i1"]), _row("m2", producers=["i1"])]
-        produced = [{"source_guid": "i1", "_state": "exhausted", "content": {}}]
+        """Exhaustion holds no answer either, on the same reading as a failure: the run
+        answered another record, and the exhausted one keeps its rows beside it."""
+        stored = [
+            _row("m1", producers=["i1"]),
+            _row("m2", producers=["i1"]),
+            _row("m3", producers=["i2"]),
+        ]
+        produced = [_row("n3", producers=["i2"]), _exhausted("i1")]
 
         result = _rerun(tmp_path, stored, produced)
 
-        assert [r["source_guid"] for r in result] == ["i1", "m1", "m2"]
+        assert [r["source_guid"] for r in result] == ["n3", "i1", "m1", "m2"]
 
 
 class TestIdentityCarryingActionsAreUnchanged:

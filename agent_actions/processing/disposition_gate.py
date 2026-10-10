@@ -14,12 +14,16 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections import Counter
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
+from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
+from agent_actions.errors import mark_action_fatal
 from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_SUCCESS
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -259,12 +263,61 @@ def _noted(
     return frozenset(registry.get(storage_backend, {}).get(action_name, ()))
 
 
+def every_answer_vouched_for(stored: Iterable[dict[str, Any]], answered: AbstractSet[str]) -> bool:
+    """Whether each answer in *stored* is one its action still calls answered.
+
+    *answered* is the records the action holds ``success`` for. A row's disposition is
+    written under its own identity or under the input it names as producer, so either
+    vouches for it. A reset clears every disposition and leaves the stored rows for the
+    re-run to replace, so after one no stored answer is vouched for.
+    """
+    return all(
+        row.get("_state") != RecordState.PROCESSED.value
+        or row.get("source_guid") in answered
+        or not answered.isdisjoint(row.get("producer_source_guids") or ())
+        for row in stored
+    )
+
+
+def _answered_records(storage_backend: StorageBackend, action_name: str) -> set[str]:
+    """The records *action_name* holds ``success`` for."""
+    return {
+        row["record_id"]
+        for row in storage_backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS)
+    }
+
+
+def stored_answers_stand(
+    storage_backend: StorageBackend, action_name: str, relative_path: str
+) -> bool:
+    """Whether a run of *relative_path* that failed and answered nothing leaves it as stored.
+
+    It does while the action still calls every answer stored there answered: they stand
+    over a run that produced only failures. After a reset it calls none of them answered,
+    and left in place they would be served as answers to the config the reset replaced,
+    so the run writes the file as one that answered something would. True when nothing
+    is stored for it.
+    """
+    try:
+        stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+        answered = _answered_records(storage_backend, action_name)
+    except FileNotFoundError:
+        return True
+    except (OSError, sqlite3.Error) as e:
+        # The store failed, not this file: lost per file, it would stay unwritten over
+        # the answers a reset took back.
+        mark_action_fatal(e)
+        raise
+    return every_answer_vouched_for(stored, answered)
+
+
 def stored_rows_not_reproduced(
     stored: Iterable[dict[str, Any]],
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
     filtered: Collection[str] = (),
+    still_answered: Callable[[], AbstractSet[str]] | None = None,
 ) -> set[str]:
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
@@ -274,10 +327,15 @@ def stored_rows_not_reproduced(
     online writes none for it. Matching is by input, since a minting action's runs share
     no identity: a processed row answers for the producer it names, else for the identity
     it carries. With no inputs recorded every other unanswered row is carried. Where
-    something failed and nothing was answered online raises before it writes, so every
-    stored answer stands, over a row produced under its identity too, and a filtered
-    input keeps what it held.
+    something failed and nothing was answered online leaves the stored file as it is, so
+    every stored answer stands, over a row produced under its identity too, and a filtered
+    input keeps what it held -- unless a stored answer is one the action no longer calls
+    answered (``stored_answers_stand``). Then the file follows its inputs, and an input
+    the run wrote a row for keeps none of its stored rows, minted ones included, as online
+    writes only that row. *still_answered* gives the records it holds ``success`` for, and
+    is asked only then; without it every stored answer counts as one.
     """
+    stored = list(stored)
     answered: set[str] = set()
     rewritten: set[str] = set()
     failed = False
@@ -296,7 +354,12 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
-    refused = failed and not answered
+    refused = (
+        failed
+        and not answered
+        and (still_answered is None or every_answer_vouched_for(stored, still_answered()))
+    )
+    taken_back = failed and not answered and not refused
     inputs = frozenset(batch_inputs)
     excluded = frozenset(filtered)
     carry: set[str] = set()
@@ -319,6 +382,9 @@ def stored_rows_not_reproduced(
             continue
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
+            continue
+        # Online writes only this run's row for an input whose answers were taken back.
+        if taken_back and answers_for in rewritten:
             continue
         if answers_for in excluded and not refused:
             filtered_out.add(guid)
@@ -371,7 +437,11 @@ def with_stored_rows_not_reproduced(
         return produced
 
     carry_guids = stored_rows_not_reproduced(
-        stored, produced, batch_inputs=batch_inputs, filtered=filtered
+        stored,
+        produced,
+        batch_inputs=batch_inputs,
+        filtered=filtered,
+        still_answered=lambda: _answered_records(storage_backend, action_name),
     )
     if not carry_guids:
         return produced

@@ -5,8 +5,8 @@ real store. Below it everything is the production object except the model: onlin
 the strategy, batch swaps the provider. So the guard, record limit, gate, preparator,
 submission, enrichment, collector and finalize all run as they do for a user.
 
-The two files are not always equal. Batch writes a failed row where online refuses to
-write at all, and keeps the rows of inputs a record limit holds back. What must never
+The two files are not always equal. Batch writes a failed row where online leaves the
+file unwritten, and keeps the rows of inputs a record limit holds back. What must never
 happen is the reverse, and ``shortfalls`` names each way it could.
 """
 
@@ -536,6 +536,7 @@ def compare(
     shape: dict[Any, Any] | None = None,
     *,
     clears_batch_state: bool = True,
+    file: str = FILE,
 ) -> list[dict[str, Any]]:
     """Run every step through both modes and report what each held and sent.
 
@@ -544,8 +545,8 @@ def compare(
     ``retry``: the records a repair names, or ``"failures"`` for whichever online's store
     says failed. Both modes are given the same names, so both run the same repair.
     """
-    online = _Online(tmp_path)
-    batch = _Batch(tmp_path, clears_batch_state=clears_batch_state)
+    online = _Online(tmp_path, file)
+    batch = _Batch(tmp_path, file, clears_batch_state=clears_batch_state)
     answer = Answerer(shape)
     findings = []
     for number, step in enumerate(runs, start=1):
@@ -592,9 +593,9 @@ def shortfalls(findings: list[dict[str, Any]]) -> list[str]:
         online_sent, batch_sent = set(run["online_sent"]), set(run["batch_sent"])
         held = _answered(run["batch"])
         for answer in sorted(_answered(run["online"]) - held):
-            # An online run that raised wrote nothing, so it still holds answers for
-            # records that are no input of this run. A batch run that answered
-            # something has written this run's file, without them.
+            # An online run that raised can have left its file unwritten, so it still
+            # holds answers for records that are no input of this run. A batch run that
+            # answered something has written this run's file, without them.
             if run["online_raised"] and _input_of(answer) not in run["inputs"]:
                 continue
             # An answer batch had, or one both modes were just given. One batch never
@@ -993,9 +994,11 @@ PREPARED = {"prompt": f"Write a question about {{{{ {UPSTREAM}.topic }}}}."}
 
 
 @pytest.mark.parametrize("guard", [SKIP, FILTER], ids=["skipping", "filtering"])
-def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer(tmp_path, guard):
-    """Nothing is sent and a record failed, so online raises before it writes, and the
-    answers stored under the tombstones and the failure row stand."""
+def test_a_reset_where_the_one_record_left_cannot_be_prepared_keeps_no_answer_from_before_it(
+    tmp_path, guard
+):
+    """Nothing is sent and a record failed, so nothing was answered. The reset took back
+    every answer stored, which answered the config it replaced: none of them stands."""
     names = ["s1", "s2", "s3", "s4", "s5", "p6"]
     batch = _Batch(tmp_path)
     first = batch.run(
@@ -1006,7 +1009,8 @@ def test_a_reset_where_the_one_record_left_cannot_be_prepared_replaces_no_answer
     held = batch.run(2, refused, extra={**guard, **PREPARED}, reset=True)
 
     assert first == [f"processed:{name}:0@run1" for name in sorted(names)]
-    assert [row for row in held if row.startswith("processed:")] == first
+    assert [row for row in held if row.startswith("processed:")] == []
+    assert "failed:p6" in held
     assert batch.sent[1] == []
 
 
@@ -1165,17 +1169,72 @@ def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
-def test_a_run_that_failed_and_answered_nothing_keeps_what_a_filtered_input_held(tmp_path):
-    """Online raises before it writes, so the filtered input's row stays until a run
-    that writes, whether or not that row was an answer."""
+def test_a_reset_that_failed_and_answered_nothing_keeps_no_row_for_a_filtered_input(tmp_path):
+    """The reset took back the answer stored for the input that failed, so the run writes
+    its file as one that answered something would, and a filtered input holds no row."""
     runs = [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}, _NOW_FILTERED]
     shape = {("a2", 1): "exhaust", ("a1", 2): "fail"}
 
     findings = compare(tmp_path, runs, FILTER, shape)
 
-    assert "exhausted:a2" in findings[1]["online"]
+    assert findings[1]["online"] == ["failed:a1"]
     for run in findings:
         assert run["batch"] == run["online"], f"run {run['run']}"
+
+
+EVERY_INPUT_FAILS_AFTER_A_RESET = {
+    "the_same_inputs": (["a1", "a2"], {("a1", 2): "fail", ("a2", 2): "fail"}),
+    "the_same_inputs_exhausted": (["a1", "a2"], {("a1", 2): "exhaust", ("a2", 2): "exhaust"}),
+    "inputs_minted_again": (["a3", "a4"], {("a3", 2): "fail", ("a4", 2): "fail"}),
+    "inputs_this_action_gave_several_rows": (
+        ["a1", "a2"],
+        {"a1": 2, "a2": 2, ("a1", 2): "fail", ("a2", 2): "fail"},
+    ),
+}
+
+
+@pytest.mark.parametrize("file", [FILE, "sub/page.json"], ids=["a_top_level_file", "a_nested_one"])
+@pytest.mark.parametrize(
+    ("inputs", "shape"),
+    EVERY_INPUT_FAILS_AFTER_A_RESET.values(),
+    ids=EVERY_INPUT_FAILS_AFTER_A_RESET.keys(),
+)
+def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
+    tmp_path, inputs, shape, file
+):
+    """Nothing is answered, and every stored answer is one the reset took back: it
+    answered the config the reset replaced, or an input the action above minted anew.
+    A nested file is looked up by its path below the action's folder, not its name."""
+    runs = [["a1", "a2"], {"inputs": inputs, "reset": True}]
+
+    findings = compare(tmp_path, runs, None, shape, file=file)
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert not _answered(findings[1][mode]), mode
+    assert findings[1]["batch"] == findings[1]["online"]
+
+
+def test_a_reset_that_answered_nothing_records_the_skip_it_held_back_for_the_write(tmp_path):
+    """The file is written with its failure, then what collection held back for the write
+    is recorded, as after any write; raised first, the guard's skip goes unrecorded."""
+    online = _Online(tmp_path)
+    online.run(1, _PASSES, extra=SKIP)
+
+    online.run(
+        2,
+        [rec("a1", keep=True), rec("a2", keep=False)],
+        Answerer({("a1", 2): "fail"}),
+        SKIP,
+        reset=True,
+    )
+
+    assert online.raised[-1], "the file answered nothing"
+    recorded = online.backend.get_disposition(ACTION)
+    assert sorted((row["record_id"], row["disposition"]) for row in recorded) == [
+        ("a1", "failed"),
+        ("a2", "passthrough"),
+    ]
 
 
 def test_a_repair_the_guard_turns_away_leaves_every_answer_in_place(tmp_path):
@@ -1206,13 +1265,27 @@ def test_inputs_minted_again_and_skipped_every_run_do_not_pile_up(tmp_path):
 
 
 def test_a_run_whose_every_answer_fails_keeps_the_stored_answers(tmp_path):
-    """Online raises before it writes; here the failures are written beside them."""
+    """Online leaves the file unwritten while its answers stand; here the failures are
+    written beside them."""
     batch = _Batch(tmp_path)
     batch.run(1, [rec("a1"), rec("a2")])
 
     held = batch.run(2, [rec("a3"), rec("a4")], Answerer({"a3": "fail", "a4": "fail"}))
 
     assert held == ["failed:a3", "failed:a4", "processed:a1:0@run1", "processed:a2:0@run1"]
+
+
+def test_a_run_whose_every_answer_fails_keeps_what_it_still_calls_answered_in_either_mode(
+    tmp_path,
+):
+    """No reset took the stored answers back: each record still holds success."""
+    runs = [["a1", "a2"], ["a3", "a4"]]
+
+    findings = compare(tmp_path, runs, None, {("a3", 2): "fail", ("a4", 2): "fail"})
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    for mode in ("online", "batch"):
+        assert _answered(findings[1][mode]) == {"processed:a1:0", "processed:a2:0"}, mode
 
 
 def test_a_run_that_answers_something_leaves_out_what_is_not_its_input(tmp_path):
