@@ -809,10 +809,11 @@ class StorageBackend(ABC):
         relative_path: str,
         records: list[dict[str, Any]],
     ) -> None:
-        """Upsert records into the checkpoint output table.
+        """Store each record's rows as its answer, replacing any answer it held.
 
-        Used for incremental checkpointing during online processing.
-        Uses INSERT OR REPLACE keyed on (action_name, relative_path, source_guid).
+        Used for incremental checkpointing during online processing. Keyed on
+        (action_name, relative_path, source_guid), and every row given under one
+        source_guid is kept: an expansion's rows share their input's until enrichment.
         """
         raise NotImplementedError
 
@@ -821,8 +822,16 @@ class StorageBackend(ABC):
         action_name: str,
         relative_path: str,
     ) -> list[dict[str, Any]]:
-        """Read all checkpointed records for an action/path."""
+        """Every row checkpointed for an action/path, in the order their records were saved."""
         return []
+
+    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
+        """Records of an action/path whose checkpoint cannot say how many rows answered them.
+
+        An earlier version kept one row per record, the last given under its identity, so
+        such a row may be one of several.
+        """
+        return set()
 
     def clear_checkpoint_records(  # noqa: B027
         self,

@@ -1136,7 +1136,11 @@ class SQLiteBackend(StorageBackend):
         relative_path: str,
         records: list[dict[str, Any]],
     ) -> None:
-        """Append records to the checkpoint output table."""
+        """Store each record's rows as its answer, replacing any answer it held.
+
+        One table row per ``source_guid``, holding every row given under it: an expansion's
+        rows share their input's ``source_guid`` until enrichment mints one for each.
+        """
         if not records:
             return
         action_name = self._validate_identifier(action_name, "action_name")
@@ -1147,7 +1151,7 @@ class SQLiteBackend(StorageBackend):
         records = self._gate_schema_echo_records(action_name, records)
 
         # Fail loud on blank source_guid: UNIQUE + INSERT OR REPLACE would silently overwrite.
-        rows: list[tuple[str, str, str, str]] = []
+        answers: dict[str, list[dict[str, Any]]] = {}
         for index, r in enumerate(records):
             source_guid = r.get("source_guid")
             if not source_guid:
@@ -1160,14 +1164,11 @@ class SQLiteBackend(StorageBackend):
                         "record_index": index,
                     },
                 )
-            rows.append(
-                (
-                    action_name,
-                    relative_path,
-                    source_guid,
-                    json.dumps(r, ensure_ascii=False),
-                )
-            )
+            answers.setdefault(source_guid, []).append(r)
+        rows = [
+            (action_name, relative_path, source_guid, json.dumps(answer, ensure_ascii=False))
+            for source_guid, answer in answers.items()
+        ]
         with self._lock:
             cursor = self.connection.cursor()
             try:
@@ -1199,7 +1200,7 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         relative_path: str,
     ) -> list[dict[str, Any]]:
-        """Read all checkpointed records for an action/path."""
+        """Every row checkpointed for an action/path, in the order their records were saved."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -1210,7 +1211,26 @@ class SQLiteBackend(StorageBackend):
                 "WHERE action_name = ? AND relative_path = ? ORDER BY id",
                 (action_name, relative_path),
             )
-            return [json.loads(row["record_data"]) for row in cursor.fetchall()]
+            rows: list[dict[str, Any]] = []
+            for stored in cursor.fetchall():
+                answer = json.loads(stored["record_data"])
+                # An earlier version stored one row, not a list, per record.
+                rows.extend(answer if isinstance(answer, list) else [answer])
+            return rows
+
+    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
+        """Records of an action/path an earlier version checkpointed: one row, not a list."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT source_guid FROM checkpoint_output "
+                "WHERE action_name = ? AND relative_path = ? AND substr(record_data, 1, 1) <> '['",
+                (action_name, relative_path),
+            )
+            return {row["source_guid"] for row in cursor.fetchall()}
 
     def clear_checkpoint_records(self, action_name: str, relative_path: str | None = None) -> None:
         """Delete checkpoint records for an action (optionally scoped to one path)."""

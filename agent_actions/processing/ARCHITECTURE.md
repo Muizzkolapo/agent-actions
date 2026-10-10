@@ -325,6 +325,15 @@ Collection marks a record answered only once its file is stored (see "Dispositio
 ordering" below), so a record whose row write failed is asked again however the run stops
 before that write.
 
+A record answered with several rows is checkpointed with all of them, under the one
+`source_guid` they share: enrichment mints each row of an expansion an identity of its own,
+and the checkpoint is saved before it. With nothing stored, `build_carry_forward` reports
+that record missing rather than carry its rows, and the run answers it again. Carried,
+they would keep that one identity, of which the carry keeps a single row. A record
+answered with one row is carried as before. A record an earlier version checkpointed is
+answered again as well: that version kept one row per `source_guid`, the last, and the
+row cannot say whether the record had others (`checkpointed_without_row_count`).
+
 ### Checkpoint storage
 
 ```
@@ -335,9 +344,12 @@ checkpoint_output table:
     ┌──────────────┬──────────────┬──────────────┬────────────┐
     │ action_name  │relative_path │ source_guid  │record_data │
     ├──────────────┼──────────────┼──────────────┼────────────┤
-    │ summarize... │ combined.json│ 44462716-... │ {JSON...}  │
-    │ summarize... │ combined.json│ 973062f1-... │ {JSON...}  │
+    │ summarize... │ combined.json│ 44462716-... │ [{JSON...}]│
+    │ summarize... │ combined.json│ 973062f1-... │ [{..},{..}]│
     └──────────────┴──────────────┴──────────────┴────────────┘
+
+    record_data lists every row the record was answered with; an expansion's
+    rows share its source_guid until enrichment.
 ```
 
 `relative_path` is the name the file's output is stored under:
@@ -389,7 +401,9 @@ answered_since_stored(action_name, path)        ← checkpointed after the file
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
-    if found → use as carry-forward data
+    if found → use as carry-forward data,
+               but a record checkpointed with several rows, or by an
+               earlier version, is answered again
     else → reprocess all
 ```
 
