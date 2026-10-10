@@ -3,7 +3,9 @@
 The storage holds wrappers, never the record's own containers: `dict(view)`, `{**view}`
 and `xs + []` read stored values below any Python override, so the record is wrapped whole
 on the way in. A write is refused, and `copy()` gives a plain writable structure with the
-record's shape. One loop with a memo builds and copies (`_rebuild`): nothing recurses, each
+record's shape. A write raises `ReadOnlyError`, a `TypeError` of its own type, so the guard
+path can stop the action on it and still pass the record for any other error the UDF
+raises. One loop with a memo builds and copies (`_rebuild`): nothing recurses, each
 container is replaced once, and storage is read directly, never through a subclass's
 accessors. `guards/ARCHITECTURE.md` ("The read-only view") has the contract and its limits.
 """
@@ -128,8 +130,16 @@ def _tuple(value: Any, memo: dict[int, Any], walked: list[tuple[Any, Any]], read
             stack[-1][1].append(made)
 
 
+class ReadOnlyError(TypeError):
+    """A write the view refused.
+
+    A TypeError, as a write to any immutable value is, so code that catches one still
+    does; its own type lets the guard path tell the refusal from the UDF's own errors.
+    """
+
+
 def _refuse(*_args: Any, **_kwargs: Any) -> NoReturn:
-    raise TypeError(_MESSAGE)
+    raise ReadOnlyError(_MESSAGE)
 
 
 class ReadOnlyDict(dict):
@@ -329,4 +339,4 @@ def readonly_view(data: Any) -> Any:
     return _rebuild(data, True)
 
 
-__all__ = ["ReadOnlyDict", "ReadOnlyList", "readonly_view"]
+__all__ = ["ReadOnlyDict", "ReadOnlyError", "ReadOnlyList", "readonly_view"]
