@@ -405,11 +405,14 @@ class UnifiedProcessor:
                 enriched.append(self._enrichment_pipeline.enrich(r, enrich_ctx))
             except Exception as e:
                 logger.warning("Enrichment failed for record %d: %s", i, e)
+                # Both carried, each standing in for the other: batch results bring
+                # only a snapshot, and the failed row is built from the input record.
                 enriched.append(
                     ProcessingResult.failed(
                         error=f"Enrichment failed: {e}",
                         source_guid=r.source_guid,
-                        source_snapshot=r.input_record,
+                        source_snapshot=r.source_snapshot or r.input_record,
+                        input_record=r.input_record or r.source_snapshot,
                     )
                 )
         return enriched

@@ -6,14 +6,10 @@ body: >-
   history the action above gave it, a guard skip carried the old `skipped_by_where_clause`
   flag in place of its reason, and no record got a disposition. So a record the guard
   filtered was not recorded as filtered, an answer whose record came back skipped kept its
-  `success`, so the record was never sent again once the guard passed it, and a record
-  with no `source_guid` that could not be prepared left the action reading complete. Such
+  `success`, so the record was never sent again once the guard passed it. Such
   a run now collects its file as finalize does: a skip or an upstream block is
   `unprocessed` (as in a batch run that sends; online records a guard skip as
-  `passthrough`), a filtered record is `filtered`, and a failure is `failed`, the record
-  with no `source_guid` under its target id, so the action reads failed. `agac retry`
-  names it there but selects records by `source_guid`, so a retry sends nothing and clears
-  the failure, and the action then reads complete over the failed row it still holds. A
+  `passthrough`), a filtered record is `filtered`, and a failure is `failed`. A
   record whose prompt could not be prepared is now recorded with the error itself on every
   batch run, as online records it, where a run that sent something recorded only
   `prep_failed`.

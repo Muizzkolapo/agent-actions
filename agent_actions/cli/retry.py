@@ -447,10 +447,14 @@ class RetryCommand:
                     )
                     waiting.update(cls._deferred_record_ids(backend, {action}))
                     continue
-                for custom_id, sent in context_map.items():
+                for sent in context_map.values():
                     if BatchContextMetadata.get_filter_status(sent) != FilterStatus.INCLUDED:
                         continue
-                    record_id = sent.get("source_guid") or custom_id
+                    # Marked failed under its custom_id, it would be a failure a later
+                    # retry clears and cannot select.
+                    record_id = sent.get("source_guid")
+                    if not record_id:
+                        continue
                     held = dispositions.get(record_id)
                     if held is None or held == DISPOSITION_DEFERRED:
                         waiting.add((action, record_id))

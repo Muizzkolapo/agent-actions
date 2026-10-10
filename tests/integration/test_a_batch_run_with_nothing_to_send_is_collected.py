@@ -282,29 +282,37 @@ def _nameless_failure() -> list[dict[str, Any]]:
 
 def test_a_failure_with_no_identity_of_its_own_fails_the_action(tmp_path):
     """Stored failed with no disposition, it left the action reading complete. It is
-    recorded under the target id the batch keys it by."""
+    refused as a run that sends refuses it, and as online refuses it: recorded under no
+    id, stored failed with the target id it arrived with, and with nothing else in the
+    file succeeding, online's breaker is raised once the file is written."""
     batch = _batch(tmp_path, "quiet")
 
-    batch.run(1, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
+    held = batch.run(1, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
 
-    assert _dispositions(batch.backend)["t-n1"][0] == "failed"
-    assert _status(batch.backend) == ActionStatus.FAILED
+    assert sorted(_dispositions(batch.backend)) == [f"k{n}" for n in range(1, 6)]
+    assert "failed:None" in held
+    (row,) = [row for row in batch.held() if row.get("_state") == "failed"]
+    assert (row.get("source_guid"), row.get("target_id")) == (None, "t-n1")
+    assert sorted(row.get("content") or {}) == [UPSTREAM, ACTION]
+    assert batch.raised[-1] is not None
+    assert batch.raised[-1].startswith("RuntimeError: ")
+    assert "produced 0 successful records" in batch.raised[-1]
 
 
-def test_a_retry_clears_a_failure_with_no_identity_without_repairing_it(tmp_path):
-    """What `agac retry` does today: it names the failure by its target id, but a repair
-    selects records by source_guid, so nothing is sent and the action reads complete
-    over the failed row it still holds."""
+def test_agac_retry_is_handed_no_failure_for_a_record_with_no_identity(tmp_path):
+    """Recorded under its target id, it was a failure `agac retry` named and cleared but
+    could not repair, since a repair selects records by source_guid: nothing was sent and
+    the action read complete over the failed row it still held. Recorded under no id, it
+    is nothing retry names, and a run after holds its one failed row, not two."""
     batch = _batch(tmp_path, "quiet")
     batch.run(1, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
-    named = batch.failures()
 
-    held = batch.run(2, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC}, retry=named)
-
-    assert (named, batch.sent[-1], batch.raised[-1]) == (["t-n1"], [], None)
-    assert "failed:t-n1" in held
     assert batch.failures() == []
-    assert _status(batch.backend) == ActionStatus.COMPLETED
+
+    held = batch.run(2, _nameless_failure(), extra={**SKIP, **NEEDS_TOPIC})
+
+    assert held.count("failed:None") == 1
+    assert batch.failures() == []
 
 
 def test_a_run_with_nothing_to_send_leaves_the_batch_before_it_alone(tmp_path):

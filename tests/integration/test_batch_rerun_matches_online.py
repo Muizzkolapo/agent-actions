@@ -383,9 +383,12 @@ def _collect(
     name: str,
     run: int,
     answer: Answerer,
-    label: Any = lambda row: row["source_guid"],
+    label: Any = lambda row: row.get("source_guid") or row["target_id"],
 ) -> list[str]:
-    """Answer the batch just submitted and finalize it. Returns what was sent, in order."""
+    """Answer the batch just submitted and finalize it. Returns what was sent, in order.
+
+    A record is answered by its source_guid, or by its target_id where it has none.
+    """
     context_map = BatchContextManager.load_batch_context_map(backend, ACTION, name)
     included = {
         custom_id: row

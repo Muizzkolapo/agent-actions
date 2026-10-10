@@ -42,7 +42,7 @@ class BatchContextAdapter:
     @staticmethod
     def to_processing_result(
         data: list[dict[str, Any]],
-        source_guid: str,
+        source_guid: str | None,
         pre_extracted_metadata: dict[str, Any] | None = None,
         recovery_metadata: RecoveryMetadata | None = None,
         passthrough_fields: dict[str, Any] | None = None,

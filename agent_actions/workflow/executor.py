@@ -16,6 +16,7 @@ from agent_actions.errors import (
     AgentActionsError,
     get_error_detail,
     raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
 )
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -1637,14 +1638,19 @@ class ActionExecutor:
         start_time: datetime,
         error: Exception,
     ) -> ActionExecutionResult:
-        """Record a policy halt raised while checking a batch; re-raise anything else.
+        """Record a halt raised while checking a batch; re-raise anything else.
 
-        Only a halt is converted: `on_exhausted: raise`, or `on_empty: error`, both
-        raised once the file is written. An ordinary polling failure must keep
-        CHECKING_BATCH so the next run re-polls the existing job — turning it
-        into FAILED would reset it to PENDING and submit a duplicate batch.
+        Only a halt is converted: `on_exhausted: raise`, `on_empty: error`, or a
+        `terminal_failure`, each raised once the file is written. An ordinary
+        polling failure must keep CHECKING_BATCH so the next run re-polls the
+        existing job — turning it into FAILED would reset it to PENDING and submit
+        a duplicate batch.
         """
-        if not (raised_by_exhaustion_policy(error) or _raised_by_on_empty_error(error)):
+        if not (
+            raised_by_exhaustion_policy(error)
+            or _raised_by_on_empty_error(error)
+            or raised_by_terminal_failure(error)
+        ):
             raise error
         return self._handle_run_failure(
             ActionRunParams(
