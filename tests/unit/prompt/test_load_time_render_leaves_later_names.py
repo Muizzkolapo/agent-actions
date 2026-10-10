@@ -678,3 +678,76 @@ actions:
     )
 
     assert _actions(data)["last"]["prompt"] == "After {{ stage_2.answer }}"
+
+
+@pytest.mark.parametrize(
+    "workflow, prompt",
+    [
+        pytest.param(
+            "actions:\n  - name: a\n    prompt:\n      Summarise this page {{ source.page_id }}\n"
+            "      in one line.\n",
+            "Summarise this page {{ source.page_id }} in one line.",
+            id="plain-value-on-the-lines-below-the-key",
+        ),
+        pytest.param(
+            'actions:\n  - name: a\n    prompt:  # one line\n\n      "Summarise {{ source.page_id }}\n'
+            '      in one line."\n',
+            "Summarise {{ source.page_id }} in one line.",
+            id="quoted-value-below-a-comment",
+        ),
+        pytest.param(
+            "actions:\n  - name: a\n    prompt:\n      |\n      Summarise {{ source.page_id }}\n"
+            "      {% if source.x %}X{% endif %}\n    intent: x\n",
+            "Summarise {{ source.page_id }}\n{% if source.x %}X{% endif %}\n",
+            id="block-header-below-the-key",
+        ),
+        pytest.param(
+            'actions:\n  - {name: a, intent: x, prompt: "Summarize {{ source.text }}"}\n',
+            "Summarize {{ source.text }}",
+            id="flow-mapping",
+        ),
+        pytest.param(
+            'actions:\n  - {name: a,  # the summary\n     prompt: "Summarize {{ source.text }}"}\n',
+            "Summarize {{ source.text }}",
+            id="flow-mapping-over-several-lines",
+        ),
+        pytest.param(
+            'actions: [{name: a, prompt: "Summarize {{ source.text }}"}]\n',
+            "Summarize {{ source.text }}",
+            id="flow-sequence-of-actions",
+        ),
+    ],
+)
+def test_a_per_record_prompt_written_in_any_yaml_form_is_kept_for_the_record(
+    tmp_path, workflow, prompt
+):
+    """These forms were rendered at load, where the record's names fail it."""
+    data = _load(tmp_path, workflow)
+
+    assert _actions(data)["a"]["prompt"] == prompt
+
+
+def test_a_version_value_on_the_line_below_its_key_renders_per_version(tmp_path):
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: m\n    versions: {range: [1, 2]}\n    intent:\n"
+        '      "Version {{ i }}"\n    prompt: "x"\n'
+        '  - {name: n, versions: {range: [1, 2]}, model_name: "m{{ i }}", prompt: "y {{ i }}"}\n',
+    )
+
+    actions = _actions(data)
+    assert [actions[f"m_{i}"]["intent"] for i in (1, 2)] == ["Version 1", "Version 2"]
+    assert [actions[f"n_{i}"]["model_name"] for i in (1, 2)] == ["m1", "m2"]
+    assert actions["n_2"]["prompt"] == "y {{ i }}"
+
+
+def test_a_mapping_below_a_key_is_not_read_as_its_value(tmp_path):
+    data = _load(
+        tmp_path,
+        "defaults:\n  {{ '' }}\n  model_name: m\nactions:\n  - name: m\n"
+        "    versions: {range: [1, 2]}\n    model_kwargs:\n      {{ '' }}\n"
+        '      temperature: "0.{{ i }}"\n    prompt: "x"\n',
+    )
+
+    assert data["defaults"] == {"model_name": "m"}
+    assert _actions(data)["m_2"]["model_kwargs"] == {"temperature": "0.2"}
