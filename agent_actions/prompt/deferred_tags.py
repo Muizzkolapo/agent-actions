@@ -250,10 +250,7 @@ class TemplateExports:
 
 
 def template_folder_exports(env: Environment, templates_folder: Path) -> TemplateExports:
-    """Read the folder's exports without running them.
-
-    So a template can use another's macro whichever loads first.
-    """
+    """Read the folder's exports without running them, so they are known before loading."""
     exports = TemplateExports()
     if not templates_folder.is_dir():
         return exports
@@ -313,8 +310,9 @@ class DeferringFileSystemLoader(FileSystemLoader):
             self._reading.discard(template)
 
     def _defer(self, environment: Environment, source: str, inherited: frozenset[str]) -> Deferral:
-        # Loading the folder makes each file's exports globals in turn, so a file's top
-        # level can count only on those already loaded, and its macros on all of them.
+        # Loading the folder makes each file's exports globals in turn. A file's top level
+        # runs as it loads, so it counts only on those already loaded; a macro runs later
+        # and counts on all of them (one loaded after its file fails the call, naming it).
         return defer_unresolved_tags(
             source,
             environment,
