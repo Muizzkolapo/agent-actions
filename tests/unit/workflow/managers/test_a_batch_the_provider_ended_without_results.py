@@ -16,7 +16,9 @@ import logging
 
 import pytest
 
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.errors import ProcessingError
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.storage.backend import DISPOSITION_FAILED
 from tests.unit.workflow.managers.test_a_file_the_collect_pass_could_not_read import (
     ACTION,
@@ -86,3 +88,39 @@ def test_a_run_after_it_finds_nothing_owed(tmp_path, ended):
     assert action.lifecycle.check_batch_submission(ACTION, 0, tmp_path) != "batch_submitted"
     assert action.check() == (action.out, "completed")
     assert action.finalized == ["page1.json", "page3.json"]
+
+
+def test_a_pass_in_which_every_batch_ended_still_fails_the_action(tmp_path):
+    """Nothing came back for any file, and the run after sends every file again."""
+    action = _Action(tmp_path, statuses=dict.fromkeys(PAGES, BatchStatus.FAILED))
+    for name in PAGES:
+        action.send(name, f"{name}-a")
+
+    with pytest.raises(ProcessingError, match="No batch results were successfully processed"):
+        action.check()
+    assert set(action.dispositions().values()) == {DISPOSITION_FAILED}
+
+
+def test_a_repair_round_the_provider_failed_leaves_the_records_of_its_file_alone(tmp_path):
+    """The pass over its file reads that file again and answers its records, which the
+    round's failure must not then mark failed."""
+    action = _Action(tmp_path)
+    action.send("page3.json", "page3.json-a", "page3.json-b")
+    action.register(
+        BatchJobEntry(
+            batch_id="batch-page3.json_repair_1",
+            status=BatchStatus.FAILED,
+            timestamp="2026-10-04T09:10:00+00:00",
+            provider="agac-provider",
+            record_count=1,
+            file_name="page3.json_repair_1",
+            parent_file_name="page3.json",
+            recovery_type=RecoveryType.REPAIR,
+            recovery_attempt=1,
+        )
+    )
+
+    action.check()
+
+    assert "page3.json" in action.finalized
+    assert action.dispositions() == {}

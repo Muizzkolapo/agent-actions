@@ -534,14 +534,19 @@ Run 2: Poll
         │       asked about; the action then returns "in_progress",
         │       and the next run reads it. One the provider reports
         │       ended or does not know has its records marked failed
+        │     → mark failed the records of an entry the poll found failed
+        │       or cancelled before it finished, and stamp it collected:
+        │       owed nothing, it rolls up with collected entries
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)
         │     → write output + dispositions
         │
-        ├── "in_progress" → poll provider APIs
-        │     all done? → process
+        ├── "in_progress" / "partial_failed" → poll provider APIs
+        │     all done? → process, as above
         │     not done? → return "in_progress" → BATCH_SUBMITTED again
+        │     A failed entry reads "partial_failed" until a pass marks
+        │     its records failed
         │
         └── "failed"/"cancelled" → return error
 

@@ -31,7 +31,9 @@ class BatchJobEntry:
     recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
     # When this batch's results were written, which `status` cannot answer:
     # a provider poll persists COMPLETED the moment the batch finishes, long
-    # before anything is retrieved. Only `finalize_batch_output` sets this.
+    # before anything is retrieved. Set by `finalize_batch_output`, and by the
+    # collect pass once it has failed the records of a batch the provider ended
+    # before it finished, which has no results to write.
     collected_at: str | None = None
 
     def __post_init__(self):
@@ -76,6 +78,14 @@ class BatchJobEntry:
         """Finished at the provider, with nothing yet saying its results were written."""
         return self.status == BatchStatus.COMPLETED and self.collected_at is None
 
+    @property
+    def is_settled(self) -> bool:
+        """Ended at the provider without results, and its records since marked failed."""
+        return (
+            self.status in (BatchStatus.FAILED, BatchStatus.CANCELLED)
+            and self.collected_at is not None
+        )
+
 
 @dataclass
 class BatchRegistryStats:
@@ -86,6 +96,9 @@ class BatchRegistryStats:
     failed: int
     in_progress: int
     cancelled: int
+    # Counted apart from failed and cancelled: owed nothing, a settled entry is no
+    # more reason to wait than a collected one.
+    settled: int = 0
 
     @property
     def overall_status(self) -> str:
@@ -93,11 +106,12 @@ class BatchRegistryStats:
         if self.total_jobs == 0:
             return "no_batches"
 
-        if self.completed == self.total_jobs:
+        done = self.completed + self.settled
+        if done == self.total_jobs:
             return "completed"
 
-        if self.completed + self.cancelled == self.total_jobs:
-            return "completed" if self.completed > 0 else "cancelled"
+        if done + self.cancelled == self.total_jobs:
+            return "completed" if done > 0 else "cancelled"
 
         if self.failed > 0:
             return "partial_failed"

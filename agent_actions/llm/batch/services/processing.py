@@ -299,8 +299,10 @@ class BatchProcessingService:
         A finished entry the provider cannot be asked about, or reports running again,
         is left unread, as is the parent a recovery dropped in the pass hands back; one
         it reports ended any other way, or does not know, has its records marked failed.
-        Tolerates writing nothing when recovery batches are pending
-        (in_progress), a collected entry was skipped, or an entry was left unread.
+        So has a batch the provider failed or cancelled before it finished, which is then
+        stamped collected: nothing is owed for it. Tolerates writing nothing when
+        recovery batches are pending (in_progress), a collected entry was skipped, or an
+        entry was left unread.
 
         Args:
             output_directory: Output directory path
@@ -359,6 +361,21 @@ class BatchProcessingService:
                 logger.info("Skipping %s: collected at %s", file_name, entry.collected_at)
                 continue
 
+            # Ended before it finished, as the poll before this pass recorded: nothing
+            # will come back, and no later pass can read it. Stamped once its records
+            # are failed, it holds the action no longer. A recovery round is left to
+            # the paths below: a retry's failure path continues it, and the pass over
+            # a repair's file puts its records back in play.
+            if entry.recovery_type is None and entry.status in (
+                BatchStatus.FAILED,
+                BatchStatus.CANCELLED,
+            ):
+                self._fail_unreadable_batch(
+                    file_name, entry, entry.status, output_directory, effective_action_name
+                )
+                manager.mark_collected(file_name)
+                continue
+
             # A dead retry recovery is processed without a readiness poll: its
             # provider status is terminal, and the failure path needs no results.
             if not _is_dead_retry(entry):
@@ -383,21 +400,8 @@ class BatchProcessingService:
                         continue
                     # Ended without results, or unknown to the provider: no later pass
                     # can read it, so waiting would hold the action for good.
-                    logger.warning(
-                        "Could not read %s (batch %s): the provider reports it %s, not "
-                        "completed. Its records are marked failed for `agac retry`",
-                        file_name,
-                        batch_id,
-                        status,
-                    )
-                    self._fail_abandoned_records(
-                        # A recovery round is sent from its parent's context map.
-                        file_name=entry.parent_file_name or file_name,
-                        output_directory=output_directory,
-                        action_name=effective_action_name,
-                        error=ProcessingError(
-                            f"batch {batch_id} is {status} at the provider, not completed"
-                        ),
+                    self._fail_unreadable_batch(
+                        file_name, entry, status, output_directory, effective_action_name
                     )
                     continue
 
@@ -816,6 +820,32 @@ class BatchProcessingService:
     # =========================================================================
     # HELPERS (kept in this module)
     # =========================================================================
+
+    def _fail_unreadable_batch(
+        self,
+        file_name: str,
+        entry: BatchJobEntry,
+        status: str,
+        output_directory: str,
+        action_name: str,
+    ) -> None:
+        """Fail the records of a batch no pass can read, which the provider reports *status*."""
+        logger.warning(
+            "Could not read %s (batch %s): the provider reports it %s, not completed. "
+            "Its records are marked failed for `agac retry`",
+            file_name,
+            entry.batch_id,
+            status,
+        )
+        self._fail_abandoned_records(
+            # A recovery round is sent from its parent's context map.
+            file_name=entry.parent_file_name or file_name,
+            output_directory=output_directory,
+            action_name=action_name,
+            error=ProcessingError(
+                f"batch {entry.batch_id} is {status} at the provider, not completed"
+            ),
+        )
 
     def _fail_abandoned_records(
         self,

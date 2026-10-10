@@ -214,6 +214,8 @@ class BatchRegistryManager:
             for entry in cache.values():
                 if entry.status == BatchStatus.COMPLETED:
                     stats.completed += 1
+                elif entry.is_settled:
+                    stats.settled += 1
                 elif entry.status == BatchStatus.FAILED:
                     stats.failed += 1
                 elif entry.status in BatchStatus.in_flight_states():

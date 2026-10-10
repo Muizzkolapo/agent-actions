@@ -125,3 +125,42 @@ class TestABatchTheProviderEndsBesideOneItFinishes:
         assert "Nothing to retry" not in runs.retried.output
         assert runs.collected[-1].status == "completed", runs.collected[-1].output
         assert _stored_rows(runs.project) == _answered("a", "b")
+
+
+class TestEveryBatchTheProviderFailed:
+    """Nothing came back for any file: the action fails, and is sent again whole."""
+
+    @pytest.fixture(scope="class")
+    def runs(self, tmp_path_factory):
+        project = _project(tmp_path_factory.mktemp("every") / "project")
+        submitted = _agac(project, "--fresh")
+        assert submitted.status == "batch_submitted", submitted.output
+        sent = _batch_ids(project)
+        for batch_id in sent.values():
+            _the_provider_ends(project, batch_id, "failed")
+
+        ended = _agac(project)
+        resent = _agac(project)
+        resent_as = _batch_ids(project)
+        collected = _agac(project)
+        return SimpleNamespace(
+            sent=sent,
+            ended=ended,
+            resent=resent,
+            resent_as=resent_as,
+            collected=collected,
+            project=project,
+        )
+
+    def test_the_run_that_finds_them_fails_the_action(self, runs):
+        assert runs.ended.code != 0, runs.ended.output
+        assert runs.ended.status == "failed"
+
+    def test_the_run_after_it_sends_every_file_again(self, runs):
+        assert runs.resent.status == "batch_submitted", runs.resent.output
+        assert set(runs.resent_as) == set(runs.sent)
+        assert set(runs.resent_as.values()).isdisjoint(runs.sent.values())
+
+    def test_every_record_ends_answered(self, runs):
+        assert runs.collected.status == "completed", runs.collected.output
+        assert _stored_rows(runs.project) == _answered("a", "b")

@@ -95,9 +95,14 @@ while checking whether its batches have finished pauses the same way. It keeps p
 as long as the provider cannot be asked; to give up on those batches instead,
 `agac run --fresh` sends every record of the workflow again.
 
-A batch the provider answers about but no longer reports finished, such as one it now
-reports failed or expired, cannot be read by a later run either. The run reads the other
-files and marks the records of that batch's file failed, for `agac retry` to send again.
+### When the provider ends a batch without results
+
+A batch the provider fails or cancels before it finishes returns nothing, and no later run
+can read it. Nor can one the provider answers about but no longer reports finished, such as
+one it now reports failed or expired. The run reads the other files, names the file and its
+batch, marks the records of that file failed, and completes the action with those failures,
+for `agac retry` to send again. When the provider ended every file's batch this way, the run
+fails the action instead, and the next run sends every file again.
 
 ### Batch Commands
 
