@@ -6,9 +6,12 @@ stored as a cascade casualty, `unprocessed` with reason `batch_not_returned`: th
 read `completed`, `agac retry` found nothing, and every later run skipped the action, so
 only `agac run --fresh` brought the record back.
 
+With retry on, a retry batch the provider refused left the record the same way.
+
 Each run is its own `agac run` process against the agac provider mock, which answers
 every task it was given; a record is lost the way a provider loses one, by taking its
-task out of the submitted batch before the run that collects it.
+task out of the submitted batch before the run that collects it. A refused retry batch
+is a sitecustomize standing in for the provider, which refuses any batch sent to retry.
 """
 
 from __future__ import annotations
@@ -117,12 +120,33 @@ _MERGE = (
 """
 )
 
+_RETRY_ON = "    retry: { enabled: true, max_attempts: 3 }\n"
+
+# (workflow, batch action, its retry: block, the retry batch the provider refuses or 0)
 SCENARIOS = {
-    "no-retry-block": (_SUMMARIZE, "summarize", ""),
-    "retry-enabled-false": (_SUMMARIZE, "summarize", "    retry: { enabled: false }\n"),
-    "retry-false": (_SUMMARIZE, "summarize", "    retry: false\n"),
-    "version-merge": (_MERGE, "merge_direct", ""),
+    "no-retry-block": (_SUMMARIZE, "summarize", "", 0),
+    "retry-enabled-false": (_SUMMARIZE, "summarize", "    retry: { enabled: false }\n", 0),
+    "retry-false": (_SUMMARIZE, "summarize", "    retry: false\n", 0),
+    "version-merge": (_MERGE, "merge_direct", "", 0),
+    "first-retry-refused": (_SUMMARIZE, "summarize", _RETRY_ON, 1),
+    "second-retry-refused": (_SUMMARIZE, "summarize", _RETRY_ON, 2),
 }
+
+_REFUSE_RETRY = """\
+import os
+
+if os.environ.get("REFUSE_RETRY_BATCH"):
+    from agent_actions.llm.providers.agac import batch_client as _client
+
+    _submit = _client.AgacBatchClient._submit_to_provider_api
+
+    def _refuse_retry(self, input_file, batch_name):
+        if batch_name.endswith("_retry"):
+            raise ConnectionError("the provider refused the batch")
+        return _submit(self, input_file, batch_name)
+
+    _client.AgacBatchClient._submit_to_provider_api = _refuse_retry
+"""
 
 
 def _project(root: Path, config: str) -> Path:
@@ -133,11 +157,16 @@ def _project(root: Path, config: str) -> Path:
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(config)
     (root / ".env").write_text("OPENAI_API_KEY=not-used\n")
+    (root.parent / "site").mkdir()
+    (root.parent / "site" / "sitecustomize.py").write_text(_REFUSE_RETRY)
     return root
 
 
-def _run(project: Path, *args: str) -> SimpleNamespace:
-    result = run_agac(project, "run", "-a", WORKFLOW, *args, env=_ENV)
+def _run(project: Path, *args: str, refuse_retry: bool = False) -> SimpleNamespace:
+    env = dict(_ENV)
+    if refuse_retry:
+        env.update(PYTHONPATH=str(project.parent / "site"), REFUSE_RETRY_BATCH="1")
+    result = run_agac(project, "run", "-a", WORKFLOW, *args, env=env)
     return SimpleNamespace(code=result.returncode, output=result.stdout + result.stderr)
 
 
@@ -217,7 +246,7 @@ def _answer(project: Path, action: str, guid: str) -> object:
 
 @pytest.fixture(scope="class", params=sorted(SCENARIOS))
 def runs(request, tmp_path_factory):
-    template, action, retry = SCENARIOS[request.param]
+    template, action, retry, refused = SCENARIOS[request.param]
     project = _project(
         tmp_path_factory.mktemp(request.param) / "project", template.replace("{retry}", retry)
     )
@@ -225,9 +254,14 @@ def runs(request, tmp_path_factory):
     assert submitted.code == 0, submitted.output
     (batch,) = _batches(project)
     custom_id = _lose(batch)
+    if refused == 2:
+        resent = _run(project)
+        (retry_batch,) = set(_batches(project)) - {batch}
+        assert _lose(retry_batch) == custom_id, resent.output
 
-    collected = _run(project)
-    sent_by_collect = set(_batches(project)) - {batch}
+    before_collect = set(_batches(project))
+    collected = _run(project, refuse_retry=bool(refused))
+    sent_by_collect = set(_batches(project)) - before_collect
     guid = _lost_guid(project)
     after_collect = SimpleNamespace(
         statuses=_statuses(project),
