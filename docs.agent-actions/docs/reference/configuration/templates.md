@@ -24,17 +24,17 @@ Templates are rendered before your agentic workflow runs. This means template er
 
 ## What Renders When
 
-Loading a workflow renders every tag whose names the load knows: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`. Any other tag is left in place for the stage that has its names:
+Loading a workflow renders the file through Jinja before it is parsed as YAML. Each action's `prompt:` is decided where the load reaches it, with exactly the names bound there: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`.
 
-- An action's `prompt:` renders per record, so `{{ source.field }}`, `{{ upstream_action.field }}`, `{{ seed.name }}` and the [version variables](../execution/versions#template-variables) work in an inline prompt as they do in the prompt store. A name nothing supplies fails each record at run time (`Template for 'write' references undefined variables: topic`) instead of rendering as nothing.
-- A versioned action's other values render once per version, with the version variables.
-- Anywhere else, a name nothing supplies fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, and so does a field a loaded name lacks.
+- A prompt whose names are all bound renders at load, as it always has.
+- A prompt that reads a name a record or a version supplies (`source`, `seed`, an action of the workflow, `version`, `i`, `idx` or a version `param`) is kept whole and renders per record, exactly as the same prompt in the prompt store does, `{% if %}`, `is defined`, captures and macros of its own included. Its own `{{ }}` tags outside its `{% %}` blocks that read only load-time names render into it at load: with `{% for n in [1, 2] %}`, `Stage {{ n }} of {{ source.text }}` becomes `Stage 2 of {{ source.text }}`. Load-time data its other tags read, such as a list a `{% for %}` walks or a flag an `{% if %}` tests, is set at its top (`{% set fields = ["title", "body"] +%}`).
+- A versioned action's other values (`model_vendor`, `model_name`, `intent`, …) that read a version variable render once per version, as if the version's variables were set when the file loads. On an action without `versions:` such a value fails the load, unless the variable is guarded with `is defined` or `default(...)`.
 
-Each tag renders whole, at one stage. `{{ tone }} {{ source.topic }}` is two tags and works with `tone` set in the file; `{{ source[field] }}`, with `field` a load-time loop variable, is one tag left for the record, where `field` is undefined.
+Only data reaches the per-record render. A prompt that renders per record can use a macro, `load_prompt` or an imported template only in a `{{ }}` tag of its own outside its `{% %}` blocks, and cannot `{% include %}` anything; otherwise the load fails naming it. Define the macro inside the prompt instead.
 
-A `{% set %}` block or macro whose body holds a per-record tag is output whole at load: with `{% set header %}Title: {{ source.title }}{% endset %}`, a prompt's `{{ header }}` becomes `Title: {{ source.title }}`, and a macro that writes actions can give them per-record prompts. A tag that tests or filters such a value, such as `{% if header == "x" %}` or `{{ header | length }}`, waits for the record together with the value's definition, so define the value inside the prompt that tests it; defined anywhere else in the file, it fails the load. One from `templates/` fails the load when tested, but capturing it in the prompt, as `{% set h %}{{ make_header() }}{% endset %}`, and testing `h` works.
+Everything else renders at load. A name nothing defines fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, unless it is guarded with `is defined` or `default(...)`, and so does a field a loaded name lacks. A name a record or a version supplies, read anywhere the load renders, also fails the load, so a record never sees a branch decided once for all of them: in a value other than a prompt, in a `{% set %}` block, macro body or `caller()` body that a prompt outputs, or tested with `is defined`. To hand a per-record tag to a prompt through a macro or a captured block, wrap it in `{% raw %}...{% endraw %}`; the prompt receives the tag as text and renders it per record.
 
-An included template (`{% include 'partial.j2' %}`) renders at load the names bound where the include stands, loop variables included, and leaves its other tags for later as the workflow file does.
+The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with nothing bound; there, as before, an undefined name renders as nothing.
 
 ## Template Location
 
