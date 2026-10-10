@@ -22,6 +22,16 @@ Let's explore what templates provide:
 Templates are rendered before your agentic workflow runs. This means template errors are caught early, during configuration loading rather than at runtime.
 :::
 
+## What Renders When
+
+Loading a workflow renders every tag whose names the load knows: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`. Any other tag is left in place for the stage that has its names:
+
+- An action's `prompt:` renders per record, so `{{ source.field }}`, `{{ upstream_action.field }}`, `{{ seed.name }}` and the [version variables](../execution/versions#template-variables) work in an inline prompt as they do in the prompt store.
+- A versioned action's other values render once per version, with the version variables.
+- A name nothing supplies fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, and so does a field a loaded name lacks.
+
+Each tag renders whole, at one stage. `{{ tone }} {{ source.topic }}` is two tags and works with `tone` set in the file; `{{ source[field] }}`, with `field` a load-time loop variable, is one tag left for the record, where `field` is undefined.
+
 ## Template Location
 
 Templates are stored in the `templates/` directory:
@@ -129,11 +139,7 @@ diff agent_workflow/my_workflow/agent_config/my_workflow.yml \
 
 ### Built-in Variables
 
-| Variable | Description |
-|----------|-------------|
-| `workflow_name` | Current workflow name |
-| `env` | Environment variables dict |
-| `now` | Current timestamp |
+The load supplies no variables of its own: only `load_prompt`, the macros and variables of `templates/`, and Jinja's globals (`range`, `dict`, `namespace`, …). Anything else a tag names comes from the file itself.
 
 ### Custom Variables
 
@@ -150,9 +156,11 @@ defaults:
 
 ## Conditional Actions
 
-Include actions conditionally:
+Include actions conditionally on a variable the file sets:
 
 ```jinja2
+\{% set enable_validation = true \%\}
+
 \{% if enable_validation \%\}
   - name: validate_output
     kind: llm
@@ -281,20 +289,6 @@ name: my_workflow
 actions:
   - name: my_action
     # Uses base defaults
-```
-
-### Environment-Specific Configuration
-
-Consider what happens when you need different settings for development vs production. Templates let you branch based on environment variables:
-
-```jinja2
-\{% if env.AGENT_ACTIONS_ENV == 'production' \%\}
-  model_name: gpt-4o
-  run_mode: batch
-\{% else \%\}
-  model_name: gpt-4o-mini
-  run_mode: online
-\{% endif \%\}
 ```
 
 ### Feature Flags
