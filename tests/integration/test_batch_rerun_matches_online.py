@@ -1230,6 +1230,20 @@ def test_a_guard_skip_is_recorded_alike_in_both_modes(tmp_path):
     assert recorded == [[("unprocessed", "guard_skip")]] * 2
 
 
+def test_a_run_that_answers_nothing_writes_the_skip_of_an_answered_input_as_batch_does(
+    tmp_path,
+):
+    """The skip is recorded at once, so the action no longer calls that input answered, and
+    a run that fails and answers nothing writes its file rather than leaving the answer."""
+    runs = [_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]]
+
+    findings = compare(tmp_path, runs, SKIP, {("a3", 2): "fail"})
+
+    assert findings[1]["online_raised"], "the file answered nothing"
+    assert findings[1]["online"] == ["failed:a3", "guard_skipped:a2", "processed:a1:0@run1"]
+    assert findings[1]["batch"] == findings[1]["online"]
+
+
 def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_again(tmp_path):
     """Judging it stops at the guard: preparing it would render and trace a prompt that
     no batch is sent with."""
