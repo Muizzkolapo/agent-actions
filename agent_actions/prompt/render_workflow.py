@@ -646,7 +646,14 @@ def render_pipeline_with_templates(
     if data:
         _expand_workflow_versions(data, load.render_version)
     data = load.fill_values(data)
-    load.check(data)
+    try:
+        load.check(data)
+    except jinja2.UndefinedError as e:
+        raise TemplateRenderingError(
+            f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",
+            context={"yaml_path": str(yaml_path), "templates_folder": str(templates_folder)},
+            cause=e,
+        ) from e
 
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:

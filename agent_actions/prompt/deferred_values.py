@@ -179,6 +179,9 @@ class LoadRender:
                 (self._actions if kind == "name" else self._params).add(name)
             self._action_prefixes.update(_NAMED_BY_TAG.findall(text))
         self._version_names = _VERSION_NAMES | self._params
+        # Names a prompt reads that the load found undefined, taken for actions the file
+        # names by a tag; check() fails the load with the error of any that is not one.
+        self._assumed: dict[str, jinja2.UndefinedError] = {}
 
         # Jinja leaves an environment's globals out of a template's undeclared names, so
         # names are read with one that has none, and the load's filters and tests.
@@ -199,7 +202,19 @@ class LoadRender:
     # ── the render ─────────────────────────────────────────────────────────
 
     def render(self, source: str, origin: str) -> str:
-        return self.env.from_string(self.wrap(source, origin)).render()
+        template = self.env.from_string(self.wrap(source, origin))
+        while True:
+            try:
+                return template.render()
+            except jinja2.UndefinedError as e:
+                name = self._read_by_a_prompt(e)
+                if name is None:
+                    raise
+                # An action named by a tag, `name: {{ n }}`, is known only once the file
+                # is parsed, so the prompts reading it are rendered again for the record.
+                self._assumed[name] = e
+                self._left.clear()
+                self._missed.clear()
 
     def wrap(self, source: str, origin: str) -> str:
         """*source* with each value that may render later wrapped in a leave tag."""
@@ -302,9 +317,19 @@ class LoadRender:
             self._not_recorded = frozenset()
 
     def check(self, data: Any) -> None:
-        """Fail on any name the load looked up that a record or a version supplies."""
+        """Fail on any name the load looked up that a record or a version supplies, and on
+        any it took for an action that is not one."""
         later = {"source", *FRAMEWORK_NAMESPACES} - {"version"}
         actions = data.get("actions") if isinstance(data, dict) else None
+        named = set()
+        for action in actions if isinstance(actions, list) else []:
+            if isinstance(action, dict):
+                version = action.get("_version_context")
+                base = version.get("base_name") if isinstance(version, dict) else None
+                named.update({action.get("name"), base})
+        for name, error in self._assumed.items():
+            if name not in named:
+                raise error
         for action in actions if isinstance(actions, list) else []:
             if not isinstance(action, dict):
                 continue
@@ -348,7 +373,7 @@ class LoadRender:
         if not isinstance(error, jinja2.UndefinedError) or match is None:
             return ""
         name = match.group(1)
-        if not self._per_record(name):
+        if name in self._assumed or not self._per_record(name):
             return ""
         return (
             f". '{name}' exists only for each record or version, and this tag renders at "
@@ -369,9 +394,20 @@ class LoadRender:
     def _per_record(self, name: str) -> bool:
         if name in _RECORD_NAMES or name in self._params or name in self._actions:
             return True
+        if name in self._assumed:
+            return True
         if any(name.startswith(f"{action}_") for action in self._actions):
             return True
         return any(name.startswith(prefix) for prefix in self._action_prefixes)
+
+    def _read_by_a_prompt(self, error: jinja2.UndefinedError) -> str | None:
+        """The name *error* found undefined, when a prompt reads it and it may be an
+        action the load does not know yet."""
+        match = _UNDEFINED_NAME.search(str(error))
+        if match is None or self._per_record(match.group(1)):
+            return None
+        name = match.group(1)
+        return name if any(r.is_prompt and name in r.free for r in self._regions) else None
 
     def _missed_name(self, name: str) -> None:
         # A file's top level runs on import only for what it exports, and as on main
