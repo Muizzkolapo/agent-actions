@@ -81,6 +81,9 @@ class BaseBatchClient(ABC):
     """Abstract base class for batch processing clients."""
 
     _configured_model: str | None = None
+    # The vendor's errors for a provider that could not answer now. A status check
+    # raises them as ConnectionError, which its callers take as "ask again later".
+    _transient_errors: tuple[type[Exception], ...] = ()
 
     def prepare_tasks(
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
@@ -153,6 +156,10 @@ class BaseBatchClient(ABC):
         try:
             raw_status = self._fetch_status(batch_id)
             return self._normalize_status(raw_status)
+        except self._transient_errors as e:
+            raise ConnectionError(
+                f"The provider could not be asked about batch {batch_id}: {e}"
+            ) from e
         except Exception as e:
             logger.error("Error checking batch %s: %s", batch_id, e)
             raise

@@ -459,6 +459,10 @@ Run 2: Poll
         │     → skip each entry already collected (collected_at): its
         │       results are written, and a later run may have written
         │       the file again since
+        │     → leave unread a finished entry the provider cannot be
+        │       asked about; the action then returns "in_progress",
+        │       and the next run reads it. One the provider reports
+        │       ended or does not know has its records marked failed
         │     → retrieve results from provider
         │     → reconcile (expected - received = missing)
         │     → recovery state machine (retry → repair → finalize)

@@ -3,6 +3,7 @@
 import logging
 import time
 from collections.abc import Callable, Collection
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -131,6 +132,18 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
     )
     return superseded
+
+
+@dataclass
+class CollectPass:
+    """The files a collect pass wrote, and the finished ones it could not read.
+
+    A file left unread still owes its results, so the action waits for it as for a batch
+    still out: completed, the action is not run again and nothing reads that batch.
+    """
+
+    written: list[str] = field(default_factory=list)
+    unread: list[str] = field(default_factory=list)
 
 
 class BatchProcessingService:
@@ -278,13 +291,16 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
-    ) -> list[str]:
+    ) -> CollectPass:
         """Process the completed batch jobs whose results are still owed.
 
         Recovery entries are processed in their own right; the parent they
         superseded is skipped instead, and so is an entry already collected.
-        Tolerates empty processed_files when recovery batches are pending
-        (in_progress) or a collected entry was skipped.
+        A finished entry the provider cannot be asked about, or reports running again,
+        is left unread, as is the parent a recovery dropped in the pass hands back; one
+        it reports ended any other way, or does not know, has its records marked failed.
+        Tolerates writing nothing when recovery batches are pending
+        (in_progress), a collected entry was skipped, or an entry was left unread.
 
         Args:
             output_directory: Output directory path
@@ -292,11 +308,11 @@ class BatchProcessingService:
             action_name: Override action_name for storage backend writes (uses self._workflow_name if not provided)
 
         Returns:
-            List of output file paths
+            The output file paths written, and the files left unread
 
         Raises:
             ProcessingError: If no registry found, or no files processed while none
-                was skipped as collected and no recovery is pending
+                was skipped as collected or left unread and no recovery is pending
         """
         effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
@@ -307,6 +323,7 @@ class BatchProcessingService:
             )
 
         processed_files = []
+        unread: list[str] = []
         # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
         # one: that restarts recovery at attempt 1, or finalizes on stale results
         # and deletes the live attempt. Stores written before this can hold them.
@@ -344,10 +361,45 @@ class BatchProcessingService:
 
             # A dead retry recovery is processed without a readiness poll: its
             # provider status is terminal, and the failure path needs no results.
-            if not _is_dead_retry(entry) and not self._is_batch_ready_for_processing(
-                batch_id, output_directory, agent_config, action_name=effective_action_name
-            ):
-                continue
+            if not _is_dead_retry(entry):
+                status = self._provider_status(
+                    batch_id, output_directory, agent_config, action_name=effective_action_name
+                )
+                if status != BatchStatus.COMPLETED:
+                    if entry.status != BatchStatus.COMPLETED:
+                        continue
+                    # Its last poll said finished, so its results are owed all the same.
+                    if status is None or status in BatchStatus.in_flight_states():
+                        logger.warning(
+                            "Could not read %s (batch %s) in this pass: %s. The action "
+                            "waits for it",
+                            file_name,
+                            batch_id,
+                            "the provider could not be asked about it"
+                            if status is None
+                            else f"the provider reports it {status}",
+                        )
+                        unread.append(file_name)
+                        continue
+                    # Ended without results, or unknown to the provider: no later pass
+                    # can read it, so waiting would hold the action for good.
+                    logger.warning(
+                        "Could not read %s (batch %s): the provider reports it %s, not "
+                        "completed. Its records are marked failed for `agac retry`",
+                        file_name,
+                        batch_id,
+                        status,
+                    )
+                    self._fail_abandoned_records(
+                        # A recovery round is sent from its parent's context map.
+                        file_name=entry.parent_file_name or file_name,
+                        output_directory=output_directory,
+                        action_name=effective_action_name,
+                        error=ProcessingError(
+                            f"batch {batch_id} is {status} at the provider, not completed"
+                        ),
+                    )
+                    continue
 
             try:
                 output_file = self._process_single_batch_file(
@@ -399,48 +451,49 @@ class BatchProcessingService:
                 )
                 continue
 
+        # A recovery dropped in this pass hands back the parent it superseded, which
+        # the loop has already skipped. One that finalized stamped its parent collected.
+        for name in sorted(superseded - _superseded_entries(manager.get_all_jobs())):
+            parent = manager.get_batch_job(name)
+            if parent is not None and parent.awaits_collection:
+                logger.warning(
+                    "Could not read %s in this pass: it was skipped for a recovery since "
+                    "dropped. The action waits for it",
+                    name,
+                )
+                unread.append(name)
+
         # A file already collected counts as one this pass did not fail, as a replay of
-        # it that succeeded did. An entry still owed beside it is left for a later pass.
-        if not processed_files and not collected_before:
+        # it that succeeded did. One left unread is waited for, not failed.
+        if not processed_files and not collected_before and not unread:
             # Check if recovery batches are pending — not an error
             stats = manager.get_registry_stats()
             if stats.in_progress > 0:
-                return processed_files
+                return CollectPass()
             raise ProcessingError(
                 "No batch results were successfully processed",
                 context={"output_directory": output_directory},
             )
-        return processed_files
+        return CollectPass(written=processed_files, unread=unread)
 
-    def _is_batch_ready_for_processing(
+    def _provider_status(
         self,
         batch_id: str,
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
-    ) -> bool:
-        """Check if batch is ready for processing (completed status).
-
-        Args:
-            batch_id: The batch job ID to check
-            output_directory: Directory containing batch registry
-            agent_config: Optional agent config for API key resolution
-            action_name: Per-action name for registry lookup
-
-        Returns:
-            True if batch status is COMPLETED, False otherwise
-        """
+    ) -> str | None:
+        """The batch's status at the provider, or None when the provider cannot be asked."""
         resolved = self._resolve_action_name(action_name)
         try:
             manager = self._registry_manager_factory(resolved)
             provider = self._client_resolver.get_for_batch_id(
                 batch_id, manager, output_directory, agent_config=agent_config
             )
-            status = provider.check_status(batch_id)
-            return status == BatchStatus.COMPLETED
+            return provider.check_status(batch_id)
         except (OSError, ConnectionError) as e:
             logger.warning("Transient error checking batch status for %s: %s", batch_id, e)
-            return False
+            return None
 
     def _determine_output_path(
         self, output_directory: str, file_name: str | None, batch_id: str

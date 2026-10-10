@@ -417,7 +417,8 @@ class RetryCommand:
         """
         from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 
-        # What a collect pass leaves: stopped, failed, or completed past a file it skipped.
+        # What a collect pass leaves: stopped, failed, or, in an earlier version, completed
+        # past a file it skipped.
         # A run stopped while submitting cannot be told from one stopped collecting.
         left_by_collecting = {ActionStatus.CHECKING_BATCH, ActionStatus.FAILED, *COMPLETED_STATUSES}
         unfinished = []
@@ -525,7 +526,7 @@ class RetryCommand:
         clears the registry entry, which is all that names it. Whether such a batch
         is still owed is asked of its records, not of the entry or the action: an
         entry written before ``collected_at`` existed has no stamp either, and an
-        action can complete past a file it skipped.
+        earlier version could complete an action past a file it skipped.
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
