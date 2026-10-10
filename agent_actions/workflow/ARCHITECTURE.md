@@ -271,13 +271,13 @@ run recorded as it started, at the start of the next run (`_reset_retryable_acti
 "A stopped action keeps what it finished while its config is unchanged".
 
 A completed action that carries a node-level failure runs again and leaves its readers
-alone. It still holds its rows and its records' dispositions, so it answers only what
-failed and carries the rest, and what its readers computed from those rows stands; a row
-it adds on that run does not reach a reader that has completed. No run leaves that state
-behind, since every node-level failure is written with a failed or skipped status and
-starting work clears node-level rows, but `agac retry` restoring an interrupted retry's
-snapshot puts failures back on the actions that retry completed, and leaves them there
-when it then stops before running (`--dry-run`, a `--from` with nothing failed).
+alone. It still holds its rows and its records' dispositions, so it would answer what
+failed and carry the rest, and a row it added on that run would not reach a reader that
+has completed. Nothing leaves that state behind: every node-level failure is written with
+a failed or skipped status, starting work clears node-level rows, and `agac retry` puts an
+interrupted retry's snapshot back without the node-level failure of an action that has
+completed (#1268). Anything that comes to write one beside a completed status has to
+clear it, or reset the readers too.
 
 A store that cannot be read while a completed action is verified leaves it completed, with
 a warning. One failed read is no evidence its output changed. Run again, the action would

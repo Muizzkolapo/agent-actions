@@ -170,6 +170,22 @@ raise` is not refused, because `agac run` does not resume a halt; a retry with a
 record to re-run still completes a halted action without the records past the
 halt (#1267).
 
+## When a retry is interrupted
+
+A retry writes down the failures it is about to clear before it clears them. If it
+is stopped before its run reaches the end, the next `retry` puts them back and
+starts where the stopped one did, so the records it named are answered again from
+there.
+
+What has moved on since keeps what it holds. Nothing goes back once every action
+the stopped retry put back to pending has completed, nor on an action a run has
+reset since. And an action the stopped retry completed never gets back a failure
+recorded against the action as a whole, which would make the next `agac run` run
+it again.
+
+`--dry-run` puts nothing back and leaves the record of the stopped retry where it
+is. The plan it shows counts what a retry would put back.
+
 ## Retrying an action that runs in batch mode
 
 An action configured [`run_mode: batch`](../execution/run-modes.md) is repaired
