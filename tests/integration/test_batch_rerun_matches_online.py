@@ -1244,6 +1244,33 @@ def test_a_carried_input_the_action_above_blocked_keeps_its_answer_as_online(tmp
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
+BLOCKED_AND_TURNED_AWAY = {"filter": FILTER, "skip": SKIP}
+
+
+@pytest.mark.parametrize("guard", BLOCKED_AND_TURNED_AWAY.values(), ids=BLOCKED_AND_TURNED_AWAY)
+def test_a_record_the_action_above_blocked_is_never_put_to_the_guard(tmp_path, guard):
+    """The guard would turn it away, reading the blocked action's fields; online's ran
+    first and stored a live skip, or nothing, where batch stores a cascade tombstone."""
+    blocked = {**rec("u1", keep=False), "_state": "failed"}
+
+    (run,) = compare(tmp_path, [[rec("s1", keep=True), blocked]], guard)
+
+    assert run["online"] == run["batch"]
+    assert "cascade_skipped:u1" in run["online"]
+    assert run["online_sent"] == run["batch_sent"] == ["s1"]
+
+
+@pytest.mark.parametrize("guard", BLOCKED_AND_TURNED_AWAY.values(), ids=BLOCKED_AND_TURNED_AWAY)
+def test_an_answered_input_the_action_above_blocked_keeps_its_answer_as_batch(tmp_path, guard):
+    """Batch's gate carries it before preparation would quarantine it, and online's gate,
+    which the guard does not stand in front of for it, does the same."""
+    blocked = {**rec("a1", keep=False), "_state": "failed"}
+
+    for run in compare(tmp_path, [_PASSES, [blocked, rec("a2", keep=True)]], guard):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
 def test_an_action_whose_guard_now_filters_every_carried_input_reads_as_skipped(tmp_path):
     """As online, which records the action skipped: it holds nothing, under the node-level
     mark the executor reads as skipped when no row is stored."""
