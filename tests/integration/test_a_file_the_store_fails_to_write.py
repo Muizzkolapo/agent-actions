@@ -10,6 +10,8 @@ and nothing asked for them again. On a first run the file was simply never store
 A batch collect pass took the failure the same way, and recorded the action partly
 complete over that file's earlier rows.
 
+Either way the run reported it first as a failed load of the file it was writing (1284).
+
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 store's failure is stood in for, raised where it writes the one target file.
 """
@@ -47,6 +49,13 @@ from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_an
 )
 
 NOT_STORED = "pages1.json"
+FAULTS = pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(sqlite3.OperationalError("disk I/O error"), id="database"),
+        pytest.param(OSError(28, "No space left on device"), id="disk-full"),
+    ],
+)
 
 
 @contextmanager
@@ -63,13 +72,39 @@ def _the_store_fails_to_write(action, relative_path, raising):
         yield
 
 
-@pytest.mark.parametrize(
-    "fault",
-    [
-        pytest.param(sqlite3.OperationalError("disk I/O error"), id="database"),
-        pytest.param(OSError(28, "No space left on device"), id="disk-full"),
-    ],
-)
+def _events(root):
+    log = root / "agent_workflow" / WORKFLOW / "agent_io" / "logs" / "events.json"
+    return [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+
+
+def _failures_naming_a_file(root):
+    return [
+        (event["event_type"], event["message"])
+        for event in _events(root)
+        if event["level"] == "error" and "file_path" in event["data"]
+    ]
+
+
+def _reported_as_a_failed_write(root, result, action, fault):
+    assert result.exit_code == 1, result.output
+    assert "Failed to load data" not in result.output
+    assert "Failed to write" in result.output
+    assert "D002" not in {event["code"] for event in _events(root)}
+    failures = _failures_naming_a_file(root)
+    assert [event_type for event_type, _ in failures] == ["FileWriteFailedEvent"]
+    ((_, message),) = failures
+    assert message.startswith("Failed to write "), message
+    assert message.endswith(f"/target/{action}/{NOT_STORED}: {fault}"), message
+
+
+def _with_a_reader(root):
+    config = _config(root)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
+    (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (root / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+
+
+@FAULTS
 def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_next_run(
     online,  # noqa: F811
     provider,  # noqa: F811
@@ -97,16 +132,51 @@ def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_
     assert all(row.get("lineage") for row in _stored_rows(online))
 
 
+@FAULTS
+def test_a_file_the_store_fails_to_write_is_reported_as_a_failed_write_not_a_load(
+    online,  # noqa: F811
+    fault,
+):
+    """The writer reported through the loaders' failure event, so the run said at error
+    level, in the terminal and in its log, that it failed to load the file it was writing."""
+    with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
+        result = _run("--fresh")
+
+    _reported_as_a_failed_write(online, result, ACTION, fault)
+
+
+def test_a_file_a_downstream_action_fails_to_store_is_reported_as_a_failed_write(
+    online,  # noqa: F811
+):
+    """An action reading another's output stores its file through the same writer, by
+    another route than the first stage's, so it said the same."""
+    _with_a_reader(online)
+    fault = sqlite3.OperationalError("disk I/O error")
+    with _the_store_fails_to_write(READER, NOT_STORED, fault):
+        result = _run("--fresh")
+
+    _reported_as_a_failed_write(online, result, READER, fault)
+
+
+def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_write(
+    project,  # noqa: F811
+):
+    """The collect pass stores a file through the same writer, so it said the same."""
+    assert _run("--fresh").exit_code == 0
+    fault = OSError(28, "No space left on device")
+    with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
+        result = _run()
+
+    _reported_as_a_failed_write(project, result, ACTION, fault)
+
+
 def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_before_the_edit(
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
     """The edit resets the reader with its source. Run while the source still held its
     old answers for that file, the reader would make its rows from them."""
-    config = _config(online)
-    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
-    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
-    (online / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+    _with_a_reader(online)
     assert _run("--fresh").exit_code == 0
     before_the_edit = _stored(online)
 

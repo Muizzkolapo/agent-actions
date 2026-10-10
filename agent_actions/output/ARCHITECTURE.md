@@ -55,6 +55,7 @@ FileWriter handles all disk I/O with atomic writes and optional database persist
 │     ├── .txt  → plain text (list joins with newlines)    │
 │     └── .csv  → csv.DictWriter or csv.writer             │
 │     Events: FileWriteStarted → write → FileWriteComplete │
+│       or FileWriteFailed; write_target fires the same    │
 │                                                          │
 │   write_target(data)                                     │
 │     ├── Requires storage_backend AND action_name         │
@@ -429,3 +430,5 @@ ResponseBuilder (static methods):
 13. **context_scope merges, not replaces.** Unlike all other config fields that follow "action overrides defaults", `context_scope` uses `deep_merge_context_scope()` which merges action-level directives into defaults. Dicts are shallow-merged; lists are concatenated and deduplicated. This lets an action add `drop` fields while inheriting `seed` from defaults.
 
 14. **A target the store fails to write fails the action.** `write_target()` marks an `OSError` or `sqlite3.Error` from the backend action-fatal, so the file walk writes the other files and then fails the action instead of completing it without that one. A batch collect pass (`process_all_batch_results`) re-raises it at once, and a later pass collects that file and the ones after it without sending them again. The store still holds whatever an earlier run wrote for the file (after a reset, the rows from before an edit), and a completed action is not run again; failed, the next run resumes it and stores that file. Online after an edit, its records are asked again on each such run, since the stored rows predate their answers. Anything else the backend raises, such as a file name it rejects or rows it cannot serialise, stays that file's own failure.
+
+15. **A failed write is reported as a write.** `FileWriter` shares `ProcessorErrorHandlerMixin` with the loaders, whose failure events say a file failed to parse or load (D001, D002). It overrides `_failure_event`, so a write that fails, whether the store failed or raised anything else, fires `FileWriteFailedEvent` (FIO007, "Failed to write <file>: <error>") instead; the error it raises is unchanged. A writer built on the mixin must do the same, or its failures read as loads.

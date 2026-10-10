@@ -12,6 +12,7 @@ import yaml
 
 from agent_actions.errors import ProcessingError, get_error_detail
 from agent_actions.errors.base import AgentActionsError
+from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import (
     DataLoadingErrorEvent,
@@ -62,6 +63,18 @@ class ProcessorErrorHandlerMixin:
         context.update(kwargs)
         return context
 
+    def _failure_event(self, error: Exception, file_path: str) -> BaseEvent:
+        """The event a failure fires: a parse or load failure, since a processor reads.
+
+        A processor that writes overrides this, or its failures read as loads.
+        """
+        for error_class, fmt in _PARSE_ERROR_MAP.items():
+            if isinstance(error, error_class):
+                return DataParsingErrorEvent(
+                    file_path=file_path, format=fmt, error=get_error_detail(error)
+                )
+        return DataLoadingErrorEvent(file_path=file_path, error=get_error_detail(error))
+
     def handle_processing_error(
         self,
         error: Exception,
@@ -80,28 +93,7 @@ class ProcessorErrorHandlerMixin:
         context["error_message"] = get_error_detail(error)
 
         file_path = str(context_kwargs.get("file_path", "unknown"))
-
-        format_type = None
-        for error_class, fmt in _PARSE_ERROR_MAP.items():
-            if isinstance(error, error_class):
-                format_type = fmt
-                break
-
-        if format_type:
-            fire_event(
-                DataParsingErrorEvent(
-                    file_path=file_path,
-                    format=format_type,
-                    error=get_error_detail(error),
-                )
-            )
-        else:
-            fire_event(
-                DataLoadingErrorEvent(
-                    file_path=file_path,
-                    error=get_error_detail(error),
-                )
-            )
+        fire_event(self._failure_event(error, file_path))
 
         if not reraise:
             self.logger.warning(
