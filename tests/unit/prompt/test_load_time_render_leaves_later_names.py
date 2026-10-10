@@ -555,16 +555,18 @@ actions:
 # ── errors name the problem ────────────────────────────────────────────────
 
 
-def test_a_yaml_typo_beside_a_per_record_prompt_shows_the_prompt_as_written(tmp_path):
+def test_a_yaml_typo_beside_a_per_record_prompt_names_the_kept_prompt_on_its_line(tmp_path):
     with pytest.raises(ConfigurationError) as raised:
         _load(
             tmp_path,
-            'actions:\n  - name: a\n    prompt: "Summarise {{ source.text }}"\n   intent: x\n',
+            "actions:\n  - name: a\n    prompt: |\n      Summarise\n      {{ source.text }}\n"
+            "   intent: x\n",
         )
 
     assert "'source'" not in str(raised.value)
-    rendered = raised.value.context["rendered_content"]
-    assert 'prompt: "Summarise {{ source.text }}"' in rendered
+    lines = raised.value.context["rendered_content"].splitlines()
+    assert lines[2] == "    prompt: <the value at line 3 of wf.yml, kept for each record>"
+    assert lines[raised.value.context["line"] - 1] == "   intent: x"
 
 
 def test_a_structural_condition_on_a_name_nothing_defines_names_only_it(tmp_path):

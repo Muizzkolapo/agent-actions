@@ -300,9 +300,15 @@ class LoadRender:
             )
 
     def readable(self, text: str) -> str:
-        """*text* with each left value's token back as the file wrote it."""
-        left = self._left
-        return _LEFT.sub(lambda m: left[int(m.group(1))].region.text.rstrip("\n"), text)
+        """*text* with each left value's token named, on the one line the token holds, so
+        a YAML error's line numbers still point into it."""
+
+        def name(match: re.Match[str]) -> str:
+            region = self._left[int(match.group(1))].region
+            stage = "kept for each record" if region.is_prompt else "rendered per version"
+            return f" <the value at {region.where}, {stage}>"
+
+        return _LEFT.sub(name, text)
 
     def explain(self, error: Exception) -> str:
         """Why a name the load found undefined is not there yet, when it is a later one."""
