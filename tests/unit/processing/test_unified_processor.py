@@ -256,6 +256,39 @@ class TestUnifiedProcessorGuardFilter:
         assert stats.unprocessed == 1
         assert stats.filtered == 1
 
+    def test_the_breaker_leaves_a_guard_skip_out_of_the_active_records(self):
+        """A file whose guard skips one record and whose other records all fail.
+
+        The breaker counts the failed records as the active ones, as batch does: the skip
+        was never sent, so it is no input the action failed on.
+        """
+
+        class FailingStrategy:
+            def invoke(self, records, context):
+                return [
+                    ProcessingResult.failed(error="boom", source_guid=record["source_guid"])
+                    for record in records
+                ]
+
+        processor = UnifiedProcessor()
+        context = _make_context(guard={"clause": "item.flag == true", "behavior": "skip"})
+        skipped = _make_record("sg-skip")
+        failing = [_make_record("sg-1"), _make_record("sg-2")]
+        records = [skipped, *failing]
+
+        with patch(
+            "agent_actions.processing.unified.prefilter_by_guard",
+            return_value=(failing, [skipped], failing, []),
+        ):
+            output, stats = processor.process(records, context, FailingStrategy())
+
+        failure = stats.terminal_failure("test_action", records, output)
+
+        assert failure is not None
+        assert "all 2 active input item(s) failed or exhausted (2 failed, 0 exhausted)" in str(
+            failure
+        )
+
 
 # ---------------------------------------------------------------------------
 # UnifiedProcessor — enrichment
