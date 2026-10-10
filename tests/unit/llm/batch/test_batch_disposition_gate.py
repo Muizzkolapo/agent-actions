@@ -358,6 +358,41 @@ class TestBatchAllCarryForward:
             assert result.batch_id is None
             assert result.passthrough == {"carry_forward_only": True}
 
+    def test_a_run_with_no_store_has_no_file_to_write_when_nothing_is_left_to_send(self):
+        """A first stage may run without a store, and the write reads the stored file."""
+        service = _make_service()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="test.json",
+                data=[],
+                output_directory=tmpdir,
+                run_inputs=[],
+            )
+
+        assert result.passthrough == {"carry_forward_only": True}
+
+    def test_a_run_given_no_output_folder_writes_nothing_when_nothing_is_left_to_send(self):
+        """The file's path is built from the folder, so without one there is nowhere to
+        store it, even with a row of a record that left to drop."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend), storage_backend=backend
+        )
+
+        result = service.submit_batch_job(
+            agent_config={"agent_type": "test_action", "action_name": "test_action"},
+            batch_name="test.json",
+            data=[_make_record("r0")],
+            output_directory=None,
+            run_inputs=[_make_record("r0")],
+        )
+
+        assert result.passthrough == {"carry_forward_only": True}
+        backend.write_target.assert_not_called()
+
 
 class TestCarryForwardDispositionDerived:
     """Carry-forward is derived from terminal dispositions, not a file."""

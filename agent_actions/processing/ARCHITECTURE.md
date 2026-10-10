@@ -507,6 +507,21 @@ prepared is recorded failed with the error preparation raised, on both paths: it
 the record's context-map entry (`_batch_prep_error`), since a collect pass may run in a
 later process. A map saved before the key existed records `prep_failed`.
 
+When no record is left to send at all -- the gate carries every input, or the input holds
+none -- nothing is sent or collected, but the file is still this run's, as online writes
+it every run. Submission merges the stored rows over no answers with this run's inputs, the
+merge finalize makes, and stores the file under `batch_output_name` (`store_batch_file`).
+So a row whose input has left goes, and a record moved to another file of the action is
+answered there and held there alone; rows of inputs a record limit holds back stay, since
+they are inputs. An empty input is written empty: handed to the merge, no inputs read as
+none recorded and keep every row. Nothing is collected, since no batch or context map
+exists for the run, and no node-level `passthrough` is recorded, so the action completes
+as it did. A repair, or a run that recorded no inputs, writes nothing, so every row it did
+not answer stands; and a file the merge would leave as it stands is not written again, as
+on a resume where nothing left. The merge keeps one row per identity, so a file holding two
+rows under one is written even then, with one of them, as online and finalize write it.
+Where nothing is stored, none is made: online writes an empty input's file empty.
+
 A batch input file has one name, its identity: its path under the action's input root
 (`sub/page.json`; a top-level file's is its name). Its registry entry, context map,
 recorded inputs, recovery state and recovery entries are keyed by it, and its output is
@@ -538,9 +553,10 @@ What this leaves:
   file's records twice, and a record limit counts them twice, until `--fresh`.
 - Two files of one basename that collided in such a store: the first walked keeps the flat
   name, and the other is sent again under its own. Where the flat file held only the
-  other's rows, the first is sent again too. Where it held both files' rows, the other's
-  stay in it, read twice below, until a batch for the first file writes it again; a run in
-  which every record of the first file is already answered writes nothing.
+  other's rows, the first is sent again too. Where it held both files' rows, the flat file
+  is written for the first file's inputs alone, which leaves the other's out: in that same
+  run when every record of the first file is already answered, otherwise once its batch is
+  collected, and until then the other's rows are read twice below.
 - A nested file from the older version whose batch is still out when a top-level file of
   its basename appears moves to its own name in that run. Its records are sent a second
   time, and held under both names until the top-level file, which finds that batch under
@@ -559,11 +575,9 @@ What this leaves:
 The two paths do not always leave the same file. Where batch differs it holds more, with
 one exception noted last:
 
-- A run whose every input the gate carries submits nothing and finalizes nothing, so the
-  file is left as it stands. It can still hold rows of inputs that have left; online writes
-  the file again without them and answers them again when they return. A record that moves
-  from one input file to another is answered in its new file while the old one, if nothing
-  is submitted for it, still holds its row.
+- A record that leaves a file while the file's batch is out, or finished and not yet
+  collected, keeps its row: that run sends nothing for the file, and the collect merges over
+  the inputs recorded when the batch was sent. Online writes the file again without it.
 - Rows of inputs a record limit holds back are carried, since they are still inputs. Online
   drops them and answers them again when the limit admits them.
 - A run in which something fails and nothing succeeds writes its failed rows. Online writes

@@ -25,6 +25,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.services.collect import (
     collect_batch_rows,
     filtered_inputs,
+    store_batch_file,
     write_batch_file,
 )
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
@@ -239,7 +240,8 @@ class BatchSubmissionService:
         carry-forward, which cannot otherwise tell a record the run left out from one
         that no longer exists. None records nothing, and neither does a repair.
         When preparation leaves nothing to send, the file is collected and written
-        here, as finalize would; the caller has nothing left to write.
+        here, as finalize would; the caller has nothing left to write. When no record
+        is left to send at all, the file is written here for this run's inputs.
         """
         force_submission = force or self._force_batch
         if not batch_name:
@@ -299,9 +301,16 @@ class BatchSubmissionService:
             )
 
         if not data:
-            logger.info(
-                "All %d records have terminal dispositions — skipping batch submission",
-                len(carry_ids),
+            if carry_ids:
+                logger.info(
+                    "All %d record(s) of %s left to send are already done — nothing submitted",
+                    len(carry_ids),
+                    batch_name,
+                )
+            else:
+                logger.info("No record of %s is left to send — nothing submitted", batch_name)
+            self._write_for_inputs_carried(
+                action_name, batch_name, output_directory, run_inputs, run_input_guids
             )
             return SubmissionResult(batch_id=None, passthrough={"carry_forward_only": True})
 
@@ -392,6 +401,57 @@ class BatchSubmissionService:
         if halt is not None:
             raise halt
         return SubmissionResult(passthrough={"type": "written"})
+
+    def _write_for_inputs_carried(
+        self,
+        action_name: str,
+        batch_name: str,
+        output_directory: str | None,
+        run_inputs: list[dict[str, Any]] | None,
+        run_input_guids: list[str] | None,
+    ) -> None:
+        """Write the file for this run's inputs when nothing is left to send, as online does.
+
+        Every input left is carried, so the merge keeps each stored row whose input is
+        one of the run's and drops the rest. Nothing is collected: no batch and no
+        context map exist for this run. A repair, or a run that recorded no inputs,
+        writes nothing, so every stored row it did not answer stands. Nor is a file
+        written that the merge would leave as it stands.
+        """
+        if run_input_guids is None or self._storage_backend is None or not output_directory:
+            return
+        stored_name = batch_output_name(batch_name)
+        try:
+            stored = self._storage_backend.read_target_for_rewrite(action_name, stored_name)
+        except FileNotFoundError:
+            return
+        if run_inputs:
+            from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
+
+            rows = with_stored_rows_not_reproduced(
+                [], action_name, stored_name, self._storage_backend, batch_inputs=run_input_guids
+            )
+        else:
+            # Handed to the merge, no inputs reads as none recorded and keeps every row.
+            # An empty input is a file online writes empty.
+            rows = []
+        # The merge keeps a subsequence of the stored rows, so an equal count is no change.
+        if len(rows) == len(stored):
+            return
+        logger.info(
+            "Writing %s for this run's %d input(s): %d of %d stored row(s) kept",
+            stored_name,
+            len(run_input_guids),
+            len(rows),
+            len(stored),
+        )
+        store_batch_file(
+            self._storage_backend,
+            action_name,
+            rows,
+            output_root=output_directory,
+            stored_name=stored_name,
+        )
 
     def _stamp_deferred(
         self,

@@ -262,6 +262,28 @@ def test_of_two_files_that_shared_a_basename_before_the_first_walked_keeps_it(tm
     }
 
 
+def test_a_basename_holding_both_files_rows_keeps_only_the_first_ones_when_it_sends_nothing(
+    tmp_path,
+):
+    """An older version stored both files' rows under the basename. Every record of the
+    file keeping it is answered, so the run writes that file for its own inputs; the
+    other's row, answered again under its own name, would else be read twice below."""
+    action = _Action(tmp_path)
+    action.upstream_holds(
+        {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+    )
+    action.process("page.json", [rec("a1", keep=True), rec("b1", keep=True)])
+    action.collect()
+
+    action.run({"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]})
+
+    assert action.files() == {
+        "page.json": ["processed:a1@batch-1"],
+        "sub2/page.json": ["processed:b1@batch-2"],
+    }
+    assert _each_record_held_once(action)
+
+
 def test_a_file_that_took_its_own_name_keeps_it_when_the_basename_falls_free(tmp_path):
     """The top-level file leaves, but the rows it was answered with stay in the store."""
     action = _Action(tmp_path)
