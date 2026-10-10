@@ -8,7 +8,7 @@ from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.record import reasons
 
 if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
+    from agent_actions.storage.backend import DispositionRow, StorageBackend
 
 
 class ProcessingStatus(Enum):
@@ -336,6 +336,13 @@ class ProcessingContext:
     # persists per record, so there is nothing to defer for.
     defer_exhaustion: bool = False
     pending_exhaustion: Exception | None = None
+
+    # Online stores a file after collecting it. When set, the dispositions the gate carries
+    # a record from the stored file by (SUCCESS, PASSTHROUGH) wait here, and the caller
+    # writes them once the file is stored. Written before it, a run stopped in between
+    # left them vouching for the rows an earlier run had stored.
+    defer_kept_dispositions: bool = False
+    kept_dispositions: list["DispositionRow"] = field(default_factory=list)
 
     @property
     def action_name(self) -> str:

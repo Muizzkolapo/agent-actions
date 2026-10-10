@@ -40,11 +40,17 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
     DispositionRow,
 )
+from agent_actions.utils.schema_echo import is_schema_echo
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+# What a reset keeps and the gate carries a record from the stored file by. A reset keeps
+# FILTERED too, but a filtered record has no row to carry, and the guard filters it again
+# above the gate.
+_CARRIED_FROM_THE_STORED_FILE = frozenset({DISPOSITION_SUCCESS, DISPOSITION_PASSTHROUGH})
 
 
 def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason: str) -> None:
@@ -223,6 +229,18 @@ def _data_has_parse_error(data: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _schema_echoes(data: list[dict[str, Any]], action_name: str) -> set[str]:
+    """Records whose row the store refuses as a schema echo, recording them failed."""
+    return {
+        guid
+        for row in data
+        if isinstance(row, dict)
+        and isinstance(content := row.get("content"), dict)
+        and is_schema_echo(content.get(action_name))
+        and (guid := row.get("source_guid"))
+    }
+
+
 def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     """Serialize a source snapshot dict to JSON for disposition storage.
 
@@ -291,6 +309,24 @@ def _safe_set_disposition(
             action_name,
             record_id,
             disposition,
+        )
+
+
+def write_dispositions(
+    storage_backend: Optional["StorageBackend"],
+    rows: list[DispositionRow],
+    action_name: str,
+) -> None:
+    """Write *rows* in one transaction — log on failure, do not crash pipeline."""
+    if not storage_backend or not rows:
+        return
+    try:
+        storage_backend.set_dispositions_batch(rows)
+    except Exception:
+        logger.exception(
+            "Failed to batch-write %d dispositions for %s",
+            len(rows),
+            action_name,
         )
 
 
@@ -455,6 +491,7 @@ def collect_results_from_processing_results(
     stats: collections.Counter[str] = collections.Counter()
     causes: list[str] = []
     pending_dispositions: list[DispositionRow] = []
+    echoed: set[str] = set()
 
     for idx, result in enumerate(results):
         status = result.status
@@ -522,6 +559,7 @@ def collect_results_from_processing_results(
                 for d in data:
                     _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
                 output.extend(data)
+                echoed |= _schema_echoes(data, action_name)
             logger.debug(
                 "Collected SUCCESS result source_guid=%s count=%d",
                 result.source_guid,
@@ -864,16 +902,20 @@ def collect_results_from_processing_results(
         else:
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
-    # Flush all accumulated dispositions in a single transaction.
-    if storage_backend and pending_dispositions:
-        try:
-            storage_backend.set_dispositions_batch(pending_dispositions)
-        except Exception:
-            logger.exception(
-                "Failed to batch-write %d dispositions for %s",
-                len(pending_dispositions),
-                action_name,
-            )
+    if context is not None and context.defer_kept_dispositions:
+        # They vouch for rows of a file not stored yet; the caller writes them once it is.
+        context.kept_dispositions.extend(
+            row
+            for row in pending_dispositions
+            if row[2] in _CARRIED_FROM_THE_STORED_FILE
+            # The store records a schema echo failed as it writes the row, and a SUCCESS
+            # written after would replace that.
+            and row[1] not in echoed
+        )
+        pending_dispositions = [
+            row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
+        ]
+    write_dispositions(storage_backend, pending_dispositions, action_name)
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""

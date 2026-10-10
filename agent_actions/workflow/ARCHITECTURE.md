@@ -384,6 +384,7 @@ run_mode == BATCH and not tool/HITL?
          ▼
     stats.raise_if_terminal_failure()
     output_handler.save_main_output()
+    write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records()
 ```
 
@@ -457,7 +458,7 @@ Run N: Resume (if recovery submitted)
 | What | Where | Format | Written when |
 |------|-------|--------|-------------|
 | Action status | `agent_io/.agent_status.json` | JSON dict | Every `update_status()` call |
-| Record dispositions | `agent_io/store/{name}.db` | SQLite table | After collection or checkpoint |
+| Record dispositions | `agent_io/store/{name}.db` | SQLite table | At checkpoint and collection; online, SUCCESS and PASSTHROUGH after the file |
 | Checkpoint records | `agent_io/store/{name}.db` | SQLite table | Per-record during invocation |
 | Target output | `agent_io/store/{name}.db` + `agent_io/target/` | SQLite + JSON file | After `save_main_output` |
 | Batch registry | `agent_io/target/{action}/batch/.batch_registry.json` | JSON | After batch submit |
@@ -546,7 +547,11 @@ Stopped partway is one of:
     unchanged → clear only RUNNING_CLEAR_DISPOSITIONS
                 (FAILED, EXHAUSTED, DEFERRED); SUCCESS, PASSTHROUGH,
                 FILTERED, SKIPPED and the prompt traces stay, and the
-                DispositionGate carries them
+                DispositionGate carries them. Online writes SUCCESS
+                and PASSTHROUGH after the file holding the record's
+                row is stored; one answered since holds a checkpoint
+                row instead (processing/ARCHITECTURE.md, "Checkpoint
+                and Resume")
     edited    → ActionExecutor.reopen_with_readers: it and every action
                 reading it are forgotten (dispositions, checkpoints, batch
                 state, a batch still out given up) and put back to pending;

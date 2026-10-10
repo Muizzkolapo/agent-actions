@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  A file-granularity action that reads an edited action no longer serves rows made from
+  the answers the edit replaced when its run stops as it stores a file: interrupted,
+  killed, or failed by an error such as a full disk on every file, now that an action
+  stopped by an error keeps what it finished. Collecting a file marked every record in it
+  answered before the file was stored, and a file tool leaves no checkpoint row to say the
+  stored file is older, so the next run carried every row of the file stored before the
+  edit and recorded the action as complete. A record whose checkpoint write had failed was
+  left marked answered the same way. Collection now marks a record answered or passed
+  through only once its file is stored, while a failure or a guard's filter is still
+  recorded as it is collected; at record granularity an answer is also marked as its
+  checkpoint row is stored. A file stored before the run stopped keeps its records, and
+  the next run does not ask for them again. A write that fails for one file of several
+  does not stop the run, and still leaves that file's earlier rows (#1265). A reader left
+  this way by an earlier version keeps those rows until the workflow is run with
+  `--fresh`.
+time: 2026-10-04T17:45:00Z

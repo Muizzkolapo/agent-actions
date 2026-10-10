@@ -9,7 +9,8 @@ changed, so every finished record was asked again, and paid for again.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 fault that stops a run is stood in for, raised where the provider is called or, for a
-record's checkpoint row (1226), where the store saves it.
+record's checkpoint row (1226), where the store saves it, or where the store writes a
+target file (1262).
 """
 
 import json
@@ -68,6 +69,37 @@ from agent_actions import udf_tool
 @udf_tool
 def echo_summary(data: Any, *args) -> list[dict]:
     return [{"summary": (data or {})["summarize"]["summary"], "exam_density": "low"}]
+"""
+
+FILE_READER = "tally_file"
+FILE_READER_ACTION = f"""  - name: {FILE_READER}
+    kind: tool
+    granularity: File
+    dependencies: [{ACTION}]
+    run_mode: online
+    intent: "Tally the file"
+    schema: tool_action_output
+    impl: echo_every_summary
+    context_scope: {{ observe: [{ACTION}.summary] }}
+    expect: {{ repair: none }}
+"""
+
+# Logs each summary it is handed, so a test can tell what the reader was asked again.
+FILE_READER_TOOL = """import json
+from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def echo_every_summary(data: Any, *args) -> list[dict]:
+    with Path("handed.jsonl").open("a") as handed:
+        for record in data or []:
+            handed.write(json.dumps(record.get("summary")) + "\\n")
+            record["exam_density"] = "low"
+    return data
 """
 
 
@@ -487,6 +519,272 @@ def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_
     after = _stored(online, PUBLISHER)
     assert sorted(after) == sorted(before_the_edit)
     assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
+
+
+def _with_a_file_reader(root, tool=FILE_READER_TOOL, impl="echo_every_summary"):
+    config = _config(root)
+    reader = FILE_READER_ACTION.replace("echo_every_summary", impl)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + reader)
+    (root / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    # Named for its tool: discovery imports by module name, so a second module of one
+    # name would be served the first one out of sys.modules.
+    (root / "tools" / WORKFLOW / f"{impl}.py").write_text(tool)
+
+
+@contextmanager
+def _storing_fails(action, raising, *, after=0):
+    """Fail every file *action* stores once *after* of them are stored."""
+    write = SQLiteBackend.write_target
+    stored = []
+
+    def failing(self, action_name, *args, **kwargs):
+        if action_name == action:
+            if len(stored) >= after:
+                raise raising
+            stored.append(action_name)
+        return write(self, action_name, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(SQLiteBackend, "write_target", failing)
+        yield
+
+
+@pytest.mark.parametrize(
+    ("fault", "left"),
+    [
+        pytest.param(OSError(28, "No space left on device"), "failed", id="disk-full"),
+        pytest.param(KeyboardInterrupt(), "interrupted", id="interrupt"),
+    ],
+)
+def test_a_file_reader_not_stored_after_its_source_was_edited_keeps_nothing_made_before_it(
+    online, fault, left
+):
+    """The edit resets the reader with its source. The run after it hands the reader every
+    record and fails as it stores each file, which still holds rows made from the summaries
+    the edit replaced. A file tool leaves no checkpoint row to say the file is older."""
+    _with_a_file_reader(online)
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online, FILE_READER)
+
+    _edit_prompt(online)
+    with _storing_fails(FILE_READER, fault):
+        _run()
+    assert _status(online, FILE_READER) == left
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    after = _stored(online, FILE_READER)
+    assert sorted(after) == sorted(before_the_edit)
+    assert _still_holding(before_the_edit, after) == [], "a row made from a replaced summary"
+    assert after == _stored(online)
+
+
+def _summaries_in(root, path):
+    backend = _backend(root)
+    try:
+        rows = backend._read_target_raw(ACTION, path)
+    finally:
+        backend.close()
+    return sorted(((row.get("content") or {}).get(ACTION) or {}).get("summary") for row in rows)
+
+
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_other(online, edited):
+    """The file it stored before it stopped holds what its records were answered with, so
+    the next run carries them and hands the tool only the file it did not store."""
+    _with_a_file_reader(online)
+    if edited:
+        assert _run("--fresh").exit_code == 0
+        _edit_prompt(online)
+    with _storing_fails(FILE_READER, KeyboardInterrupt(), after=1):
+        _run(*([] if edited else ["--fresh"]))
+    assert _status(online, FILE_READER) == "interrupted"
+    handed = online / "handed.jsonl"
+    handed.unlink()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    # Absent when the tool was handed nothing, every record carried.
+    log = handed.read_text() if handed.exists() else ""
+    assert sorted(json.loads(line) for line in log.splitlines()) == (
+        _summaries_in(online, "pages2.json")
+    )
+    assert _stored(online, FILE_READER) == _stored(online)
+
+
+SCHEMA_SHAPED_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def shape_a_row_as_a_schema(data: Any, *args) -> Any:
+    shaped = {"title": "T", "type": "object", "properties": {"summary": {"type": "string"}}}
+    return FileUDFResult(
+        [
+            {
+                "source_index": at,
+                "data": {
+                    "summary": record.get("summary"),
+                    "exam_density": "low",
+                    **(shaped if at == 0 else {}),
+                },
+            }
+            for at, record in enumerate(data or [])
+        ]
+    )
+"""
+
+
+def test_a_file_row_the_store_refuses_as_a_schema_echo_stays_failed(online):
+    """The store records the failure as it writes the file. The dispositions collection
+    marks answered are written after the file, and would replace it."""
+    _with_a_file_reader(online, SCHEMA_SHAPED_TOOL, "shape_a_row_as_a_schema")
+
+    _run("--fresh")
+
+    backend = _backend(online)
+    try:
+        failed = {row["record_id"] for row in backend.get_failed_items(FILE_READER)}
+        answered = backend.get_terminal_record_ids(FILE_READER)
+    finally:
+        backend.close()
+    assert len(failed) == len(PAGES), "one row of each file echoes the schema"
+    assert failed.isdisjoint(answered)
+    assert len(answered) == len(EVERY_PAGE) - len(PAGES)
+
+
+def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_stored(online, provider):
+    """The checkpoint marks an answer that holds a parse error answered, and collection
+    fails it. That failure is written as it is collected: left for the file, a run
+    stopped before it carries the checkpoint row as an answer."""
+    answer = AgacClient.call_json
+
+    def unparsed_for_alpha(api_key, agent_config, prompt_config, context_data, schema):
+        if _page_in(prompt_config, context_data) == "Page alpha.":
+            return {"_parse_error": "Failed to parse JSON", "raw_response": "{summary"}
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with (
+        pytest.MonkeyPatch.context() as patched,
+        _storing_fails(ACTION, KeyboardInterrupt()),
+    ):
+        patched.setattr(AgacClient, "call_json", staticmethod(unparsed_for_alpha))
+        _run("--fresh")
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert "Page alpha." in provider.pages()
+
+
+def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its_file_was_collected(
+    online, provider
+):
+    """The run after the edit answers both pages of the first file, but the first page's
+    checkpoint row is not stored, and the run is stopped as it stores the file. Collecting
+    the file must not mark that page answered while the stored file holds its old answer."""
+    provider.answers()
+    assert _run("--fresh").exit_code == 0
+    before_the_edit = _stored(online)
+
+    _edit_prompt(online)
+    with (
+        _storing_the_first_checkpoint_row_fails(sqlite3.OperationalError("disk I/O error")),
+        _storing_fails(ACTION, KeyboardInterrupt()),
+    ):
+        _run()
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
+    assert provider.pages() == EVERY_PAGE
+
+
+def test_a_first_stage_file_stored_before_the_run_stopped_keeps_a_record_whose_checkpoint_row_failed(
+    online, provider
+):
+    """The first file is stored and the run is stopped as it stores the second. Only the
+    stored file marks the first page answered, its checkpoint row having failed, so the
+    next run carries it rather than paying for it again."""
+    provider.answers()
+    with (
+        _storing_the_first_checkpoint_row_fails(sqlite3.OperationalError("disk I/O error")),
+        _storing_fails(ACTION, KeyboardInterrupt(), after=1),
+    ):
+        _run("--fresh")
+    assert _status(online) == "interrupted"
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == []
+
+
+SIDE = "side"
+JOIN = "join"
+FAN_IN_ACTIONS = f"""  - name: {SIDE}
+    intent: "Summarise again"
+    schema: batch_field_rules_output
+    prompt: $p.Summarize
+    context_scope: {{ observe: [source.page_content] }}
+    expect: {{ repair: none }}
+  - name: {JOIN}
+    kind: tool
+    dependencies: [{ACTION}, {SIDE}]
+    run_mode: online
+    intent: "Join"
+    schema: tool_action_output
+    impl: join_summaries
+    context_scope: {{ observe: [{ACTION}.summary, {SIDE}.summary] }}
+    expect: {{ repair: none }}
+"""
+
+JOIN_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def join_summaries(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("side", {}).get("summary")), "exam_density": "low"}]
+"""
+
+
+def test_a_record_filtered_beside_a_file_of_failures_stays_out_of_a_fan_in(online):
+    """The guard filters the first page and the model's answer for the second does not
+    parse, so the first file answers nothing and is not stored. A fan-in drops a record a
+    guard filtered anywhere upstream by its disposition alone, which vouches for no stored
+    row, so it is written though the file is not."""
+    config = _config(online)
+    guard = "    guard: { condition: 'source.page_content != \"Page alpha.\"', on_false: filter }\n"
+    text = config.read_text().replace(
+        "    expect: { repair: none }\n", "    expect: { repair: none }\n" + guard, 1
+    )
+    config.write_text(text.rstrip("\n") + "\n" + FAN_IN_ACTIONS)
+    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (online / "tools" / WORKFLOW / "join_summaries.py").write_text(JOIN_TOOL)
+    answer = AgacClient.call_json
+
+    def unparsed_for_beta(api_key, agent_config, prompt_config, context_data, schema):
+        if _page_in(prompt_config, context_data) == "Page beta.":
+            return {"_parse_error": "Failed to parse JSON", "raw_response": "{summary"}
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(AgacClient, "call_json", staticmethod(unparsed_for_beta))
+        _run("--fresh")
+
+    (alpha,) = [
+        row["source_guid"] for row in _stored_rows(online, SIDE) if "Page alpha." in json.dumps(row)
+    ]
+    joined = {row["source_guid"] for row in _stored_rows(online, JOIN)}
+    assert joined, "the fan-in ran"
+    assert alpha not in joined
 
 
 def test_a_record_the_reset_keeps_keeps_its_prompt_trace(online, provider):
