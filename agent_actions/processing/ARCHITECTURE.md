@@ -164,8 +164,10 @@ Input records (from staging or upstream action)
 │  6. RecoveryEnricher    → _recovery metadata         │
 │                           (retry details)            │
 │                                                      │
-│  Carry-forward records bypass enrichment (already    │
-│  have correct lineage from prior run).               │
+│  Rows carried from the stored file bypass it: they   │
+│  were enriched when it was written. Rows carried     │
+│  from a checkpoint go through it, and collection,    │
+│  with this run's own.                                │
 └──────────┬───────────────────────────────────────────┘
            │
            ▼
@@ -315,6 +317,21 @@ the answer their disposition describes, and the checkpoint row is the strategy's
 output before enrichment, without lineage or metadata. Carrying checkpoint rows is
 kept for a file with nothing stored.
 
+There a carried checkpoint row is still the strategy's output, saved before enrichment
+and collection, and what they made of it was never stored: the run stopped, or the store
+failed to write the file. So `UnifiedProcessor` puts it through both with the run's own
+results (`_answered_from_checkpoint`): the answer it was, not asked for again. It gets
+its input's lineage, parent and root, metadata, and its action's transition in
+`_state_history`, and an answer that failed to parse is failed as collection fails any
+other. It is counted with the run's answers, so a run whose one answered record failed
+is not taken for a run where every record did. Appended to the output as it was, it was
+stored without all of these, and each reader built its rows on a lineage cut short. The
+`_state` the checkpoint stamps is dropped first, since a processed record cannot be
+failed. The checkpoint keeps the row alone, without the response or its retry details,
+so the record gets no `_recovery` and takes its metadata from the action config. Rows
+carried from a stored file were enriched and collected when it was written, and are
+appended as they are.
+
 That makes the row the only sign a record was answered after its file was stored, so
 `_checkpoint_record` stores it before the disposition the gate carries, and writes no
 disposition when the row's write fails. Committed the other way round, a run stopped
@@ -401,9 +418,10 @@ answered_since_stored(action_name, path)        ← checkpointed after the file
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
-    if found → use as carry-forward data,
-               but a record checkpointed with several rows, or by an
-               earlier version, is answered again
+    if found → use as carry-forward data, which the online path
+               enriches and collects with the run's own; but a record
+               checkpointed with several rows, or by an earlier
+               version, is answered again
     else → reprocess all
 ```
 
@@ -689,9 +707,14 @@ Enrichment (step 6) MUST happen BEFORE collection (step 7)
     _state exists. If you collect before enriching, the lineage fields
     are missing and downstream breaks.
 
-Carry-forward records MUST bypass enrichment (step 8, after step 6)
+Rows carried from the stored file MUST bypass enrichment (step 8, after step 6)
     Why: they already have correct lineage from the prior run. Re-enriching
     would overwrite their node_id, target_id, and lineage with duplicates.
+
+Rows carried from a checkpoint MUST NOT bypass it, or collection
+    Why: a checkpoint row is the strategy's output, saved before either ran.
+    Appended as it is, it is stored with no lineage, metadata, parent, root
+    or state transition of its action's, and a parse error as processed.
 ```
 
 ### source_guid identity contract
@@ -801,14 +824,17 @@ If you remove the collection write thinking "checkpoint already wrote it":
 
 ```
 _state is stamped by result_collector.py during collection (step 7).
-Checkpoint records need _state=PROCESSED stamped BEFORE saving to the
-checkpoint table, because build_carry_forward returns them directly to
-the output list without going through collection again.
-
-If you remove the _state stamping in _checkpoint_record():
-    Downstream actions reject carried-forward records with:
+_checkpoint_record() also stamps _state=PROCESSED, on copies of the rows
+it saves: while carried checkpoint rows went to the output uncollected,
+it was all they had, and without it downstream actions rejected them with
     "Record is missing '_state'. Delete agent_io/target/ and re-run."
     Bug found: 2026-05-31 during real workflow testing.
+
+The online carry now collects them (see "Checkpoint and Resume"), and
+_answered_from_checkpoint() drops the stamp first: collection stamps the
+record again with the action's transition, and cannot fail a record
+already marked processed, as an answer that failed to parse must be.
+Rows an earlier version saved carry the stamp as well.
 
 Checkpoint stamps _state on COPIES of result.data, not in-place:
     checkpoint_records = [{**item, "_state": PROCESSED} ...]
