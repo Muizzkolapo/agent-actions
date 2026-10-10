@@ -18,7 +18,7 @@ and service wiring used by CLI commands and runtime agents.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `data_generator.py` | Module | `DataGenerator` that composes prompts with context for workflows. | `cli`, `workflow`, `llm` |
-| `deferred_tags.py` | Module | `defer_unresolved_tags` marks each Jinja tag of a workflow file whose names nothing at load binds (not a `set`, loop, import or macro name of the file, a `templates/` export, `load_prompt` or a Jinja global) so the load-time render passes it through verbatim; `render_marked` renders those tags once their names exist. `DeferringFileSystemLoader` does the same for `templates/` files, and `template_folder_names` reads what they export without running them. | `prompt_generation` |
+| `deferred_tags.py` | Module | `defer_unresolved_tags` marks each Jinja tag of a workflow file whose names nothing at load binds (not a `set`, loop, import or macro name of the file, a `templates/` export, `load_prompt` or a Jinja global) so the load-time render passes it through verbatim; `render_marked` renders those tags once their names exist. A `{% set %}` block or macro whose body holds a marked tag is output whole at load, but a tag that tests or filters it is left for later with its definition. `DeferringFileSystemLoader` does the same for `templates/` files, and `template_folder_exports` reads what they export, and which exports hold a marked tag, without running them. | `prompt_generation` |
 | `formatter.py` | Module | Template helpers for prompt formatting and escaping. | `prompt_generation` |
 | `handler.py` | Module | `PromptLoader` and prompt builder utilities. `PromptLoader.load_prompt` accepts `project_root: Path \| None`. | `logging`, `cli` |
 | `prompt_utils.py` | Module | Misc utilities (token counting, template expansion). | `prompt_generation`, `logging` |
@@ -41,7 +41,7 @@ and service wiring used by CLI commands and runtime agents.
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` via `validate_version_block` — the block is expanded away here, so nothing downstream sees it; `ActionExpander`'s own expansion calls the same validator |
 | `render_pipeline_with_templates()` | `schema/{workflow}/{action}.yml` | Reads | `actions[].schema_name`, `actions[].schema` |
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt` keeps its per-record and per-version tags; `actions[].versions` renders the action's other values per version |
-| `template_folder_names()`, `DeferringFileSystemLoader` | `templates/*.jinja2`, `templates/*.j2` | Reads | — |
+| `template_folder_exports()`, `DeferringFileSystemLoader` | `templates/*.jinja2`, `templates/*.j2` | Reads | — |
 | `ConfigRenderingService.render_and_load_config()` | `agent_config/{workflow}.yml` | Validates | `actions[]` |
 | `MessageBuilder.build()` | `.env` | Reads | — |
 

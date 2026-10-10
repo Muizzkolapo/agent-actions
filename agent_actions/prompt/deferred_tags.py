@@ -8,6 +8,10 @@ template, but of a record: `source`, an upstream action and `i` do not exist at 
 render verbatim, between two marks. An action's `prompt:` drops the marks and keeps the
 tag for the per-record render; any other value is rendered by `render_marked` once the
 names exist (a version's, at expansion) or the load fails on the missing name.
+
+A `{% set %}` block or macro whose body holds such a tag has that tag's text for its value
+at load. Output whole, it carries the tag on; a tag that tests or filters it waits for
+the record with its definition, or fails the load if the definition is in templates/.
 """
 
 from __future__ import annotations
@@ -42,6 +46,50 @@ _CLOSERS = {
 }
 # Bound by Jinja itself inside the block that introduces them.
 _ALWAYS_BOUND = frozenset({"self", "super"})
+# Filters that hand a value's text on with any tag in it still a tag.
+_PASS_FILTERS = frozenset({"indent", "safe", "string", "trim", "dedent"})
+
+_LOAD = "load"
+_LATER = "later"  # bound by a tag left for later
+_MODULE = "module"  # `{% import 'x' as name %}`
+# What waits for the record on the next pass: ("name", scope owner, name) or ("block", index).
+_Key = tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class _Carry:
+    """A value the load computes whose text holds a tag left for later.
+
+    Output whole, it carries that tag into the output. Tested or filtered at load, it would
+    read the tag's text instead of the record's value, so it waits for the record: by *key*
+    when the file defines it, while a value from templates/ (no key) cannot wait.
+    """
+
+    key: _Key | None
+    name: str
+
+
+_State = str | _Carry
+
+
+@dataclass
+class _Scope:
+    owner: int  # the tag that opened it, or -1 for the file
+    names: dict[str, _State] = field(default_factory=dict)
+
+
+@dataclass
+class _Frame:
+    """An open block."""
+
+    index: int
+    captures: bool  # what its body outputs becomes a value: set block, macro, call, filter
+    node: nodes.Node | None = None
+    pushed: bool = False
+    deferred: bool = False
+    carries: bool = False  # what it captures holds a tag left for later
+    scope: _Scope | None = None  # where a set block or macro binds
+    names: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -54,39 +102,58 @@ class _Tag:
     members: list[int] = field(default_factory=list)  # an opener's elif/else/closer
 
 
+@dataclass
+class Deferral:
+    """What `defer_unresolved_tags` left for a later stage in one source."""
+
+    source: str  # with every tag left for later marked
+    unresolved: set[str] = field(default_factory=set)  # names nothing at load binds
+    per_record: set[str] = field(default_factory=set)  # names left for later wherever used
+    carrying: set[str] = field(default_factory=set)  # top-level names holding a later tag
+    tested: set[str] = field(default_factory=set)  # such names from elsewhere tested at load
+
+
 def defer_unresolved_tags(
-    source: str, env: Environment, known: Iterable[str]
-) -> tuple[str, set[str]]:
-    """Mark every tag of *source* whose names the load cannot bind; also return those names.
+    source: str, env: Environment, known: Iterable[str], carrying: Iterable[str] = ()
+) -> Deferral:
+    """Mark every tag of *source* whose names the load cannot bind.
 
     *known* is what the load binds besides the file's own `set`, `import`, loop and macro
-    names: the environment's globals and the templates folder's exports. A file whose tags
-    cannot be read is returned unchanged, so the render reports its syntax error.
+    names: the environment's globals and the templates folder's exports. *carrying* are
+    the exports whose value holds a tag left for later. A file whose tags cannot be read
+    is returned unchanged, so the render reports its syntax error.
     """
     tags = _scan(source)
     if tags is None or not _pair_blocks(tags):
-        return source, set()
+        return Deferral(source)
     known = set(known) | _ALWAYS_BOUND
-    # A variable a deferred tag assigns is a per-record variable everywhere: its load-time
-    # assignment and every read are deferred with it, or the load would freeze its value.
-    forced: set[str] = set()
+    # A name a deferred tag assigns, or a load-time value a tag tests although it holds a
+    # tag left for later, waits for the record in its scope: its definition, every other
+    # assignment and every read, or the load would freeze it. Repeat until nothing new waits.
+    forced: frozenset[_Key] = frozenset()
     while True:
-        resolver = _Resolver(env, known, frozenset(forced))
-        deferred, unresolved = resolver.walk(tags)
-        if resolver.assigned <= forced:
+        resolver = _Resolver(env, known, forced, frozenset(carrying))
+        resolver.walk(tags)
+        if resolver.force <= forced:
             break
-        forced |= resolver.assigned
-    if not deferred:
-        return source, unresolved
+        forced |= resolver.force
     pieces = []
     cursor = 0
-    for index in sorted(deferred):
+    for index in sorted(resolver.deferred):
         tag = tags[index]
         pieces.append(source[cursor : tag.start])
         pieces.append(f"{OPEN}{{% raw %}}{tag.text}{{% endraw %}}{CLOSE}")
         cursor = tag.end
     pieces.append(source[cursor:])
-    return "".join(pieces), unresolved
+    return Deferral(
+        "".join(pieces),
+        unresolved=resolver.unresolved,
+        per_record={key[2] for key in forced if key[0] == "name"},
+        carrying={
+            name for name, state in resolver.scopes[0].names.items() if isinstance(state, _Carry)
+        },
+        tested=resolver.tested,
+    )
 
 
 def is_marked(text: str) -> bool:
@@ -112,39 +179,59 @@ def render_marked(env: Environment, text: str, context: Mapping[str, Any]) -> st
     return env.from_string("".join(parts)).render({**context, _LITERALS: literals})
 
 
-def template_folder_names(env: Environment, templates_folder: Path) -> set[str]:
-    """Names the templates folder's files export to the workflow as globals.
+@dataclass
+class TemplateExports:
+    """What the templates folder's files export to the workflow as globals."""
 
-    Read without running them, so a template can use another's macro whichever loads first.
+    names: set[str] = field(default_factory=set)
+    carrying: set[str] = field(default_factory=set)  # those whose value holds a later tag
+    tested: set[str] = field(default_factory=set)  # carrying ones a folder file tests at load
+
+
+def template_folder_exports(env: Environment, templates_folder: Path) -> TemplateExports:
+    """Read the folder's exports without running them.
+
+    So a template can use another's macro whichever loads first.
     """
-    names: set[str] = set()
+    exports = TemplateExports()
     if not templates_folder.is_dir():
-        return names
-    for path in templates_folder.iterdir():
+        return exports
+    sources = []
+    for path in sorted(templates_folder.iterdir()):
         if path.suffix not in (".j2", ".jinja2"):
             continue
         try:
-            template = env.parse(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            template = env.parse(source)
         except (OSError, UnicodeDecodeError, jinja2.TemplateSyntaxError):
             continue  # loading it raises with the details
         for node in template.body:
-            names |= _bound_by(node)
-    return names
+            exports.names |= _bound_by(node)
+        sources.append(source)
+    known = exports.names | set(env.globals)
+    while True:
+        deferrals = [defer_unresolved_tags(s, env, known, exports.carrying) for s in sources]
+        carrying = set().union(*(d.carrying for d in deferrals))
+        if carrying <= exports.carrying:
+            exports.tested = set().union(*(d.tested for d in deferrals))
+            return exports
+        exports.carrying |= carrying
 
 
 class DeferringFileSystemLoader(FileSystemLoader):
     """A templates folder whose files leave unresolved tags for later, as the workflow does."""
 
-    def __init__(self, searchpath: str, known: set[str]):
+    def __init__(self, searchpath: str):
         super().__init__(searchpath)
-        self.known = known
+        self.exports = TemplateExports()
 
     def get_source(
         self, environment: Environment, template: str
     ) -> tuple[str, str, Callable[[], bool]]:
         source, filename, uptodate = super().get_source(environment, template)
-        known = self.known | set(environment.globals)
-        return defer_unresolved_tags(source, environment, known)[0], filename, uptodate
+        known = self.exports.names | set(environment.globals)
+        deferral = defer_unresolved_tags(source, environment, known, self.exports.carrying)
+        return deferral.source, filename, uptodate
 
 
 def _bound_by(node: nodes.Node) -> set[str]:
@@ -268,101 +355,242 @@ def _top_level(text: str) -> str:
 
 
 class _Resolver:
-    def __init__(self, env: Environment, known: set[str], forced: frozenset[str]):
+    def __init__(
+        self,
+        env: Environment,
+        known: set[str],
+        forced: frozenset[_Key],
+        carrying: frozenset[str],
+    ):
         self.env = env
         self.known = known
-        self.forced = forced  # assigned by a deferred tag somewhere in the file
-        self.scopes: list[dict[str, bool]] = [{}]  # name -> bound only later (per record)
+        self.forced = forced  # left for later on an earlier pass
+        self.carrying = carrying  # exports of templates/ whose value holds a later tag
+        self.scopes: list[_Scope] = [_Scope(-1)]
+        self.frames: list[_Frame] = []  # open blocks
         self.deferred: set[int] = set()
         self.unresolved: set[str] = set()
-        self.assigned: set[str] = set()  # names a deferred `set` assigns
-        self.within_deferred = 0  # enclosing blocks left for later
+        self.force: set[_Key] = set()  # to leave for later on the next pass
+        self.tested: set[str] = set()
 
-    def walk(self, tags: list[_Tag]) -> tuple[set[int], set[str]]:
-        frames: list[tuple[bool, bool]] = []  # per open block: pushed a scope, deferred
+    def walk(self, tags: list[_Tag]) -> None:
         for index, tag in enumerate(tags):
             keyword = tag.keyword
             if keyword is None:
-                if self._later(self._names(tag.text)):
-                    self.deferred.add(index)
+                self._output(index, tag)
             elif keyword in ("elif", "else", "break", "continue"):
                 continue  # decided with the block they belong to
             elif keyword.startswith("end"):
-                pushed, deferred = frames.pop()
-                if pushed:
-                    self.scopes.pop()
-                self.within_deferred -= deferred
+                self._close()
             elif keyword in _CLOSERS or tag.members:
-                pushed, deferred = self._open(index, tag, tags)
-                frames.append((pushed, deferred))
-                self.within_deferred += deferred
+                self._open(index, tag, tags)
             else:
                 self._statement(index, tag)
-        return self.deferred, self.unresolved
 
-    def _open(self, index: int, tag: _Tag, tags: list[_Tag]) -> tuple[bool, bool]:
-        """Enter a block: did it push a scope, and is it left for later."""
+    def _output(self, index: int, tag: _Tag) -> None:
+        node = self._parse(tag.text)
+        if not isinstance(node, nodes.Output):
+            return  # the render itself raises on it
+        if self._later(_free(node)):
+            self._defer([index])
+            return
+        head = _pass_through_head(node.nodes[0]) if len(node.nodes) == 1 else None
+        carry = self._carry_of(head)
+        self._test(node, skip=head if carry else None)
+        if carry is not None:
+            self._carries()
+
+    def _open(self, index: int, tag: _Tag, tags: list[_Tag]) -> None:
+        """Enter a block, deciding whether it is left for later."""
         keyword = tag.keyword
-        scope: dict[str, bool] = {}
+        later = ("block", index) in self.forced
+        frame = _Frame(index, captures=keyword in ("set", "macro", "call", "filter"))
+        body: set[str] = set()  # names its body's scope binds
+        reads: list[nodes.Node] = []  # what it reads on entry
         if keyword == "if":
             conditions = [tag] + [tags[i] for i in tag.members if tags[i].keyword == "elif"]
-            names: set[str] = set()
             for condition in conditions:
-                names |= self._names(f"{{% if {condition.rest} %}}{{% endif %}}")
-            later = self._later(names)
-            if later:
-                self.deferred.update([index, *tag.members])
-            return False, later
-        node = self._parse(f"{tag.text}{{% end{keyword} %}}")
-        if keyword == "for" and isinstance(node, nodes.For):
-            targets = {n.name for n in _name_nodes(node.target)}
-            names = _free(node.iter) | (_free(node.test) - targets if node.test else set())
-            later = self._later(names)
-            if later:
-                self.deferred.update([index, *tag.members])
-            self.scopes.append(dict.fromkeys(targets | {"loop"}, later))
-            return True, later
-        if keyword == "set" and isinstance(node, nodes.AssignBlock):
-            later = self._assign(_bound_by(node), set(), [index, *tag.members])
-            return False, later
-        if keyword == "macro" and isinstance(node, nodes.Macro):
-            self.scopes[-1][node.name] = False
-            params = {arg.name for arg in node.args} | {"varargs", "kwargs", "caller"}
-            scope = dict.fromkeys(params, False)
-        elif keyword == "call" and isinstance(node, nodes.CallBlock):
-            scope = dict.fromkeys({arg.name for arg in node.args}, False)
-        elif keyword == "with" and isinstance(node, nodes.With):
-            scope = dict.fromkeys({n.name for t in node.targets for n in _name_nodes(t)}, False)
-        self.scopes.append(scope)
-        return True, False
+                node = self._parse(f"{{% if {condition.rest} %}}{{% endif %}}")
+                if isinstance(node, nodes.If):
+                    reads.append(node.test)
+            later = self._later(_free_all(reads)) or later
+        else:
+            node = self._parse(f"{tag.text}{{% end{keyword} %}}")
+            frame.node = node
+            if isinstance(node, nodes.For):
+                targets = {n.name for n in _name_nodes(node.target)}
+                names = _free(node.iter) | (_free(node.test) - targets if node.test else set())
+                reads = [node.iter]
+                later = self._later(names) or later
+                body = targets | {"loop"}
+            elif isinstance(node, nodes.AssignBlock):
+                frame.scope, frame.names = self._binding(node.target)
+                keys = {("name", frame.scope.owner, name) for name in frame.names}
+                reads = [node.filter] if node.filter else []
+                later = (
+                    self._later(_free_all(reads))
+                    or self._within_deferred()
+                    or bool(keys & self.forced)
+                    or later
+                )
+                if later:
+                    self.force |= keys
+            elif isinstance(node, nodes.Macro):
+                frame.scope, frame.names = self.scopes[-1], {node.name}
+                key = ("name", frame.scope.owner, node.name)
+                later = (
+                    self._later(_free_all(node.defaults))
+                    or self._within_deferred()
+                    or key in self.forced
+                    or later
+                )
+                if later:
+                    self.force.add(key)
+                # Bound on entry, so its body can call it.
+                frame.scope.names[node.name] = _LATER if later else _LOAD
+                body = {arg.name for arg in node.args} | {"varargs", "kwargs", "caller"}
+            elif isinstance(node, nodes.CallBlock):
+                reads = [node.call]
+                later = self._later(_free(node.call)) or later
+                body = {arg.name for arg in node.args}
+                if not later:
+                    head = _pass_through_head(node.call)
+                    if self._carry_of(head) is not None:
+                        self._test(node.call, skip=head)
+                        self._carries()
+                        reads = []
+            elif isinstance(node, nodes.FilterBlock):
+                reads = [node.filter]
+                later = self._later(_free(node.filter)) or later
+            elif isinstance(node, nodes.With):
+                reads = list(node.values)
+                later = self._later(_free_all(reads)) or later
+                body = {n.name for t in node.targets for n in _name_nodes(t)}
+        if later:
+            self._defer([index, *tag.members])
+        else:
+            for read in reads:
+                self._test(read)
+        frame.deferred = later
+        if keyword != "if":  # the one block Jinja gives no scope of its own
+            self.scopes.append(_Scope(index, dict.fromkeys(body, _LATER if later else _LOAD)))
+            frame.pushed = True
+        self.frames.append(frame)
+
+    def _close(self) -> None:
+        frame = self.frames.pop()
+        if frame.pushed:
+            self.scopes.pop()
+        node = frame.node
+        if isinstance(node, nodes.AssignBlock) and frame.scope is not None:
+            for name in frame.names:
+                key = ("name", frame.scope.owner, name)
+                state: _State = _LOAD
+                if frame.deferred:
+                    state = _LATER
+                elif frame.carries:
+                    if node.filter is not None and not _passes(node.filter):
+                        self.force.add(key)
+                    state = _Carry(key, name)
+                frame.scope.names[name] = state
+        elif frame.deferred or not frame.carries:
+            return
+        elif isinstance(node, nodes.Macro) and frame.scope is not None:
+            frame.scope.names[node.name] = _Carry(("name", frame.scope.owner, node.name), node.name)
+        elif isinstance(node, nodes.FilterBlock):
+            if not _passes(node.filter):
+                self.force.add(("block", frame.index))
+            self._carries()
+        elif isinstance(node, nodes.CallBlock):
+            self._carries()
 
     def _statement(self, index: int, tag: _Tag) -> None:
         node = self._parse(tag.text)
         if isinstance(node, nodes.Assign):
-            if isinstance(node.target, nodes.NSRef):
-                namespace = node.target.name
-                self._assign({namespace}, _free(node.node) | {namespace}, [index])
-            else:
-                targets = {n.name for n in _name_nodes(node.target)}
-                self._assign(targets, _free(node.node), [index])
-        elif isinstance(node, nodes.Import | nodes.FromImport):
-            self.scopes[-1].update(dict.fromkeys(_bound_by(node), False))
+            self._assign(index, node)
+        elif isinstance(node, nodes.Import):
+            self.scopes[-1].names[node.target] = _MODULE
+        elif isinstance(node, nodes.FromImport):
+            for alias in node.names:
+                name, bound = (alias, alias) if isinstance(alias, str) else alias
+                state: _State = _Carry(None, name) if name in self.carrying else _LOAD
+                self.scopes[-1].names[bound] = state
 
-    def _assign(self, targets: set[str], reads: set[str], indices: list[int]) -> bool:
-        """Bind *targets*; an assignment inside a deferred block, of a value only a record
-        has, or to a name such an assignment also takes, is itself left for later."""
-        later = self._later(reads) or self.within_deferred > 0 or bool(targets & self.forced)
-        if later:
-            self.deferred.update(indices)
-            self.assigned |= targets
-        for name in targets:
+    def _assign(self, index: int, node: nodes.Assign) -> None:
+        """Bind a `set`; one inside a deferred block, of a value only a record has, or to a
+        name such an assignment also takes in its scope, is itself left for later."""
+        scope, names = self._binding(node.target)
+        reads = _free(node.node)
+        if isinstance(node.target, nodes.NSRef):
+            reads.add(node.target.name)
+        keys = {("name", scope.owner, name) for name in names}
+        state: _State = _LOAD
+        if self._later(reads) or self._within_deferred() or keys & self.forced:
+            self._defer([index])
+            self.force |= keys
+            state = _LATER
+        else:
+            # `{% set b = a %}` of a value holding a later tag holds it too, waiting with a.
+            head = _pass_through_head(node.node) if isinstance(node.target, nodes.Name) else None
+            carry = self._carry_of(head)
+            self._test(node.node, skip=head if carry else None)
+            if carry is not None:
+                state = carry
+        for name in names:
+            scope.names[name] = state
+
+    def _binding(self, target: nodes.Node) -> tuple[_Scope, set[str]]:
+        """The scope a `set` binds in and the names it binds: Jinja binds a name in the
+        innermost scope, and a namespace attribute in the namespace's scope."""
+        if isinstance(target, nodes.NSRef):
             for scope in reversed(self.scopes):
-                if name in scope:
-                    scope[name] = later
-                    break
+                if target.name in scope.names:
+                    return scope, {target.name}
+            return self.scopes[-1], {target.name}
+        return self.scopes[-1], {n.name for n in _name_nodes(target)}
+
+    def _defer(self, indices: list[int]) -> None:
+        self.deferred.update(indices)
+        self._carries()
+
+    def _carries(self) -> None:
+        """What the innermost capturing block collects now holds a tag left for later."""
+        for frame in reversed(self.frames):
+            if frame.captures:
+                frame.carries = True
+                return
+
+    def _within_deferred(self) -> bool:
+        return any(frame.deferred for frame in self.frames)
+
+    def _test(self, node: nodes.Node, skip: nodes.Node | None = None) -> None:
+        """Leave for later each value *node* reads, other than to output it whole, whose
+        text holds a tag left for later; one from outside the file cannot wait."""
+        for ref in _references(node):
+            carry = None if ref is skip else self._carry_of(ref)
+            if carry is None:
+                continue
+            if carry.key is None:
+                self.tested.add(carry.name)
             else:
-                self.scopes[-1][name] = later
-        return later
+                self.force.add(carry.key)
+
+    def _carry_of(self, expr: nodes.Node | None) -> _Carry | None:
+        if isinstance(expr, nodes.Name):
+            state = self._state(expr.name)
+            return state if isinstance(state, _Carry) else None
+        if isinstance(expr, nodes.Getattr) and isinstance(expr.node, nodes.Name):
+            if self._state(expr.node.name) == _MODULE and expr.attr in self.carrying:
+                return _Carry(None, f"{expr.node.name}.{expr.attr}")
+        return None
+
+    def _state(self, name: str) -> _State | None:
+        for scope in reversed(self.scopes):
+            if name in scope.names:
+                return scope.names[name]
+        if name in self.carrying:
+            return _Carry(None, name)
+        return _LOAD if name in self.known else None
 
     def _parse(self, text: str) -> nodes.Node | None:
         try:
@@ -371,25 +599,51 @@ class _Resolver:
             return None  # the render itself raises it
         return body[0] if body else None
 
-    def _names(self, text: str) -> set[str]:
-        try:
-            return _free(self.env.parse(text))
-        except jinja2.TemplateSyntaxError:
-            return set()
-
     def _later(self, names: set[str]) -> bool:
         """True if a name is bound only later: by a deferred tag, or by nothing at load."""
         later = False
         for name in names:
-            for scope in reversed(self.scopes):
-                if name in scope:
-                    later = later or scope[name]
-                    break
-            else:
-                if name not in self.known:
-                    self.unresolved.add(name)
-                    later = True
+            state = self._state(name)
+            if state is None:
+                self.unresolved.add(name)
+                later = True
+            elif state == _LATER:
+                later = True
         return later
+
+
+def _pass_through_head(expr: nodes.Node | None) -> nodes.Node | None:
+    """The name *expr* outputs whole, called or not, through filters that keep a tag a tag."""
+    while isinstance(expr, nodes.Filter) and expr.name in _PASS_FILTERS:
+        expr = expr.node
+    if isinstance(expr, nodes.Call):
+        expr = expr.node
+    return expr if isinstance(expr, nodes.Name | nodes.Getattr) else None
+
+
+def _passes(node: nodes.Node | None) -> bool:
+    """True if every filter of a `{% filter %}` or `{% set x | f %}` chain keeps tags."""
+    while isinstance(node, nodes.Filter):
+        if node.name not in _PASS_FILTERS:
+            return False
+        node = node.node
+    return True
+
+
+def _references(node: nodes.Node) -> list[nodes.Node]:
+    """Every name and attribute *node* reads, leaving out the operand of `is defined`."""
+    tested = _defined_operands(node)
+    found = [node] if isinstance(node, nodes.Name | nodes.Getattr) else []
+    found += node.find_all((nodes.Name, nodes.Getattr))
+    return [
+        ref
+        for ref in found
+        if id(ref) not in tested and not (isinstance(ref, nodes.Name) and ref.ctx != "load")
+    ]
+
+
+def _free_all(exprs: Iterable[nodes.Node]) -> set[str]:
+    return set().union(*(_free(expr) for expr in exprs))
 
 
 def _name_nodes(node: nodes.Node) -> list[nodes.Name]:
@@ -400,11 +654,17 @@ def _name_nodes(node: nodes.Node) -> list[nodes.Name]:
 
 def _free(node: nodes.Node) -> set[str]:
     """Names *node* reads, leaving out the operand of an `is defined` test."""
-    tested = {
-        id(test.node)
-        for test in node.find_all(nodes.Test)
-        if test.name in ("defined", "undefined") and isinstance(test.node, nodes.Name)
-    }
+    tested = _defined_operands(node)
     return {
         name.name for name in _name_nodes(node) if name.ctx == "load" and id(name) not in tested
+    }
+
+
+def _defined_operands(node: nodes.Node) -> set[int]:
+    tests = [node] if isinstance(node, nodes.Test) else []
+    tests += node.find_all(nodes.Test)
+    return {
+        id(test.node)
+        for test in tests
+        if test.name in ("defined", "undefined") and isinstance(test.node, nodes.Name)
     }
