@@ -271,7 +271,10 @@ def _the_readers_tool_raises(error, from_call=1):
 def test_a_reader_an_error_stopped_partway_on_its_first_run_refuses(chained):  # noqa: F811
     """A render failure one record's data provoked, which the record loop re-raises and no
     one declares fatal, ends its file at that record: two answered, three never reached.
-    Taken as a failure on every record, the retry completed it on the one it named."""
+    Taken as a failure on every record, the retry completed it on the one it named.
+
+    Raised from the reader's tool, it stands in for that failure in an LLM reader's
+    prompt: a tool's own error fails only its record, and a tool renders no prompt."""
     stops = TemplateVariableError(
         missing_variables=[],
         available_variables=["flatten"],
