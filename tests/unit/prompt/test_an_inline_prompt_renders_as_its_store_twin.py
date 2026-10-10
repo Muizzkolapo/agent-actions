@@ -136,6 +136,12 @@ CAPTURE = "{% set kind %}{{ source.page_content }}{% endset %}"
             [URGENT, ROUTINE],
             id="trimmed-leading-if-with-an-indented-body",
         ),
+        pytest.param(
+            "Reply in this format:\n{% raw %}\n{{ name }}: {{ value }}\n  {{ nested }}\n"
+            "{% endraw %}\nText: {{ source.page_content }}",
+            [URGENT],
+            id="raw-block-of-several-lines",
+        ),
     ],
 )
 def test_the_inline_prompt_sends_what_the_store_prompt_sends(tmp_path, prompt, records):

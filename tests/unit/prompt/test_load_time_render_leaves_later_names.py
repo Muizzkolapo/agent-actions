@@ -616,6 +616,17 @@ def test_an_alias_of_a_per_record_prompt_gets_the_same_prompt(tmp_path):
             "Hello {{ source.x }}\n{% if source.y %}\nY\n{% endif %}\nBye\n",
             id="tag-lines-left-of-the-block",
         ),
+        pytest.param(
+            ">\n      {% raw %}{{ keep }}\n      next{% endraw %} {{ source.x }}",
+            "{% raw %}{{ keep }} next{% endraw %} {{ source.x }}\n",
+            id="folded-raw-block",
+        ),
+        pytest.param(
+            "|\n      {% raw %}\n      {{ keep }}\n        indented\n      {% endraw %}\n"
+            "      {{ source.x }}",
+            "{% raw %}\n{{ keep }}\n  indented\n{% endraw %}\n{{ source.x }}\n",
+            id="literal-raw-block",
+        ),
     ],
 )
 def test_a_per_record_prompt_is_the_value_yaml_reads(tmp_path, value, prompt):
