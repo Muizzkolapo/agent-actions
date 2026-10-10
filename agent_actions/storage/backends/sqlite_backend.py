@@ -1092,6 +1092,49 @@ class SQLiteBackend(StorageBackend):
                     return True
         return False
 
+    def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
+        """Delete every disposition *action_name* holds under any of *record_ids*, at once.
+
+        Returns count deleted. One transaction: no partial clear on failure.
+        """
+        action_name = self._validate_identifier(action_name, "action_name")
+        ids = [
+            self._validate_identifier(record_id, "record_id")
+            for record_id in dict.fromkeys(record_ids)
+        ]
+        if not ids:
+            return 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                deleted = 0
+                for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                    chunk = ids[start : start + _SQL_MAX_PARAMS]
+                    placeholders = ",".join("?" * len(chunk))
+                    cursor.execute(
+                        f"DELETE FROM record_disposition WHERE action_name = ? "
+                        f"AND record_id IN ({placeholders})",
+                        (action_name, *chunk),
+                    )
+                    deleted += cursor.rowcount
+                self.connection.commit()
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch clear dispositions: %s (count=%d)",
+                    e,
+                    len(ids),
+                    extra={"action_name": action_name, "workflow_name": self.workflow_name},
+                )
+                raise
+        logger.debug(
+            "Batch cleared %d dispositions: action=%s",
+            deleted,
+            action_name,
+            extra={"workflow_name": self.workflow_name},
+        )
+        return deleted
+
     def clear_disposition(
         self,
         action_name: str,

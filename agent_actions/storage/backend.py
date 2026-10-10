@@ -811,6 +811,17 @@ class StorageBackend(ABC):
         """Delete matching disposition records. Returns count deleted."""
         return 0
 
+    def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
+        """Delete every disposition *action_name* holds under any of *record_ids*.
+
+        Returns count deleted. Default implementation loops over clear_disposition.
+        Backends may override for a single transaction.
+        """
+        return sum(
+            self.clear_disposition(action_name, record_id=record_id)
+            for record_id in dict.fromkeys(record_ids)
+        )
+
     def save_checkpoint_records(
         self,
         action_name: str,
