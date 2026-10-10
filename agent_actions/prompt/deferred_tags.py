@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import jinja2
+import yaml
 from jinja2 import Environment, FileSystemLoader, nodes
 
 OPEN = ""
@@ -31,6 +32,7 @@ CLOSE = ""
 _MARKED = re.compile(f"{OPEN}(.*?){CLOSE}", re.S)
 # Joins an included template's name to the names its includer binds at load there.
 _CONTEXT = "\ue002"
+_TOKEN = re.compile("\ue003(\\d+)\ue004")
 _LITERALS = "_agac_literal_text"
 
 _RAW_BLOCK = re.compile(r"\{%[-+]?\s*raw\s*[-+]?%\}.*?\{%[-+]?\s*endraw\s*[-+]?%\}", re.S)
@@ -203,6 +205,39 @@ def render_marked(env: Environment, text: str, context: Mapping[str, Any]) -> st
     literals.append(strip_marks(text[cursor:]))
     parts.append(f"{{{{ {_LITERALS}[{len(literals) - 1}] }}}}")
     return env.from_string("".join(parts)).render({**context, _LITERALS: literals})
+
+
+def tags_between_values(text: str) -> list[str]:
+    """The marked tags of YAML *text* that break it by standing between its values.
+
+    A marked tag on a line of its own is between values unless the line belongs to a
+    value, as in a block scalar. Nothing is returned when the text is not YAML even
+    without its marked tags, as they did not break it.
+    """
+    tags: list[str] = []
+
+    def token(match: re.Match[str]) -> str:
+        tags.append(match.group(1))
+        return f"\ue003{len(tags) - 1}\ue004"
+
+    lines = _MARKED.sub(token, text).split("\n")
+    bare = [_TOKEN.sub("", line) for line in lines]
+    if not _is_yaml(bare):
+        return []
+    found = []
+    for i, line in enumerate(lines):
+        if _TOKEN.search(line) and not bare[i].strip():
+            if not _is_yaml([*bare[:i], line, *bare[i + 1 :]]):
+                found += [tags[int(n)] for n in _TOKEN.findall(line)]
+    return found
+
+
+def _is_yaml(lines: list[str]) -> bool:
+    try:
+        yaml.safe_load("\n".join(lines))
+    except yaml.YAMLError:
+        return False
+    return True
 
 
 @dataclass

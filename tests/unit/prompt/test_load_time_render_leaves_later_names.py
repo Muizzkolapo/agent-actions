@@ -494,13 +494,23 @@ def test_a_yaml_typo_beside_a_per_record_prompt_gets_no_template_note(tmp_path):
     assert "left in place" not in message
 
 
-def test_a_yaml_error_from_a_left_condition_names_only_that_condition(tmp_path):
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param('"Summarise {{ source.text }}"\n', id="quoted"),
+        pytest.param(
+            "|\n      {% for f in source.facts %}\n      - {{ f }}\n      {% endfor %}\n",
+            id="block-with-a-tag-on-its-own-line",
+        ),
+    ],
+)
+def test_a_yaml_error_from_a_left_condition_names_only_that_condition(tmp_path, prompt):
     with pytest.raises(ConfigurationError) as raised:
         _load(
             tmp_path,
-            "actions:\n"
-            '  - name: write\n    prompt: "Summarise {{ source.text }}"\n'
-            "{% if enable_validation %}\n  - name: v\n    prompt: y\n{% endif %}\n",
+            "actions:\n  - name: write\n    prompt: "
+            + prompt
+            + "{% if enable_validation %}\n  - name: v\n    prompt: y\n{% endif %}\n",
         )
 
     message = str(raised.value)

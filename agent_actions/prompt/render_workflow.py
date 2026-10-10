@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import re
 import textwrap
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -17,11 +18,13 @@ from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.deferred_tags import (
+    Deferral,
     DeferringFileSystemLoader,
     defer_unresolved_tags,
     is_marked,
     render_marked,
     strip_marks,
+    tags_between_values,
     template_folder_exports,
 )
 from agent_actions.prompt.handler import PromptLoader
@@ -416,18 +419,22 @@ def _render_marked_values(
     return value
 
 
-def _left_tags_note(undefined: set[str], per_record: set[str]) -> str:
-    """Why tags of the file were left in place, for a YAML error they may have caused."""
-    reasons = []
-    if undefined:
-        reasons.append(f"{_quoted(undefined)}, which nothing in it defines")
-    if per_record:
-        reasons.append(f"{_quoted(per_record)}, which a prompt sets or tests per record")
-    if not reasons:
+def _left_tags_note(rendered: str, deferral: Deferral) -> str:
+    """Why the tags left in place between the YAML's values were left, if they broke it."""
+    tags = tags_between_values(rendered)
+    if not tags:
         return ""
+    words = set(re.findall(r"[A-Za-z_]\w*", " ".join(tags)))
+    reasons = []
+    if undefined := words & deferral.unresolved:
+        reasons.append(f"names {_quoted(undefined)} outside a prompt, which nothing in it defines")
+    if per_record := words & deferral.per_record:
+        reasons.append(f"uses {_quoted(per_record)} outside the prompt that sets or tests it")
+    if not reasons:
+        reasons.append(f"has {tags[0].strip()} outside a prompt")
     return (
-        f" (the file names {'; and '.join(reasons)}; those tags were left in place, as only "
-        "an action's prompt renders per record)"
+        f" (the file {', and '.join(reasons)}; those tags were left in place, as only an "
+        "action's prompt renders per record)"
     )
 
 
@@ -688,9 +695,7 @@ def render_pipeline_with_templates(
             logger.warning("Could not save failed render output for debugging: %s", save_err)
             saved_file_msg = ""
         problem = getattr(e, "problem", "") or ""
-        left = ""
-        if is_marked(rendered_yaml_content):
-            left = _left_tags_note(deferral.unresolved, deferral.per_record)
+        left = _left_tags_note(rendered_yaml_content, deferral)
         raise ConfigurationError(
             f"Error parsing YAML after template rendering{left}{saved_file_msg}",
             context={
