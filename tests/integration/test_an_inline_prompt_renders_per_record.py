@@ -301,3 +301,61 @@ def test_a_value_the_prompt_captures_per_record_is_tested_per_record(tmp_path, m
         "ESCALATE NOW. Kind=urgent len=6",
         "Handle normally. Kind=routine len=7",
     ]
+
+
+_CAPTURE = "{% set kind %}{{ source.page_content }}{% endset %}"
+# Prompts the load used to decide once for every record; each is sent inline and from the
+# prompt store, and every record must get the same text from both.
+_TWINS = {
+    "caller": (
+        "{% macro decide() %}{% if caller() == 'urgent' %}ESCALATE{% else %}normal{% endif %}"
+        " len={{ caller() | length }}{% endmacro %}"
+        "{% call decide() %}{{ source.page_content }}{% endcall %} id={{ source.page_id }}",
+        ["ESCALATE len=6 id=p0", "normal len=7 id=p1"],
+    ),
+    "defined": (
+        "{% if facts is defined %}FACTS: {{ facts.facts }}{% else %}RAW: "
+        "{{ source.page_content }}{% endif %}",
+        ["FACTS: facts of p0", "FACTS: facts of p1"],
+    ),
+    "mixed": (_CAPTURE + "{{ kind ~ '/' ~ source.page_id }}", ["routine/p1", "urgent/p0"]),
+    "loop_if": (
+        _CAPTURE + "{% for n in [1, 2] if kind == 'urgent' %}E{{ n }}{% endfor %}.",
+        [".", "E1E2."],
+    ),
+}
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_an_inline_prompt_sends_each_record_what_its_store_twin_sends(tmp_path, mode):
+    pages = [
+        {"page_id": "p0", "page_content": "urgent"},
+        {"page_id": "p1", "page_content": "routine"},
+    ]
+    scope = "    schema: {answer: string}\n    context_scope: { observe: [facts.facts, source.page_content, source.page_id] }\n"
+    actions = """\
+  - name: facts
+    kind: tool
+    intent: "Facts"
+    impl: facts_of
+    schema: {facts: string}
+    context_scope: { observe: [source.page_id] }
+"""
+    store = []
+    for case, (prompt, _) in _TWINS.items():
+        actions += (
+            f'  - name: inline_{case}\n    intent: "t"\n    dependencies: [facts]\n'
+            f"    prompt: |\n      {prompt}\n{scope}"
+            f'  - name: store_{case}\n    intent: "t"\n    dependencies: [facts]\n'
+            f"    prompt: $twins.{case}\n{scope}"
+        )
+        store.append(f"{{prompt {case}}}\n{prompt}\n{{end_prompt}}\n")
+    project = _project(tmp_path, mode, actions, pages)
+    (project / "prompt_store" / "twins.md").write_text("# Twins\n\n" + "\n".join(store))
+
+    _run_to_the_end(project)
+
+    for case, (_, expected) in _TWINS.items():
+        inline = [prompt.strip() for prompt in _prompts(project, f"inline_{case}")]
+        assert inline == [prompt.strip() for prompt in _prompts(project, f"store_{case}")], case
+        assert inline == expected, case
