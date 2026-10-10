@@ -3,17 +3,27 @@
 import functools
 import logging
 import textwrap
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 import jinja2
 import yaml
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, StrictUndefined
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+from agent_actions.prompt.deferred_tags import (
+    DeferringFileSystemLoader,
+    defer_unresolved_tags,
+    is_marked,
+    render_marked,
+    strip_marks,
+    template_folder_names,
+)
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -381,7 +391,43 @@ def _apply_version_template(
     return value
 
 
-def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
+# Renders the marked tags of a value with the names a stage supplies; see deferred_tags.
+MarkedRenderer = Callable[[str, Mapping[str, Any], str], str]
+
+
+def _render_marked_values(
+    value: Any, render: MarkedRenderer, context: Mapping[str, Any], where: str
+) -> Any:
+    """*value* with every marked string in it rendered with *context*, keys included."""
+    if isinstance(value, str):
+        return render(value, context, where) if is_marked(value) else value
+    if isinstance(value, dict):
+        return {
+            _render_marked_values(k, render, context, where): _render_marked_values(
+                v, render, context, f"{where}.{k}" if where else str(k)
+            )
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _render_marked_values(item, render, context, f"{where}[{i}]")
+            for i, item in enumerate(value)
+        ]
+    return value
+
+
+def _strip_prompt_marks(data: Any) -> None:
+    """An action's prompt keeps the tags the load left: the per-record render reads them."""
+    if not isinstance(data, dict) or not isinstance(data.get("actions"), list):
+        return
+    for action in data["actions"]:
+        if isinstance(action, dict) and isinstance(action.get("prompt"), str):
+            action["prompt"] = strip_marks(action["prompt"])
+
+
+def _expand_versioned_action(
+    action: dict[str, Any], render: MarkedRenderer | None = None
+) -> list[dict[str, Any]]:
     """
     Expand a versioned action into multiple actions.
 
@@ -441,12 +487,22 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
         if param_name != "i":
             expanded["_version_context"][param_name] = i
 
+        if render is not None:
+            # A setting that reads `i` or `version.*` renders once per version; the prompt
+            # was left unmarked for the per-record render, which has these names too.
+            version = expanded["_version_context"]
+            names = {"version": version}
+            names.update({k: version[k] for k in VersionNamespaceBuilder.promoted_names(version)})
+            expanded = _render_marked_values(
+                expanded, render, names, f"actions[{expanded['name']}]"
+            )
+
         expanded_actions.append(expanded)
 
     return expanded_actions
 
 
-def _expand_workflow_versions(data: dict[str, Any]) -> None:
+def _expand_workflow_versions(data: dict[str, Any], render: MarkedRenderer | None = None) -> None:
     """
     Expand all versioned actions in a workflow.
 
@@ -472,7 +528,7 @@ def _expand_workflow_versions(data: dict[str, Any]) -> None:
             )
         if action.get("versions"):
             # Expand versioned action into multiple
-            expanded = _expand_versioned_action(action)
+            expanded = _expand_versioned_action(action, render)
             expanded_actions.extend(expanded)
             logger.debug(
                 "Expanded versioned action '%s' into %d actions",
@@ -535,7 +591,8 @@ def render_pipeline_with_templates(
 
     This is the single compilation step for workflows.
     After this function, the YAML is fully self-contained with:
-    - All Jinja2 templates resolved
+    - Every Jinja2 tag the load can resolve rendered; an action's prompt keeps the tags
+      only a record or a version can resolve, for the per-record render
     - All prompt references ($prompt_name) resolved
     - All named schemas (schema_name: foo) inlined from schema/ directory
     - All inline schemas expanded to unified format
@@ -557,16 +614,25 @@ def render_pipeline_with_templates(
         ConfigurationError: If YAML parsing or configuration fails, or if strict=True
                            and any schema fails to load
     """
-    env = Environment(loader=FileSystemLoader(str(templates_folder)))
+    folder_names: set[str] = set()
+    env = Environment(
+        loader=DeferringFileSystemLoader(str(templates_folder), folder_names),
+        undefined=StrictUndefined,
+    )
     env.globals["load_prompt"] = functools.partial(
         PromptLoader.load_prompt, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
+    folder_names |= template_folder_names(env, Path(templates_folder))
     _load_template_globals(env, str(templates_folder))
 
     yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
-    # Step 1: Jinja2 template rendering
+    # Step 1: Jinja2 template rendering. A tag naming what only a record or a version
+    # supplies is left in place, marked, for the stage that has the name.
+    yaml_content, unresolved = defer_unresolved_tags(
+        yaml_content, env, folder_names | set(env.globals)
+    )
     try:
         rendered_yaml_content = env.from_string(yaml_content).render()
     except jinja2.TemplateError as e:
@@ -583,32 +649,65 @@ def render_pipeline_with_templates(
         data = yaml.safe_load(rendered_yaml_content)
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
+        unmarked = strip_marks(rendered_yaml_content)
         try:
             saved_file_msg = _save_failed_render(
-                rendered_yaml_content, Path(yaml_path).stem, project_root=project_root
+                unmarked, Path(yaml_path).stem, project_root=project_root
             )
         except OSError as save_err:
             logger.warning("Could not save failed render output for debugging: %s", save_err)
             saved_file_msg = ""
+        problem = getattr(e, "problem", "") or ""
+        left = ""
+        if is_marked(rendered_yaml_content):
+            names = ", ".join(repr(n) for n in sorted(unresolved))
+            left = (
+                f" (the file names {names}, which nothing in it defines; those tags were "
+                "left in place, as only an action's prompt renders per record)"
+            )
         raise ConfigurationError(
-            f"Error parsing YAML after template rendering{saved_file_msg}",
+            f"Error parsing YAML after template rendering{left}{saved_file_msg}",
             context={
                 "yaml_path": str(yaml_path),
                 "line": mark.line + 1 if mark else None,
                 "column": mark.column + 1 if mark else None,
-                "problem": getattr(e, "problem", ""),
+                "problem": problem + left,
                 "operation": "parse_yaml",
-                "rendered_content": rendered_yaml_content,
+                "rendered_content": unmarked,
             },
             cause=e,
         ) from e
 
+    def render(text: str, names: Mapping[str, Any], where: str) -> str:
+        try:
+            return render_marked(env, text, names)
+        except jinja2.TemplateError as e:
+            # Not chained: the CLI reports the root cause, and Jinja's alone does not say
+            # which value of the file it was rendering.
+            raise TemplateRenderingError(
+                f"{where or 'a value'}: {safe_format_error(e)}. Only an action's prompt "
+                "renders per record, and a versioned action's other values per version",
+                context={"yaml_path": str(yaml_path), "value": strip_marks(text)},
+            ) from None
+
     # Step 3: Resolve prompt references
+    _strip_prompt_marks(data)
     _resolve_prompt_fields(data, project_root=project_root)
 
     # Step 4: Expand versioned actions
     if data:
-        _expand_workflow_versions(data)
+        _expand_workflow_versions(data, render)
+
+    # What is still marked named something only a record supplies, outside a prompt, or
+    # something nothing supplies: rendering it now fails the load on that name.
+    if isinstance(data, dict) and isinstance(data.get("actions"), list):
+        data["actions"] = [
+            _render_marked_values(action, render, {}, f"actions[{action.get('name')}]")
+            if isinstance(action, dict)
+            else action
+            for action in data["actions"]
+        ]
+    data = _render_marked_values(data, render, {}, "")
 
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
