@@ -432,10 +432,28 @@ class LoadRender:
         """The prompt each record renders: load-time tags rendered in, load-time data set."""
         pieces: list[tuple[str, str]] = []
         kept: list[str] = []
+
+        def hold(text: str) -> None:
+            pieces.append(("held", f"{_HELD_OPEN}{len(kept)}{_HELD_CLOSE}"))
+            kept.append(text)
+
         strip_next = False
         for index, part in enumerate(region.parts):
             if part.kind == "data":
                 pieces.append(("data", part.text.lstrip() if strip_next else part.text))
+                strip_next = False
+                continue
+            if part.kind == "raw":
+                # A raw block's text is the value's text, which YAML reads; only its
+                # delimiters are kept as written.
+                opening = _RAW_OPEN.match(part.text)
+                closing = _RAW_CLOSE.search(part.text, opening.end()) if opening else None
+                if opening and closing:
+                    hold(opening.group(0))
+                    pieces.append(("data", part.text[opening.end() : closing.start()]))
+                    hold(closing.group(0))
+                else:
+                    hold(part.text)
                 strip_next = False
                 continue
             names = region.top.get(index)
@@ -450,8 +468,7 @@ class LoadRender:
                 pieces.append(("rendered", rendered))
                 strip_next = part.text.endswith("-}}")
             else:
-                pieces.append(("held", f"{_HELD_OPEN}{len(kept)}{_HELD_CLOSE}"))
-                kept.append(part.text)
+                hold(part.text)
                 strip_next = False
 
         later = sorted(n for n in region.free if not _bound(context, n) and self._per_record(n))
