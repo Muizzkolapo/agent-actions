@@ -271,6 +271,16 @@ class UnifiedProcessor:
                 else:
                     to_process = passing
             passing = to_process
+        # Not a file a repair passes over, which carries nothing only for want of rows.
+        context.replaces_file_whole = (
+            whole_file
+            and not carry_ids
+            and (
+                repair_reaches_file
+                or self._disposition_gate is None
+                or not self._disposition_gate.repairing
+            )
+        )
 
         # Cascade filter — quarantine upstream-failed records before strategy
         # sees them.  Strategies only receive processable records.

@@ -5,14 +5,17 @@ body: >-
   upstream left failed, whether the retry names one record or several, starts at the tool or
   above it, and with a batch action above or a fan-in in front. What the action held for that
   file is replaced whole, a roll-up's row included, and the dispositions of the rows it does
-  not write again go with them; a file the retry names no record of keeps its rows. A
-  record limit admits what a run of the same config admits, the records the retry names,
-  and every record a stored row of the file names, so a roll-up under a limit is the one a
-  run of the same config writes. The tool used to be handed only the
-  records the retry named, beside every other row the file held, so a roll-up of the file
-  ended as two partial roll-ups and a count across the file counted one record where it held
-  two, while the retry printed "Retry complete." and the next run found the action complete.
-  The plain `agac run` that finishes an interrupted retry did the same, and now also hands
-  the tool the whole file. A HITL review a retry reaches still shows only the records it
-  names: the other records keep the decision a reviewer gave them.
+  not write again go with them; a file the retry names no record of keeps its rows. Every
+  action below the tool then answers that file again, each record of it, online or batch,
+  and keeps nothing it held there. A record limit on the tool admits what a run of the same
+  config admits, the records the retry names, and every record a stored row of the file
+  names, so a roll-up under a limit is the one a run of the same config writes. The tool
+  used to be handed only the records the retry named, beside every other row the file held,
+  so a roll-up of the file ended as two partial roll-ups and a count across the file counted
+  one record where it held two, and the actions below kept rows computed from the old
+  answer or never saw the new roll-up, while the retry printed "Retry complete." and the
+  next run found the workflow complete. The plain `agac run` that finishes an interrupted
+  retry did the same, and now also hands the tool the whole file and answers it again
+  below. A HITL review a retry reaches still shows only the records it names: the other
+  records keep the decision a reviewer gave them.
 time: 2026-10-10T19:31:18Z

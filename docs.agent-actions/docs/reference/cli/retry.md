@@ -60,8 +60,8 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 `--record`. Those are the records it processes at every action it re-runs, and
 they are the only ones. The exceptions are a
 [file-granularity tool](#a-file-tool-runs-over-the-whole-file), which is handed
-the whole of a file the retry reaches, and a retry that
-[resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
+the whole of a file the retry reaches, as is every action below it, and a retry
+that [resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
 
 Nothing else in the input joins them. A record limit —
 [`record_limit`](../configuration/defaults) or
@@ -168,10 +168,17 @@ action held for that file is replaced whole, roll-up rows included, and the
 dispositions of the rows it does not write again go with them. Each record of
 the file is decided again at that action, as a run decides it.
 
-A file the retry names no record of keeps what it holds, untouched. Records of
-a reached file that the retry did not name keep what every other action holds
-for them, and one still failed upstream stays quarantined, as in a run. A
-record limit admits what a run of the same config admits and the records the
+A file the retry names no record of keeps what it holds, untouched. A record
+still failed upstream stays quarantined, as in a run.
+
+Every action below the tool answers a file the tool rewrote again, as a run
+answers it: each of its records, whether the retry named it or not, and nothing
+it held for the file before is kept. Each of those rows was computed from what
+the tool wrote before, and a roll-up's new row is one no record the retry names
+leads to. The plain `agac run` that finishes a retry stopped part-way through
+does the same.
+
+A record limit admits what a run of the same config admits and the records the
 retry names, and with them every record a stored row of the file names, by its
 identity or as its parent, so a retry under a smaller limit than the run it
 repairs drops no record holding a row of its own there. A roll-up's row names
@@ -182,7 +189,8 @@ hands the tool the whole file the same way.
 A HITL review takes a whole file too, but a retry shows the reviewer only the
 records it names. A review's row belongs to the record reviewed, and the other
 records of the file already hold a reviewer's decision, so they keep it rather
-than being asked again.
+than being asked again. Below a FILE tool that rewrote the file, every record of
+it is asked again, since what the reviewer decided on is gone.
 
 ## A retry needs every action it runs to hold an answer for every record
 

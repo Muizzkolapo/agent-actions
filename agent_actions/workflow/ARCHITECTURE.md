@@ -355,6 +355,13 @@ run once it leaves a record of the file to answer that is not quarantined, as in
 that finishes an interrupted retry. A HITL review is not one: it shows only the records
 the repair names, and the rest keep their decisions.
 
+What every action below the tool holds for that file was computed from the rows replaced,
+and a roll-up's new row is one no named record leads to. So before the file is written the
+actions below it in the stored dependency graph forget every disposition they hold under an
+identity of the file, and once it is written a repair reaching the file below answers it as
+a plain run does: every record of it, nothing carried. A plain run finishing a stopped
+retry finds those dispositions gone and answers the file again the same way.
+
 A repair narrows only what holds an answer for every record. It carries what an action
 holds for the records it does not name, and an action never run since it was put back to
 pending, stopped partway through its records, or completed with its output gone holds no

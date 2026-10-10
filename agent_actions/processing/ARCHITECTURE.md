@@ -498,7 +498,9 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   would be left out. With nothing recorded every unanswered row but a filtered input's is
   carried, which is also what a batch submitted before inputs were recorded gets. The
   repair's submission removes any recording an earlier run left, so that does not rest on
-  who cleared batch state first.
+  who cleared batch state first. A file a FILE tool above replaced whole in the same run is
+  not repaired here: it is sent as a plain run sends it, its inputs recorded, so no row it
+  held from before the replacement is carried.
 - **A run in which something failed and nothing was answered replaces no answer the
   action still calls answered.** Online leaves the file unwritten when nothing succeeded
   (`terminal_failure`) while the answers stored for it stand. Here the failures are

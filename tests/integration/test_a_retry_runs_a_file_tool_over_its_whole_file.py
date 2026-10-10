@@ -10,6 +10,9 @@ retry reported success over both.
 Each run is its own `agac` process. Two staged files, `pages1.json` (alpha, beta) and
 `pages2.json` (gamma, delta); the record tool above fails alpha while a flag file
 exists, which is the fault a retry repairs.
+
+What reads the tool is answered again over the file too: every row of it may have
+changed, and a row minted by the tool is one no record the retry names leads to.
 """
 
 from __future__ import annotations
@@ -68,6 +71,27 @@ from agent_actions import udf_tool
 @udf_tool
 def roll_tag(data: Any, *args) -> list[dict]:
     return [{"summary": "tagged", "exam_density": "high"}]
+"""
+
+# Reads what roll_up wrote for one record, and logs each summary it is handed.
+_FINAL = """\
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def roll_final(data: Any, *args) -> list[dict]:
+    root = Path(os.environ["ROLL_DIR"])
+    summary = str(((data or {}).get("roll_up") or {}).get("summary", ""))
+    with open(root / "final.jsonl", "a") as log:
+        log.write(json.dumps(summary) + "\\n")
+    if (root / "die_below").exists():
+        os._exit(9)
+    return [{"summary": f"FINAL[{summary}]", "exam_density": "low"}]
 """
 
 _FILE_TOOL_HEAD = """\
@@ -170,6 +194,42 @@ _ROLL_UP_ACTION = """\
 
 ONLINE = _DEFAULTS.format(run_mode="online") + _FLATTEN_ACTION + _ROLL_UP_ACTION
 
+_FINAL_ACTION = """\
+  - name: finalize
+    kind: tool
+    dependencies: [roll_up]
+    intent: "Finalize"
+    schema: file_roll_output
+    impl: roll_final
+    context_scope: { observe: [roll_up.summary] }
+"""
+
+# A record tool, then a batch action, reading what the FILE tool wrote.
+TOOL_BELOW = ONLINE + _FINAL_ACTION
+BATCH_BELOW = (
+    ONLINE
+    + """\
+  - name: restate
+    dependencies: [roll_up]
+    intent: "Restate"
+    run_mode: batch
+    schema: file_roll_output
+    prompt: $file_roll.Restate
+    context_scope: { observe: [roll_up.summary] }
+"""
+)
+
+_PROMPTS = """\
+{prompt Restate}
+Restate this summary verbatim.
+## SUMMARY
+{{ roll_up.summary }}
+```json
+{"summary": "...", "exam_density": "high|medium|low"}
+```
+{end_prompt}
+"""
+
 # The tools run online whatever the default; the batch action is above them.
 BATCH_ABOVE = (
     _DEFAULTS.format(run_mode="batch")
@@ -221,9 +281,11 @@ def _project(
     tools.mkdir(parents=True)
     (tools / "roll_flatten.py").write_text(_FLATTEN)
     (tools / "roll_tag.py").write_text(_TAG)
+    (tools / "roll_final.py").write_text(_FINAL)
     (tools / "roll_pages.py").write_text(file_tool)
     (root / "schema" / WORKFLOW).mkdir()
     (root / "schema" / WORKFLOW / "file_roll_output.yml").write_text(_SCHEMA)
+    (root / "prompt_store" / f"{WORKFLOW}.md").write_text(_PROMPTS)
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
     return root
 
@@ -304,11 +366,20 @@ def _alpha(project: Path) -> str:
         backend.close()
 
 
-def _handed(project: Path) -> list[list[str]]:
-    log = project / "handed.jsonl"
+def _logged(project: Path, name: str) -> list:
+    log = project / name
     if not log.exists():
         return []
     return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+def _handed(project: Path) -> list[list[str]]:
+    return _logged(project, "handed.jsonl")
+
+
+def _finalized(project: Path) -> list[str]:
+    """The summaries `finalize` was handed, one per call."""
+    return _logged(project, "final.jsonl")
 
 
 def _failed_then_fixed(project: Path, flag: str = "fail_alpha") -> dict[str, list[dict]]:
@@ -317,6 +388,7 @@ def _failed_then_fixed(project: Path, flag: str = "fail_alpha") -> dict[str, lis
     _run(project, "--fresh")
     (project / flag).unlink()
     (project / "handed.jsonl").unlink(missing_ok=True)
+    (project / "final.jsonl").unlink(missing_ok=True)
     return _rows(project)
 
 
@@ -518,6 +590,96 @@ def test_a_review_a_retry_reaches_shows_only_the_records_it_names(tmp_path):
     after = _rows(project, as_stored=True)["pages1.json"]
     assert [r["_state"] for r in after] == ["processed", "processed"]
     assert reviewed <= {r["source_guid"] for r in after}
+
+
+class TestWhatReadsTheToolAnswersTheFileAgain:
+    """`finalize`, a record tool, reads `roll_up`. A file the retry rewrote at the FILE
+    tool is answered again below it whole: no row of it can be carried, since each was
+    computed from what the tool wrote before."""
+
+    def test_a_count_is_answered_again_for_every_record_of_the_file(self, tmp_path):
+        project = _project(tmp_path, TOOL_BELOW, _COUNT)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        rows = _rows(project, "finalize")
+        assert _summaries(rows["pages1.json"], "finalize") == [
+            "FINAL[Page alpha. (1 of 2)]",
+            "FINAL[Page beta. (2 of 2)]",
+        ]
+        assert sorted(_finalized(project)) == ["Page alpha. (1 of 2)", "Page beta. (2 of 2)"]
+        assert _summaries(rows["pages2.json"], "finalize") == [
+            "FINAL[Page gamma. (1 of 2)]",
+            "FINAL[Page delta. (2 of 2)]",
+        ]
+
+    def test_a_roll_up_is_answered_again_under_the_identity_it_now_holds(self, tmp_path):
+        project = _project(tmp_path, TOOL_BELOW, _ROLL_UP)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        rows = _rows(project, "finalize")["pages1.json"]
+        assert _summaries(rows, "finalize") == ["FINAL[Page alpha. + Page beta.]"]
+        assert [r["source_guid"] for r in rows] == [
+            r["source_guid"] for r in _rows(project)["pages1.json"]
+        ]
+        assert _finalized(project) == ["Page alpha. + Page beta."]
+        stored = {
+            row["source_guid"] for rows in _rows(project, "finalize").values() for row in rows
+        }
+        assert _successes(project, "finalize") == stored
+
+    def test_a_run_after_the_retry_finds_it_complete_and_whole(self, tmp_path):
+        project = _project(tmp_path, TOOL_BELOW, _ROLL_UP)
+        _failed_then_fixed(project)
+        _retry(project)
+        (project / "final.jsonl").unlink(missing_ok=True)
+
+        _run(project)
+
+        assert _finalized(project) == []
+        rows = _rows(project, "finalize")["pages1.json"]
+        assert _summaries(rows, "finalize") == ["FINAL[Page alpha. + Page beta.]"]
+
+    def test_a_run_finishing_a_retry_that_died_below_the_tool_answers_the_file_again(
+        self, tmp_path
+    ):
+        """The retry dies in `finalize`, after `roll_up` stored the file whole. The plain
+        run that follows runs `finalize` alone, and holds beta's answer to the old count."""
+        project = _project(tmp_path, TOOL_BELOW, _COUNT)
+        _failed_then_fixed(project)
+        (project / "die_below").touch()
+        killed = run_agac(project, "retry", "-a", WORKFLOW, env=_env(project))
+        assert killed.returncode != 0, killed.stdout + killed.stderr
+        (project / "die_below").unlink()
+        (project / "handed.jsonl").unlink()
+
+        _run(project)
+
+        assert _handed(project) == []
+        assert _summaries(_rows(project, "finalize")["pages1.json"], "finalize") == [
+            "FINAL[Page alpha. (1 of 2)]",
+            "FINAL[Page beta. (2 of 2)]",
+        ]
+
+    def test_a_batch_action_below_is_sent_the_file_again(self, tmp_path):
+        project = _project(tmp_path, BATCH_BELOW, _ROLL_UP)
+        _failed_then_fixed(project)
+        before = _rows(project, "restate")["pages2.json"]
+
+        _retry(project)
+        _run(project)
+
+        rows = _rows(project, "restate")
+        assert [r["source_guid"] for r in rows["pages1.json"]] == [
+            r["source_guid"] for r in _rows(project)["pages1.json"]
+        ]
+        assert [r["_state"] for r in _rows(project, "restate", as_stored=True)["pages1.json"]] == [
+            "processed"
+        ]
+        assert [r["source_guid"] for r in rows["pages2.json"]] == [r["source_guid"] for r in before]
 
 
 def test_a_record_limit_on_the_roll_up_admits_what_a_run_admits(tmp_path):
