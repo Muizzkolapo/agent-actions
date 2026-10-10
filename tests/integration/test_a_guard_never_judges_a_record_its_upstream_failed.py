@@ -23,6 +23,7 @@ import json
 import shutil
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -268,13 +269,23 @@ class Project:
             )
         }
 
-    def states(self, action: str) -> dict[str, str]:
-        states: dict[str, str] = {}
+    def rows(self, action: str) -> dict[str, dict[str, Any]]:
+        rows: dict[str, dict[str, Any]] = {}
         for (blob,) in self._query("select data from target_data where action_name = ?", action):
             loaded = json.loads(blob)
             for row in loaded if isinstance(loaded, list) else [loaded]:
-                states[row["source_guid"]] = row.get("_state")
-        return states
+                rows[row["source_guid"]] = row
+        return rows
+
+    def states(self, action: str) -> dict[str, str]:
+        return {guid: row.get("_state") for guid, row in self.rows(action).items()}
+
+    def summaries(self, action: str) -> dict[str, str]:
+        return {
+            guid: answer["summary"]
+            for guid, row in self.rows(action).items()
+            if isinstance(answer := (row.get("content") or {}).get(action), dict)
+        }
 
     def alpha(self) -> str:
         """Page alpha's source_guid: the one record `summarize` failed."""
@@ -378,8 +389,12 @@ def test_a_file_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_pat
             action
         )
     assert "archive" not in project.sent_for_alpha()
-    others = set(project.states("publish")) - {alpha}
-    assert {project.states("publish")[guid] for guid in others} == {"processed"}
+    # Each answer is stored under the record it rolled up: the pairing kept its step.
+    upstream = project.summaries("summarize")
+    assert project.summaries("publish") == {
+        guid: f"rolled {summary}" for guid, summary in upstream.items()
+    }
+    assert len(upstream) == 3
 
     project.alpha_fails(on=False)
     project.retry_to_the_end()
