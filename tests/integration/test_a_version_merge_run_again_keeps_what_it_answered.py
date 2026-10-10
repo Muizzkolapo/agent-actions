@@ -264,10 +264,11 @@ def _empty_and_run_from_the_first_stage(root, name):
 
 @MODES
 def test_a_retry_of_one_merge_record_leaves_the_others_answers_as_they_were(project, mode):
-    """The retry carried alpha and beta from the merge's own slot, which then held the
-    merged input: their rows lost the merge's answer and ended at a version."""
+    """The retry carried alpha and beta, and every record of the file with no failure,
+    from the merge's own slot, which then held the merged input: their rows lost the
+    merge's answer and ended at a version."""
     _configure(project, mode)
-    _stage(project, items=["alpha", "beta", "gamma"])
+    _stage(project, items=["alpha", "beta", "gamma"], items2=["delta", "epsilon"])
     if mode == "online":
         _fail(project, "gamma")
         result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
@@ -284,10 +285,12 @@ def test_a_retry_of_one_merge_record_leaves_the_others_answers_as_they_were(proj
     result = _agac(project, "retry", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    merged = _rows(project, MERGE)["items.json"]
-    assert _answered_by_the_merge(merged) == ["alpha", "beta", "gamma"], merged
-    read = _rows(project, READER)["items.json"]
-    assert _seen_by_the_reader(read) == ["alpha", "beta", "gamma"], read
+    merged = _rows(project, MERGE)
+    assert _answered_by_the_merge(merged["items.json"]) == ["alpha", "beta", "gamma"], merged
+    assert _answered_by_the_merge(merged["items2.json"]) == ["delta", "epsilon"], merged
+    read = _rows(project, READER)
+    assert _seen_by_the_reader(read["items.json"]) == ["alpha", "beta", "gamma"], read
+    assert _seen_by_the_reader(read["items2.json"]) == ["delta", "epsilon"], read
 
 
 def test_a_merge_stopped_in_a_later_file_keeps_the_answers_of_the_files_before(project):
