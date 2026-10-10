@@ -61,13 +61,13 @@ def facts_of(data: Any, *args) -> list[dict]:
 """
 
 
-def _project(tmp_path: Path, mode: str, actions: str) -> Path:
+def _project(tmp_path: Path, mode: str, actions: str, pages: list[dict] = PAGES) -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config").mkdir(parents=True)
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(_HEAD.format(mode=mode) + actions)
     (workflow / "agent_io" / "staging").mkdir(parents=True)
-    (workflow / "agent_io" / "staging" / "pages.json").write_text(json.dumps(PAGES))
+    (workflow / "agent_io" / "staging" / "pages.json").write_text(json.dumps(pages))
     for folder in ("templates", "schema", "seed_data", "prompt_store"):
         (root / folder).mkdir()
     (root / "tools" / WORKFLOW).mkdir(parents=True)
@@ -262,3 +262,42 @@ def test_a_setting_that_branches_on_the_version_takes_each_versions_branch(tmp_p
             f"model_comparison_{i}",
         )
         assert rows == [(model,)]
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(
+    "capture, kind",
+    [
+        pytest.param("{% set kind %}{{ source.page_content }}{% endset %}", "kind", id="set-block"),
+        pytest.param(
+            "{% macro kind() %}{{ source.page_content }}{% endmacro %}", "kind()", id="macro"
+        ),
+    ],
+)
+def test_a_value_the_prompt_captures_per_record_is_tested_per_record(tmp_path, mode, capture, kind):
+    """The load decided the test against the tag's text, so every record took the else."""
+    pages = [
+        {"page_id": "p0", "page_content": "urgent"},
+        {"page_id": "p1", "page_content": "routine"},
+    ]
+    project = _project(
+        tmp_path,
+        mode,
+        f"""\
+  - name: triage
+    intent: "Triage"
+    prompt: |
+      {capture}
+      {{% if {kind} == "urgent" %}}ESCALATE NOW.{{% else %}}Handle normally.{{% endif %}} Kind={{{{ {kind} }}}} len={{{{ {kind} | length }}}}
+    schema: {{answer: string}}
+    context_scope: {{ observe: [source.page_content] }}
+""",
+        pages,
+    )
+
+    _run_to_the_end(project)
+
+    assert [prompt.strip() for prompt in _prompts(project, "triage")] == [
+        "ESCALATE NOW. Kind=urgent len=6",
+        "Handle normally. Kind=routine len=7",
+    ]
