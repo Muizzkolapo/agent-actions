@@ -427,3 +427,53 @@ actions:
     )
 
     assert _actions(data)["a"]["prompt"] == "[<x>] {{ source.text }}"
+
+
+# ── an included template reads what its includer binds ───────────────────
+
+
+def test_an_included_template_reads_a_variable_the_workflow_sets(tmp_path):
+    data = _load(
+        tmp_path,
+        """\
+{% set model = "gpt-4o-mini" %}
+{% include 'defaults.j2' %}
+actions:
+  - name: a
+    prompt: "Summarise {{ source.text }}"
+""",
+        templates={"defaults.j2": 'defaults:\n  model_name: "{{ model }}"\n'},
+    )
+
+    assert data["defaults"]["model_name"] == "gpt-4o-mini"
+
+
+def test_an_included_partial_reads_the_loop_variable_and_keeps_its_record_tags(tmp_path):
+    data = _load(
+        tmp_path,
+        """\
+actions:
+{% for s in ["a", "b"] %}
+{% include 'action.j2' %}
+{% endfor %}
+""",
+        templates={
+            "action.j2": '  - name: act_{{ s }}\n    prompt: "{{ s }}: {{ source.text }}"\n'
+        },
+    )
+
+    assert _actions(data)["act_b"]["prompt"] == "b: {{ source.text }}"
+
+
+def test_a_value_captured_around_an_include_of_a_record_tag_waits_for_the_record(tmp_path):
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: a\n    prompt: |\n"
+        + _block("{% set k %}{% include 'kind.j2' %}{% endset %}{% if k == 'u' %}E{% endif %}")
+        + '    intent: "Triage"\n',
+        templates={"kind.j2": "{{ source.page_content }}"},
+    )
+
+    assert _actions(data)["a"]["prompt"] == (
+        "{% set k %}{{ source.page_content }}{% endset %}{% if k == 'u' %}E{% endif %}\n"
+    )
