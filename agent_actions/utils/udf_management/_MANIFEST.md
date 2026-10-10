@@ -14,5 +14,5 @@
 | `tooling.py` | Module | Utilities for loading/executing user-defined functions with schema validation support. | `errors`, `logging` |
 | `load_user_defined_function` | Function | Dynamically imports a module and returns the requested callable, searching sys.path if needed. | `errors` |
 | `execute_user_defined_function` | Function | Runs a UDF (RECORD-mode dict input wrapped in a `Bus`; optionally validates output against compiled schemas) and surfaces validation errors. | `errors` |
-| `bus.py` | Module | The action-name-keyed namespace dict handed to RECORD-mode UDFs, with a strict accessor. | — |
+| `bus.py` | Module | The action-name-keyed namespace dict handed to RECORD-mode UDFs, with a strict accessor. `ReadOnlyBus` is that Bus as a read-only view, a `ReadOnlyDict` by inheritance, for the guard path. | `utils` |
 | `Bus` | Class | `dict` subclass: `get`/`[]`/iteration stay tolerant; `require(namespace)` raises naming the unknown key and the available namespaces. | — |
